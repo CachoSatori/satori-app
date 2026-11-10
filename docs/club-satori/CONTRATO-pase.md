@@ -149,10 +149,10 @@ marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
 Mismo contrato. Flag `club_config.wallet_apple_activo = false` (lo agrega A). B deja listo el `.pkpass` y el web
 service de actualización de Apple, y no se ofrece el botón mientras el flag esté apagado.
 
-## 7. Secretos y configuración (los carga Ismael, nunca por chat ni en el repo)
+## 7. Secretos y configuración (los carga el dueño, nunca por chat ni en el repo)
 - Google: `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SA_KEY` (JSON de la cuenta de servicio) como secretos del Edge de B.
 - Apple (más adelante): certificado del Pass Type ID y su clave.
-- Diseño: logo, colores e imagen del local (B propone; Ismael aprueba).
+- Diseño: logo, colores e imagen del local (B propone; el dueño aprueba).
 
 ## 8. Qué entrega A y cuándo (para que B no espere)
 | Entrega de A | Día de A | B mientras tanto |

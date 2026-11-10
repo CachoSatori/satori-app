@@ -6,7 +6,7 @@ Vale para todo reporte en PDF o en pantalla: el de créditos de Grok, los análi
 - `satori-creditos-oct26-v4.pdf` es el ejemplo terminado;
 - `satori-creditos-oct26-v4.html` tiene el HTML y el CSS completos, para copiar.
 
-Si hacen falta, pedíselos a Ismael.
+Si hacen falta, pedíselos al dueño.
 
 ## 1. Idea
 - **Un informe de Satori se tiene que leer como una carta del restaurante, no como un panel de control:** papel blanco, tipografía con carácter, oro solo como hilo y mucho aire.

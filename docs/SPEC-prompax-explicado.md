@@ -1,7 +1,7 @@
 # SPEC v2.3 — «Prom/PAX explicado» (Análisis de ventas con causas) · 2026-11-06
 
 > v1 (30/10 13:00) revisada por Grok y Auditor Satori; v2 incorporó los ajustes aceptados.
-> **v2.3 (06/11, decisiones de Ismael):** el turno sale de la HORA de la factura, la madrugada es noche del
+> **v2.3 (06/11, decisiones del dueño):** el turno sale de la HORA de la factura, la madrugada es noche del
 > mismo día, el §9 se recalculó con eso y el RPC es la **mig 080**. El arreglo de roles que bloqueaba la
 > pantalla ya está en prod (SEC-01 y SEC-01b, migs 068 y 069).
 
@@ -43,7 +43,7 @@ Cuánto vendimos, cuántos pax, cuál fue el prom/pax, cuánto cambió contra la
 - **Comparar contra:** período anterior de igual largo · mismo período del año anterior · mismo tramo de temporada del año anterior.
 - **Turno:** mañana · noche · ambos — por la **hora de la factura** (§5).
 
-## 4. Temporadas (firmado Ismael 30/10; v1 fijas en código)
+## 4. Temporadas (firmado el dueño 30/10; v1 fijas en código)
 | Tramo (id) | Desde | Hasta |
 |---|---|---|
 | `alta` | 15-dic | 30-abr (cruza el año; pertenece al año en que termina) |
@@ -86,7 +86,7 @@ Para cada grupo *i* con pax > 0: s_i = pax_i / PAX, p_i = neta_i / pax_i, P* = N
 - Frase 1: ventas — cuánto vino de más/menos gente y cuánto de más/menos gasto por persona (y delivery/barra si pesan).
 - Frases 2–3: las 2 mayores contribuciones de **un solo corte**: el que más explica del Δ prom/pax con sus 2 mayores
   aportes (valor absoluto). Empate: turno → día → salonero. Se dice el corte («Por día: …»).
-- **Los números de las frases 2–3 son los de la tabla visible de ese corte, con el mismo formato** (v2.3, Ismael
+- **Los números de las frases 2–3 son los de la tabla visible de ese corte, con el mismo formato** (v2.3, el dueño
   06/11): prom/pax de la comparación → actual y Δ ₡, o pax y % de pax. Con turno = «ambos», el corte del salonero
   es salonero × turno, como su tabla. El aporte en ₡ al prom/pax ordena las causas pero no se escribe (está en
   «Ver detalle»). Test: cada número de la frase está tal cual en la fila de su grupo.

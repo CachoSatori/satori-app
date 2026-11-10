@@ -1,6 +1,6 @@
 # RUNBOOK · pase a prod del Club Satori (piloto oficial)
 
-> **No se ejecuta nada de este documento sin la firma de Ismael, paso por paso.** Es el orden obligatorio que pide la
+> **No se ejecuta nada de este documento sin la firma del dueño, paso por paso.** Es el orden obligatorio que pide la
 > auditoría (ronda 3, CLUB-AUD-35): mergear el PR #59 equivale a migrar prod, porque Branching aplica la migración del Club
 > (hoy `075`; **en prod va con otro número**, ver «Regla de numeración» y el paso 3b). Por eso
 > el merge va **al final**, cuando todo ya está aplicado y verificado a mano.
@@ -33,7 +33,7 @@
 
 ## 0. Preparación (D-1, solo lectura)
 **Hacer:**
-- Firmas de Ismael para cada paso. Ventana de día, fuera del servicio (nunca de 17:00 a 23:00).
+- Firmas del dueño para cada paso. Ventana de día, fuera del servicio (nunca de 17:00 a 23:00).
 - Export de respaldo de las tablas que se tocan: `pos_ndf_tickets`, `pos_ndf_open`, `pos_ndf_cursor` y `profiles`.
 - Lecturas en PROD (no escriben):
   ```sql
@@ -53,12 +53,12 @@
   es el punto de vuelta del paso 3.
 
 **LC-DES-10: si el ledger de prod ya tiene la migración del Club (`075` o cualquier fila `club_satori_esquema`), se
-frena todo** y se avisa a Ismael: se sigue corrigiendo en el mismo archivo mientras no esté en prod, y una versión vieja
+frena todo** y se avisa al dueño: se sigue corrigiendo en el mismo archivo mientras no esté en prod, y una versión vieja
 aplicada no coincidiría con la final.
 
 **Verificar:** el export se abre; las lecturas están anotadas. Si los respaldos `*_pre_migracion_2026_07` existen con
 `anon_select` o `authenticated_select` en `true`, se cierran **antes** de seguir (`enable row level security` +
-`revoke all … from anon, authenticated`), o se borran si Ismael lo decide.
+`revoke all … from anon, authenticated`), o se borran si el dueño lo decide.
 
 ## 1. Mig 069
 **Hacer** (solo si `tiene_069` dio `false`): aplicar `supabase/migrations/069_get_my_role_is_active.sql` en el editor SQL
@@ -98,7 +98,7 @@ y con su fila (08-nov, texto idéntico: md5 `5db915c8a422519ce77050f1fb1b916a`).
    (`docs/puente/PLAN-agente-item11.md`): `git fetch` + `git checkout claude/puente-item11-prod`, prueba en seco y
    reinicio de la tarea «Satori PoS Bridge PROD». El `.env` de prod lleva la firma `POS_AGENTE_PROD_FIRMADO=<fecha>`:
    el candado ahora mira `INGEST_URL` (CLUB-AUD-32).
-4. Backfill del período que defina Ismael.
+4. Backfill del período que defina el dueño.
 
 **Verificar:**
 - La versión del Edge subió.
@@ -110,7 +110,7 @@ y con su fila (08-nov, texto idéntico: md5 `5db915c8a422519ce77050f1fb1b916a`).
 **Rollback:** volver al agente anterior (`git checkout 4d3513a` en la carpeta de prod) y redesplegar el Edge desde el
 commit anotado en el paso 0. **Recién después**, si hiciera falta, la 081.
 
-## Regla de numeración (Ismael, 08-nov; `supabase/migraciones-reservadas.json` y `ESTADO.md`)
+## Regla de numeración (el dueño, 08-nov; `supabase/migraciones-reservadas.json` y `ESTADO.md`)
 - El Club y el puente **crean** sus migraciones en el **bloque 100–149**. Cada migración nueva se registra en
   `supabase/migraciones-reservadas.json` («asignadas») **y** en la tabla de `ESTADO.md` **en el mismo commit**: el test
   `supabase/migraciones.test.ts` (corre en el gate) falla si no.
@@ -163,7 +163,7 @@ staging) y registrar la fila `<N>` en el ledger de prod (texto idéntico al arch
   lee solo con `club_miembro_contacto_ver`, que deja rastro. `select buscar_tope_minuto from club_config;` → 30.
 - Tarea diaria de socios (LC-A2): `select jobname, schedule from cron.job where jobname = 'club_socios_mantenimiento';`
   → `15 9 * * *` (03:15 en Costa Rica). Si prod no tiene `pg_cron`, la migración del Club no la programa: anotarlo y decidir con
-  Ismael (sin ella, las altas provisionales no vuelven a pendiente y las autoaltas no se purgan).
+  el dueño (sin ella, las altas provisionales no vuelven a pendiente y las autoaltas no se purgan).
 - **Dominio del Club (08-nov noche):** `update club_config_global set club_url = 'https://<dominio>';` (el mismo de
   `VITE_CLUB_URL` de club-web; no está escrito en el código). Verificar: `select club_url from club_config_global;` y que
   un QR de anfitrión de prueba se lea en caja. Sin dominio, los links del pase, el portal, el canje y la baja fallan
@@ -211,16 +211,16 @@ key y sin el header responde «Código no válido».
 **Hacer:** en Pages `satori-club` (producción): `SUPABASE_URL` y `SUPABASE_ANON_KEY` de PROD, y los bindings `RL_CREAR`
 (5 por 60 s) y `RL_LEER` (60 por 60 s) de `wrangler.toml`. **Turnstile (LC-DES-07):** crear el widget en Cloudflare
 para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKEY` (variable de build) y la secreta en el
-**Secret** `TURNSTILE_SECRET` (las carga Ismael; **sin ella la autoalta Y la creación de cupones responden 503**: desde
+**Secret** `TURNSTILE_SECRET` (las carga el dueño; **sin ella la autoalta Y la creación de cupones responden 503**: desde
 Grok 24 el cupón también pide Turnstile). Después, el deploy y el dominio.
 **Verificar:**
-- **Antes del deploy:** `grep -c 'CONFIRMAR ISMAEL' club-web/src/i18n.ts` → **0** (el aviso no sale con marcas
+- **Antes del deploy:** `grep -c 'CONFIRMAR DUEÑO' club-web/src/i18n.ts` → **0** (el aviso no sale con marcas
   pendientes: dirección del responsable y retención de contactos de ofertas).
 - `/api/salud` → todo en `true` (incluido `turnstile`).
 - **CLAUDE-HALL-04: Turnstile de prod NO es el de prueba.** La clave del sitio del build (`VITE_TURNSTILE_SITEKEY`) no
   puede ser `1x00000000000000000000AA` (ni ninguna que empiece con `1x`, `2x` o `3x`, las de prueba de Cloudflare):
   abrir `/alta`, ver el código fuente del JS y buscar `1x0000`. El Secret `TURNSTILE_SECRET` tampoco puede ser
-  `1x0000000000000000000000000000000AA` ni `2x…`/`3x…`: lo confirma Ismael en Cloudflare → Turnstile (el widget de
+  `1x0000000000000000000000000000000AA` ni `2x…`/`3x…`: lo confirma el dueño en Cloudflare → Turnstile (el widget de
   `club.satoricostarica.com` muestra su sitekey; tiene que coincidir con la del build).
 - Tope de `/alta` por IP **y por prefijo de red** (/24 IPv4, /64 IPv6): 6 altas seguidas desde dos teléfonos en el mismo
   wifi → la sexta dice «Demasiados intentos seguidos».
@@ -271,7 +271,7 @@ frena si hay una carga de papel (nunca la borra).
 **Hacer:** `update club_config set lc_excepciones_desde = '<fecha del lanzamiento>';` Antes de esa fecha el Local Club se
 cobró sin la app y todas sus facturas saldrían como `LC_SIN_REGISTRO` (en staging: 275 en 120 días).
 **Verificar:** en Excepciones no aparecen facturas LC anteriores a esa fecha.
-**Códigos del PoS (Ismael, 08-nov), por local.** Los del local de Santa Teresa (ya cargados en staging):
+**Códigos del PoS (el dueño, 08-nov), por local.** Los del local de Santa Teresa (ya cargados en staging):
 ```sql
 update public.club_config set promo_articulo_codigo = '1123',            -- PROMO CLUB 10 % (clasificación 19, subclasif. 73 «LOCAL CLUB»)
                               cortesia_familia = 17, cortesia_subclasificacion = 40   -- sección «CORTESIAS» (17, 40)
@@ -298,7 +298,7 @@ usuarios reales de gerencia.
 nunca** (regla 10 de `ESTADO.md`).
 
 ## 11. Encender un local (multilocal genérico, LC-ML) — checklist «Encender un local»
-> **Regla (Ismael, 08-nov):** el Club es multilocal GENÉRICO. Los locales son filas de `club_config`: **ninguno está
+> **Regla (el dueño, 08-nov):** el Club es multilocal GENÉRICO. Los locales son filas de `club_config`: **ninguno está
 > escrito** en el código, la migración, club-web ni el pase (las pruebas 70 y 72 lo verifican). Abrir un local nuevo en
 > otra ciudad = **alta (un INSERT o la app) + su configuración (datos) + encender (un click)**, sin código ni migración.
 > Hoy: el de Santa Teresa encendido y el de Nosara cargado y APAGADO. Mientras un local está apagado no hay altas
@@ -325,7 +325,7 @@ borrador, y queda en la auditoría (la app) o en `club_config_historial` (los ca
 | 3 | **Marcadores de descuento** (tarjetas de hoteles o tiendas, descuento de personal…) | Club → **Descuentos** | los sembrados (856, 857) más los propios del local |
 | 4 | **Sección CORTESÍA CLUB:** `cortesia_familia` y las cortesías del sorteo | `club_config` + Club → Promociones | cortesías activas |
 | 5 | **Promoción del Local Club** (sembrada en borrador) | Club → Promociones | pasarla a vigente el día del lanzamiento |
-| 6 | **Topes:** `socios_por_factura`, `socio_visitas_semana_max`, `cupones_max_dia_referente`, `cupones_max_minuto_local`, `anfitrion_tope_mes_crc`, `socio_autoalta_max_dia`, valores del crédito | `club_config` | los que decida Ismael |
+| 6 | **Topes:** `socios_por_factura`, `socio_visitas_semana_max`, `cupones_max_dia_referente`, `cupones_max_minuto_local`, `anfitrion_tope_mes_crc`, `socio_autoalta_max_dia`, valores del crédito | `club_config` | los que decida el dueño |
 | 6b | **Tope diario del socio (ÚNICO para todo el Club, 08-nov noche):** `socio_visitas_por_dia` | `club_config_global` (una fila; no es por local) | 1 = «una visita con beneficio por día, en cualquier Satori» |
 | 7 | `aviso_privacidad_version` = la de club-web (`v1`) | `club_config` | si no coincide, la autoalta del local rechaza todo |
 | 8 | **`lc_excepciones_desde` = el día del lanzamiento** (vacío = las excepciones LC miran todo su historial) | `club_config` | — |
@@ -340,14 +340,14 @@ borrador, y queda en la auditoría (la app) o en `club_config_historial` (los ca
 alta en caja de prueba queda con su `location_id`; la tarea diaria (`club_socios_mantenimiento`) lo incluye en premios.
 **Apagar (rollback):** el mismo botón o `club_activo = false`. No borra nada: corta las operaciones nuevas.
 
-**CLUB COMPARTIDO (decisión de Ismael, 08-nov):** un **socio vale en todos los locales encendidos**. La visita es del
+**CLUB COMPARTIDO (decisión del dueño, 08-nov):** un **socio vale en todos los locales encendidos**. La visita es del
 local de la caja (su pedido, promo, cortesías y códigos) y queda con ese local; el tope de visitas con beneficio por día es
 **global**; el alta y la confirmación se hacen desde cualquier local (el alta queda con el local donde se hizo; si ese
 local se apaga, el socio sigue valiendo en los demás); el premio por referir nace y se cobra en cualquier local. Los
 **anfitriones, cupones, marcadores, cortesías, promociones y el interruptor siguen por local**. Encender un local nuevo no
 pide migrar socios.
 
-## 12. Gates de prod abiertos (Grok 56 y 61) — PROPUESTA, nada de esto corre en prod sin la firma de Ismael
+## 12. Gates de prod abiertos (Grok 56 y 61) — PROPUESTA, nada de esto corre en prod sin la firma del dueño
 
 Estos dos gates tienen que estar cerrados antes de los pasos 4 y 8 en prod. Hoy son **diseño**: lo que se hizo es
 documentación y una consulta de solo lectura probada en staging. Ninguno toca prod.
@@ -400,7 +400,7 @@ en prod tiene que poder revisarse antes, sin exponer datos personales.
      con expresiones regulares).
    - `revision.md`: lo que hay que mirar y los conteos para firmar.
    Permisos 0600 y la carpeta fuera del repo, como hoy.
-3. **Revisión:** Ismael (y Grok, si quiere) revisan `resumen.json` y el **código** que genera el SQL, no los datos. El
+3. **Revisión:** El dueño (y Grok, si quiere) revisan `resumen.json` y el **código** que genera el SQL, no los datos. El
    mismo export corrido con `--ensayo` en staging tiene que dar el mismo `resumen.json` (salvo los ids).
 4. **Ensayo en prod:** el mismo `migracion.sql` con `rollback` en vez de `commit` (lo genera `--emitir` como
    `migracion-ensayo.sql`, con su propio sha256), con la firma del día del pase y **fuera de horario**: antes de abrir o
@@ -450,7 +450,7 @@ privilegios por defecto el resultado podría ser distinto.
 4. **Pruebas:** `bash scripts/sql/gate61_test.sh` (sin base): 19 casos, uno por código de salida, por tipo de firma
    mala y por regla del modo prod (A = B por ref y por archivo, `MIN_OBJETOS` bajo el piso; `--modo-prod` la fuerza sin
    conectar). En vivo, solo staging: `gate61.sh --ref-a <staging> --ref-b <staging>` → 0; con un hecho de más o repetido → 1.
-5. **D-1 (paso 0) y después del paso 4, con la firma de Ismael para leer prod:**
+5. **D-1 (paso 0) y después del paso 4, con la firma del dueño para leer prod:**
    `bash scripts/sql/gate61.sh --prod-firmado --salida <carpeta>` (A = staging, B = prod). La carpeta (catálogos y
    diferencias, sin datos de personas) se adjunta al paquete del pase. Cada diferencia: se corrige o se anota en
    `gate61_esperadas.txt` con su motivo y la firma; se vuelve a correr hasta que dé 0.

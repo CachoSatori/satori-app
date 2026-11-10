@@ -71,7 +71,7 @@ Objetivo: dejar escrito **qué esperamos** de cada cambio, para comparar con lo 
 
 ## 6. Idea a evaluar: Local Club 3.0 (sin descuento fijo)
 
-Propuesta de Ismael (04-nov-2026):
+Propuesta del dueño (04-nov-2026):
 - **Sin descuento permanente.** Promociones directas en momentos específicos, que van variando.
 - **Tarjeta en el Wallet del teléfono** (Apple y Google), con un **QR único** por socio.
 - **Los referidos suman puntos** al socio, que los usa para consumir o para descuentos.

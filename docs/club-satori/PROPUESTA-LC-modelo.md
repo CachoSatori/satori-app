@@ -1,6 +1,6 @@
 # Propuesta · Local Club, promociones y pase único (Paso 0, 07-nov-2026)
 
-> Solo lectura y propuesta. **No se construye nada sin el OK de Ismael.** Se lee con [SPEC.md](SPEC.md) y
+> Solo lectura y propuesta. **No se construye nada sin el OK del dueño.** Se lee con [SPEC.md](SPEC.md) y
 > [SPEC-LC-promos.md](SPEC-LC-promos.md). Datos de staging, desde el 1-sep.
 
 ## 1. Qué trae hoy el puente
@@ -42,7 +42,7 @@ alimentada por el agente.
 - **Detectar el descuento real** (10 % del cupón, 15 % o 10 % del LC, 2×1) necesita el precio de catálogo: descuento de
   la línea = 1 − monto ÷ (precio × cantidad). Con el catálogo, `CUPON_SIN_PROMO` puede dejar de depender del artículo
   marcador.
-- **Decisión de Ismael:** la SPEC dice «10 % + cortesía» y el PoS hoy aplica 15 %. Hay que elegir uno y configurar el PoS
+- **Decisión del dueño:** la SPEC dice «10 % + cortesía» y el PoS hoy aplica 15 %. Hay que elegir uno y configurar el PoS
   igual; si no, todas las visitas LC darían `PROMO_FUERA_DE_VIGENCIA`.
 
 ## 2. Qué queda del CRM pausado
@@ -135,7 +135,7 @@ Usan el catálogo y el 856:
 ## 4. Plan por etapas y estimación (días de trabajo, hasta el paquete completo en staging)
 | Etapa | Qué | Días |
 |---|---|---|
-| E0 | Decisiones de Ismael: % del LC (10 o 15), cortesías iniciales, matriz de compatibilidad, tope de premios | — |
+| E0 | Decisiones del dueño: % del LC (10 o 15), cortesías iniciales, matriz de compatibilidad, tope de premios | — |
 | E1 | Catálogo en el puente: agente, Edge y mig 08x aditiva; backfill; actualización de la PC | 1,5 |
 | E2 | Modelo en la 075: roles, socios, alta, autoalta, validación, visitas por factura, premios por referido; pruebas | 3 |
 | E3 | Promociones: tablas, pantalla «Promociones» del owner (vigencia, productos del catálogo, compatibilidad), motor «qué aplicar»; pruebas | 3,5 |

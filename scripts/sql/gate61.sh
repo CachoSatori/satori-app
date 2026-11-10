@@ -6,7 +6,7 @@
 #
 # · Corre scripts/sql/gate61_catalogo.sql en cada base dentro de «begin; set transaction read only; …; rollback;»
 #   (Management API; el token lo pone el proxy o SUPABASE_ACCESS_TOKEN). Nunca escribe nada.
-# · Por defecto A = staging y B = prod. Leer prod exige --prod-firmado (la firma de Ismael para esa lectura).
+# · Por defecto A = staging y B = prod. Leer prod exige --prod-firmado (la firma del dueño para esa lectura).
 # · Diferencias esperadas: archivo versionado (por defecto scripts/sql/gate61_esperadas.txt). Cada entrada es una línea
 #   «- <hecho>» (está en A y no en B) o «+ <hecho>» (está en B y no en A). Si hay entradas, la línea
 #   «firma: <quién> <fecha> sha256=<hex>» tiene que tener el sha256 de las entradas (en el orden del archivo, unidas con
@@ -61,7 +61,7 @@ export LC_ALL=C
 leer() {   # leer REF DESTINO
   local ref=$1 dest=$2
   if ! [[ "$ref" =~ ^[a-z]{20}$ ]]; then echo "ref no válido: $ref" >&2; exit 5; fi
-  if [ "$ref" = "$PROD" ] && [ "$FIRMADO" != 1 ]; then echo "NEGADO: leer prod exige --prod-firmado (firma de Ismael)." >&2; exit 5; fi
+  if [ "$ref" = "$PROD" ] && [ "$FIRMADO" != 1 ]; then echo "NEGADO: leer prod exige --prod-firmado (firma del dueño)." >&2; exit 5; fi
   jq -n --rawfile q "$RAIZ/scripts/sql/gate61_catalogo.sql" '{query:("begin; set transaction read only; " + $q + "; rollback;")}' \
     | curl -sS -X POST "https://api.supabase.com/v1/projects/$ref/database/query" \
         -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN:-x}" -H 'Content-Type: application/json' --data-binary @- \

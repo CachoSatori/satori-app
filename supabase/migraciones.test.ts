@@ -1,4 +1,4 @@
-// Numeración de migraciones (decisión de Ismael, 08/11): bloque por rama, sin repetidos y con la
+// Numeración de migraciones (decisión del dueño, 08/11): bloque por rama, sin repetidos y con la
 // tabla de ESTADO.md al día. Corre en el gate (vitest). Ver supabase/migraciones-reservadas.json.
 //
 // Falla si:

@@ -1,6 +1,6 @@
 # SPEC — Club Satori: referentes, créditos, PM y Local Club en la app (v2, 05-nov-2026)
 
-> Estado: **borrador para revisión de Ismael.** Migración (§7) basada en el perfil técnico de Grok (`perfil-tecnico-sistema-creditos.md`, 05-nov).
+> Estado: **borrador para revisión del dueño.** Migración (§7) basada en el perfil técnico de Grok (`perfil-tecnico-sistema-creditos.md`, 05-nov).
 > Reemplaza la página externa de créditos (creditos-73bac) y reactiva el CRM pausado (`src/modules/crm`, migraciones 004/005/007).
 > Multi-local desde el día 1: todo lleva `location_id`.
 
@@ -67,7 +67,7 @@
 **«Escanear»** reconoce solo qué es: cupón de turista, pase de referente (canje) o pase de socio LC. Una sola pantalla para el cajero.
 
 ## 3. Modelo de datos (F1)
-Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, con firma de Ismael.
+Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, con firma del dueño.
 
 | Tabla | Campos clave | Notas |
 |---|---|---|
@@ -110,7 +110,7 @@ Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, co
 
 ## 5.1 Vencimiento
 - **12 meses sin actividad** (cualquier tarjeta o canje reinicia el plazo), con avisos a los 30 y a los 7 días. Configurable por local.
-  **También la restitución** (la hace el owner) cuenta como actividad y reinicia el plazo: decisión de Ismael, 08-nov
+  **También la restitución** (la hace el owner) cuenta como actividad y reinicia el plazo: decisión del dueño, 08-nov
   (es lo que hace `club_vencer`). Se cuenta desde la **última actividad**, no desde que se gana cada crédito.
 - **Por qué 12 y no 6 meses:**
   - hoy hay solo 7,5 créditos (₡135.000) con actividad de hace 6 a 12 meses, así que bajar a 6 recupera muy poco;
@@ -155,10 +155,10 @@ Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, co
 | `referrals_club` credit (104) / debit (21) | `club_pm_cargos` (estado `pendiente`) / pagos | `amount / 100` = colones (validar contra el reporte: ₡226.375 PM + ₡74.482 sin sufijo) |
 | `users_info` | **no se migra**: solo sirve para validar | Las 2 cuentas con desfase se resuelven con la suma de movimientos |
 
-**Decisiones de Ismael para la migración (05-nov):**
-- **13 nombres duplicados con distinto negocio:** probablemente la misma persona que cambió de trabajo. Claude Code arma la lista y Ismael los revisa uno por uno antes del corte. Mientras tanto, no se fusiona nada automáticamente.
+**Decisiones del dueño para la migración (05-nov):**
+- **13 nombres duplicados con distinto negocio:** probablemente la misma persona que cambió de trabajo. Claude Code arma la lista y el dueño los revisa uno por uno antes del corte. Mientras tanto, no se fusiona nada automáticamente.
 - **12 cuentas no-PM con monto de club:** sí son concierges → `tipo = concierge_pm`.
-- **Variantes de negocio:** sí se unifican. Claude Code propone la tabla de equivalencias e Ismael la aprueba.
+- **Variantes de negocio:** sí se unifican. Claude Code propone la tabla de equivalencias y el dueño la aprueba.
 - **Burger House:** no es de Satori (lo usa el desarrollador de la página para otro cliente). **No se migra.**
 - **Privacidad al cerrar:** el proyecto Firebase de la página es del desarrollador, y tiene los teléfonos de los referentes de Satori. Al terminar los 3 meses de solo lectura, pedirle por escrito que borre los datos de Satori (`businessId uPberDoE9w19ydF6bZSA`) y quitar los accesos.
 
@@ -174,11 +174,11 @@ Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, co
 - migración;
 - la página queda en solo lectura 3 meses.
 
-## 8. Decisiones registradas (Ismael, 05-nov)
+## 8. Decisiones registradas (el dueño, 05-nov)
 - Se escanea con la app, no con el PoS. El PoS solo carga la promo y el puente controla.
 - **Sin tarjetas físicas ni stickers:** QR del referente en el Wallet → el turista lo escanea → cupón digital de 5 días y un solo uso.
 - Canje de 1, 1,5 o 2 créditos por visita (máximo 2).
-- Vencimiento automático: sí, con avisos. Plazo recomendado de 12 meses (Ismael evaluaba 6).
+- Vencimiento automático: sí, con avisos. Plazo recomendado de 12 meses (el dueño evaluaba 6).
 - Se mantienen las reglas: ₡18.000 por crédito, 1 cada 6 personas, máximo 2 por visita.
 - Referentes: resumen en Wallet + detalle en un link.
 - Siempre multi-local.
@@ -193,7 +193,7 @@ Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, co
 3. **Cuentas de Wallet** (sociedad LCT Desarrollos; Satori es la marca):
    - Google: ✅ Issuer ID `3388000000023220960`, en modo prueba. La publicación se pide cuando exista la clase del pase.
    - Apple: D-U-N-S pedido el 05-nov; después, inscripción como «Organization» con satoricostarica.com.
-   - Dominio: subdominio `club.satoricostarica.com` para el cupón; Ismael tiene el control del dominio.
+   - Dominio: subdominio `club.satoricostarica.com` para el cupón; el dueño tiene el control del dominio.
 4. Confirmar 12 meses de vencimiento.
 5. Plan de transición de las tarjetas físicas que ya están repartidas: se aceptan hasta una fecha y la caja las registra por búsqueda manual.
 

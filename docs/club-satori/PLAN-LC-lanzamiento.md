@@ -3,10 +3,10 @@
 > Reemplaza el plan de [PROPUESTA-LC-modelo.md](PROPUESTA-LC-modelo.md) §4. **No se construye hasta el OK de este plan.**
 > Solo staging. Dos sesiones en paralelo, con la frontera escrita en [CONTRATO-pase.md](CONTRATO-pase.md).
 
-## Decisiones de Ismael (07-nov) que este plan da por hechas
+## Decisiones del dueño (07-nov) que este plan da por hechas
 - **Beneficio LC:** 10 % + cortesía. El PoS pasa de 15 % a 10 % **el mismo día del lanzamiento**.
 - **Créditos + descuento:** `CANJE_CON_DESCUENTO`. Está bien que salte.
-- **Promo del cupón:** artículo marcador «PROMO CLUB 10%» como control principal (lo crea Ismael). La detección por precio
+- **Promo del cupón:** artículo marcador «PROMO CLUB 10%» como control principal (lo crea el dueño). La detección por precio
   contra la lista queda como respaldo, cuando haya catálogo (después del lanzamiento).
 - **Alcance mínimo.** Queda **después del lanzamiento**: el armador completo de promociones, la sincronización del
   catálogo con precios, la detección por precio y los reportes avanzados del socio.
@@ -61,7 +61,7 @@
    - **Alta de local:** el cajero marca «verifiqué residencia». Obligatorios nombre y WhatsApp. **Nunca** se guardan números
      de cédula, DIMEX ni pasaporte (provisorio).
    - **Premio por referir socios:** 1 cortesía, máximo 3 por mes, vence a los 60 días (provisorio).
-   - **Cortesía LC:** por sorteo entre las activas (ver la segunda tanda). Vacía hasta que Ismael cargue las cortesías.
+   - **Cortesía LC:** por sorteo entre las activas (ver la segunda tanda). Vacía hasta que el dueño cargue las cortesías.
 5. **Avance:** [AVANCE-LC.md](AVANCE-LC.md), por etapa, con estado, SHA y pruebas en números (para las sesiones nocturnas).
 
 ### Dónde caen los puntos 2 y 3, y cuánto suman
@@ -76,15 +76,15 @@
 
 ## Decisiones vigentes («1b», confirmadas el 07-nov a la noche) — mandan sobre las tandas de abajo
 1. **Cortesías por sorteo:** admin del Club con **máximo 10** cortesías activables o desactivables, cada una ligada a un
-   artículo de la sección **«CORTESÍA CLUB»** del PoS (₡0; los códigos los pasa Ismael). Sorteo **fijo por visita** (no se
+   artículo de la sección **«CORTESÍA CLUB»** del PoS (₡0; los códigos los pasa el dueño). Sorteo **fijo por visita** (no se
    vuelve a sortear), **1 cortesía por visita, 1 visita por día**. Excepciones `CORTESIA_DISTINTA`, `CORTESIA_SIN_SOCIO` y
    `CORTESIA_NO_CONFIGURADA`. (Reemplaza el cruce por «familia 17» de la segunda tanda.)
 2. **Tope del anfitrión sobre lo GANADO:** alerta `ANFITRION_SOBRE_TOPE` **siempre** que pase ₡25.000 en el mes; retención
    «pendiente de aprobación» **solo en sus primeros 90 días**; aprueba un manager u owner **distinto del anfitrión**.
 3. **Wallet:** Google sigue **ya**; Apple programado y **apagado** hasta el D-U-N-S.
-4. **PROMO CLUB 10 %** existe en el PoS; el código lo pasa Ismael aparte. Mientras, R02 queda en **«pendiente de
+4. **PROMO CLUB 10 %** existe en el PoS; el código lo pasa el dueño aparte. Mientras, R02 queda en **«pendiente de
    configuración»**.
-5. **Turnstile en staging con las claves de prueba de Cloudflare** (las de prod las carga Ismael; RUNBOOK paso 6).
+5. **Turnstile en staging con las claves de prueba de Cloudflare** (las de prod las carga el dueño; RUNBOOK paso 6).
 
 ## Más decisiones del 07-nov (segunda tanda)
 1. **Cortesías del LC = SORTEO.**
@@ -101,7 +101,7 @@
        facturas). 14 de esas 37 son Local Club (856);
      - no hay cortesías hechas con «línea al 100 %» sobre el producto del menú. Hay líneas sueltas a ₡0 fuera de la
        familia 17 (1 o 2 por producto), que son ajustes;
-     - además, **el 857 «INVITADO» (₡0) aparece en 104 facturas, 90 de ellas junto al 856**: ~~hay que preguntarle a Ismael
+     - además, **el 857 «INVITADO» (₡0) aparece en 104 facturas, 90 de ellas junto al 856**: ~~hay que preguntarle al dueño
        qué marca.~~ **REEMPLAZADO** (08-nov): es el beneficio para quien viene con un socio, sin límite (`bd6786e`).
    - **Diseño del cruce:** cada cortesía del admin es **un artículo de cortesía del PoS (familia 17)**, con su nombre y su
      producto del menú de referencia. `CORTESIA_DISTINTA` compara las líneas de la familia 17 de la factura de la visita
@@ -109,7 +109,7 @@
      - salta si hay otra cortesía, o si hay una de más;
      - si no hay ninguna, no es excepción: el socio puede no pedirla;
      - como respaldo, una línea a ₡0 fuera de la familia 17 también cuenta como cortesía cobrada.
-   - **Para Ismael:** si quiere otras cortesías (por ejemplo un postre del día), tiene que crear en el PoS su artículo
+   - **Para el dueño:** si quiere otras cortesías (por ejemplo un postre del día), tiene que crear en el PoS su artículo
      «… CORTESIA» en la familia 17. Hoy solo hay 2.
 2. **Tope del anfitrión nuevo: NO bloquea.**
    - A ₡25.000 por mes (configurable) salta la alerta `ANFITRION_SOBRE_TOPE`.
@@ -141,13 +141,13 @@
    - Aprueba un manager u owner que **no** sea el anfitrión, con auditoría.
 2. **`DESCUENTO_SIN_RESPALDO`:** criterio confirmado (60 % por día, una excepción por factura).
 3. **Cortesías por SECCIÓN DEL PoS.**
-   - Ismael crea en Nube de Fuego la sección «CORTESÍA CLUB», con cada producto como artículo propio a ₡0.
+   - el dueño crea en Nube de Fuego la sección «CORTESÍA CLUB», con cada producto como artículo propio a ₡0.
    - Cada cortesía del admin (hasta 10, activable) **es un artículo de esa sección**.
    - Cruce por código de artículo:
      - `CORTESIA_DISTINTA`: un artículo distinto al sorteado;
      - `CORTESIA_SIN_SOCIO`: un artículo de la sección en una factura sin visita de socio;
      - `CORTESIA_NO_CONFIGURADA`: una línea a ₡0 o al 100 % fuera de la sección.
-   - Los códigos los pasa Ismael cuando los cree.
+   - Los códigos los pasa el dueño cuando los cree.
 4. **Correcciones de diseño:**
    - **LC-DES-01:** el alta en caja queda **«activo provisional»**: el socio usa el 10 % ese día. Un manager u owner
      **distinto de quien lo cargó** lo confirma dentro de **7 días**; si no, vuelve a pendiente. Se suman
@@ -156,7 +156,7 @@
      validación. Sin ciclos, sin autorreferido (mismo teléfono), con tope por referente y por validador. Pruebas negativas
      de cada caso. **Pasa de A2 a A4** (necesita el cruce de visitas).
    - **LC-DES-07:** autoalta con Turnstile, tope por IP y tope global por día, purga de pendientes sin validar a los 30
-     días, aviso de privacidad versionado con link de baja (texto provisorio; lo firma Ismael), datos mínimos (nombre y
+     días, aviso de privacidad versionado con link de baja (texto provisorio; lo firma el dueño), datos mínimos (nombre y
      WhatsApp).
    - **CLUB-AUD-69:** el pase **no** lleva el token del portal. Lleva un **token de pase propio**, revocable y regenerable
      (regenerarlo actualiza el pase). Con él solo se abre «Canjear», que sigue con el código de un solo uso. Prueba: un
@@ -186,7 +186,7 @@
      - ~~47: secreto ≥ 32 caracteres, sin duplicados;~~ **HECHO** `831b3ee`
      - ~~48: topes de largo.~~ **HECHO** `831b3ee` (los tres sin desplegar; falta pasarlos a `puente-item11-prod`)
 6. **CRM viejo** (CLUB-AUD-64 / LC-DES-09): diagnóstico y plan en [PLAN-CRM-cierre.md](PLAN-CRM-cierre.md). **Solo el
-   plan**: toca RLS de prod y lo firma Ismael.
+   plan**: toca RLS de prod y lo firma el dueño.
 
 ### Dónde caen y cuánto suman
 | Etapa | Suma | Días |
@@ -228,7 +228,7 @@ crítico: la usan las noches cuando una etapa está bloqueada.
   «PROMO CLUB 10%» cargado en `promo_articulo_codigo`).
 - **Camino crítico:** A1 → A3 → A4 → A5 → A6 ≈ **12,5 días** (A1 ya hecha: quedan ≈ 10,5). B termina antes (≈ 6,5 días + espera de A4 para B5). **Google arranca ya.**
 
-## Qué necesito de Ismael y cuándo
+## Qué necesito del dueño y cuándo
 | Cuándo | Qué | Para |
 |---|---|---|
 | **Antes de arrancar (día 0)** | OK de este plan y del contrato | A y B |

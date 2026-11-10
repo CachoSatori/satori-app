@@ -1,6 +1,6 @@
 # CLUB-AUD-06 · Cerrar la llamada directa a las funciones públicas con la anon key (propuesta)
 
-> Para que decida Ismael. **No está implementado.** Se aplica antes de la salida general.
+> Para que decida el dueño. **No está implementado.** Se aplica antes de la salida general.
 
 ## El problema
 `club-web` (#38) pone un tope por IP (`CF-Connecting-IP`) delante de `club_cupon_crear`, `club_cupon_ver`,

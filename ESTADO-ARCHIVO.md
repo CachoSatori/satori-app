@@ -1455,7 +1455,7 @@ Auditoría nocturna autónoma (Pase 1 + Pase 2), sin tocar la base (excepto gene
 - **STAGING**: rama `staging` → Cloudflare Pages (base `/`, pendiente de crear) · Supabase ref `hwiatgicyyqyezqwldia` · `npm run build:staging` · ver `STAGING.md`
 - Management token (para queries SQL directas): guardado en sesiones previas
 - Owner profile id: 48ef8af5-25d9-4990-a0b0-5140026da2ba (el dueño)
-- Build/verificar: `cd /Users/ismaelgutierrezpechemiel/Downloads/satori-app && npm run build`
+- Build/verificar: `cd ~/Downloads/satori-app && npm run build`
 
 ## ⚠️ SISTEMA DE DISEÑO (NO romper — costó iteraciones)
 Tema **papel claro** dentro de los módulos (NO oscuro). Tokens en src/index.css :root.

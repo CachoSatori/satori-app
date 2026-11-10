@@ -138,7 +138,7 @@ const primero = <T>(d: T | T[]): T => (Array.isArray(d) ? d[0] : d)
 export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_resolver', { p_texto: texto })
 
 /**
- * Referencia al PoS para el piloto (decisiones de Ismael, 06 y 07-nov): la clave de cruce es el PEDIDO.
+ * Referencia al PoS para el piloto (decisiones del dueño, 06 y 07-nov): la clave de cruce es el PEDIDO.
  * La caja elige el pedido abierto del puente; el servidor guarda el pedido y la hora del escaneo, y el
  * cruce es la primera factura con ese pedido cerrada después del escaneo (tope 18 h).
  * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto).

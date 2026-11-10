@@ -19,7 +19,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Fase | Estado | Notas |
 |---|---|---|
 | Caja diaria + cierre · Caja Fuerte · movimientos | ✅ prod | Sagrado `cashUtils.ts` `b597c697`. |
-| **Fix «Borrar TODO el día»** (elegir por día operativo, vista previa, errores chequeados) | ✅ prod (05/11) | Borraba filas de cierres de otro día (20/07 y 20/10). PR #25 (`781eb72`), validado por Ismael en la preview de staging. Ver [HALLAZGOS.md](HALLAZGOS.md). |
+| **Fix «Borrar TODO el día»** (elegir por día operativo, vista previa, errores chequeados) | ✅ prod (05/11) | Borraba filas de cierres de otro día (20/07 y 20/10). PR #25 (`781eb72`), validado por el dueño en la preview de staging. Ver [HALLAZGOS.md](HALLAZGOS.md). |
 | Baja · Confirmación de «Borrar TODO» en un modal propio | 🔲 | Hoy es un `window.confirm` con texto largo (vista previa, manuales, aviso de filas de otro día). Pasarlo a un modal con tabla, montos y botón de confirmar. Solo UI. |
 | **POZO único** (tres cajas = un saldo; corte 2026-07-22) | ✅ prod | Primer cierre real cuadró. Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md). |
 | **T3 · endurecimiento de caja** (los 8 ítems; mig 052 auditoría de ediciones) | ✅ prod | Cerrado el 10/08. |
@@ -53,7 +53,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 |---|---|---|
 | Módulo Ventas desde el Excel (`ventas_dias` / `ventas_hist`) | ✅ prod | Desde el 30/10 es **respaldo**: último día cargado en prod = 20/10. |
 | **Puente del PoS «Nube de Fuego»** (agente → `ingest-ndf` → `pos_ndf_*`, migs 062–066) | ✅ prod | Dos agentes en la PC del PoS (staging y prod), latido OK el 30/10. |
-| **P1/P2 · Ventas desde el PoS** (`FUENTE_VENTAS='pos'`, día de factura, fusión con el Excel) | ✅ prod (30/10) | Validado físicamente por Ismael. Rollback = revert de #16. |
+| **P1/P2 · Ventas desde el PoS** (`FUENTE_VENTAS='pos'`, día de factura, fusión con el Excel) | ✅ prod (30/10) | Validado físicamente por el dueño. Rollback = revert de #16. |
 | Paridad xls ↔ PoS | ✅ prod | **Temporal**: se retira con la pestaña «Cargar XLS». |
 | En vivo · Frente C (≈₡ y pax de mesa abierta) · desplegable de productos · turnos por lote | ✅ prod | Solo gerencia; lee las tablas `pos_ndf_*` directo. |
 | Lentes de saloneros por línea · atribución de salón | ✅ prod | |
@@ -63,12 +63,12 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Retirar el Excel (pestaña «Cargar XLS») y Paridad | 🔲 | En el backlog, después de un tiempo con el PoS solo. |
 | Re-ingesta 2025 del `01` → ROSAURA (450 tickets, ₡19,06M) | 🔲 | Con firma; requiere actualizar los dos agentes. |
 | Agregación server-side de días del PoS (`pos_ndf_dias` o RPC) | 🔲 | Solo si el cálculo en el navegador se vuelve lento. Toca esquema e ingest. |
-| Merch de mostrador (familia 21) en categoría propia | 🔲 | Decide Ismael. |
+| Merch de mostrador (familia 21) en categoría propia | 🔲 | Decide el dueño. |
 | Ingestar el % de descuento por línea (`FAC_PedidosDet.Descuento` / `TipoDescuento`) | 🔲 | Backlog, sin fecha. Separa Local Club, tarjeta 10 %, personal 30 % y cortesías. Bridge + Edge + columna → firma. Hueco #3 de [SPEC-analisis-ventas-integrado §6](docs/analisis/2026-11-mediodia-localclub/specs/SPEC-analisis-ventas-integrado.md). |
 | Ingestar `FAC_Facturas.CuentaCobrar` (cerrada «a crédito») | 🔲 | Backlog, sin fecha. Mostrar aparte los créditos de tarjetas (~₡260k/mes). Bridge + Edge + columna → firma. Hueco #6 de la misma SPEC. |
 | Revisar `regalia_crc` en tickets `cortesia` | 🔲 | Backlog, sin fecha. Tickets con `valor_servido` > 0 y `regalia_crc` = 0. Revisión, sin esquema. Hueco #7 de la misma SPEC. |
 | **Prom/PAX explicado** (Ventas → Análisis: qué explica el cambio del prom/pax, por turno, día, salonero y semana; RPC mig 080) | ✅ prod (07/11) | SPEC v2.3. Ya usa la franja por hora de la factura. |
-| Prom/PAX v2: mejoras de pantalla a definir con Ismael | 🔲 | También la tabla editable de temporadas por local y, con Nosara, restringir `p_local` al local del usuario (SPEC §10). |
+| Prom/PAX v2: mejoras de pantalla a definir con el dueño | 🔲 | También la tabla editable de temporadas por local y, con Nosara, restringir `p_local` al local del usuario (SPEC §10). |
 | Franja mediodía/noche por hora de la factura, no por turno de caja | 🔲 | Ya está en Prom/PAX (07/11); falta en el resto de Ventas. Backlog, sin fecha. El turno queda mal anotado en los dos sentidos (Q27 en [r8](docs/analisis/2026-11-mediodia-localclub/rondas/r8-Q27-D14-D15.md)). Solo lectura y cálculo, sin esquema. |
 | Código de quien entregó la tarjeta de hotel o tienda en cada mesa + conciliación automática de créditos (sistema web ↔ `CuentaCobrar`) | 🔲 | Backlog, sin fecha. Requiere ingesta → firma. Ver [r9](docs/analisis/2026-11-mediodia-localclub/rondas/r9-programa-creditos-PM.md). |
 | Descuento al personal (30 %): código de empleado obligatorio y reporte mensual por persona | 🔲 | Backlog, sin fecha. Va con firma. Ver D14/D15 en [r8](docs/analisis/2026-11-mediodia-localclub/rondas/r8-Q27-D14-D15.md). |
@@ -79,7 +79,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 ## 3.1 Club Satori (reemplazo de la página de créditos)
 
 Un solo módulo para referentes y créditos, concierges PM y el Local Club, con pases de Wallet. Spec v2 (05/11) en
-revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuestas, copiadas del §1 del spec.
+revisión del dueño → [docs/club-satori/](docs/club-satori/). Fechas propuestas, copiadas del §1 del spec.
 
 | Fase | Qué | Cuándo (propuesto) | Estado |
 |---|---|---|---|
@@ -104,7 +104,7 @@ revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuesta
 |---|---|---|
 | Estabilidad (pantalla negra, realtime tras suspensión, outbox en `SIGNED_IN`, offline) | ✅ prod | |
 | Versionar `ingest-ndf` en `main` con `supabase/config.toml` (ítem 11) | 🔲 | Hasta entonces, ningún PR a `main` con `supabase/functions/`. Con SEC-02 en prod, `monthly-report` pasa a `verify_jwt = true`. Al cerrarlo entra también `alta-empleado` (rama `claude/alta-empleado-fn`, `verify_jwt = true`). |
-| **SEC-01 · cierre de la escalada de roles** (mig 068: rol fijo al dar de alta, guarda de owner activo, nunca 0 owners) | 🟢 prod (05/11) | Paso A y mig 068 aplicados en prod. Falta que Ismael valide (3 owners, Admin, un salonero real en Mi Rendimiento) y el merge del PR. |
+| **SEC-01 · cierre de la escalada de roles** (mig 068: rol fijo al dar de alta, guarda de owner activo, nunca 0 owners) | 🟢 prod (05/11) | Paso A y mig 068 aplicados en prod. Falta que el dueño valide (3 owners, Admin, un salonero real en Mi Rendimiento) y el merge del PR. |
 | **SEC-01b · `get_my_role()` mira `is_active`** (mig 069; en staging también la 070 del PoS) | 🟢 prod (05/11) | **CRÍTICO.** Antes o en la misma migración: corregir las 6 guardas `not in` que se abren con NULL y las 3 policies que leen `profiles.role` sin `is_active` (`cierre_write`, `inv_write_recipes`, `inv_write_ri`). |
 | Versionar en migraciones las policies reales de `profiles` (y revisar drift en el resto) | 🔲 | Hoy prod y staging tienen 3 policies que no están en el repo. También el nombre distinto del trigger de `auth.users`. |
 | **Alta de empleados desde Admin** (Edge Function `alta-empleado`; el owner crea la cuenta y asigna rol) | ✅ prod (06/11, PR #39) | Owner activo, sin crear owners, contraseña temporal y cambio obligatorio en el primer ingreso. Login sin «Crear cuenta». La función está desplegada a mano (`verify_jwt` on); su código entra a `main` con el ítem 11. Auth de prod: `site_url` y redirects corregidos, contraseña mínima 8. Ver [HALLAZGOS.md](HALLAZGOS.md). |
@@ -123,11 +123,11 @@ revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuesta
 0. ~~SEC-01~~ ✅ → ~~alta de empleados~~ ✅ → ~~SEC-01b~~ ✅ → ~~SEC-02~~ ✅ (06/11).
 1. Cerrar lo que quedó del go-live del PoS: revocar/reemplazar el token `claude-code-prod`,
    usuarios de la app para RODRI/FRANCO/MAXI BARRA, recalibrar los umbrales del ICP.
-2. Retirar el Excel y Paridad cuando Ismael lo firme.
+2. Retirar el Excel y Paridad cuando el dueño lo firme.
 3. Ítem 11 (`config.toml` + `ingest-ndf` versionado, con el código de `monthly-report` **v10** y de `alta-empleado`: el de `main` es anterior a SEC-02), y después re-ingesta 2025 con los agentes actualizados.
 4. Salarios: destrabar BioTime (agente parado) y los bloqueos humanos; pase a prod por fase, con firma.
 5. PILAR de auth → gran pase del PoS.
 
-**⏸️ Diferido por Ismael (06/11): rotación de secretos de ingesta** (`POS_INGEST_SECRET` de prod y de staging, `INGEST_SECRET` de BioTime, y sus copias en los `.env` de las PCs del PoS y del reloj). No se hace hasta que Ismael lo reactive; el plan está en [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) (ítem 2).
+**⏸️ Diferido por el dueño (06/11): rotación de secretos de ingesta** (`POS_INGEST_SECRET` de prod y de staging, `INGEST_SECRET` de BioTime, y sus copias en los `.env` de las PCs del PoS y del reloj). No se hace hasta que el dueño lo reactive; el plan está en [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) (ítem 2).
 
 El detalle y la prioridad de cada ítem están en [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).

@@ -1005,7 +1005,7 @@ update club_config set promo_articulo_codigo = 'PRUEBA-PROMO'
  where location_id = 'santa-teresa' and promo_articulo_codigo is distinct from 'PRUEBA-PROMO';
 insert into club_marcadores_descuento (location_id, codigo_producto, nombre, pct_esperado, activo)
   values ('santa-teresa', 'PRUEBA-PROMO', 'PROMO CLUB 10 %', 10, true) on conflict (location_id, codigo_producto) do nothing;
--- ═══ 27. Pedido (piloto; ítem 11, firma de Ismael 07-nov): la caja elige el PEDIDO abierto; facturas =
+-- ═══ 27. Pedido (piloto; ítem 11, firma del dueño 07-nov): la caja elige el PEDIDO abierto; facturas =
 --        la del pedido + las sin pedido de la misma mesa (cuenta dividida); SIN_CRUCE → el manager elige ═══
 -- Números de pedido y de factura de prueba (90xx / 9909xx) para no chocar con los datos reales, salvo
 -- 27h (el pedido 14 del 05-nov y la mesa 19 del 31-oct, que son reales en staging).
@@ -1139,7 +1139,7 @@ begin
   perform pg_temp.r('27', 'real (backfill): la 112430 trae la apertura 18:39:48 y la mesa 20 del PoS',
     (select pedido_abierto_en = timestamptz '2026-11-05 18:39:48-06' and mesa_factura = '20' from pos_ndf_tickets where local = 'santa-teresa' and numero_factura = '112430'), '');
   --  · mesa 19 del 31-oct, con los datos REALES del backfill del ítem 11 (07-nov): pedido 33, apertura y
-  --    mesa tomadas de su factura 112313. Aceptado por Ismael (07-nov): es una cuenta partida en CINCO
+  --    mesa tomadas de su factura 112313. Aceptado por el dueño (07-nov): es una cuenta partida en CINCO
   --    (mismo cajero, 10 minutos, consecutivos 16109–16115, pax 1+0+1+1+1 = 4). No entra la 112293
   --    (pedido 21 de esa mesa, cobrado a las 20:06).
   insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
@@ -1525,7 +1525,7 @@ begin
 end $$;
 
 
--- ═══ 35. Cuenta dividida AMBIGUA (decisión de Ismael 07-nov): dos pedidos de la misma mesa ═══
+-- ═══ 35. Cuenta dividida AMBIGUA (decisión del dueño 07-nov): dos pedidos de la misma mesa ═══
 -- P1 (9301, mesa 4): abierto −60 min, factura +0. P2 (9302, mesa 4): abierto −30 min, factura +20 min.
 -- Sin pedido de la mesa 4: +10 min (cae en las dos ventanas → AMBIGUA) y +40 min (solo en la de P2).
 do $$
@@ -1801,7 +1801,7 @@ begin
 end $$;
 
 
--- ═══ 42. La mesa es (área, mesa): la mesa 3 del área 'M' no es la mesa 3 del área '3' (Ismael, 07-nov) ═══
+-- ═══ 42. La mesa es (área, mesa): la mesa 3 del área 'M' no es la mesa 3 del área '3' (el dueño, 07-nov) ═══
 -- Dos pedidos abiertos con la misma mesa 3, uno por área; cada uno cobra su factura principal y, a la misma
 -- hora, cada mesa tiene una factura sin pedido. Cada pedido cruza SOLO con la de su área.
 do $$
@@ -3525,7 +3525,7 @@ begin
   perform pg_temp.r('68', 'factura con el 857: su rebaja no es DESCUENTO_SIN_RESPALDO (negativa)', not pg_temp.hay(pg_temp.exc('DESCUENTO_SIN_RESPALDO'), 'desc:990821'), '');
   -- ₡0 del 857 no es CORTESIA_NO_CONFIGURADA
   perform pg_temp.r('68', 'el 857 a ₡0 no es «línea a ₡0 fuera de cortesías» (negativa)', not pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'cort-nc:990801'), '');
-  -- visita con 856 + 4 invitados: sin límite (Ismael), no hay excepción de invitados
+  -- visita con 856 + 4 invitados: sin límite (el dueño), no hay excepción de invitados
   v_s := pg_temp.socio('Yago Invita Ficticio', '+50661110041', null);
   perform pg_temp.factura('990831', 2, 0, '[{"c":"856","m":0},{"c":"857","m":0,"q":4}]', '9831');
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -4339,7 +4339,7 @@ begin
     (select count(*) from club_pase_eventos where id > v_e1 and motivo = 'config') = 1, '');
 end $$;
 
--- ═══ 82. RLS de public (Ismael, 08-nov noche): toda tabla con RLS, toda vista con security_invoker, y anon sin
+-- ═══ 82. RLS de public (el dueño, 08-nov noche): toda tabla con RLS, toda vista con security_invoker, y anon sin
 --         permisos que ninguna política justifique. Los privilegios por defecto NO se cambian (dan todo a anon en cada
 --         tabla nueva): esta prueba es la red. Fuera del Club, las tablas marcadas el 08-nov quedan listadas como
 --         conocidas (las arregla cada frente); cualquier tabla NUEVA marcada, o cualquier club_*, hace fallar. ═══
@@ -4387,7 +4387,7 @@ begin
   drop table public.prueba_rls_82;
 end $$;
 
--- ═══ 83. Tope diario ÚNICO del Club (Ismael, 08-nov noche): una sola configuración global, no por local ═══
+-- ═══ 83. Tope diario ÚNICO del Club (el dueño, 08-nov noche): una sola configuración global, no por local ═══
 do $$
 declare v_a text := pg_temp.loc(); v_s uuid; j jsonb; j2 jsonb; j3 jsonb; v_n int; v_e text;
 begin

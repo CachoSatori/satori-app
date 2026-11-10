@@ -45,7 +45,7 @@ VALOR_CREDITO_CRC = 18000
 NOTA_TARJETA = 'fecha aproximada (carga)'
 NOTA_VENC_136 = 'cancelación inactividad 05-nov-2026'
 NOTA_D1 = 'cuenta borrada en el sistema viejo'
-NOTA_RESTO = 'resto del sistema viejo'   # decisión de Ismael 07-nov
+NOTA_RESTO = 'resto del sistema viejo'   # decisión del dueño 07-nov
 CORTE_D1 = '2026-11-01T06:00:00'   # 1-nov-2026 00:00 hora CR, en UTC
 # CLUB-AUD-21: el export tiene que ser del negocio de Satori, y la cancelación del 05-nov cae ese día (hora CR).
 SATORI_BIZ_ID = 'uPberDoE9w19ydF6bZSA'
@@ -606,7 +606,7 @@ select {q(LOCATION)}, mp.id, j.monto, case when j.anulado_en is null then 'pendi
 select {q(LOCATION)}, mp.id, j.monto, j.fecha, 'migracion', j.legacy_ids, j.fecha
   from _datos, jsonb_to_recordset(d->'pm_pagos') as j(miembro_id uuid, monto numeric, fecha timestamptz, legacy_ids text[])
   join _map mp on mp.plan_id = j.miembro_id;""")
-    # [Restos, decisión de Ismael 07-nov] Las cuentas sin actividad en el plazo de vencimiento que solo
+    # [Restos, decisión del dueño 07-nov] Las cuentas sin actividad en el plazo de vencimiento que solo
     # tienen un resto de menos de medio crédito (1 o 2 personas con la tasa 6) se vencen acá, con la
     # fecha de la migración (mismo criterio que club_vencer_candidatos). La validación exige después
     # que la simulación de hoy dé 0 cuentas.
@@ -632,7 +632,7 @@ begin
   for k in select jsonb_object_keys(c) loop
     if (v->>k)::numeric is distinct from (c->>k)::numeric then f := f || (k || ': base=' || coalesce(v->>k, 'null') || ' plan=' || (c->>k)); end if;
   end loop;
-  -- y los esperados firmados por Ismael (--esperados)
+  -- y los esperados firmados por el dueño (--esperados)
   for k in select jsonb_object_keys(e) loop
     if not (v ? k) then
       f := f || (k || ': no existe en la validación');
@@ -749,7 +749,7 @@ def ejecutar(ref: str, sql: str, read_only: bool = False, _prod_firmado: bool = 
         sys.exit(f'Error de la base ({e.code}): {mensaje_error(cuerpo)}')
 
 
-# ── Saldos de tarjetas de papel (Ismael, 08-nov noche): validar, emitir con las reglas de G-56, ensayo en staging ──
+# ── Saldos de tarjetas de papel (el dueño, 08-nov noche): validar, emitir con las reglas de G-56, ensayo en staging ──
 def main_saldos_papel(argv: list[str]) -> None:
     import datetime as _dt
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -948,7 +948,7 @@ def main() -> None:
     ap.add_argument('--out', type=Path, default=Path.home() / 'club-export' / 'salida', help='carpeta de salida (fuera del repo)')
     ap.add_argument('--ref', default=STAGING_REF, help='ref de Supabase; solo se acepta staging')
     ap.add_argument('--local', required=True, help='id del local destino en club_config (el de la página vieja del Club)')
-    ap.add_argument('--esperados', type=Path, help='JSON con los totales esperados, firmado por Ismael (obligatorio con --apply)')
+    ap.add_argument('--esperados', type=Path, help='JSON con los totales esperados, firmado por el dueño (obligatorio con --apply)')
     modo = ap.add_mutually_exclusive_group(required=True)
     modo.add_argument('--dry-run', action='store_true', help='arma el plan y los CSV; no toca la base')
     modo.add_argument('--ensayo', action='store_true', help='corre todo contra staging y valida, pero termina en ROLLBACK')

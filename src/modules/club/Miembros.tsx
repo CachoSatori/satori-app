@@ -434,7 +434,7 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
   }
 
   async function guardar() {
-    // La baja vence el saldo en el momento (decisión de Ismael); volver a activo no lo restituye.
+    // La baja vence el saldo en el momento (decisión del dueño); volver a activo no lo restituye.
     if (inicial?.estado === 'activo' && estado === 'baja' && saldoPersonas > 0 &&
         !window.confirm(`Dar de baja a ${inicial.nombre} vence su saldo (${saldoPersonas} personas). Volver a activarlo no lo restituye: eso solo lo hace el owner con un ajuste. ¿Seguir?`)) return
     setGuardando(true); setError(null)

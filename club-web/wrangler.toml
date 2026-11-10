@@ -9,7 +9,7 @@ compatibility_date = "2025-10-01"
 #   SUPABASE_ANON_KEY  = anon key del mismo proyecto
 # (RL_CREAR_MAX, RL_LECTURA_MAX y sus ventanas solo afectan al servidor local, dev-server.mjs.)
 
-# SECRETO (CLUB-AUD-06): CLUB_WEB_KEY. Lo carga Ismael en el panel, como «Secret» (cifrado), nunca acá:
+# SECRETO (CLUB-AUD-06): CLUB_WEB_KEY. Lo carga el dueño en el panel, como «Secret» (cifrado), nunca acá:
 #   Pages → satori-club → Settings → Variables and Secrets → Add → Type: Secret → CLUB_WEB_KEY.
 #   En Supabase se guarda solo su sha256: select public.club_web_clave_cargar('<sha256 de la clave>');
 #   Sin CLUB_WEB_KEY la API responde 503.

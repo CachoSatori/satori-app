@@ -44,7 +44,7 @@
 - 08-nov · Tercera tanda (auditoría de Grok, ronda 5).
   - **Total A: 14,5 · B: 7.**
   - **Cola de endurecimiento** en el PLAN, para las noches bloqueadas.
-  - **CRM viejo:** plan en PLAN-CRM-cierre.md (lo firma Ismael).
+  - **CRM viejo:** plan en PLAN-CRM-cierre.md (lo firma el dueño).
   - **Arranca A2.**
 - 08-nov · **A2 hecha** (`838b892`).
   - **Alta en caja** (`club_socio_alta_caja`): nombre, WhatsApp y «verifiqué residencia» obligatorios; email opcional.
@@ -59,15 +59,15 @@
   - **Cursor:** `club_pase_cursor_rebobinar` (solo `service_role`, motivo obligatorio, auditado).
   - **Tarea diaria:** `pg_cron` `club_socios_mantenimiento` a las 03:15 CR, programada por la 075 solo si hay
     `pg_cron` (staging sí; en prod se verifica en el paso 4 del RUNBOOK).
-  - **DECISIONES PROVISORIAS (las revisa Ismael):**
-    1. ~~Texto del aviso de privacidad~~ → **cargado el texto de Ismael como `v1-borrador`** (08-nov; ES/EN en
+  - **DECISIONES PROVISORIAS (las revisa el dueño):**
+    1. ~~Texto del aviso de privacidad~~ → **cargado el texto del dueño como `v1-borrador`** (08-nov; ES/EN en
        `club-web/src/i18n.ts`, versión en `club-web/src/config.ts` y en `club_config`, staging incluido). Falta el
        **correo de contacto** (hoy `‹correo›`/`‹email›`): cuando llegue, se reemplaza y se sube la versión el mismo día.
     2. La respuesta de la autoalta es pareja: si el WhatsApp ya es socio no se dice; si la persona ya existía (por
        ejemplo, un socio en baja que vuelve) queda pendiente **sin** devolver su portal.
     3. Topes: 60 autoaltas por día, purga a 30 días, provisional 7 días (los tres en `club_config`).
     4. El referido (`?ref=`) se guarda en `referido_por`; el premio nace en A4 (primera factura C con el 856).
-  - **Necesita a Ismael:** widget de Turnstile en Cloudflare (`VITE_TURNSTILE_SITEKEY` y el Secret `TURNSTILE_SECRET`);
+  - **Necesita al dueño:** widget de Turnstile en Cloudflare (`VITE_TURNSTILE_SITEKEY` y el Secret `TURNSTILE_SECRET`);
     en staging alcanzan las claves de prueba de Cloudflare.
   - **Guía de uso** (`docs/sop-app/`): el Club todavía no tiene guía; va en A6 con el recorrido.
   - **Próximo:** A3 (promociones mínimas + productos + admin de cortesías).
@@ -97,13 +97,13 @@
 - 08-nov 02:30 (cont.) · B3: rutas `sync` y `actualizar` del Edge (`2654b7e`). Faltan el programador y la función de A.
 - 08-nov 04:30 · **Integración** en `claude/club-integracion` (= epic-tesla + club-wallet, sin conflictos). Corte para la
   auditoría: **`5fd7ab1`**. Batería 354/354, carreras 8/8, paridad 724 = 724, vitest 1.521, builds OK, migrador 15 OK.
-  Staging en base. Resumen y «necesita a Ismael»: [NOCHE-2026-11-08-RESUMEN.md](NOCHE-2026-11-08-RESUMEN.md).
+  Staging en base. Resumen y «necesita al dueño»: [NOCHE-2026-11-08-RESUMEN.md](NOCHE-2026-11-08-RESUMEN.md).
 - 08-nov (día) ·
   - **Anotaciones de B traídas a epic-tesla** (`901026b`).
   - **`club_pases_emitidos()`** (`490451d`, prueba 62); B3 ya la usa para los eventos de promociones (`5f759ad`, club-wallet).
   - **Puente CLUB-AUD-44/45** (`9461731`, sin desplegar): mig 082 `pos_ndf_ingestar` (una transacción + lock por local);
     carrera de dos POST de la misma factura: antes 6 líneas, ahora 3. **44 a 48 están juntos** en `claude/puente-item11`.
-  - **Diseño del pase** propuesto (`b5d6a33`, club-wallet; lo aprueba Ismael).
+  - **Diseño del pase** propuesto (`b5d6a33`, club-wallet; lo aprueba el dueño).
   - **A4 hecha**:
     - A4.1 visita del socio y «qué aplicar» (sorteo fijo, tope por día, regla de créditos, antiautocanje);
     - A4.2 Escanear;
@@ -126,7 +126,7 @@
     (120 días): 275 `LC_SIN_REGISTRO` (el LC se cobra sin la app) y 310 `DESCUENTO_SIN_RESPALDO`. Por eso existe
     `lc_excepciones_desde` (RUNBOOK 8b).
   - **DECISIONES PROVISORIAS:**
-    1. El 857 «INVITADO» no está en `articulos_cero_permitidos` hasta que Ismael diga qué marca, así que hoy sale como
+    1. El 857 «INVITADO» no está en `articulos_cero_permitidos` hasta que el dueño diga qué marca, así que hoy sale como
        `CORTESIA_NO_CONFIGURADA` cuando hay sección.
     2. `DESCUENTO_SIN_RESPALDO`: umbral de 1 % por debajo de la moda; ante un empate de modas, se toma el precio más
        alto.
@@ -140,7 +140,7 @@
     **`claude/puente-item11` NO:** arrastra 403 commits de otros frentes desde su base con main (PoS F1–F3, salarios,
     propinas…), con 17 conflictos en código ajeno al puente. Se abortó el merge (la rama quedó como estaba). Lo propio del
     puente son unos 46 archivos (`supabase/functions/ingest-ndf`, `src/shared/ndf`, la 082, `scripts/sql/puente_carreras`).
-    Propuesta para Ismael: armar `claude/puente-item11-v2` desde main con solo esos archivos.
+    Propuesta para el dueño: armar `claude/puente-item11-v2` desde main con solo esos archivos.
 
 ### Autorrevisión adversarial (A4, A5 y el 857) — qué puede hacer de más cada actor
 | Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
@@ -157,7 +157,7 @@
 | Manager | Aprobar personas pendientes de un cupón que registró él | Lo bloquea la base («lo registraste vos») | No se puede chequear «distinto del anfitrión» si el anfitrión es del equipo (no hay vínculo miembro ↔ usuario) |
 | Manager | Editar promociones o cortesías | Solo el owner | — |
 
-- 08-nov (tarde, ajustes de Ismael) ·
+- 08-nov (tarde, ajustes del dueño) ·
   - **857 sin límite** (`bd6786e`): sale `lc_invitados_max` y la excepción `LC_INVITADOS_EXCEDIDOS`; el resto del 857
     queda igual. Reemplaza lo de arriba.
   - **Grok 90/91/93** (`bd6786e`, prueba 69): socio que ya usó su beneficio hoy en otro pedido → «ya_uso_hoy», «NO
@@ -172,7 +172,7 @@
   - **Puente** (`claude/puente-item11-prod` @ `e4678b3`): cherry-pick de `831b3ee` y `9461731` (sin conflictos;
     `mapTicket.ts` idéntico, roster y GreenSeason intactos) + Grok 99 en `puente_carreras/pruebas.sql` (11/11). Sin deploy.
     Se descarta `puente-item11-v2`. **PAQUETE DE PASE para firma:** `docs/club-satori/PAQUETE-PASE-puente.md` (`9c5975b`).
-  - **Aviso de privacidad `v1-borrador`** (`e38fd49`): texto de Ismael ES/EN en club-web, versión en club-web, 075 y
+  - **Aviso de privacidad `v1-borrador`** (`e38fd49`): texto del dueño ES/EN en club-web, versión en club-web, 075 y
     staging. Falta el correo de contacto.
   - **Diseño del pase** (club-wallet `61dc7de`): el daruma no está en el repo; maqueta v2 con 悟 y franja «SATORI · CLUB».
     Sigue apagado hasta el OK.
@@ -183,13 +183,13 @@
 |---|---|---|---|
 | Socio | Usar el beneficio en dos pedidos el mismo día | La segunda llamada devuelve «ya_uso_hoy» sin crear visita; la caja ve rojo | Si la caja igual cobra el %, sale `DESCUENTO_SIN_RESPALDO`/`LC_SIN_REGISTRO` (posterior) |
 | Socio | Dos socios en la misma factura para sumar % | `socios_por_factura` = 1: el segundo sale «como_invitado», sin % ni cortesía | Configurable hasta 10: si el owner lo sube, el % se sigue aplicando una vez (lo controla la caja) |
-| Invitado | Muchos 857 en una factura | Ya no hay tope (decisión de Ismael) | Sin excepción por cantidad: queda a criterio de caja |
+| Invitado | Muchos 857 en una factura | Ya no hay tope (decisión del dueño) | Sin excepción por cantidad: queda a criterio de caja |
 | Anfitrión | Que le aprueben personas de un cupón anulado o de una factura anulada | `club_pendiente_resolver` revalida cupón, factura X y anfitrión activo antes de aprobar | — |
 | Cajero | Resolver la excepción de una factura que cobró él | Su login del PoS mapeado a su usuario lo bloquea | Logins compartidos (p. ej. el de turno) sin mapear → solo el owner: más trabajo para el owner |
 | Manager | Resolver una excepción de una factura que cobró él | Igual que el cajero, por login del PoS | Si cobró con el login de otro, no se detecta (límite del PoS) |
 | Operador del pase a prod | Correr el Edge nuevo sin la 082, o soltar la 082 con el Edge nuevo arriba | Paquete con orden fijo y rollback «Edge anterior antes del drop» | Requiere la copia del Edge actual antes de empezar (paso 0) |
 
-- 08-nov (tarde 2, Ismael: multilocal y pase del puente) ·
+- 08-nov (tarde 2, el dueño: multilocal y pase del puente) ·
   - **Multilocal** (`8e4299a`): el Club corre por local y encender uno es un dato (`club_config.club_activo`). Nosara
     cargado y **apagado**. Selector de local en la app (solo con más de uno), pestaña **Locales** del owner con el
     interruptor (auditado), club-web manda el local (`?local=` o elegido). Prueba 70 (17 casos): local sintético
@@ -200,21 +200,21 @@
   - **Relevamiento fuera del Club:** `docs/MULTILOCAL-relevamiento.md` (solo lista; caja y propinas no tienen local).
   - **Puente:** `docs/puente/PASE-PROD-2026-11-09.md` en `claude/puente-item11-prod` (`40370cc`), para la firma del lunes;
     carreras y pruebas del puente en verde con el SHA fijo `e4678b3`. La 085 espera al puente.
-  - **PR #64** mergeado (`1e28444`) con el OK de Ismael; ledger de prod en `080` antes y después.
+  - **PR #64** mergeado (`1e28444`) con el OK del dueño; ledger de prod en `080` antes y después.
   - Pruebas: batería 438/438 · paridad 840 = 840 · carreras OK · vitest 1.496 · club-web 14/14 · wallet + club 51/51.
 
 ### Autorrevisión adversarial (multilocal)
 | Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
 |---|---|---|---|
 | Anónimo | Darse de alta en un local apagado o inventado (`local` en la autoalta) | `club_local(..., true)`: el local tiene que existir y estar encendido; el proxy solo deja pasar ids `^[a-z0-9-]{2,40}$` | `club_locales_activos` muestra los nombres de los locales encendidos (dato público) |
-| Socio | Usar su QR en el otro local | La visita exige el Club encendido en SU local y busca el pedido en su local | ~~DECISIÓN PROVISORIA: no hay Club compartido entre locales~~ **REEMPLAZADO** (08-nov): Club compartido, decisión de Ismael (`677d0cc`); ver `GROK-fichas-75-99.md` |
+| Socio | Usar su QR en el otro local | La visita exige el Club encendido en SU local y busca el pedido en su local | ~~DECISIÓN PROVISORIA: no hay Club compartido entre locales~~ **REEMPLAZADO** (08-nov): Club compartido, decisión del dueño (`677d0cc`); ver `GROK-fichas-75-99.md` |
 | Anfitrión | Generar cupones con el local apagado | `club_cupon_crear` exige el Club encendido en su local | — |
 | Cajero | Operar en un local apagado eligiéndolo en un navegador viejo | El selector solo muestra locales encendidos (salvo al owner) y la base rechaza igual | — |
 | Manager | Encender un local | RLS de `club_config`: solo el owner (prueba 70) | — |
 | Owner | Encender Nosara sin preparar códigos ni topes | Confirmación con el aviso del checklist | Es una decisión suya; el checklist del RUNBOOK es la guía |
 | Cualquiera | Una pantalla que llame sin local con dos encendidos | La base pide elegir; nunca supone uno | Un acceso del inicio (alertas del Club) usa el último local elegido en ese navegador |
 
-- 08-nov (tarde 3, Ismael: genérico, aviso v1, marcadores) ·
+- 08-nov (tarde 3, el dueño: genérico, aviso v1, marcadores) ·
   - **Aviso de privacidad v1** (`30b1de5`): texto final, sin ubicación, con el correo de contacto; versión `v1` en
     club-web, en la 075 y en staging; cada alta guarda la versión aceptada.
   - **Marcadores de descuento** (`190ab94`): lista configurable por local (código del PoS, nombre, % esperado, activo);
@@ -238,7 +238,7 @@
 | Cualquiera | Insertar datos del Club sin local con dos locales encendidos | El default de `location_id` exige un único local encendido; si no, falla | — |
 | Anónimo | Aceptar un aviso viejo | La autoalta exige la versión vigente (`v1`) | — |
 
-- 08-nov (tarde 4) · **location_id sin default** (Ismael): NOT NULL y SIN default en todas las tablas del Club; nunca se
+- 08-nov (tarde 4) · **location_id sin default** (el dueño): NOT NULL y SIN default en todas las tablas del Club; nunca se
   asume un local en silencio. El migrador pasa `--local`; la batería declara su local UNA vez (`pg_temp.loc()`, el único
   encendido en staging; si no hay exactamente uno, no arranca) y sus 134 inserciones lo pasan explícito (las carreras,
   sus 4). Prueba 72: ninguna tabla tiene default ni acepta nulo, y una inserción sin local falla (23502).
@@ -246,7 +246,7 @@
   Autorrevisión: el riesgo era un dato del Club cargado en otro local sin que nadie lo note; ahora falla. Un script
   nuevo que inserte sin local se entera en la primera corrida.
 
-- 08-nov (tarde 5) · **A6 hecha** (Ismael: «seguí con A6 hasta el corte»):
+- 08-nov (tarde 5) · **A6 hecha** (el dueño: «seguí con A6 hasta el corte»):
   - **Reporte «Visitas de socios por usuario»** (`a1d19b6`): por quien registró la visita: visitas, socios, con
     beneficio, como invitado, con créditos, **sin factura** y máximo de un mismo socio. Cierra el hueco de la autorrevisión
     A4/A5 («falta un reporte de visitas por usuario»). Prueba 73.
@@ -255,9 +255,9 @@
   - **Recorrido p12** (owner, solo lectura): selector de local, Locales con «Nuevo local», Descuentos y el reporte nuevo,
     4/4. Ajuste visual de Locales y del selector a la paleta del módulo (`1701776`). Un texto de la UI nombraba a una
     persona: cambiado a genérico.
-  - **Nota para Ismael:** las cuentas de prueba `club-prueba-manager` y `club-prueba-cajero` están **desactivadas** en
+  - **Nota para el dueño:** las cuentas de prueba `club-prueba-manager` y `club-prueba-cajero` están **desactivadas** en
     staging desde el 07-nov 18:05 UTC (no las reactivé; el permiso del manager lo cubren las pruebas).
-  - **Estimación «Club compartido»:** pasada por chat (≈ 14,5 h; decide Ismael). No se cambió nada. **REEMPLAZADO:** Ismael
+  - **Estimación «Club compartido»:** pasada por chat (≈ 14,5 h; decide el dueño). No se cambió nada. **REEMPLAZADO:** El dueño
     eligió el Club compartido y se hizo (`677d0cc`, `75e5cfc`).
 
 ### Autorrevisión adversarial (A6)
@@ -274,10 +274,10 @@
     alta → reportes del mes. Limpieza: staging en 2538 / 338 / 338, sin claves ni datos sintéticos. Capturas en el
     scratchpad de la sesión (no van al repo: muestran datos de staging).
   - Arreglo de texto: «…hasta el {fecha} p. m..» (punto doble) en la validación de socio.
-  - **Para Ismael:** el encabezado de club-web usa el kanji 里 (el que dijo que no va en el pase); no se tocó: va con la
+  - **Para el dueño:** el encabezado de club-web usa el kanji 里 (el que dijo que no va en el pase); no se tocó: va con la
     decisión del diseño.
 
-- 08-nov (tarde 6, decisiones de Ismael) ·
+- 08-nov (tarde 6, decisiones del dueño) ·
   - **Puente:** el pase a prod es el **lunes 09-nov a las 9:00**; `claude/puente-item11-prod` sin cambios de código
     (`e4678b3`), paquete con la hora (`3b13c0d`).
   - **Datos del PoS del local de Santa Teresa** (staging, `2fc5edc`): PROMO CLUB 10 % = `1123` (su marcador se siembra
@@ -298,7 +298,7 @@
     re-corrido: 12/12 (el arnés re-siembra los pedidos: el agente real de staging reemplaza la foto de mesas abiertas).
   - Pruebas: batería 483/483 · paridad OK · carreras 8/8 · vitest 1.497 · club-web 14/14 · wallet + club 52/52.
   - **No se tocaron** las cuentas `club-prueba-*` (las revisa la sesión de caja).
-  - **Daruma real (v4, decisión de Ismael):** la imagen final de Ismael (foto del daruma real) reemplaza al daruma
+  - **Daruma real (v4, decisión del dueño):** la imagen final del dueño (foto del daruma real) reemplaza al daruma
     dibujado, que se borró de club-web y del pase. Original sin tocar y scripts en `docs/club-satori/img/daruma/`; solo
     se recorta el fondo blanco, sin filtros. club-web (`375ab18`): encabezado y favicons de 32 y 64 px. Pase (`7d9ab45`):
     logo en círculo tinta 990×990, hero 1032×336 con la cara, fondo tinta = diseño aprobado; maqueta v4. **El pase sigue
@@ -331,7 +331,7 @@
   `scripts/ledger-reconciliacion` y `AdminModule` ya estaban).
 - Staging vuelve a su base: 2538 movimientos / 338 miembros / 338 roles; sin locales de prueba ni claves de club-web.
 - **DECISIÓN PROVISORIA:** los contactos de turistas (`club_cupones_contactos`) **no se leen desde la app** (ni owner):
-  hasta que haya un exporte de ofertas auditado, se leen solo por SQL del proyecto. Si Ismael quiere verlos en la app,
+  hasta que haya un exporte de ofertas auditado, se leen solo por SQL del proyecto. Si el dueño quiere verlos en la app,
   va por una función con rastro, como el contacto del miembro.
 - **DECISIÓN PROVISORIA:** el texto del aviso **corto** del cupón es nuevo (resume el v1 para el turista): es borrador.
 
@@ -342,11 +342,11 @@
 | Anónimo | Dar de baja a un turista ajeno | Necesita el código del cupón (10 caracteres, secreto); responde igual exista o no | Quien vea la pantalla del turista puede darlo de baja: daño bajo (solo deja de recibir ofertas) |
 | Anónimo | Dejar contacto sin aceptar el aviso | La base exige la versión vigente exacta del local | — |
 | Cajero | Armar el mapa de teléfonos con «últimos 4 dígitos» | 30 búsquedas por minuto y cada una queda con su usuario; nunca devuelve teléfono | 10.000 combinaciones = horas y queda a la vista en `club_auditoria`. **Acción sugerida:** una alerta si alguien supera N búsquedas por día |
-| Manager | Leer contactos o exportar sin rastro | La tabla no se lee directo; la función y el exporte dejan fila; la auditoría es de solo inserción | El exporte lo registra la app: una app modificada podría saltearlo, pero el dato del reporte sale de `club_reporte_mes` (owner/manager). **Hueco anotado:** auditar también `club_reporte_mes` si Ismael lo quiere |
+| Manager | Leer contactos o exportar sin rastro | La tabla no se lee directo; la función y el exporte dejan fila; la auditoría es de solo inserción | El exporte lo registra la app: una app modificada podría saltearlo, pero el dato del reporte sale de `club_reporte_mes` (owner/manager). **Hueco anotado:** auditar también `club_reporte_mes` si el dueño lo quiere |
 | Owner | Borrar su propio rastro | `club_auditoria` sin DELETE para la app y con trigger de solo inserción (prueba 78) | — |
 | Anfitrión | Ver un saldo en ₡ que no es el real | El ₡ = créditos × `valor_credito_crc` vigente | Si el owner cambia el valor del crédito, el pase no se actualiza hasta el próximo evento del miembro (no hay evento por cambio de config). Anotado para B |
 
-## 08-nov · noche (correcciones de Ismael) · `96ed1bd`
+## 08-nov · noche (correcciones del dueño) · `96ed1bd`
 - **Guía rápida:** cupón = aplicar el 10 % en el PoS **y** marcar «PROMO CLUB 10 %» (vale ₡0: es la marca).
 - **Créditos con colones** («1 crédito · ₡10.000») en el saldo y en «Créditos a canjear» de la caja, la confirmación, el
   aviso del canje, el portal y las guías: coincide con el pase.
@@ -373,8 +373,8 @@
 
 ## 08-nov · noche (tanda 3)
 - **Mensajes del piloto** (`docs/club-satori/piloto/`): socios sin «tus acompañantes van como invitados»; acompañantes y
-  cortesía sorpresa marcados **[CONFIRMAR ISMAEL]**; anfitriones con `<valor del crédito>` y dos párrafos
-  **[CONFIRMAR ISMAEL]** (saldo de la tarjeta de papel, vencimiento de los créditos).
+  cortesía sorpresa marcados **[CONFIRMAR DUEÑO]**; anfitriones con `<valor del crédito>` y dos párrafos
+  **[CONFIRMAR DUEÑO]** (saldo de la tarjeta de papel, vencimiento de los créditos).
 - **G-56** (RUNBOOK §12): filtro de sentencias, línea de base «cero socios en `club_*`», `lock_timeout` y
   `statement_timeout`, `migracion.sql` con datos personales (viaja solo el sha256), ensayo fuera de horario. Sigue diseño.
 - **G-61** mecánico (`4fb5f28`): `gate61.sh` + `gate61_catalogo.sql` (3.439 hechos, determinista) + esperadas con firma;
@@ -382,21 +382,21 @@
 - **Paridad:** `club_paridad.sh` sale 2 con una salida vacía, `null` o con menos de 898 objetos.
 - **`club_reporte_mes` deja rastro** (`ver_reporte_mes`: quién, cuándo, mes, local, vivo; sin datos) (`377f077`).
 - **Fichas de Grok 75–99:** `GROK-fichas-75-99.md`. Llegaron 75, 76, 90, 91, 93 y 99; **77–89, 92 y 94–98 no llegaron**
-  (necesita a Ismael). Club compartido y 857 marcados como reemplazados donde decían lo contrario.
+  (necesita al dueño). Club compartido y 857 marcados como reemplazados donde decían lo contrario.
 - Pruebas: batería **528/528** · paridad **901 = 901** · gate61 13/13 y staging → 0. Staging en su base.
 
-## 08-nov · noche (decisiones de Ismael) · `fd1effb`, `78b9f80`
+## 08-nov · noche (decisiones del dueño) · `fd1effb`, `78b9f80`
 - **Mensajes del piloto cerrados:** invitados sin límite («el beneficio vale para toda la mesa, siempre que se sienten con
   vos»), cortesía en cada visita (sale de la promo vigente), saldo de papel al portal y vencimiento. Lo mismo en la guía
   rápida (una A4) y en la 6.13 (una sola factura por mesa con socio).
 - **Vencimiento verificado:** el SPEC §5.1 («12 meses sin actividad; cualquier tarjeta o canje reinicia el plazo») y
   `club_vencer` (vence todo el saldo si la última tarjeta, canje o restitución tiene más de `vencimiento_meses`)
   **coinciden**: se cuenta desde la **última actividad**, no desde que se gana cada crédito. Texto único en mensajes,
-  portal, aviso del canje por WhatsApp y guías. **Matiz para Ismael (no se eligió nada):** el código también cuenta la
+  portal, aviso del canje por WhatsApp y guías. **Matiz para el dueño (no se eligió nada):** el código también cuenta la
   **restitución** (la hace el owner) como actividad; el SPEC nombra solo tarjeta y canje.
 - **Tope diario único del Club:** `club_config_global.socio_visitas_por_dia` (una fila, solo owner, auditado); se borró la
   columna por local. Regla visible: «Una visita con beneficio por día, en cualquier Satori.» Prueba 83. Se revierte si
-  Ismael decide otra cosa.
+  el dueño decide otra cosa.
 - **Saldos de tarjetas de papel:** plantilla, validador y `migrar_firestore.py saldos-papel` con las reglas de G-56
   (`docs/club-satori/piloto/saldos-papel.md`). Ensayo en staging con 6 anfitriones ficticios: OK y ROLLBACK (staging
   intacto); negativas en vivo: código inexistente y entorno equivocado frenan. 19 pruebas. **DECISIONES PROVISORIAS:**
@@ -413,7 +413,7 @@
 - **Aviso v1.1 corregido** sin subir versión (nadie lo aceptó en prod), ES y EN: «Para qué» suma las ofertas solo si las
   aceptó (y ya no contradice «no los usamos para nada más»); «Quién los ve» suma los servicios tecnológicos con
   servidores fuera de Costa Rica; «Cuánto tiempo» suma los contactos de ofertas (hasta la baja o 24 meses sin contacto)
-  **[CONFIRMAR ISMAEL]**; «Responsable» con `<dirección del responsable>` **[CONFIRMAR ISMAEL]**. El RUNBOOK §6 exige 0
+  **[CONFIRMAR DUEÑO]**; «Responsable» con `<dirección del responsable>` **[CONFIRMAR DUEÑO]**. El RUNBOOK §6 exige 0
   marcas antes del deploy de club-web.
 - **Retención de contactos de ofertas:** `club_config_global.contactos_ofertas_meses` (24, provisorio) y borrado diario en
   `club_socios_mantenimiento` (rastro sin datos). «Último contacto» = `ultimo_contacto_en` (lo marca quien manda la oferta)
@@ -422,10 +422,10 @@
   del pase, el portal de la autoalta, el canje, la baja y la lectura de QR; la app de caja lo lee al abrir el Club; el
   Edge del pase usa `CLUB_WEB_ORIGIN` (sin él, 503). `src/dominioRepo.test.ts` falla si el dominio vuelve a estar escrito
   fuera de los docs (probado con un archivo trucado). En staging el dominio está cargado como dato.
-- **Saldos de papel:** fecha del movimiento = la de la carga por defecto **[CONFIRMAR ISMAEL]** (la de la tarjeta, en la
+- **Saldos de papel:** fecha del movimiento = la de la carga por defecto **[CONFIRMAR DUEÑO]** (la de la tarjeta, en la
   nota y como opción). `doble-carga-papel` (solo lectura) cruza el CSV con el export de Firestore: hace falta el mapa
   código ↔ id viejo, porque el export no tiene el código del Club. 25 pruebas (con un export ficticio).
-- **SPEC §5.1:** la restitución cuenta como actividad (decisión de Ismael).
+- **SPEC §5.1:** la restitución cuenta como actividad (decisión del dueño).
 - Pruebas: batería **547/547** · paridad OK · vitest 1.511 · club-web 23 · wallet + club 60 · saldos 25 · gate61 13/13.
 
 ## 09-nov · tarde (Grok NO-GO del puente; Club: 106, 109 y los arreglos de la auditoría) · rama del Club, nada en prod

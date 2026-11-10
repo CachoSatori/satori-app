@@ -1,6 +1,6 @@
 # Daruma del Club
 
-- `daruma-original.jpg`: la imagen final de Ismael (08-nov), hecha a partir de una foto del daruma real del restaurante.
+- `daruma-original.jpg`: la imagen final del dueño (08-nov), hecha a partir de una foto del daruma real del restaurante.
   Se puede publicar. **No se edita:** es la fuente de todas las piezas.
 - Piezas (sin filtros ni retoques de estilo: solo se recorta el fondo blanco, se escala y se compone sobre tinta):
 
@@ -17,4 +17,4 @@
 
 - `recortar.py` saca solo el blanco unido al borde de la imagen (el blanco de la cara queda) y suaviza 4 px de
   contorno sin dejar halo.
-- El daruma dibujado (SVG) que hubo antes se borró por decisión de Ismael.
+- El daruma dibujado (SVG) que hubo antes se borró por decisión del dueño.

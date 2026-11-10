@@ -1,4 +1,4 @@
-# Piezas del daruma del Club a partir de la imagen de Ismael (foto del daruma real; 08-nov). Sin filtros ni retoques:
+# Piezas del daruma del Club a partir de la imagen del dueño (foto del daruma real; 08-nov). Sin filtros ni retoques:
 # solo recorte del fondo blanco (recortar.py), escala y composición sobre tinta.
 #   python3 -I daruma_assets.py <daruma-original.jpg> <carpeta de salida>
 # Salida: daruma.png (sin fondo) · logo.png (990×990, círculo tinta) · hero.png (1032×336, la cara sobre tinta)

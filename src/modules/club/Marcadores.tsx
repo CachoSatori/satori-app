@@ -1,5 +1,5 @@
 /**
- * Marcadores de descuento — LC-MD (Ismael, 08-nov). Lista CONFIGURABLE por local de los artículos del PoS que respaldan
+ * Marcadores de descuento — LC-MD (el dueño, 08-nov). Lista CONFIGURABLE por local de los artículos del PoS que respaldan
  * un descuento en la factura (Local Club 856, invitado 857, PROMO CLUB, tarjetas de hoteles o tiendas, descuento de
  * personal…). DESCUENTO_SIN_RESPALDO y CANJE_CON_DESCUENTO la usan: cargar un marcador nuevo hace que esas facturas
  * dejen de salir como excepción, sin código. El owner edita; el manager ve (el contador no entra a /club).

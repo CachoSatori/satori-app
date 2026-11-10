@@ -1,6 +1,6 @@
 # Relevamiento multilocal · qué está atado a un local por nombre (08-nov-2026)
 
-> **Regla (Ismael, 08-nov):** nada atado a Santa Teresa o Nosara por nombre; los locales salen de datos y abrir uno nuevo
+> **Regla (el dueño, 08-nov):** nada atado a Santa Teresa o Nosara por nombre; los locales salen de datos y abrir uno nuevo
 > no requiere código. **Este documento solo lista; no se cambió nada fuera del Club.** Referencias contra `main` @
 > `1e28444` (y la rama del puente donde se indica). Lo arregla cada frente cuando toque ese código.
 
@@ -60,4 +60,4 @@ Con un local en datos, estos textos salen del local de la sesión o del reporte 
 ## Propuesta (para decidir, no hecha)
 Una tabla `locales` (id, nombre, dirección, mapa, zona horaria, activo por módulo) como única fuente, que usen la caja,
 las propinas, las ventas, el puente y el Club (hoy el Club usa `club_config`, que podría referenciarla). El orden lo decide
-Ismael; lo estructural de la §1 es lo que de verdad frena abrir Nosara fuera del Club.
+El dueño; lo estructural de la §1 es lo que de verdad frena abrir Nosara fuera del Club.

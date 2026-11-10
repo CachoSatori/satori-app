@@ -1,8 +1,8 @@
 # SPEC complemento: Local Club en Wallet, promociones y reglas de combinación (07-nov-2026)
 
-> Texto de Ismael, copiado tal cual. Se lee junto con [SPEC.md](SPEC.md).
+> Texto del dueño, copiado tal cual. Se lee junto con [SPEC.md](SPEC.md).
 
-**Decisión de Ismael:** el piloto oficial en prod sale con el paquete completo en Wallet (créditos de referentes + Local
+**Decisión del dueño:** el piloto oficial en prod sale con el paquete completo en Wallet (créditos de referentes + Local
 Club). Antes, un piloto interno de créditos en staging, en paralelo con el sistema viejo.
 
 ## 1. Local Club

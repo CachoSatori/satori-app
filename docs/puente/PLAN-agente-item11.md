@@ -1,6 +1,6 @@
 # Plan · actualizar el agente del PoS (ítem 11) — paso a paso por AnyDesk
 
-> **Para Ismael.** Solo el agente de **STAGING**, en **`C:\satori\satori-app`**. **Prod no se toca.**
+> **Para el dueño.** Solo el agente de **STAGING**, en **`C:\satori\satori-app`**. **Prod no se toca.**
 > **Ventana: de día y fuera del servicio. Nunca de 17:00 a 23:00.** Duración: unos 30 minutos, más el
 > backfill, que corre solo.
 > Si algo no coincide con lo que dice este plan, **parar y avisar** antes de seguir.
@@ -96,7 +96,7 @@ npm run pos:backfill -- --desde 2026-09-01 --hasta <AYER, AAAA-MM-DD>
 ## Paso 7 · Verificación (Claude Code, en staging)
 Claude Code corre `scripts/sql/club_verificar_backfill.sql`, que es solo lectura y termina en ROLLBACK:
 - **Cobertura en salón desde el 1-sep:** facturas con mesa de la factura, con consecutivo y con
-  apertura. Según el conteo de Ismael, quedan 5 sin mesa ni pedido.
+  apertura. Según el conteo del dueño, quedan 5 sin mesa ni pedido.
 - **Ejemplos:**
   - 112430 → consecutivo …16197, apertura 2026-11-05 18:39:48.
   - 112310 y 112311 → mesa 19, sin pedido.
@@ -113,7 +113,7 @@ Claude Code corre `scripts/sql/club_verificar_backfill.sql`, que es solo lectura
      `feat/pos-desglose` y después corre `scripts/sql/081_rollback.sql`. **En ese orden.**
 
 ## Segunda actualización del agente de staging: el área de la mesa (07-nov)
-La mesa es (área, mesa): la mesa 3 del área '3' no es la mesa 3 del área 'M' (decisión de Ismael). El
+La mesa es (área, mesa): la mesa 3 del área '3' no es la mesa 3 del área 'M' (decisión del dueño). El
 agente ahora manda también:
 - `area_factura` (`FAC_Facturas.Area`) en cada factura;
 - `area` (`FAC_Pedidos.Area`) en cada mesa abierta.
@@ -142,7 +142,7 @@ Cambios del agente (rama `claude/puente-item11` @ **`0cf4d87`**):
 
 La base ya acepta las dos claves, la vieja y la nueva: el orden entre la PC y la base no importa.
 
-## Pase a prod — anotado, NO se hace ahora (lleva firma de Ismael)
+## Pase a prod — anotado, NO se hace ahora (lleva firma del dueño)
 Orden obligatorio, sin saltos:
 1. **Migración 081** en prod, a mano, con el ritual del ref y registrada en el ledger. Hay **una sola versión**, la final, en el PR #59 (con el área de la mesa y los índices del CLUB-AUD-13). Las ramas del agente ya no la traen, así que no hay ninguna 081 vieja para aplicar por error. El agente no la usa.
 2. **Edge `ingest-ndf` v11** en prod, a mano. Con el Edge nuevo y sin la 081, el upsert falla y no

@@ -274,7 +274,7 @@ Verificar: `/api/salud` → todo en `true` (`club_web_key` y `turnstile` incluid
 | `socio_visitas_semana_max` | `club_config` de Santa Teresa | **7** | 5 |
 | `anfitrion_tope_mes_crc` | `club_config` de Santa Teresa | **150000** | 25000 |
 | Los otros topes (`socios_por_factura`, `cupones_max_dia_referente`, `cupones_max_minuto_local`, `socio_autoalta_max_dia`, `buscar_tope_minuto`) y los valores del crédito | `club_config` | **los de la migración** | 1 · 30 · 20 · 60 · 30 · ₡18.000 cada 6 personas |
-| `lc_excepciones_desde` | `club_config` de Santa Teresa | **el día de la apertura a clientes** (vie 13 o lun 16, lo decide el dueño el vie 13): se carga ese día, antes de abrir | vacío |
+| `lc_excepciones_desde` | `club_config` de Santa Teresa | **Provisorio: `2026-11-12`** (el día de la prueba interna; decisión del dueño, 10-nov), para que la revisión del vie 13 vea las excepciones de la prueba. **El día de la apertura a clientes** (vie 13 o lun 16) se cambia a esa fecha, antes de abrir | vacío |
 | Cortesías del sorteo | Club → Promociones (datos) | **abiertas**: las carga el dueño cuando las defina. Con **una activa** alcanza para encender | — |
 | `pos_login` de los empleados | Admin → Empleados | **ya están cargados**: no se carga nada (solo se verifica) | — |
 | Códigos del PoS y sección de cortesías | `club_config` | 856 (LOCAL CLUB), 857 (INVITADO), 1123 (PROMO CLUB 10 %); cortesías 17 / 40 | 856 · 857 · — |
@@ -284,7 +284,8 @@ Verificar: `/api/salud` → todo en `true` (`club_web_key` y `turnstile` incluid
 
 ```sql
 update public.club_config set socio_visitas_semana_max = 7, anfitrion_tope_mes_crc = 150000,
-                              promo_articulo_codigo = '1123', cortesia_familia = 17, cortesia_subclasificacion = 40
+                              promo_articulo_codigo = '1123', cortesia_familia = 17, cortesia_subclasificacion = 40,
+                              lc_excepciones_desde = '2026-11-12'   -- PROVISORIO: el día de la prueba interna
  where location_id = 'santa-teresa';
 -- verificar (anotar en §10)
 select g.socio_visitas_por_dia, g.contactos_ofertas_meses, c.socio_visitas_semana_max, c.anfitrion_tope_mes_crc,
@@ -293,13 +294,14 @@ select g.socio_visitas_por_dia, g.contactos_ofertas_meses, c.socio_visitas_seman
        c.promo_articulo_codigo, c.cortesia_familia, c.cortesia_subclasificacion, c.aviso_privacidad_version,
        c.tarjeta_manual_activa, c.lc_excepciones_desde, c.club_activo
   from public.club_config c cross join public.club_config_global g where c.location_id = 'santa-teresa';
--- 1 · 24 · 7 · 150000 · 1 · 30 · 20 · 60 · 30 · 18000 · 6 · 856 · 857 · 1123 · 17 · 40 · v1.1 · false · null · false
+-- 1 · 24 · 7 · 150000 · 1 · 30 · 20 · 60 · 30 · 18000 · 6 · 856 · 857 · 1123 · 17 · 40 · v1.1 · false · 2026-11-12 · false
 select count(*) filter (where pos_login is not null) as con_login, count(*) as activos
   from public.employees where is_active;                                                          -- anotar
 ```
-- **`lc_excepciones_desde` el día de la apertura:** `update public.club_config set lc_excepciones_desde = '<día>' where
-  location_id = 'santa-teresa';`. Mientras esté vacío, las excepciones del Local Club miran **todo** el historial (en
-  staging: 275 `LC_SIN_REGISTRO` en 120 días). Ver la nota de §6.6 sobre la prueba interna.
+- **`lc_excepciones_desde`, el día de la apertura** (antes de abrir): `update public.club_config set lc_excepciones_desde =
+  '<día de la apertura>' where location_id = 'santa-teresa';`. Desde ahí, las excepciones del Local Club cuentan solo desde
+  la apertura y lo de la prueba interna deja de aparecer (ya se revisó el vie 13). **Nunca vacío:** vacío, las excepciones
+  del Local Club miran todo el historial (en staging: 275 `LC_SIN_REGISTRO` en 120 días).
 
 **6.5 Carga única del lanzamiento** (Firestore + papel; G-56), **antes de encender**: exige la base del Club **vacía**
 («cero socios»), y la prueba interna ya crea socios. Procedimiento: RUNBOOK §8 y `docs/club-satori/piloto/saldos-papel.md`
@@ -308,10 +310,8 @@ sin ellos y la carga se replanifica con firma (el migrador frena con la base no 
 
 **6.6 Encender Santa Teresa: en la prueba interna** (jue 12 por la tarde, antes del servicio). Owner → Club → Locales →
 **Encender**. Antes: una cortesía activa (§6.4), §5.4 en 0 y `/api/salud` en verde. Nosara queda apagado.
-- **Nota sobre `lc_excepciones_desde`:** con la fecha de la apertura (en el futuro) cargada **antes** de la prueba, las
-  excepciones del Local Club de la prueba no aparecen (cuentan solo desde esa fecha); con el campo vacío aparece todo el
-  historial. Para que la revisión del viernes vea lo de la prueba hace falta una fecha **provisoria**: el día de la prueba.
-  Eso cambia la decisión del dueño y **lo decide el dueño** (pendiente en el informe del 10-nov).
+- **`lc_excepciones_desde` = `2026-11-12`** (provisorio, cargado en §6.4): la revisión del vie 13 ve las excepciones del
+  Local Club de la prueba y nada de antes. Se cambia al día de la apertura cuando se abra (§6.4).
 
 ## 7. Criterios de parada → vuelta atrás (§8)
 - Branching en error (`MIGRATIONS_FAILED`) o aplicando otra cosa que la 150 y la 151.
@@ -402,5 +402,6 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 6.4 valores del local (la fila de verificación) · empleados con login | | |
 | 6.5 carga única (sha256, conteos) o «replanificada» | | |
 | 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
-| `lc_excepciones_desde` (el día de la apertura) | | |
+| `lc_excepciones_desde`: `2026-11-12` en §6.4 (provisorio) | 2026-11-12 | |
+| `lc_excepciones_desde`: el día de la apertura, antes de abrir | (fecha) | |
 | Cierre: pasa / vuelta atrás (hasta qué paso de §8) | | |

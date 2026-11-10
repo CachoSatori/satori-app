@@ -11,6 +11,7 @@ const RE_REF = /^[A-HJ-NP-Z2-9]{8}$/
 const RE_LOCAL = /^[a-z0-9-]{2,40}$/   // LC-ML: id de local de club_config
 const RE_CUPON = /^[A-HJ-NP-Z2-9]{10}$/
 const RE_TOKEN = /^[0-9a-f]{64}$/
+const RE_BAJA = /^[0-9a-f]{32}$/   // 136: la llave de baja del turista (128 bits), no el código del cupón
 const RE_SUPABASE = /^https:\/\/[a-z0-9]{20}\.supabase\.co$/
 
 const memoria = new Map() // SOLO para el servidor local (CLUB_DEV=1)
@@ -209,12 +210,16 @@ export async function manejar(request, env, path) {
       if (!c || !c.optin || !RE_AVISO.test(c.acepto)) return json(400, { error: 'datos_invalidos' })
       return rpc(env, 'club_cupon_contacto', { p_codigo: cod, p_contacto: c })
     }
-    // POST /api/cupon/:codigo/baja  → LC-PRIV (Grok 63): el turista borra el contacto que dejó con ese cupón
-    if (partes.length === 3 && partes[2] === 'baja') {
-      if (metodo !== 'POST') return json(405, { error: 'metodo' })
-      { const ok = await limitar(env, 'crear', `baja-t:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
-      return rpc(env, 'club_cupon_contacto_baja', { p_codigo: cod })
-    }
+  }
+
+  // POST /api/baja/:token  → LC-PRIV (Grok 63) + 136: el turista borra su contacto con la llave de baja de su mensaje (128
+  // bits). Ya no con el código del cupón: ese código lo ve la caja y viajaba en cada mensaje (y servía para usar el cupón).
+  if (partes.length === 2 && partes[0] === 'baja') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_BAJA.test(tok)) return json(404, { error: 'baja_invalida' })
+    { const ok = await limitar(env, 'crear', `baja-t:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    return rpc(env, 'club_cupon_contacto_baja', { p_token: tok })
   }
 
   // POST /api/portal/:token/canje  → código de canje de un solo uso (R-01), 10 minutos

@@ -25,6 +25,7 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 | `POST /api/cupon` `{referente}` | `club_cupon_crear` | 5 cada 10 min |
 | `GET /api/cupon/{codigo}` | `club_cupon_ver` | 60 por minuto |
 | `POST /api/cupon/{codigo}/contacto` `{contacto}` | `club_cupon_contacto` | 5 cada 10 min |
+| `POST /api/baja/{llave32}` (136: la llave de baja del contacto, nunca el código del cupón) | `club_cupon_contacto_baja` | 5 por minuto |
 | `GET /api/portal/{token}` | `club_portal` | 60 por minuto |
 | `POST /api/portal/{token}/canje` | `club_canje_codigo_generar` | 5 por minuto |
 | `POST /api/portal/{token}/baja` | `club_socio_baja_portal` | 5 por minuto |

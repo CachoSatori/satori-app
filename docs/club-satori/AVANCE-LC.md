@@ -704,3 +704,26 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
   `club_facturas_recientes` primero, y sus permisos. Las tablas y los datos no cambiaron.
 - **El ledger de staging (fila 075) sigue sin igualar el archivo**, como con S0/S8: se resuelve en el pase del Club.
 
+
+### 10-nov: 136 (Grok) — la baja del turista con una llave propia, SIN aplicar en staging · rama `claude/club-baja-token`, nada en prod
+- **Riesgo real, distinto del que se describió:** no se borran contactos en masa adivinando códigos. El código tiene ~50
+  bits, la función responde siempre `true` (no confirma si existe) y hay tope por IP. El problema es que el **código del
+  cupón** era también el link de baja, y ese código va en el QR que ve la caja, en cada mensaje de ofertas y en el CSV
+  del owner. Con un mensaje reenviado, cualquiera podía dar de baja al turista y, si el cupón seguía vigente, **usarlo**.
+- **Arreglo:**
+  - `club_cupones_contactos.baja_token`: 128 bits por contacto, único;
+  - `club_cupon_contacto_baja(p_token)` borra por esa llave (y no por el código);
+  - el CSV de ofertas trae `/b/<llave>`;
+  - club-web: `POST /api/baja/:llave` (la ruta vieja con el código ya no existe), la página `/b/` pide la llave y el
+    aviso corto dice que cada mensaje trae su link.
+  - Sin Turnstile: con una llave de 128 bits no hace falta, y la baja tiene que ser de un solo clic. El tope por IP
+    sigue.
+- **Pruebas:**
+  - batería 77 y 80: el contacto nace con su llave; con el código del cupón ya no se borra nada; el CSV no trae el
+    código. Con el arreglo dentro de la transacción descartada: **597/597**;
+  - sin el arreglo, la batería se corta al leer `baja_token` (la columna no existe);
+  - mutación `136` en `mutaciones_r7.json`;
+  - API de club-web 19/19; las 2 pruebas nuevas caen con la `api.js` vieja.
+- **Ojo:** la batería tardó entre 21 y 30 s en esta corrida: sigue cerca del máximo de la Management API.
+- **Para aplicar en staging (con permiso del dueño):** la columna (con su índice único) y las dos funciones; los
+  contactos que ya existen reciben su llave al agregar la columna (hoy hay 0 en staging).

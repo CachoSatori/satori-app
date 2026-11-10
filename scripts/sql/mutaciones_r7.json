@@ -17,5 +17,8 @@
                                                                "public.club_visita_canonica(", "public.club_cruce_provisional(",
                                                                "public.club_excepciones("]}},
   "S2": {"antes_de": "-- ═══ 91. (09-nov) S2",
-         "funciones_de": {"commit": "c309b26", "funciones": ["public.club_reporte_visitas("]}}
+         "funciones_de": {"commit": "c309b26", "funciones": ["public.club_reporte_visitas("]}},
+  "136": {"antes_de": "-- ═══ 77. LC-PRIV",
+          "sql_antes": "drop function public.club_cupon_contacto_baja(text);",
+          "funciones_de": {"commit": "37164ea", "funciones": ["public.club_cupon_contacto_baja(", "public.club_contactos_ofertas_exportar("]}}
 }

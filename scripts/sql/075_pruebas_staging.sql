@@ -3999,9 +3999,9 @@ begin
   update club_config set club_activo = false where location_id in ('prueba-cc', 'prueba-off');
 end $$;
 
--- ═══ 77. LC-PRIV · Grok 63: el contacto del turista lleva la versión del aviso; baja del turista con el código ═══
+-- ═══ 77. LC-PRIV · Grok 63: el contacto del turista lleva la versión del aviso; baja del turista con su llave (136) ═══
 do $$
-declare v_cup text; v_cup2 text; v_e text; v_ok boolean; v_id uuid; v_n int; v_ref text;
+declare v_cup text; v_cup2 text; v_e text; v_ok boolean; v_id uuid; v_n int; v_ref text; v_tok text;
 begin
   perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);   -- la 40 rotó la clave
   -- la batería corre en UNA transacción (now() fijo): todos sus cupones cuentan en «el último minuto»
@@ -4035,30 +4035,42 @@ begin
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('77', 'cupón con contacto sin aviso → «Datos de contacto no válidos»', sqlerrm = 'Datos de contacto no válidos', sqlerrm);
   end;
-  -- baja del turista: borra su contacto, deja rastro SIN datos; siempre responde true
+  -- 136 (10-nov): con el CÓDIGO del cupón ya no se da de baja a nadie (lo ve la caja y viajaba en los mensajes)
+  select k.baja_token into v_tok from club_cupones_contactos k where k.cupon_id = v_id;
+  perform pg_temp.r('77', '136 · el contacto nace con su llave de baja (32 hex), distinta del código del cupón',
+    v_tok ~ '^[0-9a-f]{32}$' and v_tok <> lower(v_cup), coalesce(length(v_tok)::text, 'sin llave'));
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_cupon_contacto_baja(v_cup);
+    perform pg_temp.yo(); perform pg_temp.r('77', '136 · baja con el código del cupón', false, 'respondió');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('77', '136 · baja con el código del cupón → «Datos no válidos» y el contacto sigue (negativa)',
+      sqlerrm = 'Datos no válidos' and exists (select 1 from club_cupones_contactos where cupon_id = v_id), sqlerrm);
+  end;
+  -- baja del turista con su llave: borra su contacto, deja rastro SIN datos; siempre responde true
   perform pg_temp.como('anon', null);
-  v_ok := public.club_cupon_contacto_baja(lower(v_cup));
+  v_ok := public.club_cupon_contacto_baja(upper(v_tok));
   perform pg_temp.yo();
   perform pg_temp.r('77', 'baja del turista → true y el contacto se borra',
     v_ok and not exists (select 1 from club_cupones_contactos where cupon_id = v_id), '');
   select count(*) into v_n from club_auditoria where accion = 'baja_contacto_turista' and objeto_id = v_id and antes is null and despues is null;
   perform pg_temp.r('77', 'baja del turista: queda en club_auditoria, sin datos', v_n = 1, format('%s filas', v_n));
   perform pg_temp.como('anon', null);
-  v_ok := public.club_cupon_contacto_baja(v_cup) and public.club_cupon_contacto_baja('AAAAAAAAAA');
+  v_ok := public.club_cupon_contacto_baja(v_tok) and public.club_cupon_contacto_baja('0123456789abcdef0123456789abcdef');
   perform pg_temp.yo();
   select count(*) into v_n from club_auditoria where accion = 'baja_contacto_turista' and objeto_id = v_id;
-  perform pg_temp.r('77', 'baja repetida o de un código que no existe → true, sin rastro nuevo (no revela nada)', v_ok and v_n = 1, format('%s filas', v_n));
+  perform pg_temp.r('77', 'baja repetida o con una llave que no existe → true, sin rastro nuevo (no revela nada)', v_ok and v_n = 1, format('%s filas', v_n));
   begin
     perform pg_temp.como('anon', null);
     perform public.club_cupon_contacto_baja('corto');
-    perform pg_temp.yo(); perform pg_temp.r('77', 'baja con un código mal formado', false, 'respondió');
+    perform pg_temp.yo(); perform pg_temp.r('77', 'baja con una llave mal formada', false, 'respondió');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('77', 'baja con un código mal formado → «Datos no válidos»', sqlerrm = 'Datos no válidos', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('77', 'baja con una llave mal formada → «Datos no válidos»', sqlerrm = 'Datos no válidos', sqlerrm);
   end;
   begin
     perform set_config('request.headers', '{}', true);
     perform pg_temp.como('anon', null);
-    perform public.club_cupon_contacto_baja(v_cup);
+    perform public.club_cupon_contacto_baja(v_tok);
     perform pg_temp.yo(); perform pg_temp.r('77', 'baja sin el header de club-web', false, 'respondió');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('77', 'baja sin el header de club-web → «Datos no válidos»', sqlerrm = 'Datos no válidos', sqlerrm);
@@ -4207,8 +4219,9 @@ begin
   select count(*), min(e.baja_url) into v_n, v_url from public.club_contactos_ofertas_exportar(pg_temp.loc()) e where e.whatsapp in ('+50660008001', '+50660008002');
   select count(*) into v_fil from public.club_contactos_ofertas_exportar(null) e;
   perform pg_temp.yo();
-  perform pg_temp.r('80', 'owner exporta solo los que aceptaron, con el link de baja de su cupón',
-    v_n = 1 and v_url = public.club_url() || '/b/' || v_c1, format('%s filas · %s', v_n, v_url));
+  perform pg_temp.r('80', 'owner exporta solo los que aceptaron, con su link de baja: la llave del contacto, NUNCA el código del cupón (136)',
+    v_n = 1 and v_url = public.club_url() || '/b/' || (select k.baja_token from club_cupones_contactos k join club_cupones c on c.id = k.cupon_id where c.codigo = v_c1)
+      and position(v_c1 in v_url) = 0, format('%s filas · %s', v_n, case when position(v_c1 in coalesce(v_url, '')) > 0 then 'trae el código del cupón' else 'sin el código' end));
   select * into a from club_auditoria where accion = 'exporte_contactos_turistas' and actor = '<OWNER_UUID>'::uuid order by id desc limit 1;
   perform pg_temp.r('80', 'el exporte de contactos queda en club_auditoria (owner, filas), sin datos',
     a.despues->>'filas' = v_fil::text and a.antes is null and not (a.despues::text ~ '6000800|Ochenta'), coalesce(to_jsonb(a)::text, 'sin fila'));

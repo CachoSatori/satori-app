@@ -86,11 +86,15 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    - si `rl_crear` o `rl_leer` sale en `false`, Pages no tomó el binding. Esos endpoints responden 503: fallan cerrados, el sitio no queda abierto;
    - prueba de fuego: 6 «Obtener mi cupón» seguidos desde un mismo teléfono. El sexto tiene que mostrar «Demasiados intentos seguidos».
 
-   **Plan B, si Pages no admite los bindings: `/api` en un Worker.**
-   1. Crear un Worker `satori-club-api` con el mismo `functions/_lib/api.js`. Su `fetch(request, env)` llama a `manejar(request, env, path)`.
-   2. Declarar en el `wrangler.toml` del Worker los dos `[[unsafe.bindings]]` de arriba, más `SUPABASE_URL`, `SUPABASE_ANON_KEY` y el secreto `CLUB_WEB_KEY`.
-   3. Agregar la ruta `<dominio>/api/*` → Worker `satori-club-api` (Workers Routes), y sacar `functions/api` de Pages.
-   4. Repetir la verificación con `/api/salud`.
+   **Plan B, si Pages no admite los bindings: `/api` en un Worker** (hecho el 10-nov en `worker/`, sin desplegar).
+   - `worker/index.js` usa el mismo `functions/_lib/api.js` (no hay otra copia de la API) y `worker/wrangler.toml` declara
+     los dos topes. Cada respuesta lleva `x-club-api: worker`, y la de Pages, `x-club-api: pages`: `/api/salud` dice quién
+     contestó.
+   - En local, `wrangler pages dev` acepta el `wrangler.toml` de Pages pero **no** expone `RL_CREAR` ni `RL_LEER`; el
+     Worker sí (`wrangler deploy --dry-run`). Es probable que haga falta.
+   - Pasos de panel (crear el Worker desde el repo, variables y secretos, ruta `<dominio>/api/*`) y cómo decidir entre
+     A y B: `docs/pases/PASE-150-151-club.md` §11. **La ruta necesita que la zona del dominio esté en esta cuenta de
+     Cloudflare.** `functions/api` puede quedar en Pages: con la ruta puesta, `/api/*` lo atiende el Worker.
 5. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
 
 ## DNS: apuntar el dominio del Club (lo hace Ismael)

@@ -191,7 +191,7 @@ Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, co
 1. ~~Perfil técnico de Grok~~ ✅ recibido el 05-nov. Burger House no se migra.
 2. Definición contable con el contador: el crédito como pasivo, el canje como «a crédito» o regalía, y el PM como gasto.
 3. **Cuentas de Wallet** (sociedad LCT Desarrollos; Satori es la marca):
-   - Google: ✅ Issuer ID `3388000000023220960`, en modo prueba. La publicación se pide cuando exista la clase del pase.
+   - Google: ✅ cuenta de emisor aprobada, en modo demo (10-nov). El Issuer ID **no va en el repo**: es el secreto `GOOGLE_WALLET_ISSUER_ID` del Edge. La publicación se pide cuando exista la clase del pase.
    - Apple: D-U-N-S pedido el 05-nov; después, inscripción como «Organization» con satoricostarica.com.
    - Dominio: subdominio `club.satoricostarica.com` para el cupón; el dueño tiene el control del dominio.
 4. Confirmar 12 meses de vencimiento.

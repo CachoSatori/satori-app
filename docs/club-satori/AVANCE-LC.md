@@ -739,7 +739,7 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
 - **Vuelta atrás en staging:** `drop` de `club_cupon_contacto_baja(text)` y la versión de `37164ea` (por código) con sus
   permisos; el exporte de `37164ea`; `drop index` y `drop column baja_token`. Hoy no hay contactos que pierdan su llave.
 
-### Pendiente del piloto: partir la batería del Club (propuesta, sin implementar)
+### Pendiente del piloto: partir la batería del Club (propuesta del 10-nov; HECHO el mismo día, ver abajo)
 **Por qué:** la batería corre en un solo request a la Management API, que corta a los **30 s**. Hoy tarda **21–30 s**
 y crece con los tickets reales que el puente suma a staging cada día. Si pasa de 30, no hay resultado (no se sabe si
 está verde) y `mutar_bateria.py` tampoco corre.
@@ -767,3 +767,40 @@ la mitad» rompe esas dependencias.
 **Descartado:** conectarse directo a la base (`psql`) para evitar el límite: necesita la contraseña de la base en la
 sesión. **Complemento:** bajar el costo de `DESCUENTO_SIN_RESPALDO` (2,8 s sobre 60 días), que es lo que más pesa en
 los bloques 60–68.
+
+### 10-nov: la batería del Club por tramos (solo pruebas; rama `claude/club-bateria-tramos`, PR en borrador, nada en prod)
+- **Un solo archivo**, `scripts/sql/075_pruebas_staging.sql`, con marcas `-- ════════ TRAMO n: …`:
+  - **preámbulo:** el encabezado, los datos base, las funciones `pg_temp.*`, incluidas las 7 que antes se creaban adentro
+    de la 27, la 64 y la 67, y los perfiles de contador y manager activos, que antes estaban en la 28;
+  - **5 tramos** (la propuesta decía 4): 1–26 · 27–59 · 60–67 · 68–69 · 70–91 y 6. La 68 sola tarda ~5,5 s en el
+    servidor: con 4 tramos, el de 60–68 llegó a 12,9 s.
+  - Cada tramo trae su **puesta a punto**: la clave de club-web rotada, la config del local y la global, el marcador de
+    `PRUEBA-PROMO` y el estado de «Local Club». Cada cambio va con una guarda: en la batería entera no toca nada.
+    Se armó comparando, al empezar cada tramo, el estado «solo» contra la batería entera (config, marcadores,
+    promociones, clave, perfiles y cantidad de filas). Las filas de datos difieren y los tramos lo toleran.
+- **`scripts/sql/bateria_club.py`:** corre los tramos uno detrás del otro. **Sale ≠ 0** si un tramo no devuelve
+  resultados, si un caso falla, o si el total no es el de `--esperado`.
+- **`mutar_bateria.py`:** cada mutación va en el tramo de su ancla y en todos los siguientes (como en la batería entera,
+  donde sigue puesta hasta el final).
+- **`scripts/sql/bateria_tramos.test.ts` (vitest):** cada tramo lee de `_ids` solo lo que crea el preámbulo o él mismo;
+  ninguno crea funciones `pg_temp`; cada ancla de mutación aparece una vez. Trae un caso armado que muestra que el
+  control avisa.
+- **Dos casos que dependían de otro tramo**, ahora autosuficientes:
+  - la 90 tiene su propia factura C (993962), en vez de la 990950 de la 27;
+  - el caso B3 de la 85 («ver el teléfono del canje queda en club_auditoria») pasó a la 43, donde se ve el teléfono.
+    Conserva la etiqueta «85».
+- **Resultado en staging** (transacciones con `rollback`):
+  - por tramos, **597/597** en 3 corridas: tramo 1 (107 casos) 3,5–8,4 s; tramo 2 (225) 4,7–8,3 s; tramo 3 (72)
+    4,0–4,7 s; tramo 4 (17) 5,9–6,2 s; tramo 5 (176) 5,3–7,0 s. Los picos son carga de staging;
+  - el archivo entero en un solo request, **597/597** (21–23 s);
+  - mutaciones, iguales a la batería entera: R02 2, CLUB-AUD-43 1, R7-02 4, CLUB-AUD-66 3, S0 5, S8 1, S0b 5, S2 1,
+    136 4.
+- **La 60 se queda en el tramo 3:** pasarla al 2 obligaba a copiar en la puesta a punto las cortesías y promociones que
+  siembra.
+
+### Pendiente (después del piloto): bajar el costo de «descuento sin respaldo»
+- `club_excepciones(…, 'DESCUENTO_SIN_RESPALDO')` tarda **2,8 s sobre 60 días** en staging (todas las excepciones juntas,
+  1,4 s). Es lo que más pesa en el tramo 3 (bloques 60–68) y en la pantalla Excepciones cuando se elige ese tipo.
+- Qué mirar: el plan de la consulta del precio habitual (la moda de los 30 días anteriores por artículo), con
+  `explain analyze` sobre staging. **Sin analizar todavía; no se tocó.**
+

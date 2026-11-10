@@ -2,6 +2,9 @@
 """
 Prueba que FALLA sin el arreglo (IDS-AUDITOR.md): corre la batería 075 en STAGING con UN arreglo deshecho dentro de la
 misma transacción que la batería ya descarta (termina en ROLLBACK: nada queda en staging) y lista qué casos caen.
+10-nov: por TRAMOS (bateria_club.py). Como en la batería entera la mutación sigue puesta hasta el final, se corre en el
+tramo que tiene su ancla (justo antes del ancla) y en TODOS los tramos siguientes (al empezar, después de su puesta a
+punto). Cada request (preámbulo + tramo con la mutación + cierre) entra holgado en los 30 s de la Management API.
 
   CAJERO_UUID=… OWNER_UUID=… MANAGER_UUID=… SALONERO_UUID=… CONTADOR_UUID=… \\
     python3 scripts/sql/mutar_bateria.py scripts/sql/mutaciones_r7.json [NOMBRE…]
@@ -15,6 +18,9 @@ Token de la Management API: el proxy (o SUPABASE_ACCESS_TOKEN). Ref fijo de stag
 from __future__ import annotations
 import json, os, subprocess, sys, urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bateria_club   # noqa: E402  (partir la batería en preámbulo, tramos y cierre)
 
 REF = 'hwiatgicyyqyezqwldia'   # SOLO staging
 RAIZ = Path(__file__).resolve().parents[2]
@@ -43,12 +49,7 @@ def ejecutar(sql: str) -> object:
 def main() -> None:
     muts = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
     pedidas = sys.argv[2:] or list(muts)
-    bat = (RAIZ / 'scripts/sql/075_pruebas_staging.sql').read_text(encoding='utf-8')
-    for k in UUIDS:
-        v = os.environ.get(f'{k}_UUID')
-        if not v:
-            sys.exit(f'falta {k}_UUID')
-        bat = bat.replace(f'<{k}_UUID>', v)
+    pre, tramos, cierre = bateria_club.partir(bateria_club.leer())
     for nombre in pedidas:
         m = muts[nombre]
         if 'sql' in m:
@@ -58,20 +59,34 @@ def main() -> None:
                                  capture_output=True, text=True, check=True).stdout
             # «sql_antes»: lo que hay que correr antes (p. ej. un drop si la versión vieja devuelve otro tipo)
             deshacer = m.get('sql_antes', '') + '\n' + '\n'.join(funcion(src, f) for f in m['funciones_de']['funciones'])
-        if bat.count(m['antes_de']) != 1:
+        donde = [(n, cuerpo) for n, _, cuerpo in tramos if cuerpo.count(m['antes_de']) == 1]
+        if len(donde) != 1 or sum(cuerpo.count(m['antes_de']) for _, _, cuerpo in tramos) != 1:
             print(nombre, 'ancla no encontrada (o repetida)'); continue
-        for _ in range(4):   # la API a veces corta con «upstream request failed»: se reintenta
-            r = ejecutar(bat.replace(m['antes_de'], deshacer + '\n' + m['antes_de']))
-            if 'upstream' not in str(r)[:200]:
-                break
-        try:
-            res = r[0]['json_agg']
-        except Exception:
-            print(nombre, 'ERROR', str(r)[:400]); continue
+        n_tramo = donde[0][0]
+        res, err = [], ''
+        for n, _, cuerpo in tramos:
+            if n < n_tramo:
+                continue
+            if n == n_tramo:
+                mutado = cuerpo.replace(m['antes_de'], deshacer + '\n' + m['antes_de'])
+            else:   # al empezar el tramo: después de su marca y de su puesta a punto (antes del primer bloque)
+                i = cuerpo.index('\n-- ═══ ') + 1
+                mutado = cuerpo[:i] + deshacer + '\n' + cuerpo[i:]
+            for _ in range(4):   # la API a veces corta con «upstream request failed»: se reintenta
+                r = ejecutar(bateria_club.armar(pre, mutado, cierre))
+                if 'upstream' not in str(r)[:200]:
+                    break
+            try:
+                res += [dict(x, tramo=n) for x in r[0]['json_agg']]
+            except Exception:
+                err += f' · tramo {n}: {str(r)[:300]}'
+        if err and not res:
+            print(nombre, 'ERROR', err); continue
         caen = [x for x in res if not x['ok']]
-        print(f"{nombre}: {len(res)} casos · caen {len(caen)}")
+        por_tramo = ', '.join(f"T{n} {sum(1 for x in caen if x['tramo'] == n)}" for n in sorted({x['tramo'] for x in res}))
+        print(f"{nombre} (ancla en el tramo {n_tramo}): {len(res)} casos · caen {len(caen)} ({por_tramo}){' · ERROR' + err if err else ''}")
         for x in caen:
-            print(f"   {x['p']} · {x['caso'][:100]}")
+            print(f"   T{x['tramo']} {x['p']} · {x['caso'][:100]}")
 
 
 if __name__ == '__main__':

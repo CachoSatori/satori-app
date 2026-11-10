@@ -150,6 +150,18 @@
      de SQL de `pos-bridge/config.test.ts`, y el nombre del dueño de las líneas propias de cada rama. La
      `POS_DB_PASSWORD` de ese archivo es de mentira (confirmado por el dueño). *(Nuevo, 10/11.)*
 
+22f. **🔒 Grok 160 · bloquear el canje de un crédito cuya factura R se anuló** (decisión del dueño, 10-nov): **después del
+     piloto**. Para el piloto se MITIGA: la R que respaldaba un crédito pasa a X → alerta prioritaria arriba en Excepciones
+     (revisión diaria, «Revisado» con nota), sin bloquear ni revertir (PASE-150-151 §12). Lo que falta: que el canje frene
+     (o pida aprobación) mientras haya una alerta sin revisar sobre esos créditos. *(Nuevo, 10/11.)*
+22g. **📧 Grok 184 · correo personal en los commits:** desde el 10-nov los commits de Claude salen con
+     `noreply@anthropic.com`. Los merges hechos por la API de GitHub salen con el correo de la cuenta del dueño: activar
+     en GitHub → Settings → Emails «Keep my email addresses private» (y «Block command line pushes that expose my email»).
+     El historial no se reescribe (decisión del dueño). *(Nuevo, 10/11.)*
+22h. **🧾 Cédula jurídica en `extract-document`** (decisión del dueño, 10-nov): es un dato público del Registro y queda por
+     ahora en el texto del Edge (`supabase/functions/extract-document/index.ts`). **Después del piloto** pasa a una variable
+     del Edge. *(Nuevo, 10/11.)*
+
 ## 🟨 P2 — Esperan decisión o firma del dueño
 
 23. **🖊️ Salarios:** pase a prod por fase (migs 055–061 solo en staging), insumos humanos (6 activos sin código

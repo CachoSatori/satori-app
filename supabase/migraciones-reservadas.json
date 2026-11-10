@@ -49,12 +49,14 @@
     "087": {
       "nombre": "employee_edits_audit",
       "bloque": "caja",
-      "rama": "claude/employees-audit"
+      "rama": "claude/employees-audit",
+      "destino": "No se usa con este número: cuando esté lista, va al bloque de pase (152+) con este número como «origen» (decisión del dueño, 10-nov)."
     },
     "088": {
       "nombre": "employees_recibe_reparto_cocina",
       "bloque": "caja",
-      "rama": "claude/prop-aud-01"
+      "rama": "claude/prop-aud-01",
+      "destino": "No se usa con este número: cuando esté lista, va al bloque de pase (152+) con este número como «origen» (decisión del dueño, 10-nov)."
     },
     "089": {
       "nombre": "anon_sin_politica",

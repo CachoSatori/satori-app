@@ -42,6 +42,13 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 | #56 · #57 | `bb1a488` · `6bcfafb` | 06/11 | Saca nombres y correos reales de comentarios, tests y docs. |
 | este PR | — | 07/11 | **Prom/PAX explicado** (Ventas → Análisis) + **mig 080** `pos_prompax_agregado`, que la aplica el merge (Branching). Firmado por Ismael el 06/11. |
 
+- **🔒 085 (SEC-01c) en PROD (10/11)**: lectura de empleados, propinas y tipos de cambio solo para cuentas **activas**.
+  - **Merge del #80** `bb12652` a las 08:24:48 -06:00, con la firma del dueño (08:23); la aplicó Branching. Control: el
+    encargado. Claude no corrió nada en prod.
+  - **Verificado por el dueño:** ledger **58 · 085**, 1 fila 085 con su `name` (9 statements); las 7 policies en
+    «Después» y las otras 8 iguales; 4a después 0·0·0·0·0·profiles 1; 4b después idéntico al antes en los 5 roles y en
+    `base` (0 PARADA); pantalla OK. **Pase cerrado sin vuelta atrás.** Bitácora en
+    [docs/pases/PASE-085-rls-lectura-rol-activo.md](docs/pases/PASE-085-rls-lectura-rol-activo.md) §9.
 - **🌉 Puente del PoS en PROD (09/11, pase ejecutado por el dueño en la PC del PoS; detalle en
   [docs/puente/RESULTADO-PASE-2026-11-09.md](docs/puente/RESULTADO-PASE-2026-11-09.md)):**
   - **Migraciones, a mano antes del merge:**
@@ -221,9 +228,9 @@ solas tras un reinicio (validado el 29/10).
 4. Un número usado no se reutiliza aunque la rama se abandone. Las versiones son **texto**, como en el
    ledger: `0090` y `0095` son históricas y distintas de una futura `090` / `095`.
 
-**Orden previsto del pase a prod** (prod va hasta la **082** desde el 09/11):
+**Orden previsto del pase a prod** (prod va hasta la **085** desde el 10/11):
 1. ~~**081 → 082** (puente) primero, con su número.~~ **Hecho el 09/11** (pase del puente).
-2. Después la **085** (SEC-01c), con su número: queda arriba de la 082.
+2. ~~Después la **085** (SEC-01c), con su número: queda arriba de la 082.~~ **Hecho el 10/11** (#80, `bb12652`).
 3. Las que queden atrás (≤ al último de prod en su momento: la **083** y la **084**, la **075** del Club)
    toman **150+**, en el orden en que pasen.
 
@@ -238,20 +245,20 @@ solas tras un reinicio (validado el 29/10).
 | 082 | `pos_ndf_ingesta_transaccional` (v3) | puente (Club) | `main` (#71, 09/11) | staging (v3, 09/11 01:43) y **prod** (v3, 09/11 ~12:00 -06:00, a mano en el pase del puente) |
 | 083 | `my_turno_stats_higiene` | caja | `claude/higiene-r5` | staging (08/11). Va a prod con el PoS propio; ahí toma 150+ (regla 3) |
 | 084 | `employee_payroll` (SAL-AUD-01, paso 1) | caja | `claude/salarios-rls` | staging (08/11). Va a prod con Salarios; ahí toma 150+ (regla 3) |
-| 085 | `rls_lectura_rol_activo` (SEC-01c) | caja | `claude/rls-is-active` | staging (08/11) |
-| 087 | `employee_edits_audit` (propuesta, sin firma) | caja | `claude/employees-audit` | ninguna: propuesta |
-| 088 | `employees_recibe_reparto_cocina` (PROP-AUD-01, sin firma) | caja | `claude/prop-aud-01` | ninguna |
+| 085 | `rls_lectura_rol_activo` (SEC-01c) | caja | `main` (#80, 10/11) | staging (08/11) y **prod** (10/11 08:24:48 -06:00, Branching al mergear el #80, `bb12652`) |
+| 087 | `employee_edits_audit` (propuesta, sin firma) — **no se usa con este número: cuando esté lista va al bloque de pase (152+) con origen 087** (dueño, 10/11) | caja | `claude/employees-audit` | ninguna: propuesta |
+| 088 | `employees_recibe_reparto_cocina` (PROP-AUD-01, sin firma) — **no se usa con este número: cuando esté lista va al bloque de pase (152+) con origen 088** (dueño, 10/11) | caja | `claude/prop-aud-01` | ninguna |
 | 089 | `anon_sin_politica` (firmada para staging) | caja | `claude/anon-revoke` | **staging (09/11 08:27 CR)** |
 | 090 | `anon_privilegios_por_defecto` (firmada para staging) | caja | `claude/anon-default-privs` | **staging (09/11 08:28 CR)** |
-| 091 | `multilocal_fase0` (borrador, sin firma) | caja | `claude/multilocal-fase0` | ninguna |
-| 092 | `employees_borrado_solo_owner` (R7-01, propuesta, sin firma) | caja | `claude/employees-borrado-owner` | ninguna |
+| 091 | `multilocal_fase0` (borrador, sin firma; va después de la 090) | caja | `claude/multilocal-fase0` | ninguna |
+| 092 | `employees_borrado_solo_owner` (R7-01, sin firma; va después de la 091) | caja | `claude/employees-borrado-owner` | ninguna |
 | 093 | `ventas_lectura_rol_activo` (Grok 126, sin firma; va después de la 092) | caja | `claude/ventas-lectura-rol-activo` | ninguna |
 
 **Bloques**
 
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
-| CAJA / operación | 087–99 | 087–093 | **094** |
+| CAJA / operación | 087–99 | 087, 088, 089, 090, 091, 092, 093 | **094** |
 | CLUB SATORI + puente | 100–149 | — | **100** |
 | PASE A PROD (solo renumeraciones) | 150–199 | — | **150** |
 | (fuera de bloque) | 086 | — | libre |
@@ -259,7 +266,7 @@ solas tras un reinicio (validado el 29/10).
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
-| **PROD** | **57 filas** (09/11, según el pase; antes 55) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082` (**081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
+| **PROD** | **58 filas** (10/11, según el pase de la 085; antes 57) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085` (**085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
 | **STAGING** | **82 filas** (08/11) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5); la 082 del puente está aplicada **sin su fila**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
 - **Próximo número libre: por bloque** (08/11): **CAJA / operación 094**, **CLUB SATORI + puente 100**. Ver «Numeración de migraciones» abajo. Antes de crear una migración, leer esa sección **en `main`** y registrar el número en el mismo PR.

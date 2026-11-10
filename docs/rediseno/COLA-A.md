@@ -1,6 +1,6 @@
 # Cola · Línea A (módulos)
 
-## A1 · Textos y etiquetas · `lista`
+## A1 · Textos y etiquetas · `en revisión #101`
 - **Resumen semanal:**
   - durante la semana en curso, la variación contra la semana anterior muestra «En curso» en vez de ▼ con un %;
   - revisar que ningún conteo de PAX lleve ₡ (Prom/PAX sí lleva).

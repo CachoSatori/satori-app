@@ -246,8 +246,8 @@ solas tras un reinicio (validado el 29/10).
 | 083 | `my_turno_stats_higiene` | caja | `claude/higiene-r5` | staging (08/11). Va a prod con el PoS propio; ahí toma 150+ (regla 3) |
 | 084 | `employee_payroll` (SAL-AUD-01, paso 1) | caja | `claude/salarios-rls` | staging (08/11). Va a prod con Salarios; ahí toma 150+ (regla 3) |
 | 085 | `rls_lectura_rol_activo` (SEC-01c) | caja | `main` (#80, 10/11) | staging (08/11) y **prod** (10/11 08:24:48 -06:00, Branching al mergear el #80, `bb12652`) |
-| 087 | `employee_edits_audit` (propuesta, sin firma) | caja | `claude/employees-audit` | ninguna: propuesta |
-| 088 | `employees_recibe_reparto_cocina` (PROP-AUD-01, sin firma) | caja | `claude/prop-aud-01` | ninguna |
+| 087 | `employee_edits_audit` (propuesta, sin firma) — **no se usa con este número: cuando esté lista va al bloque de pase (152+) con origen 087** (dueño, 10/11) | caja | `claude/employees-audit` | ninguna: propuesta |
+| 088 | `employees_recibe_reparto_cocina` (PROP-AUD-01, sin firma) — **no se usa con este número: cuando esté lista va al bloque de pase (152+) con origen 088** (dueño, 10/11) | caja | `claude/prop-aud-01` | ninguna |
 | 089 | `anon_sin_politica` (firmada para staging) | caja | `claude/anon-revoke` | **staging (09/11 08:27 CR)** |
 | 090 | `anon_privilegios_por_defecto` (firmada para staging) | caja | `claude/anon-default-privs` | **staging (09/11 08:28 CR)** |
 

@@ -32,7 +32,7 @@
 ## SHA y huellas
 | Qué | Valor |
 |---|---|
-| Rama | `claude/anon-default-privs` (encima de `claude/anon-revoke`, al día con `main` @ `5a22478`) |
+| Rama | `claude/anon-default-privs`, encima de `claude/anon-revoke` @ `913c2d2` (= la 089 sobre `main` @ `54293ac`). Apenas la 089 esté en prod, se trae `main` con un merge commit y se verifica 0.4 |
 | Migración | `supabase/migrations/090_anon_privilegios_por_defecto.sql`, md5 `53aa0e0ab1df440057403e8b5ce15332` (10-nov, Grok 134: **solo cambió un comentario**; el SQL ejecutable es idéntico). **La fila 090 del ledger de staging se actualizó al texto nuevo el 10-nov a las 08:53 CR** (OK del dueño; franja de la mañana levantada por el dueño): una transacción con precondición (1 fila, 1 statement, md5 `0d93a8db…`) y postcondición, solo `statements` de esa fila; antes, sin consultas ajenas y el último commit del Club con 5 minutos. **Queda md5 `53aa0e0ab1df440057403e8b5ce15332`**, igual al archivo; ledger 85 filas, última 090; privilegios por defecto de `public` sin cambios (sin `anon`). En prod no se compara md5 (Grok 122). |
 | Rollback | `scripts/sql/090_rollback.sql` (las tablas nuevas vuelven a nacer con todo para `anon`, como hoy) |
 | Pruebas | `scripts/sql/090_pruebas.sql` (8 casos, en una transacción descartada) |
@@ -48,6 +48,9 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 - **Claude no corre nada en prod.** Prepara, revisa y lee los resultados que le pasan.
 
 ## 0. Prerrequisitos
+**Base del pase: `main` con la 089 ya mergeada y en prod** (ledger **59 · 089**). La 085 está en prod desde el 10-nov
+(ledger 58 · 085, `bb12652`).
+
 | # | Qué | Cómo se verifica |
 |---|---|---|
 | 0.1 | Firma del dueño en §9 (con el SHA de la cabeza del PR) | firma |
@@ -56,13 +59,20 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.4 | La rama al día con `main` (con la 089 ya mergeada), y el diff con **solo** los archivos de la 090 | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.5 | Gate del PR en verde: `supabase/migraciones.test.ts` (la 090 está registrada) y build | checks del PR |
 | 0.6 | Staging en verde con este mismo archivo (§3) | anotado |
-| 0.7 | **La 089 ya está en prod** y no hay ninguna migración con número mayor que 090 en `main` ni en el ledger de prod | 1.1 |
+| 0.7 | **La 089 ya está en prod con su pase cerrado** (puede haber sido minutos antes: ver 1.1) y no hay ninguna migración con número mayor que 090 en `main` ni en el ledger de prod | 1.1 |
 
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
 Editor SQL de PROD. **Leer el ref en pantalla.** Anotar cada resultado en §9.
+
+**Pase seguido: la 089 puede haber entrado minutos antes, en la misma ventana.** Estas lecturas no piden ningún
+tiempo de espera; piden que el pase de la 089 esté **cerrado**: su merge con «Supabase Preview» en `success`, su §5
+en verde y su §9 firmado («pasa»). Si el run de Branching de la 089 todavía corre, **se espera a que termine**: no se
+mergea con otro run en curso. Con eso, el ledger tiene que dar **59 filas, la última 089**, y ninguna 090 o mayor.
+Si la 089 hizo vuelta atrás, este pase **no se hace**.
+
 ```sql
 -- 1.1 ledger: el último es la 089 y la 090 no está
-select count(*), max(version) from supabase_migrations.schema_migrations;               -- anotar · 089
+select count(*), max(version) from supabase_migrations.schema_migrations;               -- 59 · 089
 select version from supabase_migrations.schema_migrations where version >= '090' and version <> '0090' and version <> '0095';  -- 0 filas
 -- 1.2 privilegios por defecto de public (tablas): el de postgres menciona a anon
 select pg_get_userbyid(d.defaclrole) as rol, d.defaclacl::text as acl
@@ -172,7 +182,7 @@ se renumera al bloque de pase (150+) con su «origen» (regla 3 de ESTADO.md).
 | Responsables (ejecución / control) | | |
 | 0.4 rama al día con `main` · diff solo los archivos de la 090 | | |
 | 0.7 la 089 en prod | | |
-| 1.1 ledger: último 089 · ninguna versión ≥ 090 (salvo las históricas 0090 y 0095) | | |
+| 1.1 ledger: 59 · 089 · ninguna versión ≥ 090 (salvo las históricas 0090 y 0095) · pase de la 089 cerrado | 59 · 089 | |
 | 1.2 fila de postgres con `anon=` (texto entero) · fila de supabase_admin | | |
 | 1.3 todas las tablas y vistas de public son de postgres | | |
 | 4b antes: permisos de anon · authenticated · service_role | | |

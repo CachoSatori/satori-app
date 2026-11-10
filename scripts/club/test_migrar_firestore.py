@@ -34,7 +34,7 @@ EMAIL_FICTICIO = 'ficticio.uno@ejemplo.com'
 
 def export_sintetico(carpeta: Path, *, negocio: str = SATORI, provisional: bool = False, manifiesto: str = 'json',
                      romper_sha: bool = False, venc_no_debit: bool = False, venc_fuera: bool = False,
-                     venc_repetido: bool = False) -> Path:
+                     venc_repetido: bool = False, inactivos: bool = False) -> Path:
     """3 referentes ficticios: uno activo con saldo, uno con canje y uno borrado; 2 vencimientos del 05-nov."""
     archivos = {
         'businesses.json': [{'_id': negocio, 'name': 'Negocio ficticio', 'peoplePointsRate': 6}],
@@ -68,6 +68,15 @@ def export_sintetico(carpeta: Path, *, negocio: str = SATORI, provisional: bool 
         ],
         'vencimientos_2026-11-05.json': ['v1', 'v2', 'v2'] if venc_repetido else ['v1', 'v2'],
     }
+    if inactivos:
+        # (10-nov) tres cuentas activas SIN actividad desde 2023-2024: dos con un resto (2 y 1 personas, < medio crédito)
+        # y una con 4 personas (medio crédito o más). Todo ficticio.
+        for rid, pers, f in (('refD', 2, '2023-03-10'), ('refE', 4, '2023-05-20'), ('refF', 1, '2024-01-15')):
+            archivos['referrers.json'].append({'_id': rid, 'businessId': negocio, 'name': f'Referente {rid}',
+                                               'workPlace': 'Hotel Ficticio', 'phoneNumber': None, 'email': None,
+                                               'createdAt': f + 'T15:00:00.000Z'})
+            archivos['referrals.json'].append({'_id': 'x' + rid, 'referrerId': rid, 'referralType': 'credit', 'peopleCount': pers,
+                                               'peoplePointsRateSnapshot': 6, 'createdAt': f + 'T20:00:00.000Z'})
     carpeta.mkdir(parents=True, exist_ok=True)
     shas = {}
     for nombre, contenido in archivos.items():
@@ -203,6 +212,83 @@ class Sql(unittest.TestCase):
         self.assertEqual(len(todos), len(con_saldo))
         self.assertTrue(all(set(x) == {'legacy_id', 'personas', 'ultima_actividad'} for x in todos))   # sin nombres
         self.assertEqual(mf.inactivos_fuente(self.p, '2000-01-01', 12), [])
+
+
+class RestosInactivos(unittest.TestCase):
+    """(10-nov, el dueño) Cuentas activas sin actividad en 12 meses con un resto (< medio crédito): con la fecha de carga
+    el SQL de restos NO las vence (sus movimientos quedan con la fecha de hoy). --vencer-restos-inactivos N las vence en
+    la misma carga, «resto del sistema viejo»; las demás inactivas siguen pidiendo --acepto-inactivos con el número exacto."""
+    MF = str(Path(__file__).resolve().parent / 'migrar_firestore.py')
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.exp = export_sintetico(self.dir / 'e', inactivos=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def correr(self, *args):
+        import subprocess
+        return subprocess.run([sys.executable, '-I', self.MF, '--export', str(self.exp), '--local', 'santa-teresa',
+                               '--out', str(self.dir / 'out'), *args], capture_output=True, text=True)
+
+    def test_regla_del_resto(self):
+        self.assertEqual([mf.es_resto(x, 6) for x in (0, 1, 2, 3, 4, 6)], [False, True, True, False, False, False])
+
+    def test_vencer_en_el_plan(self):
+        import datetime as _dt
+        p = mf.armar_plan(mf.cargar(self.exp))
+        inac = mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12)
+        self.assertEqual(sorted(x['legacy_id'] for x in inac), ['refD', 'refE', 'refF'])
+        restos = [x for x in inac if mf.es_resto(x['personas'], p.rate)]
+        self.assertEqual(mf.vencer_restos_fuente(p, restos), 2)
+        r = mf.resumen_plan(p)
+        self.assertEqual((r['vencimientos_restos'], r['vencimientos_restos_personas']), (2, 3))
+        self.assertEqual(r['diferencias_saldo_vs_firestore'], 0)   # el resto no cuenta contra Firestore (como sql_validar)
+        vencidos = [mv for mv in p.movimientos if mv['nota'] == mf.NOTA_RESTO]
+        self.assertTrue(all(mv['tipo'] == 'vencimiento' and mv['fecha'] is None for mv in vencidos))   # fecha de la carga
+        # después de vencerlos, solo queda la inactiva con medio crédito o más
+        self.assertEqual([x['legacy_id'] for x in mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12)], ['refE'])
+        # con la fecha de carga, la base controla los restos del plan
+        sql = mf.sql_apply(p, primera=True, fecha_carga=True)
+        self.assertIn('"vencimientos_restos": 2', sql)
+        self.assertNotIn('"vencimientos_restos"', mf.sql_apply(p, primera=True))   # fechas originales: los vence el SQL
+
+    def test_cli_caminos(self):
+        r = self.correr('--primera-carga', '--dry-run')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('FRENADO (B11): 3 cuentas', r.stderr); self.assertIn('(2 con un resto', r.stderr)
+        self.assertIn('"con_resto": 2', r.stdout); self.assertIn('"con_medio_credito_o_mas": 1', r.stdout)
+        self.assertEqual((self.dir / 'out' / 'inactivos.csv').read_text().splitlines()[0], 'legacy_id,personas,ultima_actividad,resto')
+        # el número tiene que ser el exacto
+        r = self.correr('--primera-carga', '--dry-run', '--vencer-restos-inactivos', '3')
+        self.assertNotEqual(r.returncode, 0); self.assertIn('la fuente tiene 2', r.stderr)
+        # vencer los restos no alcanza: queda la de 4 personas
+        r = self.correr('--primera-carga', '--dry-run', '--vencer-restos-inactivos', '2')
+        self.assertNotEqual(r.returncode, 0); self.assertIn('FRENADO (B11): 1 cuentas', r.stderr)
+        r = self.correr('--primera-carga', '--dry-run', '--vencer-restos-inactivos', '2', '--acepto-inactivos', '1')
+        self.assertEqual(r.returncode, 0, r.stderr[-500:]); self.assertIn('"restos_vencidos_en_la_carga": 2', r.stdout)
+        # el camino viejo: cargarlas todas igual (sin vencer)
+        self.assertEqual(self.correr('--primera-carga', '--dry-run', '--acepto-inactivos', '3').returncode, 0)
+        # --acepto-inactivos con un número cuando no queda nada por aceptar
+        r = self.correr('--primera-carga', '--dry-run', '--vencer-restos-inactivos', '2', '--acepto-inactivos', '3')
+        self.assertNotEqual(r.returncode, 0)
+        # solo en la primera carga con la fecha de carga
+        r = self.correr('--dry-run', '--vencer-restos-inactivos', '2')
+        self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO', r.stderr)
+        r = self.correr('--primera-carga', '--fecha-movimiento', 'original', '--dry-run', '--vencer-restos-inactivos', '2')
+        self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO', r.stderr)
+
+    def test_emitir_con_restos_vencidos_pasa_la_lista_cerrada(self):
+        r = self.correr('--primera-carga', '--vencer-restos-inactivos', '2', '--acepto-inactivos', '1', '--emitir', str(self.dir / 'emit'))
+        self.assertEqual(r.returncode, 0, r.stderr[-500:])
+        res = json.loads((self.dir / 'emit' / 'resumen.json').read_text())
+        self.assertEqual((res['plan']['vencimientos_restos'], res['plan']['vencimientos_restos_personas']), (2, 3))
+        self.assertEqual(res['plan']['diferencias_saldo_vs_firestore'], 0)
+        import sql_g56
+        self.assertEqual(sql_g56.revisar_migrador((self.dir / 'emit' / 'carga.sql').read_text(encoding='utf-8'), papel=False), [])
+        self.assertNotIn('Referente refD', (self.dir / 'emit' / 'resumen.json').read_text())   # sin nombres
 
 
 class Cruce115(unittest.TestCase):
@@ -364,6 +450,21 @@ class EnsayoStaging(unittest.TestCase):
                                                       ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True))[0]['r']
         self.assertEqual(val['miembros'], 3)
         self.assertEqual(val['diferencias_saldo_vs_firestore'], 0)
+        self.assertEqual(val['vencer_simular_hoy'], 0)
+        self.assertEqual(self.conteo(), antes)
+
+    def test_10nov_restos_inactivos_se_vencen_en_la_carga(self):
+        """Sin --vencer-restos-inactivos el SQL no vence nada con la fecha de carga; con él, 2 restos y el saldo cuadra."""
+        import datetime as _dt
+        p = mf.armar_plan(mf.cargar(export_sintetico(Path(self.tmp.name) / 'ei', inactivos=True)))
+        antes = self.conteo()
+        val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(p, ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True))[0]['r']
+        self.assertEqual(val['vencimientos_restos'], 0)   # la pregunta del dueño: así NO las vence
+        inac = mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12)
+        mf.vencer_restos_fuente(p, [x for x in inac if mf.es_resto(x['personas'], p.rate)])
+        val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(p, {'diferencias_saldo_vs_firestore': 0, 'vencimientos_restos': 2},
+                                                      ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True))[0]['r']
+        self.assertEqual((val['vencimientos_restos'], val['vencimientos_restos_personas']), (2, 3))
         self.assertEqual(val['vencer_simular_hoy'], 0)
         self.assertEqual(self.conteo(), antes)
 

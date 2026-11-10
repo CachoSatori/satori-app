@@ -255,10 +255,13 @@ público (`/r/`, cupones); el canje sale del botón «Canjear» del pase o del p
 > Club **vacía** («cero socios») y **sin borrar nada en prod**. Detalle completo: `docs/club-satori/piloto/saldos-papel.md` §A.
 
 **Hacer:**
-1. Export de Firestore con `MANIFEST` **no provisional** (depurado por el dueño) y el CSV de papel con `legacy_id`.
-2. `python3 -I scripts/club/migrar_firestore.py --export <export> --local <id> --primera-carga --papel <papel.csv> --dry-run`
-   → conteos, y el **chequeo de 12 meses sin actividad sobre la fuente** (frena si hay alguna; se decide en la fuente o
-   con `--acepto-inactivos N`, el número exacto).
+1. Export de Firestore con `MANIFEST` **no provisional** (depurado por el dueño). El CSV de papel con `legacy_id` es
+   **opcional**: (10-nov) el camino por defecto es **sin papel** (no hay lista); si aparece, se suma con `--papel <csv>`.
+2. `python3 -I scripts/club/migrar_firestore.py --export <export> --local <id> --primera-carga --dry-run`
+   → conteos, y el **chequeo de 12 meses sin actividad sobre la fuente** (frena si hay alguna; se decide en la fuente,
+   con `--vencer-restos-inactivos N` para las que tienen un resto de menos de medio crédito —se vencen en la carga,
+   «resto del sistema viejo»— y con `--acepto-inactivos M` para las demás; N y M, los números exactos del dry-run del
+   mismo día). Detalle: `piloto/saldos-papel.md` §A.2.
 3. Ensayo en staging: lo mismo con `--ensayo --vaciar-para-ensayo` (vacía el Club dentro de la transacción y la deshace).
 4. `--emitir <carpeta fuera del repo>` → `carga.sql` + `resumen.json` (sha256). El dueño firma el sha256.
 5. En PROD, con la firma y fuera de servicio: `python3 -I scripts/club/migrar_firestore.py aplicar-firmado --archivo

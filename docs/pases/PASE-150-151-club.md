@@ -224,10 +224,20 @@ mediodía. La 150 nueva se probó **aplicada encima, dentro de la transacción d
 | `mutar_bateria.py` con una mutación que no muerde o sin ancla | sale **1** (Grok 161) |
 | `151_pruebas.py` (Grok 180: control positivo del owner, INSERT y DELETE del cajero, RLS encendida) | **12/12** |
 
-**Pendiente con el OK del dueño (escritura en staging):** volver a alinear staging con la 150 nueva. Es una transacción
-con precondición (filas 150 y 151 únicas, md5 de la 150 = el del mediodía): la 150 entera encima (idempotente) y la fila
-150 con el texto nuevo. Hasta entonces, la paridad «tal cual» difiere (staging no tiene el trigger del 160) y la batería
-se corre con `--antes`.
+**Staging alineado con la 150 nueva (10-nov tarde, con el OK del dueño).** Una transacción con precondición (91 filas,
+filas 150 y 151 únicas, md5 de la fila 150 = `5da6a357…`, el del mediodía): la 150 entera encima (idempotente) y la
+fila 150 con el texto nuevo; verificación final dentro de la misma transacción. Resultado: **ledger de staging 91 filas,
+última 151**; fila 150 md5 **`919bcd5473fb68cc84dfdb5af28e5b98`** (= el archivo) y fila 151 `7a27ab08…` (sin cambios).
+Después, **sin `--antes`**:
+
+| Qué | Resultado |
+|---|---|
+| Batería (`bateria_club.py --esperado 613`) | **613/613** (tramos de 5,7 · 6,2 · 6,6 · 6,0 · 9,2 s) |
+| Paridad (`club_paridad.sh`): staging contra la 150 + 151 desde cero | **992 = 992**, sin diferencias |
+| `151_pruebas.py` | **12/12** |
+| `gate61.sh` staging contra staging | **0** diferencias (3.765 hechos) |
+
+Desde ahora la batería, la paridad y las mutaciones se corren **sin** `--antes`.
 
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (§5.5).
@@ -600,8 +610,10 @@ CNAME (11.2), `CLUB_WEB_KEY` en Pages (y en el Worker), el deploy real, 11.3 y l
   - `test-cajero`: último ingreso el **05-nov 09:03 CR**, sin sesión guardada; **ninguna** actividad en las tablas.
   - **Conclusión:** en lo que se puede ver, **no hay uso ajeno**: toda la actividad tiene un origen conocido. El hueco de
     junio a noviembre no se puede revisar desde la base.
-- **Queda para el dueño:** confirmar que el Mac con Chrome de las sesiones del 09/10-nov es suyo, y revisar en el panel de
-  Supabase (Logs → Auth) lo que todavía tenga guardado.
+- **Confirmado por el dueño (10-nov tarde):** las 3 sesiones de `test-manager` (09-nov 22:18 y 22:51, 10-nov 09:02, hora
+  CR; Mac con Chrome) **son suyas**. Con eso, toda la actividad visible de las dos cuentas tiene origen conocido.
+- **Queda (opcional) para el dueño:** revisar en el panel de Supabase (Logs → Auth) lo que todavía tenga guardado del hueco
+  de junio a noviembre.
 
 ### Grok 160 · un crédito sobre una factura R que después se anula
 **Decisión del dueño (10-nov): MITIGAR con una alerta, sin bloquear.** Cuando una factura R sobre la que se acreditó un

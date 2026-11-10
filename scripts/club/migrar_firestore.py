@@ -366,6 +366,28 @@ def inactivos_fuente(p: Plan, hoy_iso: str, meses: int = 12) -> list[dict]:
     return sorted(out, key=lambda x: x['ultima_actividad'])
 
 
+def es_resto(personas: int, rate: int) -> bool:
+    """Regla del 07-nov (la misma que el SQL de restos y club_vencer_candidatos): menos de medio crédito."""
+    return 0 < personas and personas * 2 < rate
+
+
+def vencer_restos_fuente(p: Plan, restos: list[dict]) -> int:
+    """(10-nov, el dueño) Con la fecha de carga, las cuentas activas SIN actividad en el plazo cuyo saldo es un resto
+    (< medio crédito) se vencen EN LA MISMA CARGA con la regla del 07-nov («resto del sistema viejo»), fechadas en la
+    carga: entran con saldo 0 y no vuelven a contar el plazo. `restos` sale de inactivos_fuente (solo legacy_id)."""
+    por_legacy = {m['legacy_id']: m for m in p.miembros}
+    saldo = collections.Counter()
+    for mv in p.movimientos:
+        saldo[mv['miembro_id']] += mv['personas']
+    for x in restos:
+        m = por_legacy[x['legacy_id']]
+        s = saldo[m['id']]
+        assert m['estado'] == 'activo' and s == x['personas'] and es_resto(s, p.rate), 'resto inválido'
+        p.movimientos.append({'miembro_id': m['id'], 'tipo': 'vencimiento', 'personas': -s, 'creditos': None,
+                              'fecha': None, 'nota': NOTA_RESTO, 'legacy_ids': None})
+    return len(restos)
+
+
 # ── Validación local del plan (sin red) ──────────────────────────────────────
 def pm_pendiente_plan(p: Plan) -> Decimal:
     """CLUB-AUD-22: UNA definición de PM pendiente, la de club_reporte_mes al día de hoy: todos los
@@ -389,7 +411,7 @@ def resumen_plan(p: Plan) -> dict:
         saldo[mv['miembro_id']] += mv['personas']
     neto_sin_d1 = collections.Counter()
     for mv in p.movimientos:
-        if mv['nota'] != NOTA_D1:
+        if mv['nota'] not in (NOTA_D1, NOTA_RESTO):   # igual que sql_validar: D1 y restos no son de Firestore
             neto_sin_d1[mv['miembro_id']] += mv['personas']
     diffs = sum(1 for m in p.miembros if neto_sin_d1[m['id']] != p.neto_firestore[m['legacy_id']])
     act = [m for m in p.miembros if m['estado'] == 'activo']
@@ -405,6 +427,9 @@ def resumen_plan(p: Plan) -> dict:
         'tarjetas': tipos['tarjeta'], 'canjes': tipos['canje'],
         'vencimientos_136': sum(1 for mv in p.movimientos if mv['nota'] == NOTA_VENC_136),
         'vencimientos_d1': sum(1 for mv in p.movimientos if mv['nota'] == NOTA_D1),
+        # (10-nov) los restos vencidos EN EL PLAN (solo con --vencer-restos-inactivos; con fechas originales los vence el SQL)
+        'vencimientos_restos': sum(1 for mv in p.movimientos if mv['nota'] == NOTA_RESTO),
+        'vencimientos_restos_personas': -sum(mv['personas'] for mv in p.movimientos if mv['nota'] == NOTA_RESTO),
         'pm_cargos': len(p.pm_cargos), 'pm_pagos': len(p.pm_pagos),
         'diferencias_saldo_vs_firestore': diffs,
         'creditos_activos': str(cr_eq + cr_ext), 'creditos_activos_externos': str(cr_ext),
@@ -515,6 +540,9 @@ def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False, prim
         'pm_cargos': res['pm_cargos'], 'pm_pagos': res['pm_pagos'], 'pm_pendiente': res['pm_pendiente'],
         'vencimientos_136': res['vencimientos_136'], 'vencimientos_d1': res['vencimientos_d1'],
     }
+    if fecha_carga:   # (10-nov) con la fecha de carga el SQL de restos no vence nada: los restos son los del plan
+        plan_ctrl['vencimientos_restos'] = res['vencimientos_restos']
+        plan_ctrl['vencimientos_restos_personas'] = res['vencimientos_restos_personas']
     esp = json.dumps(esperados or {}, ensure_ascii=False)
     ctl = json.dumps(plan_ctrl, ensure_ascii=False)
     hoy = "(now() at time zone 'America/Costa_Rica')::date"
@@ -961,6 +989,9 @@ def main() -> None:
     ap.add_argument('--vencimiento-meses', type=int, default=12)
     ap.add_argument('--acepto-inactivos', type=int, default=None,
                     help='(B11) cuántas cuentas con más de N meses sin actividad se cargan igual, sabiéndolo (el número exacto)')
+    ap.add_argument('--vencer-restos-inactivos', type=int, default=None,
+                    help='(10-nov, con la fecha de carga) cuántas cuentas inactivas con un RESTO (< medio crédito) se vencen en la '
+                         'misma carga, «resto del sistema viejo» (el número exacto; las demás inactivas siguen pidiendo --acepto-inactivos)')
     ap.add_argument('--papel', type=Path,
                     help='(B11, con --primera-carga) CSV de saldos de papel con legacy_id (fuera del repo): entra en la MISMA transacción')
     ap.add_argument('--vaciar-para-ensayo', action='store_true',
@@ -986,6 +1017,9 @@ def main() -> None:
     fecha_carga = (a.fecha_movimiento or ('carga' if a.primera_carga else 'original')) == 'carga'
     if a.papel and not a.primera_carga:
         sys.exit('NEGADO: --papel es solo para la primera carga (--primera-carga).')
+    if a.vencer_restos_inactivos is not None and not (a.primera_carga and fecha_carga):
+        sys.exit('NEGADO: --vencer-restos-inactivos es solo para la primera carga con la fecha de carga '
+                 '(con las fechas originales los restos los vence el SQL de la migración).')
     export = a.export.expanduser().resolve()
     out = a.out.expanduser().resolve()
     for pth, nombre in ((export, '--export'), (out, '--out')):
@@ -1011,14 +1045,35 @@ def main() -> None:
     if fecha_carga:
         import datetime as _dt
         inac = inactivos_fuente(plan, _dt.date.today().isoformat(), a.vencimiento_meses)
-        (out / 'inactivos.csv').write_text('legacy_id,personas,ultima_actividad\n' + ''.join(
-            f"{x['legacy_id']},{x['personas']},{x['ultima_actividad']}\n" for x in inac), encoding='utf-8')
+        restos = [x for x in inac if es_resto(x['personas'], plan.rate)]
+        (out / 'inactivos.csv').write_text('legacy_id,personas,ultima_actividad,resto\n' + ''.join(
+            f"{x['legacy_id']},{x['personas']},{x['ultima_actividad']},{'si' if es_resto(x['personas'], plan.rate) else 'no'}\n"
+            for x in inac), encoding='utf-8')
         os.chmod(out / 'inactivos.csv', 0o600)
-        print(json.dumps({'inactivos_mas_de_meses': a.vencimiento_meses, 'cuentas': len(inac), 'csv': str(out / 'inactivos.csv')}, ensure_ascii=False))
+        print(json.dumps({'inactivos_mas_de_meses': a.vencimiento_meses, 'cuentas': len(inac), 'con_resto': len(restos),
+                          'con_resto_personas': sum(x['personas'] for x in restos), 'con_medio_credito_o_mas': len(inac) - len(restos),
+                          'csv': str(out / 'inactivos.csv')}, ensure_ascii=False))
+        if a.vencer_restos_inactivos is not None:
+            if a.vencer_restos_inactivos != len(restos):
+                sys.exit(f'FRENADO (10-nov): --vencer-restos-inactivos {a.vencer_restos_inactivos}, pero la fuente tiene {len(restos)} '
+                         f'cuentas inactivas con un resto (< medio crédito). El número tiene que ser el exacto.')
+            vencer_restos_fuente(plan, restos)
+            inac = [x for x in inac if not es_resto(x['personas'], plan.rate)]
+            res = resumen_plan(plan)
+            malos = problemas_plan(plan, res)
+            if malos:
+                sys.exit('PLAN RECHAZADO (después de vencer los restos): ' + '; '.join(malos))
+            print(json.dumps({'restos_vencidos_en_la_carga': res['vencimientos_restos'],
+                              'personas': res['vencimientos_restos_personas'], 'nota': NOTA_RESTO,
+                              'cuentas_activas_con_creditos': res['cuentas_activas_con_creditos'],
+                              'creditos_activos': res['creditos_activos']}, ensure_ascii=False))
         if inac and a.acepto_inactivos != len(inac):
-            sys.exit(f'FRENADO (B11): {len(inac)} cuentas con saldo y más de {a.vencimiento_meses} meses sin actividad en la fuente. '
-                     'Con la fecha de carga volverían a contar el plazo: decidilas en la fuente, o pasá --acepto-inactivos '
-                     f'{len(inac)} si el dueño decidió cargarlas igual.')
+            sys.exit(f'FRENADO (B11): {len(inac)} cuentas con saldo y más de {a.vencimiento_meses} meses sin actividad en la fuente '
+                     f'({len(restos)} con un resto de menos de medio crédito). Con la fecha de carga volverían a contar el plazo: '
+                     'decidilas en la fuente; --vencer-restos-inactivos N vence los restos en la carga («resto del sistema '
+                     'viejo»); --acepto-inactivos N carga igual las que queden, si el dueño lo decidió (N, el número exacto).')
+        if not inac and a.acepto_inactivos not in (None, 0):
+            sys.exit(f'FRENADO (B11): --acepto-inactivos {a.acepto_inactivos}, pero no queda ninguna cuenta inactiva por aceptar.')
     papel_filas = None
     if a.papel:
         import datetime as _dt

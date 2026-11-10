@@ -43,7 +43,7 @@ LEE="reset role; select set_config('request.jwt.claims', '', true);
      select json_build_object('borrar', (select v from r where k = 'borrar'), 'filas', (select v from r where k = 'filas')::int,
        'bajas', (select count(*) from public.employee_bajas), 'bajas_con_autor', (select count(*) from public.employee_bajas where borrado_por is not null)) as x;"
 ok=0; fallas=0
-compara() { if [ -n "$3" ] && [ "$(jq -cS . <<<"$2")" = "$(jq -cS . <<<"$3")" ]; then echo "OK    $1"; ok=$((ok+1)); else echo "FALLA $1"; echo "      esperado: $2"; echo "      obtenido: $3"; fallas=$((fallas+1)); fi; }
+compara() { if [ -n "$3" ] && [ "$3" != "null" ] && [ "$3" != '""' ] && ! grep -qiE '"message"|^error' <<<"$3" && [ "$(jq -cS . <<<"$2" 2>/dev/null)" = "$(jq -cS . <<<"$3" 2>/dev/null)" ]; then echo "OK    $1"; ok=$((ok+1)); else echo "FALLA $1"; echo "      esperado: $2"; echo "      obtenido: $3"; fallas=$((fallas+1)); fi; }
 caso() { # $1 etiqueta · $2 sesión · $3 id · $4 esperado
   local r; r=$(q "begin; $MIG $SEMILLA $2 $(intenta "$3") $LEE rollback;" | jq -c '.[-1].x') || r=""
   compara "$1" "$4" "$r"
@@ -67,5 +67,20 @@ r=$(q "begin; $MIG $RB select json_build_object('tabla', to_regclass('public.emp
        'trigger', not exists (select 1 from pg_trigger where tgname = 'trg_employees_borrado_guardia'),
        'funcion', to_regprocedure('public.employees_borrado_guardia()') is null) as x; rollback;" | jq -c '.[-1].x') || r=""
 compara "rollback: sin tabla, sin trigger, sin función" '{"tabla":true,"trigger":true,"funcion":true}' "$r"
+# Grok 142: el rastro guarda SOLO lo mínimo (columnas exactas) y con los datos del borrado
+r=$(q "begin; $MIG $SEMILLA delete from public.employees where id = '$E1';
+       select json_build_object(
+         'columnas', (select json_agg(column_name order by ordinal_position) from information_schema.columns
+                        where table_schema = 'public' and table_name = 'employee_bajas'),
+         'fila', (select json_build_object('id_ok', employee_id = '$E1', 'pos_login', pos_login, 'nombre_ok', full_name = 'EMPLEADO SINTETICO 092 A',
+                    'fechas', empleado_creado_en is not null and empleado_actualizado_en is not null, 'autor', borrado_por, 'cuando', borrado_en is not null)
+                  from public.employee_bajas)) as x; rollback;" | jq -c '.[-1].x') || r=""
+compara "el rastro guarda solo lo mínimo (Grok 142): id, pos_login, nombre, fechas y quién" \
+  '{"columnas":["id","employee_id","pos_login","full_name","empleado_creado_en","empleado_actualizado_en","borrado_por","borrado_en"],"fila":{"id_ok":true,"pos_login":"9921","nombre_ok":true,"fechas":true,"autor":null,"cuando":true}}' "$r"
+# Grok 140: el rollback frena si employee_bajas tiene filas
+body=$(jq -n --arg q "begin; $MIG $SEMILLA delete from public.employees where id = '$E1'; $RB rollback;" '{query:$q}' | curl -sS -X POST "$API" \
+  -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @- || true)
+if grep -q "092 rollback: employee_bajas tiene filas" <<<"$body"; then echo "OK    el rollback frena si employee_bajas tiene filas (Grok 140)"; ok=$((ok+1));
+else echo "FALLA el rollback no frenó con filas en employee_bajas: $(jq -r '.message? // .' <<<"$body" 2>/dev/null | head -1 | sed -E 's/DETAIL:.*//' | head -c 160)"; fallas=$((fallas+1)); fi
 echo "── Resultado: $ok OK · $fallas FALLA ──"
 [ "$fallas" -eq 0 ] && echo VERDE || { echo "NO VERDE"; exit 1; }

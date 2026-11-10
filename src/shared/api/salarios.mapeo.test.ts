@@ -11,10 +11,15 @@ import type { Employee } from '../types/database'
 interface Op { fn: string; args: unknown[] }
 const ops: Op[] = []
 let updateError: { message: string } | null = null
+let sinFilas = false
 
 const q = {
   update: (...args: unknown[]) => { ops.push({ fn: 'update', args }); return q },
-  eq:     (...args: unknown[]) => { ops.push({ fn: 'eq', args }); return Promise.resolve({ error: updateError }) },
+  eq:     (...args: unknown[]) => {
+    ops.push({ fn: 'eq', args })
+    // update(...).eq(...).select('id'): devuelve las filas actualizadas (0 = la RLS no dejó).
+    return { select: () => Promise.resolve({ data: updateError ? null : (sinFilas ? [] : [{ id: 'x' }]), error: updateError }) }
+  },
 }
 const tablas: string[] = []
 vi.mock('./supabase', () => ({
@@ -28,7 +33,7 @@ const emp = (id: string, nombre: string, code: string | null): Employee =>
 
 const PLANTEL = [emp('e4', 'FRAN', '4'), emp('e26', 'FEDE', null)]
 
-beforeEach(() => { ops.length = 0; tablas.length = 0; updateError = null })
+beforeEach(() => { ops.length = 0; tablas.length = 0; updateError = null; sinFilas = false })
 
 describe('asignarCodigoBiotime', () => {
   it('escribe SOLO biotime_emp_code, en employees, sobre esa persona', async () => {
@@ -78,5 +83,10 @@ describe('asignarCodigoBiotime', () => {
   it('si la base rechaza (red del índice único), el error sale a la pantalla', async () => {
     updateError = { message: 'El código de BioTime «26» ya está asignado a otro empleado.' }
     await expect(asignarCodigoBiotime('e26', '26', PLANTEL)).rejects.toThrow(/ya está asignado/)
+  })
+
+  it('si la RLS no deja (0 filas, sin error: el contador) → «no tenés permiso para cambiar este dato»', async () => {
+    sinFilas = true
+    await expect(asignarCodigoBiotime('e26', '26', PLANTEL)).rejects.toThrow('No tenés permiso para cambiar este dato.')
   })
 })

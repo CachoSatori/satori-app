@@ -329,4 +329,30 @@ describe('Salarios · Empleados / Tarifas — guarda del período cerrado', () =
     await waitFor(() => expect(updatePayroll).toHaveBeenCalledTimes(1))
     expect(guardaTarifas).not.toHaveBeenCalled()
   })
+
+  it('manda SOLO lo que cambió: tocar la tarifa no reescribe servicio, código ni fecha', async () => {
+    renderList()
+    fireEvent.click(screen.getAllByText('Editar')[1])   // BENITO
+    fireEvent.change(screen.getByLabelText('Tarifa por hora: BENITO'), { target: { value: '2700' } })
+    fireEvent.click(screen.getByText('Guardar'))
+    await waitFor(() => expect(updatePayroll).toHaveBeenCalledTimes(1))
+    expect(updatePayroll).toHaveBeenCalledWith('e2', { hourly_rate_crc: 2700 })
+  })
+
+  it('guardar sin cambios no escribe nada', async () => {
+    renderList()
+    fireEvent.click(screen.getAllByText('Editar')[0])   // ANA
+    fireEvent.click(screen.getByText('Guardar'))
+    await waitFor(() => expect(screen.queryByText('Guardar')).toBeNull())
+    expect(updatePayroll).not.toHaveBeenCalled()
+  })
+
+  it('si la base no deja cambiar un dato (0 filas), se muestra «no tenés permiso para cambiar este dato»', async () => {
+    updatePayroll.mockRejectedValueOnce(new Error('No tenés permiso para cambiar este dato.'))
+    renderList()
+    fireEvent.click(screen.getAllByText('Editar')[1])
+    fireEvent.click(screen.getByLabelText('Participa del 10%: BENITO'))
+    fireEvent.click(screen.getByText('Guardar'))
+    await waitFor(() => expect(screen.getByText(/No tenés permiso para cambiar este dato/)).toBeTruthy())
+  })
 })

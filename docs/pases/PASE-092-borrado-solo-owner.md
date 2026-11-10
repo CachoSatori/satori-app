@@ -34,8 +34,8 @@
 | Qué | Valor |
 |---|---|
 | Rama | `claude/employees-borrado-owner`, encima de `claude/multilocal-fase0` (la 091 sobre la 090 y la 089). Cuando la 091 esté en prod, se trae `main` con un merge commit y se verifica 0.4 |
-| Migración | `supabase/migrations/092_employees_borrado_solo_owner.sql`, md5 `df1047a3e31c02f95a41911842d1bfd2` |
-| Rollback | `scripts/sql/092_rollback.sql`, md5 `5a29a15b1ecb815748392ec9a51b10bd` |
+| Migración | `supabase/migrations/092_employees_borrado_solo_owner.sql`, md5 `03f2dfed3f86502c2b9043e85d340b0d` (10-nov, Grok 142: el rastro guarda solo lo mínimo; antes `df1047a3…`) |
+| Rollback | `scripts/sql/092_rollback.sql`, md5 `1c02bb0b16188d2ef4822cb3cbf2ee80` (10-nov, Grok 140: frena si hay bajas) |
 | Verificación | `scripts/sql/092_verificacion.sql` (solo lectura: catálogo y un conteo), md5 `a5690026f53e847f0ae9608541e30ee6` |
 | Pruebas | `scripts/sql/092_pruebas.sh` (solo staging, transacciones descartadas) |
 | Guía | `docs/sop-app/6.6 Admin.md` (desactivar es el camino; el mensaje nuevo en la tabla de errores) |
@@ -105,6 +105,7 @@ select tgname from pg_trigger where tgrelid = 'public.employees'::regclass and n
 | 09-nov 23:37 CR (script @ `26ecde5`) | `092_pruebas.sh hwiatgicyyqyezqwldia`, transacciones descartadas | **10 OK · 0 FALLA · VERDE** |
 | 09-nov 23:37 CR | Falla sin el arreglo (transacción descartada, sin la 092): un manager borra un empleado con login | `ok`, 1 fila: **el hueco existe** |
 | 09-nov 23:38 CR | Estado de staging al terminar | 0 empleados sintéticos; sin `employee_bajas` ni el trigger; ledger 85 / 090 |
+| **10-nov 10:59 CR** (script @ `8ecf8fc`, la 092 con Grok 140 y 142) | `092_pruebas.sh hwiatgicyyqyezqwldia`, transacciones descartadas | **12 OK · 0 FALLA · VERDE**: los 10 de antes + «el rastro guarda solo lo mínimo» (columnas exactas y datos) + «el rollback frena si `employee_bajas` tiene filas» |
 
 Los 10 casos:
 - manager borra un empleado **con** login → 42501, nada borrado ni registrado;

@@ -39,7 +39,7 @@ pero no bloquea. **Después:** puede venir con el piloto andando.
 | 9 | **Carga única del lanzamiento:** la página vieja (Firestore) y las tarjetas de papel, con la base del Club vacía y el sha256 firmado (G-56). **Tiene que ir antes de encender:** después de la prueba interna la base ya no está vacía | **Imprescindible** si los anfitriones de hoy tienen que entrar con su saldo | 7 | jue 12-nov, antes de la prueba |
 | 10 | **Prueba interna en prod con el personal** (§3): se enciende Santa Teresa **sin anunciarlo** (nadie de afuera tiene los QR ni el enlace del alta) | Imprescindible | 7–9 | **jue 12-nov, por la tarde** (antes del servicio) |
 | 11 | **Revisar las excepciones de la prueba** y decidir la apertura | Imprescindible | 10 | **vie 13-nov** |
-| 12 | **Abrir a clientes:** `lc_excepciones_desde` = ese día; promoción «Local Club» vigente; el PoS del Local Club de 15 % a 10 %; mensajes a anfitriones y socios; carteles con el QR | Imprescindible | 11 | **vie 13 o lun 16-nov** (decisión del vie 13) |
+| 12 | **Abrir a clientes:** `lc_excepciones_desde` pasa de `2026-11-12` (provisorio) a ese día; promoción «Local Club» vigente; el PoS del Local Club de 15 % a 10 %; mensajes a anfitriones y socios; carteles con el QR | Imprescindible | 11 | **vie 13 o lun 16-nov** (decisión del vie 13) |
 | 13 | **087 y 088 de caja** (auditoría de cambios de empleados; «recibe reparto de cocina»). Van **después** del Club, al bloque de pase **152+**: el número se asigna cuando se arma cada paquete. Lo mismo la 093 si se atrasa y queda después del Club | No bloquea el Club | Club en prod | cuando estén listas |
 | 14 | **Pase de Wallet** (Google): terminar la sincronización (B3) y la prueba en un teléfono (B5) | **Después:** el portal y la caja funcionan sin el pase | 7 | semana del 23-nov |
 | 15 | **Apple Wallet** | Después: hace falta el D-U-N-S | 14 | sin fecha |
@@ -71,7 +71,8 @@ pero no bloquea. **Después:** puede venir con el piloto andando.
 (PASE-150-151 §6.4), no como pendientes:
 - `socio_visitas_por_dia` = 1 (global) y `socio_visitas_semana_max` = 7;
 - `anfitrion_tope_mes_crc` = 150000; los otros topes, en sus valores por defecto;
-- `lc_excepciones_desde` = el día de la apertura a clientes;
+- `lc_excepciones_desde` = **`2026-11-12` provisorio** (el día de la prueba interna, para que la revisión del vie 13 vea sus
+  excepciones) y, el día de la apertura a clientes, esa fecha;
 - las cortesías del sorteo quedan abiertas: son datos (Club → Promociones) y se cargan cuando el dueño las defina;
 - los `pos_login` ya están en Empleados: no hay que cargar nada.
 

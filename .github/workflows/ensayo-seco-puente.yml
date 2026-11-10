@@ -1,0 +1,53 @@
+# Ensayo EN SECO de los bloques de PowerShell del paquete del pase del puente, en Windows 5.1 y 7.
+# Solo en la rama de la plantilla (nunca en main). Sin secretos ni variables del repo, permisos mínimos.
+# El kit usa solo datos FICTICIOS y dobles de git/supabase/node/npm/cmd: no sale a Supabase ni a prod. El log es público.
+# Dos pasos:
+#   1. la PLANTILLA corregida tiene que dar 0 FAIL;
+#   2. el paquete del 09-nov (sin las correcciones del pase real) tiene que FALLAR justo donde falló el pase real
+#      (incluida la espera de 4.1, que filtraba node.exe por la palabra 'agente' y agarraba el agente de staging);
+#   3. el procedimiento aparte de rotación del secreto del agente (Grok 120) tiene que dar 0 FAIL.
+name: ensayo-seco-puente
+on:
+  push:
+    branches: [claude/pase-puente-resultado-2026-11-09, claude/puente-120-121]
+    paths:
+      - docs/puente/PASE-PROD-PLANTILLA.md
+      - docs/puente/PASE-PROD-2026-11-09.md
+      - docs/puente/ROTACION-SECRETO-AGENTE.md
+      - scripts/puente/ensayo_seco_paquete.ps1
+      - .github/workflows/ensayo-seco-puente.yml
+permissions:
+  contents: read
+concurrency:
+  group: ensayo-seco-puente
+  cancel-in-progress: true
+jobs:
+  ensayo:
+    name: PowerShell ${{ matrix.ps }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ps: '5.1'
+            exe: powershell.exe
+          - ps: '7'
+            exe: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Plantilla corregida (${{ matrix.exe }}) → 0 FAIL
+        shell: cmd
+        run: ${{ matrix.exe }} -NoProfile -ExecutionPolicy Bypass -Command "$PSVersionTable.PSVersion.ToString(); $PSVersionTable.PSEdition; & '.\scripts\puente\ensayo_seco_paquete.ps1'; exit $LASTEXITCODE"
+      - name: Paquete del 09-nov (${{ matrix.exe }}) → tiene que fallar donde falló el pase real
+        shell: cmd
+        run: |
+          ${{ matrix.exe }} -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\puente\ensayo_seco_paquete.ps1' -Paquete '.\docs\puente\PASE-PROD-2026-11-09.md' *> viejo.txt; exit $LASTEXITCODE"
+          if %ERRORLEVEL% EQU 0 (echo El paquete viejo NO fallo: el kit no ve los desvios del 09-nov & exit /b 1)
+          type viejo.txt
+          ${{ matrix.exe }} -NoProfile -Command "$t = Get-Content -Raw viejo.txt; $faltan = @('sin Docker, se necesita --use-api', 'la tarea no corre el agente', 'npm.ps1 no se puede cargar', 'la espera no termina') | Where-Object { $t -notlike ('*' + $_ + '*') }; if ($faltan) { 'NO aparecio: ' + ($faltan -join ' | '); exit 1 } else { 'OK: el paquete viejo falla por --use-api, la accion .cmd, npm y la espera de 4.1 (filtro por la palabra agente)' }"
+      - name: Rotación del secreto del agente (${{ matrix.exe }}) → 0 FAIL
+        shell: cmd
+        run: ${{ matrix.exe }} -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\puente\ensayo_seco_paquete.ps1' -Paquete '.\docs\puente\ROTACION-SECRETO-AGENTE.md'; exit $LASTEXITCODE"

@@ -704,3 +704,66 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
   `club_facturas_recientes` primero, y sus permisos. Las tablas y los datos no cambiaron.
 - **El ledger de staging (fila 075) sigue sin igualar el archivo**, como con S0/S8: se resuelve en el pase del Club.
 
+
+### 10-nov: 136 (Grok) — la baja del turista con una llave propia, APLICADA en staging (autorizado) · rama `claude/club-baja-token`, nada en prod
+- **Riesgo real, distinto del que se describió:** no se borran contactos en masa adivinando códigos. El código tiene ~50
+  bits, la función responde siempre `true` (no confirma si existe) y hay tope por IP. El problema es que el **código del
+  cupón** era también el link de baja, y ese código va en el QR que ve la caja, en cada mensaje de ofertas y en el CSV
+  del owner. Con un mensaje reenviado, cualquiera podía dar de baja al turista y, si el cupón seguía vigente, **usarlo**.
+- **Arreglo:**
+  - `club_cupones_contactos.baja_token`: 128 bits por contacto, único;
+  - `club_cupon_contacto_baja(p_token)` borra por esa llave (y no por el código);
+  - el CSV de ofertas trae `/b/<llave>`;
+  - club-web: `POST /api/baja/:llave` (la ruta vieja con el código ya no existe), la página `/b/` pide la llave y el
+    aviso corto dice que cada mensaje trae su link.
+  - Sin Turnstile: con una llave de 128 bits no hace falta, y la baja tiene que ser de un solo clic. El tope por IP
+    sigue.
+- **Pruebas:**
+  - batería 77 y 80: el contacto nace con su llave; con el código del cupón ya no se borra nada; el CSV no trae el
+    código. Con el arreglo dentro de la transacción descartada: **597/597**;
+  - sin el arreglo, la batería se corta al leer `baja_token` (la columna no existe);
+  - mutación `136` en `mutaciones_r7.json`;
+  - API de club-web 19/19; las 2 pruebas nuevas caen con la `api.js` vieja.
+- **Ojo:** la batería tardó entre 21 y 30 s en esta corrida: sigue cerca del máximo de la Management API.
+- **Estado de staging ANTES** (10-nov 08:43 CR, solo lectura): `club_cupon_contacto_baja(p_codigo)` md5 `d6063385…`
+  (ejecutan `anon` y `authenticated`), `club_contactos_ofertas_exportar` md5 `6b7b1956…`, sin la columna `baja_token`,
+  0 contactos, ledger 85 filas (última 090).
+- **Aplicado a las 08:44:42 CR**, autorizado por el dueño, en una transacción con precondición (los dos md5 y la
+  columna ausente): la columna con su índice único, `drop` + `create` de `club_cupon_contacto_baja(p_token)` con sus
+  permisos, y el exporte. Tal cual están en la 075 de `7f3de6b`.
+- **Estado DESPUÉS:** `club_cupon_contacto_baja(p_token)` md5 `9d6df33e…` (mismos permisos), exporte `8921d7b5…`,
+  `baja_token` not null con default y el índice `club_cupones_contactos_baja_token_key`; ledger igual (85 · 090).
+- **Verde:** batería **597/597** · paridad **977 = 977** (dos objetos más: la columna y el índice) · API de club-web
+  **19/19** · mutación `136`: **caen 4** (77 y 80). Para que la mutación caiga por casos y no corte la batería, las dos
+  llamadas a la baja con la llave en la prueba 77 van dentro de un `begin … exception`.
+- **Vuelta atrás en staging:** `drop` de `club_cupon_contacto_baja(text)` y la versión de `37164ea` (por código) con sus
+  permisos; el exporte de `37164ea`; `drop index` y `drop column baja_token`. Hoy no hay contactos que pierdan su llave.
+
+### Pendiente del piloto: partir la batería del Club (propuesta, sin implementar)
+**Por qué:** la batería corre en un solo request a la Management API, que corta a los **30 s**. Hoy tarda **21–30 s**
+y crece con los tickets reales que el puente suma a staging cada día. Si pasa de 30, no hay resultado (no se sabe si
+está verde) y `mutar_bateria.py` tampoco corre.
+
+**Lo que la complica:** los bloques comparten fixtures por `_ids` (78 lecturas: `cupon1`, `manu`, `ref_cod`, `m2`…`m5`,
+`ped_m`…) y por datos que deja un bloque anterior (por ejemplo, la factura 990950 de la 27 la usa la 90). Partirla «por
+la mitad» rompe esas dependencias.
+
+**Propuesta:**
+1. **Un preámbulo común** (`075_pruebas_comun.sql`): `begin`, las tablas temporales, los `set local`, todas las funciones
+   `pg_temp.*` (como, yo, r, loc, cruce, fac, factura, exc, hay, socio, aviso…) y los **fixtures compartidos** que hoy
+   crean los primeros bloques y leen los demás (miembros base, `cupon1`, `manu`, `ref_cod`, `m2`…`m5`).
+2. **4 tramos por tema**, de ≤ 12 s cada uno, cada uno autosuficiente: (A) cupones, canjes y roles (1–26); (B) pedidos,
+   cruce y socios (27–59); (C) excepciones del PoS del Local Club (60–75, los más pesados); (D) 76–91 y el bloque 6
+   (cuentas inactivas). Cada request = preámbulo + tramo + el `select` de resultados + `rollback`.
+3. **Un runner** (`correr_bateria.sh`): corre los tramos **uno detrás del otro** (en paralelo podrían trabarse en las
+   mismas filas, como `club_config`), junta los JSON, compara el total de casos con el esperado y sale ≠ 0 si algo
+   falla o si un tramo no devolvió resultado.
+4. **`mutar_bateria.py`**: mete la mutación en el tramo de su ancla. Si las funciones mutadas las usan otros tramos,
+   los corre todos con la mutación.
+5. **Un control estático** (vitest que lee el SQL): cada clave de `_ids` que lee un tramo se crea en el preámbulo o en
+   ese mismo tramo. Así, mover un bloque de tramo no rompe nada en silencio.
+6. **La paridad no cambia** (ya es su propio request).
+
+**Descartado:** conectarse directo a la base (`psql`) para evitar el límite: necesita la contraseña de la base en la
+sesión. **Complemento:** bajar el costo de `DESCUENTO_SIN_RESPALDO` (2,8 s sobre 60 días), que es lo que más pesa en
+los bloques 60–68.

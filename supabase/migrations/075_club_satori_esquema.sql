@@ -209,6 +209,13 @@ create table if not exists public.club_cupones_contactos (
 alter table public.club_cupones_contactos add column if not exists aviso_version text
   check (aviso_version ~ '^v[0-9A-Za-z.-]{1,30}$');
 alter table public.club_cupones_contactos add column if not exists aviso_aceptado_en timestamptz;
+-- 136 (Grok, 10-nov): la baja del turista va con una llave PROPIA de 128 bits, no con el código del cupón. El código va
+-- impreso en el QR que ve la caja y viajaba en cada mensaje de ofertas y en el CSV del owner: con él, cualquiera que
+-- recibiera un mensaje reenviado podía dar de baja al turista y, si el cupón seguía vigente, usarlo.
+alter table public.club_cupones_contactos add column if not exists baja_token text default encode(extensions.gen_random_bytes(16), 'hex');
+update public.club_cupones_contactos set baja_token = encode(extensions.gen_random_bytes(16), 'hex') where baja_token is null;
+alter table public.club_cupones_contactos alter column baja_token set not null;
+create unique index if not exists club_cupones_contactos_baja_token_key on public.club_cupones_contactos (baja_token);
 -- Bases donde club_cupones todavía tiene las columnas de contacto: se mueven y se borran.
 do $$ begin
   if exists (select 1 from information_schema.columns
@@ -6598,7 +6605,7 @@ begin
   end if;
   return query
     select k.nombre, k.whatsapp, k.email, c.location_id, k.aviso_version, coalesce(k.aviso_aceptado_en, k.created_at),
-           public.club_url() || '/b/' || c.codigo
+           public.club_url() || '/b/' || k.baja_token   -- 136: la llave de baja, no el código del cupón
       from public.club_cupones_contactos k join public.club_cupones c on c.id = k.cupon_id
      where k.optin and (p_location is null or c.location_id = p_location)
      order by coalesce(k.aviso_aceptado_en, k.created_at);
@@ -6677,7 +6684,10 @@ $$;
 
 -- Grok 63: baja del turista (link del aviso corto del cupón). Con el código del cupón (secreto, 10 caracteres) se
 -- borra su contacto. Siempre responde true (no revela si el cupón existe o tenía contacto). Queda rastro sin datos.
-create or replace function public.club_cupon_contacto_baja(p_codigo text)
+-- 136 (10-nov): la baja va con la llave propia del contacto (baja_token), nunca con el código del cupón. Cambia el nombre
+-- del parámetro: se borra antes (los permisos se vuelven a dar más abajo).
+drop function if exists public.club_cupon_contacto_baja(text);
+create or replace function public.club_cupon_contacto_baja(p_token text)
 returns boolean
 language plpgsql
 volatile
@@ -6685,17 +6695,16 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_cod text := upper(btrim(coalesce(p_codigo, '')));
+  v_tok text := lower(btrim(coalesce(p_token, '')));
   v_id  uuid;
 begin
   if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
-  if v_cod !~ '^[A-HJ-NP-Z2-9]{10}$' then
+  if v_tok !~ '^[0-9a-f]{32}$' then
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
-  delete from public.club_cupones_contactos k using public.club_cupones c
-   where c.codigo = v_cod and k.cupon_id = c.id
+  delete from public.club_cupones_contactos k where k.baja_token = v_tok
   returning k.cupon_id into v_id;
   if v_id is not null then
     perform public.club_auditar('baja_contacto_turista', 'club_cupones_contactos', v_id, null, null);

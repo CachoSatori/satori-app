@@ -228,9 +228,11 @@ Grok 24 el cupón también pide Turnstile). Después, el deploy y el dominio.
 - `/alta`: el widget aparece; un alta de prueba queda **pendiente** y se borra a mano después.
 - 6 «Obtener mi cupón» seguidos desde un teléfono: el sexto dice «Demasiados intentos seguidos». Grok 24: lo mismo desde
   dos teléfonos en el mismo wifi (tope por prefijo de red), y `/r/…` muestra el widget de Turnstile antes del botón.
-- Grok 63: en el cupón, «¿Querés recibir ofertas?» muestra el aviso resumido con «Aviso completo (v1)» (abre
-  `/privacidad`) y «Darme de baja» (abre `/b/<código>`); un opt-in de prueba queda en `club_cupones_contactos` con
-  `aviso_version` = la vigente, y `/b/<código>` lo borra (fila `baja_contacto_turista` en `club_auditoria`).
+- Grok 63 + 136: en el cupón, «¿Querés recibir ofertas?» muestra el aviso resumido con «Aviso completo (v1)» (abre
+  `/privacidad`) y «Cada mensaje de ofertas trae su link para darte de baja». Un opt-in de prueba queda en
+  `club_cupones_contactos` con `aviso_version` = la vigente y su `baja_token`. El link del CSV «Contactos para ofertas»
+  (`/b/<llave>`) lo borra (fila `baja_contacto_turista` en `club_auditoria`). `/b/<código del cupón>` dice «Este link de
+  baja no es válido».
 - Las cabeceras de `_headers`: CSP `script-src 'self'` y no-store en `/api`.
 - Si Pages no toma los bindings: el «Plan B» de `club-web/README.md` (`/api` en un Worker).
 

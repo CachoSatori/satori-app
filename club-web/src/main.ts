@@ -7,7 +7,7 @@
  *   /s/{codigo9}  QR fijo del socio del Local Club: lo lee la caja; abierto en un navegador, solo un aviso
  *   /alta         autoalta del socio (LC-DES-07): nombre + WhatsApp + aviso de privacidad + Turnstile → pendiente
  *   /w/{token}    botón «Canjear» del pase de Wallet (token de pase, CLUB-AUD-69): solo genera el código de canje
- *   /b/{codigo10} baja del turista (LC-PRIV): borra el contacto que dejó con ese cupón
+ *   /b/{llave32}  baja del turista (LC-PRIV + 136): borra su contacto con la llave de baja que trae cada mensaje
  *   /privacidad   aviso de privacidad completo (la versión vigente)
  * Todo pasa por /api/* (Pages Function con tope por IP). El DOM se arma sin innerHTML.
  */
@@ -137,20 +137,20 @@ function formOptin(codigo: string): HTMLElement {
     h('label', { for: 'o-nombre' }, t.optin_nombre), nombre,
     h('label', { for: 'o-wa' }, t.optin_whatsapp), wa,
     h('label', { for: 'o-em' }, t.optin_email), em,
-    avisoCorto(codigo),
+    avisoCorto(),
     h('label', { class: 'check', for: 'o-ok' }, ok, h('span', {}, t.optin_acepto)),
     err, enviar)
   return h('details', { class: 'tarjeta' }, h('summary', {}, t.optin_titulo), form)
 }
 
-/** LC-PRIV (Grok 63): el aviso corto del turista, con link al aviso v1 completo y a la baja (con el código del cupón). */
-function avisoCorto(codigo: string): HTMLElement {
+/** LC-PRIV (Grok 63): el aviso corto del turista, con link al aviso v1 completo. 136: la baja ya no va con el código del
+ * cupón; cada mensaje de ofertas trae su propio link de baja. */
+function avisoCorto(): HTMLElement {
   return h('div', { class: 'aviso-priv corto' },
     h('p', {}, t.optin_aviso),
     h('p', { class: 'sub' },
       h('a', { href: '/privacidad', target: '_blank', rel: 'noopener' }, `${t.optin_aviso_completo} (${AVISO_PRIVACIDAD_VERSION})`),
-      ' · ',
-      h('a', { href: `/b/${codigo}` }, t.optin_baja)))
+      ' · ', t.optin_baja_en_mensajes))
 }
 
 function paginaPrivacidad() {
@@ -159,14 +159,15 @@ function paginaPrivacidad() {
       h('p', { class: 'sub' }, `(${AVISO_PRIVACIDAD_VERSION})`)))
 }
 
-/** LC-PRIV (Grok 63): baja del turista. El link va en el aviso corto y en cada mensaje de ofertas: /b/{código del cupón}. */
-function paginaBajaTurista(codigo: string) {
-  if (!/^[A-HJ-NP-Z2-9]{10}$/.test(codigo)) return pintar(h('h1', {}, t.baja_t_titulo), avisoEl('err', t.cupon_invalido))
+/** LC-PRIV (Grok 63) + 136: baja del turista. El link va en cada mensaje de ofertas: /b/{llave de baja, 32 hex}. */
+function paginaBajaTurista(llave: string) {
+  const tok = llave.toLowerCase()
+  if (!/^[0-9a-f]{32}$/.test(tok)) return pintar(h('h1', {}, t.baja_t_titulo), avisoEl('err', t.baja_t_invalida))
   const err = h('div')
   const boton = h('button', { type: 'button', class: 'btn sec' }, t.baja_t_boton) as HTMLButtonElement
   boton.addEventListener('click', async () => {
     boton.disabled = true; err.replaceChildren()
-    const r = await api<boolean>(`cupon/${codigo}/baja`, { method: 'POST', body: '{}' })
+    const r = await api<boolean>(`baja/${tok}`, { method: 'POST', body: '{}' })
     if (r.ok) { boton.replaceWith(avisoEl('ok', t.baja_t_listo)); anunciar(t.baja_t_listo); return }
     boton.disabled = false; err.append(avisoEl('err', msgError(r.error)))
   })
@@ -470,7 +471,7 @@ function ruta() {
   if (tipo === 'k') return pintar(h('h1', {}, t.canje_qr), h('p', { class: 'sub' }, t.k_txt))
   if (tipo === 's') return pintar(h('h1', {}, t.s_titulo), h('p', { class: 'sub' }, t.s_txt))
   if (tipo === 'w') return paginaPase(cod.toLowerCase())
-  if (tipo === 'b') return paginaBajaTurista(cod.toUpperCase())
+  if (tipo === 'b') return paginaBajaTurista(cod.toLowerCase())
   return paginaPortal(cod.toLowerCase())
 }
 

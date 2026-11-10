@@ -242,14 +242,22 @@ test('Grok 63: el opt-in del turista exige la versión del aviso; la base la rec
   assert.deepEqual(args.p_contacto, { nombre: '', whatsapp: '60000000', email: '', optin: true, acepto: 'v1' })
 })
 
-test('Grok 63: baja del turista → POST /api/cupon/:codigo/baja llama a club_cupon_contacto_baja; GET → 405; código malo → 404; tope', async () => {
+test('Grok 63 + 136: baja del turista → POST /api/baja/:llave (32 hex) llama a club_cupon_contacto_baja; GET → 405; llave mala → 404; tope', async () => {
   llamadas = []
-  const r = await manejar(pedido('cupon/abcdefgh23/baja', 'POST', '{}'), conLimite(), 'cupon/abcdefgh23/baja')
+  const llave = '0123456789abcdef0123456789ABCDEF'
+  const r = await manejar(pedido(`baja/${llave}`, 'POST', '{}'), conLimite(), `baja/${llave}`)
   assert.equal(r.status, 200)
   assert.ok(String(llamadas[0].url).endsWith('/rpc/club_cupon_contacto_baja'))
-  assert.deepEqual(JSON.parse(llamadas[0].init.body), { p_codigo: 'ABCDEFGH23' })
-  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/baja'), conLimite(), 'cupon/ABCDEFGH23/baja')).status, 405)
-  assert.equal((await manejar(pedido('cupon/ABC/baja', 'POST', '{}'), conLimite(), 'cupon/ABC/baja')).status, 404)
-  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/baja', 'POST', '{}'), conLimite(false), 'cupon/ABCDEFGH23/baja')).status, 429)
+  assert.deepEqual(JSON.parse(llamadas[0].init.body), { p_token: llave.toLowerCase() })
+  assert.equal((await manejar(pedido(`baja/${llave}`), conLimite(), `baja/${llave}`)).status, 405)
+  assert.equal((await manejar(pedido('baja/ABCDEFGH23', 'POST', '{}'), conLimite(), 'baja/ABCDEFGH23')).status, 404)   // un código de cupón ya no sirve
+  assert.equal((await manejar(pedido(`baja/${llave}`, 'POST', '{}'), conLimite(false), `baja/${llave}`)).status, 429)
   assert.equal(llamadas.length, 1)
+})
+
+test('136: la ruta vieja POST /api/cupon/:codigo/baja ya no existe (con el código del cupón no se da de baja a nadie)', async () => {
+  llamadas = []
+  const r = await manejar(pedido('cupon/ABCDEFGH23/baja', 'POST', '{}'), conLimite(), 'cupon/ABCDEFGH23/baja')
+  assert.equal(r.status, 404)
+  assert.equal(llamadas.length, 0)
 })

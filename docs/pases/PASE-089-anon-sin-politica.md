@@ -36,7 +36,7 @@
 ## SHA y huellas
 | Qué | Valor |
 |---|---|
-| Rama | `claude/anon-revoke` (al día con `main` @ `5a22478`) |
+| Rama | `claude/anon-revoke` (al día con `main` @ `54293ac`, con la 085 en prod; merge commit `8aa44f9`) |
 | Migración | `supabase/migrations/089_anon_sin_politica.sql` @ `d59d3a9`, md5 `88ecdc8122bf42efbf57df66824000ae` (igual a la fila 089 de staging, aplicada a mano en un solo statement) |
 | Rollback | `scripts/sql/089_rollback.sql` (devuelve exactamente lo que la 089 saca, tabla por tabla, si existe) |
 | Pruebas | `scripts/sql/089_pruebas.sql` (8 casos) |
@@ -51,21 +51,25 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 - **Claude no corre nada en prod.** Prepara, revisa y lee los resultados que le pasan.
 
 ## 0. Prerrequisitos
+**Base del pase: `main` @ `54293ac`** (10-nov: merge del #89, resultado del pase de la 085). **La 085 está en prod** desde el
+10-nov 08:24:48 -06:00 (Branching al mergear el #80, `bb12652`): **ledger de prod 58 · 085**. Si `main` se movió desde
+`54293ac`, se vuelve a verificar 0.4.
+
 | # | Qué | Cómo se verifica |
 |---|---|---|
 | 0.1 | Firma del dueño en §9 (con el SHA de la cabeza del PR) | firma |
 | 0.2 | Los dos responsables presentes | §9 |
 | 0.3 | **No se mergea entre las 17:00 y las 23:00 CR**, y ninguna otra sesión mergeando a `main` | hora en §9 |
-| 0.4 | La rama al día con `main`, y el diff con **solo** los archivos del PR (§2) | `git merge-base --is-ancestor`, `git diff --name-only` |
+| 0.4 | La rama al día con `main` (`54293ac` o la que haya el día del pase), y el diff con **solo** los archivos del PR (§2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.5 | Gate del PR en verde: `supabase/migraciones.test.ts` (la 089 está registrada) y build | checks del PR |
 | 0.6 | Staging en verde con este mismo archivo (§3) | anotado |
-| 0.7 | **La 085 ya está en prod** y no hay ninguna migración con número mayor que 089 en `main` ni en el ledger de prod | 1.1 |
+| 0.7 | **La 085 ya está en prod** (✅ 10-nov, ledger 58 · 085) y no hay ninguna migración con número mayor que 089 en `main` ni en el ledger de prod | 1.1 |
 
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
 Editor SQL de PROD. **Leer el ref en pantalla.** Anotar cada resultado en §9.
 ```sql
 -- 1.1 ledger: el último es la 085 y la 089 no está
-select count(*), max(version) from supabase_migrations.schema_migrations;               -- 58 · 085 (si la 085 pasó sola)
+select count(*), max(version) from supabase_migrations.schema_migrations;               -- 58 · 085
 select version from supabase_migrations.schema_migrations where version >= '089';       -- 0 filas
 -- 1.2 qué tiene anon hoy en la lista, sin política que lo justifique (lo que la 089 va a sacar)
 begin read only;
@@ -234,7 +238,7 @@ de ESTADO.md). Después de las dos, sacar estas tablas de la lista «conocidas»
 | Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
 | Responsables (ejecución / control) | | |
 | 0.4 rama al día con `main` · diff solo los archivos del PR | | |
-| 0.7 la 085 en prod | | |
+| 0.7 la 085 en prod (ledger 58 · 085) | 58 · 085 | |
 | 1.1 ledger: último 085 · ninguna versión ≥ 089 | | |
 | 1.2 20 tablas · permisos sin política (anotar) · 20 con RLS | | |
 | 1.2b respaldo del ACL: 20 filas guardadas · `sha256_relacl` · `sha256_normalizado` (Grok 133) | | |

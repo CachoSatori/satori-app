@@ -82,6 +82,11 @@
       "nombre": "ventas_lectura_rol_activo",
       "bloque": "caja",
       "rama": "claude/ventas-lectura-rol-activo"
+    },
+    "094": {
+      "nombre": "anon_sin_maintain",
+      "bloque": "caja",
+      "rama": "claude/anon-sin-maintain"
     }
   }
 }

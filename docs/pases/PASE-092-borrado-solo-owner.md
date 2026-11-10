@@ -72,7 +72,16 @@ Al volver atrás se pierde el registro de bajas. Si tiene filas, el owner las ex
 
 ## 6. Resultados
 
-- **Staging (ventana 09-nov 23:35 CR):** _pendiente_.
+- **Staging (ventana 09-nov 23:35 CR, `092_pruebas.sh` @ `26ecde5`, todo en transacciones descartadas): 10 OK · 0 FALLA ·
+  VERDE.**
+  - manager con login → 42501 y nada borrado; manager sin login, owner y canal admin → se borra con rastro (el canal
+    admin sin autor); owner inactivo y cajero → 0 filas; anon no lee el registro (42501);
+  - la consulta de verificación (§4) da lo esperado con la 092 puesta y sin ella; la vuelta atrás deja sin tabla, sin
+    trigger y sin función.
+- **Falla sin el arreglo (misma ventana, transacción descartada, sin la 092):** un manager borra un empleado con login
+  del PoS → `ok`, 1 fila. Es el hueco que cierra la 092.
+- **Estado de staging al terminar:** 0 empleados sintéticos, sin `employee_bajas` ni el trigger (la 092 **no** quedó
+  aplicada), ledger sin cambios (85 filas, última 090), sin consultas ajenas.
 
 ## 7. Firma
 

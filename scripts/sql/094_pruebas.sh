@@ -17,7 +17,7 @@ x() { q "$1" | jq -c 'if type=="array" then .[-1].x else empty end' 2>/dev/null 
 limpio() { jq -r 'if type=="object" and has("message") then (.message | split("\n")[0] | sub("DETAIL:.*"; "")) else tostring end' <<<"$1" 2>/dev/null | head -c 200; }
 echo "094_pruebas · $(TZ=America/Costa_Rica date '+%Y-%m-%d %H:%M CR') · REF=$REF · script @ $(git -C "$RAIZ" rev-parse --short HEAD)"
 ok=0; fallas=0
-compara() { if [ -n "$3" ] && [ "$(jq -cS . <<<"$2" 2>/dev/null)" = "$(jq -cS . <<<"$3" 2>/dev/null)" ]; then echo "OK    $1"; ok=$((ok+1));
+compara() { if [ -n "$3" ] && [ "$3" != "\"\"" ] && [ "$3" != "null" ] && [ "$(jq -cS . <<<"$2" 2>/dev/null)" = "$(jq -cS . <<<"$3" 2>/dev/null)" ]; then echo "OK    $1"; ok=$((ok+1));
             else echo "FALLA $1"; echo "      esperado: $2"; echo "      obtenido: ${3:-(sin respuesta)}"; fallas=$((fallas+1)); fi; }
 LISTA="'accounting_entries','cash_movements','cash_sessions','credit_applications','movement_deletions','movement_edits','pos_ndf_cursor','pos_ndf_open','pos_ndf_ticket_lines','pos_ndf_tickets','product_map','punch_exceptions','sops','supplier_credits','suppliers','time_punches','tip_entries','tip_sessions','ventas_comps','ventas_dias','ventas_hist','ventas_metas','salary_periods'"
 # ACL normalizado (rol:permiso:re-otorgable, ordenado) de la lista; $1 = condición extra sobre las entradas

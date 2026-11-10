@@ -62,10 +62,10 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.2 | Los dos responsables presentes | §10 |
 | 0.3 | **No se mergea entre las 17:00 y las 23:00 CR**; ninguna otra sesión mergeando a `main` en la ventana | hora en §10 |
 | 0.4 | **La 091 en prod** (desde el mié 11-nov): la 151 se apoya en su `locations`. También la 092 y, si no se atrasaron, la 093, la 094 y la 095. Ninguna migración con número de 096 a 149 ni ≥ 150 en `main` ni en el ledger | 1.1 |
-| 0.5 | El paquete (este PR) y el plan B de club-web (#98, el Worker) mergeados en el #59, y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
+| 0.5 | El paquete (este PR) y el plan B de club-web (#98, el Worker, con el binding activo) mergeados en el #59 (el #98 **antes del miércoles**, para crear el Worker), y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.6 | Checks del #59 en verde: `supabase/migraciones.test.ts` (150 y 151 registradas con su origen), vitest y build | checks del PR |
 | 0.7 | Staging en verde con estos mismos archivos (§3), **el día del pase** | anotado |
-| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov; pasos en §11.1): proyecto de Pages `satori-club` con la rama de producción `main` y sin previews; variables de §11.1; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3). El DNS queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). Si se usa el plan B, el Worker se crea **antes** del merge (§11.4) | §10 |
+| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov; pasos en §11.1): proyecto de Pages `satori-club` con la rama de producción `main` y sin previews; variables de §11.1; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3). El DNS queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). El plan B va activo desde el merge: el Worker `satori-club-api` se crea **el miércoles** (§11.4) | §10 |
 | 0.9 | G-61 «antes» hecho y sus diferencias esperadas **firmadas en este PR** (`scripts/sql/gate61_esperadas.txt`) | §1.5 |
 | 0.10 | Si los anfitriones de hoy tienen que entrar con su saldo a la prueba interna: export de Firestore depurado, CSV de las tarjetas de papel y su sha256 firmado **antes del jueves** (la carga exige la base vacía, §6.5) | §10 |
 | 0.11 | El agente nuevo del puente (#83) en prod desde el mié 11-nov por la mañana. **Recomendado, no bloquea** | anotado |
@@ -314,7 +314,8 @@ Cada alta siembra sus marcadores de descuento (856 y 857) y la promoción «Loca
    `satori-club` (producción) → Settings → Variables and Secrets → **Secret** `CLUB_WEB_KEY`. **Nunca por chat.**
 2. En el editor SQL de prod: `select public.club_web_clave_cargar('<sha256 de la clave>');` (el sha256, nunca la clave).
 3. Volver a desplegar `satori-club` (los Secrets toman efecto en el próximo deploy).
-4. **Si se usa el plan B (§11.4):** la misma clave también como Secret `CLUB_WEB_KEY` del Worker `satori-club-api`.
+4. **Plan B (activo desde el merge, §11.4 paso 6):** la misma clave también como Secret `CLUB_WEB_KEY` del Worker
+   `satori-club-api`. En Pages queda igual, para poder volver al plan A sin esperar.
 
 Verificar: `/api/salud` → todo en `true` (`club_web_key` y `turnstile` incluidos). Una llamada directa a
 `/rest/v1/rpc/club_cupon_crear` con la anon key y sin el header responde «Código no válido».
@@ -443,7 +444,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | Responsables (ejecución / control) | | |
 | 0.4 la 091–093 en prod | ledger termina en 093 | |
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | |
-| 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker creado si va B (§11.4) | | |
+| 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` creado el miércoles, sin URL pública, con sus variables (§11.4) | | |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | | |
 | 0.10 carga única: export, CSV y sha256 firmado (o «la prueba va sin carga») | | |
 | 1.1 ledger: la última de caja que pasó (093 o 095) · nada del Club (Grok 181) | | |
@@ -462,7 +463,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 6.1 dos locales, los dos apagados · `locations` como se espera | | |
 | 6.2 dominio | | |
 | 6.3 `CLUB_WEB_KEY` cargada, sha256 en la base, `/api/salud` en verde | | |
-| §11.3 `/api/salud`: `x-club-api` y los dos topes → plan A o B (con B, el PR del binding y su merge) · prueba de fuego | | |
+| §11.3 `/api/salud`: `x-club-api: worker` y todo en `true` · prueba de fuego · Worker en `main` (§11.4 paso 7) | | |
 | 6.4 valores del local (la fila de verificación) · empleados con login | | |
 | 6.5 carga única (sha256, conteos) o «replanificada» | | |
 | 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
@@ -501,52 +502,71 @@ El certificado lo emite Cloudflare solo, cuando ve el CNAME.
 **Cuándo:** el dueño eligió el jueves. Se puede adelantar al miércoles sin publicar nada: sin un deploy que funcione, el
 dominio no sirve ningún sitio, y así el certificado ya está listo el jueves.
 
-### 11.3 A o B: cómo decidir con `/api/salud` (jueves, después del merge y de §6.3)
+### 11.3 Plan B desde el merge: cómo se verifica con `/api/salud` (jueves, después del merge y de §6.3)
+**Decisión del dueño (10-nov): el plan B entra activo con el #59.** El `[[services]]` de `club-web/wrangler.toml` va
+descomentado en el #98: desde el primer deploy, la Pages Function le pasa `/api` al Worker `satori-club-api` (§11.4), que
+tiene los topes. El plan A (la Pages Function con sus propios topes) queda como vuelta atrás.
+
 Abrir `https://club.satoricostarica.com/api/salud` y mirar el JSON y el encabezado `x-club-api` (DevTools → Network → la
-llamada → Headers). La Pages Function contesta `x-club-api: pages`; el Worker, `x-club-api: worker`.
+llamada → Headers). El Worker contesta `x-club-api: worker`; la Pages Function, `x-club-api: pages`.
 
-| Lo que dice | Plan | Qué se hace |
+| Lo que dice | Qué pasa | Qué se hace |
 |---|---|---|
-| `x-club-api: pages` · `rl_crear` y `rl_leer` en `true` | **A** | Nada más: Pages tomó los topes. Prueba de fuego (abajo) |
-| `x-club-api: pages` · `rl_crear` o `rl_leer` en `false` | **B** | 11.4. Mientras tanto, crear cupones y el alta responden 503 (falla cerrada) |
-| Sin `x-club-api`, 404 o error | — | **Se para**: el deploy no trae `/api`. Revisar el log del build |
-| Después de 11.4: `x-club-api: worker` · todo en `true` | **B** listo | Prueba de fuego |
+| `x-club-api: worker` · todo en `true` | **B funciona** | Prueba de fuego (abajo) |
+| `x-club-api: worker` · `club_web_key` en `false` | Falta el Secret en el Worker | §11.4 paso 6 (y §6.3) |
+| `x-club-api: worker` · `rl_crear` o `rl_leer` en `false` | El Worker no tomó los topes | Revisar el log del deploy del Worker (§11.4 paso 4). Mientras tanto, crear cupones y el alta responden 503 (falla cerrada) |
+| `x-club-api: pages` | Pages no tomó el binding | **Se para** y se revisa el log del deploy de Pages (¿el Worker existía cuando se desplegó?) |
+| Error 500 o sin respuesta | El binding apunta a un Worker que no está | **Se para**: §11.4 pasos 1–5 |
 
-En los dos planes, `club_web_key`, `turnstile` y `supabase` en `true`. **Prueba de fuego:** 6 «Obtener mi cupón» seguidos
-desde un teléfono con datos móviles → el sexto dice «Demasiados intentos seguidos»; desde otro teléfono en **otra** red,
-pasa; desde dos teléfonos en el **mismo** wifi, el tope es compartido (prefijo de red). Que el tope sea por teléfono y no
-global prueba que llega la IP real.
+En todos los casos, `club_web_key`, `turnstile` y `supabase` tienen que estar en `true`. **Prueba de fuego:** 6 «Obtener mi
+cupón» seguidos desde un teléfono con datos móviles → el sexto dice «Demasiados intentos seguidos»; desde otro teléfono
+en **otra** red, pasa; desde dos teléfonos en el **mismo** wifi, el tope es compartido (prefijo de red). Que el tope sea
+por teléfono y no global prueba que llega la IP real.
 
-### 11.4 Plan B: `/api` en el Worker `satori-club-api` por un service binding (#98)
-**Cómo funciona:** la Pages Function recibe el pedido del cliente (ahí `CF-Connecting-IP` es la IP real) y, si tiene el
-binding `CLUB_API`, se lo pasa al Worker con un host interno que no existe en ningún DNS y la IP en `x-club-ip` (pisa
-cualquier `x-club-ip` que mande el cliente). El Worker no tiene URL pública (`workers_dev = false`, sin rutas): rechaza
-otro host (404) y, sin IP, responde 503. Así no depende de lo que haga Cloudflare con `CF-Connecting-IP` dentro de un
-service binding (eso no está documentado). **Si aun así faltara la IP**, el Worker falla cerrado (503) y quedan como red
-Turnstile (cupón y alta) y los topes de la base (`cupones_max_dia_referente`, `cupones_max_minuto_local`,
-`socio_autoalta_max_dia`).
+### 11.4 El Worker `satori-club-api` (#98): se crea el MIÉRCOLES, antes del merge
+**Cómo funciona:** la Pages Function recibe el pedido del cliente (ahí `CF-Connecting-IP` es la IP real) y se lo pasa al
+Worker por el binding `CLUB_API`, con un host interno que no existe en ningún DNS y la IP en `x-club-ip` (pisa cualquier
+`x-club-ip` que mande el cliente). El Worker no tiene URL pública (`workers_dev = false`, sin rutas): rechaza otro host
+(404) y, sin IP, responde 503. No depende de lo que haga Cloudflare con `CF-Connecting-IP` dentro de un service binding
+(eso no está documentado). **Si aun así faltara la IP**, el Worker falla cerrado (503) y quedan como red Turnstile (cupón y
+alta) y los topes de la base (`cupones_max_dia_referente`, `cupones_max_minuto_local`, `socio_autoalta_max_dia`).
 
-**El Worker se crea ANTES del merge del #59** (miércoles o jueves temprano). No publica nada: sin URL pública ni rutas, el
-único que lo puede llamar es el binding, y el binding todavía está apagado.
+**Por qué el miércoles:** el binding está activo en el `wrangler.toml` que llega a `main` con el #59. El Worker tiene que
+existir **antes** de ese deploy de Pages. Creado el miércoles no publica nada: sin URL pública ni rutas, el único que lo
+puede llamar es el binding, y el binding recién existe cuando el #59 llega a `main`.
+
+**Antes de empezar:** el #98 mergeado en el #59 (lo hace Claude con el OK del dueño; no toca prod), así la rama del #59
+trae `club-web/worker/`.
+
+**Miércoles (el dueño, en Cloudflare):**
 1. Workers & Pages → **Create** → **Workers** → **Import a repository** → `satori-app`.
-2. Nombre **`satori-club-api`** · rama de producción **`claude/epic-tesla-pyo77m`** (la del #59, con el #98 adentro) ·
-   Root directory **`club-web/worker`** · Build command: vacío · Deploy command **`npx wrangler deploy`**.
-3. En el log del deploy: `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)`.
-4. Worker → Settings → **Variables and Secrets**: `SUPABASE_URL` y `SUPABASE_ANON_KEY` (texto, prod); `TURNSTILE_SECRET` y,
-   el jueves, `CLUB_WEB_KEY` (Secret). Los mismos valores que en Pages.
-5. **Después del merge del #59:** Worker → Settings → Build → rama de producción **`main`**.
+2. Nombre **`satori-club-api`** (igual al `service` del binding y al `name` de `club-web/worker/wrangler.toml`) · rama de
+   producción **`claude/epic-tesla-pyo77m`** (la del #59) · Root directory **`club-web/worker`** · Build command: vacío ·
+   Deploy command **`npx wrangler deploy`**. **No** agregar un dominio ni una ruta.
+3. **Save and Deploy.**
+4. En el log del deploy tienen que aparecer `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)`. En Settings →
+   **Domains & Routes**: sin rutas y **sin** la URL `*.workers.dev` (si aparece encendida, apagarla).
+5. Worker → Settings → **Variables and Secrets** (Production), los mismos valores que en Pages:
 
-**Activar B (jueves, solo si 11.3 dice B):** un PR de tres líneas a `main` que descomenta en `club-web/wrangler.toml`:
-```toml
-[[services]]
-binding = "CLUB_API"
-service = "satori-club-api"
-```
-(El `wrangler.toml` de Pages manda sobre el panel: el binding se declara ahí, no en Settings.) Merge fuera de 17:00–23:00 →
-Pages vuelve a desplegar → 11.3 tiene que decir `x-club-api: worker` y todo en `true`. Si el deploy de Pages falla por el
-binding, queda en línea el deploy anterior (plan A, que falla cerrado) y se mira el log.
+| Nombre | Tipo | Cuándo |
+|---|---|---|
+| `SUPABASE_URL` (prod) | texto | miércoles |
+| `SUPABASE_ANON_KEY` (prod; es pública) | texto | miércoles |
+| `TURNSTILE_SECRET` | **Secret** | miércoles |
+| `CLUB_WEB_KEY` | **Secret** | **jueves** (paso 6) |
 
-**Vuelta atrás de B:** volver a comentar las tres líneas (otro PR). El Worker puede quedar creado y sin uso.
+   El `wrangler.toml` del Worker tiene `keep_vars = true`: un deploy nuevo no borra estas variables.
+
+**Jueves:**
+6. Con la clave nueva de prod de §6.3 (la misma que va en Pages): Worker → Settings → Variables and Secrets → **Secret**
+   `CLUB_WEB_KEY`. **Nunca por chat.** Si el panel lo pide, **Deploy**.
+7. **Después del merge del #59:** Worker → Settings → **Build** → rama de producción **`main`** (así los arreglos futuros
+   del Worker salen de `main`).
+8. §11.3.
+
+**Vuelta atrás al plan A:** un PR de tres líneas a `main` que comenta el `[[services]]` de `club-web/wrangler.toml`
+(merge fuera de 17:00–23:00). Pages vuelve a desplegar y `/api` lo atiende la Pages Function: si Pages no toma los topes,
+crear cupones y el alta responden 503 (falla cerrada). El Worker puede quedar creado y sin uso.
 
 ### 11.5 Qué se probó hoy (10-nov, sin publicar nada) y qué queda para el jueves
 **Probado hoy, en local** (wrangler 4: `wrangler dev` para el Worker y `wrangler pages dev` para Pages, con el binding):

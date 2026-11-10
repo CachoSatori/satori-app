@@ -656,3 +656,51 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
   entera, así que `statements` de la fila 075 sigue con el texto de antes. **No se toca ahora.** Se resuelve en el pase
   del Club a prod, cuando la 075 se renumere (075 → 150, CLUB-AUD-100): ahí se arma la fila del ledger con el archivo
   final. La paridad (975 = 975) compara el catálogo, no el ledger, y sigue igual.
+
+### 09-nov · tarde: S0b y S2 aplicadas en STAGING (autorizado por el dueño) · rama `claude/club-s0b-s2`, nada en prod
+- **S0b · plan B con `R`.** La lista del plan B (`club_facturas_recientes`) trae también las facturas `R` de las últimas
+  2 h, con la columna nueva `estado`. La caja las ve con la nota «Cobrada, falta el cierre de caja: vale igual».
+  - `club_pos_ref` (modo factura) acepta `C` o `R`; una `X` no.
+  - `club_visita_canonica`: la factura del plan B en `R` da la clave del pedido, la misma que cuando pase a `C`.
+  - `club_cruce_provisional` también vale para el plan B: con la factura elegida en `R`, **«REGISTRO_SIN_FACTURA»** no
+    sale (se agregó la condición en `club_excepciones`). Si la `R` pasa a `X`, sale; cuando pasa a `C`, cruza exacto.
+  - `club_facturas_recientes` cambia lo que devuelve: la 075 la borra antes de crearla, y los permisos se vuelven a dar
+    en el mismo archivo.
+- **S2 · «sin factura» del reporte de visitas con la regla de «SIN_CRUCE».** Una visita cuyo pedido sigue **abierto** no
+  cuenta hasta que el pedido se cierra sin factura (o pasan 18 h desde el escaneo).
+- **Pruebas:** batería **90** (S0b) y **91** (S2).
+  - Con los arreglos cargados dentro de la transacción descartada de la batería: **595/595** (23 s).
+  - Con staging tal como está (sin los arreglos): **caen 6**, 5 de la 90 y 1 de la 91 («2 → 4»: el pedido abierto contaba).
+  - Mutaciones `S0b` y `S2` en `mutaciones_r7.json` (las funciones de `c309b26`). `mutar_bateria.py` acepta
+    `sql_antes` (para borrar `club_facturas_recientes` antes de volver a crear la versión vieja, que devuelve otro tipo).
+- **Batería más rápida:** `pg_temp.exc` lee 14 días de excepciones y no 60. La batería de antes (587 casos) ya tardaba
+  30,2 s, el máximo que espera la Management API, porque staging suma tickets reales del puente cada día. Las facturas
+  de prueba que mira son de las últimas 240 h y el corte más viejo es `current_date - 7`.
+  - Aparte: `club_excepciones(…, 'DESCUENTO_SIN_RESPALDO')` sobre 60 días tarda **2,8 s** en staging (todas juntas,
+    1,4 s). Para mirar antes del piloto, no se tocó.
+- **App:** `marcaFactura` (con vitest) y la nota en el plan B de «Escanear». Los textos dicen «cobradas», no «cerradas».
+  Guía 6.13: tarea 2, indicador «Visitas sin factura» y reglas.
+- **Estado de staging ANTES** (16:29 CR, solo lectura):
+  - ledger 85 filas, la última 090;
+  - md5 de `pg_get_functiondef`: `club_facturas_recientes` `594083c3…` (sin `estado`), `club_pos_ref` `6600c524…`,
+    `club_visita_canonica` `544aec01…`, `club_cruce_provisional` `d09c0e6c…`, `club_excepciones` `a919ee7c…`,
+    `club_reporte_visitas` `0ab994dd…`.
+- **Aplicado a las 16:32:39 CR**, autorizado por el dueño, en una transacción:
+  - precondición: los 6 md5 iguales a los de las 16:29 (se volvieron a leer a las 16:32: iguales);
+  - `drop` + `create` de `club_facturas_recientes` con sus permisos (`authenticated` ejecuta);
+  - las otras 5 funciones, tal cual están en la 075 de la rama (`04916fa`).
+- **Estado de staging DESPUÉS:**
+  - ledger igual (85 filas, la última 090);
+  - md5: `club_facturas_recientes` `d8a00039…` (con `estado`), `club_pos_ref` `4449eee4…`, `club_visita_canonica`
+    `a31bf7a3…`, `club_cruce_provisional` `7080f582…`, `club_excepciones` `43218a89…`, `club_reporte_visitas`
+    `fcd67503…`;
+  - permisos iguales a los de antes en las 6.
+- **Verde:**
+  - batería **595/595** (28 s);
+  - paridad **975 = 975**;
+  - mutaciones: R02 2, CLUB-AUD-43 1, R7-02 4, CLUB-AUD-66 3, S0 5 (ahora también caen la 90 y la 91), S8 1, **S0b 5**,
+    **S2 1**.
+- **Vuelta atrás en staging, si hiciera falta:** las 6 funciones desde la 075 de `c309b26`, con el `drop` de
+  `club_facturas_recientes` primero, y sus permisos. Las tablas y los datos no cambiaron.
+- **El ledger de staging (fila 075) sigue sin igualar el archivo**, como con S0/S8: se resuelve en el pase del Club.
+

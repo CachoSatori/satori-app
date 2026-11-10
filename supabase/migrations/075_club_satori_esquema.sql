@@ -793,7 +793,8 @@ create index if not exists club_mov_visita_tarjeta_idx on public.club_movimiento
 --                                                  abierto en el puente: se guardan el pedido, la mesa, el
 --                                                  total, `abierto_en` (apertura del pedido) y `hora` =
 --                                                  hora del escaneo (la del servidor, no la del cliente).
---   {modo:'factura', numero_factura[, local]}   → plan B: factura cerrada de las últimas 2 h (cruce exacto).
+--   {modo:'factura', numero_factura[, local]}   → plan B: factura cobrada de las últimas 2 h: C (cruce exacto) o R
+--                                                  (S0b: cobrada, falta el cierre de caja; cruce provisional hasta la C).
 -- Devuelve además `visita`: la clave CANÓNICA de la visita (club_visita_canonica, CLUB-AUD-15).
 -- CLUB-AUD-18: el local es el del miembro o del cupón (p_location), no el que mande el cliente; si el
 -- cliente manda otro, se rechaza.
@@ -822,8 +823,12 @@ begin
   if v_cl is null then
     return null;
   end if;
+  -- CLUB-AUD-68: el número tipeado (legacy) solo con C. S0b (09-nov): la factura elegida del plan B también puede estar
+  -- en R (cobrada, falta el cierre de caja); su pedido da la misma clave que tendrá cuando pase a C.
   select * into t from public.pos_ndf_tickets x
-   where x.local = p_location and ltrim(x.numero_factura, '0') = v_cl and x.estado = 'C'   -- CLUB-AUD-68
+   where x.local = p_location and ltrim(x.numero_factura, '0') = v_cl
+     and (x.estado = 'C' or (x.estado = 'R' and p_pos is not null and p_pos->>'modo' = 'factura'))
+   order by (x.estado = 'C') desc
    limit 1;
   if found and t.numero_pedido is not null and t.pedido_abierto_en is not null then
     return format('pedido:%s@%s', t.numero_pedido, to_char(t.pedido_abierto_en at time zone 'UTC', 'YYYYMMDD"T"HH24MISS'));
@@ -910,7 +915,9 @@ begin
     if v_nf !~ '^[0-9]{1,30}$' then
       raise exception 'Factura no válida: elegila de la lista' using errcode = 'P0001';
     end if;
-    select * into t from public.pos_ndf_tickets x where x.local = v_local and x.numero_factura = v_nf and x.estado = 'C';
+    -- S0b (09-nov): en este PoS la factura queda en R (cobrada) hasta el cierre de caja; la caja la puede elegir igual.
+    -- Una anulada (X) no.
+    select * into t from public.pos_ndf_tickets x where x.local = v_local and x.numero_factura = v_nf and x.estado in ('C', 'R');
     if not found then
       raise exception 'Esa factura no está en el PoS: tocá «Actualizar» o, si se cobró hace más de 2 horas, avisale al manager' using errcode = 'P0001';
     end if;
@@ -2486,8 +2493,13 @@ $$;
 -- Plan B: facturas cerradas de las últimas 2 h (hora, total, mesa si tiene, consecutivo para comparar
 -- con el tiquete). owner, manager, cajero.
 drop function if exists public.club_facturas_recientes(text);
+-- S0b (09-nov): la lista del plan B trae también las R (cobradas, falta el cierre de caja), con `estado` para marcarlas.
+-- Sin esto, durante el servicio la lista estaba vacía (no hay C hasta el cierre) y con el puente caído no se registraba
+-- nada. Cambia el tipo de lo que devuelve: hay que borrarla antes (los permisos se vuelven a dar más abajo).
+drop function if exists public.club_facturas_recientes(text);
 create or replace function public.club_facturas_recientes(p_location text default null)
-returns table (numero_factura text, hora timestamptz, total_crc numeric, area text, mesa text, pedido text, consecutivo_fe text)
+returns table (numero_factura text, hora timestamptz, total_crc numeric, area text, mesa text, pedido text, consecutivo_fe text,
+               estado text)
 language plpgsql
 stable
 security definer
@@ -2504,9 +2516,9 @@ begin
            nullif(upper(btrim(coalesce(t.area_factura, t.area, ''))), ''),
            (select case when btrim(coalesce(x, '')) in ('', '0') then null else upper(btrim(x)) end
               from (select coalesce(t.mesa_factura, t.mesa) as x) m),
-           t.numero_pedido, t.consecutivo_fe
+           t.numero_pedido, t.consecutivo_fe, t.estado
       from public.pos_ndf_tickets t
-     where t.local = p_location and t.estado = 'C' and t.fecha_registra >= now() - interval '2 hours'
+     where t.local = p_location and t.estado in ('C', 'R') and t.fecha_registra >= now() - interval '2 hours'
        and t.fecha_registra <= now() + interval '5 minutes'   -- margen por el reloj de la PC del PoS
      order by t.fecha_registra desc, t.numero_factura desc
      limit 100;
@@ -2844,7 +2856,11 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select coalesce(p_pos->>'modo', '') = 'pedido' and exists (
+  -- S0b (09-nov): con el plan B, la factura elegida en R (todavía sin cierre de caja) también es cruce provisional.
+  select (coalesce(p_pos->>'modo', '') = 'factura' and exists (
+            select 1 from public.pos_ndf_tickets t
+             where t.local = p_location and t.estado = 'R' and t.numero_factura = p_pos->>'numero_factura'))
+      or (coalesce(p_pos->>'modo', '') = 'pedido' and exists (
     select 1 from public.pos_ndf_tickets t
      where t.local = p_location and t.estado = 'R' and t.numero_pedido = p_pos->>'pedido'
        and t.fecha_registra >= least(coalesce((p_pos->>'abierto_en')::timestamptz, (p_pos->>'visto')::timestamptz, (p_pos->>'hora')::timestamptz),
@@ -2852,7 +2868,7 @@ as $$
        and t.fecha_registra < (p_pos->>'hora')::timestamptz + interval '18 hours'
        and (t.pedido_abierto_en is null
             or abs(extract(epoch from t.pedido_abierto_en
-                   - coalesce((p_pos->>'abierto_en')::timestamptz, (p_pos->>'visto')::timestamptz, (p_pos->>'hora')::timestamptz))) < 2))
+                   - coalesce((p_pos->>'abierto_en')::timestamptz, (p_pos->>'visto')::timestamptz, (p_pos->>'hora')::timestamptz))) < 2)))
 $$;
 
 -- Factura elegida a mano por el manager para un registro que no cruzó solo (cuenta dividida o
@@ -3121,6 +3137,7 @@ begin
        and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and cardinality(m.ticket_ids) = 0
        and coalesce(m.pos_ref->>'modo', '') <> 'pedido'
+       and not public.club_cruce_provisional(p_location, m.pos_ref)   -- S0b: factura del plan B en R (falta el cierre)
     union all
     -- SIN_CRUCE: pedido sin su factura. Se marca cuando ya pasó la latencia del puente y el pedido no
     -- sigue abierto (o pasaron las 18 h). Sigue listada (resuelta) aunque el manager elija la factura.
@@ -5099,7 +5116,13 @@ begin
       select x.registrado_por as actor, x.miembro_id, x.estado_beneficio,
              (x.registrada_en < now() - make_interval(mins => coalesce(v_lat, 30))
               and cardinality(public.club_cruce_facturas(x.location_id, x.pos_ref, null)) = 0
-              and not public.club_cruce_provisional(x.location_id, x.pos_ref)) as sin_fac   -- S0: R = cobrada, falta el cierre
+              and not public.club_cruce_provisional(x.location_id, x.pos_ref)   -- S0: R = cobrada, falta el cierre
+              -- S2 (09-nov): la misma regla que SIN_CRUCE. Un pedido que sigue abierto todavía no tiene factura: no es
+              -- «sin factura» hasta que se cierra (o pasan 18 h desde el escaneo).
+              and (coalesce(x.pos_ref->>'modo', '') <> 'pedido'
+                   or now() >= (x.pos_ref->>'hora')::timestamptz + interval '18 hours'
+                   or not exists (select 1 from public.pos_ndf_open o
+                                   where o.local = x.location_id and o.id_pedido = x.pos_ref->>'pedido'))) as sin_fac
         from public.club_visitas_socio x
        where x.location_id = p_location and x.registrada_en >= v_ini and x.registrada_en < v_fin),
     m as (select actor, max(n)::int as mx from (select actor, miembro_id, count(*) as n from v group by 1, 2) z group by actor)

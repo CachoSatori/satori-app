@@ -70,7 +70,7 @@ describe('errores y opciones de canje', () => {
   })
 })
 
-import { describirPos, describirPedido, describirFactura, posDePedido, posDeFactura, posParaServidor } from '../../shared/api/club'
+import { describirPos, describirPedido, describirFactura, marcaFactura, posDePedido, posDeFactura, posParaServidor } from '../../shared/api/club'
 describe('pedido del PoS (piloto)', () => {
   it('describe el pedido como lo ve la caja: «Pedido 14 · Mesa 20 · ₡48.500»', () => {
     expect(describirPedido({ pedido: '14', mesa: '20', total_crc: 48500 })).toBe('Pedido 14 · Mesa 20 · ₡48.500')
@@ -93,6 +93,11 @@ describe('pedido del PoS (piloto)', () => {
     expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 9000, area: '3', mesa: '4' })).toBe('19:21 · ₡9.000 · Área 3 · Mesa 4')
     expect(posParaServidor(posDePedido({ pedido: '7', area: '3', mesa: '4', salonero: null, total_crc: 1, pax: null, actualizado: '2026-11-06T01:00:00Z' })))
       .toEqual({ modo: 'pedido', pedido: '7' })
+  })
+  it('S0b: plan B marca la factura en R (cobrada, falta el cierre de caja); la cerrada no lleva marca', () => {
+    expect(marcaFactura({ estado: 'R' })).toBe('Cobrada, falta el cierre de caja: vale igual')
+    expect(marcaFactura({ estado: 'C' })).toBeNull()
+    expect(marcaFactura({})).toBeNull()
   })
 })
 

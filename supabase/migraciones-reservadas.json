@@ -45,5 +45,11 @@
   "libres_fuera_de_bloque": [
     "086"
   ],
-  "asignadas": {}
+  "asignadas": {
+    "100": {
+      "nombre": "club_catalogo_locales",
+      "bloque": "club",
+      "rama": "claude/club-100-catalogo"
+    }
+  }
 }

@@ -225,9 +225,15 @@ solas tras un reinicio (validado el 29/10).
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | — | **087** |
-| CLUB SATORI + puente | 100–149 | — | **100** |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`, sin aplicar; va después de la 075) | **101** |
 | PASE A PROD (solo renumeraciones) | 150–199 | — | **150** |
 | (fuera de bloque) | 086 | — | libre |
+
+**Asignadas en los bloques**
+
+| Número | Nombre | Bloque | Rama | Dónde está aplicada |
+|---|---|---|---|---|
+| 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **sin aplicar**. Orden en prod (Grok 127): 085 → 089 → 090 → 091 → 092 → pase del Club. **Decisión (CLUB-AUD-100): en el pase del Club, 075 → 150 y 100 → 151** (bloque de pase, con su «origen»). No se mergea antes que la 091 y la 092 |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |

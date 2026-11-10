@@ -140,5 +140,13 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
     environmentOptions: { happyDOM: { url: 'http://localhost/' } },
+    // Valores FALSOS y fijos para que los módulos que importan el cliente de Supabase
+    // (src/shared/api/supabase.ts tira si faltan) se puedan cargar en los tests sin `.env.local`.
+    // Pisan cualquier .env a propósito: ningún test unitario debe hablar con un proyecto real.
+    // 127.0.0.1:9 (discard) → si alguien llama a la red, falla rápido y en local.
+    env: {
+      VITE_SUPABASE_URL: 'http://127.0.0.1:9',
+      VITE_SUPABASE_ANON_KEY: 'clave-falsa-solo-tests',
+    },
   },
 })

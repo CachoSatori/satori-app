@@ -122,6 +122,29 @@ drop function if exists public.club_norm_telefono(text);
 drop function if exists public.club_creditos(bigint, int);
 drop function if exists public.club_gen_codigo(int);
 
+-- (10-nov, paquete del pase) tres tablas que la lista de arriba no tenía: quedaban después del rollback.
+drop table if exists public.club_pos_login_historial;   -- historial de cambios de login del PoS (trigger en employees)
+drop table if exists public.club_cargas_papel;          -- carga de saldos de papel (G-56)
+drop table if exists public.club_avisos_privacidad;     -- versiones del aviso de privacidad
+
+-- (10-nov) el rollback se verifica solo: si queda CUALQUIER objeto club_* en public (tabla, vista, secuencia, tipo,
+-- función) o un trigger club_* sobre una tabla que no es del Club (p. ej. employees), aborta y no se borra nada.
+do $$
+declare v text;
+begin
+  select string_agg(x, ', ') into v from (
+    select c.relname::text || ' (' || c.relkind::text || ')' as x from pg_class c
+     where c.relnamespace = 'public'::regnamespace and c.relname like 'club\_%'
+    union all select p.oid::regprocedure::text from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'club\_%'
+    union all select t.typname::text || ' (tipo)' from pg_type t
+     where t.typnamespace = 'public'::regnamespace and t.typname like 'club\_%' and t.typtype in ('e', 'd')
+    union all select t.tgname::text || ' on ' || t.tgrelid::regclass::text from pg_trigger t
+     where not t.tgisinternal and t.tgname like 'club\_%') z;
+  if v is not null then
+    raise exception 'rollback de la 150 incompleto, queda: %', v;
+  end if;
+end $$;
+
 delete from supabase_migrations.schema_migrations where version in ('075', '150');
 
 commit;

@@ -108,7 +108,7 @@ merge**.
 - el ledger no da 62 · 092, o ya tiene la 093;
 - alguna de las 5 policies `_read` no existe o no tiene `qual` = `true` (un `alter policy` sobre una policy que no
   existe hace fallar la migración, y Branching queda en `MIGRATIONS_FAILED`);
-- no hay ninguna cuenta inactiva para la prueba de humo;
+- no hay ninguna cuenta inactiva para la prueba de humo (4a con `hay_cuenta` false);
 - 1.3 da una vista, o una función que no está en el repo.
 
 ## 2. El cambio: merge del PR → Supabase Branching aplica la 093
@@ -156,13 +156,17 @@ begin read only;
 select set_config('request.jwt.claims', json_build_object('sub', p.id::text, 'role', 'authenticated')::text, true)
   from public.profiles p where p.is_active = false order by (p.role = 'manager') desc, p.id limit 1;
 set local role authenticated;
-select public.get_my_role() as rol_visto, (select count(*) from public.ventas_dias) as ventas_dias,
+select (nullif(current_setting('request.jwt.claims', true), '')::json ->> 'sub') is not null as hay_cuenta,   -- Grok 141
+       public.get_my_role() as rol_visto, (select count(*) from public.ventas_dias) as ventas_dias,
        (select count(*) from public.ventas_hist) as ventas_hist, (select count(*) from public.ventas_metas) as ventas_metas,
        (select count(*) from public.ventas_comps) as ventas_comps, (select count(*) from public.product_map) as product_map;
 rollback;
 ```
-- **Antes:** `rol_visto` null y las cinco tablas con filas.
-- **Después:** `rol_visto` null y **las cinco en 0**.
+- **`hay_cuenta` tiene que dar `true` (Grok 141).** Si da `false`, no hay ninguna cuenta inactiva en prod y la consulta
+  corrió sin usuario. Sus ceros no prueban nada: **4a queda NO PROBADO y es PARADA** (se avisa; no se sigue con
+  4a «después» como si estuviera en verde).
+- **Antes:** `hay_cuenta` true, `rol_visto` null y las cinco tablas con filas.
+- **Después:** `hay_cuenta` true, `rol_visto` null y **las cinco en 0**.
 
 **4b. Cuentas ACTIVAS: owner, manager, cajero, contador y salonero** (la más antigua de cada rol; solo conteos, sin
 nombres ni ids):
@@ -285,14 +289,14 @@ pasan. Después va el pase del Club (075 → 150, 100 → 151). La 087 y la 088,
 | 1.1 ledger 62 · 092 · ninguna versión ≥ 093 | 62 · 092 | |
 | 1.2 5 `_read` en `true` · 5 `_write` anotadas · RLS en las 5 | | |
 | 1.3 vistas · funciones SECURITY DEFINER: 0 | | |
-| 4a antes (cuenta inactiva): las 5 con filas | | |
+| 4a antes (cuenta inactiva): `hay_cuenta` true · las 5 con filas | | |
 | 4b antes (activas), justo antes del merge | | |
 | Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | |
 | §2 merge (SHA, hora) | | |
 | 5.1 Branching success · log con la 093 | | |
 | 5.2 exactamente 1 fila 093 con `name = 'ventas_lectura_rol_activo'` (statements: anotar) | 63 · 093 · 1 | |
 | 5.3 las 5 `_read` en «Después» · las 5 `_write` iguales | | |
-| 4a después: 0 · 0 · 0 · 0 · 0 | | |
+| 4a después: `hay_cuenta` true · 0 · 0 · 0 · 0 · 0 | | |
 | 4b después = 4b antes (una diferencia que también está en `base` no es parada) | | |
 | 5.5 pantalla de Ventas OK (owner) | | |
 | Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | |

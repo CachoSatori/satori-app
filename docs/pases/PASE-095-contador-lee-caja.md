@@ -16,6 +16,8 @@
 - **Decisión del dueño (10-nov):** el contador tiene que ver caja. Hoy la ruta `/caja` lo deja entrar, pero la pantalla
   le sale **vacía**: las lecturas de `cash_movements`, `cash_sessions` y `suppliers` son solo para owner, manager y
   cajero.
+- **OK explícito del dueño (10-nov, para la firma):** el contador lee **todos** los movimientos de caja y **todos** los
+  proveedores.
 - **Pasa:** una policy permisiva de **SELECT** por tabla para el **contador activo**,
   `(select get_my_role()) = 'contador'`. Con la cuenta inactiva, `get_my_role()` es null, igual que en la 085 y la 093.
   Las tablas, con el motivo de cada una:
@@ -37,8 +39,8 @@
   - **convive con la 091**: las policies restrictivas por local siguen aplicando, y el contador ve los locales que le da
     `mis_locales()` (todos, decisión 2 del plan multilocal);
   - **lo que ya existía:** `cash_movements_contador_insert` (mig 038, la bandeja) le deja al contador **crear**
-    movimientos que no son en efectivo, pendientes o de Banco. Esta migración no la cambia. Si el dueño quiere que el
-    contador no cree nada, es otra migración.
+    movimientos que no son en efectivo, pendientes o de Banco. **Decisión del dueño (10-nov): se deja así, sin
+    migración.** La 095 no la cambia, y la prueba comprueba que sigue dando `ok` sin y con la 095 (Grok 157).
 
 ## SHA y huellas
 | Qué | Valor |
@@ -65,7 +67,7 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 |---|---|---|
 | 0.1 | Firma del dueño en §9 (con el SHA de la cabeza del PR) | firma |
 | 0.2 | Los dos responsables presentes | §9 |
-| 0.3 | **No se mergea entre las 17:00 y las 23:00 CR** (salvo que el dueño lo autorice ese día), y ninguna otra sesión mergeando a `main` | hora en §9 |
+| 0.3 | **No se mergea entre las 17:00 y las 23:00 CR** (regla fija; cualquier excepción la escribe el dueño en su firma del §9), y ninguna otra sesión mergeando a `main` | hora en §9 |
 | 0.4 | La rama al día con `main` (con la 094 ya mergeada), y el diff con **solo** los archivos de la 095 (§2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.5 | Gate del PR: `supabase/migraciones.test.ts` (la 095 está registrada) y build | checks del PR |
 | 0.6 | Staging en verde con este mismo archivo (§3) | anotado |

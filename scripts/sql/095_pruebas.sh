@@ -33,20 +33,25 @@ if [ -z "$BASE" ] || jq -e 'to_entries | any(.value < 1)' >/dev/null <<<"$BASE";
 CEROS='{"cash_movements":0,"cash_sessions":0,"suppliers":0}'
 echo "      base (postgres): $BASE"
 
+# Si la 095 ya está aplicada en staging (desde el 10-nov 11:03), «sin la 095» se arma deshaciéndola DENTRO de la
+# transacción descartada (su rollback); «con la 095» la vuelve a poner encima. Así los casos miden siempre lo mismo.
+APLICADA=$(x "select (exists (select 1 from pg_policies where policyname = 'cash_movements_contador_select'))::text as x" | tr -d '"')
+if [ "$APLICADA" = "true" ]; then SIN="$RB"; else SIN=""; fi
+echo "      la 095 ya está aplicada en staging: ${APLICADA:-?}"
 echo "== Lectura =="
-compara "sin la 095, el contador ve 0 en las 3 (el hueco)" "$CEROS" "$(ve "$(sim contador true)")"
-compara "con la 095, el contador ve lo mismo que la base en las 3" "$BASE" "$(ve "$MIG $(sim contador true)")"
-OWN=$(x "begin; $MIG $(sim owner true) select json_build_object($TRES, $YA) as x; rollback;")
-CON=$(x "begin; $MIG $(sim contador true) select json_build_object($TRES, $YA) as x; rollback;")
+compara "sin la 095, el contador ve 0 en las 3 (el hueco)" "$CEROS" "$(ve "$SIN $(sim contador true)")"
+compara "con la 095, el contador ve lo mismo que la base en las 3" "$BASE" "$(ve "$SIN $MIG $(sim contador true)")"
+OWN=$(x "begin; $SIN $MIG $(sim owner true) select json_build_object($TRES, $YA) as x; rollback;")
+CON=$(x "begin; $SIN $MIG $(sim contador true) select json_build_object($TRES, $YA) as x; rollback;")
 compara "con la 095, el contador ve lo mismo que el owner en las 12 tablas de la pantalla de Caja" "$OWN" "$CON"
-compara "con la 095, el contador INACTIVO ve 0 en las 3" "$CEROS" "$(ve "$MIG $(sim contador false)")"
+compara "con la 095, el contador INACTIVO ve 0 en las 3" "$CEROS" "$(ve "$SIN $MIG $(sim contador false)")"
 for rol in owner manager cajero salonero proveedor; do
-  compara "$rol no cambia (sin y con la 095)" "$(ve "$(sim $rol true)")" "$(ve "$MIG $(sim $rol true)")"
+  compara "$rol no cambia (sin y con la 095)" "$(ve "$SIN $(sim $rol true)")" "$(ve "$SIN $MIG $(sim $rol true)")"
 done
 
 echo "== Escritura del contador con la 095: ninguna pasa =="
 w() { # $1 etiqueta · $2 sentencia → OK si 0 filas o 42501
-  local r; r=$(x "begin; $MIG create temp table r (v text) on commit drop; grant all on r to authenticated; $(sim contador true)
+  local r; r=$(x "begin; $SIN $MIG create temp table r (v text) on commit drop; grant all on r to authenticated; $(sim contador true)
      do \$\$ declare n int; begin $2; get diagnostics n = row_count; insert into r values (n::text);
      exception when others then insert into r values (sqlstate); end \$\$;
      reset role; select (select v from r) as x; rollback;")
@@ -67,20 +72,23 @@ P038="insert into public.cash_movements (created_by, movement_type, amount_crc, 
 i038() { x "begin; $1 create temp table r (v text) on commit drop; grant all on r to authenticated; $(sim contador true)
   do \$\$ begin $P038; insert into r values ('ok'); exception when others then insert into r values (sqlstate); end \$\$;
   reset role; select (select v from r) as x; rollback;"; }
-compara "el contador crea un movimiento pendiente que no es efectivo (038): mismo resultado sin y con la 095" "$(i038 "")" "$(i038 "$MIG")"
+# Grok 157: contra «ok» literal, sin y con la 095 (no solo «igual entre sí»: dos errores iguales no cuentan como verde)
+compara "el contador crea un movimiento pendiente que no es efectivo (038), SIN la 095: ok" '"ok"' "$(i038 "$SIN")"
+compara "el contador crea un movimiento pendiente que no es efectivo (038), CON la 095: ok" '"ok"' "$(i038 "$SIN $MIG")"
 
 echo "== Convive con la 091 (RLS por local), todo descartado =="
 OTRO="insert into public.locations (id, name) values ('local-prueba-095', 'Local de prueba') on conflict (id) do nothing;
   insert into public.cash_movements (created_by, movement_type, amount_crc, amount_usd, currency, description, caja_origen, method, status, location_id)
   values ((select id from public.profiles where role = 'owner' order by created_at limit 1), 'ingreso', 1, 0, 'CRC', 'prueba 095 local', 'Caja Fuerte', 'Efectivo', 'aprobado', 'local-prueba-095');"
 CU="select json_build_object('otro_local', (select count(*) from public.cash_movements where location_id = 'local-prueba-095'), 'total', (select count(*) from public.cash_movements)) as x"
-O91=$(x "begin; $M091 $MIG $OTRO $(sim owner true) $CU; rollback;")
-C91=$(x "begin; $M091 $MIG $OTRO $(sim contador true) $CU; rollback;")
+O91=$(x "begin; $SIN $M091 $MIG $OTRO $(sim owner true) $CU; rollback;")
+C91=$(x "begin; $SIN $M091 $MIG $OTRO $(sim contador true) $CU; rollback;")
 compara "con la 091 y la 095, el contador ve lo mismo que el owner (todos los locales de mis_locales())" "$O91" "$C91"
-compara "con la 091 y la 095, el cajero sin asignación no ve el otro local" "0" "$(x "begin; $M091 $MIG $OTRO $(sim cajero true) $CU; rollback;" | jq -c '.otro_local')"
+compara "con la 091 y la 095, el cajero sin asignación no ve el otro local" "0" "$(x "begin; $SIN $M091 $MIG $OTRO $(sim cajero true) $CU; rollback;" | jq -c '.otro_local')"
 
 echo "== Vuelta atrás y estado final =="
 compara "095 + rollback: el contador vuelve a ver 0" "$CEROS" "$(ve "$MIG $RB $(sim contador true)")"
-compara "estado final: staging sin las 3 policies ni la fila 095" '{"pols":0,"ledger":0}' "$(x "select json_build_object('pols', (select count(*) from pg_policies where policyname like '%contador_select'), 'ledger', (select count(*) from supabase_migrations.schema_migrations where version = '095')) as x")"
+[ "$APLICADA" = "true" ] && FIN='{"pols":3,"ledger":1}' || FIN='{"pols":0,"ledger":0}'
+compara "estado final: staging igual que al empezar (la 095 aplicada: ${APLICADA:-?})" "$FIN" "$(x "select json_build_object('pols', (select count(*) from pg_policies where policyname like '%contador_select'), 'ledger', (select count(*) from supabase_migrations.schema_migrations where version = '095')) as x")"
 echo "── Resultado: $ok OK · $fallas FALLA ──"
 [ "$fallas" -eq 0 ] && echo VERDE || { echo "NO VERDE"; exit 1; }

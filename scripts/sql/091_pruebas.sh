@@ -23,7 +23,15 @@ q() {
 uno() { jq -c 'if type=="array" then .[-1] else . end'; }
 # Lo que se imprime de un error: su primera línea. NUNCA el DETAIL (Postgres pone ahí la fila entera, con datos).
 limpio() { jq -r 'if type=="object" and has("message") then (.message | split("\n")[0] | sub("DETAIL:.*"; "")) else tostring end' <<<"$1" 2>/dev/null | head -c 220; }
-uid() { q "select id from public.profiles where role = '$1' and is_active order by created_at limit 1" | jq -r '.[0].id // empty'; }
+# Un solo perfil (no owner) que toma cada rol DENTRO de la transacción (se descarta con ella): así ningún rol queda sin
+# probar por no tener cuenta activa en staging (antes se salteaba con «--» y no contaba como falla).
+PID=$(q "select id from public.profiles where role <> 'owner' order by created_at limit 1" | jq -r '.[0].id // empty')
+[ -n "$PID" ] || { echo "NO PROBADO: no hay perfil para simular"; exit 1; }
+como_rol() { # $1 = rol → SQL que deja al perfil de prueba con ese rol, activo, y abre su sesión
+  echo "set local session_replication_role = replica; update public.profiles set role = '$1', is_active = true where id = '$PID';
+        set local session_replication_role = origin; set local role authenticated;
+        select set_config('request.jwt.claims', '{\"sub\":\"$PID\",\"role\":\"authenticated\"}', true);"
+}
 
 FOTO="select json_build_object(
   'cash_movements', (select json_build_object('n', count(*), 'crc', sum(amount_crc), 'usd', sum(amount_usd),
@@ -60,10 +68,8 @@ compara "postgres: filas, totales, saldo CF y cierres" "$A" "$D"
 
 echo "== Lo que ve cada rol, antes y después =="
 for rol in owner manager contador cajero salonero; do
-  id=$(uid $rol)
-  if [ -z "$id" ]; then echo "--    $rol: sin cuenta activa en staging"; continue; fi
-  A=$(q "begin; $(como "$id") $FOTO; rollback;" | uno)
-  D=$(q "begin; $MIG; $(como "$id") $FOTO; rollback;" | uno)
+  A=$(q "begin; $(como_rol $rol) $FOTO; rollback;" | uno)
+  D=$(q "begin; $MIG; $(como_rol $rol) $FOTO; rollback;" | uno)
   compara "$rol ve lo mismo" "$A" "$D"
 done
 
@@ -73,23 +79,22 @@ OTRO="insert into public.locations (id, name) values ('local-prueba-091', 'Local
       values ((select id from public.profiles where role = 'owner' order by created_at limit 1), 'ingreso', 1, 0, 'CRC', 'prueba 091', 'Caja Fuerte', 'Efectivo', 'aprobado', 'local-prueba-091');"
 CUENTA="select count(*) as n from public.cash_movements where location_id = 'local-prueba-091'"
 for caso in "owner:1" "contador:1" "manager:0" "cajero:0"; do
-  rol=${caso%%:*}; esperado=${caso##*:}; id=$(uid $rol)
-  [ -z "$id" ] && { echo "--    $rol: sin cuenta"; continue; }
-  n=$(q "begin; $MIG; $OTRO; $(como "$id") $CUENTA; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
+  rol=${caso%%:*}; esperado=${caso##*:}
+  n=$(q "begin; $MIG; $OTRO; $(como_rol $rol) $CUENTA; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
   compara "$rol ve $esperado fila(s) del otro local" "$esperado" "$n"
 done
-id=$(uid manager)
+id=$PID
 if [ -n "$id" ]; then
-  n=$(q "begin; $MIG; $OTRO; insert into public.profile_locations (profile_id, location_id) values ('$id', 'local-prueba-091'); $(como "$id") $CUENTA; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
+  n=$(q "begin; $MIG; $OTRO; insert into public.profile_locations (profile_id, location_id) values ('$id', 'local-prueba-091'); $(como_rol manager) $CUENTA; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
   compara "manager asignado al otro local lo ve" "1" "$n"
-  n=$(q "begin; $MIG; $OTRO; insert into public.profile_locations (profile_id, location_id) values ('$id', 'local-prueba-091'); $(como "$id") select count(*) as n from public.cash_movements where location_id = 'santa-teresa'; rollback;" | jq -r 'if type=="array" then .[-1].n else "error" end')
+  n=$(q "begin; $MIG; $OTRO; insert into public.profile_locations (profile_id, location_id) values ('$id', 'local-prueba-091'); $(como_rol manager) select count(*) as n from public.cash_movements where location_id = 'santa-teresa'; rollback;" | jq -r 'if type=="array" then .[-1].n else "error" end')
   compara "manager asignado SOLO al otro local deja de ver santa-teresa" "0" "$n"
 fi
 
 echo "== Una escritura de un manager sin asignación a otro local se rechaza =="
-id=$(uid manager)
+id=$PID
 if [ -n "$id" ]; then
-  r=$(q "begin; $MIG; $OTRO; $(como "$id")
+  r=$(q "begin; $MIG; $OTRO; $(como_rol manager)
          insert into public.cash_movements (created_by, movement_type, amount_crc, amount_usd, currency, description, caja_origen, method, status, location_id)
          values ('$id', 'ingreso', 1, 0, 'CRC', 'prueba 091 b', 'Caja Fuerte', 'Efectivo', 'aprobado', 'local-prueba-091'); rollback;")
   if echo "$r" | grep -qE 'ERROR:[[:space:]]+42501' && echo "$r" | grep -qi "row-level security"; then echo "OK    insert en otro local rechazado por RLS (42501)"; else echo "FALLA insert en otro local: $(limpio "$r")"; fallas=$((fallas+1)); fi
@@ -129,9 +134,9 @@ else
     r=$(q "begin; ${!1}; ${!2}; $EST; rollback;" | jq -c 'if type=="array" then .[-1].x else . end')
     compara "opción a ($1 → $2): FK validada, ningún local del Club fuera del catálogo, 4 columnas" '{"fk":true,"club_sin_catalogo":0,"cols_local":4}' "$r"
   done
-  ido=$(uid owner)
+  ido=$PID
   if [ -z "$ido" ]; then echo "NO PROBADO club_local_crear: sin owner activo en staging"; fallas=$((fallas+1)); else
-    r=$(q "begin; $MIG; $PROP; $(como "$ido") select public.club_local_crear('prueba-091-opcion-a', 'Local de prueba 091'); reset role;
+    r=$(q "begin; $MIG; $PROP; $(como_rol owner) select public.club_local_crear('prueba-091-opcion-a', 'Local de prueba 091'); reset role;
           select json_build_object('en_catalogo', (select not is_active from public.locations where id = 'prueba-091-opcion-a'),
             'en_club', exists (select 1 from public.club_config where location_id = 'prueba-091-opcion-a')) as x; rollback;" \
         | jq -c 'if type=="array" then .[-1].x else . end')

@@ -252,7 +252,7 @@ solas tras un reinicio (validado el 29/10).
 | 090 | `anon_privilegios_por_defecto` (firmada para staging) | caja | `claude/anon-default-privs` | **staging (09/11 08:28 CR)** |
 | 091 | `multilocal_fase0` (borrador, sin firma; va después de la 090) | caja | `claude/multilocal-fase0` | **staging (10/11 11:02 CR)** |
 | 092 | `employees_borrado_solo_owner` (R7-01, sin firma; va después de la 091) | caja | `claude/employees-borrado-owner` | **staging (10/11 11:03 CR)** |
-| 093 | `ventas_lectura_rol_activo` (Grok 126, sin firma; va después de la 092) | caja | `claude/ventas-lectura-rol-activo` | ninguna |
+| 093 | `ventas_lectura_rol_activo` (Grok 126, sin firma; va después de la 092) | caja | `claude/ventas-lectura-rol-activo` | **staging (10/11 11:03 CR)** |
 
 **Bloques**
 

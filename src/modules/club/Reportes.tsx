@@ -9,19 +9,16 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
 import { Aviso, Btn, Card } from './ui'
-import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
+import { C, inputStyle, labelStyle, fmtFecha, mesActualCR } from './estilos'
 import { esParcial } from './reporteSaldo'
 
-const mesAnterior = () => {
-  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Costa_Rica' }))
-  d.setDate(1); d.setMonth(d.getMonth() - 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
 const n0 = (n: number) => Number(n ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 0 })
 const crc = (n: number) => `₡${n0(n)}`
 
 export default function Reportes() {
-  const [mes, setMes] = useState(mesAnterior())
+  // 10-nov: abre en el mes EN CURSO (antes, en el anterior: el 09-nov abría «octubre»). El mes en curso se ve parcial y
+  // no se puede cerrar (el servidor solo cierra meses terminados); para cerrar, se elige el mes anterior.
+  const [mes, setMes] = useState(mesActualCR())
   const [local, setLocal] = useState<string | null>(localActual())
   const [locales, setLocales] = useState<LocalClub[]>([])
   const [rep, setRep] = useState<ReporteMes | null>(null)

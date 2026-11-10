@@ -177,9 +177,10 @@ archivo (90.708 caracteres contra 416.138 bytes) aunque el **catálogo** coincid
 | 10-nov | `gate61.sh` staging contra staging; `gate61_staging_con_151.sh` | 0 diferencias (3.701 hechos); con la 151: 3.714 (los 13 hechos de la 151) |
 | 10-nov | `gate61_test.sh` (sin red) · `migraciones.test.ts` · vitest | 25/25 · 6/6 · 1526 |
 
-**Staging después del pase** (necesita el OK del dueño: es una escritura en staging). Una transacción con precondición:
-la fila 075 pasa a 150 con el texto exacto del archivo, se aplica la 151 y se registra su fila. Así staging queda igual que
-prod y el G-61 se puede correr sin `gate61_staging_con_151.sh`. El SQL lo arma Claude cuando el dueño lo autorice.
+**Staging: alinear con prod** (autorizado por el dueño el 10-nov, **recién cuando la sesión de caja confirme que aplicó la
+091 → 093 en staging**: la 151 va sobre el `locations` de la 091). Una transacción con precondición: la fila 075 pasa a 150
+con el texto exacto del archivo, se aplica la 151 y se registra su fila. Así staging queda igual que prod y el G-61 se
+corre con `gate61.sh` tal cual. Hasta esa confirmación no se escribe nada: el G-61 usa `gate61_staging_con_151.sh`.
 
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (§5.5).

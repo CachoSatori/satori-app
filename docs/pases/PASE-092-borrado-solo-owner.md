@@ -19,9 +19,11 @@
   1. Un trigger `BEFORE DELETE` en `employees`: si la ficha tiene `pos_login` y quien borra es un usuario que **no** es
      owner activo, la base responde 42501 «Solo el owner borra un empleado con login del PoS. Para sacarlo,
      desactivalo.» y no borra nada.
-  2. Cada borrado que sí pasa (owner, o el canal admin sin usuario) deja una copia de la ficha en una tabla nueva,
-     `employee_bajas`, con quién y cuándo. Solo el owner la lee y nadie la escribe a mano: la escribe solo el trigger,
-     con una función `SECURITY DEFINER` que nadie más puede ejecutar.
+  2. Cada borrado que sí pasa (owner, o el canal admin sin usuario) deja un registro en una tabla nueva,
+     `employee_bajas`, **solo con lo mínimo** (Grok 142, decisión del dueño): id, login del PoS, nombre, las fechas de
+     alta y de última edición de la ficha, quién la borró y cuándo. **No** guarda la ficha completa (nada de salario,
+     banco ni horarios). Solo el owner la lee y nadie la escribe a mano: la escribe solo el trigger, con una función
+     `SECURITY DEFINER` que nadie más puede ejecutar.
 - **No pasa:**
   - desactivar sigue igual: es el camino normal para sacar a alguien;
   - la app no tiene botón de borrar empleados, así que nadie ve un cambio en pantalla (la guía 6.6 Admin ya lo dice);
@@ -140,13 +142,16 @@ al trigger). La regla ya se probó en staging (§3). En prod se mira:
 - 4b distinto de antes, o 4c con la lista de empleados rota.
 
 ## 7. Vuelta atrás (todo en la misma ventana; nadie más pushea a `main`)
-1. **En prod, UN bloque** (editor SQL). Al volver atrás se pierde el registro de bajas: si `bajas` es mayor que 0, el
-   owner lo exporta primero.
+1. **En prod, UN bloque** (editor SQL). **Si `employee_bajas` tiene filas, el bloque frena sin tocar nada** (Grok 140):
+   el owner las exporta, decide, y recién ahí se sigue.
    ```sql
    begin;
    do $$ begin
      if (select count(*) from supabase_migrations.schema_migrations where version = '092') <> 1 then
        raise exception 'precondición: se esperaba exactamente 1 fila 092 en el ledger: no se toca nada';
+     end if;
+     if exists (select 1 from public.employee_bajas) then
+       raise exception 'precondición: employee_bajas tiene filas: exportarlas antes; no se toca nada';
      end if;
    end $$;
    drop trigger if exists trg_employees_borrado_guardia on public.employees;

@@ -11,7 +11,7 @@ Cada request = preámbulo + tramo + cierre: corre en una transacción que termin
 Los tramos van UNO DETRÁS DEL OTRO (en paralelo se podrían trabar en las mismas filas, por ejemplo club_config).
 
   CAJERO_UUID=… OWNER_UUID=… MANAGER_UUID=… SALONERO_UUID=… CONTADOR_UUID=… \\
-    python3 scripts/sql/bateria_club.py --esperado 597 [--tramo N] [--json salida.json]
+    python3 scripts/sql/bateria_club.py --esperado 597 [--tramo N] [--json salida.json] [--antes migración.sql]
 
 (Grok 153, 10-nov) --esperado es OBLIGATORIO y tiene que ser la suma de los «-- casos esperados: N» de cada tramo (la
 línea que va justo debajo de su marca). Cada tramo tiene que devolver exactamente sus casos esperados: un tramo que
@@ -73,6 +73,15 @@ def esperados_por_tramo(tramos: list[tuple[int, str, str]]) -> dict[int, int]:
     return out
 
 
+def con_antes(pre: str, archivo: Path) -> str:
+    """(10-nov) --antes <migración.sql>: la aplica DENTRO de la transacción de cada tramo, justo después del primer
+    «begin;» del preámbulo (sin su begin/commit). Sirve para probar una versión nueva de la 150 sobre staging sin
+    escribir nada: al final del tramo, ROLLBACK."""
+    cuerpo = '\n'.join(l for l in archivo.read_text(encoding='utf-8').splitlines() if l.strip().lower() not in ('begin;', 'commit;'))
+    i = pre.index('\nbegin;\n') + len('\nbegin;\n')
+    return pre[:i] + cuerpo + '\n' + pre[i:]
+
+
 def armar(pre: str, cuerpo: str, cierre: str) -> str:
     return pre + cuerpo + '\n' + cierre
 
@@ -113,7 +122,10 @@ def main() -> None:
         sys.exit('falta --esperado TOTAL (obligatorio; Grok 153): la suma de los «-- casos esperados» de los tramos')
     esperado = int(args[args.index('--esperado') + 1])
     salida = args[args.index('--json') + 1] if '--json' in args else None
+    antes = Path(args[args.index('--antes') + 1]) if '--antes' in args else None
     pre, tramos, cierre = partir(leer())
+    if antes:
+        pre = con_antes(pre, antes)
     por_tramo = esperados_por_tramo(tramos)
     if esperado != sum(por_tramo.values()):
         sys.exit(f'--esperado {esperado} no es la suma de los tramos ({sum(por_tramo.values())}: {por_tramo})')

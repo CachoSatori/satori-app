@@ -1,24 +1,95 @@
 {
-  "R02": {"antes_de": "-- ═══ F1f · 22. Excepciones del puente",
-          "sql": "do $mut$ begin execute replace(pg_get_functiondef('public.club_excepciones(date,date,text,text)'::regprocedure), E'x(tipo)\\n     where v_cfg.promo_articulo_codigo is null', E'x(tipo)\\n     where false'); end $mut$;"},
-  "CLUB-AUD-43": {"antes_de": "-- ═══ 53. LC-A1: roles",
-                  "sql": "alter table club_miembro_roles drop constraint club_miembro_roles_check;"},
-  "R7-02": {"antes_de": "-- ═══ 86. (09-nov) R7-02",
-            "funciones_de": {"commit": "ed447b2", "funciones": ["public.club_roles_desde_miembro(", "public.club_socio_baja_portal("]}},
-  "CLUB-AUD-66": {"antes_de": "-- ═══ 87. (09-nov) CLUB-AUD-66",
-                  "funciones_de": {"commit": "15ac3af", "funciones": ["public.club_cupon_usar("]}},
-  "S0": {"antes_de": "-- ═══ 88. (09-nov) S0",
-         "funciones_de": {"commit": "9dcf212", "funciones": ["public.club_excepciones(", "public.club_reporte_visitas("]}},
-  "S8": {"antes_de": "-- ═══ 89. (09-nov) S8",
-         "funciones_de": {"commit": "9dcf212", "funciones": ["public.club_pendiente_resolver("]}},
-  "S0b": {"antes_de": "-- ═══ 90. (09-nov) S0b",
-          "sql_antes": "drop function public.club_facturas_recientes(text);",
-          "funciones_de": {"commit": "c309b26", "funciones": ["public.club_facturas_recientes(", "public.club_pos_ref(",
-                                                               "public.club_visita_canonica(", "public.club_cruce_provisional(",
-                                                               "public.club_excepciones("]}},
-  "S2": {"antes_de": "-- ═══ 91. (09-nov) S2",
-         "funciones_de": {"commit": "c309b26", "funciones": ["public.club_reporte_visitas("]}},
-  "136": {"antes_de": "-- ═══ 77. LC-PRIV",
-          "sql_antes": "drop function public.club_cupon_contacto_baja(text);",
-          "funciones_de": {"commit": "37164ea", "funciones": ["public.club_cupon_contacto_baja(", "public.club_contactos_ofertas_exportar("]}}
+  "R02": {
+    "antes_de": "-- ═══ F1f · 22. Excepciones del puente",
+    "sql": "do $mut$ begin execute replace(pg_get_functiondef('public.club_excepciones(date,date,text,text)'::regprocedure), E'x(tipo)\\n     where v_cfg.promo_articulo_codigo is null', E'x(tipo)\\n     where false'); end $mut$;"
+  },
+  "CLUB-AUD-43": {
+    "antes_de": "-- ═══ 53. LC-A1: roles",
+    "sql": "alter table club_miembro_roles drop constraint club_miembro_roles_check;"
+  },
+  "R7-02": {
+    "antes_de": "-- ═══ 86. (09-nov) R7-02",
+    "funciones_de": {
+      "commit": "ed447b2",
+      "funciones": [
+        "public.club_roles_desde_miembro(",
+        "public.club_socio_baja_portal("
+      ]
+    }
+  },
+  "CLUB-AUD-66": {
+    "antes_de": "-- ═══ 87. (09-nov) CLUB-AUD-66",
+    "funciones_de": {
+      "commit": "15ac3af",
+      "funciones": [
+        "public.club_cupon_usar("
+      ]
+    }
+  },
+  "S0": {
+    "antes_de": "-- ═══ 88. (09-nov) S0",
+    "funciones_de": {
+      "commit": "9dcf212",
+      "funciones": [
+        "public.club_excepciones(",
+        "public.club_reporte_visitas("
+      ]
+    }
+  },
+  "S8": {
+    "antes_de": "-- ═══ 89. (09-nov) S8",
+    "funciones_de": {
+      "commit": "9dcf212",
+      "funciones": [
+        "public.club_pendiente_resolver("
+      ]
+    }
+  },
+  "S0b": {
+    "antes_de": "-- ═══ 90. (09-nov) S0b",
+    "sql_antes": "drop function public.club_facturas_recientes(text);",
+    "funciones_de": {
+      "commit": "c309b26",
+      "funciones": [
+        "public.club_facturas_recientes(",
+        "public.club_pos_ref(",
+        "public.club_visita_canonica(",
+        "public.club_cruce_provisional(",
+        "public.club_excepciones("
+      ]
+    }
+  },
+  "S2": {
+    "antes_de": "-- ═══ 91. (09-nov) S2",
+    "funciones_de": {
+      "commit": "c309b26",
+      "funciones": [
+        "public.club_reporte_visitas("
+      ]
+    }
+  },
+  "136": {
+    "antes_de": "-- ═══ 77. LC-PRIV",
+    "sql_antes": "drop function public.club_cupon_contacto_baja(text);",
+    "funciones_de": {
+      "commit": "37164ea",
+      "funciones": [
+        "public.club_cupon_contacto_baja(",
+        "public.club_contactos_ofertas_exportar("
+      ]
+    }
+  },
+  "160": {
+    "antes_de": "-- ═══ 92. (10-nov) Grok 160",
+    "sql": "drop trigger if exists club_factura_r_anulada_trg on public.pos_ndf_tickets;"
+  },
+  "159": {
+    "antes_de": "-- ═══ 94. (10-nov) Grok 159",
+    "funciones_de": {
+      "commit": "e66b9bb",
+      "funciones": [
+        "public.club_tarjeta_manual("
+      ]
+    }
+  }
 }

@@ -3647,7 +3647,7 @@ begin
 end $$;
 
 -- ════════ TRAMO 5: multilocal, privacidad, S0–S8 y cuentas inactivas (70–91 y 6) ════════
--- casos esperados: 176
+-- casos esperados: 191
 -- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
 -- en la batería entera (un solo request) no cambia nada.
 --   · la 40 rotó la clave de club-web:
@@ -4960,6 +4960,122 @@ begin
   select coalesce(sum(r.sin_factura), 0) into s2 from public.club_reporte_visitas(v_ini, v_fin) r where r.usuario = v_caj;
   perform pg_temp.yo();
   perform pg_temp.r('91', 'S2 · el pedido se cierra sin factura → cuenta «sin factura» (negativa)', s2 = s0 + 2, format('%s → %s', s0, s2));
+end $$;
+
+-- ═══ 92. (10-nov) Grok 160: la R que respaldaba un crédito pasa a X → alerta prioritaria (no bloquea ni revierte) ═══
+do $$
+declare v_m uuid; v_mv uuid; v_mp uuid; v_n int; v_id bigint; j jsonb; e text; b boolean;
+        v_ab timestamptz := now() - interval '1 hour';
+begin
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Grok 160', 'app') returning id into v_m;
+  -- (a) modo factura (plan B, S0b): crédito sobre la R 993973
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura,
+                               numero_pedido, pedido_abierto_en, total_crc, cxc_crc) values
+    ('993973', now() - interval '20 minutes', 'R', 'salon', 'cajero', true, 'ok', '71', '71', '9973', v_ab, 20000, 0);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"993973"}'::jsonb);
+  perform pg_temp.yo();
+  select id into v_mv from club_movimientos where miembro_id = v_m and pos_ref->>'numero_factura' = '993973';
+  update pos_ndf_tickets set estado = 'X' where numero_factura = '993973';
+  select count(*) into v_n from club_alertas a where a.tipo = 'factura_r_anulada' and a.detalle->>'movimiento_id' = v_mv::text;
+  perform pg_temp.r('92', '160 · la R del crédito (plan B) pasa a X → 1 alerta PRIORITARIA con el movimiento y la factura',
+    v_n = 1 and (select a.prioritaria and a.miembro_id = v_m and a.detalle->>'numero_factura' = '993973' from club_alertas a
+                  where a.tipo = 'factura_r_anulada' and a.detalle->>'movimiento_id' = v_mv::text), format('alertas=%s', v_n));
+  perform pg_temp.r('92', '160 · no bloquea ni revierte: el crédito sigue en el libro',
+    exists (select 1 from club_movimientos where id = v_mv), null);
+  update pos_ndf_tickets set estado = 'R' where numero_factura = '993973';
+  update pos_ndf_tickets set estado = 'X' where numero_factura = '993973';
+  select count(*) into v_n from club_alertas a where a.tipo = 'factura_r_anulada' and a.detalle->>'movimiento_id' = v_mv::text;
+  perform pg_temp.r('92', '160 · la misma R anulada otra vez no repite la alerta', v_n = 1, format('alertas=%s', v_n));
+  -- (b) modo pedido (S0/S8): dos R del mismo pedido; si una pasa a X y la otra sigue en R, todavía hay respaldo
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura,
+                               numero_pedido, pedido_abierto_en, total_crc, cxc_crc) values
+    ('993974', now() - interval '15 minutes', 'R', 'salon', 'cajero', true, 'ok', '72', '72', '9974', v_ab, 12000, 0),
+    ('993975', now() - interval '14 minutes', 'R', 'salon', 'cajero', true, 'ok', '72', '72', '9974', v_ab, 9000, 0);
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, pos_ref, registrado_por)
+  values (pg_temp.loc(), v_m, 'tarjeta', 3, 6, 18000,
+          jsonb_build_object('modo', 'pedido', 'pedido', '9974', 'hora', now() - interval '30 minutes', 'abierto_en', v_ab), '<CAJERO_UUID>')
+  returning id into v_mp;
+  update pos_ndf_tickets set estado = 'X' where numero_factura = '993974';
+  select count(*) into v_n from club_alertas a where a.tipo = 'factura_r_anulada' and a.detalle->>'movimiento_id' = v_mp::text;
+  perform pg_temp.r('92', '160 · pedido con otra R viva: anular una R no alerta (negativa)', v_n = 0, format('alertas=%s', v_n));
+  update pos_ndf_tickets set estado = 'X' where numero_factura = '993975';
+  select count(*) into v_n from club_alertas a where a.tipo = 'factura_r_anulada' and a.detalle->>'movimiento_id' = v_mp::text;
+  perform pg_temp.r('92', '160 · se anula la última R del pedido → alerta', v_n = 1, format('alertas=%s', v_n));
+  -- (c) Excepciones: la lista (owner y manager) y «Revisado» con nota
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(x)), '[]') into j from public.club_alertas_prioritarias(pg_temp.loc()) x
+   where x.detalle->>'movimiento_id' in (v_mv::text, v_mp::text);
+  perform pg_temp.yo();
+  perform pg_temp.r('92', '160 · el manager ve las 2 alertas prioritarias, sin revisar, con el nombre del referente',
+    jsonb_array_length(j) = 2 and j->0->>'revisada_en' is null and j->0->>'miembro' = 'Ref Grok 160', j::text);
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_alertas_prioritarias(pg_temp.loc()); e := 'ok';
+  exception when others then e := sqlstate; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('92', '160 · el cajero no las ve (42501)', e = '42501', e);
+  select id into v_id from club_alertas a where a.tipo = 'factura_r_anulada' and a.detalle->>'movimiento_id' = v_mv::text;
+  begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    perform public.club_alerta_revisar(v_id, 'x'); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('92', '160 · «Revisado» exige una nota', e like 'Escribí qué se revisó%', e);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin
+    b := public.club_alerta_revisar(v_id, 'Factura rehecha en la 993980: el crédito vale');
+  exception when others then b := false; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('92', '160 · «Revisado» con nota: queda quién y cuándo, y en la auditoría',
+    b and (select revisada_por = '<MANAGER_UUID>'::uuid and revisada_en is not null from club_alertas where id = v_id)
+      and exists (select 1 from club_auditoria where accion = 'alerta_revisada' and despues->>'id' = v_id::text), null);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin
+    b := public.club_alerta_revisar(v_id, 'otra vez');
+  exception when others then b := null; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('92', '160 · revisar dos veces no pisa la primera revisión', b is not null and not b
+    and (select revisada_nota from club_alertas where id = v_id) like 'Factura rehecha%', null);
+  perform pg_temp.r('92', '160 · las alertas prioritarias no van al pase de Wallet (club_alertas_pendientes solo canje)',
+    not exists (select 1 from public.club_alertas_pendientes(1000) p where p.tipo = 'factura_r_anulada'), null);
+end $$;
+
+-- ═══ 93. (10-nov) Grok, condición de la 150: authenticated sin MAINTAIN en club_* ni en locations ═══
+do $$
+declare v text;
+begin
+  if current_setting('server_version_num')::int < 170000 then
+    perform pg_temp.r('93', 'MAINTAIN: Postgres < 17 (no existe)', true, current_setting('server_version_num')); return;
+  end if;
+  select string_agg(c.relname, ', ') into v from pg_class c
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'm')
+     and (c.relname like 'club\_%' or c.relname = 'locations') and has_table_privilege('authenticated', c.oid, 'MAINTAIN');
+  perform pg_temp.r('93', 'ninguna tabla club_* ni locations con MAINTAIN para authenticated', v is null, coalesce(v, '—'));
+  perform pg_temp.r('93', 'las tablas de caja no se tocan (siguen como estaban: cash_movements conserva MAINTAIN)',
+    has_table_privilege('authenticated', 'public.cash_movements', 'MAINTAIN'), null);
+end $$;
+
+-- ═══ 94. (10-nov) Grok 159: el replay de la tarjeta manual exige las mismas personas ═══
+do $$
+declare v_m uuid; v_op uuid := gen_random_uuid(); e text;
+begin
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Grok 159', 'app') returning id into v_m;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_tarjeta_manual(v_m, 2, 'FX159', v_op);
+  begin
+    perform public.club_tarjeta_manual(v_m, 5, 'FX159', v_op); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('94', '159 · la misma operación con otras personas → error (no confirma un registro que no es)',
+    e like 'Esta operación ya se usó para otro registro%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin
+    perform public.club_tarjeta_manual(v_m, 2, 'FX159', v_op); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('94', '159 · la misma operación con las mismas personas → replay sin otro movimiento',
+    e = 'ok' and (select count(*) from club_movimientos where client_op_id = v_op) = 1, e);
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

@@ -98,7 +98,9 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
      misma /24 → 429; otra red → pasa; un `x-club-ip` falso del cliente se pisa con la IP real.
    - En local `wrangler pages dev` también lista `RL_CREAR` y `RL_LEER` como bindings de Pages (modo remoto): **no se
      sabe** si el deploy real de Pages los toma. Eso lo dice `/api/salud` después del primer deploy.
-   - Activar B: descomentar el `[[services]]` de `wrangler.toml` (el Worker ya creado). Pasos: `docs/pases/PASE-150-151-club.md` §11.
+   - **B está activo desde el merge** (decisión del dueño, 10-nov): el `[[services]]` de `wrangler.toml` va descomentado.
+     El Worker se crea **antes** (el miércoles, desde la rama del #59). Volver al plan A: comentar esas tres líneas.
+     Pasos: `docs/pases/PASE-150-151-club.md` §11.
 
 5. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
 

@@ -100,7 +100,8 @@ test('wrangler.toml del Worker: los mismos topes que Pages, sin URL *.workers.de
   assert.doesNotMatch(w, /^\s*(routes|route|\[vars\])/m)
 })
 
-test('wrangler.toml de Pages: el binding del plan B nombra al Worker (comentado hasta que /api/salud pida B)', () => {
+test('wrangler.toml de Pages: el binding del plan B está ACTIVO y nombra al Worker (decisión del dueño, 10-nov)', () => {
   const p = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')
-  assert.match(p, /^# \[\[services\]\]\n# binding = "CLUB_API"\n# service = "satori-club-api"$/m)
+  assert.match(p, /^\[\[services\]\]\nbinding = "CLUB_API"\nservice = "satori-club-api"$/m)
+  assert.doesNotMatch(p, /^#\s*\[\[services\]\]/m)
 })

@@ -3,8 +3,8 @@
 // (10-nov) Dos planes, y /api/salud dice cuál contestó (encabezado «x-club-api»):
 // · A — sin binding CLUB_API: el router corre acá, en Pages, con los topes RL_CREAR y RL_LEER de wrangler.toml.
 //   Marca «x-club-api: pages».
-// · B — con el service binding CLUB_API (wrangler.toml → [[services]]): /api lo atiende el Worker satori-club-api, que sí
-//   tiene los topes. Sin zona del dominio en Cloudflare (el DNS queda en SiteGround) no hay Workers Routes: el único camino
+// · B (activo desde el merge, decisión del dueño 10-nov) — con el service binding CLUB_API (wrangler.toml → [[services]]):
+//   /api lo atiende el Worker satori-club-api, que sí tiene los topes. Sin zona del dominio en Cloudflare (el DNS queda en SiteGround) no hay Workers Routes: el único camino
 //   al Worker es este binding. La IP real del cliente la ve ESTA función (Pages es el borde del pedido); se le pasa al
 //   Worker en «x-club-ip», sin depender de qué hace Cloudflare con CF-Connecting-IP en un service binding. El Worker
 //   marca «x-club-api: worker».

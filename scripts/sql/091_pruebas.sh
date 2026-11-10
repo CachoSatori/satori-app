@@ -78,10 +78,18 @@ OTRO="insert into public.locations (id, name) values ('local-prueba-091', 'Local
       insert into public.cash_movements (created_by, movement_type, amount_crc, amount_usd, currency, description, caja_origen, method, status, location_id)
       values ((select id from public.profiles where role = 'owner' order by created_at limit 1), 'ingreso', 1, 0, 'CRC', 'prueba 091', 'Caja Fuerte', 'Efectivo', 'aprobado', 'local-prueba-091');"
 CUENTA="select count(*) as n from public.cash_movements where location_id = 'local-prueba-091'"
-for caso in "owner:1" "contador:1" "manager:0" "cajero:0"; do
+# contador:0 — hoy el contador NO tiene ninguna policy de SELECT en cash_movements (las de lectura son owner, manager y
+# cajero): ve 0 también sin la 091. Una policy restrictiva solo achica, no da acceso. Que el contador «ve todos los
+# locales» (decisión 2) se prueba abajo, en mis_locales().
+for caso in "owner:1" "contador:0" "manager:0" "cajero:0"; do
   rol=${caso%%:*}; esperado=${caso##*:}
   n=$(q "begin; $MIG; $OTRO; $(como_rol $rol) $CUENTA; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
   compara "$rol ve $esperado fila(s) del otro local" "$esperado" "$n"
+done
+for caso in "owner:true" "contador:true" "manager:false" "cajero:false"; do
+  rol=${caso%%:*}; esperado=${caso##*:}
+  n=$(q "begin; $MIG; $OTRO; $(como_rol $rol) select ('local-prueba-091' = any (public.mis_locales()))::text as n; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
+  compara "mis_locales() de $rol incluye el otro local: $esperado" "$esperado" "$n"
 done
 id=$PID
 if [ -n "$id" ]; then

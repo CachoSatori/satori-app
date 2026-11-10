@@ -146,7 +146,15 @@ staging.
 
 | Cuándo | Qué | Resultado |
 |---|---|---|
-| _(se completa en esta rama)_ | `091_pruebas.sh hwiatgicyyqyezqwldia` | _(pendiente)_ |
+| 10-nov 10:06 CR (script @ `2eba291`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | 23 OK · **1 FALLA**: «contador ve 1 fila del otro local» dio 0. **Error de la expectativa, no de la 091:** hoy el contador no tiene ninguna policy de SELECT en `cash_movements` (las de lectura son owner, manager y cajero) y ve 0 filas también **sin** la 091 (verificado en una transacción descartada). Una policy restrictiva solo achica |
+| 10-nov 10:06 CR (script @ `7ec3567`: contador espera 0; 4 casos nuevos de `mis_locales()`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE** |
+| 10-nov 10:07 CR | Estado de staging al terminar | sin columnas `location_id`, sin `profile_locations`, sin `mis_locales()`, sin policies por local, sin el local de prueba, sin la FK del Club; ledger 85 / 090: **la 091 no quedó aplicada** |
+
+Antes de correr: sin consultas ajenas en staging y el último commit del Club con más de 5 minutos.
+
+**Lo que dejó a la vista la corrida:** el contador hoy **no lee** `cash_movements` (ni con la 091 ni sin ella). La decisión 2
+(«owner y contador ven todos los locales») queda en `mis_locales()`; para que el contador lea caja hace falta una policy
+de lectura propia, que **no** es parte de esta fase.
 
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (5.4).

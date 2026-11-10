@@ -226,27 +226,55 @@ select set_config('humo.salonero', json_build_object('hay_cuenta', current_setti
        'tip_sessions', (select count(*) from public.tip_sessions), 'role_tip_points', (select count(*) from public.role_tip_points),
        'exchange_rates', (select count(*) from public.exchange_rates), 'profiles', (select count(*) from public.profiles))::text, true);
 reset role;
-select current_setting('humo.owner')::json as owner, current_setting('humo.manager')::json as manager,
-       current_setting('humo.cajero')::json as cajero, current_setting('humo.contador')::json as contador,
-       current_setting('humo.salonero')::json as salonero,
+-- UNA sola columna (humo), para copiarla entera a la comparación de abajo (Grok 131)
+select json_build_object('owner', current_setting('humo.owner')::json, 'manager', current_setting('humo.manager')::json,
+       'cajero', current_setting('humo.cajero')::json, 'contador', current_setting('humo.contador')::json,
+       'salonero', current_setting('humo.salonero')::json,
        -- base: lo que hay en cada tabla, como postgres (sin políticas), en la misma transacción
-       json_build_object('employees', (select count(*) from public.employees), 'tip_entries', (select count(*) from public.tip_entries),
+       'base', json_build_object('employees', (select count(*) from public.employees), 'tip_entries', (select count(*) from public.tip_entries),
        'tip_sessions', (select count(*) from public.tip_sessions), 'role_tip_points', (select count(*) from public.role_tip_points),
-       'exchange_rates', (select count(*) from public.exchange_rates), 'profiles', (select count(*) from public.profiles)) as base;
+       'exchange_rates', (select count(*) from public.exchange_rates), 'profiles', (select count(*) from public.profiles))) as humo;
 rollback;
 ```
 - **El «antes» de 4b se corre justo antes del merge** (no al empezar §1), para que pase el menor tiempo posible entre
   «antes» y «después».
-- **Regla: después = antes**, para cada rol con `hay_cuenta: true`. Un rol con `hay_cuenta: false` (sin cuenta activa) no se
-  compara.
-- **Si una diferencia aparece también en `base`** (el conteo como postgres), **no es parada**: se cargó algo nuevo entre
-  «antes» y «después» (una propina, una sesión, un tipo de cambio). Ejemplo: `tip_entries` sube 2 en un rol y también sube
-  2 en `base`. **Es parada** si la diferencia de un rol no está en `base`, o si es distinta de la de `base`.
+- **Regla, por rol con `hay_cuenta: true` y por tabla** (un rol sin cuenta activa no se compara). Δrol = después − antes del
+  rol; Δbase = después − antes de `base` (el conteo como postgres):
+  1. **Si el rol veía todo** (antes, su número = el de `base`): **Δrol = Δbase**. Si `base` cambió y el rol no cambió lo
+     mismo, **PARADA** (Grok 131: el rol dejó de ver filas nuevas). Ejemplo: `base.tip_entries` +2 y owner +0 → PARADA.
+  2. **Si el rol veía una parte** (su número < `base`, por ejemplo los empleados activos): Δrol va de 0 a Δbase, con el mismo
+     signo (una fila nueva puede caer o no en su parte). Si `base` no cambió, Δrol = 0. Si no, **PARADA**.
+  3. Si un rol tenía cuenta y ya no (o al revés): **PARADA** (se mira por qué antes de seguir).
+- **La comparación la hace esta consulta**, no a ojo: se pegan el `humo` de «antes» y el de «después», tal como salieron.
+  **No lee ninguna tabla** (solo compara los dos textos), así que da lo mismo correrla en el editor de prod o en cualquier
+  otro. Tiene que dar **0 filas con PARADA**:
+```sql
+-- 4b · comparación (Grok 131). Reemplazar <ANTES> y <DESPUES> por el JSON de la columna humo (sin las comillas de afuera).
+with a(j) as (select '<ANTES>'::json), d(j) as (select '<DESPUES>'::json),
+roles(r) as (values ('owner'), ('manager'), ('cajero'), ('contador'), ('salonero')),
+tablas(t) as (values ('employees'), ('tip_entries'), ('tip_sessions'), ('role_tip_points'), ('exchange_rates'), ('profiles')),
+x as (select r, t, (a.j->r->>t)::int as ra, (d.j->r->>t)::int as rd, (a.j->'base'->>t)::int as ba, (d.j->'base'->>t)::int as bd,
+             coalesce((a.j->r->>'hay_cuenta')::boolean, false) as ca, coalesce((d.j->r->>'hay_cuenta')::boolean, false) as cd
+        from roles, tablas, a, d),
+v as (select *, rd - ra as dr, bd - ba as db,
+        case when not ca and not cd then 'sin cuenta: no se compara'
+             when ca <> cd then 'PARADA: la cuenta del rol apareció o desapareció'
+             when ra = ba and rd - ra <> bd - ba then 'PARADA: veía todo y no cambió lo mismo que base'
+             when ra <> ba and (rd - ra) <> 0 and (sign(rd - ra) <> sign(bd - ba) or abs(rd - ra) > abs(bd - ba))
+               then 'PARADA: cambió distinto que base'
+             else 'ok' end as veredicto from x)
+select r as rol, t as tabla, ra, rd, ba, bd, dr, db, veredicto from v
+ order by (veredicto like 'PARADA%') desc, r, t;
+```
 - **staging (09-nov), con la 085 y con la 085 deshecha en la misma transacción:** idéntico.
   - owner 45 · 17 · 3 · 7 · 3 · 10;
   - cajero y salonero 21 · 17 · 3 · 7 · 3 · 1;
   - manager y contador sin cuenta activa en staging;
   - con la columna `base` (09-nov ~16:20 CR, `begin read only`): los mismos números, y `base` 45 · 17 · 3 · 7 · 3 · 10.
+  - **comparación (Grok 131), 10-nov:** `scripts/sql/085_comparacion_4b_pruebas.sh` corre el 4b de este documento en staging y
+    la comparación con 7 casos: **7/7**. Sin parada: igual; `base` +2 y los que ven todo +2; `base` +1 y el cajero (ve una
+    parte) sin cambio. Con parada: **`base` +2 y owner +0 (el caso del 131)**; cajero +1 sin cambio en `base`; cajero +2
+    con `base` +1; el salonero pierde la cuenta.
 
 ## 5. Verificación después del merge
 1. **Branching:** el check «Supabase Preview» del merge commit en `success`. En el log del panel:
@@ -261,8 +289,7 @@ rollback;
    ```
 3. **Catálogo:** la consulta 1.2. Las 7 policies con la condición de «Después», y las otras 8 **sin cambios** contra el
    respaldo.
-4. **Humo:** 4a con los números de «Después», y 4b **igual que antes** para cada rol con cuenta (Grok 129); una diferencia
-   que también está en `base` no cuenta (§4, 4b).
+4. **Humo:** 4a con los números de «Después», y 4b con la comparación de §4 (Grok 129 y 131) en **0 filas con PARADA**.
 5. **Pantalla:** el owner abre Caja y Propinas, y alguien con rol de salonero abre Mi Rendimiento. Tienen que ver lo de
    siempre.
 
@@ -270,8 +297,8 @@ rollback;
 - Branching en error (`MIGRATIONS_FAILED`) o aplicando algo que no sea la 085.
 - 5.2 sin exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'`, o 5.3 con alguna policy distinta de lo esperado.
 - 4a «Después» con alguna de las cinco tablas en más de 0, o `profiles` distinto de 1.
-- 4b «Después» distinto de «Antes» en algún rol con cuenta, **salvo** que la misma diferencia aparezca en `base` (algo
-  nuevo cargado entre las dos lecturas: no es parada).
+- 4b: la comparación (Grok 131) da alguna fila con **PARADA**: un rol cambió distinto que `base`, o `base` cambió y un rol
+  que veía todo en esa tabla no cambió lo mismo.
 - 5.5: un usuario **activo** deja de ver algo que veía.
 
 ## 7. Vuelta atrás (todo en la misma ventana; nadie más pushea a `main`)
@@ -348,6 +375,6 @@ rollback;
 | 5.2 ledger 58 · 085 · exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'` (n de statements: anotar) | | |
 | 5.3 las 7 policies en «Después» · las otras 8 iguales | | |
 | 4a después: 0 · 0 · 0 · 0 · 0 · profiles 1 | | |
-| 4b después = 4b antes, en cada rol con cuenta (una diferencia que también está en `base` no es parada) | | |
+| 4b después: comparación con el antes (Grok 131) → 0 filas con PARADA | | |
 | 5.5 pantalla OK (owner, salonero) | | |
 | Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | |

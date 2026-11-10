@@ -83,6 +83,38 @@ select count(distinct t) filter (where to_regclass('public.' || t) is not null) 
 rollback;
 -- esperado: tablas_existentes 20 · permisos_sin_politica > 0 (anotar el número) · con_rls 20
 ```
+**1.2b (Grok 133) Respaldo del ACL de las 20 tablas, antes del merge** (solo lectura). Se guarda la salida **entera**
+fuera del repo (no tiene datos de personas: nombres de tablas y roles) y se anotan los dos sha256 en §9:
+```sql
+-- (a) el ACL tal cual, tabla por tabla: guardar las 20 filas
+select c.relname, c.relacl::text as relacl
+  from pg_class c
+ where c.relnamespace = 'public'::regnamespace
+   and c.relname in ('accounting_entries','cash_movements','cash_sessions','credit_applications','movement_deletions',
+     'movement_edits','pos_ndf_cursor','pos_ndf_open','pos_ndf_ticket_lines','pos_ndf_tickets','product_map','sops',
+     'supplier_credits','suppliers','tip_entries','tip_sessions','ventas_comps','ventas_dias','ventas_hist','ventas_metas')
+ order by 1;
+-- (b) sus dos huellas: la del texto tal cual y la normalizada (permiso por permiso, ordenada)
+with lista(t) as (values ('accounting_entries'),('cash_movements'),('cash_sessions'),('credit_applications'),
+  ('movement_deletions'),('movement_edits'),('pos_ndf_cursor'),('pos_ndf_open'),('pos_ndf_ticket_lines'),('pos_ndf_tickets'),
+  ('product_map'),('sops'),('supplier_credits'),('suppliers'),('tip_entries'),('tip_sessions'),('ventas_comps'),
+  ('ventas_dias'),('ventas_hist'),('ventas_metas')),
+acl as (
+  select c.relname, c.relacl::text as relacl,
+         (select string_agg(coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC') || ':' || a.privilege_type || ':' || a.is_grantable,
+                            ',' order by 1) from aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a) as normalizado
+    from lista join pg_class c on c.oid = to_regclass('public.' || lista.t))
+select count(*) as tablas,
+       encode(sha256(convert_to(string_agg(relname || '|' || coalesce(relacl, '(null)'), E'\n' order by relname), 'UTF8')), 'hex') as sha256_relacl,
+       encode(sha256(convert_to(string_agg(relname || '|' || normalizado, E'\n' order by relname), 'UTF8')), 'hex') as sha256_normalizado
+  from acl;
+```
+- **Por qué dos huellas:** después de un `revoke` y un `grant`, Postgres puede reordenar las entradas del ACL sin cambiar
+  ningún permiso. `sha256_relacl` compara el texto tal cual; `sha256_normalizado` compara los permisos (rol, permiso,
+  si se puede re-otorgar), sin importar el orden.
+- **staging (10-nov 07:48 CR, con la 089 ya puesta; solo para probar la consulta):** 20 tablas,
+  `sha256_relacl` `86b111cc…`, `sha256_normalizado` `79813f6a…`. No sirve como referencia de prod.
+
 **1.3 Qué de la app usa `anon`** (repetir la lista de verificación de la migración contra `main` del día):
 - rutas sin login de `src/App.tsx`: solo `/login` y `/registro` (`customers`, fuera de la lista);
 - Edge Functions: `service_role` o el JWT del usuario; ninguna lee estas tablas como `anon`;
@@ -180,7 +212,15 @@ Ventas, Admin, SoP): nada nuevo en rojo.
 2. **Enseguida, revert del merge en `main`**, que saca el `.sql`:
    - si el archivo se queda en `main`, Branching la vuelve a aplicar en el próximo push;
    - si se saca el archivo sin borrar la fila, Branching falla en cada push (el caso de la 074).
-3. **Verificar:** Branching del revert «All migrations are up to date»; 1.2 y 4a con los valores de «Antes».
+3. **Verificar:**
+   - Branching del revert: «All migrations are up to date»;
+   - 1.2 y 4a con los valores de «Antes»;
+   - **(Grok 133) el ACL igual al respaldo de 1.2b.** Se corre 1.2b otra vez:
+     - `sha256_normalizado` igual al de antes → los permisos quedaron exactamente como estaban. Si además
+       `sha256_relacl` difiere, es solo el orden de las entradas: se anota y no es parada;
+     - `sha256_normalizado` distinto → **se anota la diferencia tabla por tabla**, comparando las 20 filas de (a) con
+       las guardadas, y se avisa antes de cerrar. Un permiso que falta o sobra **no** se arregla a mano sin la firma del
+       dueño.
 
 ## 8. Orden en prod
 **085 → 089 → 090 → 091 → 092 → 093.** Los merges a `main` van en ese orden, sin saltos. La 090 (privilegios por
@@ -197,6 +237,7 @@ de ESTADO.md). Después de las dos, sacar estas tablas de la lista «conocidas»
 | 0.7 la 085 en prod | | |
 | 1.1 ledger: último 085 · ninguna versión ≥ 089 | | |
 | 1.2 20 tablas · permisos sin política (anotar) · 20 con RLS | | |
+| 1.2b respaldo del ACL: 20 filas guardadas · `sha256_relacl` · `sha256_normalizado` (Grok 133) | | |
 | 1.3 nada nuevo que `anon` use | | |
 | 4a antes: true · true · true · true | | |
 | 4b antes (activas), justo antes del merge | | |
@@ -207,4 +248,5 @@ de ESTADO.md). Después de las dos, sacar estas tablas de la lista «conocidas»
 | 5.3 permisos sin política 0 · PUBLIC 0 | | |
 | 4a después: true (igual que antes) · false · false · false | | |
 | 4b después = antes · 4c sin rojos | | |
+| Si hubo vuelta atrás: 1.2b después del rollback, `sha256_normalizado` igual al respaldo, o la diferencia anotada tabla por tabla | | |
 | Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | |

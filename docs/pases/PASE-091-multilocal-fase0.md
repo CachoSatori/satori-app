@@ -147,7 +147,7 @@ staging.
 | Cuándo | Qué | Resultado |
 |---|---|---|
 | 10-nov 10:06 CR (script @ `2eba291`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | 23 OK · **1 FALLA**: «contador ve 1 fila del otro local» dio 0. **Error de la expectativa, no de la 091:** hoy el contador no tiene ninguna policy de SELECT en `cash_movements` (las de lectura son owner, manager y cajero) y ve 0 filas también **sin** la 091 (verificado en una transacción descartada). Una policy restrictiva solo achica |
-| 10-nov 10:06 CR (script @ `7ec3567`: contador espera 0; 4 casos nuevos de `mis_locales()`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE** |
+| 10-nov 10:06 CR (script @ `7ec3567`: contador espera 0; 4 casos nuevos de `mis_locales()`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **23 OK · 0 FALLA · VERDE** (contados de la salida guardada; antes decía 24 por error) |
 | 10-nov 10:59 CR (script @ `47829f6`, Grok 138/139) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE** (salida literal abajo) |
 | 10-nov 10:07 CR | Estado de staging al terminar | sin columnas `location_id`, sin `profile_locations`, sin `mis_locales()`, sin policies por local, sin el local de prueba, sin la FK del Club; ledger 85 / 090: **la 091 no quedó aplicada** |
 

@@ -69,10 +69,12 @@ LEE="do \$\$ declare v boolean; begin
   v := v or exists (select 1 from public.employees where id = '$ID' and nombre_homebanking is not null);
   insert into r values ('ve_banco', v::text);
 end \$\$;
-do \$\$ begin
+do \$\$ declare n int; begin
   if to_regclass('public.employee_payroll') is null then insert into r values ('guarda_tarifa', 'n/a'); return; end if;
+  -- EXECUTE no actualiza FOUND (PL/pgSQL): se mide con GET DIAGNOSTICS. 0 filas = la RLS no lo dejó.
   execute 'update public.employee_payroll set hourly_rate_crc = 999 where employee_id = ''$ID''';
-  if not found then raise exception 'sin filas' using errcode = '42501'; end if;
+  get diagnostics n = row_count;
+  if n = 0 then raise exception 'sin filas' using errcode = '42501'; end if;
   insert into r values ('guarda_tarifa', 'ok');
 exception when others then insert into r values ('guarda_tarifa', sqlstate); end \$\$;
 do \$\$ begin

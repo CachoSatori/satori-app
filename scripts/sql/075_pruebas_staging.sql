@@ -1,7 +1,13 @@
 -- 075_pruebas_staging.sql — pruebas de la F1a (Club Satori). SOLO STAGING. Todo corre en UNA transacción
 -- que termina en ROLLBACK: no deja datos. Reemplazar <CAJERO_UUID>, <OWNER_UUID> y <SALONERO_UUID> por
 -- perfiles activos de staging (la prueba 6 los desactiva dentro de la transacción y el rollback lo deshace).
--- Devuelve un JSON con cada caso y ok=true/false. Correr por la Management API (un solo request).
+-- Devuelve un JSON con cada caso y ok=true/false. Correr por la Management API.
+-- 10-nov · POR TRAMOS: entera ya tardaba 21–30 s y la API corta a los 30. Se corre con
+--   python3 scripts/sql/bateria_club.py --esperado <total>
+-- que manda, uno detrás del otro, «preámbulo + tramo + cierre» por cada marca «-- ════════ TRAMO n: …». Cada tramo
+-- empieza con su PUESTA A PUNTO (lo que dejan los tramos anteriores; da lo mismo correrla dos veces), así que el archivo
+-- entero sigue sirviendo como un solo request. Un bloque nuevo que lea `_ids` de otro tramo o cree una función pg_temp
+-- fuera del preámbulo lo frena scripts/sql/bateria_tramos.test.ts (vitest).
 -- CLUB-AUD-42: necesita la base marcada como staging (scripts/sql/club_marcar_staging.sql); sin la marca, el modo
 -- `pruebas` no existe y las pruebas que backdatean el libro fallan.
 begin;
@@ -59,6 +65,69 @@ begin
   insert into public.club_codigos_canje (location_id, miembro_id, codigo_hash, vence_en) values (pg_temp.loc(), p_m, public.club_codigo_hash(c), now() + interval '10 minutes');
   return c;
 end $f$;
+-- Perfiles sintéticos dentro de la transacción: un contador y un manager activos (perfiles inactivos reutilizados; el
+-- rollback los deja como estaban). Antes estaban en la 28; desde la 28 en adelante los usan casi todos los bloques.
+update profiles set role = 'contador', is_active = true where id = '<CONTADOR_UUID>';
+update profiles set role = 'manager',  is_active = true where id = '<MANAGER_UUID>';
+-- Funciones de ayuda de toda la batería (10-nov, batería por tramos): antes se creaban adentro de los bloques 27, 64 y
+-- 67, y los bloques de después las usaban. Ahora están en el preámbulo: cada tramo las tiene.
+create function pg_temp.fac(p_ids uuid[]) returns text language sql as $f$
+  select coalesce(string_agg(t.numero_factura, '+' order by o.n), '') from unnest(p_ids) with ordinality o(id, n)
+    join pos_ndf_tickets t on t.id = o.id;
+$f$;
+create function pg_temp.cruce(p_mov uuid) returns text language sql as $f$
+  select pg_temp.fac(public.club_cruce_facturas('santa-teresa', m.pos_ref, m.factura_pos)) from club_movimientos m where m.id = p_mov;
+$f$;
+create function pg_temp.pedido_lc(p_ped text, p_estado text, p_856 boolean) returns void language plpgsql as $f$
+declare v_t uuid; v_abre timestamptz := now() - interval '40 minutes';
+begin
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
+  values ('santa-teresa', 'pedido:' || p_ped, p_ped, 'M' || p_ped, 'salon', 2, v_abre, v_abre);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc,
+                               numero_pedido, pedido_abierto_en, mesa_factura)
+  values ('99' || p_ped, now() - interval '10 minutes', p_estado, 'salon', 'cajero', true, 'ok', 10000, p_ped, v_abre, 'M' || p_ped)
+  returning id into v_t;
+  if p_856 then insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values (v_t, '856', 'LOCAL CLUB', 1, 0); end if;
+end $f$;
+create function pg_temp.socio(p_nombre text, p_tel text, p_ref uuid) returns uuid language plpgsql as $f$
+declare v uuid;
+begin
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', p_nombre, 'app') returning id into v;
+  insert into club_miembros_contacto (location_id, miembro_id, telefono) values (pg_temp.loc(), v, p_tel);
+  update club_miembro_roles set referido_por = p_ref, validado_por = '<MANAGER_UUID>'::uuid where miembro_id = v and rol = 'socio';
+  return v;
+end $f$;
+create function pg_temp.factura(p_nf text, p_horas int, p_cxc numeric, p_lineas jsonb, p_pedido text default null) returns uuid language plpgsql as $f$
+declare v uuid; v_abre timestamptz := now() - make_interval(hours => p_horas) - interval '30 minutes';
+begin
+  if p_pedido is not null then
+    insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
+    values ('santa-teresa', 'pedido:' || p_pedido, p_pedido, 'M' || p_pedido, 'salon', 2, v_abre, v_abre);
+  end if;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc, cxc_crc,
+                               numero_pedido, pedido_abierto_en, mesa_factura)
+  values (p_nf, now() - make_interval(hours => p_horas), 'C', 'salon', 'cajero', true, 'ok', 10000, p_cxc, p_pedido,
+          case when p_pedido is not null then v_abre end, case when p_pedido is not null then 'M' || p_pedido end)
+  returning id into v;
+  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia, es_cortesia)
+  select v, x->>'c', coalesce(x->>'n', x->>'c'), coalesce((x->>'q')::numeric, 1), (x->>'m')::numeric, (x->>'f')::int, coalesce((x->>'cort')::boolean, false)
+    from jsonb_array_elements(p_lineas) x;
+  return v;
+end $f$;
+create function pg_temp.exc(p_tipo text) returns jsonb language plpgsql as $f$
+declare j jsonb;
+begin
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  -- 09-nov: 14 días y no 60. Las facturas de prueba que mira son de las últimas 240 h (10 días) y el corte más viejo es
+  -- lc_excepciones_desde = current_date - 7. Con 60 días, los tickets reales que el puente suma a staging cada día
+  -- llevaron la batería a los 30 s, que es lo máximo que espera la Management API.
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 14, current_date + 1, 'santa-teresa', p_tipo) e;
+  perform pg_temp.yo();
+  return j;
+end $f$;
+create function pg_temp.hay(p_j jsonb, p_ref text) returns boolean language sql as $f$
+  select exists (select 1 from jsonb_array_elements(p_j) x where x->>'ref' = p_ref)
+$f$;
 
 -- ── Datos de prueba (como postgres; todo se deshace al final) ──
 do $$
@@ -85,6 +154,7 @@ begin
     ('ref_tok', (select token_portal from club_miembros where id = v_ref));
 end $$;
 
+-- ════════ TRAMO 1: cupones, canjes, miembros y roles (bloques 1–26) ════════
 -- ═══ 1. Anon: lectura o escritura directa en club_* → rechazada ═══
 do $$
 declare t text; v_ok boolean;
@@ -927,6 +997,14 @@ begin
   perform pg_temp.r('26', 'owner restituye con club_ajuste (restitucion)', public.club_saldo_personas(v_m) = 10, '');
 end $$;
 
+-- ════════ TRAMO 2: pedidos, cruce y socios (27–59) ════════
+-- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
+-- en la batería entera (un solo request) no cambia nada.
+--   · el tramo 1 deja el artículo de la promo en PRUEBA-PROMO (y su marcador):
+update club_config set promo_articulo_codigo = 'PRUEBA-PROMO'
+ where location_id = 'santa-teresa' and promo_articulo_codigo is distinct from 'PRUEBA-PROMO';
+insert into club_marcadores_descuento (location_id, codigo_producto, nombre, pct_esperado, activo)
+  values ('santa-teresa', 'PRUEBA-PROMO', 'PROMO CLUB 10 %', 10, true) on conflict (location_id, codigo_producto) do nothing;
 -- ═══ 27. Pedido (piloto; ítem 11, firma de Ismael 07-nov): la caja elige el PEDIDO abierto; facturas =
 --        la del pedido + las sin pedido de la misma mesa (cuenta dividida); SIN_CRUCE → el manager elige ═══
 -- Números de pedido y de factura de prueba (90xx / 9909xx) para no chocar con los datos reales, salvo
@@ -944,13 +1022,6 @@ begin
     ('santa-teresa', 'pedido:9030', '9030', '51', 'salon', 3, 40000, now() - interval '40 minutes', now() - interval '40 minutes');
   insert into _ids values ('ped_m', v_m), ('ped_c', v_c), ('ped_cod', v_cod), ('ped_d', v_d);
 end $$;
-create function pg_temp.fac(p_ids uuid[]) returns text language sql as $f$
-  select coalesce(string_agg(t.numero_factura, '+' order by o.n), '') from unnest(p_ids) with ordinality o(id, n)
-    join pos_ndf_tickets t on t.id = o.id;
-$f$;
-create function pg_temp.cruce(p_mov uuid) returns text language sql as $f$
-  select pg_temp.fac(public.club_cruce_facturas('santa-teresa', m.pos_ref, m.factura_pos)) from club_movimientos m where m.id = p_mov;
-$f$;
 do $$
 declare j jsonb; v_cup text; v_mv uuid; v_hoy text := (now() at time zone 'America/Costa_Rica')::date::text;
         v_m uuid := (select i.v::uuid from _ids i where i.k = 'ped_m');
@@ -1204,10 +1275,7 @@ end $$;
 
 
 -- ═══ 28. CLUB-AUD-01 (S-01, S-02): contactos de turistas solo para gerencia ═══
--- Perfiles sintéticos dentro de la transacción: un contador y un manager activos (perfiles inactivos
--- reutilizados; el rollback los deja como estaban).
-update profiles set role = 'contador', is_active = true where id = '<CONTADOR_UUID>';
-update profiles set role = 'manager',  is_active = true where id = '<MANAGER_UUID>';
+-- (Los perfiles sintéticos de contador y manager activos se cargan en el preámbulo: los usan los tramos 2 a 4.)
 do $$
 declare v_n int; v_cod text; r text; v_uid text;
 begin
@@ -1919,6 +1987,14 @@ begin
   perform pg_temp.r('43', 'ver el teléfono de ESTE canje deja UNA fila en club_auditoria (cajero, miembro y local), sin el número',
     (select count(*) from club_auditoria a where a.accion = 'ver_telefono_canje' and a.objeto_id = v_mov and a.actor = '<CAJERO_UUID>'::uuid
         and a.antes is null and a.despues->>'miembro' = v_a::text and a.despues ? 'local' and a.despues::text !~ '60000009') = 1, '');
+  -- B3 (de la 85; 10-nov: acá, junto al aviso, para que no dependa de otro tramo)
+  perform pg_temp.r('85', 'B3 · ver el teléfono del canje queda en club_auditoria, sin el número',
+    exists (select 1 from club_auditoria a join club_movimientos m on m.id = a.objeto_id and m.tipo = 'canje'
+             where a.accion = 'ver_telefono_canje' and a.en = now() and a.despues->>'miembro' = m.miembro_id::text)
+      and not exists (select 1 from club_auditoria a join club_movimientos m on m.id = a.objeto_id
+                        join club_miembros_contacto c on c.miembro_id = m.miembro_id
+                       where a.accion = 'ver_telefono_canje'
+                         and (a.antes is not null or position(right(regexp_replace(c.telefono, '\D', '', 'g'), 8) in coalesce(a.despues::text, '')) > 0)), '');
   begin
     perform pg_temp.como('authenticated', '<OWNER_UUID>'); perform pg_temp.yo();
     perform pg_temp.como('authenticated', '<CONTADOR_UUID>');
@@ -2790,6 +2866,18 @@ begin
   perform pg_temp.r('59', 'la misma factura cerrada (C) → cruza', c2 = '990995', c2);
 end $$;
 
+-- ════════ TRAMO 3: Local Club: promociones, visitas, premios y excepciones (60–67) ════════
+-- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
+-- en la batería entera (un solo request) no cambia nada.
+--   · la 40 rotó la clave de club-web:
+select public.club_web_clave_cargar(encode(extensions.digest('clave-nueva-del-club-rotada-fedcba9876543210', 'sha256'), 'hex'));
+select set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+--   · lo que dejan los tramos 1 y 2 en la config del local (y el marcador de PRUEBA-PROMO):
+update club_config set cupones_max_dia_referente = 100, cupones_max_minuto_local = 3, promo_articulo_codigo = null
+ where location_id = 'santa-teresa'
+   and (cupones_max_dia_referente, cupones_max_minuto_local, promo_articulo_codigo) is distinct from (100, 3, null::text);
+insert into club_marcadores_descuento (location_id, codigo_producto, nombre, pct_esperado, activo)
+  values ('santa-teresa', 'PRUEBA-PROMO', 'PROMO CLUB 10 %', 10, true) on conflict (location_id, codigo_producto) do nothing;
 -- ═══ 60. LC-A3: promociones mínimas, productos y cortesías del sorteo ═══
 do $$
 declare v_p uuid; v_p2 uuid; e text; j jsonb; v_n int; v_s uuid; v_r uuid; v_v1 bigint; v_v2 bigint; v_ok boolean; i int; v_c uuid;
@@ -3059,25 +3147,6 @@ begin
 end $$;
 
 -- ═══ 64. LC-A4.3: premio por referir (primera factura C con el 856, sin autorreferido ni ciclos, topes, consumo) ═══
-create function pg_temp.pedido_lc(p_ped text, p_estado text, p_856 boolean) returns void language plpgsql as $f$
-declare v_t uuid; v_abre timestamptz := now() - interval '40 minutes';
-begin
-  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
-  values ('santa-teresa', 'pedido:' || p_ped, p_ped, 'M' || p_ped, 'salon', 2, v_abre, v_abre);
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc,
-                               numero_pedido, pedido_abierto_en, mesa_factura)
-  values ('99' || p_ped, now() - interval '10 minutes', p_estado, 'salon', 'cajero', true, 'ok', 10000, p_ped, v_abre, 'M' || p_ped)
-  returning id into v_t;
-  if p_856 then insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values (v_t, '856', 'LOCAL CLUB', 1, 0); end if;
-end $f$;
-create function pg_temp.socio(p_nombre text, p_tel text, p_ref uuid) returns uuid language plpgsql as $f$
-declare v uuid;
-begin
-  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', p_nombre, 'app') returning id into v;
-  insert into club_miembros_contacto (location_id, miembro_id, telefono) values (pg_temp.loc(), v, p_tel);
-  update club_miembro_roles set referido_por = p_ref, validado_por = '<MANAGER_UUID>'::uuid where miembro_id = v and rol = 'socio';
-  return v;
-end $f$;
 do $$
 declare v_a uuid; v_b uuid; v_c uuid; v_e uuid; v_f uuid; v_g uuid; n int; j jsonb; v_p uuid;
 begin
@@ -3267,37 +3336,6 @@ begin
 end $$;
 
 -- ═══ 67. LC-A5: excepciones del Local Club ═══
-create function pg_temp.factura(p_nf text, p_horas int, p_cxc numeric, p_lineas jsonb, p_pedido text default null) returns uuid language plpgsql as $f$
-declare v uuid; v_abre timestamptz := now() - make_interval(hours => p_horas) - interval '30 minutes';
-begin
-  if p_pedido is not null then
-    insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
-    values ('santa-teresa', 'pedido:' || p_pedido, p_pedido, 'M' || p_pedido, 'salon', 2, v_abre, v_abre);
-  end if;
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc, cxc_crc,
-                               numero_pedido, pedido_abierto_en, mesa_factura)
-  values (p_nf, now() - make_interval(hours => p_horas), 'C', 'salon', 'cajero', true, 'ok', 10000, p_cxc, p_pedido,
-          case when p_pedido is not null then v_abre end, case when p_pedido is not null then 'M' || p_pedido end)
-  returning id into v;
-  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia, es_cortesia)
-  select v, x->>'c', coalesce(x->>'n', x->>'c'), coalesce((x->>'q')::numeric, 1), (x->>'m')::numeric, (x->>'f')::int, coalesce((x->>'cort')::boolean, false)
-    from jsonb_array_elements(p_lineas) x;
-  return v;
-end $f$;
-create function pg_temp.exc(p_tipo text) returns jsonb language plpgsql as $f$
-declare j jsonb;
-begin
-  perform pg_temp.como('authenticated', '<OWNER_UUID>');
-  -- 09-nov: 14 días y no 60. Las facturas de prueba que mira son de las últimas 240 h (10 días) y el corte más viejo es
-  -- lc_excepciones_desde = current_date - 7. Con 60 días, los tickets reales que el puente suma a staging cada día
-  -- llevaron la batería a los 30 s, que es lo máximo que espera la Management API.
-  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 14, current_date + 1, 'santa-teresa', p_tipo) e;
-  perform pg_temp.yo();
-  return j;
-end $f$;
-create function pg_temp.hay(p_j jsonb, p_ref text) returns boolean language sql as $f$
-  select exists (select 1 from jsonb_array_elements(p_j) x where x->>'ref' = p_ref)
-$f$;
 do $$
 declare v_s uuid; v_sr uuid; v_a uuid; j jsonb; v_vis jsonb; i int; e text; v_mov uuid; v_clave text;
 begin
@@ -3447,6 +3485,26 @@ begin
       and e like 'Pendiente de configuración%', e);
 end $$;
 
+-- ════════ TRAMO 4: el 857 «INVITADO» y Grok 90/91/93 (68–69) ════════
+-- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
+-- en la batería entera (un solo request) no cambia nada.
+--   · la 40 rotó la clave de club-web:
+select public.club_web_clave_cargar(encode(extensions.digest('clave-nueva-del-club-rotada-fedcba9876543210', 'sha256'), 'hex'));
+select set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+--   · lo que dejan los tramos 1 a 3 en la config del local (la 67 deja la latencia en 1, sin familia de cortesías, las
+--     excepciones del Local Club desde hace 7 días y ZZ0 permitido a ₡0), en la config global y el marcador:
+update club_config set cupones_max_dia_referente = 100, cupones_max_minuto_local = 3, promo_articulo_codigo = null, puente_latencia_min = 1,
+                       cortesia_familia = null, lc_excepciones_desde = current_date - 7, articulos_cero_permitidos = '{ZZ0}'
+ where location_id = 'santa-teresa'
+   and (cupones_max_dia_referente, cupones_max_minuto_local, promo_articulo_codigo, puente_latencia_min, cortesia_familia,
+        lc_excepciones_desde, articulos_cero_permitidos)
+       is distinct from (100, 3, null::text, 1, null::int, current_date - 7, '{ZZ0}'::text[]);
+update club_config_global set socio_visitas_por_dia = 1 where socio_visitas_por_dia is distinct from 1;
+insert into club_marcadores_descuento (location_id, codigo_producto, nombre, pct_esperado, activo)
+  values ('santa-teresa', 'PRUEBA-PROMO', 'PROMO CLUB 10 %', 10, true) on conflict (location_id, codigo_producto) do nothing;
+--   · el tramo 3 deja «Local Club» vigente en santa-teresa y terminada en nosara:
+update club_promociones set estado = 'vigente'   where location_id = 'santa-teresa' and nombre = 'Local Club' and estado <> 'vigente';
+update club_promociones set estado = 'terminada' where location_id = 'nosara'       and nombre = 'Local Club' and estado <> 'terminada';
 -- ═══ 68. 857 «INVITADO»: igual que el 856 en todas las reglas (sin límite de invitados) ═══
 do $$
 declare v_s uuid; v_vis jsonb; v_vis2 jsonb; j jsonb; i int;
@@ -3584,6 +3642,21 @@ begin
   perform pg_temp.r('69', 'Grok 93: con todo en orden, se aprueba', exists (select 1 from club_movimientos where client_op_id = op), '');
 end $$;
 
+-- ════════ TRAMO 5: multilocal, privacidad, S0–S8 y cuentas inactivas (70–91 y 6) ════════
+-- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
+-- en la batería entera (un solo request) no cambia nada.
+--   · la 40 rotó la clave de club-web:
+select public.club_web_clave_cargar(encode(extensions.digest('clave-nueva-del-club-rotada-fedcba9876543210', 'sha256'), 'hex'));
+select set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+--   · lo que dejan los tramos 1 a 3 en la config del local (la latencia del puente queda en 1) y el marcador:
+update club_config set cupones_max_dia_referente = 100, cupones_max_minuto_local = 3, promo_articulo_codigo = null, puente_latencia_min = 1
+ where location_id = 'santa-teresa'
+   and (cupones_max_dia_referente, cupones_max_minuto_local, promo_articulo_codigo, puente_latencia_min) is distinct from (100, 3, null::text, 1);
+insert into club_marcadores_descuento (location_id, codigo_producto, nombre, pct_esperado, activo)
+  values ('santa-teresa', 'PRUEBA-PROMO', 'PROMO CLUB 10 %', 10, true) on conflict (location_id, codigo_producto) do nothing;
+--   · el tramo 3 deja «Local Club» vigente en santa-teresa y terminada en nosara:
+update club_promociones set estado = 'vigente'   where location_id = 'santa-teresa' and nombre = 'Local Club' and estado <> 'vigente';
+update club_promociones set estado = 'terminada' where location_id = 'nosara'       and nombre = 'Local Club' and estado <> 'terminada';
 -- ═══ 70. LC-ML: multilocal — encender y apagar un local sintético con UN dato (club_config.club_activo) ═══
 do $$
 declare v_ver text; e text; j jsonb; v_s uuid; v_n int; v_loc text;
@@ -4502,14 +4575,7 @@ begin
                where x.resuelto_en = now() and x.resuelto_por is not null and not coalesce(x.actor_pos ? 'pos_logins' and x.actor_pos ? 'mapeo'
                                                           and jsonb_typeof(x.actor_pos->'pos_logins') = 'array', false)), ''));
 
-  -- B3 · el teléfono del aviso de canje deja rastro (sin el teléfono)
-  perform pg_temp.r('85', 'B3 · ver el teléfono del canje queda en club_auditoria, sin el número',
-    exists (select 1 from club_auditoria a join club_movimientos m on m.id = a.objeto_id and m.tipo = 'canje'
-             where a.accion = 'ver_telefono_canje' and a.en = now() and a.despues->>'miembro' = m.miembro_id::text)
-      and not exists (select 1 from club_auditoria a join club_movimientos m on m.id = a.objeto_id
-                        join club_miembros_contacto c on c.miembro_id = m.miembro_id
-                       where a.accion = 'ver_telefono_canje'
-                         and (a.antes is not null or position(right(regexp_replace(c.telefono, '\D', '', 'g'), 8) in coalesce(a.despues::text, '')) > 0)), '');
+  -- (B3 · «ver el teléfono del canje queda en club_auditoria» se movió a la 43, donde se ve el teléfono: batería por tramos)
   -- B3 · los cierres no se leen directo (ni owner ni manager): solo por club_reporte_mes
   foreach v_err in array array['<OWNER_UUID>', '<MANAGER_UUID>'] loop
     begin
@@ -4806,15 +4872,16 @@ begin
   insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref S0b 90', 'app') returning id into v_m;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura,
                                numero_pedido, pedido_abierto_en, total_crc, cxc_crc) values
+    ('993962', now() - interval '30 minutes', 'C', 'salon', 'cajero', true, 'ok', '69', '69', '9962', now() - interval '1 hour', 18000, 0),
     ('993960', now() - interval '20 minutes', 'R', 'salon', 'cajero', true, 'ok', '64', '64', '9960', now() - interval '1 hour', 25000, 0),
     ('993961', now() - interval '20 minutes', 'X', 'salon', 'cajero', true, 'ok', '65', '65', '9961', now() - interval '1 hour', 0,     0);
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   select coalesce(jsonb_agg(to_jsonb(x) order by x.numero_factura), '[]') into j from public.club_facturas_recientes() x
-   where x.numero_factura in ('990950', '993960', '993961');
+   where x.numero_factura in ('993962', '993960', '993961');   -- su propia C (no la 990950 de la 27: batería por tramos)
   perform pg_temp.yo();
   perform pg_temp.r('90', 'S0b · la lista del plan B trae la R de hace 20 min marcada «R» (y las C marcadas «C»); la X no aparece',
-    jsonb_array_length(j) = 2 and j->0->>'numero_factura' = '990950' and j->0->>'estado' = 'C'
-      and j->1->>'numero_factura' = '993960' and j->1->>'estado' = 'R', j::text);
+    jsonb_array_length(j) = 2 and j->0->>'numero_factura' = '993960' and j->0->>'estado' = 'R'
+      and j->1->>'numero_factura' = '993962' and j->1->>'estado' = 'C', j::text);
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   begin
     perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"993960"}'::jsonb); e := 'ok';

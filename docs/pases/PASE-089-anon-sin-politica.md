@@ -1,6 +1,8 @@
 # Pase a PROD de la mig 089 `anon_sin_politica`
 
-> **Estado: preparado, SIN ejecutar.** Formato del `PASE-085` (rama `claude/pase-085`,
+> **Estado: EJECUTADO y CERRADO (10-nov-2026). La 089 está en prod (merge `fa1cbef`, 10:22:11 -06:00; ledger 59 · 089). Resultado en §9.**
+>
+> Antes: Formato del `PASE-085` (rama `claude/pase-085`,
 > `docs/pases/PASE-085-rls-lectura-rol-activo.md`): qué cambia, lecturas previas, prueba en staging, humo de solo
 > lectura, vuelta atrás y firma.
 >
@@ -235,22 +237,22 @@ de ESTADO.md). Después de las dos, sacar estas tablas de la lista «conocidas»
 ## 9. Firma y bitácora
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
-| Responsables (ejecución / control) | | |
-| 0.4 rama al día con `main` · diff solo los archivos del PR | | |
-| 0.7 la 085 en prod (ledger 58 · 085) | 58 · 085 | |
-| 1.1 ledger: último 085 · ninguna versión ≥ 089 | | |
-| 1.2 20 tablas · permisos sin política (anotar) · 20 con RLS | | |
-| 1.2b respaldo del ACL: 20 filas guardadas · `sha256_relacl` · `sha256_normalizado` (Grok 133) | | |
-| 1.3 nada nuevo que `anon` use | | |
-| 4a antes: true · true · true · true | | |
-| 4b antes (activas), justo antes del merge | | |
-| Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | |
-| §2 merge (SHA, hora) | | |
-| 5.1 Branching success · log con la 089 | | |
-| 5.2 exactamente 1 fila 089 con `name = 'anon_sin_politica'` (statements: anotar) | | |
-| 5.3 permisos sin política 0 · PUBLIC 0 | | |
-| 4a después: true (igual que antes) · false · false · false | | |
-| 4b después = antes · 4c sin rojos | | |
-| Si hubo vuelta atrás: 1.2b después del rollback, `sha256_normalizado` igual al respaldo, o la diferencia anotada tabla por tabla | | |
-| Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | |
+| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | «Firmo: autorizo el pase de la 089 (PR #90 @ 913c2d29508e0c087aea60186213fe2d04173cc3)». GO de Grok: auditoría 133 (condiciones cumplidas). 10-nov, merge autorizado también entre 17:00 y 23:00 |
+| Responsables (ejecución / control) | | el dueño / el encargado del turno |
+| 0.4 rama al día con `main` · diff solo los archivos del PR | | verificado contra `main` @ `7f5befa` (#79: solo archivos del puente, sin migraciones, sin conflictos); el merge trae solo los 7 archivos de la 089 |
+| 0.7 la 085 en prod (ledger 58 · 085) | 58 · 085 | ✅ |
+| 1.1 ledger: último 085 · ninguna versión ≥ 089 | 58 · 085 | **58 · 085**, ninguna ≥ 089 |
+| 1.2 20 tablas · permisos sin política (anotar) · 20 con RLS | 20 · >0 · 20 | **20 · 124 · 20** |
+| 1.2b respaldo del ACL: 20 filas guardadas · `sha256_relacl` · `sha256_normalizado` (Grok 133) | | 20 filas guardadas · `sha256_relacl` `5830ab3b…4023` · `sha256_normalizado` `a0212cf3…81fa` |
+| 1.3 nada nuevo que `anon` use | | OK |
+| 4a antes: true · true · true · true | | **false** · true · true · true: `insert_customers` ya daba false antes (no lo toca la 089); anotado |
+| 4b antes (activas), justo antes del merge | | guardado |
+| Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | aceptado por el dueño sin CI de pruebas (125): el repo no corre pruebas en PRs; la 089 se probó en staging (8/8, batería 580/580) y la auditó Grok |
+| §2 merge (SHA, hora) | | `fa1cbeffdce52a6b4cee26d1144e908dcfb766a9`, 10-nov **10:22:11 -06:00** (padres `7f5befa` y `913c2d2`) |
+| 5.1 Branching success · log con la 089 | | «Supabase Preview» **success** (run 129961706095, 10:22:46 -06:00). Quedaron otros dos con el mismo nombre en «in progress», como en la 085 y el #71 |
+| 5.2 exactamente 1 fila 089 con `name = 'anon_sin_politica'` (statements: anotar) | 59 · 089 · 1 | **59 · 089 · 1 fila**, **3 statements** |
+| 5.3 permisos sin política 0 · PUBLIC 0 | 20 · 0 · 20 · 0 | **20 · 0 · 20 · PUBLIC 0** |
+| 4a después: true (igual que antes) · false · false · false | | **false · false · false · false** (`insert_customers` ya era false antes) |
+| 4b después = antes · 4c sin rojos | | 4b después = antes · 4c sin rojos |
+| Si hubo vuelta atrás: 1.2b después del rollback, `sha256_normalizado` igual al respaldo, o la diferencia anotada tabla por tabla | | no hubo vuelta atrás |
+| Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | **PASA · pase CERRADO (10-nov)** |

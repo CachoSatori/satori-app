@@ -25,7 +25,7 @@
    - outbox y service worker;
    - cambiar permisos (`MODULES[].roles`, rutas, `PrivateRoute`).
 
-   Es todo trabajo de pantalla.
+   Es todo trabajo de pantalla. **Única excepción:** una tarea que en su cola diga que Ismael la aprobó en `DECISIONES.md` para cambiar *cuándo* se consulta (por ejemplo A5). Aun así no se cambia *qué* se consulta ni *cómo* se calcula, y nunca se escribe en la base.
 5. **Gates antes del PR:**
    - `bash -c 'set -o pipefail; VITE_APP_ENV=production npm run build'`;
    - `npm test`;

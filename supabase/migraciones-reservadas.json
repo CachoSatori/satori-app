@@ -67,6 +67,11 @@
       "nombre": "anon_privilegios_por_defecto",
       "bloque": "caja",
       "rama": "claude/anon-default-privs"
+    },
+    "091": {
+      "nombre": "multilocal_fase0",
+      "bloque": "caja",
+      "rama": "claude/multilocal-fase0"
     }
   }
 }

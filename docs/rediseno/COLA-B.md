@@ -46,7 +46,7 @@
 ---
 ### Tanda 2 · Auditoría y estilo en los módulos (decidido por Ismael el 11-nov 15:15)
 
-## B5 · Inicio que nunca dice «Todo en orden» sin comprobar · `lista`
+## B5 · Inicio que nunca dice «Todo en orden» sin comprobar · `en revisión #119`
 - **Auditoría 196:** en `src/pages/HomePage.tsx`, primero escribí en el reporte qué pasa en pantalla cuando falla cada lectura de la alerta y de `fetchHomeStatus`. Después:
   - estado de error: si alguna señal falló, la frase es «No se pudo comprobar todo — revisá Caja», con una píldora oro «sin comprobar» que abre `/caja`. **Nunca** «Todo en orden» ni el Daruma si algo falló;
   - en `fetchHomeStatus`, las lecturas rechazadas se marcan como «sin comprobar» en vez de quedar en 0;

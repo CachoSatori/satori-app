@@ -34,7 +34,7 @@
 - **Medición sin login:** tamaño de los chunks por vista y consultas que dispara cada vista al abrir.
 - **Reporte:** si alguna vista hace más de 3 consultas pesadas al abrir, proponer el arreglo en el reporte, sin aplicarlo.
 
-## A5 · Ventas carga a pedido · `lista` · aprobada por Ismael el 11-nov 14:10 (cambia *cuándo* se consulta; excepción autorizada a «no cambiar consultas»)
+## A5 · Ventas carga a pedido · `en revisión #116` (reporte `2026-11-11-1451-A-A5.md`) · aprobada por Ismael el 11-nov 14:10 (cambia *cuándo* se consulta; excepción autorizada a «no cambiar consultas»)
 - Sale de A4 (arreglos 1–3). No cambia qué se consulta ni cómo se calcula; cambia **cuándo**:
   1. la historia completa del PoS (`cargarDeFondo`) se pide solo al entrar a una vista que la usa (Análisis, Histórico, Calendario, Mix, Ventas, Metas, Ing. Menú, Evaluación, ICP);
   2. En vivo, Paridad y Por línea se pintan sin esperar la carga de 90 días;

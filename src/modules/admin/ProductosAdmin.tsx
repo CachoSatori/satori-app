@@ -354,7 +354,7 @@ function ModificadoresDelProducto({ productName, locationId, onError }: { produc
                   <label style={{ flex: 1, opacity: enabled ? 1 : 0.45 }}>
                     <input type="checkbox" checked={enabled} onChange={e => setOpt(m.id, { enabled: e.target.checked })} /> {m.name}
                   </label>
-                  <span style={{ color: '#5a5040', fontSize: '0.68rem' }}>default +{fi(m.price_delta_crc)}</span>
+                  <span style={{ color: '#5a5040', fontSize: '0.68rem' }}>por defecto +{fi(m.price_delta_crc)}</span>
                   <span style={{ fontSize: '0.68rem' }}>override ₡</span>
                   <input type="number" className={inp} style={{ width: 80 }} defaultValue={override ?? ''} placeholder="—" disabled={!enabled}
                     onBlur={e => { const v = e.target.value.trim() === '' ? null : Number(e.target.value) || 0; if (v !== override) setOpt(m.id, { price_delta_override_crc: v }) }} />

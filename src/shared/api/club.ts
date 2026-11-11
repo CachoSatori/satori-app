@@ -13,6 +13,8 @@ interface Q<T> extends PromiseLike<{ data: T[] | null; error: PgError }> {
   order(col: string, o?: { ascending?: boolean }): Q<T>
   limit(n: number): Q<T>
   update(v: Record<string, unknown>): Q<T>
+  gte(col: string, v: unknown): Q<T>
+  lt(col: string, v: unknown): Q<T>
 }
 // `.bind(supabase)`: sin `this` supabase-js revienta (ver cash.ts). `?.`: tests que mockean parcial.
 const rpc = supabase.rpc?.bind(supabase) as unknown as RpcInvoke
@@ -229,6 +231,31 @@ export const tarjetaManual = async (miembro: string, personas: number, pos: PosR
   primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
 export const buscar = (q: string) => llamar<BusquedaFila[]>('club_buscar', { p_q: q })
+
+// ── (11-nov) Modo transición: tarjetas viejas (de papel, sin QR) ─────────────
+/**
+ * ¿La tarjeta vieja está encendida en el local? Lee `club_config.tarjeta_manual_activa` (RLS del staff). Con un local
+ * elegido, el de ese local; sin elegir, el de los locales con el Club encendido. Es solo para mostrar el botón: el
+ * permiso lo decide la base en `club_tarjeta_manual`.
+ */
+export const getTarjetaManualActiva = async (local: string | null = localClub): Promise<boolean> => {
+  const filas = await leer(from<{ location_id: string; club_activo: boolean; tarjeta_manual_activa: boolean }>('club_config')
+    .select('location_id,club_activo,tarjeta_manual_activa').order('location_id'))
+  return (local ? filas.filter(f => f.location_id === local) : filas.filter(f => f.club_activo === true))
+    .some(f => f.tarjeta_manual_activa === true)
+}
+/** Una visita de anfitrión registrada en la app: con cupón (QR o link) o tarjeta vieja (`cupon_id` vacío). Sin nombres. */
+export interface VisitaAnfitrion { fecha_visita: string; miembro_id: string; cupon_id: string | null; location_id: string }
+/**
+ * Las visitas de anfitriones registradas en la app entre dos instantes (para medir la transición). No trae la carga
+ * inicial (`origen` 'migracion') ni las tarjetas de papel cargadas en lote ('papel'). Hasta 5000 filas.
+ */
+export const getVisitasAnfitriones = async (desde: string, hasta: string, local: string | null = localClub): Promise<VisitaAnfitrion[]> => {
+  const filas = await leer(from<VisitaAnfitrion>('club_movimientos').select('fecha_visita,miembro_id,cupon_id,location_id')
+    .eq('tipo', 'tarjeta').eq('origen', 'app').gte('fecha_visita', desde).lt('fecha_visita', hasta)
+    .order('fecha_visita', { ascending: false }).limit(5000))
+  return local ? filas.filter(f => f.location_id === local) : filas
+}
 
 // ── Gestión (owner, manager) ─────────────────────────────────────────────────
 export const guardarNegocio = (p: { id: string | null; nombre: string; tipo: TipoNegocio; activo: boolean }) =>

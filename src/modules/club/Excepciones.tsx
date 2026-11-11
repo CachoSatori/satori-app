@@ -7,12 +7,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getExcepciones, resolverExcepcion, aClubError, fmtCreditos, getCandidatasSinCruce, elegirFacturaSinCruce, describirFactura,
-  getAlertasPrioritarias, revisarAlerta,
+  getAlertasPrioritarias, revisarAlerta, getVisitasAnfitriones, getTarjetaManualActiva,
   type Excepcion, type TipoExcepcion, type FacturaCandidata, type AlertaPrioritaria,
 } from '../../shared/api/club'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { semanasTransicion, estadoTransicion, rangoTransicion, UMBRAL_APAGADO_PCT, type SemanaTransicion } from './transicion'
 
 const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   SIN_CRUCE:            { titulo: 'Sin cruce: posible cuenta dividida', que: 'Registro con pedido que no encontró la factura de su pedido (anulada, refacturada o cobrada solo en facturas sin pedido). Elegí la factura de la lista o buscala por los últimos dígitos del tiquete.' },
@@ -23,7 +24,7 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CREDITOS_SIN_CANJE:   { titulo: 'Créditos sin canje',   que: 'Factura pagada «a crédito» por un múltiplo de medio crédito, sin canje en el Club.' },
   CANJE_MONTO_DISTINTO: { titulo: 'Canje con monto distinto', que: 'El valor del canje no coincide con lo cobrado «a crédito» en la factura.' },
   PROMO_SIN_CUPON:      { titulo: 'Promo sin cupón',      que: 'Factura con el artículo de la promo 10 % y sin cupón ni tarjeta registrada.' },
-  TARJETA_MANUAL:       { titulo: 'Tarjeta física',       que: 'Tarjeta impresa cargada a mano (piloto en paralelo). Siempre se revisa; no la resuelve quien la cargó.' },
+  TARJETA_MANUAL:       { titulo: 'Tarjeta vieja',        que: 'Llegó con tarjeta vieja (de papel, sin QR): la caja eligió al anfitrión de la búsqueda y cargó las personas a mano. Siempre se revisa; no la resuelve quien la cargó.' },
   CANJE_SIN_CODIGO:     { titulo: 'Canje sin código',     que: 'Canje sin celular aprobado por owner o manager. Siempre se revisa; no lo resuelve quien lo aprobó.' },
   CUPON_SIN_PROMO:      { titulo: 'Cupón sin promo',      que: 'Cupón usado en una visita cuyas facturas no tienen el artículo de la promo 10 %: sumó personas sin descuento aplicado.' },
   // LC-A5 · Local Club
@@ -83,6 +84,7 @@ export default function Excepciones() {
     <div className="tips-body" style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
       <AlertasPrioritarias />
+      <Transicion />
       <Card style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
         <label><span style={labelStyle}>Desde</span><input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={inputStyle} /></label>
         <label><span style={labelStyle}>Hasta</span><input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={inputStyle} /></label>
@@ -289,6 +291,63 @@ function ElegirFactura({ e, onElegida }: { e: Excepcion; onElegida: () => Promis
  * «Revisado» con una nota. Las revisadas se ven 7 días, con quién las revisó. Grok 162: no la revisa quien registró el
  * movimiento ni quien aprobó su pendiente (la base lo rechaza con el motivo); la revisa otro manager o el owner.
  */
+/**
+ * (11-nov, modo transición; decisión del dueño) Cómo va el paso de las tarjetas viejas (de papel, sin QR) al QR o al link
+ * del anfitrión. Por semana (lunes a domingo): visitas de anfitriones, cuántas con cupón, cuántas con tarjeta vieja y
+ * cuántos anfitriones ya usan su QR o link. Criterio para apagarla: menos del 15 % dos semanas completas seguidas.
+ * Se ve mientras la tarjeta vieja esté encendida, o si hubo alguna en las últimas semanas. Solo cuentas, sin nombres.
+ */
+function Transicion() {
+  const [semanas, setSemanas] = useState<SemanaTransicion[] | null>(null)
+  const [activa, setActiva] = useState(false)
+  useEffect(() => {
+    let vivo = true
+    const ahora = new Date()
+    const { desde, hasta } = rangoTransicion(ahora, 5)
+    Promise.all([getVisitasAnfitriones(desde, hasta), getTarjetaManualActiva().catch(() => false)])
+      .then(([filas, act]) => { if (vivo) { setSemanas(semanasTransicion(filas, ahora, 5)); setActiva(act) } })
+      .catch(() => { if (vivo) setSemanas(null) })   // sin la medición, la pantalla de excepciones sigue igual
+    return () => { vivo = false }
+  }, [])
+  if (!semanas || (!activa && semanas.every(s => s.viejas === 0))) return null
+  const estado = estadoTransicion(semanas)
+  const dia = (lunes: string) => `${lunes.slice(8, 10)}/${lunes.slice(5, 7)}`
+  const pct = (s: SemanaTransicion) => s.pctViejas === null ? '—' : `${String(s.pctViejas).replace('.', ',')} %`
+  const celda = { padding: '0.3rem 0.5rem', textAlign: 'right' as const }
+  return (
+    <Card>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <strong>Transición · tarjetas viejas</strong>
+        <Chip color={activa ? C.ink : C.muted}>{activa ? 'tarjeta vieja encendida' : 'tarjeta vieja apagada'}</Chip>
+      </div>
+      <div style={{ fontSize: '0.85rem', color: C.muted, margin: '0.3rem 0 0.5rem' }}>
+        Visitas de anfitriones registradas en caja, por semana. La tarjeta vieja se apaga cuando sea menos del {UMBRAL_APAGADO_PCT} % de las
+        visitas dos semanas completas seguidas (se revisa cada 2 semanas).
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+          <thead>
+            <tr style={{ color: C.muted, fontSize: '0.75rem' }}>
+              <th style={{ ...celda, textAlign: 'left' }}>Semana del</th><th style={celda}>Visitas</th><th style={celda}>Con cupón</th>
+              <th style={celda}>Tarjeta vieja</th><th style={celda}>% viejas</th><th style={celda}>Anfitriones con QR o link</th><th style={celda}>Solo tarjeta vieja</th>
+            </tr>
+          </thead>
+          <tbody>
+            {semanas.map(s => (
+              <tr key={s.lunes} style={{ borderTop: `1px solid ${C.border}` }}>
+                <td style={{ ...celda, textAlign: 'left' }}>{dia(s.lunes)}{s.enCurso ? ' (en curso)' : ''}</td>
+                <td style={celda}>{s.visitas}</td><td style={celda}>{s.conCupon}</td><td style={celda}>{s.viejas}</td>
+                <td style={{ ...celda, fontWeight: 700 }}>{pct(s)}</td><td style={celda}>{s.anfitrionesConCupon}</td><td style={celda}>{s.anfitrionesSoloVieja}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ marginTop: 8, fontSize: '0.88rem', fontWeight: estado.listo ? 700 : 400 }}>{estado.texto}</div>
+    </Card>
+  )
+}
+
 function AlertasPrioritarias() {
   const [lista, setLista] = useState<AlertaPrioritaria[] | null>(null)
   const [error, setError] = useState<string | null>(null)

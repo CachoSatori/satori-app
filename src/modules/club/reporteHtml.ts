@@ -17,7 +17,7 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const TIPO_EXC: Record<string, string> = {
   REGISTRO_SIN_FACTURA: 'Registro sin factura', SIN_CRUCE: 'Sin cruce (posible cuenta dividida)', VISITA_REPETIDA: 'Visita repetida', AMBIGUA: 'Factura ambigua (dos pedidos de la mesa)', PERSONAS_SOBRE_PAX: 'Personas sobre el pax', CREDITOS_SIN_CANJE: 'Créditos sin canje (probable)',
-  CANJE_MONTO_DISTINTO: 'Canje con monto distinto (probable)', PROMO_SIN_CUPON: 'Promo sin cupón', CUPON_SIN_PROMO: 'Cupón sin promo', TARJETA_MANUAL: 'Tarjeta física (piloto)', CANJE_SIN_CODIGO: 'Canje sin código',
+  CANJE_MONTO_DISTINTO: 'Canje con monto distinto (probable)', PROMO_SIN_CUPON: 'Promo sin cupón', CUPON_SIN_PROMO: 'Cupón sin promo', TARJETA_MANUAL: 'Tarjeta vieja (de papel, sin QR)', CANJE_SIN_CODIGO: 'Canje sin código',
 }
 
 // ── Formatos (ESTANDAR §7): punto de miles, coma decimal, ₡ pegado, % con espacio ──

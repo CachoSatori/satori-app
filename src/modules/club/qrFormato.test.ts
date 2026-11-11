@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { parsearQR, urlCupon, urlReferente, urlPortal, urlCanje, urlSocio, configurarClubUrl, clubUrl, MSG_SIN_DOMINIO } from './qrFormato'
+import { readFileSync } from 'node:fs'
+import { parsearQR, esQrCaja, QR_CAJA_TARJETA_VIEJA, urlCupon, urlReferente, urlPortal, urlCanje, urlSocio, configurarClubUrl, clubUrl, MSG_SIN_DOMINIO } from './qrFormato'
 import { aClubError, opcionesCanje, MSG_REFERENTE_INACTIVO } from '../../shared/api/club'
 
 describe('parsearQR', () => {
@@ -109,5 +110,22 @@ describe('comparación con la página vieja: pegado', () => {
       { referente: 'Beto Ficticio', semana: '2026-11-09', personas: 3 },
       { referente: 'Caro, Ficticia', semana: '2026-11-02', personas: 4 },
     ])
+  })
+})
+
+describe('(11-nov) QR único de caja: «Tarjeta vieja (sin QR)»', () => {
+  beforeEach(() => configurarClubUrl('https://club.ejemplo.test'))
+  it('se reconoce con espacios y en minúsculas; nada más lo es', () => {
+    expect(esQrCaja(QR_CAJA_TARJETA_VIEJA)).toBe(true)
+    expect(esQrCaja('  satori-caja:tarjeta-vieja \n')).toBe(true)
+    for (const no of ['', null, undefined, 'SATORI-CAJA', 'SATORI-CAJA:TARJETA-VIEJA-2', urlReferente('ABCD2345'), 'ABCD2345']) expect(esQrCaja(no)).toBe(false)
+  })
+  it('el cartel de caja lleva exactamente ese código', () => {
+    const guion = readFileSync(new URL('../../../scripts/club/cartel_caja.mjs', import.meta.url), 'utf8')
+    expect(guion).toContain(`export const QR_CAJA_TARJETA_VIEJA = '${QR_CAJA_TARJETA_VIEJA}'`)
+  })
+  it('no es un link ni un código del Club: la cámara de un teléfono no abre nada y club_resolver no lo conoce', () => {
+    expect(QR_CAJA_TARJETA_VIEJA).not.toMatch(/^https?:|\/|\./)
+    expect(parsearQR(QR_CAJA_TARJETA_VIEJA)).toEqual({ tipo: 'desconocido', codigo: null })
   })
 })

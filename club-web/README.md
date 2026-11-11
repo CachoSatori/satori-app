@@ -86,11 +86,22 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    - si `rl_crear` o `rl_leer` sale en `false`, Pages no tomó el binding. Esos endpoints responden 503: fallan cerrados, el sitio no queda abierto;
    - prueba de fuego: 6 «Obtener mi cupón» seguidos desde un mismo teléfono. El sexto tiene que mostrar «Demasiados intentos seguidos».
 
-   **Plan B, si Pages no admite los bindings: `/api` en un Worker.**
-   1. Crear un Worker `satori-club-api` con el mismo `functions/_lib/api.js`. Su `fetch(request, env)` llama a `manejar(request, env, path)`.
-   2. Declarar en el `wrangler.toml` del Worker los dos `[[unsafe.bindings]]` de arriba, más `SUPABASE_URL`, `SUPABASE_ANON_KEY` y el secreto `CLUB_WEB_KEY`.
-   3. Agregar la ruta `<dominio>/api/*` → Worker `satori-club-api` (Workers Routes), y sacar `functions/api` de Pages.
-   4. Repetir la verificación con `/api/salud`.
+   **Plan B, si Pages no toma los topes: `/api` en el Worker `satori-club-api` por un service binding** (`worker/`, sin
+   desplegar). El DNS del dominio queda en SiteGround: la zona no está en Cloudflare, así que no hay Workers Routes.
+   - La Pages Function, si tiene el binding `CLUB_API`, le pasa `/api/*` al Worker con un host interno que no existe en
+     ningún DNS y la IP real del cliente en `x-club-ip` (la lee de `CF-Connecting-IP`, que en Pages es la del cliente).
+     El Worker no tiene URL pública (`workers_dev = false`, sin rutas), rechaza otro host (404) y, sin IP, responde 503.
+   - El Worker usa el mismo `functions/_lib/api.js`; sus respuestas dicen `x-club-api: worker` y las de Pages,
+     `x-club-api: pages`: `/api/salud` dice quién contestó.
+   - **Probado en local (10-nov):** `wrangler dev` (Worker) y `wrangler pages dev --service CLUB_API=satori-club-api`:
+     `/api/salud` por Pages contesta el Worker con todo en `true`; 6 cupones desde una IP → el sexto 429; otra IP de la
+     misma /24 → 429; otra red → pasa; un `x-club-ip` falso del cliente se pisa con la IP real.
+   - En local `wrangler pages dev` también lista `RL_CREAR` y `RL_LEER` como bindings de Pages (modo remoto): **no se
+     sabe** si el deploy real de Pages los toma. Eso lo dice `/api/salud` después del primer deploy.
+   - **B está activo desde el merge** (decisión del dueño, 10-nov): el `[[services]]` de `wrangler.toml` va descomentado.
+     El Worker se crea **antes** (el miércoles, desde la rama del #59). Volver al plan A: comentar esas tres líneas.
+     Pasos: `docs/pases/PASE-150-151-club.md` §11.
+
 5. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
 
 ## DNS: apuntar el dominio del Club (lo hace Ismael)

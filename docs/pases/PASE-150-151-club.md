@@ -8,7 +8,7 @@
 >
 > - **Fecha prevista: jueves 12-nov, por la mañana** (nunca entre las 17:00 y las 23:00 CR). La tarde del mismo día es la
 >   prueba interna con el personal (plan: `docs/club-satori/PLAN-ACTIVACION-PILOTO.md` §3).
-> - **Orden en prod: 085 → 089 → 090 → 091 → 092 → 093 (→ 094 → 095, si caja las pasa antes) → 150 → 151.** Supabase no
+> - **Orden en prod: 085 → 089 → 090 → 091 → 092 → 093 → 094 → 095 (todas en prod desde el 10-nov noche: ledger 65 · 095) → 150 → 151.** Supabase no
 >   aplica una migración con número menor que la última aplicada: el Club va **después** de toda la caja que esté en prod.
 >   La 087, la 088 (y cualquier migración de caja que quede después del Club) toman **152+** cuando se arme su paquete.
 > - **Regla del ledger (Grok 122):** Branching guarda las migraciones **partidas** en varios statements. La verificación es
@@ -61,7 +61,7 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.1 | Firma del dueño en §10, con el SHA de la cabeza del #59 que se mergea | firma |
 | 0.2 | Los dos responsables presentes | §10 |
 | 0.3 | **No se mergea entre las 17:00 y las 23:00 CR**; ninguna otra sesión mergeando a `main` en la ventana | hora en §10 |
-| 0.4 | **La 091 en prod** (desde el mié 11-nov): la 151 se apoya en su `locations`. También la 092 y, si no se atrasaron, la 093, la 094 y la 095. Ninguna migración con número de 096 a 149 ni ≥ 150 en `main` ni en el ledger | 1.1 |
+| 0.4 | **✅ Cumplido (10-nov noche, lo informó el dueño):** la **091** en prod (merge `b8cb74d`, pase cerrado) y la tanda **092–095** (merge `c41e18b`). **Ledger de prod: 65 · 095.** La 151 se apoya en el `locations` de la 091. El día del pase se vuelve a leer en 1.1: tiene que seguir en **65 · 095**. Ninguna migración con número de 096 a 149 ni ≥ 150 en `main` ni en el ledger (si caja pasa otra antes del jueves, se para y se rehace §1 con el número nuevo) | 1.1 |
 | 0.5 | El paquete (este PR) y el plan B de club-web (#98, el Worker, con el binding activo) mergeados en el #59 (el #98 **antes del miércoles**, para crear el Worker), y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.6 | Checks del #59 en verde: `supabase/migraciones.test.ts` (150 y 151 registradas con su origen), vitest y build | checks del PR |
 | 0.7 | Staging en verde con estos mismos archivos (§3), **el día del pase** | anotado |
@@ -73,12 +73,12 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
 Editor SQL de PROD. **Leer el ref en pantalla.** Anotar cada resultado en §10.
 ```sql
--- 1.1 ledger: el último es la última de caja que pasó (093, o 095 si pasaron la 094 y la 095) y no hay nada del Club
-select count(*), max(version) from supabase_migrations.schema_migrations;                         -- anotar · 093 o 095
+-- 1.1 ledger: igual que después del pase de caja del 10-nov (65 · 095) y nada del Club
+select count(*), max(version) from supabase_migrations.schema_migrations;                         -- 65 · 095
 select version, name from supabase_migrations.schema_migrations
  where version between '096' and '149' or version >= '150'
     or name in ('club_satori_esquema', 'club_catalogo_locales') or version in ('075', '100');      -- 0 filas
-select version from supabase_migrations.schema_migrations where version between '089' and '095' order by 1;  -- 089 … 093 (… 095)
+select version from supabase_migrations.schema_migrations where version between '089' and '095' order by 1;  -- 089 090 091 092 093 094 095
 
 -- 1.2 no hay ningún objeto del Club en prod
 begin read only;
@@ -146,15 +146,16 @@ CSV). Son las tablas fuera del Club que el pase toca (un trigger y filas nuevas 
      `participa_servicio`;
    - políticas de tablas que solo existen en staging (PoS propio 022–024, Salarios 055–061 y 084, la 070 y la 083), con su
      dependencia de `get_my_role`; entre ellas `pos_locations_select` y `pos_locations_write` sobre `locations` (022);
-   - staging tiene la 089–095 (lectura del 10-nov): si en prod no pasaron la 094 o la 095, lo que cambian aparece como
-     diferencia de staging.
+   - la 089–095 están en staging y en prod (10-nov): lo que cambian **no** debería aparecer como diferencia. Si aparece
+     (por ejemplo, una versión de la 094 o la 095 aplicada en staging antes de su último cambio), se explica por su
+     origen antes de firmar.
 4. Las diferencias que tienen explicación van a `scripts/sql/gate61_esperadas.txt` con su motivo y la firma, **en este PR**
    (lo revisa el dueño). Una diferencia **sin** explicación **para** el pase hasta entenderla.
 
 Más la **prueba de humo de antes** (§4).
 
 **Para (no se sigue)** si:
-- el ledger no termina en la última de caja esperada (093, o 095), o ya tiene algo del Club;
+- el ledger no da **65 · 095** (otra migración de caja entró después del 10-nov, o falta una), o ya tiene algo del Club;
 - 1.2 no da 0 · 0 · 0;
 - 1.3 da distinto (en particular, sin `locations` o sin `santa-teresa` activa: **la 091 no está**);
 - el G-61 «antes» tiene una diferencia sin explicación.
@@ -255,6 +256,11 @@ Después, sin `--antes`:
 | Mutaciones 162 y 163 | caen **4** y **1** |
 | Las 14 mutaciones de `mutaciones_r7.json` (`mutar_bateria.py`, Grok 161) | **14 muerden · 0 con problema** (S0b y 160 caen 11 cada una: las tarjetas de la puesta a punto de la 92 y la 94 ahora se atrapan) |
 
+**La caja de staging es la misma que la de prod (10-nov noche, lectura).** Las filas 089–095 del ledger de staging tienen el
+mismo md5 que los archivos de `main` (`88ecdc81` · `53aa0e0a` · `1838dd21` · `03f2dfed` · `d5b5173c` · `bfa5a786` ·
+`a8959a18`), que son las que entraron a prod (091 por `b8cb74d`; 092–095 por `c41e18b`). Todas las pruebas del Club de
+arriba corrieron sobre esa caja: el pase de la 091–095 no cambia nada de la 150 ni de la 151.
+
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (§5.5).
 
@@ -287,7 +293,7 @@ SoP: nada nuevo en rojo. **Después**, además: la app muestra el acceso al Club
    150_club_satori_esquema.sql` y después `151_club_catalogo_locales.sql`.
 2. **Ledger** (solo lectura): **exactamente 1 fila de cada una, con su `name`**. No se compara md5.
    ```sql
-   select count(*), max(version) from supabase_migrations.schema_migrations;                      -- anterior + 2 · 151
+   select count(*), max(version) from supabase_migrations.schema_migrations;                      -- 67 · 151 (65 + 2)
    select version, name, array_length(statements, 1) as statements
      from supabase_migrations.schema_migrations where version in ('150', '151') order by 1;
    -- 150 · club_satori_esquema · (anotar) ; 151 · club_catalogo_locales · (anotar)
@@ -452,7 +458,7 @@ altas, visitas, cupones, canjes y premios; la caja cobra como antes) y se arregl
 Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están en el ledger de prod no se borran nunca**.
 
 ## 9. Orden en prod y después
-- **085 → 089 → 090 → 091 → 092 → 093 (→ 094 → 095) → 150 → 151.** La 087 y la 088 (y cualquier migración de caja que
+- **085 → 089 → 090 → 091 → 092 → 093 → 094 → 095 (en prod, 10-nov) → 150 → 151.** La 087 y la 088 (y cualquier migración de caja que
   quede después del Club) toman **152+** al armar su paquete.
 - Después del pase: actualizar `ESTADO.md` (ledger de prod) y el «Resultado» abajo. Staging ya está alineado (§3).
 - Después del pase, en un PR aparte: sacar el nombre del dueño de los comentarios de `supabase/migrations/` (decisión del
@@ -468,12 +474,12 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 |---|---|---|
 | Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del #59) | | |
 | Responsables (ejecución / control) | | |
-| 0.4 la 091–093 en prod | ledger termina en la última de caja que pasó (093 o 095) | |
+| 0.4 la 091–095 en prod | ledger 65 · 095 | ✅ 10-nov noche (lo informó el dueño): 091 por el merge `b8cb74d` (pase cerrado), 092–095 por el merge `c41e18b`; ledger 65 · 095 |
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | |
 | 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` creado el miércoles con `wrangler deploy` manual (SHA de la rama del #59), sin repositorio conectado, sin URL pública, con sus variables (§11.4) | | |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | | |
 | 0.10 carga única: export, sha256 de `carga.sql` y esperados de restos (N y personas) firmados (o «la prueba va sin carga») | | |
-| 1.1 ledger: la última de caja que pasó (093 o 095) · nada del Club (Grok 181) | | |
+| 1.1 ledger: 65 · 095 · 089–095 presentes · nada del Club (Grok 181) | 65 · 095 | |
 | 1.2 0 · 0 · 0 | | |
 | 1.3 true · true · true · 2 · 2 · false · true · 3 · true · pgcrypto · pg_cron | | |
 | 1.4 respaldo de `employees`, `profiles` y `locations`: cifrado, dónde quedó (sin la contraseña), sha256 y fecha de borrado | | |
@@ -482,7 +488,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | Gate de CI en la cabeza del #59 (enlace), o la aceptación del dueño sin ese verde, con el motivo | | |
 | §2 merge (SHA, hora) | | |
 | 5.1 Branching success · log con la 150 y la 151 | | |
-| 5.2 1 fila 150 y 1 fila 151 con su `name` (statements: anotar) | | |
+| 5.2 ledger 67 · 151 · 1 fila 150 y 1 fila 151 con su `name` (statements: anotar) | | |
 | 5.3 0 · 1 · 0 · true · 1 · 1 · `15 9 * * *` · false · false · true · 1 · 0 | | |
 | 5.4 G-61 después: sale 0 | | |
 | 4a después: 10 · (las 10) · 0 · 4b = antes · 4c sin rojos | | |

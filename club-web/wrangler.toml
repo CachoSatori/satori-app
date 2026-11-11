@@ -30,3 +30,12 @@ name = "RL_LEER"
 type = "ratelimit"
 namespace_id = "1002"
 simple = { limit = 60, period = 60 }
+
+# PLAN B, ACTIVO DESDE EL MERGE (decisión del dueño, 10-nov): /api lo atiende el Worker satori-club-api (club-web/worker/)
+# por este SERVICE BINDING. El DNS del dominio queda en SiteGround (la zona no está en Cloudflare): no hay Workers Routes, y
+# este binding es el único camino al Worker. El Worker tiene que existir ANTES de que este archivo llegue a main (se crea el
+# miércoles desde la rama del #59: docs/pases/PASE-150-151-club.md §11.4).
+# Volver al plan A (la Pages Function con sus propios topes): comentar estas tres líneas (un PR a main).
+[[services]]
+binding = "CLUB_API"
+service = "satori-club-api"

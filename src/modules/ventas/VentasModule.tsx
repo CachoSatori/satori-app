@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
@@ -9,7 +9,9 @@ import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/type
 import { cargarDeFondo, cargarDiasEager, cargarHistEager, type EstadoPos } from './ventasFuente'
 import AvisoFuentePos from './AvisoFuentePos'
 import './ventasNav.css'
-import { type Tab, resolverTab, entradasVisibles, entradaDe, labelDe } from './ventasTabs'
+import {
+  type Tab, resolverTab, entradasVisibles, entradaDe, labelDe, VISTAS_SIN_DIAS, VISTAS_CON_FONDO,
+} from './ventasTabs'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
 const VentasHoy          = lazy(() => import('./VentasHoy'))
@@ -57,7 +59,6 @@ export default function VentasModule() {
   const entradas  = entradasVisibles(role)
   const entrada   = entradas.find(e => e.id === entradaDe(tab).id)
   const color     = ENTRADA_COLOR[entradaDe(tab).id]
-  const [loading, setLoading] = useState(true)
   const [error, setError]   = useState<string | null>(null)
 
   const [dias,     setDias]     = useState<DiasMap>({})
@@ -74,70 +75,119 @@ export default function VentasModule() {
   })
   const [comps, setComps] = useState<Comp[]>([])
 
-  const loadAll = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // ── P2 · LA FUENTE ES EL PoS, con el Excel de respaldo ──────────────────────────
-      // Todo fusiona `{ ...xls, ...pos }` con la MISMA función (`ventasFuente.ts`): el PoS
-      // pisa donde tiene lote, el Excel queda intacto en 2023 y en cualquier jornada sin lote.
-      // Que la fusión sea una sola es lo que evita que «Hoy» y «Análisis» discrepen en las
-      // fechas que se solapan, o que algo salte cuando el fondo termina de cargar.
-      //
-      // ── QUÉ BLOQUEA Y QUÉ NO (P2-perf) ──────────────────────────────────────────────
-      // Bloquea solo lo barato: 90 días de días + el `hist` del Excel (una consulta a una
-      // tabla ya resumida). El PoS no da resúmenes: hay que agregar tickets y líneas crudas,
-      // así que el rango completo se lee en SEGUNDO PLANO y de un solo pase salen las dos
-      // cosas que faltan (el `DiasMap` full y el `HistMap`).
-      //
-      // Con `FUENTE_VENTAS = 'xls'` nada de esto consulta el PoS.
-      const [d, h, p, m, c] = await Promise.all([
-        cargarDiasEager(),      // últimos DIAS_EAGER días, PoS + Excel
+  // ── A5 · CUÁNDO se pide cada cosa (qué se pide y cómo se calcula, igual que antes) ────────
+  // Tres cargas, cada una UNA vez por entrada al módulo (o por «recargar»):
+  //   · base  — lo liviano (hist del Excel, product_map, metas, comps). Siempre; bloquea el módulo.
+  //   · eager — los 90 días (PoS + Excel). Solo al abrir una vista que usa `dias`; En vivo,
+  //             Paridad y Por línea se pintan sin esperarla.
+  //   · fondo — la historia completa del PoS. Solo al abrir una vista de `VISTAS_CON_FONDO`.
+  // `gen` invalida lo que llega tarde de una carga anterior a un «recargar».
+  const gen    = useRef(0)
+  const baseP  = useRef<Promise<{ h: HistMap; p: ProductMap }> | null>(null)
+  const eagerP = useRef<Promise<{ h: HistMap; dias: DiasMap }> | null>(null)
+  const fondoP = useRef<Promise<void> | null>(null)
+  const [recarga,    setRecarga]    = useState(0)
+  const [baseListo,  setBaseListo]  = useState(false)
+  const [eagerListo, setEagerListo] = useState(false)
+
+  const msg = (e: unknown) => e instanceof Error ? e.message : 'Error cargando datos'
+
+  const pedirBase = useCallback(() => {
+    if (!baseP.current) {
+      const g = gen.current
+      const vigente = () => g === gen.current
+      baseP.current = Promise.all([
         cargarHistEager(),      // el hist del Excel; el overlay del PoS llega en el fondo
         getProductMap(),
         getMetas(),
         getComps(),
-      ])
-      setDias(d.dias)
-      setFuentePos({ estado: d.estadoPos ?? null, ultimoDiaXls: d.ultimoDiaXls ?? null })
-      setHist(h)
-      // ── El ProductMap que ven las pantallas: curado + FAMILIA del PoS ─────────────────
-      // `d.pm` lo arma `armarDia` con la familia de cada línea (`FAMILIAS_NETO`), y hasta
-      // ahora se tiraba: las pantallas se quedaban con el `product_map` curado a mano, que no
-      // conoce los nombres del PoS, y el Mix mandaba esa plata a «MERCHANDISING / OTROS».
-      //
-      // La fusión es CONSERVADORA (ver `fusionarProductMap`): la familia solo rellena lo que
-      // no tiene un tipo válido puesto a mano. Un `cortesia`/`personal` curado no se pisa, así
-      // que `cortTotal`/`persTotal`, Menu Engineering y la Paridad no se mueven, y los días
-      // del .xls quedan idénticos.
-      setPm(fusionarProductMap(p, d.pm))
-      setMetas(m)
-      setComps(c)
+      ]).then(([h, p, m, c]) => {
+        if (vigente()) { setHist(h); setMetas(m); setComps(c) }
+        return { h, p }
+      })
+      baseP.current
+        .catch(e => { if (vigente()) setError(msg(e)) })
+        .finally(() => { if (vigente()) setBaseListo(true) })
+    }
+    return baseP.current
+  }, [])
+
+  const pedirEager = useCallback(() => {
+    if (!eagerP.current) {
+      const g = gen.current
+      const vigente = () => g === gen.current
+      // ── P2 · LA FUENTE ES EL PoS, con el Excel de respaldo ──────────────────────────
+      // Todo fusiona `{ ...xls, ...pos }` con la MISMA función (`ventasFuente.ts`): el PoS
+      // pisa donde tiene lote, el Excel queda intacto en 2023 y en cualquier jornada sin lote.
+      // Con `FUENTE_VENTAS = 'xls'` nada de esto consulta el PoS.
+      eagerP.current = Promise.all([pedirBase(), cargarDiasEager()]).then(([{ h, p }, d]) => {
+        if (vigente()) {
+          setDias(d.dias)
+          setFuentePos({ estado: d.estadoPos ?? null, ultimoDiaXls: d.ultimoDiaXls ?? null })
+          // ── El ProductMap que ven las pantallas: curado + FAMILIA del PoS ───────────────
+          // La fusión es CONSERVADORA (ver `fusionarProductMap`): la familia solo rellena lo
+          // que no tiene un tipo válido puesto a mano. Un `cortesia`/`personal` curado no se
+          // pisa, así que `cortTotal`/`persTotal`, Menu Engineering y la Paridad no se mueven.
+          setPm(fusionarProductMap(p, d.pm))
+        }
+        return { h, dias: d.dias }
+      })
+      eagerP.current
+        .catch(e => { if (vigente()) setError(msg(e)) })
+        .finally(() => { if (vigente()) setEagerListo(true) })
+    }
+    return eagerP.current
+  }, [pedirBase])
+
+  const pedirFondo = useCallback(() => {
+    if (!fondoP.current) {
+      const g = gen.current
+      const vigente = () => g === gen.current
       // La historia completa, en segundo plano: es lo que necesitan Análisis (año contra año),
       // Histórico y Calendario. Hasta que llegue, esas pestañas muestran el Excel — nunca
       // quedan vacías, porque el Excel cubre 2023-2025 entero.
-      setCargandoFondo(true)
-      cargarDeFondo(h)
-        .then(({ dias, hist, pm }) => {
-          setDiasFull(dias)
-          setHist(hist)
-          // El rango completo ve más productos que los 90 días del eager: se vuelve a fusionar
-          // sobre el curado ORIGINAL (`p`), no sobre el ya fusionado, para que la regla se
-          // aplique una sola vez y el resultado no dependa del orden de llegada.
-          setPm(fusionarProductMap(p, pm))
-        })
-        .catch(() => setDiasFull(d.dias))
-        .finally(() => setCargandoFondo(false))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error cargando datos')
-    } finally {
-      setLoading(false)
+      fondoP.current = Promise.all([pedirBase(), pedirEager()]).then(([{ p }, { h, dias: d90 }]) => {
+        if (!vigente()) return
+        setCargandoFondo(true)
+        return cargarDeFondo(h)
+          .then(({ dias, hist, pm }) => {
+            if (!vigente()) return
+            setDiasFull(dias)
+            setHist(hist)
+            // El rango completo ve más productos que los 90 días del eager: se vuelve a fusionar
+            // sobre el curado ORIGINAL (`p`), no sobre el ya fusionado, para que la regla se
+            // aplique una sola vez y el resultado no dependa del orden de llegada.
+            setPm(fusionarProductMap(p, pm))
+          })
+          .catch(() => { if (vigente()) setDiasFull(d90) })
+          .finally(() => { if (vigente()) setCargandoFondo(false) })
+      }, () => { /* el error de base/eager ya se mostró */ })
     }
-  }, [])
+    return fondoP.current
+  }, [pedirBase, pedirEager])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  /** «Recargar» (Competencias, Cargar XLS, Productos): vuelve a pedir todo, como antes. */
+  const loadAll = () => {
+    gen.current += 1
+    baseP.current = null
+    eagerP.current = null
+    fondoP.current = null
+    setError(null)
+    setBaseListo(false)
+    setEagerListo(false)
+    setCargandoFondo(false)
+    setRecarga(r => r + 1)
+  }
 
-  if (loading) {
+  const usaDias  = !VISTAS_SIN_DIAS.has(tab)
+  const usaFondo = VISTAS_CON_FONDO.has(tab)
+  useEffect(() => {
+    pedirBase()
+    if (usaDias) pedirEager()
+    if (usaFondo) pedirFondo()
+  }, [usaDias, usaFondo, recarga, pedirBase, pedirEager, pedirFondo])
+
+  if (!baseListo) {
     return (
       <div className="module-loading">
         <span className="loading-mark">売</span>
@@ -224,6 +274,7 @@ export default function VentasModule() {
         const allDias = Object.keys(diasFull).length > 0 ? diasFull : dias
         return (
           <Suspense fallback={<TabLoader />}>
+            {usaDias && !eagerListo ? <TabLoader /> : (
             <div className="vt-content">
               {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
               {tab === 'envivo'      && <VentasEnVivo       metas={metas} />}
@@ -244,6 +295,7 @@ export default function VentasModule() {
               {tab === 'xls'         && <VentasXLS          dias={allDias} onRefresh={loadAll} />}
               {tab === 'config'      && <VentasConfig       dias={allDias} pm={pm} onRefresh={loadAll} />}
             </div>
+            )}
           </Suspense>
         )
       })()}

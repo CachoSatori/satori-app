@@ -86,3 +86,24 @@ export function entradaDe(tab: Tab): Entrada {
 export function labelDe(tab: Tab): string {
   return TAB_POR_ID.get(tab)?.label ?? tab
 }
+
+// ── A5 · Cuándo se piden los datos de cada vista ─────────────────────────────────────────────
+// Ninguna vista cambia lo que lee ni cómo calcula: cambia CUÁNDO el shell pide los datos.
+
+/**
+ * Vistas que no reciben `dias` ni `pm` (leen lo suyo): se pintan sin esperar la carga de los
+ * 90 días del PoS.
+ */
+export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'paridad', 'salolineas'])
+
+/**
+ * Vistas que pueden mirar más atrás de los 90 días (historia, año contra año, rangos «Todo»,
+ * competencias viejas, catálogo completo): al abrirse piden la historia completa del PoS
+ * (`cargarDeFondo`). Mientras llega, muestran lo mismo que antes: los 90 días + el Excel.
+ *
+ * Quedan afuera «Hoy» (mira el último día y las 4 semanas anteriores) y las de `VISTAS_SIN_DIAS`.
+ */
+export const VISTAS_CON_FONDO: ReadonlySet<Tab> = new Set<Tab>([
+  'analisis', 'historico', 'calendario', 'mix', 'ventas', 'metas', 'menueng', 'evaluacion', 'icp',
+  'saloneros', 'cajeros', 'competencias', 'xls', 'config',
+])

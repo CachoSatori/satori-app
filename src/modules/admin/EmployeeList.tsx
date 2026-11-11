@@ -204,7 +204,7 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                       value={editRole}
                       onChange={e => setEditRole(e.target.value as UserRole)}
                       disabled={saving}
-                      style={{ background: '#111', border: '1px solid #2a2a2a', color: 'var(--white)', padding: '4px 8px', borderRadius: '2px' }}
+                      style={{ background: 'var(--c-fondo)', border: '1px solid var(--c-linea)', color: 'var(--c-tinta)', padding: '4px 8px', borderRadius: '2px' }}
                     >
                       {ROLES.map(r => (
                         <option key={r} value={r}>{ROLE_LABELS[r]}</option>

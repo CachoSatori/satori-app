@@ -82,11 +82,11 @@ vi.mock('../../shared/utils/planillaBanco', async (orig) => {
 })
 
 import SalariosPago from './SalariosPago'
+import { fi } from '../../shared/utils'
 
-// El separador de miles de es-CR depende del ICU del runtime (espacio duro, punto…):
-// formateamos igual que la app y comparamos con los espacios normalizados.
+// Formateamos con el MISMO fi() de la app y comparamos con los espacios normalizados.
 const plano = (s: string) => s.replace(/\s+/g, ' ').trim()
-const money = (n: number) => (content: string) => plano(content) === plano(`₡ ${n.toLocaleString('es-CR')}`)
+const money = (n: number) => (content: string) => plano(content) === plano(fi(n))
 
 const emp = (over: Partial<Employee> & { id: string; full_name: string }): Employee =>
   ({ role: 'salonero', profile_id: null, is_active: true, pos_name: null,
@@ -659,7 +659,7 @@ describe('Salarios · consolidado con ingreso total', () => {
     // …y las propinas van SEPARADAS, con su propia etiqueta: 27.000 + 8.500
     // el "NO" va en <strong>: el monto vive en el <span> padre
     const nota = screen.getByText(/que NO se transfieren/).parentElement!
-    expect(plano(nota.textContent ?? '')).toContain(plano((35_500).toLocaleString('es-CR')))
+    expect(plano(nota.textContent ?? '')).toContain(plano(fi(35_500)))
     expect(plano(nota.textContent ?? '')).toMatch(/de propinas que NO se transfieren/)
   })
 
@@ -874,7 +874,7 @@ describe('Salarios · el 10% de servicio SIN ASIGNAR', () => {
     const cartel = container.querySelector('.sal-nomap.is-stop')!
     const item = [...cartel.querySelectorAll('li')].find(li => li.textContent?.includes('VIEJO'))!
     expect(item.textContent).toContain('4 h')
-    expect(plano(item.textContent ?? '')).toContain(plano(`₡ ${(4_000).toLocaleString('es-CR')}`))
+    expect(plano(item.textContent ?? '')).toContain(plano(fi(4_000)))
     expect(item.textContent).toContain('no está en la grilla')
   })
 

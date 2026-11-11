@@ -12,7 +12,7 @@
   - mismo aspecto.
 - **Aceptación:** el diff es solo de JSX y textos; ningún cálculo cambia; los tests de ResumenSemanal y Ventas están verdes.
 
-## A2 · Ventas agrupado y con pestaña en la URL · `lista`
+## A2 · Ventas agrupado y con pestaña en la URL · `en revisión #111` (hecha por la sesión de revisión del 11-nov 10:50 con Ismael presente; la revisa la de las 15:40)
 - Pestaña activa en la URL: `/ventas?tab=<id>`. Entrar sin `tab` abre la misma pestaña de hoy para cada rol.
 - Agrupar según `PLAN.md`:
   - 7 entradas;

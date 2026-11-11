@@ -11,7 +11,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`2953994`** (09/11: merge del #71) | **PROD.** GitHub Pages (base `/satori-app/`). El #71 suma la 081 y la 082 v3 (ya aplicadas a mano en prod en el pase del puente del 09/11); Branching: «Supabase Preview» en success. |
+| `main` | **`c41e18b`** (10/11: merge del #107, tanda 092–095) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. Ledger de prod: **65 · 095**. |
 | `staging` | **`fb29872`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
 | `integracion/analitica-staging` | **`850a22f`** | ⚠️ Rama vieja, 123 commits atrás de `staging`. **No la publica Cloudflare** (lo de septiembre ya no vale: la rama de producción es `staging`). |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
@@ -228,11 +228,15 @@ solas tras un reinicio (validado el 29/10).
 4. Un número usado no se reutiliza aunque la rama se abandone. Las versiones son **texto**, como en el
    ledger: `0090` y `0095` son históricas y distintas de una futura `090` / `095`.
 
-**Orden previsto del pase a prod** (prod va hasta la **085** desde el 10/11):
+**Orden del pase a prod** (prod va hasta la **095** desde el 10/11): **085 ✅ → 089 ✅ → 090 ✅ → 091 ✅ → 092–095 ✅ (tanda, un merge) → sigue el Club (075 como 150 y 100 como 151).**
 1. ~~**081 → 082** (puente) primero, con su número.~~ **Hecho el 09/11** (pase del puente).
 2. ~~Después la **085** (SEC-01c), con su número: queda arriba de la 082.~~ **Hecho el 10/11** (#80, `bb12652`).
 3. Las que queden atrás (≤ al último de prod en su momento: la **083** y la **084**, la **075** del Club)
    toman **150+**, en el orden en que pasen.
+4. **Hecho el 10/11:** la **089** (#90, `fa1cbef`), la **090** (#97, `7543347`), la **091** (#103, `b8cb74d`) y la tanda
+   **092–095** (#107, `c41e18b`). Detalle en el §9 de cada PASE (`docs/pases/`).
+5. **Sigue el Club:** la 075 como **150** y la 100 como **151**. La MAINTAIN de `authenticated` va después de abrir el
+   Club, en el bloque 152+ (decisión del dueño).
 
 **Ya usados (antes de los bloques)**
 
@@ -248,13 +252,13 @@ solas tras un reinicio (validado el 29/10).
 | 085 | `rls_lectura_rol_activo` (SEC-01c) | caja | `main` (#80, 10/11) | staging (08/11) y **prod** (10/11 08:24:48 -06:00, Branching al mergear el #80, `bb12652`) |
 | 087 | `employee_edits_audit` (propuesta, sin firma) — **no se usa con este número: cuando esté lista va al bloque de pase (152+) con origen 087** (dueño, 10/11) | caja | `claude/employees-audit` | ninguna: propuesta |
 | 088 | `employees_recibe_reparto_cocina` (PROP-AUD-01, sin firma) — **no se usa con este número: cuando esté lista va al bloque de pase (152+) con origen 088** (dueño, 10/11) | caja | `claude/prop-aud-01` | ninguna |
-| 089 | `anon_sin_politica` | caja | `main` (#90, 10/11) | staging (09/11 08:27 CR) y **prod** (10/11 10:22:11 -06:00, Branching al mergear el #90, `fa1cbef`) |
-| 090 | `anon_privilegios_por_defecto` (firmada para staging) | caja | `claude/anon-default-privs` | **staging (09/11 08:28 CR)** |
-| 091 | `multilocal_fase0` (borrador, sin firma; va después de la 090) | caja | `claude/multilocal-fase0` | **staging (10/11 11:02 CR)** |
-| 092 | `employees_borrado_solo_owner` (R7-01, sin firma; va después de la 091) | caja | `claude/employees-borrado-owner` | **staging (10/11 11:03 CR)** |
-| 093 | `ventas_lectura_rol_activo` (Grok 126, sin firma; va después de la 092) | caja | `claude/ventas-lectura-rol-activo` | **staging (10/11 11:03 CR)** |
-| 094 | `anon_sin_maintain` (hallazgo del pase de la 089, sin firma; va después de la 093) | caja | `claude/anon-sin-maintain` | **staging (10/11 11:03 CR)** |
-| 095 | `contador_lee_caja` (decisión del dueño 10/11, sin firma; va después de la 094) | caja | `claude/contador-lee-caja` | **staging (10/11 11:03 CR)** |
+| 089 | `anon_sin_politica` | caja | `main` (#90, 10/11) | staging (09/11 08:27 CR) y **prod** (10/11 10:22:11 -06:00, Branching al mergear el #90, `fa1cbef`, 3 statements) |
+| 090 | `anon_privilegios_por_defecto` | caja | `main` (#97, 10/11) | staging (09/11 08:28 CR) y **prod** (10/11 11:33:38 -06:00, Branching al mergear el #97, `7543347`, 4 statements) |
+| 091 | `multilocal_fase0` | caja | `main` (#103, 10/11) | staging (10/11 11:02 CR) y **prod** (10/11 22:44:57 -06:00, Branching al mergear el #103, `b8cb74d`, 31 statements) |
+| 092 | `employees_borrado_solo_owner` | caja | `main` (#107, tanda 092–095, 10/11) | staging (10/11 11:03 CR) y **prod** (10/11 22:57:17 -06:00, Branching al mergear el #107, `c41e18b`, 12 statements) |
+| 093 | `ventas_lectura_rol_activo` | caja | `main` (#107, tanda 092–095, 10/11) | staging (10/11 11:03 CR) y **prod** (10/11 22:57:17 -06:00, Branching al mergear el #107, `c41e18b`, 7 statements) |
+| 094 | `anon_sin_maintain` | caja | `main` (#107, tanda 092–095, 10/11) | staging (10/11 11:03 CR) y **prod** (10/11 22:57:17 -06:00, Branching al mergear el #107, `c41e18b`, 3 statements) |
+| 095 | `contador_lee_caja` | caja | `main` (#107, tanda 092–095, 10/11) | staging (10/11 11:03 CR) y **prod** (10/11 22:57:17 -06:00, Branching al mergear el #107, `c41e18b`, 9 statements) |
 
 **Bloques**
 
@@ -268,7 +272,7 @@ solas tras un reinicio (validado el 29/10).
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
-| **PROD** | **58 filas** (10/11, según el pase de la 085; antes 57) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085` (**085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
+| **PROD** | **65 filas** (10/11, según el cierre de la tanda 092–095; antes 61 con la 091 y 60 con la 090) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085 · 089 · 090 · 091 · 092 · 093 · 094 · 095` (**092, 093, 094 y 095 el 10/11 22:57:17 -06:00, en UN merge del #107 (`c41e18b`), Branching las aplicó en orden: 12, 7, 3 y 9 statements; pase de la tanda cerrado**; **091 el 10/11 22:44:57 -06:00, Branching al mergear el #103 (`b8cb74d`), 31 statements; pase cerrado 22:51**; **090 el 10/11 11:33:38 -06:00, Branching al mergear el #97 (`7543347`), 4 statements; pase cerrado**; **089 el 10/11 10:22:11 -06:00, Branching al mergear el #90 (`fa1cbef`), 3 statements; pase cerrado**; **085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
 | **STAGING** | **90 filas** (10/11 11:03 CR: + 091, 092, 093, 094 y 095) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5); la 082 del puente está aplicada **sin su fila**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
 - **Próximo número libre: por bloque** (08/11): **CAJA / operación 096**, **CLUB SATORI + puente 100**. Ver «Numeración de migraciones» abajo. Antes de crear una migración, leer esa sección **en `main`** y registrar el número en el mismo PR.

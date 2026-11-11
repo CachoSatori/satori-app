@@ -1,6 +1,6 @@
 # Cola · Línea B (shell y estética)
 
-## B1 · Colores en un solo lugar, sin cambio visual · `en revisión #102`
+## B1 · Colores en un solo lugar, sin cambio visual · `en revisión #102` (aprobada por la revisión nocturna 11-nov 00:29; merge pendiente por permiso)
 - **Qué hay hoy:** `src/index.css` tiene varios bloques de variables (`--t-*` aparece repetido en tres lugares) y colores sueltos.
 - **Qué se hace:**
   - consolidar todo en un único `:root` con nombres semánticos: `--c-tinta`, `--c-gris`, `--c-linea`, `--c-panel`, `--c-oro`, `--c-oro-texto`, `--c-laca`, `--c-musgo`, más sus fondos;

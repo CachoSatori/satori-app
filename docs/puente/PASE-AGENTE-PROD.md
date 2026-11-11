@@ -1,6 +1,8 @@
 # Pase a PROD del AGENTE NUEVO del puente (pos-bridge `4d3513a` → `5da233a`)
 
-> **Estado: preparado, SIN ejecutar.** Formato de [`PASE-PROD-PLANTILLA.md`](PASE-PROD-PLANTILLA.md).
+> **Estado: EJECUTADO el 10-nov-2026 (agente `5da233a` en prod desde las 23:37:18 -06:00, al segundo intento). El cierre queda ABIERTO: faltan 5.2/5.4 y el cierre de caja del 11-nov. Bitácora en §9; las correcciones que dejó el pase están marcadas «corrección 10-nov».**
+>
+> Antes: preparado. Formato de [`PASE-PROD-PLANTILLA.md`](PASE-PROD-PLANTILLA.md).
 >
 > **Nada de este documento se ejecuta en prod hasta que el dueño lo firme (§9).** Si algo no coincide con lo que dice
 > acá, **se para y se avisa**: no se improvisa en prod. Claude no corre nada en prod.
@@ -75,6 +77,13 @@ versiones. Lo demás son tipos.
 | 0.5 | Node del agente y `npm.cmd` (no `npm`) | `node --version; Ok 'node'` · `npm.cmd --version; Ok 'npm'` |
 
 ## Consola (en cada una, antes que nada)
+**Notas de ejecución (corrección 10-nov, del pase real):**
+- **PowerShell ISE:** `git` y `npm` escriben a stderr, y con `$ErrorActionPreference = 'Stop'` el ISE corta el bloque
+  aunque el comando haya salido bien. En los bloques con comandos nativos (2.1, 2.3 y 2.5) se pone
+  `$ErrorActionPreference = 'Continue'` antes de correrlos y se vuelve a `'Stop'` después. Los `Ok '…'` y los `throw`
+  siguen frenando igual. En la consola normal de PowerShell no hace falta.
+- **El SQL va en el editor SQL de Supabase**, no en PowerShell (1.3 y §5).
+
 ```powershell
 $ErrorActionPreference = 'Stop'; Set-StrictMode -Version Latest
 function Ok([string]$que) { if ($LASTEXITCODE -ne 0) { throw "falló «$que» (código $LASTEXITCODE): NO SE SIGUE" } }
@@ -203,7 +212,8 @@ rollback;
 **Para** si: el cursor no late o tiene error; 1.1 o 1.2 cortan.
 
 ## 2. Preparar la carpeta nueva (con la tarea ANDANDO)
-**2.1 Clon en el SHA, con el árbol del agente verificado, y dependencias:**
+**2.1 Clon en el SHA, con el árbol del agente verificado, y dependencias** (en la raíz **y dentro de `pos-bridge\`**, que
+tiene su propio `package.json`):
 ```powershell
 $NUEVA = 'C:\satori\agente-prod-5da233a'
 if (Test-Path -LiteralPath $NUEVA) { throw "$NUEVA ya existe: revisarlo o borrarlo antes" }
@@ -216,11 +226,20 @@ if ($h -cne '5da233a516d1a6c4c2c95eb165be448be5416697') { throw 'la carpeta nuev
 $arbol = git -C $NUEVA rev-parse 'HEAD:pos-bridge'; Ok 'árbol pos-bridge'
 if ($arbol -cne '5600ebbd287559b23667f61c6e4c90181fa24b8e') { throw 'pos-bridge de la carpeta nueva no es el revisado' }
 Push-Location $NUEVA; try { npm.cmd ci; Ok 'npm ci' } finally { Pop-Location }
-"2.1 ok · carpeta nueva en 5da233a5… · pos-bridge $($arbol.Substring(0,12))… · dependencias instaladas"
+# Corrección 10-nov (hallazgo del pase): pos-bridge tiene su PROPIO package.json (mssql). Sin `npm.cmd ci` ahí adentro el
+# agente nuevo no arranca (LastTaskResult 1). Se instala y se comprueba que `mssql` carga DESDE pos-bridge.
+Push-Location (Carpeta (Join-Path $NUEVA 'pos-bridge')); try {
+  npm.cmd ci; Ok 'npm ci (pos-bridge)'
+  $m = node -e "import('mssql').then(() => console.log('si'), () => { console.log('no'); process.exit(1) })"; Ok "import('mssql') desde pos-bridge"
+  if ("$m".Trim() -cne 'si') { throw "mssql no carga desde pos-bridge: NO SE SIGUE" }
+} finally { Pop-Location }
+"2.1 ok · carpeta nueva en 5da233a5… · pos-bridge $($arbol.Substring(0,12))… · dependencias instaladas (raíz y pos-bridge) · mssql carga"
 ```
 
 **2.2 El `.env` del agente, copiado sin mostrarlo, y la firma del candado** (CLUB-AUD-32). Se copian los mismos archivos
-que tiene la carpeta de prod, idénticos byte a byte. La firma se agrega **solo** en la carpeta nueva:
+que tiene la carpeta de prod, idénticos byte a byte. La firma se agrega **solo** en la carpeta nueva. **Si la firma ya
+viene en el `.env` de prod, no es un error** (corrección 10-nov: en el pase real ya estaba, con fecha 2026-10-28): se
+anota su fecha y se sigue. El 2.3 prueba el candado con esa firma:
 ```powershell
 $VIEJA = Carpeta C:\satori\satori-app-prod; $NUEVA = Carpeta C:\satori\agente-prod-5da233a
 $copiados = @()
@@ -237,10 +256,15 @@ foreach ($e in @('.env', '.env.local', 'pos-bridge\.env')) {
 if (-not $copiados.Count) { throw 'no se encontró ningún .env en la carpeta de prod' }
 $f = Join-Path $NUEVA 'pos-bridge\.env'
 $prev = if (Test-Path -LiteralPath $f) { [IO.File]::ReadAllText($f) } else { '' }
-if ($prev -match '(?m)^\s*POS_AGENTE_PROD_FIRMADO\s*=') { throw 'la firma ya estaba en el .env nuevo' }
-$sep = if ($prev -and -not $prev.EndsWith("`n")) { "`r`n" } else { '' }
-[IO.File]::AppendAllText($f, "${sep}POS_AGENTE_PROD_FIRMADO=$(Get-Date -Format 'yyyy-MM-dd')`r`n", (New-Object Text.UTF8Encoding($false)))
-"2.2 ok · copiados idénticos: $($copiados -join ', ') · firma agregada en pos-bridge\.env de la carpeta nueva"
+$ya = [regex]::Matches($prev, '(?m)^\s*POS_AGENTE_PROD_FIRMADO\s*=\s*(\S*)')
+if ($ya.Count -gt 1) { throw 'la firma está más de una vez en el .env: revisarlo' }
+if ($ya.Count -eq 1) {
+  "2.2 ok · copiados idénticos: $($copiados -join ', ') · la firma YA VENÍA en el .env de prod (fecha $($ya[0].Groups[1].Value)): no se agrega otra; anotar la fecha en §9"
+} else {
+  $sep = if ($prev -and -not $prev.EndsWith("`n")) { "`r`n" } else { '' }
+  [IO.File]::AppendAllText($f, "${sep}POS_AGENTE_PROD_FIRMADO=$(Get-Date -Format 'yyyy-MM-dd')`r`n", (New-Object Text.UTF8Encoding($false)))
+  "2.2 ok · copiados idénticos: $($copiados -join ', ') · firma agregada en pos-bridge\.env de la carpeta nueva"
+}
 ```
 
 **2.3 El agente nuevo arranca con esta configuración y manda el MISMO secreto.** Se mide con el parser del propio agente:
@@ -277,6 +301,18 @@ if ($txtN -ceq $txtV) { throw 'el .cmd viejo no menciona C:\satori\satori-app-pr
 if ($txtN.Replace('C:\satori\agente-prod-5da233a', 'C:\satori\satori-app-prod') -cne $txtV) { throw 'el .cmd nuevo cambió algo más que la carpeta' }
 [IO.File]::WriteAllBytes($CMDN, $lat.GetBytes($txtN))
 "2.4 ok · $CMDN = $CMDV con la carpeta cambiada"
+```
+
+**2.5 Las dependencias del agente cargan desde la carpeta nueva** (corrección 10-nov). El candado del 2.3 no prueba que
+el agente pueda arrancar: en el pase real pasó el candado y el agente no arrancó, porque faltaba `mssql` en `pos-bridge\`.
+Justo antes del cambio se vuelve a comprobar, desde `pos-bridge\` de la carpeta nueva:
+```powershell
+$NUEVA = Carpeta C:\satori\agente-prod-5da233a
+Push-Location (Carpeta (Join-Path $NUEVA 'pos-bridge')); try {
+  $m = node -e "import('mssql').then(() => console.log('si'), () => { console.log('no'); process.exit(1) })"; Ok "import('mssql') desde pos-bridge (2.5)"
+  if ("$m".Trim() -cne 'si') { throw "mssql no carga desde pos-bridge: NO SE HACE EL CAMBIO" }
+} finally { Pop-Location }
+"2.5 ok · mssql carga desde pos-bridge de la carpeta nueva"
 ```
 
 ## 3. El cambio (la tarea queda detenida ~2 minutos)
@@ -390,19 +426,19 @@ if ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -ne 'Running') 
 ## 9. Firma y bitácora
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
-| Responsables (ejecución / control) | | |
+| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | 10-nov: firma del dueño sobre el PR #83 @ `a5a3104` (agente `5da233a`); el texto está en su conversación con Claude, fuera del repo. Restaurante cerrado |
+| Responsables (ejecución / control) | | el dueño, en la PC del PoS / la encargada |
 | 0.3 ensayo en staging con `5da233a` (fechas, un cierre de caja, 5.1–5.4 contra staging) | latido sin error · claves con fecha · campos nuevos en las C · cierre de caja con R→C | **Hecho (staging, solo lectura).** El agente de staging corre `5da233a` desde el **09-nov 16:01**. Cierre de caja de las **16:06:11**: 9 facturas pasaron de R a C. Cierre de las **23:07:08**: **32 facturas en C (112548–112583), 0 en R**; la **112548**, que a las 16:36 estaba en R, pasó a C. **Las 41 C del día traen `mesa_factura`, `consecutivo_fe` y `clave_fe`**; las **6 X** traen `mesa_factura` sin consecutivo (esperado). Claves de los pedidos abiertos con fecha (`pedido:2026-11-09:11`, 16:36). **Latido sin error** (23:19:40, cursor 112583). Revisiones del 09-nov a las 16:36 y a las 23:20 CR |
-| 1.1 tarea → `pos-agente-prod.cmd` (md5) · agente `4d3513a6…` limpio | | |
-| 1.2 entorno de la cuenta: «leído de» entero, sin `INGEST_`/`POS_` | | |
-| 1.3 cursor sano · campos nuevos en 0 · claves viejas | | |
-| 2.1 carpeta nueva `5da233a5…` · árbol `5600ebbd…` · `npm.cmd ci` | | |
-| 2.2 `.env` copiados idénticos (cuáles) · firma agregada | | |
-| 2.3 mismo archivo que manda y mismo largo (64) · candado OK | | |
-| 2.4 `.cmd` nuevo = viejo con la carpeta cambiada | | |
-| 3 `HORA_CAMBIO` · segundos detenida | | |
-| 4 latido · Edge sin `invalid` ni `401` | | |
-| 5 +15 / +30 / +45 / +60 (5.1–5.4) | | |
-| Cierre de caja: 5.2 con consecutivo y clave FE en las que pasaron a C | | |
-| Gate de CI en la cabeza del PR (o la aceptación explícita del dueño) | | |
-| Cierre: pasa / vuelta atrás | | |
+| 1.1 tarea → `pos-agente-prod.cmd` (md5) · agente `4d3513a6…` limpio | | ok: tarea → `C:\satori\pos-agente-prod.cmd`, md5 `71d7c1b0f875a817c563ea6e4ba05aea` · agente `4d3513a6` limpio · Running |
+| 1.2 entorno de la cuenta: «leído de» entero, sin `INGEST_`/`POS_` | | ok: cuenta SYSTEM (S-1-5-18), sin `INGEST_`/`POS_`; leído de máquina + `HKEY_USERS\S-1-5-18\Environment` |
+| 1.3 cursor sano · campos nuevos en 0 · claves viejas | | cursor 112615, latiendo (40 s) sin error · cerradas en 24 h: 29, campos nuevos 0 · pedidos abiertos 0 (restaurante cerrado) |
+| 2.1 carpeta nueva `5da233a5…` · árbol `5600ebbd…` · `npm.cmd ci` | | ok: `5da233a5`, árbol `5600ebbd`, `npm ci` en la raíz. **Faltó el `npm ci` dentro de `pos-bridge\`** (el paquete no lo pedía): ver el paso 3 |
+| 2.2 `.env` copiados idénticos (cuáles) · firma agregada | | `pos-bridge\.env` copiado idéntico. **La firma `POS_AGENTE_PROD_FIRMADO` ya existía en el `.env` de prod (2026-10-28):** no se agregó otra (el bloque frenó por su guarda anti-duplicado) |
+| 2.3 mismo archivo que manda y mismo largo (64) · candado OK | | ok: mismo archivo, largo 64; el candado pasa con la firma del 28-oct |
+| 2.4 `.cmd` nuevo = viejo con la carpeta cambiada | | ok |
+| 3 `HORA_CAMBIO` · segundos detenida | | **Primer intento (23:32): el agente nuevo no arrancó** (`LastTaskResult` 1). **Vuelta atrás §6 ok a las 23:33:24**; el agente viejo latió a los 44 s. Causa: faltaba `npm ci` dentro de `pos-bridge\` (`mssql` sin instalar). Se corrió ahí (`mssql` antes: no; después: sí). **Segundo intento: ok**, detenida 21 s, `HORA_CAMBIO` **2026-11-10 23:37:18 -06:00** |
+| 4 latido · Edge sin `invalid` ni `401` | | dos latidos sin error (23:39:58 y 23:42:31); `last_factura` 112615 (sin ventas). **Logs del Edge: no revisados** |
+| 5 +15 / +30 / +45 / +60 (5.1–5.4) | | **pendiente:** 5.2 y 5.4 el 11-nov, con las primeras facturas |
+| Cierre de caja: 5.2 con consecutivo y clave FE en las que pasaron a C | | **pendiente:** el cierre de caja del 11-nov |
+| Gate de CI en la cabeza del PR (o la aceptación explícita del dueño) | | no informado a esta sesión |
+| Cierre: pasa / vuelta atrás | | **el agente nuevo corre en prod desde el 10-nov 23:37:18.** El cierre queda **abierto** hasta 5.2/5.4 y el cierre de caja del 11-nov |

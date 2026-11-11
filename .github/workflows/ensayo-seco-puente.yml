@@ -9,7 +9,7 @@
 name: ensayo-seco-puente
 on:
   push:
-    branches: [claude/pase-puente-resultado-2026-11-09, claude/puente-120-121, claude/pase-agente-nuevo]
+    branches: [claude/pase-puente-resultado-2026-11-09, claude/puente-120-121, claude/pase-agente-nuevo, claude/pase-agente-resultado]
     paths:
       - docs/puente/PASE-PROD-PLANTILLA.md
       - docs/puente/PASE-PROD-2026-11-09.md

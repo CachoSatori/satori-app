@@ -54,7 +54,7 @@ $F081RB = $utf8.GetBytes("-- rollback 081 FICTICIO`n")
 $FINDEX = $utf8.GetBytes("// index.ts FICTICIO del Edge v1`n")
 $FMAPA = $utf8.GetBytes("// armar_mapa_secretos.mjs FICTICIO (ensayo en seco)`n")
 $MD5_081 = Md5DeBytes $F081; $MD5_082 = Md5DeBytes $F082; $MD5_081RB = Md5DeBytes $F081RB; $MD5_MAPA = Md5DeBytes $FMAPA
-$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; fmapa = $FMAPA; cli = '2.122.0'; tarea = 'Running'; secretos = @{}; cmd = $null; cuenta = 'SYSTEM'; corto = $false; arbol_mal = $false; medir_distinto = $false
+$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; fmapa = $FMAPA; cli = '2.122.0'; tarea = 'Running'; secretos = @{}; cmd = $null; cuenta = 'SYSTEM'; corto = $false; arbol_mal = $false; medir_distinto = $false; mssql_falta = $false
                  raiz = $null; prod_no_para = $false; prod_huerfano = $false; dormidas = 0; cerrados = @() }
 
 # ── Dobles de los comandos (las funciones le ganan a los .exe en PowerShell) ─────────────────────────────────────
@@ -109,6 +109,8 @@ function supabase {
 function node {
   $a = @($args); $global:LASTEXITCODE = 0
   if ($global:KIT.node_falla) { $global:LASTEXITCODE = 1; return }
+  # 10-nov (pase del agente): `node -e "import('mssql')…"` desde pos-bridge. Doble: carga salvo que el kit lo haga faltar.
+  if ($a -contains '-e') { if ($global:KIT.mssql_falta) { $global:LASTEXITCODE = 1; 'no' } else { 'si' }; return }
   if ($a -contains '--solo-medir' -and $global:KIT.medir_distinto -and ([string]$a[[array]::IndexOf($a, '--agente') + 1] -like '*agente-prod-*')) { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":63,"cumple_32":true}'; return }
   if ($a -contains '--solo-medir') { if ($global:KIT.corto) { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":20,"cumple_32":false}' } else { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":64,"cumple_32":true}' }; return }
   $salida = [string]$a[[array]::IndexOf($a, '--salida') + 1]
@@ -193,7 +195,7 @@ try {
   function Frena([string]$caso, [int]$nBloque, [string]$espera, [scriptblock]$preparar) {
     $r2 = Join-Path ([IO.Path]::GetTempPath()) ("satori-ensayo-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
     New-Item -ItemType Directory -Force $r2 | Out-Null; Preparar-Agente $r2
-    $global:KIT.falla_git = $null; $global:KIT.huella_mal = $false; $global:KIT.node_falla = $false; $global:KIT.f082 = $F082; $global:KIT.fmapa = $FMAPA; $global:KIT.cli = '2.122.0'; $global:KIT.tarea = 'Running'; $global:KIT.corto = $false; $global:KIT.cuenta = 'SYSTEM'; $global:KIT.arbol_mal = $false; $global:KIT.medir_distinto = $false
+    $global:KIT.falla_git = $null; $global:KIT.huella_mal = $false; $global:KIT.node_falla = $false; $global:KIT.f082 = $F082; $global:KIT.fmapa = $FMAPA; $global:KIT.cli = '2.122.0'; $global:KIT.tarea = 'Running'; $global:KIT.corto = $false; $global:KIT.cuenta = 'SYSTEM'; $global:KIT.arbol_mal = $false; $global:KIT.medir_distinto = $false; $global:KIT.mssql_falta = $false
     $global:KIT.prod_no_para = $false; $global:KIT.prod_huerfano = $false; $global:KIT.dormidas = 0
     try {
       . ([scriptblock]::Create((Preparar $bloques[0] $r2)))          # el preámbulo fail-stop
@@ -235,6 +237,7 @@ try {
     Frena 'agente 1.1: la tarea corre otro .cmd' $nA11 'la tarea no corre' { param($r) $global:KIT.cmd = Join-Path $r 'otro.cmd'; [IO.File]::WriteAllText($global:KIT.cmd, "@echo off`r`n", $utf8) }
     Frena 'agente 2.1: la carpeta nueva ya existe' $nA21 'ya existe' { param($r) New-Item -ItemType Directory -Force (Join-Path $r 'agente-prod-5da233a') | Out-Null }
     Frena 'agente 2.1: el árbol de pos-bridge no es el revisado' $nA21 'no es el revisado' { param($r) $global:KIT.arbol_mal = $true }
+    Frena 'agente 2.1 (10-nov): mssql no carga desde pos-bridge (faltó npm ci ahí adentro)' $nA21 'mssql' { param($r) $global:KIT.mssql_falta = $true }
     Frena 'agente 2.3: la carpeta nueva manda otro secreto' $nA23 'no manda el mismo secreto' { param($r) $global:KIT.medir_distinto = $true }
     Frena 'agente 3: el .cmd viejo cambió desde 1.1' $nA3 'cambió desde 1.1' { param($r) [IO.File]::AppendAllText((Join-Path $r 'pos-agente-prod.cmd'), "rem cambio`r`n", $utf8) }
     # hallazgo del pase (09-nov, 4.1): el agente de STAGING corre en la misma PC con la misma línea de comando

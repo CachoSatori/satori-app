@@ -65,10 +65,10 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.5 | El paquete (este PR) y el plan B de club-web (#98, el Worker, con el binding activo) mergeados en el #59 (el #98 **antes del miércoles**, para crear el Worker), y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.6 | Checks del #59 en verde: `supabase/migraciones.test.ts` (150 y 151 registradas con su origen), vitest y build | checks del PR |
 | 0.7 | Staging en verde con estos mismos archivos (§3), **el día del pase** | anotado |
-| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov; pasos en §11.1): proyecto de Pages `satori-club` con la rama de producción `main` y sin previews; variables de §11.1; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3). El DNS queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). El plan B va activo desde el merge: el Worker `satori-club-api` se crea **el miércoles** con un `wrangler deploy` **manual** desde la rama del #59, **sin** repositorio conectado ni despliegues automáticos; se conecta a `main` después del merge (§11.4 paso 7, corte bloqueante) | §10 |
+| 0.8 | **✅ Cumplido (11-nov).** Pages `satori-club` (rama de producción `main`, sin previews, variables de §11.1) y **Turnstile de prod** (10-nov); el dominio queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). **Worker `satori-club-api`** desplegado **a mano** con `wrangler deploy` desde el #59 @ `66c950d` (Version `ae142f3a…`), **sin** rutas ni `workers.dev` ni repositorio conectado, con `RL_CREAR` y `RL_LEER` y sus 4 variables apuntando a **prod** (`SUPABASE_URL`, `SUPABASE_ANON_KEY`; `TURNSTILE_SECRET` y `CLUB_WEB_KEY` como Secret). **`CLUB_WEB_KEY` de prod creada el 11-nov y cargada en el Worker y en Pages**; su sha256 lo tiene el dueño y va a la base el jueves, **después de la 150** (§6.3 paso 2). Ningún valor en este documento. **Falta una cosa (§11.4 paso 4b):** volver a desplegar el Worker, a mano, desde la **cabeza nueva del #59** (la que se firma): el #93 cambió `club-web/functions/_lib/api.js` (la baja por POST, Grok 183), y el Worker corre ese código | §10 |
 | 0.9 | G-61 «antes» hecho y sus diferencias esperadas **firmadas en este PR** (`scripts/sql/gate61_esperadas.txt`) | §1.5 |
-| 0.10 | Si los anfitriones de hoy tienen que entrar con su saldo a la prueba interna: export de Firestore depurado (sin papel por defecto) y, firmados por el dueño **antes del jueves**, el sha256 de `carga.sql` **y** los esperados de los restos (`vencimientos_restos` y `vencimientos_restos_personas`, Grok 171; la carga exige la base vacía, §6.5) | §10 |
-| 0.11 | El agente nuevo del puente (#83) en prod desde el mié 11-nov por la mañana. **Recomendado, no bloquea** | anotado |
+| 0.10 | **✅ Cumplido (11-nov, firmado a las 10:14).** `carga.sql` sha256 **`150f0c8e5ba0de07369bd42f0e52866aa905628549c40696c58ae6817d6b461f`**, emitido con el código de `d6c117b` desde el export final del 10-nov 15:46; esperados de los restos firmados **115 / 174** (`vencimientos_restos` / `vencimientos_restos_personas`, Grok 171); sin papel; ensayo en staging OK (`guardado: false`). Los archivos, fuera del repo. Se aplica el jueves con `aplicar-firmado`, sobre la base del Club **vacía** y antes de la prueba interna (§6.5) | §10 |
+| 0.11 | **✅ Cumplido.** El agente nuevo del puente (#83) en prod (11-nov). Era recomendado, no bloqueaba | anotado |
 
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
 Editor SQL de PROD. **Leer el ref en pantalla.** Anotar cada resultado en §10.
@@ -341,13 +341,13 @@ Cada alta siembra sus marcadores de descuento (856 y 857) y la promoción «Loca
 **6.2 Dominio del Club:** `update public.club_config_global set club_url = 'https://club.satoricostarica.com';`
 (el mismo de `VITE_CLUB_URL` de club-web). Verificar: `select club_url from public.club_config_global;`.
 
-**6.3 Clave de club-web (se carga hoy, el día del pase):**
-1. El dueño genera una clave **nueva de prod** en su PC (nunca la de staging) y la carga en Cloudflare → Pages
-   `satori-club` (producción) → Settings → Variables and Secrets → **Secret** `CLUB_WEB_KEY`. **Nunca por chat.**
+**6.3 Clave de club-web (la clave ya está en Pages y en el Worker desde el 11-nov; hoy va su sha256 a la base):**
+1. ✅ (11-nov) El dueño generó la clave **nueva de prod** en su PC (nunca la de staging) y la cargó como **Secret**
+   `CLUB_WEB_KEY` en Pages `satori-club` (producción) y en el Worker `satori-club-api`. **Nunca por chat.**
 2. En el editor SQL de prod: `select public.club_web_clave_cargar('<sha256 de la clave>');` (el sha256, nunca la clave).
 3. Volver a desplegar `satori-club` (los Secrets toman efecto en el próximo deploy).
-4. **Plan B (activo desde el merge, §11.4 paso 6):** la misma clave también como Secret `CLUB_WEB_KEY` del Worker
-   `satori-club-api`. En Pages queda igual, para poder volver al plan A sin esperar.
+4. **Plan B (activo desde el merge, §11.4 paso 6):** ✅ la misma clave ya está como Secret `CLUB_WEB_KEY` del Worker
+   `satori-club-api` (11-nov). En Pages queda igual, para poder volver al plan A sin esperar.
 
 Verificar: `/api/salud` → todo en `true` (`club_web_key` y `turnstile` incluidos). Una llamada directa a
 `/rest/v1/rpc/club_cupon_crear` con la anon key y sin el header responde «Código no válido».
@@ -476,9 +476,10 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | Responsables (ejecución / control) | | |
 | 0.4 la 091–095 en prod | ledger 65 · 095 | ✅ 10-nov noche (lo informó el dueño): 091 por el merge `b8cb74d` (pase cerrado), 092–095 por el merge `c41e18b`; ledger 65 · 095 |
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | |
-| 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` creado el miércoles con `wrangler deploy` manual (SHA de la rama del #59), sin repositorio conectado, sin URL pública, con sus variables (§11.4) | | |
+| 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` con `wrangler deploy` manual, sin repositorio conectado, sin URL pública, con sus variables (§11.4) · `CLUB_WEB_KEY` en Pages y en el Worker | | ✅ 11-nov: Worker desde `66c950d` (Version `ae142f3a…`), 4 variables a prod; `CLUB_WEB_KEY` creada y cargada en los dos |
+| §11.4 paso 4b · Worker otra vez a mano desde la cabeza firmada (SHA, Version nueva) | | |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | | |
-| 0.10 carga única: export, sha256 de `carga.sql` y esperados de restos (N y personas) firmados (o «la prueba va sin carga») | | |
+| 0.10 carga única: export, sha256 de `carga.sql` y esperados de restos (N y personas) firmados (o «la prueba va sin carga») | | ✅ 11-nov 10:14: sha256 `150f0c8e…6b461f`, esperados 115 / 174, ensayo en staging OK |
 | 1.1 ledger: 65 · 095 · 089–095 presentes · nada del Club (Grok 181) | 65 · 095 | |
 | 1.2 0 · 0 · 0 | | |
 | 1.3 true · true · true · 2 · 2 · false · true · 3 · true · pgcrypto · pg_cron | | |
@@ -582,7 +583,12 @@ a la rama del #59: una rama de trabajo conectada desplegaría sola con cada push
    uno, desconectarlo). Así nada lo vuelve a desplegar hasta el paso 7.
 4. En la salida del deploy tienen que aparecer `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)`. En Settings →
    **Domains & Routes**: sin rutas y **sin** la URL `*.workers.dev` (si aparece encendida, apagarla). Anotar en §10 el SHA
-   del paso 1 y la hora.
+   del paso 1 y la hora. ✅ Hecho el 11-nov desde `66c950d` (Version `ae142f3a…`).
+4b. **Antes del merge (mié 11 a la noche o jue 12 temprano), otra vez a mano y desde la cabeza que se firma.** Lo mismo
+   que los pasos 1 a 4, con `git checkout <cabeza firmada del #59>`. Motivo: el #93 entró al #59 después del primer
+   despliegue y cambia `club-web/functions/_lib/api.js` (la baja por POST con la llave en el cuerpo, Grok 183), que es el
+   código que corre el Worker. Sin esto, entre el merge y el paso 7 la página nueva le pediría al Worker una ruta que no
+   tiene. Las variables no se tocan (`keep_vars = true`). Anotar en §10 el SHA y la Version nueva.
 5. Worker → Settings → **Variables and Secrets** (Production), los mismos valores que en Pages:
 
 | Nombre | Tipo | Cuándo |
@@ -595,8 +601,8 @@ a la rama del #59: una rama de trabajo conectada desplegaría sola con cada push
    El `wrangler.toml` del Worker tiene `keep_vars = true`: un deploy nuevo no borra estas variables.
 
 **Jueves:**
-6. Con la clave nueva de prod de §6.3 (la misma que va en Pages): Worker → Settings → Variables and Secrets → **Secret**
-   `CLUB_WEB_KEY`. **Nunca por chat.** Si el panel lo pide, **Deploy**.
+6. ✅ (11-nov, adelantado) Con la clave nueva de prod de §6.3 (la misma de Pages): Worker → Settings → Variables and
+   Secrets → **Secret** `CLUB_WEB_KEY`. **Nunca por chat.**
 7. **Después del merge del #59 — CORTE BLOQUEANTE (§10):** Worker → Settings → **Build** → **Connect** → `satori-app`, rama
    de producción **`main`**, Root directory **`club-web/worker`**, Build command vacío, Deploy command **`npx wrangler
    deploy`**, y **Deploy** una vez desde `main`. En el log, los dos `ratelimit`; en Variables, las 4 siguen (`keep_vars`).

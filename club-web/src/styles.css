@@ -83,3 +83,7 @@ details summary { cursor: pointer; font-weight: 700; min-height: 44px; display: 
        border-radius: 10px; font: 600 1rem var(--sans); cursor: pointer; }
 .tab[aria-selected='true'] { background: var(--ink); color: var(--gold); border-color: var(--ink); }
 .socio-qr canvas { display: block; width: min(240px, 70vw); height: auto; margin: 0.5rem auto; }
+/* (11-nov) el link del anfitrión para WhatsApp */
+.portal-qr h3 { margin: 1.2rem 0 0.2rem; font-size: 1.05rem; }
+.portal-qr input.link { margin: 0.4rem 0 0.5rem; font-size: 0.9rem; }
+.portal-qr .fila + .fila { margin-top: 0.5rem; }

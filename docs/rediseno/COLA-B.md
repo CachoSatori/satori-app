@@ -46,7 +46,7 @@
 ---
 ### Tanda 2 · Auditoría y estilo en los módulos (decidido por Ismael el 11-nov 15:15)
 
-## B5 · Inicio que nunca dice «Todo en orden» sin comprobar · `en revisión #119`
+## B5 · Inicio que nunca dice «Todo en orden» sin comprobar · `hecha` (merge #119 a `staging` el 11-nov 16:02)
 - **Auditoría 196:** en `src/pages/HomePage.tsx`, primero escribí en el reporte qué pasa en pantalla cuando falla cada lectura de la alerta y de `fetchHomeStatus`. Después:
   - estado de error: si alguna señal falló, la frase es «No se pudo comprobar todo — revisá Caja», con una píldora oro «sin comprobar» que abre `/caja`. **Nunca** «Todo en orden» ni el Daruma si algo falló;
   - en `fetchHomeStatus`, las lecturas rechazadas se marcan como «sin comprobar» en vez de quedar en 0;
@@ -55,12 +55,12 @@
 - No cambiar qué se consulta. Tests de render para cada falla.
 - **Aceptación:** tests verdes; guía 6.1; link de vista previa.
 
-## B5b · Alerta del Inicio una vez por sesión · `en revisión #119` (la línea B la sumó al PR de B5 antes de ver la separación: commit `457e58f`, aparte, con sus tests; si la revisión la quiere en otro PR, lo pide como `cambios pedidos #119`)
+## B5b · Alerta del Inicio una vez por sesión · `hecha` (entró en el mismo PR que B5, #119, commit `457e58f`)
 - **Auditoría 197 (aprobada por Ismael el 11-nov 15:55, excepción a «no cambiar consultas» solo en *cuándo*):** la alerta de días sin cierre se lee **una vez por sesión** (en memoria del módulo o `sessionStorage`; se reusa hasta cerrar la app o recargar) y los otros pendientes se pintan sin esperarla. Mismas funciones con los mismos argumentos; no cambiar qué se consulta ni cómo se calcula. Si la lectura falló, no se guarda: se reintenta en la próxima visita (y vale el estado «sin comprobar» de 196).
 - Tests: segunda visita al Inicio no vuelve a llamar las tres funciones de la alerta; una lectura fallida sí se reintenta.
 - **Aceptación:** tests verdes; guía 6.1; link de vista previa.
 
-## B6 · Cáscara y clases de módulo con estilo carta · `pendiente` (después de B5b) · validación visual
+## B6 · Cáscara y clases de módulo con estilo carta · `lista` · validación visual
 - **Mayúsculas:** sacar `text-transform: uppercase` del menú (`AppShell.css`), del Inicio y de las clases de módulo de `index.css` (`.vt-nav-tab`, `.shell-grupo-titulo`, `.login-btn` y las 93 de `index.css`), con letra de 44 px de alto donde sea pestaña o botón (auditoría 201).
 - **Barras y paneles oscuros:** `.vt-module`, `.vt-module-header`, `.vt-nav-tabs`, `.module-header` y las clases de Caja, Propinas e Inventario pasan a fondo blanco con filete de oro, texto en tinta; pestaña activa en `--c-oro-texto`.
 - **Botones secundarios** (`--gray-pale`, auditoría 204): borde `var(--c-linea)`, fondo transparente, texto tinta (`App.tsx`, `src/pages/auth/CambiarPasswordInicial.tsx`, `src/shared/ErrorBoundary.tsx`).

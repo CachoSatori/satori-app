@@ -15,6 +15,7 @@ import './styles.css'
 import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
+import { linkAnfitrion, lugarDelMensaje, mensajeWhatsapp, urlWhatsapp } from './compartir'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -288,8 +289,40 @@ function seccionCanje(token: string, via: 'portal' | 'pase' = 'portal'): HTMLEle
   return sec
 }
 
+/**
+ * (11-nov, modo transición) El link del anfitrión para WhatsApp (check-in de Airbnb): lo MISMO que codifica su QR
+ * (`/r/<código>`), nunca el link de este portal. «Copiar link» y un botón de WhatsApp por idioma del huésped.
+ */
+function seccionLink(codigo: string, locales: LocalPub[] | null): HTMLElement[] {
+  const link = linkAnfitrion(CLUB_BASE_URL, codigo)
+  if (!link) return []
+  const lugar = lugarDelMensaje(locales)
+  const campo = h('input', { type: 'text', id: 'p-link', class: 'link', readonly: true, value: link, 'aria-label': t.portal_link }) as HTMLInputElement
+  campo.addEventListener('focus', () => campo.select())
+  const estado = h('p', { class: 'sub', role: 'status' })
+  const copiar = h('button', { type: 'button', class: 'btn sec' }, t.copiar_link)
+  copiar.addEventListener('click', async () => {
+    let ok = false
+    try { await navigator.clipboard.writeText(link); ok = true } catch { /* sin permiso o sin API: se selecciona el campo */ }
+    if (!ok) { campo.focus(); campo.select() }
+    estado.textContent = ok ? t.link_copiado : t.link_no_copiado
+    anunciar(estado.textContent)
+  })
+  const wa = (idiomaMsj: 'es' | 'en', rotulo: string) => h('a', { class: 'btn sec', target: '_blank', rel: 'noopener noreferrer',
+    href: urlWhatsapp(mensajeWhatsapp(idiomaMsj, LOCAL.nombre, lugar, link)) }, rotulo)
+  return [
+    h('h3', {}, t.portal_link),
+    h('p', { class: 'sub' }, t.portal_link_ayuda),
+    campo,
+    h('div', { class: 'fila' }, copiar),
+    h('div', { class: 'fila' }, wa('es', t.whatsapp_es), wa('en', t.whatsapp_en)),
+    estado,
+  ]
+}
+
 async function paginaPortal(token: string) {
-  const r = await api<Portal>(`portal/${token}`)
+  // (11-nov) los locales encendidos, solo para nombrar el lugar en el mensaje de WhatsApp (LC-ML); si falla, sin lugar
+  const [r, locs] = await Promise.all([api<Portal>(`portal/${token}`), api<LocalPub[]>('locales')])
   if (!r.ok) return pintar(h('h1', {}, t.inicio), avisoEl('err', msgError(r.error)))
   const p = r.data
   const canvas = await qr(urlReferente(p.codigo), `QR ${p.codigo}`)
@@ -318,6 +351,7 @@ async function paginaPortal(token: string) {
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
       h('p', {}, t.portal_indicaciones),
       h('div', { class: 'fila' }, compartir, descargar),
+      ...seccionLink(p.codigo, locs.ok && Array.isArray(locs.data) ? locs.data : null),
     ),
     h('section', { class: 'tarjeta' },
       h('h2', {}, t.historial),

@@ -103,7 +103,7 @@
 5. **🖊️ Umbrales del ICP** (hoy ≥13 % excelente, 10–13 % bueno, <10 % a mejorar): recalibrar contra el histórico
    real, que da **5–9 %**. Con el PoS, el ICP del equipo de octubre es 10,6 %. *(Nuevo, 30/10.)*
 6. **Usuarios de la app para RODRI, FRANCO y MAXI BARRA** (barmans activos sin perfil de login). El perfil
-   «NACHO» (`satorisushibarnacho@gmail.com`) es la cuenta de prueba del dueño, sin empleado vinculado a
+   «NACHO» es la cuenta de prueba del dueño, sin empleado vinculado a
    propósito: no hay nada que decidir. *(Nuevo, 29–30/10; corregido 30/10.)*
 7. **👁️ El deploy de #16 quedó en `waiting`** (job `deploy` del run #247: creado 17:42, arrancó 17:55 UTC). En
    GitHub Actions eso es una regla de protección del environment `github-pages` (aprobación o temporizador). El

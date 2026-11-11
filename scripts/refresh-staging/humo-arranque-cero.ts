@@ -11,14 +11,16 @@
 // borran en `finally` — la base tiene que quedar VACÍA pase lo que pase.
 
 import { leerDeStaging, escribirEnStaging, token, verificarRefs } from './gate.ts'
-import { loadEnv } from '../t0-reconciliacion-cajas/env.ts'
+import { correoOwner, loadEnv } from '../t0-reconciliacion-cajas/env.ts'
 import { esc } from './lib.ts'
 import { saldoTarjetaEfectivo } from '../../src/modules/cash/tarjetaPozo.ts'
 import { propinasPorPagarDe } from '../../src/modules/cash/propinaPago.ts'
 import type { CashMovement, CashSession } from '../../src/shared/types/database.ts'
 
 verificarRefs()
-const tok = token(loadEnv())
+const env = loadEnv()
+const tok = token(env)
+const OWNER_EMAIL = correoOwner(env)
 const MARCA = 'HUMO-ARRANQUE-CERO'
 const fi = (n: number) => '₡' + n.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -59,7 +61,7 @@ async function insertar(p: {
         description, subcategory, supplier_id, supplier_name, employee_name, shift, caja_origen,
         method, status)
      values (null,
-       (select id from public.profiles where email = 'satorisushibar@gmail.com' limit 1),
+       (select id from public.profiles where email = '${OWNER_EMAIL}' limit 1),
        ${esc(p.tipo)}, ${p.crc}, ${p.usd ?? 0}, 'CRC', null,
        ${esc(`${MARCA} · ${p.etiqueta}`)}, ${esc(p.subcategory ?? 'Prueba')},
        null, '', '', '', ${esc(p.caja)}, ${esc(p.method)}, 'aprobado')`,

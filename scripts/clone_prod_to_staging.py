@@ -25,15 +25,17 @@ Qué hace:
 NO clona: Storage (bucket documents — las fotos no estarán en staging) ni auth
 config (ya difiere a propósito: autoconfirm/site_url).
 """
-import json, os, subprocess, sys, time
+import json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 
 PROD_REF = "yiczgdtirrkdvohdquzf"   # SOLO LECTURA
 STG_REF  = "hwiatgicyyqyezqwldia"   # único destino de escritura
-OWNER_EMAIL = "satorisushibar@gmail.com"
+OWNER_EMAIL = os.environ.get("SATORI_OWNER_EMAIL", "").strip()  # repo público: por configuración
 TAG = "$satori_clone$"
 
 TOKEN = os.environ.get("SUPABASE_ACCESS_TOKEN", "")
+if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", OWNER_EMAIL):
+    sys.exit("ABORT: falta SATORI_OWNER_EMAIL (o no es un correo válido) en el entorno.")
 if not TOKEN:
     sys.exit("ABORT: falta SUPABASE_ACCESS_TOKEN en el entorno.")
 if STG_REF == PROD_REF:

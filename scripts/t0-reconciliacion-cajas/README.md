@@ -192,3 +192,13 @@ Si alguna falla, **aborta sin generar el reporte** (mejor nada que un número qu
 
 En `analisis.ts`, arriba del todo: `TOLERANCIA_CRC` (₡500), `VENTANA_PROPINA_DIAS` (±3 días) y
 `FECHAS_NO_CONFIABLES` (los días con turnos ficticios de prueba en staging).
+
+## Correo del owner (configuración)
+
+Los scripts que necesitan el perfil del owner (`refresh-staging/seed-apertura.ts`, `humo-arranque-cero.ts`,
+`prueba-viva-tarjeta.ts`, `t0-reconciliacion-cajas/prod-asiento-arranque.ts` y `clone_prod_to_staging.py`) leen
+el correo de `SATORI_OWNER_EMAIL` (`.env.local` o entorno). Sin esa variable abortan antes de escribir.
+Repo público: el correo no se escribe en el código.
+
+En la app, el ejemplo de alias para empleados sin correo propio sale de `VITE_CORREO_LOCAL` (variable del build);
+sin configurar, la pantalla muestra el marcador `correo-del-local+nombre@…`.

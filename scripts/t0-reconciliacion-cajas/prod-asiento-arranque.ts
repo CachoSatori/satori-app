@@ -21,7 +21,7 @@
 // Conteos y huella del ledger ANTES y DESPUÉS. Exige +1 fila EXACTA en cash_movements, 0
 // cambios en cash_sessions / cash_cierres_dia, y que la huella difiera SOLO en la fila nueva.
 
-import { loadEnv, mgmtToken, REF_PROD, REF_STAGING } from './env.ts'
+import { correoOwner, loadEnv, mgmtToken, REF_PROD, REF_STAGING } from './env.ts'
 
 const REF_PROD_CLAVADO = 'yiczgdtirrkdvohdquzf'
 const FIRMA_REQUERIDA = '2026-07-22'
@@ -34,6 +34,7 @@ const USD = 3441
 const fi = (n: number) => '₡' + n.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const env = loadEnv()
+const OWNER_EMAIL = correoOwner(env)
 
 // Candado 1 · firma
 const firma = (env.T0_PROD_FIRMADO || '').trim()
@@ -109,7 +110,7 @@ await sql(
       description, subcategory, supplier_id, supplier_name, employee_name, shift, caja_origen,
       method, status, created_at, updated_at)
    values (null,
-     (select id from public.profiles where email = 'satorisushibar@gmail.com' limit 1),
+     (select id from public.profiles where email = '${OWNER_EMAIL}' limit 1),
      'ingreso', ${CRC}, ${USD}, 'CRC', null, '${DESC}', 'Apertura pozo',
      null, '', '', '', 'Caja Fuerte', 'Efectivo', 'aprobado',
      '2026-07-22T12:00:00+00', '2026-07-22T12:00:00+00')`, false)

@@ -10,7 +10,7 @@
 // Escribe la misma fila que `recordAperturaPozo` de src/shared/api/cash.ts —  mismo
 // subcategory, misma descripción, misma caja, mismo método — y es idempotente por descripción.
 
-import { loadEnv } from '../t0-reconciliacion-cajas/env.ts'
+import { correoOwner, loadEnv } from '../t0-reconciliacion-cajas/env.ts'
 import { escribirEnStaging, leerDeStaging, token, verificarRefs } from './gate.ts'
 import { esc } from './lib.ts'
 
@@ -26,7 +26,9 @@ async function main(): Promise<void> {
   verificarRefs()
   const fecha = arg('--fecha')
   if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error('Falta --fecha AAAA-MM-DD (el día del corte)')
-  const tok = token(loadEnv())
+  const env = loadEnv()
+  const tok = token(env)
+  const OWNER_EMAIL = correoOwner(env)
 
   const [ultimo] = (await leerDeStaging(
     `select session_date,
@@ -52,7 +54,7 @@ async function main(): Promise<void> {
         description, subcategory, supplier_id, supplier_name, employee_name, shift, caja_origen,
         method, status)
      values (null,
-       (select id from public.profiles where email = 'satorisushibar@gmail.com' limit 1),
+       (select id from public.profiles where email = '${OWNER_EMAIL}' limit 1),
        'ingreso', ${crc}, ${usd}, 'CRC', null, ${esc(desc)}, 'Apertura pozo',
        null, '', '', '', 'Caja Fuerte', 'Efectivo', 'aprobado')`,
     tok,

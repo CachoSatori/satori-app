@@ -11,7 +11,7 @@
   - el diff es solo CSS;
   - el reporte lista cuántos colores sueltos quedaron sin pasar a variable.
 
-## B2 · Valores del diseño C · `lista` · validación visual
+## B2 · Valores del diseño C · `en revisión #112` · validación visual
 - **Qué se hace:**
   - cambiar los valores de las variables por los del `PLAN.md`;
   - fondo blanco;

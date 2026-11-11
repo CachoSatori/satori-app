@@ -84,7 +84,7 @@
 5. **🖊️ Umbrales del ICP** (hoy ≥13 % excelente, 10–13 % bueno, <10 % a mejorar): recalibrar contra el histórico
    real, que da **5–9 %**. Con el PoS, el ICP del equipo de octubre es 10,6 %. *(Nuevo, 30/10.)*
 6. **Usuarios de la app para RODRI, FRANCO y MAXI BARRA** (barmans activos sin perfil de login). El perfil
-   «NACHO» (`satorisushibarnacho@gmail.com`) es la cuenta de prueba del dueño, sin empleado vinculado a
+   «NACHO» es la cuenta de prueba del dueño, sin empleado vinculado a
    propósito: no hay nada que decidir. *(Nuevo, 29–30/10; corregido 30/10.)*
 7. **👁️ El deploy de #16 quedó en `waiting`** (job `deploy` del run #247: creado 17:42, arrancó 17:55 UTC). En
    GitHub Actions eso es una regla de protección del environment `github-pages` (aprobación o temporizador). El
@@ -154,6 +154,10 @@
      piloto**. Para el piloto se MITIGA: la R que respaldaba un crédito pasa a X → alerta prioritaria arriba en Excepciones
      (revisión diaria, «Revisado» con nota), sin bloquear ni revertir (PASE-150-151 §12). Lo que falta: que el canje frene
      (o pida aprobación) mientras haya una alerta sin revisar sobre esos créditos. *(Nuevo, 10/11.)*
+     **Residual de la alerta (Grok 164, 10-nov):** hoy alerta solo el paso R→X de un crédito de los últimos 7 días con
+     cruce por factura o pedido, y solo con un UPDATE del ticket. Queda afuera: una factura **C** que se anula (C→X), un
+     crédito con **cruce manual** (`club_cruces_manuales`), uno de **más de 7 días**, y un ticket que se borra o se inserta ya
+     anulado (no es UPDATE). Se revisa junto con el bloqueo del canje.
 22g. **📧 Grok 184 · correo personal en los commits:** desde el 10-nov los commits de Claude salen con
      `noreply@anthropic.com`. Los merges hechos por la API de GitHub salen con el correo de la cuenta del dueño: activar
      en GitHub → Settings → Emails «Keep my email addresses private» (y «Block command line pushes that expose my email»).
@@ -161,6 +165,16 @@
 22h. **🧾 Cédula jurídica en `extract-document`** (decisión del dueño, 10-nov): es un dato público del Registro y queda por
      ahora en el texto del Edge (`supabase/functions/extract-document/index.ts`). **Después del piloto** pasa a una variable
      del Edge. *(Nuevo, 10/11.)*
+22i. **🔑 Grok 168 · secreto compartido Pages → Worker** (decisión del dueño, 10-nov): **después del piloto**. Hoy el Worker
+     `satori-club-api` no tiene URL pública y solo lo alcanza el service binding de Pages; la IP llega en `x-club-ip`. Sumar un
+     secreto compartido (un encabezado que el Worker exige y Pages manda) como segunda barrera, por si algún día el Worker
+     queda con una ruta o con `workers.dev` encendido. *(Nuevo, 10/11.)*
+22j. **📧 Grok 169 · los correos @gmail que quedan** (la prueba `src/walletRepo.test.ts` los tiene en su lista de
+     pendientes, que solo se achica): el correo del negocio como login del owner en los scripts de staging
+     (`STAGING.md`, `scripts/clone_prod_to_staging.py`, `scripts/refresh-staging/*`, `scripts/t0-reconciliacion-cajas/`)
+     pasa a una variable de entorno; el ejemplo «+nombre» del alta de empleados (`NuevoEmpleado`, `UserApprovals`) pasa a
+     un correo ficticio (cambia una pantalla: guía de admin en el mismo PR); los dos archivos históricos se limpian con las
+     ramas viejas (22e). El correo personal de `cierre-email` y `monthly-report` es el 22d. *(Nuevo, 10/11.)*
 
 ## 🟨 P2 — Esperan decisión o firma del dueño
 

@@ -557,10 +557,6 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               ↩ Deshacer cierre
             </button>
           )}
-          <button onClick={handleBorrarDia} disabled={saving} title="Deshacer el cierre Y borrar TODOS los movimientos del día (recargar de cero)"
-            style={{ background:'#c23b22', border:'none', color:'#fff', borderRadius:2, padding:'5px 10px', fontSize:'0.76rem', cursor:'pointer' }}>
-            🗑 Borrar TODO el día
-          </button>
           <input type="date" value={fecha} max={today}
             onChange={e => setFecha(e.target.value)}
             className="cierre-input"
@@ -1006,6 +1002,21 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           )}
         </>
       )}
+
+      {/* ── Más acciones: lo destructivo va al pie, lejos de la fecha (rediseño A3). Misma función y permisos. ── */}
+      <div style={{ marginTop:'2rem', paddingTop:'1rem', borderTop:'1px solid #e6e4de' }}>
+        <div style={{ fontSize:'0.65rem', color:'#6e706c', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'0.5rem' }}>Más acciones</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.75rem', flexWrap:'wrap',
+                      background:'#f6e4e1', border:'1px solid #a3392d', borderRadius:4, padding:'0.75rem 1rem' }}>
+          <div style={{ fontSize:'0.78rem', color:'#a3392d', flex:'1 1 220px' }}>
+            Deshace el cierre y borra todos los movimientos del día, para recargarlo desde cero. Antes muestra una vista previa.
+          </div>
+          <button type="button" onClick={handleBorrarDia} disabled={saving} title="Deshacer el cierre Y borrar TODOS los movimientos del día (recargar de cero)"
+            style={{ background:'#a3392d', border:'none', color:'#fff', borderRadius:4, padding:'0 14px', minHeight:44, fontSize:'0.82rem', fontWeight:600, cursor:'pointer' }}>
+            🗑 Borrar TODO el día
+          </button>
+        </div>
+      </div>
 
       {/* ── «Recontar» una vez: se ofrece al pedir el cierre fuera de tolerancia ── */}
       {ofertaRecuento && parcial && !completo && (

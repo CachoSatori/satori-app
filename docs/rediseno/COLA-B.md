@@ -32,7 +32,7 @@
 - **Las rutas, `PrivateRoute` y el aterrizaje del cajero no cambian.**
 - **Aceptación:** un test por rol confirma que el menú muestra exactamente los módulos que hoy muestra la grilla del Inicio.
 
-## B4 · Inicio con pendientes · `en revisión #115` (revisada 11-nov 14:05: pasa todo; espera validación visual de Ismael) · validación visual
+## B4 · Inicio con pendientes · `hecha` (#115, validada por Ismael y mergeada el 11-nov 14:10) · validación visual
 - **Qué muestra la grilla de Inicio:**
   1. una frase de estado;
   2. «Para hacer hoy», con los mismos datos que hoy alimentan los badges, más los días sin cierre de `diasSinCierre`;

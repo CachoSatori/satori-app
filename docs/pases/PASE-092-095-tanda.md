@@ -32,7 +32,7 @@ mismo. No toca dinero, sagrados ni el cierre.
 | 094 | `claude/anon-sin-maintain` @ `ab80c1671657f31b8f6de4806a8ac24a723747c7` | `bfa5a7866684c732493e60542b022168` | `f0827dfb814407b356fe8c8eb8bec9c0` |
 | 095 | `claude/contador-lee-caja` @ **`c78b4c20b26a0a103d1b5fa91f58462fa7128c3a`** (la que se mergea: trae las cuatro) | `a8959a18071320f6af63aaafeddd4166` | `3af4c58fa9bab50435c61f47079d8129` |
 
-- El PR que se mergea es el **#107** (`claude/contador-lee-caja`).
+- **Los PR ya existen (#103 a #107). La tanda 092→095 se mergea por el #107 (`claude/contador-lee-caja` @ `c78b4c2`); al entrar, el #104, #105 y #106 quedan incluidos.** La 091 va antes, sola, por el #103.
 - Los #104, #105 y #106 (092, 093 y 094) quedan incluidos: sus cabezas son ancestros de `c78b4c2`, y GitHub los marca
   como mergeados al entrar.
 - Los md5 sirven para comprobar los archivos, **no** para el ledger de prod.
@@ -49,7 +49,7 @@ mismo. No toca dinero, sagrados ni el cierre.
 | 0.1 | Firma del dueño en §9, con la cabeza `c78b4c2` y los md5 de las cuatro | firma |
 | 0.2 | Los dos responsables presentes | §9 |
 | 0.3 | **No se mergea entre las 17:00 y las 23:00 CR** (regla fija; cualquier excepción la escribe el dueño en su firma del §9), y ninguna otra sesión mergeando a `main` | hora en §9 |
-| 0.4 | **La 091 en prod con su pase CERRADO** (§9 del PASE-091 «pasa»): **ledger 61 · 091** | bloque A, `ledger` |
+| 0.4 | **La 091 en prod con su pase CERRADO** (PR #103 mergeado; §9 del PASE-091 «pasa»): **ledger 61 · 091** | bloque A, `ledger` |
 | 0.5 | **Ninguna versión ≥ 092 en el ledger de prod**, y ninguna `09[2-9]_*.sql` en `main` antes del merge | bloque A, `desde_092` = `[]` |
 | 0.6 | `claude/contador-lee-caja` al día con `main` (con la 091 ya mergeada): `main` es ancestro de la cabeza, y el diff contra `main` trae **solo** los archivos de la 092 a la 095 (registro, guías 6.6 y 6.2, PASE, scripts y las 4 migraciones) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.7 | Gate del PR: `supabase/migraciones.test.ts` (las cuatro registradas) y build; o la aceptación del dueño sin CI de pruebas (125) | checks del PR |

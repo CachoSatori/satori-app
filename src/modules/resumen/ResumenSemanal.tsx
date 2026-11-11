@@ -27,6 +27,12 @@ function fmtShort(d: string): string {
   return `${Number(dd)} ${MSHORT[Number(m)-1]}`
 }
 
+// Mientras la semana no terminó, comparar contra la semana anterior completa
+// da un ▼ engañoso: se muestra «En curso» en vez del %.
+function semanaEnCurso(today: string, semanaHasta: string): boolean {
+  return today <= semanaHasta
+}
+
 const DAYS_CR = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
 function dowLabel(date: string): string {
   return DAYS_CR[new Date(date + 'T12:00:00').getDay()]
@@ -143,13 +149,15 @@ export default function ResumenSemanal() {
     ? ((thisWeek.propinas - lastWeek.propinas) / lastWeek.propinas * 100)
     : null
 
+  const enCurso = thisWeek ? semanaEnCurso(today, thisWeek.to) : false
+
   const isManager = ['owner','manager','contador'].includes(profile?.role ?? '')
   const [copied, setCopied] = useState(false)
 
   const buildWeekShare = () => {
     if (!thisWeek) return ''
-    const pctV = varVenta !== null ? ` (${varVenta >= 0 ? '▲' : '▼'}${Math.abs(varVenta).toFixed(1)}% vs sem ant)` : ''
-    const pctP = varProp !== null ? ` (${varProp >= 0 ? '▲' : '▼'}${Math.abs(varProp).toFixed(1)}% vs sem ant)` : ''
+    const pctV = enCurso ? ' (semana en curso)' : varVenta !== null ? ` (${varVenta >= 0 ? '▲' : '▼'}${Math.abs(varVenta).toFixed(1)}% vs sem ant)` : ''
+    const pctP = enCurso ? '' : varProp !== null ? ` (${varProp >= 0 ? '▲' : '▼'}${Math.abs(varProp).toFixed(1)}% vs sem ant)` : ''
     return [
       `📅 *SATORI — Semana ${fmtShort(thisWeek.from)} al ${fmtShort(thisWeek.to)}*`,
       '━━━━━━━━━━━━━━━━━━━━',
@@ -240,7 +248,12 @@ export default function ResumenSemanal() {
                   <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555', marginBottom: '0.3rem' }}>{k.label}</div>
                   <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.1rem', fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.val}</div>
                   {k.sub && <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '0.2rem' }}>{k.sub}</div>}
-                  {k.var !== null && k.var !== undefined && (
+                  {k.var !== null && k.var !== undefined && enCurso && (
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, marginTop: '0.2rem', color: '#888' }}>
+                      En curso
+                    </div>
+                  )}
+                  {k.var !== null && k.var !== undefined && !enCurso && (
                     <div style={{ fontSize: '0.72rem', fontWeight: 700, marginTop: '0.2rem', color: k.var >= 0 ? '#7ec8a0' : '#f08070' }}>
                       {k.var >= 0 ? '▲' : '▼'} {Math.abs(k.var).toFixed(1)}% vs sem. ant.
                     </div>
@@ -319,10 +332,10 @@ export default function ResumenSemanal() {
                     vs Semana anterior ({fmtShort(lastWeek.from)}–{fmtShort(lastWeek.to)})
                   </div>
                   {[
-                    { label: 'Ventas', cur: thisWeek.ventaNeta, prev: lastWeek.ventaNeta },
-                    { label: 'PAX', cur: thisWeek.pax, prev: lastWeek.pax },
-                    { label: 'Prom/PAX', cur: thisWeek.promPax, prev: lastWeek.promPax },
-                    { label: 'Propinas', cur: thisWeek.propinas, prev: lastWeek.propinas },
+                    { label: 'Ventas', cur: thisWeek.ventaNeta, prev: lastWeek.ventaNeta, esConteo: false },
+                    { label: 'PAX', cur: thisWeek.pax, prev: lastWeek.pax, esConteo: true },
+                    { label: 'Prom/PAX', cur: thisWeek.promPax, prev: lastWeek.promPax, esConteo: false },
+                    { label: 'Propinas', cur: thisWeek.propinas, prev: lastWeek.propinas, esConteo: false },
                   ].map(row => {
                     const diff = row.prev > 0 ? (row.cur - row.prev) / row.prev * 100 : null
                     const col  = diff === null ? '#555' : diff >= 0 ? '#7ec8a0' : '#f08070'
@@ -330,8 +343,13 @@ export default function ResumenSemanal() {
                       <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0', borderBottom: '1px solid #1a1a1a', fontSize: '0.8rem' }}>
                         <span style={{ color: '#888' }}>{row.label}</span>
                         <div style={{ textAlign: 'right' }}>
-                          <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{fi(row.cur)}</span>
-                          {diff !== null && (
+                          <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{row.esConteo ? row.cur.toLocaleString('es-CR') : fi(row.cur)}</span>
+                          {enCurso && (
+                            <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 700, color: '#555' }}>
+                              En curso
+                            </span>
+                          )}
+                          {diff !== null && !enCurso && (
                             <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 700, color: col }}>
                               {diff >= 0 ? '▲' : '▼'}{Math.abs(diff).toFixed(0)}%
                             </span>

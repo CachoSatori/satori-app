@@ -8,6 +8,7 @@ import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/type
 // existiendo y se llaman desde acá adentro: el Excel es el piso de la fusión, no se retiró.
 import { cargarDeFondo, cargarDiasEager, cargarHistEager, type EstadoPos } from './ventasFuente'
 import AvisoFuentePos from './AvisoFuentePos'
+import './ventasNav.css'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
 const VentasHoy          = lazy(() => import('./VentasHoy'))
@@ -191,7 +192,7 @@ export default function VentasModule() {
       </div>
 
       {/* Nav tabs — agrupadas con etiqueta de grupo (estilo dashboard) */}
-      <div className="vt-nav-tabs">
+      <div className="vt-nav-tabs" role="tablist" aria-label="Vistas de Ventas">
         {GROUP_ORDER.map(g => {
           const groupTabs = visibleTabs.filter(t => t.group === g)
           if (!groupTabs.length) return null
@@ -199,14 +200,17 @@ export default function VentasModule() {
             <Fragment key={g}>
               <span className="vt-nav-group">{GROUP_NAMES[g]}</span>
               {groupTabs.map(t => (
-                <div
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.id}
                   key={t.id}
                   className={`vt-nav-tab ${tab === t.id ? 'active' : ''}`}
                   style={tab === t.id ? { borderBottomColor: GROUP_COLORS[t.group], color: GROUP_COLORS[t.group] } : {}}
                   onClick={() => setTab(t.id)}
                 >
                   {t.label}
-                </div>
+                </button>
               ))}
             </Fragment>
           )

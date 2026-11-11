@@ -5,11 +5,13 @@ import { aprobacionPropinaFields } from './propinaPago'
 import type { CashCierreDia } from '../../shared/types/database'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { errorMovimiento, parsearMonto, TRASPASOS } from './validarMovimiento'
 
 // Conceptos para "Nuevo movimiento" manual (administrativo, sin foto/turno)
 const CONCEPTOS = [
-  { id: 'banco_cf', label: 'Ingreso de Banco → Caja Fuerte', type: 'traspaso',          caja: 'Caja Fuerte',       sub: 'Banco → Caja Fuerte', method: 'Transferencia' },
-  { id: 'cf_banco', label: 'Retiro Caja Fuerte → Banco',      type: 'traspaso',          caja: 'Caja Fuerte',       sub: 'Caja Fuerte → Banco', method: 'Transferencia' },
+  // Traspasos: la dirección sale de la lista TRASPASOS (validarMovimiento.ts), nunca de texto libre.
+  { id: 'banco_cf', label: 'Ingreso de Banco → Caja Fuerte', type: 'traspaso',          caja: 'Caja Fuerte',       sub: TRASPASOS[0],          method: 'Transferencia' },
+  { id: 'cf_banco', label: 'Retiro Caja Fuerte → Banco',      type: 'traspaso',          caja: 'Caja Fuerte',       sub: TRASPASOS[1],          method: 'Transferencia' },
   { id: 'egr_merc', label: 'Egreso · Mercadería',             type: 'egreso_mercaderia', caja: 'Caja Proveedores',  sub: '',                    method: 'Efectivo' },
   { id: 'egr_oper', label: 'Egreso · Operativo',              type: 'egreso_operativo',  caja: 'Caja Proveedores',  sub: '',                    method: 'Efectivo' },
   { id: 'egr_pers', label: 'Egreso · Personal / Salario',     type: 'egreso_personal',   caja: 'Caja Fuerte',       sub: '',                    method: 'Efectivo' },
@@ -56,7 +58,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const guardarNuevo = async () => {
     const c = CONCEPTOS.find(x => x.id === nmConcepto)!
     if (!Number(nmCRC) && !Number(nmUSD)) { setNmErr('Ingresá un monto'); return }
-    if (Number(nmCRC) < 0 || Number(nmUSD) < 0) { setNmErr('El monto no puede ser negativo.'); return }   // Ítem 2
+    // Ítem 2 + 08-nov: egresos ≥ 0; un ingreso puede llevar colones negativos solo si tiene dólares (vuelto).
+    const errMov = errorMovimiento({ tipo: c.type, crc: nmCRC, usd: nmUSD, subcategory: c.type === 'traspaso' ? c.sub : undefined, exigirMonto: true })
+    if (errMov) { setNmErr(errMov); return }
 
     // ── Guard de fecha (Ítem 4) ────────────────────────────────────────────────────────────────
     // Default HOY. Futuro → bloqueado para TODOS. Pasado → solo owner/manager/contador (gate por ROL,
@@ -79,7 +83,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     setNmSaving(true); setNmErr(null)
     try {
       await createDayMovement({
-        created_by: profile?.id ?? '', movement_type: c.type, amount_crc: Number(nmCRC) || 0, amount_usd: Number(nmUSD) || 0,
+        created_by: profile?.id ?? '', movement_type: c.type, amount_crc: parsearMonto(nmCRC), amount_usd: parsearMonto(nmUSD),
         description: nmDesc || c.label, subcategory: c.sub, method: c.method, caja_origen: c.caja, status: 'aprobado', fecha: nmFecha,
       })
       setNmOpen(false); setNmCRC(''); setNmUSD(''); setNmDesc('')
@@ -202,12 +206,36 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   // por la MISMA vía que la pestaña Pendientes (banco), y para saberlo hay que mirar su
   // subcategory. El resto de los campos no lo necesitan y lo omiten.
   const handleFieldChange = useCallback(async (id: string, field: string, value: unknown, mov?: CashMovement) => {
-    // Guard de negativos (Ítem 2): un monto editado inline no puede quedar < 0 → revierte el input.
-    if ((field === 'amount_crc' || field === 'amount_usd') && typeof value === 'number' && value < 0) {
-      window.alert('El monto no puede ser negativo.')
-      onRefresh()
-      return
+    // Guard del movimiento COMPLETO (Ítem 2 + 08/09-nov, Grok 107): cualquier cambio de importe o de tipo se valida
+    // con el movimiento como QUEDARÍA (tipo + ₡ + $), en línea y antes de la cola sin conexión (updateCashMovement
+    // encola si no hay red). Egreso nunca negativo; un ingreso con ₡ negativos (vuelto) no puede pasar a egreso;
+    // coma decimal, NaN, infinitos y «quedar en cero» se frenan acá. El valor llega crudo: nada de `Number(x) || 0`.
+    if (field === 'amount_crc' || field === 'amount_usd' || field === 'movement_type') {
+      const monto = field === 'movement_type' ? null : parsearMonto(value)
+      const err = mov
+        ? errorMovimiento({
+            tipo: field === 'movement_type' ? String(value) : (mov.movement_type ?? ''),
+            crc:  field === 'amount_crc' ? monto : (mov.amount_crc ?? 0),
+            usd:  field === 'amount_usd' ? monto : (mov.amount_usd ?? 0),
+            exigirMonto: true,
+          })
+        // Sin el movimiento a mano (no debería pasar): solo se acepta un monto válido y ≥ 0.
+        : (monto !== null && !(Number.isFinite(monto) && monto >= 0) ? 'El monto no es válido o es negativo.' : null)
+      if (err) {
+        window.alert(err)
+        onRefresh()
+        return
+      }
+      if (monto !== null) value = monto
     }
+    // Tipo o monto: a la API va el movimiento COMPLETO (tipo, ₡ y $), que es lo que valida y lo que se encola.
+    const completo = (field === 'amount_crc' || field === 'amount_usd' || field === 'movement_type') && mov
+      ? {
+          movement_type: field === 'movement_type' ? value : mov.movement_type,
+          amount_crc:    field === 'amount_crc' ? value : (mov.amount_crc ?? 0),
+          amount_usd:    field === 'amount_usd' ? value : (mov.amount_usd ?? 0),
+        }
+      : null
     // Editar un movimiento GUARDADO (montos, tipo, método…) requiere autorización de gerencia,
     // igual que borrarlo. owner/manager logueado pasa al instante; cajero → modal de contraseña.
     // Si cancela o falla, onRefresh() revierte lo que muestre el input.
@@ -220,7 +248,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
       // 3 campos, no solo el status. Pasar a 'pendiente' y las filas NO-propina, igual que antes.
       const esAprobarPropina = field === 'status' && value === 'aprobado'
         && mov?.subcategory === 'Propinas por turno'
-      const updates = esAprobarPropina ? aprobacionPropinaFields() : { [field]: value }
+      const updates = esAprobarPropina ? aprobacionPropinaFields() : (completo ?? { [field]: value })
       await updateCashMovement(id, updates as Partial<CashMovement>)
       onRefresh()
     } catch {
@@ -505,7 +533,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   </td>
                   <td>
                     <select className="cd-tbl-select" value={m.movement_type}
-                      onChange={e => handleFieldChange(m.id, 'movement_type', e.target.value)}
+                      onChange={e => handleFieldChange(m.id, 'movement_type', e.target.value, m)}
                       disabled={saving === m.id}>
                       {/* 'traspaso' NO se ofrece como destino de conversión (un traspaso necesita
                           dirección legible 'A → B', que este select no captura → quedaría indeterminado).
@@ -538,17 +566,18 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                       disabled={saving === m.id} />
                   </td>
                   <td className="r">
-                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number" min={0}
+                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number"
+                      min={m.movement_type === 'ingreso' && (m.amount_usd || 0) > 0 ? undefined : 0}
                       defaultValue={m.amount_crc || ''}
                       style={{ color: col, fontWeight: 600 }}
-                      onBlur={e => handleFieldChange(m.id, 'amount_crc', Number(e.target.value) || 0)}
+                      onBlur={e => handleFieldChange(m.id, 'amount_crc', e.target.value, m)}
                       disabled={saving === m.id} />
                   </td>
                   <td className="r">
                     <input key={m.id + '-usd'} className="cd-tbl-input r" type="number" min={0}
                       defaultValue={m.amount_usd || ''}
                       style={{ color: '#7ab4d4' }}
-                      onBlur={e => handleFieldChange(m.id, 'amount_usd', Number(e.target.value) || 0)}
+                      onBlur={e => handleFieldChange(m.id, 'amount_usd', e.target.value, m)}
                       disabled={saving === m.id} />
                   </td>
                   <td>

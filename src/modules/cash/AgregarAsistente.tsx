@@ -8,6 +8,7 @@ import { PAGO_META, formasPago, type Pago } from '../../shared/utils/pagoMatrix'
 import { norm } from '../../shared/api/inventoryIngest'
 import { tipShiftToCaja } from '../../shared/utils'
 import { fi, fd } from './cashUtils'
+import { errorMontos, parsearMonto } from './validarMovimiento'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashSession, CashMovement, Supplier, UserRole } from '../../shared/types/database'
 
@@ -157,10 +158,13 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     e.target.value = ''   // permite re-sacar la misma foto
   }
 
-  const amountCRC = Number(montoCRC) || 0
-  const amountUSD = Number(montoUSD) || 0
+  // Sin `Number(x) || 0`: un monto inválido queda NaN y lo frena errorMontos (Grok 107).
+  const amountCRC = parsearMonto(montoCRC)
+  const amountUSD = parsearMonto(montoUSD)
   const montoOk = amountCRC > 0 || amountUSD > 0
-  const montoNegativo = amountCRC < 0 || amountUSD < 0   // Ítem 2: entrada manual no admite montos < 0
+  // Ítem 2 + 08-nov: entrada manual no admite montos < 0, salvo colones negativos en un INGRESO con dólares (vuelto).
+  const errorMonto = errorMontos({ tipo: clase === 'ingreso' ? 'ingreso' : 'egreso', crc: amountCRC, usd: amountUSD })
+  const montoNegativo = errorMonto !== null
 
   // Ingreso adicional: categoría + motivo completos (sino no se puede crear) y si el equivalente en
   // colones (crc + usd·tc) supera el umbral → hay que pedir autorización de gerencia antes de crear.
@@ -210,7 +214,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   const confirmar = async () => {
     if (!montoOk || saving) return
-    if (montoNegativo) { onError('El monto no puede ser negativo.'); return }   // Ítem 2
+    if (montoNegativo) { onError(errorMonto ?? 'El monto no puede ser negativo.'); return }   // Ítem 2 + Grok 107
     // Ingreso adicional: sin categoría o sin motivo NO se crea (se elimina el default mudo).
     if (clase === 'ingreso' && !ingresoCompleto) return
     setSaving(true)
@@ -460,7 +464,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         </div>
         {montoNegativo && (
           <div className="cd-method-info pend" role="alert" style={{ marginTop: 4 }}>
-            ⚠ El monto no puede ser negativo.
+            ⚠ {errorMonto}
           </div>
         )}
 

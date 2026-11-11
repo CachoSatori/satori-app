@@ -55,7 +55,7 @@
 - No cambiar qué se consulta. Tests de render para cada falla.
 - **Aceptación:** tests verdes; guía 6.1; link de vista previa.
 
-## B5b · Alerta del Inicio una vez por sesión · `pendiente` (después de B5)
+## B5b · Alerta del Inicio una vez por sesión · `en revisión #119` (la línea B la sumó al PR de B5 antes de ver la separación: commit `457e58f`, aparte, con sus tests; si la revisión la quiere en otro PR, lo pide como `cambios pedidos #119`)
 - **Auditoría 197 (aprobada por Ismael el 11-nov 15:55, excepción a «no cambiar consultas» solo en *cuándo*):** la alerta de días sin cierre se lee **una vez por sesión** (en memoria del módulo o `sessionStorage`; se reusa hasta cerrar la app o recargar) y los otros pendientes se pintan sin esperarla. Mismas funciones con los mismos argumentos; no cambiar qué se consulta ni cómo se calcula. Si la lectura falló, no se guarda: se reintenta en la próxima visita (y vale el estado «sin comprobar» de 196).
 - Tests: segunda visita al Inicio no vuelve a llamar las tres funciones de la alerta; una lectura fallida sí se reintenta.
 - **Aceptación:** tests verdes; guía 6.1; link de vista previa.

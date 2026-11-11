@@ -342,7 +342,7 @@ pasan. Después va el pase del Club (la 075 como 150 y la 100 como 151). La 100 
 | 1.1 ledger 60 · 090 · ninguna versión ≥ 091 | 60 · 090 | **60 · 090** |
 | 1.2 nada de la 091 en prod | todo false / 0 | OK: nada de la 091 en prod |
 | 1.3 foto de Santa Teresa (n y huella por tabla; **sin montos**) | | tomada a las 22:36 y repetida a las 22:4x, justo antes del merge: idéntica (mismos n y huella en las 5 tablas). Guardada fuera del repo |
-| 1.4 funciones SECURITY DEFINER sobre las 4 tablas (lista) | | no informado a esta sesión (informativo) |
+| 1.4 funciones SECURITY DEFINER sobre las 4 tablas (lista) | | 4 (informativo): `apply_supplier_credit(uuid,uuid,numeric,uuid)`, `create_supplier_credit(uuid,text,numeric,numeric,text,date,text,text,uuid,uuid,uuid)`, `delete_movement_cascade(uuid,text,text,text)` y `mark_factura_verified(uuid)`. Con un solo local no cambian nada |
 | 4a antes (activas), justo antes del merge | | guardado |
 | Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | aceptado por el dueño sin CI de pruebas (125): el repo no corre pruebas en PRs; la 091 se probó en staging (24 OK antes de aplicarla) y la auditó Grok |
 | §2 merge (SHA, hora) | | PR #103 · `b8cb74dffedddc3b8c0e0287b54891e5251f7629`, 10-nov **22:44:57 -06:00** (padres `7543347` y `5b6cd05`) |

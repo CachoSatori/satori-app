@@ -72,6 +72,26 @@
       "nombre": "multilocal_fase0",
       "bloque": "caja",
       "rama": "claude/multilocal-fase0"
+    },
+    "092": {
+      "nombre": "employees_borrado_solo_owner",
+      "bloque": "caja",
+      "rama": "claude/employees-borrado-owner"
+    },
+    "093": {
+      "nombre": "ventas_lectura_rol_activo",
+      "bloque": "caja",
+      "rama": "claude/ventas-lectura-rol-activo"
+    },
+    "094": {
+      "nombre": "anon_sin_maintain",
+      "bloque": "caja",
+      "rama": "claude/anon-sin-maintain"
+    },
+    "095": {
+      "nombre": "contador_lee_caja",
+      "bloque": "caja",
+      "rama": "claude/contador-lee-caja"
     }
   }
 }

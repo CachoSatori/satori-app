@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Pruebas de la 092 (R7-01) — SOLO STAGING, cada caso en una transacción que termina en ROLLBACK (no deja nada).
+# Sin falsos verdes: cada caso tiene su resultado esperado; los errores se capturan por SQLSTATE dentro de la
+# transacción y NUNCA se imprime el detalle de un error (puede traer la fila de un perfil).
+# Uso: SUPABASE_ACCESS_TOKEN=… scripts/sql/092_pruebas.sh hwiatgicyyqyezqwldia
+# Salida: 0 = verde · 1 = falla · 2 = uso.
+set -euo pipefail
+: "${SUPABASE_ACCESS_TOKEN:?Falta SUPABASE_ACCESS_TOKEN}"
+REF=${1:?Uso: $0 <REF de staging>}
+[ "$REF" = hwiatgicyyqyezqwldia ] || { echo "Solo staging. Nada en prod." >&2; exit 2; }
+RAIZ=$(git rev-parse --show-toplevel)
+MIG=$(grep -viE '^\s*(begin|commit)\s*;\s*$' "$RAIZ/supabase/migrations/092_employees_borrado_solo_owner.sql")
+RB=$(grep -viE '^\s*(begin|commit)\s*;\s*$' "$RAIZ/scripts/sql/092_rollback.sql")
+VER=$(grep -v '^--' "$RAIZ/scripts/sql/092_verificacion.sql")
+API="https://api.supabase.com/v1/projects/$REF/database/query"
+q() {
+  local body
+  body=$(jq -n --arg q "$1" '{query:$q}' | curl -sS --fail-with-body -X POST "$API" \
+    -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @-) || {
+    echo "ERROR de la API: $(jq -r '.message? // .' <<<"$body" 2>/dev/null | head -1 | sed -E 's/DETAIL:.*//' | head -c 160)" >&2; return 1; }
+  jq -e 'type == "array"' >/dev/null <<<"$body" || { echo "ERROR: no es un arreglo" >&2; return 1; }
+  echo "$body"
+}
+echo "092_pruebas · $(TZ=America/Costa_Rica date '+%Y-%m-%d %H:%M CR') · REF=$REF · script @ $(git -C "$RAIZ" rev-parse --short HEAD)"
+PID=$(q "select id from public.profiles where role <> 'owner' order by created_at limit 1" | jq -r '.[0].id // empty')
+[ -n "$PID" ] || { echo "FALLA no hay perfil para simular"; exit 1; }
+E1='00000000-0000-4000-8000-000000000921'; E2='00000000-0000-4000-8000-000000000922'
+SEMILLA="insert into public.employees (id, full_name, role, is_active, pos_login) values ('$E1', 'EMPLEADO SINTETICO 092 A', 'salonero', true, '9921');
+         insert into public.employees (id, full_name, role, is_active) values ('$E2', 'EMPLEADO SINTETICO 092 B', 'salonero', true);
+         create temp table r (k text, v text) on commit drop; grant all on r to authenticated;"
+sim() { # $1 rol · $2 activo
+  echo "set local session_replication_role = replica; update public.profiles set role = '$1', is_active = $2 where id = '$PID';
+        set local session_replication_role = origin; set local role authenticated;
+        select set_config('request.jwt.claims', '{\"sub\":\"$PID\",\"role\":\"authenticated\"}', true);"
+}
+intenta() { # $1 id a borrar → guarda en r: estado (ok | <sqlstate>) y filas borradas
+  echo "do \$\$ declare n int; begin
+          delete from public.employees where id = '$1'; get diagnostics n = row_count;
+          insert into r values ('borrar', 'ok'), ('filas', n::text);
+        exception when others then insert into r values ('borrar', sqlstate), ('filas', '0'); end \$\$;"
+}
+LEE="reset role; select set_config('request.jwt.claims', '', true);
+     select json_build_object('borrar', (select v from r where k = 'borrar'), 'filas', (select v from r where k = 'filas')::int,
+       'bajas', (select count(*) from public.employee_bajas), 'bajas_con_autor', (select count(*) from public.employee_bajas where borrado_por is not null)) as x;"
+ok=0; fallas=0
+compara() { if [ -n "$3" ] && [ "$3" != "null" ] && [ "$3" != '""' ] && ! grep -qiE '"message"|^error' <<<"$3" && [ "$(jq -cS . <<<"$2" 2>/dev/null)" = "$(jq -cS . <<<"$3" 2>/dev/null)" ]; then echo "OK    $1"; ok=$((ok+1)); else echo "FALLA $1"; echo "      esperado: $2"; echo "      obtenido: $3"; fallas=$((fallas+1)); fi; }
+caso() { # $1 etiqueta · $2 sesión · $3 id · $4 esperado
+  local r; r=$(q "begin; $MIG $SEMILLA $2 $(intenta "$3") $LEE rollback;" | jq -c '.[-1].x') || r=""
+  compara "$1" "$4" "$r"
+}
+caso "manager borra un empleado CON login → 42501, nada borrado"   "$(sim manager true)" "$E1" '{"borrar":"42501","filas":0,"bajas":0,"bajas_con_autor":0}'
+caso "manager borra un empleado SIN login → se borra, con rastro"   "$(sim manager true)" "$E2" '{"borrar":"ok","filas":1,"bajas":1,"bajas_con_autor":1}'
+caso "owner borra un empleado con login → se borra, con rastro"     "$(sim owner true)"   "$E1" '{"borrar":"ok","filas":1,"bajas":1,"bajas_con_autor":1}'
+caso "owner INACTIVO → la RLS no lo deja (0 filas)"                 "$(sim owner false)"  "$E1" '{"borrar":"ok","filas":0,"bajas":0,"bajas_con_autor":0}'
+caso "cajero → la RLS no lo deja (0 filas)"                         "$(sim cajero true)"  "$E1" '{"borrar":"ok","filas":0,"bajas":0,"bajas_con_autor":0}'
+caso "canal admin (sin JWT) → se borra, rastro sin autor"           ""                    "$E1" '{"borrar":"ok","filas":1,"bajas":1,"bajas_con_autor":0}'
+r=$(q "begin; $MIG set local role anon; do \$\$ begin perform count(*) from public.employee_bajas; raise exception 'leyó' using errcode = 'P0001';
+       exception when insufficient_privilege then raise notice 'ok'; end \$\$; select 'sin_permiso' as x; rollback;" | jq -r '.[-1].x') || r=""
+compara "anon no lee employee_bajas (42501)" '"sin_permiso"' "\"$r\""
+r=$(q "begin; $MIG $VER rollback;" | jq -c '.[-1].x') || r=""
+compara "verificación (la de prod) con la 092 puesta; sin fila del ledger en la prueba" \
+  '{"ledger_092":false,"tabla":true,"rls_tabla":true,"politicas":["employee_bajas_select_owner:SELECT"],"anon_sin_permisos":true,"funcion_definer":true,"funcion_no_publica":true,"trigger_activo":true,"bajas":0}' "$r"
+r=$(q "$VER" | jq -c '.[-1].x') || r=""
+compara "verificación sin la 092 (estado de staging hoy)" \
+  '{"ledger_092":false,"tabla":false,"rls_tabla":false,"politicas":[],"anon_sin_permisos":true,"funcion_definer":false,"funcion_no_publica":true,"trigger_activo":false,"bajas":null}' "$r"
+r=$(q "begin; $MIG $RB select json_build_object('tabla', to_regclass('public.employee_bajas') is null,
+       'trigger', not exists (select 1 from pg_trigger where tgname = 'trg_employees_borrado_guardia'),
+       'funcion', to_regprocedure('public.employees_borrado_guardia()') is null) as x; rollback;" | jq -c '.[-1].x') || r=""
+compara "rollback: sin tabla, sin trigger, sin función" '{"tabla":true,"trigger":true,"funcion":true}' "$r"
+# Grok 142: el rastro guarda SOLO lo mínimo (columnas exactas) y con los datos del borrado
+r=$(q "begin; $MIG $SEMILLA delete from public.employees where id = '$E1';
+       select json_build_object(
+         'columnas', (select json_agg(column_name order by ordinal_position) from information_schema.columns
+                        where table_schema = 'public' and table_name = 'employee_bajas'),
+         'fila', (select json_build_object('id_ok', employee_id = '$E1', 'pos_login', pos_login, 'nombre_ok', full_name = 'EMPLEADO SINTETICO 092 A',
+                    'fechas', empleado_creado_en is not null and empleado_actualizado_en is not null, 'autor', borrado_por, 'cuando', borrado_en is not null)
+                  from public.employee_bajas)) as x; rollback;" | jq -c '.[-1].x') || r=""
+compara "el rastro guarda solo lo mínimo (Grok 142): id, pos_login, nombre, fechas y quién" \
+  '{"columnas":["id","employee_id","pos_login","full_name","empleado_creado_en","empleado_actualizado_en","borrado_por","borrado_en"],"fila":{"id_ok":true,"pos_login":"9921","nombre_ok":true,"fechas":true,"autor":null,"cuando":true}}' "$r"
+# Grok 140: el rollback frena si employee_bajas tiene filas
+body=$(jq -n --arg q "begin; $MIG $SEMILLA delete from public.employees where id = '$E1'; $RB rollback;" '{query:$q}' | curl -sS -X POST "$API" \
+  -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @- || true)
+if grep -q "092 rollback: employee_bajas tiene filas" <<<"$body"; then echo "OK    el rollback frena si employee_bajas tiene filas (Grok 140)"; ok=$((ok+1));
+else echo "FALLA el rollback no frenó con filas en employee_bajas: $(jq -r '.message? // .' <<<"$body" 2>/dev/null | head -1 | sed -E 's/DETAIL:.*//' | head -c 160)"; fallas=$((fallas+1)); fi
+echo "── Resultado: $ok OK · $fallas FALLA ──"
+[ "$fallas" -eq 0 ] && echo VERDE || { echo "NO VERDE"; exit 1; }

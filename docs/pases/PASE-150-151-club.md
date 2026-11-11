@@ -36,7 +36,7 @@
 ## SHA y huellas
 | Qué | Valor |
 |---|---|
-| Rama del paquete | `claude/pase-club` (PR contra el #59, `claude/epic-tesla-pyo77m` @ `fd39819`) |
+| Rama del paquete | `claude/pase-club` (#93), mergeada en el #59 (`claude/epic-tesla-pyo77m`) el 11-nov: cabeza verificada `60a977e98b468e1ef1429442dcbde9822bba1a4d` |
 | 150 | `supabase/migrations/150_club_satori_esquema.sql`: la 075 renombrada (10-nov mañana, blob `cf16b82b…`) **más los arreglos de la auditoría del 10-nov** (Grok 159, 160, 182 y la condición de MAINTAIN) y de la segunda vuelta (Grok 162–164). Hoy: blob git `44d12e03aa1cd170dfca1b0e9f263a25a9571355`, md5 `04681f41e4861972134b6f46b4132f87`, 427.895 bytes |
 | 151 | `supabase/migrations/151_club_catalogo_locales.sql`: renombre puro de la 100 (blob `a61d7d4f2b73b0cacac5d000fa0b0323d7bfb76c`), md5 `7a27ab08ee4a292a8ac255ecfae612c9` |
 | Rollbacks | `scripts/sql/151_rollback.sql` (FK y trigger; no toca `locations`) y `scripts/sql/150_rollback.sql` (todo `club_*`; desde el 10-nov se verifica solo: aborta si queda algo) |
@@ -58,12 +58,12 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 ## 0. Prerrequisitos
 | # | Qué | Cómo se verifica |
 |---|---|---|
-| 0.1 | Firma del dueño en §10, con el SHA de la cabeza del #59 que se mergea | firma |
+| 0.1 | Firma del dueño en §10, con el SHA de la cabeza del #59 que se mergea. **Cabeza verificada (11-nov): `60a977e98b468e1ef1429442dcbde9822bba1a4d`** (merge del #93 y de `main` @ `ced6621`; §0.5 y §0.6). Este renglón lo escribe un commit **solo de este documento** encima de esa cabeza, así que la cabeza del PR queda una más arriba: **se firma la cabeza que muestra el PR #59**, y antes de firmar se comprueba que `git diff 60a977e <cabeza> --stat` toque **solo** `docs/pases/PASE-150-151-club.md`. Cualquier otro cambio después invalida la firma | firma |
 | 0.2 | Los dos responsables presentes | §10 |
 | 0.3 | **No se mergea entre las 17:00 y las 23:00 CR**; ninguna otra sesión mergeando a `main` en la ventana | hora en §10 |
 | 0.4 | **✅ Cumplido (10-nov noche, lo informó el dueño):** la **091** en prod (merge `b8cb74d`, pase cerrado) y la tanda **092–095** (merge `c41e18b`). **Ledger de prod: 65 · 095.** La 151 se apoya en el `locations` de la 091. El día del pase se vuelve a leer en 1.1: tiene que seguir en **65 · 095**. Ninguna migración con número de 096 a 149 ni ≥ 150 en `main` ni en el ledger (si caja pasa otra antes del jueves, se para y se rehace §1 con el número nuevo) | 1.1 |
-| 0.5 | El paquete (este PR) y el plan B de club-web (#98, el Worker, con el binding activo) mergeados en el #59 (el #98 **antes del miércoles**, para crear el Worker), y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
-| 0.6 | Checks del #59 en verde: `supabase/migraciones.test.ts` (150 y 151 registradas con su origen), vitest y build | checks del PR |
+| 0.5 | **✅ (11-nov).** El paquete (#93 @ `c7af8d0`) mergeado en el #59 con merge commit (`78b27e4`), el #98 adentro desde el 10-nov, y el #59 **al día con `main`** (`ced6621`, merge `60a977e`). `main` es ancestro de la cabeza; en `supabase/migrations/` el diff contra `main` es **solo** la 150 (md5 `04681f41…`) y la 151 (md5 `7a27ab08…`); el resto del diff es del Club (app, club-web, scripts, docs) | `git merge-base --is-ancestor`, `git diff --name-only` |
+| 0.6 | **✅ (11-nov, sobre `60a977e`).** vitest 1542 (incluye `supabase/migraciones.test.ts` 6/6 y las pruebas de `club-web/functions` y `club-web/worker`), `tsc` sin errores, `npm run build` de la app, build de club-web (con `VITE_CLUB_URL` de prueba) y sus 43 pruebas, `gate61_test.sh` 25/25 sin red, `club_paridad_cuerpo_test.sh` 10/10, migrador 132. El repo no corre pruebas en los PR: estas corridas son el gate (como en la 091, Grok 125) | checks del PR |
 | 0.7 | Staging en verde con estos mismos archivos (§3), **el día del pase** | anotado |
 | 0.8 | **✅ Cumplido (11-nov).** Pages `satori-club` (rama de producción `main`, sin previews, variables de §11.1) y **Turnstile de prod** (10-nov); el dominio queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). **Worker `satori-club-api`** desplegado **a mano** con `wrangler deploy` desde el #59 @ `66c950d` (Version `ae142f3a…`), **sin** rutas ni `workers.dev` ni repositorio conectado, con `RL_CREAR` y `RL_LEER` y sus 4 variables apuntando a **prod** (`SUPABASE_URL`, `SUPABASE_ANON_KEY`; `TURNSTILE_SECRET` y `CLUB_WEB_KEY` como Secret). **`CLUB_WEB_KEY` de prod creada el 11-nov y cargada en el Worker y en Pages**; su sha256 lo tiene el dueño y va a la base el jueves, **después de la 150** (§6.3 paso 2). Ningún valor en este documento. **Falta una cosa (§11.4 paso 4b):** volver a desplegar el Worker, a mano, desde la **cabeza nueva del #59** (la que se firma): el #93 cambió `club-web/functions/_lib/api.js` (la baja por POST, Grok 183), y el Worker corre ese código | §10 |
 | 0.9 | G-61 «antes» hecho y sus diferencias esperadas **firmadas en este PR** (`scripts/sql/gate61_esperadas.txt`) | §1.5 |
@@ -475,7 +475,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del #59) | | |
 | Responsables (ejecución / control) | | |
 | 0.4 la 091–095 en prod | ledger 65 · 095 | ✅ 10-nov noche (lo informó el dueño): 091 por el merge `b8cb74d` (pase cerrado), 092–095 por el merge `c41e18b`; ledger 65 · 095 |
-| 0.5 el #59 al día con `main` · diff solo lo del Club | | |
+| 0.5 el #59 al día con `main` · diff solo lo del Club | | ✅ 11-nov: `60a977e` (main `ced6621` ancestro; migraciones: solo 150 y 151) |
 | 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` con `wrangler deploy` manual, sin repositorio conectado, sin URL pública, con sus variables (§11.4) · `CLUB_WEB_KEY` en Pages y en el Worker | | ✅ 11-nov: Worker desde `66c950d` (Version `ae142f3a…`), 4 variables a prod; `CLUB_WEB_KEY` creada y cargada en los dos |
 | §11.4 paso 4b · Worker otra vez a mano desde la cabeza firmada (SHA, Version nueva) | | |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | | |

@@ -286,7 +286,8 @@ function ElegirFactura({ e, onElegida }: { e: Excepcion; onElegida: () => Promis
  * Grok 160 (10-nov): alertas PRIORITARIAS, arriba de todo, para la revisión diaria. Hoy: una factura R (cobrada, sin cierre
  * de caja) que respaldaba un crédito del Club (cupón, tarjeta o pendiente aprobado) pasó a X (anulada) y no quedó otra
  * factura de ese pedido. El crédito NO se revirtió: se revisa a mano (¿se rehízo la factura?, ¿hay que ajustar?) y se marca
- * «Revisado» con una nota. Las revisadas se ven 7 días.
+ * «Revisado» con una nota. Las revisadas se ven 7 días, con quién las revisó. Grok 162: no la revisa quien registró el
+ * movimiento ni quien aprobó su pendiente (la base lo rechaza con el motivo); la revisa otro manager o el owner.
  */
 function AlertasPrioritarias() {
   const [lista, setLista] = useState<AlertaPrioritaria[] | null>(null)
@@ -325,7 +326,7 @@ function AlertasPrioritarias() {
               <span style={{ color: C.muted, fontSize: '0.85rem' }}>{fmtFechaHora(a.creado_en)}</span>
             </div>
             {a.revisada_en ? (
-              <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 4 }}>Revisada {fmtFechaHora(a.revisada_en)}: {a.revisada_nota}</div>
+              <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 4 }}>Revisada {fmtFechaHora(a.revisada_en)}{a.revisada_por ? ` por ${a.revisada_por}` : ''}: {a.revisada_nota}</div>
             ) : (
               <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                 <input value={notas[a.id] ?? ''} onChange={e => setNotas(n => ({ ...n, [a.id]: e.target.value }))}

@@ -154,10 +154,14 @@ def cuerpo_sql(filas: list[dict], local: str, entorno: str, fecha: str = 'carga'
         de 12 meses sin actividad se deciden ANTES, en la fuente (`inactivos`).
       · 'tarjeta': la fecha de la tarjeta (la de la última marca).
     La fecha de la tarjeta queda siempre en la nota."""
-    assert entorno in ('staging', 'prod')
-    assert fecha in FECHAS
+    # Grok 170: if, no assert (python -O los ignora)
+    if entorno not in ('staging', 'prod'):
+        raise ValueError('entorno: staging o prod')
+    if fecha not in FECHAS:
+        raise ValueError(f'fecha: una de {FECHAS}')
     claves = {f.get('clave', 'codigo') for f in filas}
-    assert len(claves) == 1, 'todas las filas con la misma clave (código o legacy_id)'
+    if len(claves) != 1:
+        raise ValueError('todas las filas con la misma clave (código o legacy_id)')
     col = 'codigo' if claves == {'codigo'} else 'legacy_id'
     valores = ',\n  '.join(f"({_q(f['codigo'])}, {f['personas']}, {_q(f['fecha'])}::date, {_q(f['referencia'])})" for f in filas)
     n, total = len(filas), sum(f['personas'] for f in filas)
@@ -223,7 +227,8 @@ def sql_cruce_firestore(filas: list[dict], local: str, tolerancia_dias: int = 3)
       · hay INTERSECCIÓN: una tarjeta de papel que YA está en Firestore (el mismo anfitrión, un crédito con las mismas
         personas y la fecha a ≤ `tolerancia_dias`, en hora de Costa Rica): sería una doble carga.
     Va ANTES del cuerpo de la carga de papel. Los mensajes dicen cuántas, sin datos."""
-    assert {f.get('clave', 'codigo') for f in filas} == {'legacy_id'}, 'el cruce de la carga única es por legacy_id'
+    if {f.get('clave', 'codigo') for f in filas} != {'legacy_id'}:   # Grok 170: if, no assert
+        raise ValueError('el cruce de la carga única es por legacy_id')
     valores = ',\n  '.join(f"({_q(f['codigo'])}, {f['personas']}, {_q(f['fecha'])}::date)" for f in filas)
     return f"""do $$
 declare v_sin int; v_inter int;

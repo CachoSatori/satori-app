@@ -28,6 +28,11 @@
    La validación dentro de la transacción controla `vencimientos_restos` y que el saldo siga cuadrando con Firestore
    (el resto, como el D1, no cuenta contra la fuente). `--acepto-inactivos N` sin vencer los restos los carga **vivos**
    (vuelven a contar 12 meses desde el lanzamiento).
+   **(Grok 170–173)** «Hoy» y la última actividad se cuentan **en hora de Costa Rica** (createdAt viene en UTC: de 18:00
+   a 24:00 CR ya es el día siguiente en UTC). Con `--vencer-restos-inactivos`, `--ensayo` y `--emitir` exigen
+   `--esperados` con `vencimientos_restos` y `vencimientos_restos_personas` (los firma el dueño con el sha256). La
+   transacción aborta si algún «resto del sistema viejo» no cumple la regla (menos de medio crédito, miembro activo, saldo
+   final 0). **No se combina con `--papel`**: si algún día hay papel, se resuelve aparte (§B).
 3. **Ensayo en staging** (no deja nada: vacía el Club **dentro** de la transacción, solo en una base marcada como staging,
    y termina en ROLLBACK):
    ```

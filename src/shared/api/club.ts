@@ -344,10 +344,13 @@ export interface AlertaPrioritaria {
   id: number; tipo: 'factura_r_anulada'; creado_en: string; miembro: string | null
   detalle: { numero_factura?: string; pedido?: string | null; personas?: number; modo?: string; cupon_id?: string | null; movimiento_id?: string }
   revisada_en: string | null; revisada_nota: string | null
+  /** Grok 162: el nombre de quien la revisó (perfil). */
+  revisada_por: string | null
 }
 export const getAlertasPrioritarias = (local: string | null = localClub) =>
   llamar<AlertaPrioritaria[]>('club_alertas_prioritarias', { p_location: local })
-/** «Revisado» con nota (3 a 500 caracteres). Devuelve false si ya estaba revisada. */
+/** «Revisado» con nota (3 a 500 caracteres). Devuelve false si ya estaba revisada. Grok 162: no la revisa quien registró el
+ *  movimiento ni quien aprobó su pendiente (42501, con el motivo); la revisa otro manager o el owner. */
 export const revisarAlerta = (id: number, nota: string) => llamar<boolean>('club_alerta_revisar', { p_id: id, p_nota: nota })
 export const resolverExcepcion = (tipo: TipoExcepcion, ref: string, nota: string, local: string | null = localClub) =>
   llamar<boolean>('club_excepcion_resolver', { p_tipo: tipo, p_ref: ref, p_nota: nota, p_location: local })

@@ -6929,6 +6929,9 @@ set search_path = public, pg_temp
 as $$
 declare m record;
 begin
+  -- Grok 163 (10-nov): la alerta NUNCA frena la ingesta R→X del puente. Un error acá (una restricción, un dato raro) se
+  -- deshace solo dentro de este bloque y queda como WARNING en el log; el UPDATE del ticket sigue.
+  begin
   if not exists (select 1 from public.club_config c where c.location_id = new.local) then
     return null;   -- el Club no existe en ese local
   end if;
@@ -6951,6 +6954,9 @@ begin
       on conflict ((detalle->>'movimiento_id'), (detalle->>'numero_factura')) where tipo = 'factura_r_anulada' do nothing;
     end if;
   end loop;
+  exception when others then
+    raise warning 'CLUB: la alerta de factura R anulada falló (% %): la ingesta sigue', sqlstate, sqlerrm;
+  end;
   return null;
 end;
 $$;
@@ -6961,9 +6967,11 @@ create trigger club_factura_r_anulada_trg after update of estado on public.pos_n
 
 -- Excepciones: alertas prioritarias del local (owner y manager). Sin revisar primero; las revisadas de los últimos 7 días
 -- se ven con quién y cuándo. Sin datos de contacto: el nombre del miembro y lo del movimiento.
+-- Grok 162 (10-nov): devuelve también quién la revisó (nombre del perfil); cambia el tipo de retorno → drop antes.
+drop function if exists public.club_alertas_prioritarias(text);
 create or replace function public.club_alertas_prioritarias(p_location text default null)
 returns table (id bigint, tipo text, creado_en timestamptz, miembro text, detalle jsonb,
-               revisada_en timestamptz, revisada_nota text)
+               revisada_en timestamptz, revisada_nota text, revisada_por text)
 language plpgsql
 stable
 security definer
@@ -6975,8 +6983,10 @@ begin
   end if;
   p_location := public.club_local(p_location, false);
   return query
-    select a.id, a.tipo, a.creado_en, m.nombre, a.detalle, a.revisada_en, a.revisada_nota
+    select a.id, a.tipo, a.creado_en, m.nombre, a.detalle, a.revisada_en, a.revisada_nota,
+           case when a.revisada_por is not null then coalesce(pr.full_name, 'Sin perfil') end
       from public.club_alertas a left join public.club_miembros m on m.id = a.miembro_id
+      left join public.profiles pr on pr.id = a.revisada_por
      where a.location_id = p_location and a.prioritaria
        and (a.revisada_en is null or a.revisada_en > now() - interval '7 days')
      order by (a.revisada_en is not null), a.creado_en desc
@@ -6990,9 +7000,9 @@ language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
-declare v public.club_alertas%rowtype;
+declare v public.club_alertas%rowtype; v_rol public.user_role := public.get_my_role(); v_mv uuid;
 begin
-  if public.get_my_role() is null or public.get_my_role() not in ('owner', 'manager') then
+  if v_rol is null or v_rol not in ('owner', 'manager') then
     raise exception 'Solo owner o manager' using errcode = '42501';
   end if;
   if p_nota is null or length(btrim(p_nota)) < 3 or length(p_nota) > 500 then
@@ -7001,6 +7011,19 @@ begin
   select * into v from public.club_alertas a where a.id = p_id and a.prioritaria for update;
   if not found then
     raise exception 'Alerta no encontrada' using errcode = 'P0001';
+  end if;
+  -- Grok 162 (10-nov): no revisa la alerta quien registró el movimiento ni quien aprobó su pendiente (la misma regla que
+  -- CLUB-AUD-25 en el cruce manual): la revisa otro manager; si no hay otra persona, el owner (el owner no queda frenado).
+  if v.tipo = 'factura_r_anulada' and v_rol <> 'owner' then
+    begin
+      v_mv := (v.detalle->>'movimiento_id')::uuid;
+    exception when others then v_mv := null; end;
+    if exists (select 1 from public.club_movimientos mv where mv.id = v_mv and mv.registrado_por = auth.uid())
+       or exists (select 1 from public.club_personas_pendientes pp
+                   where pp.movimiento_id = v_mv and pp.resuelto_por = auth.uid()) then
+      raise exception 'Esta alerta es de un movimiento que usted registró o aprobó: la revisa otro manager o el owner'
+        using errcode = '42501';
+    end if;
   end if;
   if v.revisada_en is not null then
     return false;   -- ya estaba revisada: no se pisa quién y cuándo

@@ -201,7 +201,7 @@ class Sql(unittest.TestCase):
         # sin fecha de carga, las fechas originales
         self.assertIn("coalesce(j.fecha, now()), coalesce(j.fecha, now()), 'migracion'", mf.sql_apply(self.p, primera=True))
         # el vaciado de ensayo solo existe con ensayo y primera carga
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(SystemExit):   # Grok 170: if/sys.exit, no assert
             mf.sql_apply(self.p, primera=True, vaciar_ensayo=True)
         self.assertIn('truncate public.club_miembros', mf.sql_apply(self.p, ensayo=True, primera=True, vaciar_ensayo=True))
 
@@ -233,13 +233,46 @@ class RestosInactivos(unittest.TestCase):
         return subprocess.run([sys.executable, '-I', self.MF, '--export', str(self.exp), '--local', 'santa-teresa',
                                '--out', str(self.dir / 'out'), *args], capture_output=True, text=True)
 
+    def test_173_papel_y_vencer_restos_no_se_combinan(self):
+        r = self.correr('--primera-carga', '--dry-run', '--vencer-restos-inactivos', '2', '--papel', str(self.dir / 'papel.csv'))
+        self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO (Grok 173)', r.stderr)
+
+    def test_170_resto_invalido_en_el_plan_sale_sin_assert(self):
+        p = mf.armar_plan(mf.cargar(self.exp))
+        with self.assertRaises(SystemExit):   # 4 personas no es un resto (medio crédito o más)
+            mf.vencer_restos_fuente(p, [{'legacy_id': 'refE', 'personas': 4, 'ultima_actividad': '2023-05-20'}])
+        with self.assertRaises(SystemExit):   # saldo distinto del informado
+            mf.vencer_restos_fuente(p, [{'legacy_id': 'refD', 'personas': 1, 'ultima_actividad': '2023-03-10'}])
+        self.assertIn("'restos_invalidos'", mf.sql_validar())
+        self.assertIn("restos_invalidos=", mf.sql_apply(p, primera=True, fecha_carga=True))
+
+    def test_172_corte_en_hora_de_costa_rica(self):
+        import datetime as _dt
+        utc = _dt.timezone.utc
+        # 11-nov 20:00 CR = 12-nov 02:00 UTC: hoy es el 11 en Costa Rica
+        self.assertEqual(mf.hoy_cr(_dt.datetime(2026, 11, 12, 2, 0, tzinfo=utc)), _dt.date(2026, 11, 11))
+        self.assertEqual(mf.hoy_cr(_dt.datetime(2026, 11, 12, 6, 0, tzinfo=utc)), _dt.date(2026, 11, 12))
+        self.assertEqual(mf.fecha_cr('2025-11-11T05:30:00.000Z'), '2025-11-10')   # 10-nov 23:30 CR
+        self.assertEqual(mf.fecha_cr('2025-11-11T06:30:00.000Z'), '2025-11-11')   # 11-nov 00:30 CR
+        p = mf.armar_plan(mf.cargar(self.exp))
+        por_legacy = {m['legacy_id']: m['id'] for m in p.miembros}
+        for mv in p.movimientos:
+            if mv['miembro_id'] == por_legacy['refD']:
+                mv['fecha'] = '2025-11-11T05:30:00.000Z'   # en UTC sería el 11 (dentro); en CR es el 10 (fuera)
+            if mv['miembro_id'] == por_legacy['refF']:
+                mv['fecha'] = '2025-11-11T06:30:00.000Z'   # en CR, el 11: justo en el corte → activa
+        inac = {x['legacy_id']: x for x in mf.inactivos_fuente(p, '2026-11-11', 12)}
+        self.assertIn('refD', inac); self.assertEqual(inac['refD']['ultima_actividad'], '2025-11-10')
+        self.assertNotIn('refF', inac)
+        self.assertIn('refE', inac)
+
     def test_regla_del_resto(self):
         self.assertEqual([mf.es_resto(x, 6) for x in (0, 1, 2, 3, 4, 6)], [False, True, True, False, False, False])
 
     def test_vencer_en_el_plan(self):
         import datetime as _dt
         p = mf.armar_plan(mf.cargar(self.exp))
-        inac = mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12)
+        inac = mf.inactivos_fuente(p, mf.hoy_cr().isoformat(), 12)
         self.assertEqual(sorted(x['legacy_id'] for x in inac), ['refD', 'refE', 'refF'])
         restos = [x for x in inac if mf.es_resto(x['personas'], p.rate)]
         self.assertEqual(mf.vencer_restos_fuente(p, restos), 2)
@@ -249,7 +282,7 @@ class RestosInactivos(unittest.TestCase):
         vencidos = [mv for mv in p.movimientos if mv['nota'] == mf.NOTA_RESTO]
         self.assertTrue(all(mv['tipo'] == 'vencimiento' and mv['fecha'] is None for mv in vencidos))   # fecha de la carga
         # después de vencerlos, solo queda la inactiva con medio crédito o más
-        self.assertEqual([x['legacy_id'] for x in mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12)], ['refE'])
+        self.assertEqual([x['legacy_id'] for x in mf.inactivos_fuente(p, mf.hoy_cr().isoformat(), 12)], ['refE'])
         # con la fecha de carga, la base controla los restos del plan
         sql = mf.sql_apply(p, primera=True, fecha_carga=True)
         self.assertIn('"vencimientos_restos": 2', sql)
@@ -280,10 +313,28 @@ class RestosInactivos(unittest.TestCase):
         r = self.correr('--primera-carga', '--fecha-movimiento', 'original', '--dry-run', '--vencer-restos-inactivos', '2')
         self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO', r.stderr)
 
+    def esperados(self, **kw):
+        f = self.dir / 'esperados.json'
+        f.write_text(json.dumps(kw))
+        return str(f)
+
     def test_emitir_con_restos_vencidos_pasa_la_lista_cerrada(self):
-        r = self.correr('--primera-carga', '--vencer-restos-inactivos', '2', '--acepto-inactivos', '1', '--emitir', str(self.dir / 'emit'))
+        base = ('--primera-carga', '--vencer-restos-inactivos', '2', '--acepto-inactivos', '1', '--emitir', str(self.dir / 'emit'))
+        # Grok 171: sin los dos totales firmados, no emite
+        r = self.correr(*base)
+        self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO (Grok 171)', r.stderr)
+        r = self.correr(*base, '--esperados', self.esperados(vencimientos_restos=2))
+        self.assertNotEqual(r.returncode, 0); self.assertIn('vencimientos_restos_personas', r.stderr)
+        # firmados distintos del plan → frena antes de emitir
+        r = self.correr(*base, '--esperados', self.esperados(vencimientos_restos=2, vencimientos_restos_personas=4))
+        self.assertNotEqual(r.returncode, 0); self.assertIn('FRENADO (Grok 171)', r.stderr)
+        self.assertFalse((self.dir / 'emit' / 'carga.sql').exists())
+        r = self.correr(*base, '--esperados', self.esperados(vencimientos_restos=2, vencimientos_restos_personas=3))
         self.assertEqual(r.returncode, 0, r.stderr[-500:])
         res = json.loads((self.dir / 'emit' / 'resumen.json').read_text())
+        self.assertEqual(res['esperados_firmados'], {'vencimientos_restos': 2, 'vencimientos_restos_personas': 3})
+        # y van DENTRO de la transacción (el sha256 del carga.sql los cubre)
+        self.assertIn('"vencimientos_restos_personas": 3', (self.dir / 'emit' / 'carga.sql').read_text(encoding='utf-8'))
         self.assertEqual((res['plan']['vencimientos_restos'], res['plan']['vencimientos_restos_personas']), (2, 3))
         self.assertEqual(res['plan']['diferencias_saldo_vs_firestore'], 0)
         import sql_g56
@@ -357,7 +408,7 @@ class AplicarFirmado(unittest.TestCase):
     def _inactivos(self):
         import datetime as _dt
         p = mf.armar_plan(mf.cargar(self.exp))
-        return len(mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12))
+        return len(mf.inactivos_fuente(p, mf.hoy_cr().isoformat(), 12))
 
     def test_emitir_pasa_la_lista_cerrada_y_aplicar_niega_sin_firma_o_sin_confirmar_prod(self):
         carga, h = self.emitir()
@@ -460,12 +511,27 @@ class EnsayoStaging(unittest.TestCase):
         antes = self.conteo()
         val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(p, ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True))[0]['r']
         self.assertEqual(val['vencimientos_restos'], 0)   # la pregunta del dueño: así NO las vence
-        inac = mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12)
+        inac = mf.inactivos_fuente(p, mf.hoy_cr().isoformat(), 12)
         mf.vencer_restos_fuente(p, [x for x in inac if mf.es_resto(x['personas'], p.rate)])
         val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(p, {'diferencias_saldo_vs_firestore': 0, 'vencimientos_restos': 2},
                                                       ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True))[0]['r']
         self.assertEqual((val['vencimientos_restos'], val['vencimientos_restos_personas']), (2, 3))
         self.assertEqual(val['vencer_simular_hoy'], 0)
+        self.assertEqual(val['restos_invalidos'], 0)
+        self.assertEqual(self.conteo(), antes)
+
+    def test_170_un_resto_invalido_hace_caer_la_validacion(self):
+        """Dos «resto del sistema viejo» trucados en el plan (saltando el chequeo de Python): 4 personas (medio crédito o
+        más) y 1 persona sobre un saldo de 2 (no lo deja en 0). La validación de la transacción aborta: no queda nada."""
+        p = mf.armar_plan(mf.cargar(export_sintetico(Path(self.tmp.name) / 'e170', inactivos=True)))
+        por_legacy = {m['legacy_id']: m['id'] for m in p.miembros}
+        for rid, pers in (('refE', 4), ('refD', 1)):
+            p.movimientos.append({'miembro_id': por_legacy[rid], 'tipo': 'vencimiento', 'personas': -pers, 'creditos': None,
+                                  'fecha': None, 'nota': mf.NOTA_RESTO, 'legacy_ids': None})
+        antes = self.conteo()
+        with self.assertRaises(SystemExit) as cm:
+            mf.ejecutar(mf.STAGING_REF, mf.sql_apply(p, ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True))
+        self.assertIn('restos_invalidos=2', str(cm.exception))
         self.assertEqual(self.conteo(), antes)
 
     def test_b11_carga_unica_con_papel_en_la_misma_transaccion(self):

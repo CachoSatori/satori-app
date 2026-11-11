@@ -12,7 +12,18 @@ REF=hwiatgicyyqyezqwldia   # staging
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"; TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 q() { jq -n --rawfile q "$1" '{query:$q}' | curl -sS -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
         -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN:-x}" -H 'Content-Type: application/json' --data-binary @- | jq -r '.[0].cat'; }
-cuerpo() { grep -v -x -e 'begin;' -e 'commit;' "$1"; }
+# (Grok 165, 10-nov) La misma normalización que con_antes de bateria_club.py: saca «begin;» y «commit;» con espacios
+# alrededor y en cualquier mayúscula. Si después queda cualquier control de transacción (begin/commit/rollback con su «;»,
+# «start transaction», «end transaction»), ABORTA: un commit en el medio confirmaría escrituras en staging.
+cuerpo() {
+  local out
+  out=$(awk '{ l = tolower($0); gsub(/^[ \t\r]+|[ \t\r]+$/, "", l); if (l != "begin;" && l != "commit;") print }' "$1")
+  if printf '%s\n' "$out" | grep -q -i -E '^[[:space:]]*(begin|commit|rollback|start[[:space:]]+transaction|end[[:space:]]+(transaction|work))([[:space:]]+(transaction|work))?[[:space:]]*;'; then
+    echo "ABORTA (Grok 165): $1 tiene un control de transacción fuera de «begin;»/«commit;» en su propia línea" >&2
+    exit 3
+  fi
+  printf '%s\n' "$out"
+}
 if [ -n "$ANTES" ]; then
   { echo 'begin;'; cuerpo "$ANTES"; cat "$RAIZ/scripts/sql/club_catalogo.sql"; echo '; rollback;'; } > "$TMP/a.sql"
 else

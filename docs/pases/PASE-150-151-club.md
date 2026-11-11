@@ -65,9 +65,9 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.5 | El paquete (este PR) y el plan B de club-web (#98, el Worker, con el binding activo) mergeados en el #59 (el #98 **antes del miércoles**, para crear el Worker), y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.6 | Checks del #59 en verde: `supabase/migraciones.test.ts` (150 y 151 registradas con su origen), vitest y build | checks del PR |
 | 0.7 | Staging en verde con estos mismos archivos (§3), **el día del pase** | anotado |
-| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov; pasos en §11.1): proyecto de Pages `satori-club` con la rama de producción `main` y sin previews; variables de §11.1; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3). El DNS queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). El plan B va activo desde el merge: el Worker `satori-club-api` se crea **el miércoles** (§11.4) | §10 |
+| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov; pasos en §11.1): proyecto de Pages `satori-club` con la rama de producción `main` y sin previews; variables de §11.1; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3). El DNS queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). El plan B va activo desde el merge: el Worker `satori-club-api` se crea **el miércoles** con un `wrangler deploy` **manual** desde la rama del #59, **sin** repositorio conectado ni despliegues automáticos; se conecta a `main` después del merge (§11.4 paso 7, corte bloqueante) | §10 |
 | 0.9 | G-61 «antes» hecho y sus diferencias esperadas **firmadas en este PR** (`scripts/sql/gate61_esperadas.txt`) | §1.5 |
-| 0.10 | Si los anfitriones de hoy tienen que entrar con su saldo a la prueba interna: export de Firestore depurado, CSV de las tarjetas de papel y su sha256 firmado **antes del jueves** (la carga exige la base vacía, §6.5) | §10 |
+| 0.10 | Si los anfitriones de hoy tienen que entrar con su saldo a la prueba interna: export de Firestore depurado (sin papel por defecto) y, firmados por el dueño **antes del jueves**, el sha256 de `carga.sql` **y** los esperados de los restos (`vencimientos_restos` y `vencimientos_restos_personas`, Grok 171; la carga exige la base vacía, §6.5) | §10 |
 | 0.11 | El agente nuevo del puente (#83) en prod desde el mié 11-nov por la mañana. **Recomendado, no bloquea** | anotado |
 
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
@@ -239,6 +239,21 @@ Después, **sin `--antes`**:
 
 Desde ahora la batería, la paridad y las mutaciones se corren **sin** `--antes`.
 
+**Segunda vuelta de la auditoría (Grok 162–164), aplicada en staging el 10-nov 18:10 CR** (autorizado por el dueño), de la
+misma forma: precondición (91 filas, última 151, fila 150 = `919bcd54…`, fila 151 única), la 150 entera encima y la fila
+150 con el texto nuevo, verificación dentro de la transacción (md5, trigger, las funciones con 162 y 163). Resultado:
+**91 filas, última 151**; fila 150 md5 **`04681f41e4861972134b6f46b4132f87`** (= el archivo); fila 151 `7a27ab08…`.
+Después, sin `--antes`:
+
+| Qué | Resultado |
+|---|---|
+| Batería (`--esperado 623`: 108 · 225 · 72 · 17 · 201), con la 93 (MAINTAIN) y la 95 (162–164) | **623/623** |
+| Paridad (`club_paridad.sh`, catálogo con ACL ordenadas) | **992 = 992** |
+| `151_pruebas.py` | **12/12** |
+| `gate61.sh` staging contra staging | **0** diferencias (3.765 hechos) |
+| Migrador (`test_migrar_firestore`, `test_saldos_papel`, `test_sql_g56`; ensayos en staging con ROLLBACK) | **132** (1 omitida: la de prod) |
+| Mutaciones 162 y 163 | caen **4** y **1** |
+
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (§5.5).
 
@@ -369,7 +384,7 @@ select count(*) filter (where pos_login is not null) as con_login, count(*) as a
 
 **6.5 Carga única del lanzamiento** (Firestore + papel; G-56), **antes de encender**: exige la base del Club **vacía**
 («cero socios»), y la prueba interna ya crea socios. Procedimiento: RUNBOOK §8 y `docs/club-satori/piloto/saldos-papel.md`
-§A (`migrar_firestore.py aplicar-firmado` con el sha256 firmado). Si los datos no están el jueves, la prueba interna se hace
+§A (`migrar_firestore.py aplicar-firmado` con el sha256 firmado; con restos vencidos, el dueño firma también `vencimientos_restos` y `vencimientos_restos_personas`, que van en `--esperados` dentro del `carga.sql`, Grok 171). Si los datos no están el jueves, la prueba interna se hace
 sin ellos y la carga se replanifica con firma (el migrador frena con la base no vacía).
 
 **6.6 Encender Santa Teresa: en la prueba interna** (jue 12 por la tarde, antes del servicio). Owner → Club → Locales →
@@ -452,11 +467,11 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 |---|---|---|
 | Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del #59) | | |
 | Responsables (ejecución / control) | | |
-| 0.4 la 091–093 en prod | ledger termina en 093 | |
+| 0.4 la 091–093 en prod | ledger termina en la última de caja que pasó (093 o 095) | |
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | |
-| 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` creado el miércoles, sin URL pública, con sus variables (§11.4) | | |
+| 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` creado el miércoles con `wrangler deploy` manual (SHA de la rama del #59), sin repositorio conectado, sin URL pública, con sus variables (§11.4) | | |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | | |
-| 0.10 carga única: export, CSV y sha256 firmado (o «la prueba va sin carga») | | |
+| 0.10 carga única: export, sha256 de `carga.sql` y esperados de restos (N y personas) firmados (o «la prueba va sin carga») | | |
 | 1.1 ledger: la última de caja que pasó (093 o 095) · nada del Club (Grok 181) | | |
 | 1.2 0 · 0 · 0 | | |
 | 1.3 true · true · true · 2 · 2 · false · true · 3 · true · pgcrypto · pg_cron | | |
@@ -473,7 +488,8 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 6.1 dos locales, los dos apagados · `locations` como se espera | | |
 | 6.2 dominio | | |
 | 6.3 `CLUB_WEB_KEY` cargada, sha256 en la base, `/api/salud` en verde | | |
-| §11.3 `/api/salud`: `x-club-api: worker` y todo en `true` · prueba de fuego · Worker en `main` (§11.4 paso 7) | | |
+| **§11.4 paso 7 · CORTE BLOQUEANTE:** Worker conectado a `main` y desplegado desde `main` (SHA, hora); sin despliegues desde otra rama. Sin esto no se sigue | | |
+| §11.3 `/api/salud`: `x-club-api: worker` y todo en `true` · prueba de fuego | | |
 | 6.4 valores del local (la fila de verificación) · empleados con login | | |
 | 6.5 carga única (sha256, conteos) o «replanificada» | | |
 | 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
@@ -548,14 +564,18 @@ puede llamar es el binding, y el binding recién existe cuando el #59 llega a `m
 **Antes de empezar:** el #98 mergeado en el #59 (lo hace Claude con el OK del dueño; no toca prod), así la rama del #59
 trae `club-web/worker/`.
 
-**Miércoles (el dueño, en Cloudflare):**
-1. Workers & Pages → **Create** → **Workers** → **Import a repository** → `satori-app`.
-2. Nombre **`satori-club-api`** (igual al `service` del binding y al `name` de `club-web/worker/wrangler.toml`) · rama de
-   producción **`claude/epic-tesla-pyo77m`** (la del #59) · Root directory **`club-web/worker`** · Build command: vacío ·
-   Deploy command **`npx wrangler deploy`**. **No** agregar un dominio ni una ruta.
-3. **Save and Deploy.**
-4. En el log del deploy tienen que aparecer `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)`. En Settings →
-   **Domains & Routes**: sin rutas y **sin** la URL `*.workers.dev` (si aparece encendida, apagarla).
+**Miércoles (el dueño): despliegue MANUAL, una vez, y SIN despliegues automáticos** (Grok 167). El Worker **no** se conecta
+a la rama del #59: una rama de trabajo conectada desplegaría sola con cada push. Se conecta a `main` recién en el paso 7.
+1. En su Mac, en el repo: `git fetch origin claude/epic-tesla-pyo77m && git checkout claude/epic-tesla-pyo77m` (la rama del
+   #59, que ya trae `club-web/worker/`) y anotar el SHA (`git rev-parse --short HEAD`).
+2. `cd club-web/worker && npx wrangler login` (abre el navegador; la cuenta de Cloudflare de Satori) y **`npx wrangler
+   deploy`**. El nombre **`satori-club-api`** sale del `wrangler.toml` (igual al `service` del binding). **No** agregar un
+   dominio ni una ruta.
+3. En Cloudflare → Workers & Pages → `satori-club-api` → Settings → **Build**: **sin** repositorio conectado (si aparece
+   uno, desconectarlo). Así nada lo vuelve a desplegar hasta el paso 7.
+4. En la salida del deploy tienen que aparecer `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)`. En Settings →
+   **Domains & Routes**: sin rutas y **sin** la URL `*.workers.dev` (si aparece encendida, apagarla). Anotar en §10 el SHA
+   del paso 1 y la hora.
 5. Worker → Settings → **Variables and Secrets** (Production), los mismos valores que en Pages:
 
 | Nombre | Tipo | Cuándo |
@@ -570,8 +590,11 @@ trae `club-web/worker/`.
 **Jueves:**
 6. Con la clave nueva de prod de §6.3 (la misma que va en Pages): Worker → Settings → Variables and Secrets → **Secret**
    `CLUB_WEB_KEY`. **Nunca por chat.** Si el panel lo pide, **Deploy**.
-7. **Después del merge del #59:** Worker → Settings → **Build** → rama de producción **`main`** (así los arreglos futuros
-   del Worker salen de `main`).
+7. **Después del merge del #59 — CORTE BLOQUEANTE (§10):** Worker → Settings → **Build** → **Connect** → `satori-app`, rama
+   de producción **`main`**, Root directory **`club-web/worker`**, Build command vacío, Deploy command **`npx wrangler
+   deploy`**, y **Deploy** una vez desde `main`. En el log, los dos `ratelimit`; en Variables, las 4 siguen (`keep_vars`).
+   Desde ahí los arreglos del Worker salen solo de `main`. **Sin este paso no se sigue con §11.3 ni se enciende el local**
+   (el Worker quedaría con el código de una rama de trabajo).
 8. §11.3.
 
 **Vuelta atrás al plan A:** un PR de tres líneas a `main` que comenta el `[[services]]` de `club-web/wrangler.toml`
@@ -594,26 +617,11 @@ crear cupones y el alta responden 503 (falla cerrada). El Worker puede quedar cr
 CNAME (11.2), `CLUB_WEB_KEY` en Pages (y en el Worker), el deploy real, 11.3 y la prueba de fuego con teléfonos.
 
 ## 12. Hallazgos de la auditoría del 10-nov (partes A y B) y decisiones del dueño
-### Grok 158 (Alta) · contraseña de las cuentas de prueba de staging expuesta en el historial
-- **Exposición:** la contraseña de las cuentas de prueba (`test-manager`, rol **owner** en staging; `test-cajero`, rol
-  salonero) estuvo en el historial del repo desde el **11-jun-2026 21:43 (-06:00)**. Se rotó dos veces el 09-nov y
-  ya no está en `main` ni en la rama del Club. Staging es un espejo de los datos de prod.
-- **Revisión de los ingresos (10-nov, solo lectura en staging):**
-  - `auth.audit_log_entries` está **vacía** (Supabase ya no escribe ahí) y la API de logs de auth respondió error: **no hay
-    registro de los ingresos del 11-jun al 09-nov**. Lo que queda: el último ingreso de cada cuenta, las sesiones vivas y
-    la actividad que cada cuenta dejó en las tablas que guardan quién hizo cada cambio (33 columnas «quién lo hizo» revisadas).
-  - `test-manager`: 3 sesiones, todas del 10-nov (22:18 y 22:51 del 09-nov y 09:02 del 10-nov, hora CR), desde **una
-    misma red** y **un mismo navegador** (Chrome en macOS). Su actividad en las tablas: 8
-    acciones del Club el **08-nov 12:24–13:12 CR** (las del recorrido con capturas de Claude, que entró con esa cuenta a esa
-    hora) y 4 «ver reporte del mes» el **09-nov 22:52–22:58 CR** (la revisión de las fechas de Reportes que hizo el dueño
-    esa noche). **Nada más** en caja, propinas, ventas ni el Club.
-  - `test-cajero`: último ingreso el **05-nov 09:03 CR**, sin sesión guardada; **ninguna** actividad en las tablas.
-  - **Conclusión:** en lo que se puede ver, **no hay uso ajeno**: toda la actividad tiene un origen conocido. El hueco de
-    junio a noviembre no se puede revisar desde la base.
-- **Confirmado por el dueño (10-nov tarde):** las 3 sesiones de `test-manager` (09-nov 22:18 y 22:51, 10-nov 09:02, hora
-  CR; Mac con Chrome) **son suyas**. Con eso, toda la actividad visible de las dos cuentas tiene origen conocido.
-- **Queda (opcional) para el dueño:** revisar en el panel de Supabase (Logs → Auth) lo que todavía tenga guardado del hueco
-  de junio a noviembre.
+### Grok 158 (Alta) · contraseña de prueba de staging en el historial del repo
+- **Contraseña de prueba rotada (09-nov) y revisada, con residual: sin logs de auth entre jun y nov.**
+- Revisión (10-nov, solo lectura en staging): toda la actividad visible de las cuentas de prueba tiene origen conocido
+  (el recorrido con capturas del 08-nov y sesiones del dueño del 09-nov y del 10-nov, que el dueño confirmó). Lo de junio
+  a noviembre no se puede revisar desde la base. Opcional para el dueño: el panel de Supabase (Logs → Auth).
 
 ### Grok 160 · un crédito sobre una factura R que después se anula
 **Decisión del dueño (10-nov): MITIGAR con una alerta, sin bloquear.** Cuando una factura R sobre la que se acreditó un
@@ -638,4 +646,39 @@ prioritaria** (`club_alertas`, tipo `factura_r_anulada`) que Excepciones muestra
   El historial no se reescribe.
 - **Condición de la 150 (MAINTAIN):** `authenticated` (y `anon`) sin MAINTAIN en ninguna tabla `club_*` ni en `locations`,
   con verificación dentro de la migración y la prueba 93. Las tablas de caja, después de abrir (bloque 152+).
+
+### Auditoría del 10-nov, segunda vuelta (delta hasta `f8bc602` y migrador hasta `e91b294`): sin NO-GO
+**Alertas (en la 150):**
+- **162:** `club_alerta_revisar` rechaza (42501) a quien registró el movimiento (`registrado_por`) o aprobó su pendiente
+  (`club_personas_pendientes.resuelto_por`); la revisa otro manager y, si no hay otra persona, el owner (la misma regla
+  que CLUB-AUD-25: el owner no queda frenado). `club_alertas_prioritarias` devuelve `revisada_por` (nombre del perfil) y
+  Excepciones lo muestra. Prueba 95 y mutación `162` (caen 4).
+- **163:** el cuerpo de `club_factura_r_anulada_trg` va en `begin … exception when others then raise warning`: un error de
+  la alerta **nunca** frena la ingesta R→X del puente. Prueba 95 (la alerta forzada a fallar: el UPDATE pasa y no queda
+  alerta a medias) y mutación `163` (cae 1).
+- **164:** negativas en la prueba 95 (cajero → 42501; `authenticated` sin INSERT ni UPDATE en `club_alertas`). El residual
+  (C→X, cruce manual, más de 7 días, solo UPDATE) va al backlog 22f.
+
+**Migrador de la primera carga (toca saldos):**
+- **170:** la validación dentro de la transacción cuenta `restos_invalidos` y aborta si algún «resto del sistema viejo» no
+  cumple `-personas*2 < personas_por_credito`, miembro activo y saldo final 0. Los `assert` pasaron a `if … sys.exit`
+  (`python -O` los ignora). Prueba en staging (ROLLBACK): dos restos trucados → `restos_invalidos=2`, no queda nada.
+- **171:** con `--vencer-restos-inactivos`, `--ensayo` y `--emitir` exigen `--esperados` con `vencimientos_restos` y
+  `vencimientos_restos_personas`; se comparan con el plan antes de emitir y con la base dentro de la transacción. El dueño
+  los firma **junto con el sha256 de `carga.sql`** (van dentro del SQL; `resumen.json` los muestra en `esperados_firmados`).
+- **172:** «hoy» y la última actividad, en hora de Costa Rica (`hoy_cr`, `fecha_cr`). Prueba en el borde: 10-nov 23:30 CR
+  (11-nov 05:30 UTC) queda fuera del plazo con hoy = 11-nov-2026; 11-nov 00:30 CR, dentro.
+- **173:** `--papel` y `--vencer-restos-inactivos` no se combinan (sale con «NEGADO (Grok 173)»).
+
+**PASE, scripts y repo:**
+- **165:** `club_paridad.sh`: `cuerpo()` normaliza como `con_antes` (espacios y mayúsculas) y aborta (sale 3) si queda
+  cualquier control de transacción. Pruebas sin red: `club_paridad_cuerpo_test.sh` (10/10). Además, el catálogo lista las
+  ACL con sus entradas ordenadas: aplicar la 150 dos veces en staging reordena las entradas sin cambiar ningún permiso.
+- **166:** §12 / Grok 158 reducido a lo que corresponde en un repo público.
+- **167:** el Worker se crea el miércoles con un `wrangler deploy` manual, sin repositorio conectado; se conecta a `main`
+  después del merge (§11.4 paso 7, **corte bloqueante** en §10).
+- **168:** al backlog, después del piloto: secreto compartido Pages → Worker.
+- **169:** sacado del backlog (`PROMPT-CONTINUACION.md`, #94 y #95) el correo de login de la cuenta de prueba de prod;
+  `walletRepo.test.ts` detecta correos `@gmail` y el nombre del dueño (#94 y #95).
+- **181:** §10, fila 0.4.
 

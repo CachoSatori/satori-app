@@ -151,7 +151,7 @@ class SqlEmitido(unittest.TestCase):
         con_tarjeta = sp.sql_carga(self.f, 'local-prueba', 'prod', 'tarjeta')
         self.assertIn("(p.fecha::timestamp + time '12:00') at time zone 'America/Costa_Rica', now(), 'papel'", con_tarjeta)
         self.assertEqual(sp.filtrar(con_tarjeta), [])
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):   # Grok 170: if/raise, no assert
             sp.sql_carga(self.f, 'local-prueba', 'prod', 'original')
 
     def test_comillas_en_la_referencia_no_rompen_el_sql(self):

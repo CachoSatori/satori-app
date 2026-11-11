@@ -242,16 +242,19 @@ test('Grok 63: el opt-in del turista exige la versión del aviso; la base la rec
   assert.deepEqual(args.p_contacto, { nombre: '', whatsapp: '60000000', email: '', optin: true, acepto: 'v1' })
 })
 
-test('Grok 63 + 136: baja del turista → POST /api/baja/:llave (32 hex) llama a club_cupon_contacto_baja; GET → 405; llave mala → 404; tope', async () => {
+test('Grok 63 + 136 + 183: baja del turista → POST /api/baja con la llave en el CUERPO; en la ruta ya no; GET → 405; llave mala → 404; tope', async () => {
   llamadas = []
   const llave = '0123456789abcdef0123456789ABCDEF'
-  const r = await manejar(pedido(`baja/${llave}`, 'POST', '{}'), conLimite(), `baja/${llave}`)
+  const cuerpo = JSON.stringify({ llave })
+  const r = await manejar(pedido('baja', 'POST', cuerpo), conLimite(), 'baja')
   assert.equal(r.status, 200)
   assert.ok(String(llamadas[0].url).endsWith('/rpc/club_cupon_contacto_baja'))
   assert.deepEqual(JSON.parse(llamadas[0].init.body), { p_token: llave.toLowerCase() })
-  assert.equal((await manejar(pedido(`baja/${llave}`), conLimite(), `baja/${llave}`)).status, 405)
-  assert.equal((await manejar(pedido('baja/ABCDEFGH23', 'POST', '{}'), conLimite(), 'baja/ABCDEFGH23')).status, 404)   // un código de cupón ya no sirve
-  assert.equal((await manejar(pedido(`baja/${llave}`, 'POST', '{}'), conLimite(false), `baja/${llave}`)).status, 429)
+  assert.equal((await manejar(pedido('baja'), conLimite(), 'baja')).status, 405)
+  assert.equal((await manejar(pedido('baja', 'POST', JSON.stringify({ llave: 'ABCDEFGH23' })), conLimite(), 'baja')).status, 404)   // un código de cupón no sirve
+  assert.equal((await manejar(pedido('baja', 'POST', '{}'), conLimite(), 'baja')).status, 404)
+  assert.equal((await manejar(pedido(`baja/${llave}`, 'POST', '{}'), conLimite(), `baja/${llave}`)).status, 404)   // 183: la ruta vieja con la llave
+  assert.equal((await manejar(pedido('baja', 'POST', cuerpo), conLimite(false), 'baja')).status, 429)
   assert.equal(llamadas.length, 1)
 })
 

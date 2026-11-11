@@ -231,14 +231,15 @@ solas tras un reinicio (validado el 29/10).
 **Orden previsto del pase a prod** (prod va hasta la **085** desde el 10/11):
 1. ~~**081 → 082** (puente) primero, con su número.~~ **Hecho el 09/11** (pase del puente).
 2. ~~Después la **085** (SEC-01c), con su número: queda arriba de la 082.~~ **Hecho el 10/11** (#80, `bb12652`).
-3. Las que queden atrás (≤ al último de prod en su momento: la **083** y la **084**, la **075** del Club)
-   toman **150+**, en el orden en que pasen.
+3. Las que queden atrás (≤ al último de prod en su momento) toman **150+**, en el orden en que pasen:
+   **150 ← 075 y 151 ← 100** (pase del Club, `docs/pases/PASE-150-151-club.md`); la **083**, la **084**, la 087 y la 088
+   (y la 093 si va después del Club) toman **152+** cuando se arme su paquete.
 
 **Ya usados (antes de los bloques)**
 
 | Número | Nombre | De | Rama | Dónde está aplicada |
 |---|---|---|---|---|
-| 075 | `club_satori_esquema` | Club | `claude/brave-brown-m45jd7` y ramas del Club | staging. Al pasar a prod se renombra al bloque de pase (regla 3) |
+| 075 | `club_satori_esquema` | Club | `claude/brave-brown-m45jd7` y ramas del Club | **Renumerada a 150** en el pase del Club (`claude/pase-club`, 10-nov; regla 3). En staging la fila ya es la 150 |
 | 078 | — | — | — | **No usar** (fue Prom/PAX, renumerada a 080) |
 | 080 | `pos_prompax_agregado` | Prom/PAX | `main` (#58) | staging y prod (último de prod al 08/11) |
 | 081 | `pos_ndf_campos_factura` | puente (Club) | `main` (#71, 09/11) | staging y **prod** (09/11 10:57 -06:00, a mano en el pase del puente) |
@@ -261,21 +262,23 @@ solas tras un reinicio (validado el 29/10).
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | 087, 088, 089, 090, 091, 092, 093, 094, 095 | **096** |
-| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`, sin aplicar; va después de la 075) | **101** |
-| PASE A PROD (solo renumeraciones) | 150–199 | — | **150** |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) | **101** |
+| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` | **152** (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
 | (fuera de bloque) | 086 | — | libre |
 
 **Asignadas en los bloques**
 
 | Número | Nombre | Bloque | Rama | Dónde está aplicada |
 |---|---|---|---|---|
-| 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **sin aplicar**. Orden en prod (Grok 127): 085 → 089 → 090 → 091 → 092 → pase del Club. **Decisión (CLUB-AUD-100): en el pase del Club, 075 → 150 y 100 → 151** (bloque de pase, con su «origen»). No se mergea antes que la 091 y la 092 |
+| 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **renumerada a 151** en el pase del Club (`claude/pase-club`, 10-nov). El número 100 no se reutiliza (regla 4) |
+| 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` |
+| 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
 | **PROD** | **58 filas** (10/11, según el pase de la 085; antes 57) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085` (**085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
-| **STAGING** | **90 filas** (10/11 11:03 CR: + 091, 092, 093, 094 y 095) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5); la 082 del puente está aplicada **sin su fila**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
+| **STAGING** | **91 filas · última 151** (10/11 11:40 CR, lectura; antes 82 el 08/11 y 85 el 10/11 a la mañana) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5), la 089 a la 095 (caja) y, **el 10/11, el Club como 150 y 151** (la fila 075 pasó a 150 con el texto del archivo y se aplicó la 151 con su fila, en una transacción con precondición; PASE-150-151 §3). **10/11 tarde:** la 150 nueva (auditoría A/B, md5 `919bcd54…`) aplicada encima con su fila, con el OK del dueño; batería 613/613 y paridad 992 = 992 sin `--antes`. **10/11 18:10 CR:** la 150 de la segunda vuelta (Grok 162–164, md5 `04681f41…`) con su fila, mismo procedimiento; batería 623/623, paridad 992 = 992. La 082 del puente está aplicada **con su fila**: la v3 (09/11), md5 `edb7ffc58976804e55968f75df530a05`, igual al archivo de `main`. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
 - **Próximo número libre: por bloque** (08/11): **CAJA / operación 096**, **CLUB SATORI + puente 100**. Ver «Numeración de migraciones» abajo. Antes de crear una migración, leer esa sección **en `main`** y registrar el número en el mismo PR.
   - La **076** (`sops_code_area`: columnas `code`, `area`, `doc_type`, `version`, `employee_book`, `pdf_path` en `public.sops` + índice único parcial `sops_code_key` + check `sops_doc_type_check`) y la **077** (`sops_pdf_storage`: policies `sops_storage_read` y `sops_franquicia_solo_gerencia` en `storage.objects`, bucket privado `documents`) están **en staging y en prod**. Prod: 06/11 entre 18:03:48 y 18:05:14 UTC, aplicadas a mano por la Management API (sesión de Claude Code de los SoP, con OK del dueño), verificando el ref antes de cada escritura y **antes** del merge del código (PR #49). Sus `.sql` son **idénticos byte a byte** a los statements del ledger de prod y de staging (md5 `fc26bfea…` y `ef17f371…`). Rollback: `scripts/sql/077_rollback.sql` y, solo después de revertir el sync de SoP, `scripts/sql/076_rollback.sql`.

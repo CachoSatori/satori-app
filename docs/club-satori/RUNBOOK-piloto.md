@@ -9,6 +9,12 @@
 > **Ritual antes de cada comando de base:** leer el ref en la pantalla del editor SQL y decirlo en voz alta. Nunca
 > SQL de escritura sin haber leído el ref.
 
+> **⚠️ (10-nov) El orden del pase lo manda ahora el paquete [`docs/pases/PASE-150-151-club.md`](../pases/PASE-150-151-club.md).**
+> La base del Club entra **con el merge** (Branching aplica la 150, antes 075, y la 151, antes 100), como la 085 y la 089:
+> ya no se aplica a mano antes del merge (pasos 3b, 4 y 10 de abajo). Los locales se dan de alta **apagados** (no como dice
+> el 4b) y Santa Teresa se enciende en la prueba interna. Este RUNBOOK sigue valiendo para el detalle de cada
+> verificación (Cloudflare, clave, carga única, encender un local, gates).
+
 ## Orden (no se saltea ni se invierte)
 
 | # | Paso | Depende de | Si falla |
@@ -249,12 +255,20 @@ público (`/r/`, cupones); el canje sale del botón «Canjear» del pase o del p
 > Club **vacía** («cero socios») y **sin borrar nada en prod**. Detalle completo: `docs/club-satori/piloto/saldos-papel.md` §A.
 
 **Hacer:**
-1. Export de Firestore con `MANIFEST` **no provisional** (depurado por el dueño) y el CSV de papel con `legacy_id`.
-2. `python3 -I scripts/club/migrar_firestore.py --export <export> --local <id> --primera-carga --papel <papel.csv> --dry-run`
-   → conteos, y el **chequeo de 12 meses sin actividad sobre la fuente** (frena si hay alguna; se decide en la fuente o
-   con `--acepto-inactivos N`, el número exacto).
+1. Export de Firestore con `MANIFEST` **no provisional** (depurado por el dueño). El CSV de papel con `legacy_id` es
+   **opcional**: (10-nov) el camino por defecto es **sin papel** (no hay lista); si aparece, se suma con `--papel <csv>`.
+2. `python3 -I scripts/club/migrar_firestore.py --export <export> --local <id> --primera-carga --dry-run`
+   → conteos, y el **chequeo de 12 meses sin actividad sobre la fuente** (frena si hay alguna; se decide en la fuente,
+   con `--vencer-restos-inactivos N` para las que tienen un resto de menos de medio crédito —se vencen en la carga,
+   «resto del sistema viejo»— y con `--acepto-inactivos M` para las demás; N y M, los números exactos del dry-run del
+   mismo día, en hora de Costa Rica). Detalle: `piloto/saldos-papel.md` §A.2. **`--papel` y `--vencer-restos-inactivos`
+   no se combinan** (Grok 173): la carga con restos vencidos va sin papel.
 3. Ensayo en staging: lo mismo con `--ensayo --vaciar-para-ensayo` (vacía el Club dentro de la transacción y la deshace).
-4. `--emitir <carpeta fuera del repo>` → `carga.sql` + `resumen.json` (sha256). El dueño firma el sha256.
+4. `--emitir <carpeta fuera del repo>` → `carga.sql` + `resumen.json` (sha256). (Grok 171) Con `--vencer-restos-inactivos`,
+   el ensayo y la emisión exigen `--esperados <json>` con **`vencimientos_restos`** (N) y **`vencimientos_restos_personas`**:
+   el dueño los firma **junto con el sha256 de `carga.sql`** (van dentro del SQL, así que el sha256 los cubre). El script
+   frena si no coinciden con el plan, y la transacción vuelve a controlarlos contra lo que quedó en la base, además de que
+   todo «resto del sistema viejo» sea de menos de medio crédito, de un miembro activo y lo deje en 0 (Grok 170).
 5. En PROD, con la firma y fuera de servicio: `python3 -I scripts/club/migrar_firestore.py aplicar-firmado --archivo
    <carga.sql> --sha256 <el firmado> --ref <prod> --confirmo-ref <prod>` con `CLUB_G56_PROD=si`. Recalcula el sha256,
    vuelve a pasar la lista cerrada del migrador, exige `commit` al final y `standard_conforming_strings = on`, y lo

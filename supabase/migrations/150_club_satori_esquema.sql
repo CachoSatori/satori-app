@@ -2230,7 +2230,9 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));   -- CLUB-AUD-08
   select * into v_prev from public.club_movimientos where client_op_id = p_op;
   if found then
-    if v_prev.tipo <> 'tarjeta' or v_prev.miembro_id is distinct from p_miembro or v_prev.cupon_id is not null then
+    -- Grok 159 (10-nov): el replay exige también las mismas personas (si no, la caja creería que registró otra cantidad)
+    if v_prev.tipo <> 'tarjeta' or v_prev.miembro_id is distinct from p_miembro or v_prev.cupon_id is not null
+       or v_prev.personas is distinct from p_personas then
       raise exception 'Esta operación ya se usó para otro registro: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
     end if;
     select * into v_cfg from public.club_config where location_id = v_prev.location_id;
@@ -2641,8 +2643,12 @@ $$;
 
 -- Opt-in del turista DESPUÉS de obtener el cupón (PÚBLICA). Solo sobre un cupón vigente y sin
 -- contacto previo (una sola vez). Mismas validaciones que club_cupon_crear. No revela nada.
+-- Grok 182 (10-nov): devuelve {ok, baja}: la llave de baja del turista va UNA SOLA VEZ, en la respuesta del pedido que
+-- guarda el contacto (club-web le muestra su link /b/<llave>). Un pedido repetido (ya cargado) devuelve solo {ok}.
+-- Cambia el tipo de retorno: por eso el drop (los grants se vuelven a dar abajo, en la lista de permisos).
+drop function if exists public.club_cupon_contacto(text, jsonb);
 create or replace function public.club_cupon_contacto(p_codigo text, p_contacto jsonb)
-returns boolean
+returns jsonb
 language plpgsql
 volatile
 security definer
@@ -2655,6 +2661,7 @@ declare
   v_wa     text;
   v_email  text;
   v_aviso  text;
+  v_tok    text;
 begin
   if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
     raise exception 'Datos no válidos' using errcode = 'P0001';
@@ -2675,7 +2682,7 @@ begin
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
   if exists (select 1 from public.club_cupones_contactos k where k.cupon_id = v_c.id) then
-    return true;   -- ya cargado: no se pisa ni se informa nada más
+    return jsonb_build_object('ok', true);   -- ya cargado: no se pisa ni se informa nada más (la llave no se repite)
   end if;
   v_nombre := nullif(btrim(regexp_replace(coalesce(p_contacto->>'nombre', ''), '[[:cntrl:]]', '', 'g')), '');
   if v_nombre is not null and length(v_nombre) > 80 then
@@ -2695,8 +2702,9 @@ begin
   end if;
   insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin, aviso_version, aviso_aceptado_en)
   values (v_c.id, v_nombre, v_wa, v_email, true, v_aviso, now())
-  on conflict (cupon_id) do nothing;
-  return true;
+  on conflict (cupon_id) do nothing
+  returning baja_token into v_tok;
+  return jsonb_build_object('ok', true) || case when v_tok is null then '{}'::jsonb else jsonb_build_object('baja', v_tok) end;
 end;
 $$;
 
@@ -6872,6 +6880,188 @@ alter table public.club_config add constraint club_config_aviso_registrado_fk
 revoke all on function public.club_employees_pos_login_guardia() from public, anon, authenticated;
 revoke all on function public.club_excepcion_actor(text, text, text) from public, anon, authenticated;
 revoke all on function public.club_inmutable_trg() from public, anon, authenticated;
+
+
+-- ═══ Grok 160 (10-nov, decisión del dueño: MITIGAR) · alerta prioritaria si la R que respaldaba un crédito pasa a X ═══
+-- S0/S0b/S8: una factura R (cobrada, falta el cierre de caja) cuenta como cruce provisional, así que se acredita un cupón
+-- (o se aprueba un pendiente, que crea su movimiento con el mismo pos_ref) sobre ella. Si después esa R se ANULA (X) y no
+-- queda otra factura C o R del mismo pedido o factura, el crédito quedó sin respaldo. NO se bloquea ni se revierte nada
+-- (bloquear el canje queda para después del piloto, en el backlog): se crea una alerta PRIORITARIA en club_alertas, que
+-- Excepciones muestra arriba para la revisión diaria (owner y manager), con «Revisado».
+alter table public.club_alertas add column if not exists prioritaria boolean not null default false;
+alter table public.club_alertas add column if not exists revisada_en timestamptz;
+alter table public.club_alertas add column if not exists revisada_por uuid;
+alter table public.club_alertas add column if not exists revisada_nota text check (revisada_nota is null or length(revisada_nota) <= 500);
+alter table public.club_alertas drop constraint if exists club_alertas_tipo_check;
+alter table public.club_alertas add constraint club_alertas_tipo_check check (tipo in ('canje','autoalta_cupo','factura_r_anulada'));
+alter table public.club_alertas drop constraint if exists club_alertas_r_anulada_movimiento;
+alter table public.club_alertas add constraint club_alertas_r_anulada_movimiento
+  check (tipo <> 'factura_r_anulada' or (detalle ? 'movimiento_id' and detalle ? 'numero_factura' and prioritaria));
+-- una alerta por movimiento y factura (una R que se anula dos veces en el puente no repite)
+create unique index if not exists club_alertas_r_anulada_un on public.club_alertas ((detalle->>'movimiento_id'), (detalle->>'numero_factura'))
+  where tipo = 'factura_r_anulada';
+create index if not exists club_alertas_prioritarias_idx on public.club_alertas (location_id, creado_en desc) where prioritaria;
+
+-- ¿Esta factura del PoS corresponde a este pos_ref? La misma regla que club_cruce_provisional, sin mirar el estado.
+create or replace function public.club_pos_ticket_coincide(p_location text, p_pos jsonb, t public.pos_ndf_tickets)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select t.local = p_location and (
+    (coalesce(p_pos->>'modo', '') = 'factura' and t.numero_factura = p_pos->>'numero_factura')
+    or (coalesce(p_pos->>'modo', '') = 'pedido' and t.numero_pedido = p_pos->>'pedido'
+        and t.fecha_registra >= least(coalesce((p_pos->>'abierto_en')::timestamptz, (p_pos->>'visto')::timestamptz, (p_pos->>'hora')::timestamptz),
+                                      (p_pos->>'hora')::timestamptz) - interval '2 minutes'
+        and t.fecha_registra < (p_pos->>'hora')::timestamptz + interval '18 hours'
+        and (t.pedido_abierto_en is null
+             or abs(extract(epoch from t.pedido_abierto_en
+                    - coalesce((p_pos->>'abierto_en')::timestamptz, (p_pos->>'visto')::timestamptz, (p_pos->>'hora')::timestamptz))) < 2)))
+$$;
+
+create or replace function public.club_factura_r_anulada_trg()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare m record;
+begin
+  -- Grok 163 (10-nov): la alerta NUNCA frena la ingesta R→X del puente. Un error acá (una restricción, un dato raro) se
+  -- deshace solo dentro de este bloque y queda como WARNING en el log; el UPDATE del ticket sigue.
+  begin
+  if not exists (select 1 from public.club_config c where c.location_id = new.local) then
+    return null;   -- el Club no existe en ese local
+  end if;
+  for m in
+    select mv.id, mv.miembro_id, mv.cupon_id, mv.personas, mv.pos_ref, mv.location_id, mv.registrado_en
+      from public.club_movimientos mv
+     where mv.location_id = new.local and mv.tipo = 'tarjeta' and mv.pos_ref is not null
+       and mv.pos_ref->>'modo' in ('factura', 'pedido')
+       and mv.registrado_en > now() - interval '7 days'
+  loop
+    if public.club_pos_ticket_coincide(new.local, m.pos_ref, new)
+       and not exists (select 1 from public.pos_ndf_tickets t2
+                        where t2.local = new.local and t2.numero_factura <> new.numero_factura and t2.estado in ('C', 'R')
+                          and public.club_pos_ticket_coincide(new.local, m.pos_ref, t2)) then
+      insert into public.club_alertas (location_id, tipo, miembro_id, prioritaria, detalle)
+      values (m.location_id, 'factura_r_anulada', m.miembro_id, true,
+              jsonb_build_object('movimiento_id', m.id, 'numero_factura', new.numero_factura, 'pedido', new.numero_pedido,
+                                 'cupon_id', m.cupon_id, 'personas', m.personas, 'modo', m.pos_ref->>'modo',
+                                 'registrado_en', m.registrado_en))
+      on conflict ((detalle->>'movimiento_id'), (detalle->>'numero_factura')) where tipo = 'factura_r_anulada' do nothing;
+    end if;
+  end loop;
+  exception when others then
+    raise warning 'CLUB: la alerta de factura R anulada falló (% %): la ingesta sigue', sqlstate, sqlerrm;
+  end;
+  return null;
+end;
+$$;
+drop trigger if exists club_factura_r_anulada_trg on public.pos_ndf_tickets;
+create trigger club_factura_r_anulada_trg after update of estado on public.pos_ndf_tickets
+  for each row when (old.estado = 'R' and new.estado = 'X')
+  execute function public.club_factura_r_anulada_trg();
+
+-- Excepciones: alertas prioritarias del local (owner y manager). Sin revisar primero; las revisadas de los últimos 7 días
+-- se ven con quién y cuándo. Sin datos de contacto: el nombre del miembro y lo del movimiento.
+-- Grok 162 (10-nov): devuelve también quién la revisó (nombre del perfil); cambia el tipo de retorno → drop antes.
+drop function if exists public.club_alertas_prioritarias(text);
+create or replace function public.club_alertas_prioritarias(p_location text default null)
+returns table (id bigint, tipo text, creado_en timestamptz, miembro text, detalle jsonb,
+               revisada_en timestamptz, revisada_nota text, revisada_por text)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if public.get_my_role() is null or public.get_my_role() not in ('owner', 'manager') then
+    raise exception 'Solo owner o manager' using errcode = '42501';
+  end if;
+  p_location := public.club_local(p_location, false);
+  return query
+    select a.id, a.tipo, a.creado_en, m.nombre, a.detalle, a.revisada_en, a.revisada_nota,
+           case when a.revisada_por is not null then coalesce(pr.full_name, 'Sin perfil') end
+      from public.club_alertas a left join public.club_miembros m on m.id = a.miembro_id
+      left join public.profiles pr on pr.id = a.revisada_por
+     where a.location_id = p_location and a.prioritaria
+       and (a.revisada_en is null or a.revisada_en > now() - interval '7 days')
+     order by (a.revisada_en is not null), a.creado_en desc
+     limit 200;
+end;
+$$;
+
+create or replace function public.club_alerta_revisar(p_id bigint, p_nota text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v public.club_alertas%rowtype; v_rol public.user_role := public.get_my_role(); v_mv uuid;
+begin
+  if v_rol is null or v_rol not in ('owner', 'manager') then
+    raise exception 'Solo owner o manager' using errcode = '42501';
+  end if;
+  if p_nota is null or length(btrim(p_nota)) < 3 or length(p_nota) > 500 then
+    raise exception 'Escribí qué se revisó (3 a 500 caracteres)' using errcode = 'P0001';
+  end if;
+  select * into v from public.club_alertas a where a.id = p_id and a.prioritaria for update;
+  if not found then
+    raise exception 'Alerta no encontrada' using errcode = 'P0001';
+  end if;
+  -- Grok 162 (10-nov): no revisa la alerta quien registró el movimiento ni quien aprobó su pendiente (la misma regla que
+  -- CLUB-AUD-25 en el cruce manual): la revisa otro manager; si no hay otra persona, el owner (el owner no queda frenado).
+  if v.tipo = 'factura_r_anulada' and v_rol <> 'owner' then
+    begin
+      v_mv := (v.detalle->>'movimiento_id')::uuid;
+    exception when others then v_mv := null; end;
+    if exists (select 1 from public.club_movimientos mv where mv.id = v_mv and mv.registrado_por = auth.uid())
+       or exists (select 1 from public.club_personas_pendientes pp
+                   where pp.movimiento_id = v_mv and pp.resuelto_por = auth.uid()) then
+      raise exception 'Esta alerta es de un movimiento que usted registró o aprobó: la revisa otro manager o el owner'
+        using errcode = '42501';
+    end if;
+  end if;
+  if v.revisada_en is not null then
+    return false;   -- ya estaba revisada: no se pisa quién y cuándo
+  end if;
+  update public.club_alertas set revisada_en = now(), revisada_por = auth.uid(), revisada_nota = btrim(p_nota) where id = p_id;
+  perform public.club_auditar('alerta_revisada', 'club_alertas', null, to_jsonb(v), jsonb_build_object('id', p_id, 'nota', btrim(p_nota)));
+  return true;
+end;
+$$;
+revoke all on function public.club_pos_ticket_coincide(text, jsonb, public.pos_ndf_tickets) from public, anon, authenticated;
+revoke all on function public.club_factura_r_anulada_trg() from public, anon, authenticated;
+revoke all on function public.club_alertas_prioritarias(text) from public, anon, authenticated;
+revoke all on function public.club_alerta_revisar(bigint, text) from public, anon, authenticated;
+grant execute on function public.club_alertas_prioritarias(text) to authenticated;
+grant execute on function public.club_alerta_revisar(bigint, text) to authenticated;
+
+-- ═══ Grok (condición para la 150, 10-nov) · authenticated sin MAINTAIN en las tablas del Club ni en locations ═══
+-- MAINTAIN (Postgres 17: VACUUM, ANALYZE, REINDEX, CLUSTER, REFRESH, LOCK TABLE) llegaba por los privilegios por defecto de
+-- public y ningún revoke de arriba lo sacaba. Las tablas de caja NO se tocan acá (van después de abrir, bloque 152+).
+do $$
+declare r record; v text;
+begin
+  if current_setting('server_version_num')::int < 170000 then
+    return;   -- antes de Postgres 17 el privilegio MAINTAIN no existe
+  end if;
+  for r in select c.oid::regclass as t from pg_class c
+            where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'm')
+              and (c.relname like 'club\_%' or c.relname = 'locations') loop
+    execute format('revoke maintain on table %s from public, anon, authenticated', r.t);
+  end loop;
+  select string_agg(c.relname, ', ') into v from pg_class c
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'm')
+     and (c.relname like 'club\_%' or c.relname = 'locations')
+     and (has_table_privilege('authenticated', c.oid, 'MAINTAIN') or has_table_privilege('anon', c.oid, 'MAINTAIN'));
+  if v is not null then
+    raise exception 'MAINTAIN sigue en: %', v;
+  end if;
+end $$;
 
 
 -- CLUB-AUD-11: red de seguridad al final, después de todos los grants de arriba.

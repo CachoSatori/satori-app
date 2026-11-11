@@ -340,11 +340,44 @@ def armar_plan(d: dict) -> Plan:
     return p
 
 
+# ── Hora de Costa Rica (Grok 172) ───────────────────────────────────────────
+def _zona_cr():
+    """America/Costa_Rica; si la máquina no tiene la base de zonas, UTC−6 fijo (Costa Rica no cambia de hora desde 1992)."""
+    import datetime as _dt
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo('America/Costa_Rica')
+    except Exception:
+        return _dt.timezone(_dt.timedelta(hours=-6), 'CR')
+
+
+def hoy_cr(ahora=None):
+    """La fecha de HOY en Costa Rica (no la de la máquina, que puede estar en UTC: de 18:00 a 24:00 CR ya es mañana)."""
+    import datetime as _dt
+    ahora = ahora or _dt.datetime.now(_dt.timezone.utc)
+    if ahora.tzinfo is None:
+        ahora = ahora.replace(tzinfo=_dt.timezone.utc)
+    return ahora.astimezone(_zona_cr()).date()
+
+
+def fecha_cr(iso: str | None) -> str:
+    """createdAt de Firestore (UTC, «…Z») → fecha de Costa Rica «AAAA-MM-DD». Sin zona, se toma como UTC. '' si no hay."""
+    import datetime as _dt
+    if not iso:
+        return ''
+    t = _dt.datetime.fromisoformat(str(iso).replace('Z', '+00:00'))
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=_dt.timezone.utc)
+    return t.astimezone(_zona_cr()).date().isoformat()
+
+
 # ── Inactividad sobre la fuente (B11, sin red) ───────────────────────────────
 def inactivos_fuente(p: Plan, hoy_iso: str, meses: int = 12) -> list[dict]:
     """Cuentas ACTIVAS con saldo cuya última actividad (tarjeta o canje) es de antes de hoy − `meses`. Con «fecha de
     carga para todos» volverían a contar el plazo el día del lanzamiento: se deciden en la fuente antes de cargar.
-    Devuelve legacy_id (id de la página vieja, no un dato personal), saldo en personas y la fecha; sin nombres."""
+    Devuelve legacy_id (id de la página vieja, no un dato personal), saldo en personas y la fecha; sin nombres.
+    (Grok 172) `hoy_iso` es la fecha de Costa Rica (hoy_cr) y la última actividad también (fecha_cr: createdAt viene en UTC),
+    para que el corte de 12 meses no se corra un día."""
     import datetime as _dt
     hoy = _dt.date.fromisoformat(hoy_iso[:10])
     y, m = hoy.year, hoy.month - meses
@@ -355,15 +388,38 @@ def inactivos_fuente(p: Plan, hoy_iso: str, meses: int = 12) -> list[dict]:
     for mv in p.movimientos:
         saldo[mv['miembro_id']] += mv['personas']
         if mv['tipo'] in ('tarjeta', 'canje') and mv['fecha']:
-            ult[mv['miembro_id']] = max(ult.get(mv['miembro_id'], ''), mv['fecha'][:10])
+            ult[mv['miembro_id']] = max(ult.get(mv['miembro_id'], ''), fecha_cr(mv['fecha']))
     out = []
     for mi in p.miembros:
         if mi['estado'] != 'activo' or saldo[mi['id']] <= 0:
             continue
-        u = ult.get(mi['id']) or (mi.get('created_at') or '')[:10]
+        u = ult.get(mi['id']) or fecha_cr(mi.get('created_at'))
         if u < corte:
             out.append({'legacy_id': mi['legacy_id'], 'personas': saldo[mi['id']], 'ultima_actividad': u})
     return sorted(out, key=lambda x: x['ultima_actividad'])
+
+
+def es_resto(personas: int, rate: int) -> bool:
+    """Regla del 07-nov (la misma que el SQL de restos y club_vencer_candidatos): menos de medio crédito."""
+    return 0 < personas and personas * 2 < rate
+
+
+def vencer_restos_fuente(p: Plan, restos: list[dict]) -> int:
+    """(10-nov, el dueño) Con la fecha de carga, las cuentas activas SIN actividad en el plazo cuyo saldo es un resto
+    (< medio crédito) se vencen EN LA MISMA CARGA con la regla del 07-nov («resto del sistema viejo»), fechadas en la
+    carga: entran con saldo 0 y no vuelven a contar el plazo. `restos` sale de inactivos_fuente (solo legacy_id)."""
+    por_legacy = {m['legacy_id']: m for m in p.miembros}
+    saldo = collections.Counter()
+    for mv in p.movimientos:
+        saldo[mv['miembro_id']] += mv['personas']
+    for x in restos:
+        m = por_legacy[x['legacy_id']]
+        s = saldo[m['id']]
+        if not (m['estado'] == 'activo' and s == x['personas'] and es_resto(s, p.rate)):   # Grok 170: no assert (-O)
+            sys.exit(f"FRENADO (Grok 170): resto inválido para {x['legacy_id']} (estado, saldo o regla del medio crédito)")
+        p.movimientos.append({'miembro_id': m['id'], 'tipo': 'vencimiento', 'personas': -s, 'creditos': None,
+                              'fecha': None, 'nota': NOTA_RESTO, 'legacy_ids': None})
+    return len(restos)
 
 
 # ── Validación local del plan (sin red) ──────────────────────────────────────
@@ -389,7 +445,7 @@ def resumen_plan(p: Plan) -> dict:
         saldo[mv['miembro_id']] += mv['personas']
     neto_sin_d1 = collections.Counter()
     for mv in p.movimientos:
-        if mv['nota'] != NOTA_D1:
+        if mv['nota'] not in (NOTA_D1, NOTA_RESTO):   # igual que sql_validar: D1 y restos no son de Firestore
             neto_sin_d1[mv['miembro_id']] += mv['personas']
     diffs = sum(1 for m in p.miembros if neto_sin_d1[m['id']] != p.neto_firestore[m['legacy_id']])
     act = [m for m in p.miembros if m['estado'] == 'activo']
@@ -405,6 +461,9 @@ def resumen_plan(p: Plan) -> dict:
         'tarjetas': tipos['tarjeta'], 'canjes': tipos['canje'],
         'vencimientos_136': sum(1 for mv in p.movimientos if mv['nota'] == NOTA_VENC_136),
         'vencimientos_d1': sum(1 for mv in p.movimientos if mv['nota'] == NOTA_D1),
+        # (10-nov) los restos vencidos EN EL PLAN (solo con --vencer-restos-inactivos; con fechas originales los vence el SQL)
+        'vencimientos_restos': sum(1 for mv in p.movimientos if mv['nota'] == NOTA_RESTO),
+        'vencimientos_restos_personas': -sum(mv['personas'] for mv in p.movimientos if mv['nota'] == NOTA_RESTO),
         'pm_cargos': len(p.pm_cargos), 'pm_pagos': len(p.pm_pagos),
         'diferencias_saldo_vs_firestore': diffs,
         'creditos_activos': str(cr_eq + cr_ext), 'creditos_activos_externos': str(cr_ext),
@@ -489,8 +548,10 @@ def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False, prim
       de carga para todos»; la inactividad de más de 12 meses se decide antes, en la fuente: inactivos_fuente).
     · vaciar_ensayo=True (solo con ensayo y solo en una base marcada como staging): vacía el Club DENTRO de la
       transacción para ensayar la primera carga sobre una base vacía; el ROLLBACK lo deshace."""
-    assert not vaciar_ensayo or (ensayo and primera), 'vaciar_ensayo solo con ensayo y primera carga'
-    assert papel is None or primera, 'la carga de papel dentro de la migración es solo para la primera carga'
+    if vaciar_ensayo and not (ensayo and primera):   # Grok 170: if, no assert (python -O los ignora)
+        sys.exit('NEGADO: vaciar_ensayo solo con ensayo y primera carga')
+    if papel is not None and not primera:
+        sys.exit('NEGADO: la carga de papel dentro de la migración es solo para la primera carga')
 
     datos = {
         'negocios': list(p.negocios.values()),
@@ -515,6 +576,9 @@ def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False, prim
         'pm_cargos': res['pm_cargos'], 'pm_pagos': res['pm_pagos'], 'pm_pendiente': res['pm_pendiente'],
         'vencimientos_136': res['vencimientos_136'], 'vencimientos_d1': res['vencimientos_d1'],
     }
+    if fecha_carga:   # (10-nov) con la fecha de carga el SQL de restos no vence nada: los restos son los del plan
+        plan_ctrl['vencimientos_restos'] = res['vencimientos_restos']
+        plan_ctrl['vencimientos_restos_personas'] = res['vencimientos_restos_personas']
     esp = json.dumps(esperados or {}, ensure_ascii=False)
     ctl = json.dumps(plan_ctrl, ensure_ascii=False)
     hoy = "(now() at time zone 'America/Costa_Rica')::date"
@@ -628,6 +692,8 @@ begin
   if (v->>'cuentas_baja_con_saldo')::int <> 0 then f := f || ('cuentas_baja_con_saldo=' || (v->>'cuentas_baja_con_saldo')); end if;
   if (v->>'vencer_simular_hoy')::int <> 0 then f := f || ('vencer_simular_hoy=' || (v->>'vencer_simular_hoy')); end if;
   if (v->>'barrido_anon_abiertas')::int <> 0 then f := f || ('barrido_anon_abiertas=' || (v->>'barrido_anon_abiertas')); end if;
+  -- Grok 170: todo «resto del sistema viejo» cumple la regla (menos de medio crédito), es de un miembro activo y lo deja en 0
+  if (v->>'restos_invalidos')::int <> 0 then f := f || ('restos_invalidos=' || (v->>'restos_invalidos')); end if;
   -- lo que dice el plan (Python) tiene que ser lo que quedó en la base
   for k in select jsonb_object_keys(c) loop
     if (v->>k)::numeric is distinct from (c->>k)::numeric then f := f || (k || ': base=' || coalesce(v->>k, 'null') || ' plan=' || (c->>k)); end if;
@@ -678,6 +744,11 @@ select json_build_object(
   'vencimientos_d1', (select count(*) from mov where tipo = 'vencimiento' and nota = {q(NOTA_D1)}),
   'vencimientos_restos', (select count(*) from mov where tipo = 'vencimiento' and nota = {q(NOTA_RESTO)}),
   'vencimientos_restos_personas', (select coalesce(-sum(personas), 0) from mov where tipo = 'vencimiento' and nota = {q(NOTA_RESTO)}),
+  'restos_invalidos', (select count(*) from mov v join mig m on m.id = v.miembro_id
+                        left join public.club_saldos s on s.miembro_id = v.miembro_id
+                       where v.nota = {q(NOTA_RESTO)}
+                         and not (v.tipo = 'vencimiento' and v.personas < 0 and -v.personas * 2 < v.personas_por_credito
+                                  and m.estado = 'activo' and coalesce(s.personas, 0) = 0)),
   'vencer_simular_hoy', (select count(*) from public.club_vencer_candidatos((now() at time zone 'America/Costa_Rica')::date)),
   'docs_legacy_en_canjes', (select coalesce(sum(cardinality(legacy_ids)), 0) from mov where tipo = 'canje'),
   'pm_cargos', (select count(*) from public.club_pm_cargos where origen = 'migracion'),
@@ -792,11 +863,11 @@ def main_saldos_papel(argv: list[str]) -> None:
         archivo = a.csv.expanduser().resolve()
         if archivo == REPO_ROOT or REPO_ROOT in archivo.parents:
             sys.exit('NEGADO: el CSV está dentro del repo. Los datos de anfitriones van fuera.')
-        filas, errores = sp.validar(archivo.read_text(encoding='utf-8'), _dt.date.today())
+        filas, errores = sp.validar(archivo.read_text(encoding='utf-8'), hoy_cr())
         if errores:
             print('CSV RECHAZADO (no se carga nada):'); print('\n'.join('  ' + e for e in errores[:200])); sys.exit(1)
         if a.fecha_movimiento == 'carga':
-            inac = sp.inactivos(filas, _dt.date.today(), a.vencimiento_meses)
+            inac = sp.inactivos(filas, hoy_cr(), a.vencimiento_meses)
             if inac and a.acepto_inactivos != len(inac):
                 print(f'FRENADO (B11): {len(inac)} tarjetas con más de {a.vencimiento_meses} meses sin actividad (con la fecha de carga '
                       'volverían a contar el plazo). Decidilas en la fuente, o --acepto-inactivos N si el dueño decidió cargarlas igual:')
@@ -921,7 +992,7 @@ def main_doble_carga(argv: list[str]) -> None:
         r = pth.expanduser().resolve()
         if r == REPO_ROOT or REPO_ROOT in r.parents:
             sys.exit(f'NEGADO: {nombre} está dentro del repo. Los datos van fuera.')
-    filas, errores = sp.validar(a.csv.expanduser().read_text(encoding='utf-8'), _dt.date.today())
+    filas, errores = sp.validar(a.csv.expanduser().read_text(encoding='utf-8'), hoy_cr())
     if errores:
         print('CSV RECHAZADO:'); print('\n'.join('  ' + e for e in errores[:200])); sys.exit(1)
     d = cargar(a.export.expanduser().resolve())
@@ -961,6 +1032,9 @@ def main() -> None:
     ap.add_argument('--vencimiento-meses', type=int, default=12)
     ap.add_argument('--acepto-inactivos', type=int, default=None,
                     help='(B11) cuántas cuentas con más de N meses sin actividad se cargan igual, sabiéndolo (el número exacto)')
+    ap.add_argument('--vencer-restos-inactivos', type=int, default=None,
+                    help='(10-nov, con la fecha de carga) cuántas cuentas inactivas con un RESTO (< medio crédito) se vencen en la '
+                         'misma carga, «resto del sistema viejo» (el número exacto; las demás inactivas siguen pidiendo --acepto-inactivos)')
     ap.add_argument('--papel', type=Path,
                     help='(B11, con --primera-carga) CSV de saldos de papel con legacy_id (fuera del repo): entra en la MISMA transacción')
     ap.add_argument('--vaciar-para-ensayo', action='store_true',
@@ -986,6 +1060,12 @@ def main() -> None:
     fecha_carga = (a.fecha_movimiento or ('carga' if a.primera_carga else 'original')) == 'carga'
     if a.papel and not a.primera_carga:
         sys.exit('NEGADO: --papel es solo para la primera carga (--primera-carga).')
+    if a.vencer_restos_inactivos is not None and a.papel:
+        sys.exit('NEGADO (Grok 173): --papel y --vencer-restos-inactivos no se combinan. La carga con restos vencidos va SIN '
+                 'papel; si algún día hay una lista de papel, se resuelve aparte (saldos-papel.md).')
+    if a.vencer_restos_inactivos is not None and not (a.primera_carga and fecha_carga):
+        sys.exit('NEGADO: --vencer-restos-inactivos es solo para la primera carga con la fecha de carga '
+                 '(con las fechas originales los restos los vence el SQL de la migración).')
     export = a.export.expanduser().resolve()
     out = a.out.expanduser().resolve()
     for pth, nombre in ((export, '--export'), (out, '--out')):
@@ -996,6 +1076,14 @@ def main() -> None:
         esperados = json.loads(a.esperados.expanduser().read_text(encoding='utf-8'))
         if not isinstance(esperados, dict) or not esperados:
             sys.exit('NEGADO: --esperados tiene que ser un objeto JSON con al menos un total.')
+    # Grok 171: vencer restos en la carga toca saldos: el ensayo y la emisión exigen los dos totales firmados por el dueño
+    # en --esperados, y se controlan dentro de la transacción (y antes, contra el plan).
+    RESTOS_FIRMADOS = ('vencimientos_restos', 'vencimientos_restos_personas')
+    if a.vencer_restos_inactivos is not None and (a.ensayo or a.emitir):
+        faltan = [k for k in RESTOS_FIRMADOS if not isinstance((esperados or {}).get(k), int)]
+        if faltan:
+            sys.exit('NEGADO (Grok 171): con --vencer-restos-inactivos, --ensayo y --emitir exigen --esperados con '
+                     + ' y '.join(RESTOS_FIRMADOS) + ' (enteros, firmados por el dueño). Falta: ' + ', '.join(faltan))
     out.mkdir(parents=True, exist_ok=True)
     os.chmod(out, 0o700)
 
@@ -1010,15 +1098,39 @@ def main() -> None:
         sys.exit('PLAN RECHAZADO: ' + '; '.join(malos))
     if fecha_carga:
         import datetime as _dt
-        inac = inactivos_fuente(plan, _dt.date.today().isoformat(), a.vencimiento_meses)
-        (out / 'inactivos.csv').write_text('legacy_id,personas,ultima_actividad\n' + ''.join(
-            f"{x['legacy_id']},{x['personas']},{x['ultima_actividad']}\n" for x in inac), encoding='utf-8')
+        inac = inactivos_fuente(plan, hoy_cr().isoformat(), a.vencimiento_meses)   # Grok 172: hoy en CR
+        restos = [x for x in inac if es_resto(x['personas'], plan.rate)]
+        (out / 'inactivos.csv').write_text('legacy_id,personas,ultima_actividad,resto\n' + ''.join(
+            f"{x['legacy_id']},{x['personas']},{x['ultima_actividad']},{'si' if es_resto(x['personas'], plan.rate) else 'no'}\n"
+            for x in inac), encoding='utf-8')
         os.chmod(out / 'inactivos.csv', 0o600)
-        print(json.dumps({'inactivos_mas_de_meses': a.vencimiento_meses, 'cuentas': len(inac), 'csv': str(out / 'inactivos.csv')}, ensure_ascii=False))
+        print(json.dumps({'inactivos_mas_de_meses': a.vencimiento_meses, 'cuentas': len(inac), 'con_resto': len(restos),
+                          'con_resto_personas': sum(x['personas'] for x in restos), 'con_medio_credito_o_mas': len(inac) - len(restos),
+                          'csv': str(out / 'inactivos.csv')}, ensure_ascii=False))
+        if a.vencer_restos_inactivos is not None:
+            if a.vencer_restos_inactivos != len(restos):
+                sys.exit(f'FRENADO (10-nov): --vencer-restos-inactivos {a.vencer_restos_inactivos}, pero la fuente tiene {len(restos)} '
+                         f'cuentas inactivas con un resto (< medio crédito). El número tiene que ser el exacto.')
+            vencer_restos_fuente(plan, restos)
+            inac = [x for x in inac if not es_resto(x['personas'], plan.rate)]
+            res = resumen_plan(plan)
+            malos = problemas_plan(plan, res)
+            if malos:
+                sys.exit('PLAN RECHAZADO (después de vencer los restos): ' + '; '.join(malos))
+            for k in RESTOS_FIRMADOS:
+                if esperados and k in esperados and esperados[k] != res[k]:
+                    sys.exit(f'FRENADO (Grok 171): {k}: el plan da {res[k]} y el firmado dice {esperados[k]}.')
+            print(json.dumps({'restos_vencidos_en_la_carga': res['vencimientos_restos'],
+                              'personas': res['vencimientos_restos_personas'], 'nota': NOTA_RESTO,
+                              'cuentas_activas_con_creditos': res['cuentas_activas_con_creditos'],
+                              'creditos_activos': res['creditos_activos']}, ensure_ascii=False))
         if inac and a.acepto_inactivos != len(inac):
-            sys.exit(f'FRENADO (B11): {len(inac)} cuentas con saldo y más de {a.vencimiento_meses} meses sin actividad en la fuente. '
-                     'Con la fecha de carga volverían a contar el plazo: decidilas en la fuente, o pasá --acepto-inactivos '
-                     f'{len(inac)} si el dueño decidió cargarlas igual.')
+            sys.exit(f'FRENADO (B11): {len(inac)} cuentas con saldo y más de {a.vencimiento_meses} meses sin actividad en la fuente '
+                     f'({len(restos)} con un resto de menos de medio crédito). Con la fecha de carga volverían a contar el plazo: '
+                     'decidilas en la fuente; --vencer-restos-inactivos N vence los restos en la carga («resto del sistema '
+                     'viejo»); --acepto-inactivos N carga igual las que queden, si el dueño lo decidió (N, el número exacto).')
+        if not inac and a.acepto_inactivos not in (None, 0):
+            sys.exit(f'FRENADO (B11): --acepto-inactivos {a.acepto_inactivos}, pero no queda ninguna cuenta inactiva por aceptar.')
     papel_filas = None
     if a.papel:
         import datetime as _dt
@@ -1027,7 +1139,7 @@ def main() -> None:
         pf = a.papel.expanduser().resolve()
         if pf == REPO_ROOT or REPO_ROOT in pf.parents:
             sys.exit('NEGADO: --papel está dentro del repo. Los datos de anfitriones van fuera.')
-        papel_filas, errores = sp.validar(pf.read_text(encoding='utf-8'), _dt.date.today())
+        papel_filas, errores = sp.validar(pf.read_text(encoding='utf-8'), hoy_cr())
         if errores:
             print('CSV DE PAPEL RECHAZADO (no se carga nada):'); print('\n'.join('  ' + e for e in errores[:200])); sys.exit(1)
         if papel_filas[0]['clave'] != 'legacy_id':
@@ -1042,7 +1154,7 @@ def main() -> None:
                      f"mismas personas, ≤ {inter['tolerancia_dias']} días): líneas "
                      + ', '.join(str(x['linea']) for x in inter['en_los_dos'][:30]) + '. Sacalas del CSV (doble carga).')
         if fecha_carga:
-            inac_p = sp.inactivos(papel_filas, _dt.date.today(), a.vencimiento_meses)
+            inac_p = sp.inactivos(papel_filas, hoy_cr(), a.vencimiento_meses)
             if inac_p and a.acepto_inactivos != len(inac_p):
                 sys.exit(f'FRENADO (B11): {len(inac_p)} tarjetas de papel con más de {a.vencimiento_meses} meses sin actividad en la fuente '
                          '(líneas ' + ', '.join(str(x['linea']) for x in inac_p[:30]) + '). Decidilas en la fuente.')
@@ -1069,6 +1181,7 @@ def main() -> None:
             sys.exit('FILTRO G-56 (migrador): ' + '; '.join(malos))
         (dst / 'carga.sql').write_text(sql, encoding='utf-8'); os.chmod(dst / 'carga.sql', 0o600)
         r = {'modo': 'primera-carga', 'fecha_movimiento': 'carga' if fecha_carga else 'original', 'plan': res,
+             'esperados_firmados': esperados or {},
              'sha256_sql': hashlib.sha256(sql.encode()).hexdigest()}
         (dst / 'resumen.json').write_text(json.dumps(r, ensure_ascii=False, indent=1, default=str), encoding='utf-8')
         print(json.dumps(r, ensure_ascii=False, indent=1, default=str)); return

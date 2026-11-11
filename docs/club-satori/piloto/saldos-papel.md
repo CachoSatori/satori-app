@@ -10,12 +10,29 @@
    - el **export de la página vieja** (Firestore), depurado por el dueño (es lo que lee el migrador);
    - el **CSV de papel con `legacy_id`**: `legacy_id,personas,fecha_tarjeta,referencia`. El `legacy_id` es el id del
      anfitrión en la página vieja: los códigos del Club todavía no existen (nacen en esta carga).
+   - **(10-nov) Camino por defecto: SIN papel.** Hoy no hay lista de tarjetas de papel: la carga se arma **sin `--papel`**.
+     Si aparece una lista antes de emitir, se suma con ese CSV (`--papel <csv>`) y se vuelven a correr el dry-run y el
+     ensayo; después de la carga **no** se puede sumar en la misma carga (la base ya no está vacía): iría por §B.
 2. **Chequeo de 12 meses sin actividad, SOBRE LA FUENTE y antes de cargar.** Con la fecha de carga, una cuenta o una
    tarjeta sin actividad desde hace más que el vencimiento volvería a contar los 12 meses el día del lanzamiento. Por eso
    el migrador **frena** (sale con error) si hay alguna, en la página vieja (`inactivos.csv`: legacy_id, personas y última
    actividad, sin nombres) o en el papel (línea, referencia y meses). El dueño las decide en la fuente; si decide
    cargarlas igual, pasa `--acepto-inactivos N` con el **número exacto** (si cambia la fuente, cambia el número y vuelve a
    frenar).
+   **(10-nov) Los restos inactivos se vencen en la carga.** Con la fecha de carga, el vencimiento de restos de la migración
+   (regla del 07-nov) **no** las alcanza: sus movimientos quedan con la fecha de hoy. `--vencer-restos-inactivos N` (el
+   número exacto) vence en la **misma carga**, con la nota «resto del sistema viejo» y la fecha de la carga, las cuentas
+   activas sin actividad en el plazo cuyo saldo es **menos de medio crédito** (1 o 2 personas con la tasa 6): entran con
+   saldo 0. Las inactivas con medio crédito o más **no** se vencen así: siguen pidiendo `--acepto-inactivos M`. El dry-run
+   imprime los dos números (`con_resto` y `con_medio_credito_o_mas`) e `inactivos.csv` trae la columna `resto` (si/no).
+   La validación dentro de la transacción controla `vencimientos_restos` y que el saldo siga cuadrando con Firestore
+   (el resto, como el D1, no cuenta contra la fuente). `--acepto-inactivos N` sin vencer los restos los carga **vivos**
+   (vuelven a contar 12 meses desde el lanzamiento).
+   **(Grok 170–173)** «Hoy» y la última actividad se cuentan **en hora de Costa Rica** (createdAt viene en UTC: de 18:00
+   a 24:00 CR ya es el día siguiente en UTC). Con `--vencer-restos-inactivos`, `--ensayo` y `--emitir` exigen
+   `--esperados` con `vencimientos_restos` y `vencimientos_restos_personas` (los firma el dueño con el sha256). La
+   transacción aborta si algún «resto del sistema viejo» no cumple la regla (menos de medio crédito, miembro activo, saldo
+   final 0). **No se combina con `--papel`**: si algún día hay papel, se resuelve aparte (§B).
 3. **Ensayo en staging** (no deja nada: vacía el Club **dentro** de la transacción, solo en una base marcada como staging,
    y termina en ROLLBACK):
    ```

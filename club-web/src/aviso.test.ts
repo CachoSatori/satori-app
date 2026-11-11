@@ -13,7 +13,7 @@ test('v1.1: el aviso completo (ES/EN) dice que guardamos el email, si lo da', ()
 })
 
 test('la versión de club-web es la que la migración del Club carga por defecto', () => {
-  const sql = readFileSync(new URL('../../supabase/migrations/075_club_satori_esquema.sql', import.meta.url), 'utf8')
+  const sql = readFileSync(new URL('../../supabase/migrations/150_club_satori_esquema.sql', import.meta.url), 'utf8')
   expect(sql).toContain(`alter column aviso_privacidad_version set default '${AVISO_PRIVACIDAD_VERSION}'`)
 })
 
@@ -24,7 +24,7 @@ test('v1.1 corregido (08-nov noche): ofertas solo si las aceptó, servidores fue
   expect(es).toContain('Los guardamos en servicios tecnológicos que contratamos, con servidores fuera de Costa Rica.')
   expect(en).toContain('only if you agreed, send you Satori offers')
   expect(en).toContain('We store it with technology services we hire, on servers outside Costa Rica.')
-  const sql = readFileSync(new URL('../../supabase/migrations/075_club_satori_esquema.sql', import.meta.url), 'utf8')
+  const sql = readFileSync(new URL('../../supabase/migrations/150_club_satori_esquema.sql', import.meta.url), 'utf8')
   const meses = sql.match(/contactos_ofertas_meses int not null default (\d+)/)?.[1]
   expect(meses).toBeTruthy()
   expect(es).toContain(`hasta que te des de baja o hasta ${meses} meses desde que nos lo dejaste`)
@@ -40,7 +40,7 @@ test('(09-nov) v1.1 sin marcas pendientes: dirección del responsable y 24 meses
 })
 
 test('(09-nov, B8) la huella del texto de cada idioma es la registrada para la versión, aquí y en la base', () => {
-  const sql = readFileSync(new URL('../../supabase/migrations/075_club_satori_esquema.sql', import.meta.url), 'utf8')
+  const sql = readFileSync(new URL('../../supabase/migrations/150_club_satori_esquema.sql', import.meta.url), 'utf8')
   for (const k of ['es', 'en'] as const) {
     const h = createHash('sha256').update(TEXTOS[k].alta_aviso, 'utf8').digest('hex')
     expect(h, `cambió el texto ${k} del aviso: subí la versión y registrá su huella`).toBe(AVISO_PRIVACIDAD_SHA256[k])

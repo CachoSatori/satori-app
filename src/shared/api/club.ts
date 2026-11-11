@@ -338,6 +338,20 @@ export const getCandidatasSinCruce = (movimiento: string, buscar?: string) =>
   llamar<FacturaCandidata[]>('club_sin_cruce_candidatas', { p_movimiento: movimiento, p_buscar: buscar?.trim() || null })
 export const elegirFacturaSinCruce = (movimiento: string, numeroFactura: string, nota: string) =>
   llamar<string>('club_sin_cruce_elegir', { p_movimiento: movimiento, p_numero_factura: numeroFactura, p_nota: nota.trim() || null })
+// Grok 160 (10-nov): la factura R que respaldaba un crédito pasó a X. Alerta PRIORITARIA, arriba en Excepciones, para la
+// revisión diaria (owner y manager). No bloquea ni revierte nada.
+export interface AlertaPrioritaria {
+  id: number; tipo: 'factura_r_anulada'; creado_en: string; miembro: string | null
+  detalle: { numero_factura?: string; pedido?: string | null; personas?: number; modo?: string; cupon_id?: string | null; movimiento_id?: string }
+  revisada_en: string | null; revisada_nota: string | null
+  /** Grok 162: el nombre de quien la revisó (perfil). */
+  revisada_por: string | null
+}
+export const getAlertasPrioritarias = (local: string | null = localClub) =>
+  llamar<AlertaPrioritaria[]>('club_alertas_prioritarias', { p_location: local })
+/** «Revisado» con nota (3 a 500 caracteres). Devuelve false si ya estaba revisada. Grok 162: no la revisa quien registró el
+ *  movimiento ni quien aprobó su pendiente (42501, con el motivo); la revisa otro manager o el owner. */
+export const revisarAlerta = (id: number, nota: string) => llamar<boolean>('club_alerta_revisar', { p_id: id, p_nota: nota })
 export const resolverExcepcion = (tipo: TipoExcepcion, ref: string, nota: string, local: string | null = localClub) =>
   llamar<boolean>('club_excepcion_resolver', { p_tipo: tipo, p_ref: ref, p_nota: nota, p_location: local })
 

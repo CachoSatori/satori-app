@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const RAIZ = join(__dirname, '..', '..')
-const BATERIA = readFileSync(join(RAIZ, 'scripts/sql/075_pruebas_staging.sql'), 'utf8')
+const BATERIA = readFileSync(join(RAIZ, 'scripts/sql/150_pruebas_staging.sql'), 'utf8')
 const MUTACIONES = JSON.parse(readFileSync(join(RAIZ, 'scripts/sql/mutaciones_r7.json'), 'utf8')) as Record<string, { antes_de: string }>
 const RE_MARCA = /^-- ════════ TRAMO (\d+): .*? ════════$/gm
 
@@ -47,6 +47,10 @@ describe('batería del Club por tramos (10-nov)', () => {
     expect(tramos.map(t => t.n)).toEqual(tramos.map((_, i) => i + 1))
     expect(pre).not.toMatch(/^-- ═══ /m)
     for (const t of tramos) expect(t.cuerpo).toMatch(/^-- ═══ /m)
+  })
+
+  it('(Grok 153) cada tramo dice cuántos casos espera, justo debajo de su marca', () => {
+    for (const t of tramos) expect(t.cuerpo, `tramo ${t.n}`).toMatch(/^-- ════════ TRAMO \d+: .*? ════════\n-- casos esperados: [1-9]\d*\n/)
   })
 
   it('cada tramo es autosuficiente: lee de _ids solo lo que crea el preámbulo o él mismo, y no crea funciones pg_temp', () => {

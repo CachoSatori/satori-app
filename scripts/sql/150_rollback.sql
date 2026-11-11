@@ -1,4 +1,5 @@
--- 075_rollback.sql — Club Satori F1a: borra TODO lo club_* y la fila 075 del ledger.
+-- 150_rollback.sql (antes 075_rollback.sql; renumerada en el pase del Club, 10-nov) — Club Satori F1a: borra TODO lo
+-- club_* y la fila del ledger (150 en prod; 075 en staging mientras su fila no se renumere).
 -- ⚠️ Destruye los datos del Club (miembros, movimientos, cupones, PM). Pensado para STAGING
 -- antes del piloto. En prod, solo con firma y después de exportar los datos.
 begin;
@@ -121,13 +122,46 @@ drop function if exists public.club_norm_telefono(text);
 drop function if exists public.club_creditos(bigint, int);
 drop function if exists public.club_gen_codigo(int);
 
-delete from supabase_migrations.schema_migrations where version = '075';
+-- (10-nov, paquete del pase) tres tablas que la lista de arriba no tenía: quedaban después del rollback.
+drop table if exists public.club_pos_login_historial;   -- historial de cambios de login del PoS (trigger en employees)
+drop table if exists public.club_cargas_papel;          -- carga de saldos de papel (G-56)
+drop table if exists public.club_avisos_privacidad;     -- versiones del aviso de privacidad
+
+-- LC-A2: tarea diaria de socios (si pg_cron está). (Grok 150, 10-nov) DENTRO de la transacción y antes de la guarda:
+-- si algo después aborta, tampoco se desprograma. Dinámico: sin pg_cron, el esquema cron no existe.
+do $$ declare j text; begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    for j in execute 'select jobname from cron.job where jobname like ''club\_%''' loop
+      perform cron.unschedule(j);
+    end loop;
+  end if;
+end $$;
+
+-- (10-nov) el rollback se verifica solo: si queda CUALQUIER objeto club_* en public (tabla, vista, secuencia, tipo,
+-- función), un trigger club_* sobre una tabla que no es del Club (p. ej. employees) o una tarea club_* de pg_cron
+-- (Grok 150), aborta y no se borra nada.
+do $$
+declare v text; v_cron text;
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute 'select string_agg(''cron.job '' || jobname, '', '') from cron.job where jobname like ''club\_%''' into v_cron;
+  end if;
+  select string_agg(x, ', ') into v from (
+    select v_cron as x where v_cron is not null
+    union all
+    select c.relname::text || ' (' || c.relkind::text || ')' as x from pg_class c
+     where c.relnamespace = 'public'::regnamespace and c.relname like 'club\_%'
+    union all select p.oid::regprocedure::text from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'club\_%'
+    union all select t.typname::text || ' (tipo)' from pg_type t
+     where t.typnamespace = 'public'::regnamespace and t.typname like 'club\_%' and t.typtype in ('e', 'd')
+    union all select t.tgname::text || ' on ' || t.tgrelid::regclass::text from pg_trigger t
+     where not t.tgisinternal and t.tgname like 'club\_%') z;
+  if v is not null then
+    raise exception 'rollback de la 150 incompleto, queda: %', v;
+  end if;
+end $$;
+
+delete from supabase_migrations.schema_migrations where version in ('075', '150');
 
 commit;
 
--- LC-A2: tarea diaria de socios (si pg_cron está)
-do $$ begin
-  if exists (select 1 from pg_extension where extname = 'pg_cron') and exists (select 1 from cron.job where jobname = 'club_socios_mantenimiento') then
-    perform cron.unschedule('club_socios_mantenimiento');
-  end if;
-end $$;

@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getExcepciones, resolverExcepcion, aClubError, fmtCreditos, getCandidatasSinCruce, elegirFacturaSinCruce, describirFactura,
-  type Excepcion, type TipoExcepcion, type FacturaCandidata,
+  getAlertasPrioritarias, revisarAlerta,
+  type Excepcion, type TipoExcepcion, type FacturaCandidata, type AlertaPrioritaria,
 } from '../../shared/api/club'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora } from './estilos'
@@ -81,6 +82,7 @@ export default function Excepciones() {
   return (
     <div className="tips-body" style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      <AlertasPrioritarias />
       <Card style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
         <label><span style={labelStyle}>Desde</span><input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={inputStyle} /></label>
         <label><span style={labelStyle}>Hasta</span><input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={inputStyle} /></label>
@@ -279,3 +281,64 @@ function ElegirFactura({ e, onElegida }: { e: Excepcion; onElegida: () => Promis
     </div>
   )
 }
+
+/**
+ * Grok 160 (10-nov): alertas PRIORITARIAS, arriba de todo, para la revisión diaria. Hoy: una factura R (cobrada, sin cierre
+ * de caja) que respaldaba un crédito del Club (cupón, tarjeta o pendiente aprobado) pasó a X (anulada) y no quedó otra
+ * factura de ese pedido. El crédito NO se revirtió: se revisa a mano (¿se rehízo la factura?, ¿hay que ajustar?) y se marca
+ * «Revisado» con una nota. Las revisadas se ven 7 días, con quién las revisó. Grok 162: no la revisa quien registró el
+ * movimiento ni quien aprobó su pendiente (la base lo rechaza con el motivo); la revisa otro manager o el owner.
+ */
+function AlertasPrioritarias() {
+  const [lista, setLista] = useState<AlertaPrioritaria[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notas, setNotas] = useState<Record<number, string>>({})
+  const [ocupada, setOcupada] = useState<number | null>(null)
+  const cargar = useCallback(async () => {
+    try { setLista(await getAlertasPrioritarias()) } catch (e) { setError(aClubError(e).message); setLista([]) }
+  }, [])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { cargar() }, [cargar])
+  if (lista === null || (lista.length === 0 && !error)) return null
+  const abiertas = lista.filter(a => !a.revisada_en)
+  const revisar = async (a: AlertaPrioritaria) => {
+    setOcupada(a.id); setError(null)
+    try { await revisarAlerta(a.id, notas[a.id] ?? ''); await cargar() } catch (e) { setError(aClubError(e).message) } finally { setOcupada(null) }
+  }
+  return (
+    <Card style={{ border: `2px solid ${C.red}` }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <strong>Alertas prioritarias · revisión diaria</strong>
+        <Chip color={abiertas.length ? C.red : C.muted}>{abiertas.length} sin revisar</Chip>
+      </div>
+      <div style={{ fontSize: '0.85rem', color: C.muted, margin: '0.3rem 0 0.6rem' }}>
+        Una factura cobrada (R) que respaldaba un crédito del Club se anuló (X) y no quedó otra factura de ese pedido. El crédito
+        no se revirtió: revisá si la factura se rehízo o si hay que hacer un ajuste, y marcá «Revisado» con una nota.
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {lista.map(a => (
+          <div key={a.id} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.6rem 0.7rem' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+              <strong>Factura {a.detalle.numero_factura ?? '—'} anulada</strong>
+              {a.detalle.pedido && <span style={{ color: C.muted }}>pedido {a.detalle.pedido}</span>}
+              <span>{a.miembro ?? '—'} · {a.detalle.personas ?? '—'} personas{a.detalle.cupon_id ? ' · con cupón' : ''}</span>
+              <span style={{ color: C.muted, fontSize: '0.85rem' }}>{fmtFechaHora(a.creado_en)}</span>
+            </div>
+            {a.revisada_en ? (
+              <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 4 }}>Revisada {fmtFechaHora(a.revisada_en)}{a.revisada_por ? ` por ${a.revisada_por}` : ''}: {a.revisada_nota}</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                <input value={notas[a.id] ?? ''} onChange={e => setNotas(n => ({ ...n, [a.id]: e.target.value }))}
+                  placeholder="Qué se revisó (p. ej. «se rehízo en la factura …»)" maxLength={500}
+                  style={{ ...inputStyle, flex: '1 1 240px' }} aria-label={`Nota de revisión de la factura ${a.detalle.numero_factura ?? ''}`} />
+                <Btn onClick={() => revisar(a)} disabled={ocupada === a.id || (notas[a.id] ?? '').trim().length < 3}>Revisado</Btn>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+

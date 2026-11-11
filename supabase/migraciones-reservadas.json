@@ -96,7 +96,20 @@
     "100": {
       "nombre": "club_catalogo_locales",
       "bloque": "club",
-      "rama": "claude/club-100-catalogo"
+      "rama": "claude/club-100-catalogo",
+      "renumerada_a": "151"
+    },
+    "150": {
+      "nombre": "club_satori_esquema",
+      "bloque": "pase",
+      "rama": "claude/pase-club",
+      "origen": "075"
+    },
+    "151": {
+      "nombre": "club_catalogo_locales",
+      "bloque": "pase",
+      "rama": "claude/pase-club",
+      "origen": "100"
     }
   }
 }

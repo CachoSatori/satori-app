@@ -56,6 +56,20 @@ MIN_OBJETOS=100 caso 'prod: MIN_OBJETOS bajo el piso → 5'                   5 
 caso 'prod: dos archivos idénticos, distintos → 0'          0 --archivos "$T/a.txt" "$T/b.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
 caso 'prod: diferencia sin esperar → 1'                     1 --archivos "$T/a.txt" "$T/b_falta.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
 MIN_OBJETOS=50 caso 'staging: MIN_OBJETOS bajo (sin prod) se respeta → 0'  0 --archivos "$T/corto.txt" "$T/corto2.txt" --esperadas "$T/esp_vacio.txt"
+# (10-nov) el CSV del editor SQL de prod → archivo de hechos (gate61_desde_csv.py), sin base
+C="$RAIZ/scripts/sql/gate61_desde_csv.py"
+csvcaso() {   # csvcaso NOMBRE CODIGO_ESPERADO entrada.csv
+  python3 -I "$C" "$3" "$T/conv.txt" > "$T/out" 2>&1; local rc=$?
+  if [ "$rc" = "$2" ]; then echo "ok   $1 (sale $rc)"; else echo "FALLA $1: salió $rc, esperaba $2"; sed 's/^/     /' "$T/out" | head -3; fallas=$((fallas+1)); fi
+}
+{ echo 'col club_x.c1 text def='"'"'a,b'"'"''; echo 'pol club_x "con comillas" PERMISSIVE'; cat "$T/a.txt"; } > "$T/raro.txt"
+python3 -I -c 'import csv,sys; w=csv.writer(open(sys.argv[2],"w",newline="")); w.writerow(["cat"]); w.writerow([open(sys.argv[1]).read().rstrip("\n")])' "$T/raro.txt" "$T/ok.csv"
+csvcaso 'CSV del editor (comas y comillas) → 0'             0 "$T/ok.csv"
+if cmp -s "$T/raro.txt" "$T/conv.txt"; then echo "ok   el CSV vuelve idéntico al catálogo"; else echo "FALLA el CSV no vuelve idéntico"; fallas=$((fallas+1)); fi
+caso 'CSV convertido contra el original → 0'                0 --archivos "$T/raro.txt" "$T/conv.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
+printf 'cat\n"a"\n"b"\n' > "$T/dos.csv";     csvcaso 'CSV con dos filas → 1'                1 "$T/dos.csv"
+printf 'otra\n"a"\n' > "$T/enc.csv";         csvcaso 'CSV con otro encabezado → 1'          1 "$T/enc.csv"
+printf 'cat\nnull\n' > "$T/null.csv";        csvcaso 'CSV con «null» → 1'                   1 "$T/null.csv"
 if [ -s "$T/red.log" ]; then echo "FALLA alguien intentó conectarse (curl): $(wc -l < "$T/red.log") veces"; fallas=$((fallas+1)); else echo "ok   ningún caso salió a la red"; fi
 echo "fallas: $fallas"
 exit $fallas

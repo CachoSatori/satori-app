@@ -5,7 +5,7 @@ mandarlo).
 
 | Archivo | Para quién | Idioma |
 |---|---|---|
-| `guia-rapida-caja.html` (+ `.pdf` para imprimir, una página A4) | Caja: escanear, qué marcar en el PoS, si sale rojo, canje con código, alta en caja | ES |
+| `guia-rapida-caja.html` (+ `.pdf` para imprimir, dos páginas A4) | Caja: escanear, qué marcar en el PoS, si sale rojo, canje con código, alta en caja; **página 2 (11-nov): tarjeta vieja de papel, paso a paso (modo transición)** | ES |
 | `mensaje-anfitriones.md` | Hoteles y concierges: qué cambia, cómo guardan el pase, cómo comparten su link, cómo canjean | ES (usted) y EN |
 | `mensaje-socios.md` | Socios del Local Club: el pase, el beneficio, «vale en Satori Santa Teresa (y pronto en Nosara)» | ES (usted) y EN |
 | `cartel-socios-local-club.html` (+ `.pdf`, A4) | Mesa y caja: «Hágase socio del Local Club», con el QR del alta de Santa Teresa | ES y EN |

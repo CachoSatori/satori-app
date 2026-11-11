@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Club Satori · Guía rápida de caja</title>
 <!-- BORRADOR (08-nov) para que lo revise el dueño. Sale de docs/sop-app/6.13 Club Satori.md; si la guía cambia, esto
-     también. Una página A4 al imprimir. Sin datos personales. -->
+     también. Dos páginas A4 al imprimir: la guía y, desde el 11-nov, «Tarjeta vieja de papel» (modo transición). Sin datos
+     personales. -->
 <style>
   @page { size: A4; margin: 9mm 11mm; }
   * { box-sizing: border-box; }
@@ -23,6 +24,12 @@
   .pie { margin-top: 8px; font-size: 8.6pt; color: #444; border-top: 1px solid #999; padding-top: 4px; }
   .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   b.btn { white-space: nowrap; }
+  /* (11-nov) página 2: tarjeta vieja de papel (modo transición) */
+  .pagina2 { break-before: page; font-size: 11.5pt; line-height: 1.4; }
+  .pagina2 h1 { margin-top: 2px; }
+  .pagina2 h2 { font-size: 12.5pt; margin: 12px 0 6px; }
+  .pagina2 ol li, .pagina2 ul li { margin: 4px 0; }
+  .pagina2 .rojo { margin: 9px 0; padding: 7px 10px; }
 </style>
 </head>
 <body>
@@ -91,5 +98,49 @@
 
   <p class="pie">Borrador para revisar · sale de la guía 6.13 del Club · el beneficio del socio vale en Satori Santa Teresa (y pronto en Nosara)
     con el Club encendido, una visita con beneficio por día · los montos son de ejemplo.</p>
+
+  <section class="pagina2">
+    <h1>Tarjeta vieja de papel (sin QR)</h1>
+    <p class="sub">Modo transición (decisión del dueño, 11-nov). El cliente llega con una tarjeta de papel de las de antes, o de un
+      anfitrión que todavía no usa el sistema nuevo. <b>Solo para anfitriones ya inscriptos.</b> No le muestres ningún QR al
+      cliente.</p>
+
+    <h2>Paso a paso</h2>
+    <ol>
+      <li>Inicio → tarjeta «Club» → <b>«Escanear»</b>.</li>
+      <li>Más abajo, en <b>«Buscar referente (plan B)»</b>, escribí el nombre del anfitrión, su negocio o los últimos 4 números
+        de su teléfono (mínimo 3 letras) y tocá <b>«Buscar»</b>.</li>
+      <li>Tocá al anfitrión en la lista. Si no aparece, o dice «baja»: <b>no se carga a otro</b>; avisale al manager.</li>
+      <li>En su tarjeta, tocá <b>«Tarjeta física»</b>.</li>
+      <li>«Personas de la mesa»: poné el número (− / +).</li>
+      <li>Elegí el <b>pedido</b> de la mesa. Si la cuenta ya se cerró: «El pedido no está» → elegí la factura.</li>
+      <li><b>«Continuar»</b>, leé lo que dice («Tarjeta física: +N personas a …») y <b>«Confirmar»</b>.</li>
+    </ol>
+
+    <div class="rojo"><b>Ojo después de «Confirmar».</b> La pantalla vuelve al inicio y puede salir en rojo «Código no reconocido.
+      Probá de nuevo o buscá por nombre.» <b>La tarjeta SÍ quedó guardada: no la cargues de nuevo.</b> Es un error del
+      aviso, que se corrige con la próxima actualización de la app. Si dudás, el manager la ve en Club → «Excepciones» →
+      «Tarjeta física».</div>
+
+    <h2>En el PoS</h2>
+    <ul>
+      <li>El descuento del cliente es el de siempre con la tarjeta de papel. Si le aplicás el 10 %, marcá también el artículo
+        <b>«PROMO CLUB 10 %»</b>, igual que con un cupón.</li>
+    </ul>
+
+    <h2>Reglas</h2>
+    <ul>
+      <li><b>Una tarjeta por anfitrión y por mesa.</b> Las personas no pueden ser más que las del pedido.</li>
+      <li><b>Tope: 12 personas por anfitrión por día.</b> Si se pasa, sale «Supera el tope diario de tarjeta física…»: avisale
+        al manager; el resto no se carga hoy.</li>
+      <li>Si el cliente trae el <b>cupón en su teléfono</b>, no es tarjeta vieja: escaneá el cupón (punto 1 de la guía).</li>
+      <li>Cada tarjeta vieja la revisa <b>otra persona</b> (owner o manager), todos los días, en «Excepciones». No la resuelve
+        quien la cargó.</li>
+      <li>«Tarjeta física» aparece solo si el dueño la encendió en el local. Si no está el botón, avisale al manager.</li>
+    </ul>
+
+    <p class="pie">Modo transición · mientras haya tarjetas de papel en la calle · con la próxima actualización de la app este
+      camino pasa a ser el botón «Tarjeta vieja (sin QR)» arriba en «Escanear».</p>
+  </section>
 </body>
 </html>

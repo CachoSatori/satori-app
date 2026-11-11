@@ -6,107 +6,9 @@ import { supabase } from '../shared/api/supabase'
 import { todayCR, fi } from '../shared/utils'
 import { monthRangeBounds } from '../shared/utils/dateRange'
 import { ROLE_LABELS } from '../shared/constants'
+import { modulosPara } from '../shared/layout/modulos'
 
-interface Module {
-  id:          string
-  path:        string
-  label:       string
-  kanji:       string
-  description: string
-  ready:       boolean
-  roles:       UserRole[]
-}
-
-const MODULES: Module[] = [
-  {
-    id: 'resumen', path: '/resumen', label: 'Resumen', kanji: '日',
-    description: 'Cuadre del día', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'semana', path: '/semana', label: 'Semana', kanji: '週',
-    description: 'Digest semanal', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'reporte-mensual', path: '/reporte-mensual', label: 'Reporte Mensual', kanji: '月',
-    description: 'Ventas · Propinas · Caja', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'mi-turno', path: '/mi-turno', label: 'Mi Turno', kanji: '番',
-    description: 'Mis ventas · propinas · cierre', ready: true,
-    roles: ['salonero', 'barman'],
-  },
-  {
-    id: 'mi-rendimiento', path: '/mi-rendimiento', label: 'Mi Rendimiento', kanji: '人',
-    description: 'Mis stats del turno', ready: true,
-    // manager: SOLO su propio rendimiento · owner: además «Ver como» a otro empleado (solo lectura).
-    roles: ['salonero', 'barman', 'barback', 'runner', 'cocina', 'manager', 'owner'],
-  },
-  // "Mis Propinas" ya vive como pestaña dentro de Mi Rendimiento → card redundante removida.
-  // La ruta /mis-propinas sigue redirigiendo a /mi-rendimiento?tab=propinas (App.tsx), sin romper links viejos.
-  {
-    id: 'cash', path: '/caja', label: 'Caja', kanji: '金',
-    description: 'Turnos y movimientos', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'contador'],
-  },
-  {
-    id: 'comandero', path: '/comandero', label: 'Comandero', kanji: '卓',
-    description: 'Mesas y pedidos (PoS)', ready: true,
-    roles: ['owner', 'manager', 'salonero', 'barman', 'cajero'],
-  },
-  {
-    id: 'kds', path: '/kds', label: 'KDS', kanji: '厨',
-    description: 'Pantalla de cocina/barra', ready: true,
-    roles: ['owner', 'manager', 'cocina', 'barman'],
-  },
-  {
-    id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
-    description: 'Pool del turno', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'contador'],
-  },
-  {
-    id: 'dashboard', path: '/ventas', label: 'Ventas', kanji: '売',
-    description: 'KPIs y metas', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'inventario', path: '/inventario', label: 'Inventario', kanji: '庫',
-    description: 'Stock · Recetas · Costos', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'clientes', path: '/clientes', label: 'Clientes', kanji: '客',
-    description: 'CRM · Fidelización', ready: true,
-    roles: ['owner', 'manager', 'cajero'],
-  },
-  {
-    id: 'finanzas', path: '/finanzas', label: 'Finanzas', kanji: '財',
-    description: 'P&L · Presupuesto vs Real', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'salarios', path: '/salarios', label: 'Salarios', kanji: '給',
-    description: 'Tarifas · Nómina', ready: true,
-    roles: ['owner', 'manager'],
-  },
-  {
-    id: 'sops', path: '/sops', label: 'SOPs', kanji: '書',
-    description: 'Procedimientos', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],
-  },
-  {
-    id: 'admin', path: '/admin', label: 'Admin', kanji: '管',
-    description: 'Empleados · Config', ready: true,
-    roles: ['owner'],
-  },
-  {
-    id: 'prueba', path: '/prueba', label: 'Prueba', kanji: '試',
-    description: '🧪 Simulador · solo lectura', ready: true,
-    roles: ['owner'],
-  },
-]
+// La lista de módulos vive en `shared/layout/modulos.ts`: es la misma fuente del menú global (B3).
 
 // ── Live status per module ─────────────────────────────────────
 interface HomeStatus {
@@ -355,7 +257,7 @@ export default function HomePage() {
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol
 
-  const available = MODULES.filter(m => m.roles.includes(profile.role))
+  const available = modulosPara(profile.role)
   const isManager = ['owner', 'manager', 'contador'].includes(profile.role)
 
   // Build status for each module
@@ -419,6 +321,7 @@ export default function HomePage() {
     <div className="home-container">
       <header className="app-header">
         <div className="header-brand">
+          <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" className="header-daruma" width={22} height={24} />
           <span className="header-mark">祭</span>
           <span className="header-title">Satori · Santa Teresa, Costa Rica</span>
         </div>

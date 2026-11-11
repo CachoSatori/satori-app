@@ -51,7 +51,7 @@
   - estado de error: si alguna señal falló, la frase es «No se pudo comprobar todo — revisá Caja», con una píldora oro «sin comprobar» que abre `/caja`. **Nunca** «Todo en orden» ni el Daruma si algo falló;
   - en `fetchHomeStatus`, las lecturas rechazadas se marcan como «sin comprobar» en vez de quedar en 0;
   - si `fetchHomeStatus` falla entero: «No se pudo cargar el día», no «Revisando el día…» para siempre.
-- **Auditoría 197 (espera decisión de Ismael):** no hacer nada con *cuándo* se lee la alerta hasta que esté en `DECISIONES.md`.
+- **Auditoría 197 (aprobada por Ismael el 11-nov 15:55, excepción a «no cambiar consultas» solo en *cuándo*):** la alerta de días sin cierre se lee **una vez por sesión** (en memoria del módulo o `sessionStorage`; se reusa hasta cerrar la app o recargar) y los otros pendientes se pintan sin esperarla. Mismas funciones con los mismos argumentos; no cambiar qué se consulta ni cómo se calcula. Si la lectura falló, no se guarda: se reintenta en la próxima visita (y vale el estado «sin comprobar» de 196).
 - No cambiar qué se consulta. Tests de render para cada falla.
 - **Aceptación:** tests verdes; guía 6.1; link de vista previa.
 

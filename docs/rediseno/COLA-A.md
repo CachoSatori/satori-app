@@ -45,7 +45,7 @@
 ---
 ### Tanda 2 · Auditoría y estilo en los módulos (decidido por Ismael el 11-nov 15:15)
 
-## A6 · Admin legible y colones al estándar · `lista`
+## A6 · Admin legible y colones al estándar · `en revisión #120`
 - **Auditoría 198:** `src/modules/admin/EmployeeList.tsx:207`, el selector de rol tiene `background:'#111'` y `color:'var(--white)'` (ahora tinta): queda ilegible. Pasarlo a `background: var(--c-fondo)`, `color: var(--c-tinta)` y borde `var(--c-linea)`. Buscar con `rg "var\(--(white|black)\)"` otros casos sobre fondos fijos en archivos de la línea A.
 - **Colones:** `fi()` en `src/shared/utils/index.ts` pasa de «₡ 1 460 000» a «₡1.460.000» (₡ pegado, punto de miles, sin decimales). Revisar `fd()` y otros formateadores de la misma carpeta solo si muestran colones.
   - Antes de cambiar: listar dónde se usa `fi()` y confirmar que **ningún resultado se guarda en la base ni se vuelve a leer como número** (si alguno se guarda o se parsea, frenar y anotarlo).

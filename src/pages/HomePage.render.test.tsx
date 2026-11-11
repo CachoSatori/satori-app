@@ -14,26 +14,36 @@ vi.mock('../shared/hooks/useAuth', () => ({
   }),
 }))
 
-// Respuestas por tabla: { data, count }. Cualquier cadena de filtros devuelve lo mismo.
-let tablas: Record<string, { data?: unknown; count?: number }> = {}
+// Respuestas por tabla: { data, count, error }. Cualquier cadena de filtros devuelve lo mismo.
+let tablas: Record<string, { data?: unknown; count?: number; error?: unknown }> = {}
+let baseCaida = false   // `supabase.from` explota: `fetchHomeStatus` falla entero
 vi.mock('../shared/api/supabase', () => {
   const cadena = (t: string): unknown => {
-    const r = { data: tablas[t]?.data ?? null, count: tablas[t]?.count ?? 0, error: null }
+    const r = tablas[t]?.error
+      ? { data: null, count: null, error: tablas[t].error }
+      : { data: tablas[t]?.data ?? null, count: tablas[t]?.count ?? 0, error: null }
     const p: Record<string, unknown> = {
       then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => Promise.resolve(r).then(ok, ko),
     }
     return new Proxy(p, { get: (o, k) => (k in o ? o[k as string] : () => cadena(t)) })
   }
-  return { supabase: { from: (t: string) => cadena(t) } }
+  return { supabase: { from: (t: string) => {
+    if (baseCaida) throw new Error('sin conexión')
+    return cadena(t)
+  } } }
 })
 
 let alertaDias: string[] = []
+let cierresFalla = false
+let jornadasFalla = false
 vi.mock('../shared/api/cash', () => ({
-  getCierresDia: async () => [],
+  getCierresDia: async () => { if (cierresFalla) throw new Error('sin conexión'); return [] },
   getAllCashMovements: async () => [],
   getCashSessions: async () => alertaDias.map((f, i) => ({ id: `s${i}`, status: 'open', session_date: f, cajero_name: null })),
 }))
-vi.mock('../shared/api/jornadasConVentas', () => ({ getJornadasConVentas: async () => [] }))
+vi.mock('../shared/api/jornadasConVentas', () => ({
+  getJornadasConVentas: async () => { if (jornadasFalla) throw new Error('sin conexión'); return [] },
+}))
 
 import HomePage from './HomePage'
 
@@ -46,6 +56,9 @@ beforeEach(() => {
   role = 'owner'
   tablas = { sops: { count: 7 } }
   alertaDias = []
+  cierresFalla = false
+  jornadasFalla = false
+  baseCaida = false
   sessionStorage.clear()
 })
 
@@ -88,5 +101,78 @@ describe('Inicio (B4)', () => {
     expect(screen.queryByText('Para hacer hoy')).toBeNull()
     expect(screen.queryByText('Venta de hoy')).toBeNull()
     expect(screen.getByText('Mi Turno')).toBeTruthy()
+  })
+})
+
+// B5: cada falla de lectura se ve en pantalla; nunca «Todo en orden» ni el Daruma.
+describe('Inicio (B5) · si una lectura falla', () => {
+  const FRASE = 'No se pudo comprobar todo — revisá Caja.'
+  const sinOrden = () => {
+    expect(screen.queryByText('Todo en orden')).toBeNull()
+    expect(screen.queryByText('Todo en orden.')).toBeNull()
+    expect(document.querySelector('.inicio-en-orden')).toBeNull()
+  }
+  const avisoACaja = () => {
+    const boton = screen.getByText('sin comprobar', { selector: '.inicio-pendiente .pildora' }).closest('button')
+    expect(boton?.textContent).toContain('Revisar Caja')
+  }
+
+  it.each([
+    ['tip_sessions'], ['cash_sessions'], ['cash_movements'], ['sops'], ['ingredients'],
+    ['ventas_dias'], ['ventas_metas'],
+  ])('falla la lectura de %s: frase de error y «sin comprobar»', async (tabla) => {
+    tablas[tabla] = { error: { message: 'falló' } }
+    montar()
+    await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
+    avisoACaja()
+    sinOrden()
+  })
+
+  it('procedimientos que no se pudieron leer no salen como «sin contenido»', async () => {
+    tablas.sops = { error: { message: 'falló' } }
+    montar()
+    await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
+    expect(screen.queryByText('sin contenido')).toBeNull()
+  })
+
+  it('la venta del día que no se pudo leer muestra «—» y la píldora, no «Sin datos hoy»', async () => {
+    tablas.ventas_dias = { error: { message: 'falló' } }
+    montar()
+    await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
+    expect(screen.queryByText('Sin datos hoy')).toBeNull()
+    expect(screen.getAllByText('sin comprobar', { selector: '.inicio-cifra-sub .pildora' })).toHaveLength(1)
+  })
+
+  it('falla la alerta de cierres (cierres del día)', async () => {
+    cierresFalla = true
+    montar()
+    await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
+    avisoACaja()
+    sinOrden()
+  })
+
+  it('falla la lectura de jornadas con ventas del PoS', async () => {
+    jornadasFalla = true
+    montar()
+    await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
+    sinOrden()
+  })
+
+  it('falla todo el día: «No se pudo cargar el día.», no «Revisando el día…» para siempre', async () => {
+    baseCaida = true
+    montar()
+    await waitFor(() => expect(screen.getByText('No se pudo cargar el día.')).toBeTruthy())
+    expect(screen.queryByText('Revisando el día…')).toBeNull()
+    expect(screen.queryByText('Cargando…')).toBeNull()
+    avisoACaja()
+    sinOrden()
+  })
+
+  it('contador: una falla también le cambia la frase', async () => {
+    role = 'contador'
+    tablas.cash_movements = { error: { message: 'falló' } }
+    montar()
+    await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
+    sinOrden()
   })
 })

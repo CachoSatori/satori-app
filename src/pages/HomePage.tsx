@@ -7,7 +7,7 @@ import { todayCR, fi } from '../shared/utils'
 import { monthRangeBounds } from '../shared/utils/dateRange'
 import { ROLE_LABELS } from '../shared/constants'
 import { modulosPara } from '../shared/layout/modulos'
-import { calcularPendientes, fraseEstado, type Pendiente } from '../shared/layout/pendientes'
+import { calcularPendientes, fraseEstado, TODAS_LAS_SENALES, type Pendiente, type Senal } from '../shared/layout/pendientes'
 import { getCashSessions, getAllCashMovements, getCierresDia } from '../shared/api/cash'
 import { getJornadasConVentas } from '../shared/api/jornadasConVentas'
 import { calcularAlertaCierres, desdeVentanaVentas, type AlertaCierres } from '../modules/cash/diasSinCierre'
@@ -41,6 +41,19 @@ interface HomeStatus {
   invTotal:         number
   invLowStock:      number
   invOutStock:      number
+  /**
+   * B5: lecturas que fallaron (rechazadas o con `error`). Sus valores quedan en 0, pero NO valen:
+   * las señales van como «sin comprobar» y los números como «—» con la píldora.
+   */
+  fallas:           Lectura[]
+}
+
+/** Las lecturas del Inicio que se pueden marcar «sin comprobar» (las de `pendientes.ts`). */
+type Lectura = Senal
+
+/** Una lectura falló si se rechazó o si la base devolvió `error` (supabase-js casi nunca rechaza). */
+function fallo(r: PromiseSettledResult<{ error?: unknown }>): boolean {
+  return r.status === 'rejected' || !!r.value?.error
 }
 
 async function fetchHomeStatus(): Promise<HomeStatus> {
@@ -82,6 +95,17 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     supabase.from('ingredients').select('current_stock,min_stock'),
   ])
 
+  const fallas = new Set<Lectura>()
+  if (fallo(tipRes))         fallas.add('propinas')
+  if (fallo(cashRes))        fallas.add('caja')
+  if (fallo(pendRes))        fallas.add('movimientos')
+  if (fallo(sopsRes))        fallas.add('procedimientos')
+  if (fallo(ingredientsRes)) fallas.add('inventario')
+  if (fallo(metaRes))        fallas.add('meta')
+  if (fallo(ventasRes))      fallas.add('venta')
+  if (fallo(tipDetailRes))   fallas.add('propinasDia')
+  if (fallo(cashSessionsRes) || fallo(cashMovsRes)) fallas.add('cajaDia')
+
   const tipSession  = tipRes.status  === 'fulfilled' ? (tipRes.value.data  as { shift_type: string; created_at: string } | null)   : null
   const cashSession = cashRes.status === 'fulfilled' ? (cashRes.value.data as { cajero_name: string; created_at: string } | null) : null
   const pendCount   = pendRes.status === 'fulfilled' ? (pendRes.value.count ?? 0) : 0
@@ -110,11 +134,12 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
       // Get current month ventas total. Límite superior EXCLUSIVO = 1° del mes siguiente
       // (no `${curMonth}-31`, que es fecha inválida y daba 400 en meses de 30 días/feb).
       const { start, endExclusive } = monthRangeBounds(curMonth)
-      const { data: dias } = await supabase
+      const { data: dias, error: diasError } = await supabase
         .from('ventas_dias')
         .select('data')
         .gte('session_date', start)
         .lt('session_date', endExclusive)
+      if (diasError) fallas.add('meta')
       if (dias) {
         const ventas = (dias as { data: { saloneros: Record<string, { total?: number; esCajero?: boolean }> } }[])
           .reduce((s, row) => {
@@ -147,7 +172,8 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     tipPool = (tipDetail.pool_efectivo_crc ?? 0) + (tipDetail.pool_efectivo_usd ?? 0) * rate + (tipDetail.pool_barra_crc ?? 0) + (tipDetail.pool_barra_electronico_crc ?? 0)
     // Load tip entries to count workers
     if (tipDetail.status === 'closed') {
-      const { data: entries } = await supabase.from('tip_entries').select('payout_crc').eq('session_id', tipDetail.id)
+      const { data: entries, error: entriesError } = await supabase.from('tip_entries').select('payout_crc').eq('session_id', tipDetail.id)
+      if (entriesError) fallas.add('propinasDia')
       tipWorkers = ((entries ?? []) as { payout_crc: number | null }[]).filter(e => (e.payout_crc ?? 0) > 0).length
     }
   }
@@ -199,7 +225,15 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     invTotal,
     invLowStock,
     invOutStock,
+    fallas:           [...fallas],
   }
+}
+
+/** Si `fetchHomeStatus` falla entero: ninguna señal vale, todas «sin comprobar». */
+const SIN_DATOS = {
+  cashOpen: false, cashOpenHours: 0, tipOpen: false, tipOpenHours: 0, pendingCount: 0,
+  invOutStock: 0, invLowStock: 0, sopsCount: 0, esLunes: false,
+  diasSinCierre: null, turnosViejos: null, sinComprobar: TODAS_LAS_SENALES,
 }
 
 // ── Aterrizaje por rol (operación por roles, 06-12) ───────────
@@ -217,6 +251,8 @@ export default function HomePage() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
   const [status, setStatus] = useState<HomeStatus | null>(null)
+  // B5: si `fetchHomeStatus` falla entero, se dice — no «Revisando el día…» para siempre.
+  const [statusFallo, setStatusFallo] = useState(false)
 
   const landing = profile ? ROLE_LANDING[profile.role] : undefined
   const landKey = profile ? `satori-landed-${profile.id}` : ''
@@ -230,16 +266,21 @@ export default function HomePage() {
 
   useEffect(() => {
     if (mustLand) return   // nos vamos ya — no dispares las consultas del Home
-    fetchHomeStatus().then(setStatus).catch(() => {})
+    let vivo = true
+    fetchHomeStatus()
+      .then(s => { if (vivo) setStatus(s) })
+      .catch(() => { if (vivo) setStatusFallo(true) })
+    return () => { vivo = false }
   }, [mustLand])
 
   const role = profile?.role ?? ''
   const isManager = ['owner', 'manager', 'contador'].includes(role)
 
   // Días sin cierre (B4): la MISMA alerta que ve Caja, con las mismas lecturas y el mismo filtro de rol
-  // (owner y manager). Solo lectura; si algo falla, el pendiente simplemente no sale.
+  // (owner y manager). Solo lectura. B5: si alguna de sus lecturas falla, queda «sin comprobar»
+  // (antes quedaba en cero y el Inicio podía decir «Todo en orden»).
   const veAlerta = role === 'owner' || role === 'manager'
-  const [alerta, setAlerta] = useState<AlertaCierres | null>(null)
+  const [alerta, setAlerta] = useState<AlertaCierres | 'fallo' | null>(null)
   useEffect(() => {
     if (mustLand || !veAlerta) return
     let vivo = true
@@ -250,17 +291,24 @@ export default function HomePage() {
       getCierresDia(),
       getAllCashMovements(),
       getCashSessions(),
-      getJornadasConVentas(desdeVentanaVentas(hoy), ayer).catch(() => [] as string[]),
+      getJornadasConVentas(desdeVentanaVentas(hoy), ayer),
     ]).then(([cierres, movements, sessions, jornadasConVentas]) => {
       if (vivo) setAlerta(calcularAlertaCierres({ hoy, cierres, movements, sessions, jornadasConVentas }))
-    }).catch(() => { if (vivo) setAlerta({ dias: [], turnos: [] }) })
+    }).catch(() => { if (vivo) setAlerta('fallo') })
     return () => { vivo = false }
   }, [mustLand, veAlerta])
 
   const pendientes = useMemo<Pendiente[] | null>(() => {
-    if (!status || !isManager) return null
-    if (veAlerta && !alerta) return null
+    if (!isManager) return null
     const visibles = new Set(modulosPara(role).map(m => m.id))
+    // Falló todo `fetchHomeStatus`: no hay señales; solo el aviso «sin comprobar».
+    const esLunes = new Date(todayCR() + 'T12:00:00').getDay() === 1
+    if (statusFallo) return calcularPendientes({ ...SIN_DATOS, esLunes }, visibles)
+    if (!status) return null
+    if (veAlerta && !alerta) return null
+    const alertaOk = alerta && alerta !== 'fallo' ? alerta : null
+    const sinComprobar = [...status.fallas]
+    if (alerta === 'fallo') sinComprobar.push('cierres')
     return calcularPendientes({
       cashOpen:      status.cashOpen,
       cashOpenHours: status.cashOpenHours,
@@ -270,11 +318,12 @@ export default function HomePage() {
       invOutStock:   status.invOutStock,
       invLowStock:   status.invLowStock,
       sopsCount:     status.sopsCount,
-      esLunes:       new Date(todayCR() + 'T12:00:00').getDay() === 1,
-      diasSinCierre: alerta ? alerta.dias.length : null,
-      turnosViejos:  alerta ? alerta.turnos.length : null,
+      esLunes,
+      diasSinCierre: alertaOk ? alertaOk.dias.length : null,
+      turnosViejos:  alertaOk ? alertaOk.turnos.length : null,
+      sinComprobar,
     }, visibles)
-  }, [status, alerta, isManager, veAlerta, role])
+  }, [status, statusFallo, alerta, isManager, veAlerta, role])
 
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol
@@ -301,6 +350,7 @@ export default function HomePage() {
           {isManager && (
             <ResumenDelDia
               status={status}
+              statusFallo={statusFallo}
               pendientes={pendientes}
               onIr={path => navigate(path)}
             />
@@ -336,12 +386,21 @@ export default function HomePage() {
 }
 
 // ── Frase, 3 números del día y «Para hacer hoy» (owner, manager y contador) ──
-function ResumenDelDia({ status, pendientes, onIr }: {
-  status:     HomeStatus | null
-  pendientes: Pendiente[] | null
-  onIr:       (path: string) => void
+function ResumenDelDia({ status, statusFallo, pendientes, onIr }: {
+  status:      HomeStatus | null
+  statusFallo: boolean
+  pendientes:  Pendiente[] | null
+  onIr:        (path: string) => void
 }) {
-  const cargando = !status || !pendientes
+  const cargando = !pendientes
+  const falta = (l: Lectura) => statusFallo || !!status?.fallas.includes(l)
+  // Valor de una cifra: «…» cargando, «—» si no hay dato o si no se pudo comprobar.
+  const cifra = (l: Lectura, valor: (s: HomeStatus) => string) =>
+    falta(l) ? '—' : status ? valor(status) : '…'
+  const sub = (l: Lectura, texto: string) =>
+    falta(l) ? <span className="pildora pildora-pendiente">sin comprobar</span> : texto
+  const frase = statusFallo ? 'No se pudo cargar el día.'
+    : cargando ? 'Revisando el día…' : fraseEstado(pendientes)
   const tipSub = !status ? '' : status.tipStatus === 'closed'
     ? `Cerrado · ${status.tipWorkers} ${status.tipWorkers === 1 ? 'persona' : 'personas'}`
     : status.tipOpen ? `Abierto · ${status.tipShift}` : 'Sin turno hoy'
@@ -349,33 +408,34 @@ function ResumenDelDia({ status, pendientes, onIr }: {
     : status.cajaStatus === 'closed' ? 'Turno cerrado' : 'Sin turno hoy'
   const ventaSub = !status ? '' : [
     status.ventaPax > 0 ? `${status.ventaPax} PAX` : (status.ventasHoy ? '' : 'Sin datos hoy'),
-    status.metaPct !== null ? `meta del mes ${status.metaPct.toFixed(0)} %` : '',
+    status.metaPct !== null ? `meta del mes ${status.metaPct.toFixed(0)} %`
+      : status.fallas.includes('meta') ? 'meta sin comprobar' : '',
   ].filter(Boolean).join(' · ')
 
   return (
     <>
       <p className="inicio-frase" aria-live="polite">
-        {cargando ? 'Revisando el día…' : fraseEstado(pendientes)}
+        {frase}
       </p>
 
       <dl className="inicio-cifras">
         <div className="inicio-cifra">
           <dt>Venta de hoy</dt>
-          <dd className="inicio-cifra-valor">{status ? (status.ventaNeta > 0 ? fi(status.ventaNeta) : '—') : '…'}</dd>
-          <dd className="inicio-cifra-sub">{ventaSub}</dd>
+          <dd className="inicio-cifra-valor">{cifra('venta', s => s.ventaNeta > 0 ? fi(s.ventaNeta) : '—')}</dd>
+          <dd className="inicio-cifra-sub">{sub('venta', ventaSub)}</dd>
         </div>
         <div className="inicio-cifra">
           <dt>Propinas del día</dt>
-          <dd className="inicio-cifra-valor">{status ? (status.tipPool > 0 ? fi(status.tipPool) : '—') : '…'}</dd>
-          <dd className="inicio-cifra-sub">{tipSub}</dd>
+          <dd className="inicio-cifra-valor">{cifra('propinasDia', s => s.tipPool > 0 ? fi(s.tipPool) : '—')}</dd>
+          <dd className="inicio-cifra-sub">{sub('propinasDia', tipSub)}</dd>
         </div>
         <div className="inicio-cifra">
           <dt>Caja de hoy</dt>
           <dd className="inicio-cifra-valor">
-            {status ? (status.cajaIngresos > 0 || status.cajaSaldo !== 0
-              ? `${status.cajaSaldo > 0 ? '+' : ''}${fi(status.cajaSaldo)}` : '—') : '…'}
+            {cifra('cajaDia', s => s.cajaIngresos > 0 || s.cajaSaldo !== 0
+              ? `${s.cajaSaldo > 0 ? '+' : ''}${fi(s.cajaSaldo)}` : '—')}
           </dd>
-          <dd className="inicio-cifra-sub">{cajaSub}</dd>
+          <dd className="inicio-cifra-sub">{sub('cajaDia', cajaSub)}</dd>
         </div>
       </dl>
 
@@ -383,7 +443,7 @@ function ResumenDelDia({ status, pendientes, onIr }: {
         <h2 id="inicio-hoy" className="inicio-subtitulo">Para hacer hoy</h2>
         {cargando ? (
           <p className="inicio-vacio">Cargando…</p>
-        ) : pendientes.length === 0 ? (
+        ) : pendientes.length === 0 && !statusFallo ? (
           <div className="inicio-en-orden">
             <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" width={44} height={48} />
             <div>

@@ -584,7 +584,18 @@ html, body, #root {
 }
 .inicio-vacio { font-size: 0.85rem; color: var(--c-gris); margin: 0; }
 
-.inicio .modules-grid { max-width: none; }
+.inicio .modules-grid {
+  max-width: none;
+  gap: 0;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--c-linea);
+  border-left: 1px solid var(--c-linea);
+}
+.inicio .module-card {
+  border-right: 1px solid var(--c-linea);
+  border-bottom: 1px solid var(--c-linea);
+}
 .inicio .module-card:not(:disabled):hover { transform: none; box-shadow: none; }
 
 @media (max-width: 480px) {
@@ -596,6 +607,8 @@ html, body, #root {
   .inicio-cifra + .inicio-cifra { padding-left: 0; border-left: none; border-top: 1px solid var(--c-linea); }
   .inicio-cifra-valor { grid-column: 2; grid-row: 1 / span 2; font-size: 1.5rem; margin-top: 0 !important; text-align: right; }
   .inicio-cifra-sub { grid-column: 1; }
+  .inicio .module-card { padding: 1.25rem 0.75rem; min-height: 0; }
+  .inicio .module-kanji { font-size: 1.9rem; }
 }
 
 /* ── App Footer ──────────────────────────────────────────── */

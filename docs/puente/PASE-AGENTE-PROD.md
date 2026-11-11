@@ -433,12 +433,12 @@ if ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -ne 'Running') 
 | 1.2 entorno de la cuenta: «leído de» entero, sin `INGEST_`/`POS_` | | ok: cuenta SYSTEM (S-1-5-18), sin `INGEST_`/`POS_`; leído de máquina + `HKEY_USERS\S-1-5-18\Environment` |
 | 1.3 cursor sano · campos nuevos en 0 · claves viejas | | cursor 112615, latiendo (40 s) sin error · cerradas en 24 h: 29, campos nuevos 0 · pedidos abiertos 0 (restaurante cerrado) |
 | 2.1 carpeta nueva `5da233a5…` · árbol `5600ebbd…` · `npm.cmd ci` | | ok: `5da233a5`, árbol `5600ebbd`, `npm ci` en la raíz. **Faltó el `npm ci` dentro de `pos-bridge\`** (el paquete no lo pedía): ver el paso 3 |
-| 2.2 `.env` copiados idénticos (cuáles) · firma agregada | | `pos-bridge\.env` copiado idéntico. **La firma `POS_AGENTE_PROD_FIRMADO` ya existía en el `.env` de prod (2026-10-28):** no se agregó otra (el bloque frenó por su guarda anti-duplicado) |
+| 2.2 `.env` copiados idénticos (cuáles) · firma agregada | | `pos-bridge\.env` copiado idéntico. **La firma `POS_AGENTE_PROD_FIRMADO` ya existía en el `.env` de prod (2026-10-28):** no se agregó otra (el bloque frenó por su guarda anti-duplicado). El camino «la firma ya viene» (corrección 10-nov del 2.2) **no está en el ensayo en seco del kit**, pero se ejecutó de hecho en prod el 10-nov: lectura de la firma 2026-10-28 y 2.3 con el candado OK |
 | 2.3 mismo archivo que manda y mismo largo (64) · candado OK | | ok: mismo archivo, largo 64; el candado pasa con la firma del 28-oct |
 | 2.4 `.cmd` nuevo = viejo con la carpeta cambiada | | ok |
 | 3 `HORA_CAMBIO` · segundos detenida | | **Primer intento (23:32): el agente nuevo no arrancó** (`LastTaskResult` 1). **Vuelta atrás §6 ok a las 23:33:24**; el agente viejo latió a los 44 s. Causa: faltaba `npm ci` dentro de `pos-bridge\` (`mssql` sin instalar). Se corrió ahí (`mssql` antes: no; después: sí). **Segundo intento: ok**, detenida 21 s, `HORA_CAMBIO` **2026-11-10 23:37:18 -06:00** |
-| 4 latido · Edge sin `invalid` ni `401` | | dos latidos sin error (23:39:58 y 23:42:31); `last_factura` 112615 (sin ventas). **Logs del Edge: no revisados** |
+| 4 latido · Edge sin `invalid` ni `401` | | dos latidos sin error (23:39:58 y 23:42:31); `last_factura` 112615 (sin ventas). **Logs del Edge:** no revisados el 10-nov; se revisan el 11-nov con las primeras facturas, junto con 5.2/5.4 |
 | 5 +15 / +30 / +45 / +60 (5.1–5.4) | | **pendiente:** 5.2 y 5.4 el 11-nov, con las primeras facturas |
 | Cierre de caja: 5.2 con consecutivo y clave FE en las que pasaron a C | | **pendiente:** el cierre de caja del 11-nov |
-| Gate de CI en la cabeza del PR (o la aceptación explícita del dueño) | | no informado a esta sesión |
+| Gate de CI en la cabeza del PR (o la aceptación explícita del dueño) | | aceptación del dueño en la firma, textual: «Acepto sin CI de pruebas en el PR (el repo no corre pruebas en PRs; el agente corre en staging desde el 09-nov).» |
 | Cierre: pasa / vuelta atrás | | **el agente nuevo corre en prod desde el 10-nov 23:37:18.** El cierre queda **abierto** hasta 5.2/5.4 y el cierre de caja del 11-nov |

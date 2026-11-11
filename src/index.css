@@ -320,6 +320,10 @@ html, body, #root {
   color: var(--accent);
 }
 
+/* Daruma: solo en el encabezado del celular (en computadora va en la marca del menú). */
+.header-daruma { display: block; width: 22px; height: auto; }
+@media (min-width: 1024px) { .header-daruma { display: none; } }
+
 .header-title {
   font-size: 0.7rem;
   letter-spacing: 0.18em;

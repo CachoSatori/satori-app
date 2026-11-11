@@ -9,3 +9,4 @@
 | 2026-11-11 08:20 | Merge a `staging` de #101 (A1) y #102 (B1) | Aprobado («apruebo todo», por chat). Mergeados por la sesión de revisión con Ismael presente. |
 | 2026-11-11 08:20 | Gate de tests | Aprobado: `npm test` con variables ficticias de Supabase; `pos-bridge/backfill.test.ts` (falta `mssql`) es fallo conocido de entorno. |
 | 2026-11-11 10:14 | Ritmo del proceso | Aprobado: los merges a `staging` se aprueban por chat en tanda (el control de seguridad de las sesiones automáticas no deja mergear sin una persona). Las líneas corren 01:10/02:50, 10:10/10:50 y 16:10/16:50 (se sacan las de 04 y 06 h). A3 pasa a `lista` para que su PR esté listo para firmar. |
+| 2026-11-11 11:45 | A2 (#111) y B2 (#112) | Validadas visualmente por Ismael en las vistas previas de Cloudflare (`claude-rediseno-a2…` y `claude-rediseno-b2…`) y aprobado el merge a `staging` («quedó bien», «B está revisado y también muy bien»). A2 pasó además una revisión independiente (subagente). |

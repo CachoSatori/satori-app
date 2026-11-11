@@ -11,7 +11,7 @@
   - el diff es solo CSS;
   - el reporte lista cuántos colores sueltos quedaron sin pasar a variable.
 
-## B2 · Valores del diseño C · `en revisión #112` · validación visual
+## B2 · Valores del diseño C · `hecha` (#112, mergeada a staging el 11-nov 11:45, validada por Ismael en la vista previa)
 - **Qué se hace:**
   - cambiar los valores de las variables por los del `PLAN.md`;
   - fondo blanco;
@@ -20,7 +20,7 @@
 - **No se toca:** ningún componente; solo CSS.
 - **Reporte:** capturas de la pantalla de login y de la build local en 390 px y 1280 px.
 
-## B3 · Shell: menú lateral y barra inferior · `pendiente` (después de B1, y A2 hecha) · validación visual
+## B3 · Shell: menú lateral y barra inferior · `lista` · validación visual
 - **Componentes:** `src/shared/layout/AppShell.tsx` (nuevo) envuelve las rutas privadas.
 - **El menú:**
   - sale de `MODULES`, con un campo `grupo` agregado;

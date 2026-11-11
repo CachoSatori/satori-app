@@ -80,6 +80,10 @@
 
    Máximo 8 líneas en total.
 
+## Vista previa para validar
+
+Cloudflare Pages publica cada rama: `https://<rama con / y . cambiados por ->.satori-staging.pages.dev` (por ejemplo `claude-rediseno-b3.satori-staging.pages.dev`). La revisión le pasa ese link a Ismael para la validación visual, en vez de esperar a `staging`.
+
 ## Estados de las colas
 
 `pendiente` (espera dependencias) → `lista` → `en revisión #PR` → `hecha` | `cambios pedidos #PR` | `espera firma #PR`.

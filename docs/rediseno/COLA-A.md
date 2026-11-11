@@ -12,7 +12,7 @@
   - mismo aspecto.
 - **Aceptación:** el diff es solo de JSX y textos; ningún cálculo cambia; los tests de ResumenSemanal y Ventas están verdes.
 
-## A2 · Ventas agrupado y con pestaña en la URL · `en revisión #111` (hecha por la sesión de revisión del 11-nov 10:50 con Ismael presente; la revisa la de las 15:40)
+## A2 · Ventas agrupado y con pestaña en la URL · `hecha` (#111, mergeada a staging el 11-nov 11:40)
 - Pestaña activa en la URL: `/ventas?tab=<id>`. Entrar sin `tab` abre la misma pestaña de hoy para cada rol.
 - Agrupar según `PLAN.md`:
   - 7 entradas;
@@ -24,12 +24,12 @@
   - un test cubre la pestaña por defecto de cada rol y el `?tab=`;
   - guía 6.4 actualizada.
 
-## A3 · «Borrar TODO el día» a «Más acciones» · `lista` (después de A2 en el orden) · **FIRMA** (archivo de cierre)
+## A3 · «Borrar TODO el día» a «Más acciones» · `lista` · **FIRMA** (archivo de cierre)
 - En `CashCierre.tsx`, sacar el botón de la barra superior, donde está pegado a la fecha. Pasa a un bloque «Más acciones» al pie del cierre, con estilo de peligro.
 - **Misma función, misma vista previa y mismos permisos.** Solo se mueve el JSX: no se toca ninguna función.
 - **Aceptación:** el diff de `CashCierre.tsx` es solo de JSX; los tests de CashCierre (borrarDia, recontar, etc.) pasan.
 - El PR lleva en la descripción qué va a ver el encargado.
 
-## A4 · Medir Ventas · `pendiente` (después de A2)
+## A4 · Medir Ventas · `lista` (después de A3 en el orden)
 - **Medición sin login:** tamaño de los chunks por vista y consultas que dispara cada vista al abrir.
 - **Reporte:** si alguna vista hace más de 3 consultas pesadas al abrir, proponer el arreglo en el reporte, sin aplicarlo.

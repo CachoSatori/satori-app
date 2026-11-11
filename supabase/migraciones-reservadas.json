@@ -45,5 +45,53 @@
   "libres_fuera_de_bloque": [
     "086"
   ],
-  "asignadas": {}
+  "asignadas": {
+    "087": {
+      "nombre": "employee_edits_audit",
+      "bloque": "caja",
+      "rama": "claude/employees-audit",
+      "destino": "No se usa con este número: cuando esté lista, va al bloque de pase (152+) con este número como «origen» (decisión del dueño, 10-nov)."
+    },
+    "088": {
+      "nombre": "employees_recibe_reparto_cocina",
+      "bloque": "caja",
+      "rama": "claude/prop-aud-01",
+      "destino": "No se usa con este número: cuando esté lista, va al bloque de pase (152+) con este número como «origen» (decisión del dueño, 10-nov)."
+    },
+    "089": {
+      "nombre": "anon_sin_politica",
+      "bloque": "caja",
+      "rama": "claude/anon-revoke"
+    },
+    "090": {
+      "nombre": "anon_privilegios_por_defecto",
+      "bloque": "caja",
+      "rama": "claude/anon-default-privs"
+    },
+    "091": {
+      "nombre": "multilocal_fase0",
+      "bloque": "caja",
+      "rama": "claude/multilocal-fase0"
+    },
+    "092": {
+      "nombre": "employees_borrado_solo_owner",
+      "bloque": "caja",
+      "rama": "claude/employees-borrado-owner"
+    },
+    "093": {
+      "nombre": "ventas_lectura_rol_activo",
+      "bloque": "caja",
+      "rama": "claude/ventas-lectura-rol-activo"
+    },
+    "094": {
+      "nombre": "anon_sin_maintain",
+      "bloque": "caja",
+      "rama": "claude/anon-sin-maintain"
+    },
+    "095": {
+      "nombre": "contador_lee_caja",
+      "bloque": "caja",
+      "rama": "claude/contador-lee-caja"
+    }
+  }
 }

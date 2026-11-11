@@ -6,3 +6,5 @@
 | Fecha y hora | Qué | Decisión |
 |---|---|---|
 | 2026-11-10 09:00 | Proceso automático | Aprobado: 2 líneas + revisión. Las revisiones de la noche (0:20 y 3:20) son silenciosas; avisan las de 5:40 y 15:40. Si el consumo es mucho, se bajan corridas. |
+| 2026-11-11 08:20 | Merge a `staging` de #101 (A1) y #102 (B1) | Aprobado («apruebo todo», por chat). Mergeados por la sesión de revisión con Ismael presente. |
+| 2026-11-11 08:20 | Gate de tests | Aprobado: `npm test` con variables ficticias de Supabase; `pos-bridge/backfill.test.ts` (falta `mssql`) es fallo conocido de entorno. |

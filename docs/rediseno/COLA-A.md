@@ -1,6 +1,6 @@
 # Cola · Línea A (módulos)
 
-## A1 · Textos y etiquetas · `en revisión #101` (aprobada por las revisiones del 11-nov 00:29, 03:25 y 05:40; merge a staging bloqueado por permiso de la sesión automática, espera a Ismael)
+## A1 · Textos y etiquetas · `hecha` (#101, mergeada a staging el 11-nov 08:20)
 - **Resumen semanal:**
   - durante la semana en curso, la variación contra la semana anterior muestra «En curso» en vez de ▼ con un %;
   - revisar que ningún conteo de PAX lleve ₡ (Prom/PAX sí lleva).
@@ -12,7 +12,7 @@
   - mismo aspecto.
 - **Aceptación:** el diff es solo de JSX y textos; ningún cálculo cambia; los tests de ResumenSemanal y Ventas están verdes.
 
-## A2 · Ventas agrupado y con pestaña en la URL · `pendiente` (después de A1)
+## A2 · Ventas agrupado y con pestaña en la URL · `lista`
 - Pestaña activa en la URL: `/ventas?tab=<id>`. Entrar sin `tab` abre la misma pestaña de hoy para cada rol.
 - Agrupar según `PLAN.md`:
   - 7 entradas;

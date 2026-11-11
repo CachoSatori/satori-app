@@ -1,6 +1,6 @@
 # Cola · Línea B (shell y estética)
 
-## B1 · Colores en un solo lugar, sin cambio visual · `en revisión #102` (aprobada por las revisiones del 11-nov 00:29, 03:25 y 05:40; merge a staging bloqueado por permiso de la sesión automática, espera a Ismael)
+## B1 · Colores en un solo lugar, sin cambio visual · `hecha` (#102, mergeada a staging el 11-nov 08:20)
 - **Qué hay hoy:** `src/index.css` tiene varios bloques de variables (`--t-*` aparece repetido en tres lugares) y colores sueltos.
 - **Qué se hace:**
   - consolidar todo en un único `:root` con nombres semánticos: `--c-tinta`, `--c-gris`, `--c-linea`, `--c-panel`, `--c-oro`, `--c-oro-texto`, `--c-laca`, `--c-musgo`, más sus fondos;
@@ -11,7 +11,7 @@
   - el diff es solo CSS;
   - el reporte lista cuántos colores sueltos quedaron sin pasar a variable.
 
-## B2 · Valores del diseño C · `pendiente` (después de B1) · validación visual
+## B2 · Valores del diseño C · `lista` · validación visual
 - **Qué se hace:**
   - cambiar los valores de las variables por los del `PLAN.md`;
   - fondo blanco;

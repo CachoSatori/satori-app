@@ -144,19 +144,24 @@ staging.
 - **Las 4 policies son restrictivas**, con `using` y `with check`; el rollback deja todo como antes.
 - **Opción «a» del catálogo** (con la 100 del Club, que va después): compatible en los dos órdenes.
 
+Tabla en orden por hora (Grok 174).
+
 | Cuándo | Qué | Resultado |
 |---|---|---|
 | 10-nov 10:06 CR (script @ `2eba291`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | 18 OK · **1 FALLA** (contados de la salida guardada; antes decía 23 por error): «contador ve 1 fila del otro local» dio 0. **Error de la expectativa, no de la 091:** hoy el contador no tiene ninguna policy de SELECT en `cash_movements` (las de lectura son owner, manager y cajero) y ve 0 filas también **sin** la 091 (verificado en una transacción descartada). Una policy restrictiva solo achica |
 | 10-nov 10:06 CR (script @ `7ec3567`: contador espera 0; 4 casos nuevos de `mis_locales()`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **23 OK · 0 FALLA · VERDE** (contados de la salida guardada; antes decía 24 por error) |
-| 10-nov tarde (script @ `e265da8`: guarda del rollback, Grok 137; contador según la 095; la 091 → 095 ya aplicadas en staging) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **27 OK · 0 FALLA · VERDE** (salida literal abajo) |
-| 10-nov 10:59 CR (script @ `47829f6`, Grok 138/139) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE** (salida literal abajo) |
 | 10-nov 10:07 CR | Estado de staging al terminar | sin columnas `location_id`, sin `profile_locations`, sin `mis_locales()`, sin policies por local, sin el local de prueba, sin la FK del Club; ledger 85 / 090: **la 091 no quedó aplicada** |
+| 10-nov 10:59 CR (script @ `47829f6`, Grok 138/139) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE**: la evidencia válida de «antes/después» (su salida literal quedó en el PASE-091 @ `1cdd505`; la de abajo es la de las ~11:56) |
+| 10-nov 11:02:50 CR | **Aplicada en staging** (transacción con precondición y su fila del ledger) | ver el párrafo de abajo |
+| 10-nov ~11:56 CR (script @ `e265da8`: guarda del rollback, Grok 137; contador según la 095; **la 091 → 095 ya aplicadas en staging**) | `091_pruebas.sh hwiatgicyyqyezqwldia` | Salida 27 OK · 0 FALLA, pero **Grok 174: 21 OK válidos + 6 NO PROBADO**. Los 6 casos de «antes/después» (postgres y los 5 roles) compararon la base CON la 091 contra la base CON la 091 y no prueban nada. **La evidencia válida de esos 6 es la corrida de las 10:59 (24 OK), antes de aplicar la 091.** Desde el 11-nov el script los marca NO PROBADO solo y no da verde (salida literal abajo) |
+| 10-nov noche (script con Grok 174, en la rama del #108) | `091_pruebas.sh hwiatgicyyqyezqwldia`, con la 091 ya aplicada | **21 OK · 0 FALLA · 6 NO PROBADO**: salida 1, no da verde. Los 6 de «antes/después» se marcan NO PROBADO solos |
 
 Antes de correr: sin consultas ajenas en staging y el último commit del Club con más de 5 minutos.
 
 **Grok 138 — salida literal de la última corrida** (10-nov, `scripts/sql/091_pruebas.sh hwiatgicyyqyezqwldia`, script @ `e265da8`,
 con la 091 → 095 ya aplicadas en staging; transacciones descartadas). Suma la guarda de la vuelta atrás (Grok 137, 3 casos)
-y el caso del contador según la 095. Salida 0: **27 OK · 0 FALLA**. La corrida de las 10:59 (24 OK, script @ `47829f6`)
+y el caso del contador según la 095. Salida 0: **27 OK · 0 FALLA**. **Grok 174:** de esos 27, los 6 de «antes/después» (postgres y los 5 roles)
+corrieron con la 091 ya aplicada y **no prueban nada** (21 OK válidos + 6 NO PROBADO); su evidencia es la corrida de las 10:59. La corrida de las 10:59 (24 OK, script @ `47829f6`)
 está en la tabla de arriba.
 ```text
 == Santa Teresa idéntica (postgres) ==
@@ -313,6 +318,10 @@ aparecer como siempre (entra con `location_id = 'santa-teresa'` por el default).
 3. **Verificar:** Branching del revert «All migrations are up to date»; 1.2 con el estado de «antes»; 1.3 y 4a iguales a
    los de antes.
 4. **La 092 y la 093 no pasan** ese día: tienen número mayor y esperan a que la 091 vuelva a estar en `main` y en prod.
+5. **Si ya entró el pase del Club (la 150 y la 151), primero se deshace la 151.** La 151 (la 100 del Club) pone la FK
+   `club_config.location_id → locations` y puede haber sumado locales al catálogo. Con ella puesta, la guarda de la 137
+   frena («locations no tiene solo santa-teresa»). Además, Supabase no deja deshacer una versión que no sea la última.
+   Orden: la vuelta atrás de la 151 (paquete del Club, PASE-150-151) → las de 095 a 092 si están → recién ahí la 091.
 
 ## 8. Orden en prod
 **085 → 089 → 090 → 091 → 092 → 093.** Supabase no aplica una migración con número menor que la última aplicada, así

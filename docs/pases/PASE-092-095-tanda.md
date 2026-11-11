@@ -30,9 +30,15 @@ mismo. No toca dinero, sagrados ni el cierre.
 | 092 | `claude/employees-borrado-owner` @ `e31fc886635871a9d598c6b7fcf3a2b703d923b0` | `03f2dfed3f86502c2b9043e85d340b0d` | `1c02bb0b16188d2ef4822cb3cbf2ee80` |
 | 093 | `claude/ventas-lectura-rol-activo` @ `8a1f1c64d6a8e976f284675d6577b9e84eb59a45` | `d5b5173c595600cd4f52dfa1052e0d1e` | `10bc50a1cb6739956ba21a42f530335f` |
 | 094 | `claude/anon-sin-maintain` @ `ab80c1671657f31b8f6de4806a8ac24a723747c7` | `bfa5a7866684c732493e60542b022168` | `f0827dfb814407b356fe8c8eb8bec9c0` |
-| 095 | `claude/contador-lee-caja` @ **`c78b4c20b26a0a103d1b5fa91f58462fa7128c3a`** (la que se mergea: trae las cuatro) | `a8959a18071320f6af63aaafeddd4166` | `3af4c58fa9bab50435c61f47079d8129` |
+| 095 | `claude/contador-lee-caja` @ `c78b4c20b26a0a103d1b5fa91f58462fa7128c3a` hoy (la que se mergea: trae las cuatro). **Se firma la cabeza nueva**, al día con `main` con la 091 (Grok 176) | `a8959a18071320f6af63aaafeddd4166` | `3af4c58fa9bab50435c61f47079d8129` |
 
-- **Los PR ya existen (#103 a #107). La tanda 092→095 se mergea por el #107 (`claude/contador-lee-caja` @ `c78b4c2`); al entrar, el #104, #105 y #106 quedan incluidos.** La 091 va antes, sola, por el #103.
+- **Los PR ya existen (#103 a #107). La tanda 092→095 se mergea por el #107 (`claude/contador-lee-caja`); al entrar, el #104, #105 y #106 quedan incluidos.** La 091 va antes, sola, por el #103.
+- **Grok 176: la firma de la tanda NO va sobre `c78b4c2`.** Mañana, con la 091 ya en `main` (merge del #103) y su pase
+  cerrado, se trae `main` a `claude/contador-lee-caja` con un merge commit. Después se verifica, contra `c78b4c2`:
+  - que solo entró ese merge;
+  - que los blobs de las cuatro migraciones y sus rollbacks son los mismos (md5 de esta tabla).
+  La **cabeza nueva** es la que se firma (§9).
+- **El #108 (este PASE combinado, solo docs) NO se mergea a `main` antes que el #107.**
 - Los #104, #105 y #106 (092, 093 y 094) quedan incluidos: sus cabezas son ancestros de `c78b4c2`, y GitHub los marca
   como mergeados al entrar.
 - Los md5 sirven para comprobar los archivos, **no** para el ledger de prod.
@@ -63,12 +69,14 @@ pase esté **cerrado** (merge con «Supabase Preview» en `success`, §5 en verd
 Editor SQL de PROD. **Leer el ref en pantalla.** Se agrupan en **dos bloques**, más el respaldo del ACL que pide la 094.
 Los bloques son los archivos `scripts/sql/tanda_092_095_bloque_*.sql`, copiados acá tal cual.
 
-**Bloque A — catálogo de las cuatro, una sola fila JSON** (reúne el 1.1–1.4 de la 092, el 1.2–1.3 de la 093, el 1.2 de la
-094 y el 1.2 de la 095):
+**Bloque A (ANTES) — catálogo de las cuatro, una sola fila JSON** (reúne el 1.1–1.4 de la 092, el 1.2–1.3 de la 093, el
+1.2 de la 094 y el 1.2 de la 095). **Grok 178:** trae un freno (`do … raise`) que da PARADA y lista qué no dio si algo no
+coincide con lo esperado. Igual se lee el JSON en voz alta. **Grok 177:** suma la huella (md5) de las 5 `_read` y de las 3
+`*_contador_select`: tabla, nombre, cmd, roles, `qual` y `with_check`, con el texto para diagnosticar.
 ```sql
--- BLOQUE A · catálogo de la tanda (092 → 095), una sola fila JSON. SOLO LECTURA.
+-- BLOQUE A (ANTES) · catálogo de la tanda 092 → 095, una sola fila JSON, con freno (Grok 178). SOLO LECTURA.
 begin read only;
-select json_build_object(
+select set_config('tanda.a', (json_build_object(
   -- 1.1 ledger
   'ledger', (select json_build_object('filas', count(*),
                'ultima', max(version) filter (where version ~ '^[0-9]{3}$'),
@@ -142,8 +150,36 @@ select json_build_object(
   -- 095 · 1.2 las policies de las 3 tablas de caja
   'v095', (select json_build_object('contador_select', count(*) filter (where policyname like '%\_contador\_select'),
               'policies', json_agg(tablename || '.' || policyname || ':' || cmd order by tablename, policyname))
-           from pg_policies where schemaname = 'public' and tablename in ('cash_movements','cash_sessions','suppliers'))
-) as tanda_antes;
+           from pg_policies where schemaname = 'public' and tablename in ('cash_movements','cash_sessions','suppliers')),
+  -- 177 · huella de las 5 _read y de las 3 *_contador_select (tabla, nombre, cmd, roles, qual, with_check)
+  'v093_read_md5', (select md5(coalesce(string_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''), E'\n' order by tablename), ''))
+                      from pg_policies where schemaname = 'public' and policyname = tablename || '_read'
+                       and tablename in ('ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map')),
+  'v095_contador_md5', (select md5(coalesce(string_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''), E'\n' order by tablename), ''))
+                      from pg_policies where schemaname = 'public'
+                       and policyname in ('cash_movements_contador_select','cash_sessions_contador_select','suppliers_contador_select')),
+  'v093_v095_texto', (select json_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || permissive || '|' || coalesce(qual, '') order by tablename, policyname)
+                      from pg_policies where schemaname = 'public' and (policyname = tablename || '_read'
+                       and tablename in ('ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map')
+                       or policyname in ('cash_movements_contador_select','cash_sessions_contador_select','suppliers_contador_select')))
+))::text, true);
+-- 178 · freno: si algo no da lo esperado, PARADA (el error lista qué). Se sigue leyendo en voz alta el JSON igual.
+do $chk$
+declare j jsonb := current_setting('tanda.a')::jsonb; m text := '';
+begin
+  if not ((j#>>'{ledger,filas}')::int = 61) then m := m || ' · ledger.filas≠61'; end if;
+  if not (j#>>'{ledger,ultima}' = '091') then m := m || ' · ledger.ultima≠091'; end if;
+  if not (j#>'{ledger,desde_092}' = '[]'::jsonb) then m := m || ' · hay versiones ≥092'; end if;
+  if not (j->'v092' = '{"ledger_092":false,"tabla":false,"rls_tabla":false,"politicas":[],"anon_sin_permisos":true,"funcion_definer":false,"funcion_no_publica":true,"trigger_activo":false,"bajas":null}'::jsonb) then m := m || ' · v092≠antes'; end if;
+  if not (not (j->'v092_triggers_employees') ? 'trg_employees_borrado_guardia') then m := m || ' · ya existe trg_employees_borrado_guardia'; end if;
+  if not ((j#>>'{v093,read_abiertas}')::int = 5 and (j#>>'{v093,read_con_rol}')::int = 0 and (j#>>'{v093,write}')::int = 5) then m := m || ' · v093≠5·0·5'; end if;
+  if not ((j->>'v093_rls')::int = 5) then m := m || ' · v093_rls≠5'; end if;
+  if not (j->'v093_lectores_sin_rls' = '[]'::jsonb) then m := m || ' · hay lectores de ventas sin RLS'; end if;
+  if not ((j#>>'{v094,tablas}')::int = 20 and (j#>>'{v094,anon_maintain}')::int = 20 and (j#>>'{v094,anon_trt}')::int = 0 and (j#>>'{v094,public}')::int = 0 and (j#>>'{v094,ledger_094}')::boolean = false) then m := m || ' · v094≠20·20·0·0·false'; end if;
+  if not ((j#>>'{v095,contador_select}')::int = 0) then m := m || ' · v095.contador_select≠0'; end if;
+  if m <> '' then raise exception 'PARADA (bloque A antes): no da%', m; end if;
+end $chk$;
+select current_setting('tanda.a')::json as tanda_antes;
 rollback;
 ```
 **Esperado ANTES en prod** (anotar el JSON entero en §9):
@@ -156,7 +192,8 @@ rollback;
   `v093_lectores_sin_rls` **[]**;
 - `v094`: `tablas` **20**, `anon_maintain` **20**, `anon_trt` 0, `public` 0, `ledger_094` false; `anon_otros` y
   `authenticated_maintain` anotar;
-- `v095`: `contador_select` **0**; `policies` anotar (la lista entera: en 5.3 tiene que ser la misma más las 3 nuevas).
+- `v095`: `contador_select` **0**; `policies` anotar (la lista entera: en 5.3 tiene que ser la misma más las 3 nuevas);
+- `v093_read_md5` y `v095_contador_md5`: anotar (antes de la tanda la segunda es el md5 de la nada).
 
 **Bloque B — respaldo del ACL de las 20 tablas** (el 1.2b de la 094, que es el 1.2b del PASE-089). Correr (a) y (b) por
 separado. Guardar las 20 filas de (a) fuera del repo y anotar los dos sha256:
@@ -193,7 +230,9 @@ select count(*) as tablas,
 - `v092` no da el estado de «antes», o ya existe `trg_employees_borrado_guardia`;
 - `v093` no da 5 lecturas abiertas, o `v093_lectores_sin_rls` no está vacío;
 - `v094.anon_maintain` no es 20, o `public` / `anon_trt` no son 0;
-- `v095.contador_select` no es 0.
+- `v095.contador_select` no es 0;
+- **Grok 185:** el bloque B no dio **20** tablas, o el respaldo **no quedó guardado fuera del repo** con sus **dos sha256**
+  anotados.
 
 ## 2. El cambio: UN merge → Branching aplica 092, 093, 094 y 095, en orden
 - **UN merge commit** del PR #107 (`claude/contador-lee-caja` @ `c78b4c2`), con la firma del §9. Anotar el SHA y la hora
@@ -213,7 +252,16 @@ select count(*) as tablas,
 | 094 | 10-nov 11:03:30 CR | `094_pruebas.sh` **8 OK · 0 FALLA** (antes de aplicarla) |
 | 095 | 10-nov 11:03:32 CR | `095_pruebas.sh` **24 OK · 0 FALLA** |
 
-**Los bloques de este documento, probados en staging el 10-nov a la noche (solo lectura):**
+**Los bloques de este documento, probados en staging el 10-nov a la noche (solo lectura).** Staging tiene las cuatro
+aplicadas y, además, la 150 y la 151 del Club (91 filas, última 151):
+- **A (ANTES):** frena, listando todo lo que ya no está como «antes». Es lo esperado: staging está en «después».
+- **A (DESPUÉS):** frena solo por el ledger (91 · 151) y por la 094, porque staging tiene 23 tablas y prod 20. Las
+  comprobaciones de la 092, la 093 y la 095 **pasan**, con los dos md5 de la 177.
+- **D:** frena solo por `filas≠65 · última≠095` (la 150 y la 151 del Club). La tanda da 4 filas con su `name`.
+- **E con la precondición de la 175, en READ ONLY:** **las cuatro frenan** con «la última versión del ledger no es la
+  09x», porque la última es la 151. Es justo el caso de la 175: una versión posterior impide deshacer.
+
+Las corridas de la versión anterior de los bloques (antes de la 175–178):
 - **A, B y D:** corren y dan la forma esperada. Staging ya tiene las cuatro, así que muestran el estado de «después»:
   - **A:** `v093.read_con_rol` 5, `v094.anon_maintain` 0, `v095.contador_select` 3;
   - **D:** 4 filas con su `name`, 1 statement cada una y `repetidas` vacía.
@@ -287,6 +335,7 @@ rollback;
   las dos lecturas) no es parada.
 
 **Pantallas (4c):**
+- **sin sesión (Grok 179): `/login` y `/registro`** abren como siempre;
 - el owner abre Caja, Propinas, Ventas y Admin → Empleados;
 - el contador abre Caja y ve datos;
 - nada nuevo en rojo.
@@ -295,10 +344,13 @@ rollback;
 1. **Branching:** el «Supabase Preview» del merge commit que termina en `success`. Los otros con el mismo nombre que
    quedan en «in progress» no cuentan. En el log, las cuatro `Applying migration …`, en orden.
 2. **Ledger, bloque D:** **65 filas, última 095**, `tanda` con exactamente 4 filas (092, 093, 094 y 095), cada una con su
-   `name`, `repetidas` [] y `names_ok` 4. Anotar `statements` de cada una (sin valor esperado).
+   `name`, `repetidas` [] y `names_ok` 4. **Grok 178:** el bloque frena (PARADA) si algo de eso no da. Anotar `statements`
+   de cada una (sin valor esperado).
    ```sql
--- BLOQUE D · el ledger de la tanda, después del merge (5.2). SOLO LECTURA.
-select json_build_object(
+-- BLOQUE D · el ledger de la tanda después del merge (5.2), con freno (Grok 178). SOLO LECTURA.
+-- Frena si no da: 65 filas, última 095, 4 filas de la tanda, names_ok 4, repetidas []. Se sigue leyendo en voz alta igual.
+begin read only;
+select set_config('tanda.d', (json_build_object(
   'filas', (select count(*) from supabase_migrations.schema_migrations),
   'ultima', (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$'),
   'tanda', (select coalesce(json_agg(json_build_object('v', version, 'name', name, 'statements', array_length(statements, 1)) order by version), '[]'::json)
@@ -307,21 +359,149 @@ select json_build_object(
                   where version in ('092','093','094','095') group by version having count(*) <> 1) r),
   'names_ok', (select count(*) from supabase_migrations.schema_migrations where (version, name) in
                  (('092','employees_borrado_solo_owner'), ('093','ventas_lectura_rol_activo'), ('094','anon_sin_maintain'), ('095','contador_lee_caja')))
-) as ledger_tanda;
+))::text, true);
+do $chk$
+declare j jsonb := current_setting('tanda.d')::jsonb; m text := '';
+begin
+  if (j->>'filas')::int <> 65 then m := m || ' · filas≠65'; end if;
+  if j->>'ultima' <> '095' then m := m || ' · última≠095'; end if;
+  if jsonb_array_length(j->'tanda') <> 4 then m := m || ' · la tanda no tiene 4 filas'; end if;
+  if (j->>'names_ok')::int <> 4 then m := m || ' · names_ok≠4'; end if;
+  if j->'repetidas' <> '[]'::jsonb then m := m || ' · hay versiones repetidas'; end if;
+  if m <> '' then raise exception 'PARADA (bloque D): no da%', m; end if;
+end $chk$;
+select current_setting('tanda.d')::json as ledger_tanda;
+rollback;
    ```
-3. **Catálogo:** bloque A otra vez. Tiene que dar:
+3. **Catálogo: bloque A (DESPUÉS)**, el mismo JSON con el freno del estado de «después» (Grok 177 y 178):
+   ```sql
+-- BLOQUE A (DESPUÉS) · el mismo JSON, con el freno del estado de «después» (Grok 177 y 178). SOLO LECTURA.
+-- Las huellas esperadas de las _read y de las *_contador_select son las de staging (10-nov), con las cuatro aplicadas.
+begin read only;
+select set_config('tanda.a', (json_build_object(
+  -- 1.1 ledger
+  'ledger', (select json_build_object('filas', count(*),
+               'ultima', max(version) filter (where version ~ '^[0-9]{3}$'),
+               'desde_092', coalesce(json_agg(version order by version) filter (where version ~ '^[0-9]{3}$' and version >= '092'), '[]'::json))
+             from supabase_migrations.schema_migrations),
+  -- 092 · 1.2 la verificación (scripts/sql/092_verificacion.sql)
+  'v092', (select json_build_object(
+  'ledger_092',        exists (select 1 from supabase_migrations.schema_migrations where version = '092'),
+  'tabla',             to_regclass('public.employee_bajas') is not null,
+  'rls_tabla',         coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.employee_bajas')), false),
+  'politicas',         (select coalesce(json_agg(policyname || ':' || cmd order by policyname), '[]'::json)
+                          from pg_policies where schemaname = 'public' and tablename = 'employee_bajas'),
+  'anon_sin_permisos', to_regclass('public.employee_bajas') is null
+                       or not exists (select 1 from information_schema.role_table_grants
+                                       where table_schema = 'public' and table_name = 'employee_bajas' and grantee = 'anon'),
+  'funcion_definer',   coalesce((select prosecdef from pg_proc where oid = to_regprocedure('public.employees_borrado_guardia()')), false),
+  'funcion_no_publica', to_regprocedure('public.employees_borrado_guardia()') is null
+                       or not (has_function_privilege('anon', 'public.employees_borrado_guardia()', 'execute')
+                            or has_function_privilege('authenticated', 'public.employees_borrado_guardia()', 'execute')),
+  'trigger_activo',    exists (select 1 from pg_trigger where tgname = 'trg_employees_borrado_guardia'
+                                and tgrelid = 'public.employees'::regclass and tgenabled = 'O'),
+  'bajas',             case when to_regclass('public.employee_bajas') is null then null
+                            else (xpath('/row/c/text()', query_to_xml('select count(*) as c from public.employee_bajas', false, true, '')))[1]::text::int end
+)),
+  -- 092 · 1.3 qué protege (solo conteos) y 1.4 los triggers de employees
+  'v092_empleados', (select json_build_object('con_login', count(*) filter (where pos_login is not null),
+                        'con_login_sin_propinas', count(*) filter (where pos_login is not null
+                          and not exists (select 1 from public.tip_entries t where t.employee_id = e.id)))
+                     from public.employees e),
+  'v092_triggers_employees', (select coalesce(json_agg(tgname order by tgname), '[]'::json) from pg_trigger
+                               where tgrelid = 'public.employees'::regclass and not tgisinternal),
+  -- 093 · 1.2 las 10 policies de ventas (las _read y la huella de las _write) y la RLS de las 5
+  'v093', (select json_build_object(
+              'read_abiertas', count(*) filter (where policyname = tablename || '_read' and qual = 'true'),
+              'read_con_rol',  count(*) filter (where policyname = tablename || '_read' and qual ~ 'get_my_role' and qual ~ 'IS NOT NULL'),
+              'write', count(*) filter (where policyname = tablename || '_write'),
+              'write_md5', md5(coalesce(string_agg(tablename || '|' || qual || '|' || coalesce(with_check, ''), E'\n' order by tablename)
+                                        filter (where policyname = tablename || '_write'), '')))
+           from pg_policies where schemaname = 'public'
+            and tablename in ('ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map')),
+  'v093_rls', (select count(*) filter (where relrowsecurity) from pg_class where relnamespace = 'public'::regnamespace
+                 and relname in ('ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map')),
+  -- 093 · 1.3 vistas y funciones SECURITY DEFINER que leen ventas sin pasar por las policies
+  'v093_lectores_sin_rls', (select coalesce(json_agg(x order by x), '[]'::json) from (
+      select distinct 'vista ' || r.ev_class::regclass::text as x
+        from pg_depend d join pg_rewrite r on r.oid = d.objid
+       where d.classid = 'pg_rewrite'::regclass and d.refclassid = 'pg_class'::regclass
+         and d.refobjid in ('public.ventas_dias'::regclass, 'public.ventas_hist'::regclass, 'public.ventas_metas'::regclass,
+                            'public.ventas_comps'::regclass, 'public.product_map'::regclass)
+         and r.ev_class not in ('public.ventas_dias'::regclass, 'public.ventas_hist'::regclass, 'public.ventas_metas'::regclass,
+                                'public.ventas_comps'::regclass, 'public.product_map'::regclass)
+      union all
+      select 'funcion ' || p.oid::regprocedure::text from pg_proc p
+       where p.pronamespace = 'public'::regnamespace and p.prosecdef
+         and p.prosrc ~* '\m(ventas_dias|ventas_hist|ventas_metas|ventas_comps|product_map)\M') q),
+  -- 094 · 1.2 la verificación (scripts/sql/094_verificacion.sql)
+  'v094', (with lista(t) as (values ('accounting_entries'),('cash_movements'),('cash_sessions'),('credit_applications'),
+  ('movement_deletions'),('movement_edits'),('pos_ndf_cursor'),('pos_ndf_open'),('pos_ndf_ticket_lines'),('pos_ndf_tickets'),
+  ('product_map'),('punch_exceptions'),('sops'),('supplier_credits'),('suppliers'),('time_punches'),('tip_entries'),
+  ('tip_sessions'),('ventas_comps'),('ventas_dias'),('ventas_hist'),('ventas_metas'),('salary_periods')),
+ex as (select t, ('public.' || t)::regclass as r from lista where to_regclass('public.' || t) is not null)
+select json_build_object(
+  'tablas', (select count(*) from ex),
+  'anon_maintain', (select count(*) from ex where has_table_privilege('anon', r, 'MAINTAIN')),
+  'anon_otros', (select count(*) from ex cross join unnest(array['SELECT','INSERT','UPDATE','DELETE']) p where has_table_privilege('anon', r, p)),
+  'anon_trt', (select count(*) from ex cross join unnest(array['TRUNCATE','REFERENCES','TRIGGER']) p where has_table_privilege('anon', r, p)),
+  'public', (select count(*) from ex join pg_class c on c.oid = ex.r cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a where a.grantee = 0),
+  'authenticated_maintain', (select count(*) from ex where has_table_privilege('authenticated', r, 'MAINTAIN')),
+  'ledger_094', exists (select 1 from supabase_migrations.schema_migrations where version = '094')
+)),
+  -- 095 · 1.2 las policies de las 3 tablas de caja
+  'v095', (select json_build_object('contador_select', count(*) filter (where policyname like '%\_contador\_select'),
+              'policies', json_agg(tablename || '.' || policyname || ':' || cmd order by tablename, policyname))
+           from pg_policies where schemaname = 'public' and tablename in ('cash_movements','cash_sessions','suppliers')),
+  -- 177 · huella de las 5 _read y de las 3 *_contador_select (tabla, nombre, cmd, roles, qual, with_check)
+  'v093_read_md5', (select md5(coalesce(string_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''), E'\n' order by tablename), ''))
+                      from pg_policies where schemaname = 'public' and policyname = tablename || '_read'
+                       and tablename in ('ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map')),
+  'v095_contador_md5', (select md5(coalesce(string_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''), E'\n' order by tablename), ''))
+                      from pg_policies where schemaname = 'public'
+                       and policyname in ('cash_movements_contador_select','cash_sessions_contador_select','suppliers_contador_select')),
+  'v093_v095_texto', (select json_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || permissive || '|' || coalesce(qual, '') order by tablename, policyname)
+                      from pg_policies where schemaname = 'public' and (policyname = tablename || '_read'
+                       and tablename in ('ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map')
+                       or policyname in ('cash_movements_contador_select','cash_sessions_contador_select','suppliers_contador_select')))
+))::text, true);
+-- 178 · freno: si algo no da lo esperado, PARADA (el error lista qué). Se sigue leyendo en voz alta el JSON igual.
+do $chk$
+declare j jsonb := current_setting('tanda.a')::jsonb; m text := '';
+begin
+  if not ((j#>>'{ledger,filas}')::int = 65) then m := m || ' · ledger.filas≠65'; end if;
+  if not (j#>>'{ledger,ultima}' = '095') then m := m || ' · ledger.ultima≠095'; end if;
+  if not (j#>'{ledger,desde_092}' = '["092","093","094","095"]'::jsonb) then m := m || ' · desde_092≠[092..095]'; end if;
+  if not (j->'v092' = '{"ledger_092":true,"tabla":true,"rls_tabla":true,"politicas":["employee_bajas_select_owner:SELECT"],"anon_sin_permisos":true,"funcion_definer":true,"funcion_no_publica":true,"trigger_activo":true,"bajas":0}'::jsonb) then m := m || ' · v092≠después'; end if;
+  if not ((j->'v092_triggers_employees') ? 'trg_employees_borrado_guardia') then m := m || ' · falta trg_employees_borrado_guardia'; end if;
+  if not ((j#>>'{v093,read_abiertas}')::int = 0 and (j#>>'{v093,read_con_rol}')::int = 5 and (j#>>'{v093,write}')::int = 5) then m := m || ' · v093≠0·5·5'; end if;
+  if not ((j->>'v093_rls')::int = 5) then m := m || ' · v093_rls≠5'; end if;
+  if not (j->>'v093_read_md5' = 'c25aabee6ae97e32a55119725ba95d99') then m := m || ' · v093_read_md5≠staging'; end if;
+  if not ((j#>>'{v094,tablas}')::int = 20 and (j#>>'{v094,anon_maintain}')::int = 0 and (j#>>'{v094,anon_trt}')::int = 0 and (j#>>'{v094,public}')::int = 0 and (j#>>'{v094,ledger_094}')::boolean) then m := m || ' · v094≠20·0·0·0·true'; end if;
+  if not ((j#>>'{v095,contador_select}')::int = 3) then m := m || ' · v095.contador_select≠3'; end if;
+  if not (j->>'v095_contador_md5' = 'bd9d17e15125957009e90a37bcf068bd') then m := m || ' · v095_contador_md5≠staging'; end if;
+  if m <> '' then raise exception 'PARADA (bloque A despues): no da%', m; end if;
+end $chk$;
+select current_setting('tanda.a')::json as tanda_despues;
+rollback;
+   ```
+   Tiene que dar (el freno lo controla):
    - `v092`: `ledger_092` true, `tabla` true, `rls_tabla` true, `politicas` `["employee_bajas_select_owner:SELECT"]`,
      `anon_sin_permisos` true, `funcion_definer` true, `funcion_no_publica` true, `trigger_activo` true, `bajas` 0;
    - `v092_triggers_employees`: lo de antes más `trg_employees_borrado_guardia`;
    - `v093`: `read_abiertas` 0, `read_con_rol` 5, `write` 5, **`write_md5` igual al de antes**; `v093_rls` 5;
    - `v094`: `anon_maintain` **0**, con `tablas`, `anon_otros`, `anon_trt`, `public` y `authenticated_maintain` iguales a
      los de antes; `ledger_094` true;
-   - `v095`: `contador_select` **3**, y `policies` = la lista de antes más las 3 `*_contador_select`.
+   - `v095`: `contador_select` **3**, y `policies` = la lista de antes más las 3 `*_contador_select`;
+   - **`v093_read_md5` = `c25aabee6ae97e32a55119725ba95d99`** y **`v095_contador_md5` = `bd9d17e15125957009e90a37bcf068bd`**
+     (los de staging del 10-nov, con las cuatro aplicadas). Si una no da, se compara `v093_v095_texto` con el texto de
+     staging antes de decidir: una diferencia de cómo Postgres escribe la expresión no es lo mismo que otra condición.
 4. **Humo:** bloque C con las reglas del §4, y las pantallas sin rojos.
 
 ## 6. Criterios de parada → vuelta atrás (§7)
 - Branching en error (`MIGRATIONS_FAILED`): una de las cuatro falló a mitad de camino.
-- El bloque D no da 65 · 095, o falta alguna versión, o alguna está repetida o con otro `name`.
+- El bloque D frena (no da 65 · 095, o falta alguna versión, o alguna está repetida o con otro `name`).
+- El bloque A (DESPUÉS) frena.
 - El bloque A después con algún valor distinto de lo esperado en 5.3.
 - El bloque C después: la inactiva con algo en ventas; el contador sin ver caja (con `hay_cuenta` true); otro rol que
   cambió sin que `base` lo explique.
@@ -347,8 +527,9 @@ ninguna versión mayor de la tanda: así no se puede deshacer una antes que la d
 `scripts/sql/tanda_092_095_bloque_E_vuelta_atras.sql`, copiado tal cual.
 ```sql
 -- BLOQUE E · vuelta atrás de la tanda, AL REVÉS: 095 → 094 → 093 → 092. Cada bloque es UNA transacción y se corre solo
--- si su versión está en el ledger (ver la tabla de §7). La precondición exige exactamente 1 fila de esa versión y NINGUNA
--- versión mayor de la tanda: así no se puede deshacer una antes que la de arriba. Después de la última: revert del merge.
+-- si su versión está en el ledger (ver la tabla de §7). La precondición exige exactamente 1 fila de esa versión, que sea la
+-- ÚLTIMA del ledger y que el ledger tenga 61+n filas (Grok 175). Después de la última: el bloque D0 tiene que dar la tanda
+-- vacía, y recién ahí el revert del merge (Grok 186).
 
 -- ── E.095 ─────────────────────────────────────────────────────────────────────
 begin;
@@ -356,8 +537,13 @@ do $pre$ begin
   if (select count(*) from supabase_migrations.schema_migrations where version = '095') <> 1 then
     raise exception 'precondición: se esperaba exactamente 1 fila 095 en el ledger: no se toca nada';
   end if;
-  if exists (select 1 from supabase_migrations.schema_migrations where version in ('092','093','094','095') and version > '095') then
-    raise exception 'precondición: hay una versión mayor de la tanda en el ledger: deshacerla antes que la 095';
+  -- Grok 175: la ÚLTIMA versión del ledger tiene que ser exactamente la 095 y tiene que haber 65 filas. Una 096, una 150
+  -- o cualquier otra que haya entrado después la frena.
+  if (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$') <> '095' then
+    raise exception 'precondición: la última versión del ledger no es la 095: no se toca nada';
+  end if;
+  if (select count(*) from supabase_migrations.schema_migrations) <> 65 then
+    raise exception 'precondición: el ledger no tiene 65 filas: no se toca nada';
   end if;
 end $pre$;
 drop policy if exists cash_movements_contador_select on public.cash_movements;
@@ -372,8 +558,13 @@ do $pre$ begin
   if (select count(*) from supabase_migrations.schema_migrations where version = '094') <> 1 then
     raise exception 'precondición: se esperaba exactamente 1 fila 094 en el ledger: no se toca nada';
   end if;
-  if exists (select 1 from supabase_migrations.schema_migrations where version in ('092','093','094','095') and version > '094') then
-    raise exception 'precondición: hay una versión mayor de la tanda en el ledger: deshacerla antes que la 094';
+  -- Grok 175: la ÚLTIMA versión del ledger tiene que ser exactamente la 094 y tiene que haber 64 filas. Una 096, una 150
+  -- o cualquier otra que haya entrado después la frena.
+  if (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$') <> '094' then
+    raise exception 'precondición: la última versión del ledger no es la 094: no se toca nada';
+  end if;
+  if (select count(*) from supabase_migrations.schema_migrations) <> 64 then
+    raise exception 'precondición: el ledger no tiene 64 filas: no se toca nada';
   end if;
 end $pre$;
 do $$
@@ -397,8 +588,13 @@ do $pre$ begin
   if (select count(*) from supabase_migrations.schema_migrations where version = '093') <> 1 then
     raise exception 'precondición: se esperaba exactamente 1 fila 093 en el ledger: no se toca nada';
   end if;
-  if exists (select 1 from supabase_migrations.schema_migrations where version in ('092','093','094','095') and version > '093') then
-    raise exception 'precondición: hay una versión mayor de la tanda en el ledger: deshacerla antes que la 093';
+  -- Grok 175: la ÚLTIMA versión del ledger tiene que ser exactamente la 093 y tiene que haber 63 filas. Una 096, una 150
+  -- o cualquier otra que haya entrado después la frena.
+  if (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$') <> '093' then
+    raise exception 'precondición: la última versión del ledger no es la 093: no se toca nada';
+  end if;
+  if (select count(*) from supabase_migrations.schema_migrations) <> 63 then
+    raise exception 'precondición: el ledger no tiene 63 filas: no se toca nada';
   end if;
 end $pre$;
 alter policy ventas_dias_read  on public.ventas_dias  using (true);
@@ -415,8 +611,13 @@ do $pre$ begin
   if (select count(*) from supabase_migrations.schema_migrations where version = '092') <> 1 then
     raise exception 'precondición: se esperaba exactamente 1 fila 092 en el ledger: no se toca nada';
   end if;
-  if exists (select 1 from supabase_migrations.schema_migrations where version in ('092','093','094','095') and version > '092') then
-    raise exception 'precondición: hay una versión mayor de la tanda en el ledger: deshacerla antes que la 092';
+  -- Grok 175: la ÚLTIMA versión del ledger tiene que ser exactamente la 092 y tiene que haber 62 filas. Una 096, una 150
+  -- o cualquier otra que haya entrado después la frena.
+  if (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$') <> '092' then
+    raise exception 'precondición: la última versión del ledger no es la 092: no se toca nada';
+  end if;
+  if (select count(*) from supabase_migrations.schema_migrations) <> 62 then
+    raise exception 'precondición: el ledger no tiene 62 filas: no se toca nada';
   end if;
 end $pre$;
 do $$ begin
@@ -431,17 +632,36 @@ delete from supabase_migrations.schema_migrations where version = '092';
 commit;
 ```
 - **E.092 frena si `employee_bajas` tiene filas** (Grok 140): el owner las exporta, decide, y recién ahí se sigue.
-- **Después de cada bloque se corre el bloque D**, que tiene que mostrar esa versión fuera de `tanda`.
+- **Grok 175:** cada precondición exige que la versión que se deshace sea **la ÚLTIMA del ledger** y que haya **61+n
+  filas** (E.095: 095 y 65; E.094: 094 y 64; E.093: 093 y 63; E.092: 092 y 62). Una 096, una 150 o cualquiera que haya
+  entrado después la frena.
+- **Después de cada bloque E se corre el bloque D0** (lectura, sin freno), que tiene que mostrar esa versión fuera de
+  `tanda`:
+  ```sql
+-- BLOQUE D0 · el ledger de la tanda, SOLO LECTURA y SIN freno: para la vuelta atrás (después de cada bloque E) y para el
+-- revert (Grok 186: el revert recién cuando `tanda` dé []).
+select json_build_object(
+  'filas', (select count(*) from supabase_migrations.schema_migrations),
+  'ultima', (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$'),
+  'tanda', (select coalesce(json_agg(json_build_object('v', version, 'name', name, 'statements', array_length(statements, 1)) order by version), '[]'::json)
+              from supabase_migrations.schema_migrations where version in ('092','093','094','095')),
+  'repetidas', (select coalesce(json_agg(version), '[]'::json) from (select version from supabase_migrations.schema_migrations
+                  where version in ('092','093','094','095') group by version having count(*) <> 1) r),
+  'names_ok', (select count(*) from supabase_migrations.schema_migrations where (version, name) in
+                 (('092','employees_borrado_solo_owner'), ('093','ventas_lectura_rol_activo'), ('094','anon_sin_maintain'), ('095','contador_lee_caja')))
+) as ledger_tanda;
+  ```
 
-**7.3 Revert del merge en `main`** (enseguida, sin otro merge en el medio). Saca los cuatro `.sql`, sus guías y sus
-documentos:
+**7.3 Revert del merge en `main` (Grok 186):** `git revert -m 1 <SHA del merge del #107>`, **recién cuando el bloque D0
+muestre `tanda` = `[]`**, y **nadie pushea a `main` en el medio** (desde el merge hasta el revert). Saca los cuatro `.sql`,
+sus guías y sus documentos:
 - si los archivos quedan en `main` sin su fila, Branching los vuelve a aplicar en el próximo push;
 - si se sacan sin borrar la fila, Branching falla en cada push (el caso de la 074).
 
 **7.4 Verificar:**
 - Branching del revert: «All migrations are up to date»;
-- bloque D: 61 · 091, con `tanda` `[]`;
-- bloque A: el JSON de «antes»;
+- bloque D0: 61 · 091, con `tanda` `[]`;
+- bloque A (ANTES): sin PARADA, el JSON de «antes»;
 - bloque B: `sha256_normalizado` igual al respaldo; si difiere, se anota tabla por tabla y **no** se arregla a mano sin
   la firma del dueño;
 - bloque C: igual que «antes».
@@ -454,13 +674,15 @@ La MAINTAIN de `authenticated` (75 tablas) va después de abrir el Club, en el b
 ## 9. Firma única de la tanda y bitácora
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| **Firma del dueño** (fecha y hora `-06:00`): «autorizo el pase de la tanda 092–095 en un merge del PR #107 @ `c78b4c20b26a0a103d1b5fa91f58462fa7128c3a`», con los md5 de las cuatro migraciones y rollbacks de la tabla de huellas | | |
+| **Firma del dueño** (fecha y hora `-06:00`): «autorizo el pase de la tanda 092–095 en un merge del PR #107 @ **<cabeza nueva de `claude/contador-lee-caja`, al día con `main` con la 091 (Grok 176)>**», con los md5 de las cuatro migraciones y rollbacks de la tabla de huellas y el PASE combinado (#108 @ <su cabeza>) | | |
+| **Condición 3 de Grok, texto que firma el dueño:** «Para esta tanda, el humo combinado después del merge y la vuelta atrás de la tanda entera por defecto reemplazan la condición de cerrar cada pase antes del siguiente» | | |
+| 176: la cabeza nueva contra `c78b4c2`: solo el merge de `main`; blobs de 092–095 (migraciones y rollbacks) iguales | | |
 | Responsables (ejecución / control) | | |
 | 0.4 la 091 en prod con su pase cerrado | 61 · 091 | |
 | 0.5 ninguna versión ≥ 092 | `desde_092` [] | |
 | 0.6 rama al día con `main` (con la 091) · diff solo 092–095 | | |
 | Bloque A antes (el JSON entero) | §1 | |
-| Bloque B: 20 filas guardadas · `sha256_relacl` · `sha256_normalizado` | | |
+| Bloque B: **20** tablas · respaldo **guardado fuera del repo** · `sha256_relacl` · `sha256_normalizado` (Grok 185) | | |
 | Bloque C antes (justo antes del merge; `inactiva.hay_cuenta` true) | | |
 | Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | |
 | §2 merge (SHA, hora) | | |

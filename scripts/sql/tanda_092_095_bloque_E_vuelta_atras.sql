@@ -1,6 +1,7 @@
 -- BLOQUE E · vuelta atrás de la tanda, AL REVÉS: 095 → 094 → 093 → 092. Cada bloque es UNA transacción y se corre solo
--- si su versión está en el ledger (ver la tabla de §7). La precondición exige exactamente 1 fila de esa versión y NINGUNA
--- versión mayor de la tanda: así no se puede deshacer una antes que la de arriba. Después de la última: revert del merge.
+-- si su versión está en el ledger (ver la tabla de §7). La precondición exige exactamente 1 fila de esa versión, que sea la
+-- ÚLTIMA del ledger y que el ledger tenga 61+n filas (Grok 175). Después de la última: el bloque D0 tiene que dar la tanda
+-- vacía, y recién ahí el revert del merge (Grok 186).
 
 -- ── E.095 ─────────────────────────────────────────────────────────────────────
 begin;
@@ -8,8 +9,13 @@ do $pre$ begin
   if (select count(*) from supabase_migrations.schema_migrations where version = '095') <> 1 then
     raise exception 'precondición: se esperaba exactamente 1 fila 095 en el ledger: no se toca nada';
   end if;
-  if exists (select 1 from supabase_migrations.schema_migrations where version in ('092','093','094','095') and version > '095') then
-    raise exception 'precondición: hay una versión mayor de la tanda en el ledger: deshacerla antes que la 095';
+  -- Grok 175: la ÚLTIMA versión del ledger tiene que ser exactamente la 095 y tiene que haber 65 filas. Una 096, una 150
+  -- o cualquier otra que haya entrado después la frena.
+  if (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$') <> '095' then
+    raise exception 'precondición: la última versión del ledger no es la 095: no se toca nada';
+  end if;
+  if (select count(*) from supabase_migrations.schema_migrations) <> 65 then
+    raise exception 'precondición: el ledger no tiene 65 filas: no se toca nada';
   end if;
 end $pre$;
 drop policy if exists cash_movements_contador_select on public.cash_movements;
@@ -24,8 +30,13 @@ do $pre$ begin
   if (select count(*) from supabase_migrations.schema_migrations where version = '094') <> 1 then
     raise exception 'precondición: se esperaba exactamente 1 fila 094 en el ledger: no se toca nada';
   end if;
-  if exists (select 1 from supabase_migrations.schema_migrations where version in ('092','093','094','095') and version > '094') then
-    raise exception 'precondición: hay una versión mayor de la tanda en el ledger: deshacerla antes que la 094';
+  -- Grok 175: la ÚLTIMA versión del ledger tiene que ser exactamente la 094 y tiene que haber 64 filas. Una 096, una 150
+  -- o cualquier otra que haya entrado después la frena.
+  if (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$') <> '094' then
+    raise exception 'precondición: la última versión del ledger no es la 094: no se toca nada';
+  end if;
+  if (select count(*) from supabase_migrations.schema_migrations) <> 64 then
+    raise exception 'precondición: el ledger no tiene 64 filas: no se toca nada';
   end if;
 end $pre$;
 do $$
@@ -49,8 +60,13 @@ do $pre$ begin
   if (select count(*) from supabase_migrations.schema_migrations where version = '093') <> 1 then
     raise exception 'precondición: se esperaba exactamente 1 fila 093 en el ledger: no se toca nada';
   end if;
-  if exists (select 1 from supabase_migrations.schema_migrations where version in ('092','093','094','095') and version > '093') then
-    raise exception 'precondición: hay una versión mayor de la tanda en el ledger: deshacerla antes que la 093';
+  -- Grok 175: la ÚLTIMA versión del ledger tiene que ser exactamente la 093 y tiene que haber 63 filas. Una 096, una 150
+  -- o cualquier otra que haya entrado después la frena.
+  if (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$') <> '093' then
+    raise exception 'precondición: la última versión del ledger no es la 093: no se toca nada';
+  end if;
+  if (select count(*) from supabase_migrations.schema_migrations) <> 63 then
+    raise exception 'precondición: el ledger no tiene 63 filas: no se toca nada';
   end if;
 end $pre$;
 alter policy ventas_dias_read  on public.ventas_dias  using (true);
@@ -67,8 +83,13 @@ do $pre$ begin
   if (select count(*) from supabase_migrations.schema_migrations where version = '092') <> 1 then
     raise exception 'precondición: se esperaba exactamente 1 fila 092 en el ledger: no se toca nada';
   end if;
-  if exists (select 1 from supabase_migrations.schema_migrations where version in ('092','093','094','095') and version > '092') then
-    raise exception 'precondición: hay una versión mayor de la tanda en el ledger: deshacerla antes que la 092';
+  -- Grok 175: la ÚLTIMA versión del ledger tiene que ser exactamente la 092 y tiene que haber 62 filas. Una 096, una 150
+  -- o cualquier otra que haya entrado después la frena.
+  if (select max(version) from supabase_migrations.schema_migrations where version ~ '^[0-9]{3}$') <> '092' then
+    raise exception 'precondición: la última versión del ledger no es la 092: no se toca nada';
+  end if;
+  if (select count(*) from supabase_migrations.schema_migrations) <> 62 then
+    raise exception 'precondición: el ledger no tiene 62 filas: no se toca nada';
   end if;
 end $pre$;
 do $$ begin

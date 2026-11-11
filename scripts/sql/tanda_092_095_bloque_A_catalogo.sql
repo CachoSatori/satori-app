@@ -1,6 +1,6 @@
--- BLOQUE A · catálogo de la tanda (092 → 095), una sola fila JSON. SOLO LECTURA.
+-- BLOQUE A (ANTES) · catálogo de la tanda 092 → 095, una sola fila JSON, con freno (Grok 178). SOLO LECTURA.
 begin read only;
-select json_build_object(
+select set_config('tanda.a', (json_build_object(
   -- 1.1 ledger
   'ledger', (select json_build_object('filas', count(*),
                'ultima', max(version) filter (where version ~ '^[0-9]{3}$'),
@@ -74,6 +74,34 @@ select json_build_object(
   -- 095 · 1.2 las policies de las 3 tablas de caja
   'v095', (select json_build_object('contador_select', count(*) filter (where policyname like '%\_contador\_select'),
               'policies', json_agg(tablename || '.' || policyname || ':' || cmd order by tablename, policyname))
-           from pg_policies where schemaname = 'public' and tablename in ('cash_movements','cash_sessions','suppliers'))
-) as tanda_antes;
+           from pg_policies where schemaname = 'public' and tablename in ('cash_movements','cash_sessions','suppliers')),
+  -- 177 · huella de las 5 _read y de las 3 *_contador_select (tabla, nombre, cmd, roles, qual, with_check)
+  'v093_read_md5', (select md5(coalesce(string_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''), E'\n' order by tablename), ''))
+                      from pg_policies where schemaname = 'public' and policyname = tablename || '_read'
+                       and tablename in ('ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map')),
+  'v095_contador_md5', (select md5(coalesce(string_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''), E'\n' order by tablename), ''))
+                      from pg_policies where schemaname = 'public'
+                       and policyname in ('cash_movements_contador_select','cash_sessions_contador_select','suppliers_contador_select')),
+  'v093_v095_texto', (select json_agg(tablename || '|' || policyname || '|' || cmd || '|' || roles::text || '|' || permissive || '|' || coalesce(qual, '') order by tablename, policyname)
+                      from pg_policies where schemaname = 'public' and (policyname = tablename || '_read'
+                       and tablename in ('ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map')
+                       or policyname in ('cash_movements_contador_select','cash_sessions_contador_select','suppliers_contador_select')))
+))::text, true);
+-- 178 · freno: si algo no da lo esperado, PARADA (el error lista qué). Se sigue leyendo en voz alta el JSON igual.
+do $chk$
+declare j jsonb := current_setting('tanda.a')::jsonb; m text := '';
+begin
+  if not ((j#>>'{ledger,filas}')::int = 61) then m := m || ' · ledger.filas≠61'; end if;
+  if not (j#>>'{ledger,ultima}' = '091') then m := m || ' · ledger.ultima≠091'; end if;
+  if not (j#>'{ledger,desde_092}' = '[]'::jsonb) then m := m || ' · hay versiones ≥092'; end if;
+  if not (j->'v092' = '{"ledger_092":false,"tabla":false,"rls_tabla":false,"politicas":[],"anon_sin_permisos":true,"funcion_definer":false,"funcion_no_publica":true,"trigger_activo":false,"bajas":null}'::jsonb) then m := m || ' · v092≠antes'; end if;
+  if not (not (j->'v092_triggers_employees') ? 'trg_employees_borrado_guardia') then m := m || ' · ya existe trg_employees_borrado_guardia'; end if;
+  if not ((j#>>'{v093,read_abiertas}')::int = 5 and (j#>>'{v093,read_con_rol}')::int = 0 and (j#>>'{v093,write}')::int = 5) then m := m || ' · v093≠5·0·5'; end if;
+  if not ((j->>'v093_rls')::int = 5) then m := m || ' · v093_rls≠5'; end if;
+  if not (j->'v093_lectores_sin_rls' = '[]'::jsonb) then m := m || ' · hay lectores de ventas sin RLS'; end if;
+  if not ((j#>>'{v094,tablas}')::int = 20 and (j#>>'{v094,anon_maintain}')::int = 20 and (j#>>'{v094,anon_trt}')::int = 0 and (j#>>'{v094,public}')::int = 0 and (j#>>'{v094,ledger_094}')::boolean = false) then m := m || ' · v094≠20·20·0·0·false'; end if;
+  if not ((j#>>'{v095,contador_select}')::int = 0) then m := m || ' · v095.contador_select≠0'; end if;
+  if m <> '' then raise exception 'PARADA (bloque A antes): no da%', m; end if;
+end $chk$;
+select current_setting('tanda.a')::json as tanda_antes;
 rollback;

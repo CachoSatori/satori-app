@@ -20,7 +20,28 @@ export interface Pendiente {
   tono:    Tono
 }
 
-/** Las señales que ya trae el Inicio. `null` = no se cargó (o el rol no la ve): no se muestra. */
+/**
+ * Las lecturas de las que salen los pendientes (B5). Si una falla, su pendiente no se puede calcular:
+ * se marca «sin comprobar» y el Inicio nunca dice «Todo en orden».
+ */
+export type Senal = 'caja' | 'movimientos' | 'cierres' | 'propinas' | 'inventario' | 'procedimientos'
+  // Las de los 3 números del día: no generan pendientes, pero si fallan tampoco hay «Todo en orden».
+  | 'venta' | 'meta' | 'propinasDia' | 'cajaDia'
+
+/** Módulo de cada lectura: la falla solo cuenta si el rol ve ese módulo. */
+const MODULO_DE_SENAL: Record<Senal, string> = {
+  caja: 'cash', movimientos: 'cash', cierres: 'cash',
+  propinas: 'tips', inventario: 'inventario', procedimientos: 'sops',
+  venta: 'dashboard', meta: 'dashboard', propinasDia: 'tips', cajaDia: 'cash',
+}
+
+/** Todas las lecturas, para cuando no se pudo cargar nada. */
+export const TODAS_LAS_SENALES = Object.keys(MODULO_DE_SENAL) as Senal[]
+
+/** Id del pendiente que avisa que algo no se pudo comprobar. */
+export const ID_SIN_COMPROBAR = 'sin-comprobar'
+
+/** Las señales que ya trae el Inicio. `null` = el rol no la ve: no se muestra. */
 export interface SenalesInicio {
   cashOpen:       boolean
   cashOpenHours:  number
@@ -35,6 +56,8 @@ export interface SenalesInicio {
   diasSinCierre:  number | null
   /** Turnos de Caja de días anteriores que siguen abiertos (`calcularAlertaCierres().turnos`). */
   turnosViejos:   number | null
+  /** Señales cuya lectura falló (B5): no se calculan y se avisa «sin comprobar». */
+  sinComprobar?:  readonly Senal[]
 }
 
 /** Desde cuántas horas un turno abierto se marca (el mismo umbral que tenían las tarjetas). */
@@ -45,42 +68,51 @@ const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno
 export function calcularPendientes(s: SenalesInicio, modulosVisibles: ReadonlySet<string>): Pendiente[] {
   const out: Pendiente[] = []
   const add = (p: Pendiente) => { if (modulosVisibles.has(p.modulo)) out.push(p) }
+  const fallo = new Set(s.sinComprobar ?? [])
+  const ok = (senal: Senal) => !fallo.has(senal)
+
+  // ── Lo que no se pudo comprobar va primero: lleva a Caja ──
+  const algoFallo = [...fallo].some(senal => modulosVisibles.has(MODULO_DE_SENAL[senal]))
+  const sinComprobar: Pendiente[] = algoFallo && modulosVisibles.has('cash') ? [{
+    id: ID_SIN_COMPROBAR, modulo: 'cash', path: '/caja', tono: 'pendiente',
+    texto: 'Revisar Caja: no se pudo comprobar todo', estado: 'sin comprobar',
+  }] : []
 
   // ── Caja ──
-  if (s.diasSinCierre && s.diasSinCierre > 0) {
+  if (ok('cierres') && s.diasSinCierre && s.diasSinCierre > 0) {
     add({ id: 'dias-sin-cierre', modulo: 'cash', path: '/caja', tono: 'malo',
       texto: 'Cerrar los días que quedaron sin cierre',
       estado: plural(s.diasSinCierre, 'día sin cierre', 'días sin cierre') })
   }
-  if (s.turnosViejos && s.turnosViejos > 0) {
+  if (ok('cierres') && s.turnosViejos && s.turnosViejos > 0) {
     add({ id: 'turnos-viejos', modulo: 'cash', path: '/caja', tono: 'malo',
       texto: 'Cerrar el turno de Caja que quedó abierto de otro día',
       estado: plural(s.turnosViejos, 'turno abierto', 'turnos abiertos') })
-  } else if (s.cashOpen && s.cashOpenHours >= HORAS_TURNO_LARGO) {
+  } else if (ok('caja') && s.cashOpen && s.cashOpenHours >= HORAS_TURNO_LARGO) {
     add({ id: 'caja-larga', modulo: 'cash', path: '/caja', tono: 'malo',
       texto: 'Revisar el turno de Caja abierto',
       estado: `Abierta ${s.cashOpenHours} h` })
   }
-  if (s.pendingCount > 0) {
+  if (ok('movimientos') && s.pendingCount > 0) {
     add({ id: 'movimientos', modulo: 'cash', path: '/caja', tono: 'pendiente',
       texto: 'Revisar los movimientos de Caja pendientes',
       estado: `${s.pendingCount} por revisar` })
   }
 
   // ── Propinas ──
-  if (s.tipOpen && s.tipOpenHours >= HORAS_TURNO_LARGO) {
+  if (ok('propinas') && s.tipOpen && s.tipOpenHours >= HORAS_TURNO_LARGO) {
     add({ id: 'propinas-larga', modulo: 'tips', path: '/propinas', tono: 'malo',
       texto: 'Cerrar el turno de Propinas abierto',
       estado: `Abierto ${s.tipOpenHours} h` })
   }
 
   // ── Inventario ──
-  if (s.invOutStock > 0) {
+  if (ok('inventario') && s.invOutStock > 0) {
     add({ id: 'sin-stock', modulo: 'inventario', path: '/inventario', tono: 'malo',
       texto: 'Reponer lo que se quedó sin stock',
       estado: `${s.invOutStock} sin stock` })
   }
-  if (s.invLowStock > 0) {
+  if (ok('inventario') && s.invLowStock > 0) {
     add({ id: 'stock-bajo', modulo: 'inventario', path: '/inventario', tono: 'pendiente',
       texto: 'Pedir lo que tiene stock bajo',
       estado: `${s.invLowStock} stock bajo` })
@@ -93,17 +125,19 @@ export function calcularPendientes(s: SenalesInicio, modulosVisibles: ReadonlySe
   }
 
   // ── Procedimientos vacíos ──
-  if (s.sopsCount === 0) {
+  if (ok('procedimientos') && s.sopsCount === 0) {
     add({ id: 'sops-vacios', modulo: 'sops', path: '/sops', tono: 'pendiente',
       texto: 'Cargar los procedimientos', estado: 'sin contenido' })
   }
 
-  // Lo malo primero; dentro de cada tono, el orden de arriba.
-  return [...out.filter(p => p.tono === 'malo'), ...out.filter(p => p.tono === 'pendiente')]
+  // «Sin comprobar» primero, después lo malo; dentro de cada tono, el orden de arriba.
+  return [...sinComprobar, ...out.filter(p => p.tono === 'malo'), ...out.filter(p => p.tono === 'pendiente')]
 }
 
 /** La frase de arriba del Inicio: la conclusión en una línea. */
 export function fraseEstado(pendientes: readonly Pendiente[]): string {
+  // B5: si algo no se pudo comprobar, nunca «Todo en orden».
+  if (pendientes.some(p => p.id === ID_SIN_COMPROBAR)) return 'No se pudo comprobar todo — revisá Caja.'
   const malos = pendientes.filter(p => p.tono === 'malo').length
   if (malos > 0) return malos === 1 ? 'Hay una cosa para resolver hoy.' : `Hay ${malos} cosas para resolver hoy.`
   if (pendientes.length > 0) return pendientes.length === 1 ? 'Queda un pendiente para hoy.' : `Quedan ${pendientes.length} pendientes para hoy.`

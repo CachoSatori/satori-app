@@ -1,6 +1,6 @@
 # Cola · Línea A (módulos)
 
-## A1 · Textos y etiquetas · `en revisión #101` (aprobada por las revisiones nocturnas 11-nov 00:29 y 03:25; merge pendiente por permiso)
+## A1 · Textos y etiquetas · `en revisión #101` (aprobada por las revisiones del 11-nov 00:29, 03:25 y 05:40; merge a staging bloqueado por permiso de la sesión automática, espera a Ismael)
 - **Resumen semanal:**
   - durante la semana en curso, la variación contra la semana anterior muestra «En curso» en vez de ▼ con un %;
   - revisar que ningún conteo de PAX lleve ₡ (Prom/PAX sí lleva).

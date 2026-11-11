@@ -37,10 +37,10 @@
 | Qué | Valor |
 |---|---|
 | Rama del paquete | `claude/pase-club` (PR contra el #59, `claude/epic-tesla-pyo77m` @ `fd39819`) |
-| 150 | `supabase/migrations/150_club_satori_esquema.sql`: la 075 renombrada (10-nov mañana, blob `cf16b82b…`) **más los arreglos de la auditoría del 10-nov** (Grok 159, 160, 182 y la condición de MAINTAIN). Hoy: blob git `9681c1a3afc560a272f960d0eab0272b21e5d83d`, md5 `919bcd5473fb68cc84dfdb5af28e5b98`, 426.268 bytes |
+| 150 | `supabase/migrations/150_club_satori_esquema.sql`: la 075 renombrada (10-nov mañana, blob `cf16b82b…`) **más los arreglos de la auditoría del 10-nov** (Grok 159, 160, 182 y la condición de MAINTAIN) y de la segunda vuelta (Grok 162–164). Hoy: blob git `44d12e03aa1cd170dfca1b0e9f263a25a9571355`, md5 `04681f41e4861972134b6f46b4132f87`, 427.895 bytes |
 | 151 | `supabase/migrations/151_club_catalogo_locales.sql`: renombre puro de la 100 (blob `a61d7d4f2b73b0cacac5d000fa0b0323d7bfb76c`), md5 `7a27ab08ee4a292a8ac255ecfae612c9` |
 | Rollbacks | `scripts/sql/151_rollback.sql` (FK y trigger; no toca `locations`) y `scripts/sql/150_rollback.sql` (todo `club_*`; desde el 10-nov se verifica solo: aborta si queda algo) |
-| Pruebas | `scripts/sql/150_pruebas_staging.sql` (batería, 5 tramos, `bateria_club.py`) y `scripts/sql/151_pruebas.sql` (8 casos) |
+| Pruebas | `scripts/sql/150_pruebas_staging.sql` (batería, 5 tramos, 623 casos, `bateria_club.py`) y `scripts/sql/151_pruebas.sql` (12 casos, `151_pruebas.py`) |
 | Registro | `supabase/migraciones-reservadas.json`: 150 y 151 en el bloque `pase`, con `origen` 075 y 100 |
 
 Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 122).

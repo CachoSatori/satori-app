@@ -1,8 +1,9 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-07.** Cada dato de este bloque se verificó contra `origin` y contra las dos bases
-(Management API, solo lectura) el mismo día. Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
+**Al día: 2026-11-11.** Los hashes de este bloque se verificaron contra `origin` el 11-nov, y el ledger de staging
+contra la base (solo lectura). Lo de prod y lo de Cloudflare lo informó el dueño: Claude no corre nada en prod.
+**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md).** Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
 está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin actualizar este bloque ⚡ARRANQUE, en el
@@ -11,7 +12,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`c41e18b`** (10/11: merge del #107, tanda 092–095) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. Ledger de prod: **65 · 095**. |
+| `main` | **`66b3b85`** (10/11: merges de docs #96 y #108; el último con migraciones es `c41e18b`, la tanda 092–095) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. Ledger de prod: **65 · 095**. |
 | `staging` | **`fb29872`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
 | `integracion/analitica-staging` | **`850a22f`** | ⚠️ Rama vieja, 123 commits atrás de `staging`. **No la publica Cloudflare** (lo de septiembre ya no vale: la rama de producción es `staging`). |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
@@ -42,6 +43,29 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 | #56 · #57 | `bb1a488` · `6bcfafb` | 06/11 | Saca nombres y correos reales de comentarios, tests y docs. |
 | este PR | — | 07/11 | **Prom/PAX explicado** (Ventas → Análisis) + **mig 080** `pos_prompax_agregado`, que la aplica el merge (Branching). Firmado por Ismael el 06/11. |
 
+- **📍 Foto del 11/11 (lo nuevo desde el 10/11; el detalle, en el handoff):**
+  - **`main` = `66b3b85`** (merges de docs #96 y #108 sobre `c41e18b`). **Ledger de prod: 65 · 095.** El 10/11 entraron
+    por Branching la 085, la 089, la 090, la 091 y la tanda 092–095, cada una con su PASE cerrado en `docs/pases/`.
+  - **Agente del PoS en prod: `5da233a`** desde el 10/11 a las 23:37:18 -06:00 (carpeta `C:\satori\agente-prod-5da233a`;
+    la carpeta vieja se queda 7 días). La bitácora y las correcciones del PASE están en el **#109**, abierto hasta las
+    lecturas 5.2/5.4 y el cierre de caja del 11/11.
+  - **Club Satori: pase a prod el jue 12/11**, sobre el paquete **#93 @ `d6c117b`** (la 150, md5 `04681f41…`; la 151, md5
+    `7a27ab08…`; ledger esperado 65 · 095 → 67 · 151). El Club entero está en el **#59 @ `66c950d`**.
+  - **Cloudflare (11/11):** el Worker `satori-club-api` está desplegado a mano desde el #59 @ `66c950d` con wrangler
+    4.160.1 (Version `ae142f3a-3bdf-46fd-b8e1-ab8d6ff70a59`), sin rutas ni `workers.dev`, con los bindings `RL_CREAR` y
+    `RL_LEER`. Las variables están cargadas en el panel: `SUPABASE_URL` y `SUPABASE_ANON_KEY` apuntan a **prod**, igual
+    que Pages; `TURNSTILE_SECRET` y `CLUB_WEB_KEY` van como Secret. La `CLUB_WEB_KEY` se creó el 11/11 y está cargada en
+    el Worker y en Pages; su sha256 se carga en prod el jueves, después de la 150. El valor lo tiene el dueño y no va al
+    repo.
+  - **Carga única del Club (G-56): firmada por el dueño el 11/11 a las 10:14.**
+    - `carga.sql`, sha256 `150f0c8e5ba0de07369bd42f0e52866aa905628549c40696c58ae6817d6b461f`, emitido con `d6c117b` desde
+      el export final del 10/11 15:46 (sha256 `0cc1b7ece316a05108e8e93136c0bbbdbbcdbcbfcb8df3e65f18a0924a6f8c00`).
+    - Esperados firmados: 115 / 174 (restos de inactivos vencidos). Ensayo en staging OK (`guardado: false`).
+    - Totales: 338 socios (88 en baja), 64,0 créditos en 37 cuentas y 0 diferencias. El monto de PM pendiente no se
+      escribe acá (repo público): está en el resumen de la carga.
+    - Los archivos viven fuera del repo, en la computadora del dueño. Se aplica el jueves con `aplicar-firmado`, con la
+      base del Club vacía y antes de la prueba interna.
+  - **Staging:** ledger **91 · 151** (leído el 11/11): tiene de la 085 a la 095, y la 150 y la 151 del Club.
 - **🔒 085 (SEC-01c) en PROD (10/11)**: lectura de empleados, propinas y tipos de cambio solo para cuentas **activas**.
   - **Merge del #80** `bb12652` a las 08:24:48 -06:00, con la firma del dueño (08:23); la aplicó Branching. Control: el
     encargado. Claude no corrió nada en prod.
@@ -181,7 +205,7 @@ pos_ndf_tickets · pos_ndf_ticket_lines · pos_ndf_open · pos_ndf_cursor   (RLS
 | Agente | PC | Carpeta / versión | Publica a | Latido 30/10 |
 |---|---|---|---|---|
 | «Satori PoS Bridge» | PoS (`DESKTOP-25PRDR1`) | `C:\satori\satori-app` @ `14bd278` ¹ | staging · `ingest-ndf` v10 | `last_poll_at` 18:13 UTC, `last_error` null |
-| «Satori PoS Bridge PROD» | PoS (`DESKTOP-25PRDR1`) | `C:\satori\satori-app-prod` @ `4d3513a` ¹ (sigue así tras el pase del 09/11; la tarea corre `C:\satori\pos-agente-prod.cmd` como SYSTEM) | **prod** · `ingest-ndf` **v3** (09/11) | `last_poll_at` 18:12 UTC, `last_error` null |
+| «Satori PoS Bridge PROD» | PoS (`DESKTOP-25PRDR1`) | `C:\satori\agente-prod-5da233a` @ **`5da233a`** (pase del agente nuevo, 10/11 23:37:18 -06:00; la tarea corre `C:\satori\pos-agente-prod-5da233a.cmd` como SYSTEM). La carpeta vieja (`C:\satori\satori-app-prod` @ `4d3513a`) y el `.cmd` viejo se quedan 7 días como vuelta atrás | **prod** · `ingest-ndf` **v3** (09/11) | `last_poll_at` 18:12 UTC, `last_error` null |
 | `biotime-bridge` | PC del reloj (ST) | — | staging · `ingest-punches` v6 | ⚠️ **última sync 14/09 17:12 UTC** (22.969 marcas): parado desde entonces |
 
 ¹ Versión según el backlog del 29/10 (no verificable desde fuera de la PC). Las dos tareas del PoS arrancan
@@ -273,7 +297,7 @@ solas tras un reinicio (validado el 29/10).
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
 | **PROD** | **65 filas** (10/11, según el cierre de la tanda 092–095; antes 61 con la 091 y 60 con la 090) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085 · 089 · 090 · 091 · 092 · 093 · 094 · 095` (**092, 093, 094 y 095 el 10/11 22:57:17 -06:00, en UN merge del #107 (`c41e18b`), Branching las aplicó en orden: 12, 7, 3 y 9 statements; pase de la tanda cerrado**; **091 el 10/11 22:44:57 -06:00, Branching al mergear el #103 (`b8cb74d`), 31 statements; pase cerrado 22:51**; **090 el 10/11 11:33:38 -06:00, Branching al mergear el #97 (`7543347`), 4 statements; pase cerrado**; **089 el 10/11 10:22:11 -06:00, Branching al mergear el #90 (`fa1cbef`), 3 statements; pase cerrado**; **085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
-| **STAGING** | **90 filas** (10/11 11:03 CR: + 091, 092, 093, 094 y 095) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5); la 082 del puente está aplicada **sin su fila**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
+| **STAGING** | **91 filas, última 151** (leído el 11/11; el 10/11 a las 11:03 CR entraron la 091–095, y después la sesión del Club renumeró la 075 a 150 y aplicó la 151) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5); la 082 del puente está aplicada **sin su fila**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
 - **Próximo número libre: por bloque** (08/11): **CAJA / operación 096**, **CLUB SATORI + puente 100**. Ver «Numeración de migraciones» abajo. Antes de crear una migración, leer esa sección **en `main`** y registrar el número en el mismo PR.
   - La **076** (`sops_code_area`: columnas `code`, `area`, `doc_type`, `version`, `employee_book`, `pdf_path` en `public.sops` + índice único parcial `sops_code_key` + check `sops_doc_type_check`) y la **077** (`sops_pdf_storage`: policies `sops_storage_read` y `sops_franquicia_solo_gerencia` en `storage.objects`, bucket privado `documents`) están **en staging y en prod**. Prod: 06/11 entre 18:03:48 y 18:05:14 UTC, aplicadas a mano por la Management API (sesión de Claude Code de los SoP, con OK del dueño), verificando el ref antes de cada escritura y **antes** del merge del código (PR #49). Sus `.sql` son **idénticos byte a byte** a los statements del ledger de prod y de staging (md5 `fc26bfea…` y `ef17f371…`). Rollback: `scripts/sql/077_rollback.sql` y, solo después de revertir el sync de SoP, `scripts/sql/076_rollback.sql`.

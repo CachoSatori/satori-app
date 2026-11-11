@@ -57,3 +57,15 @@
 - **B4 sí agrega lecturas** al Inicio (las mismas que Caja usa para «días sin cierre»), permitidas por COLA-B bajo la RLS actual. El resto del rediseño no cambia consultas; A5 cambia *cuándo* se consulta, con aprobación de Ismael.
 - **«Se descartó el KDS y el Comandero»** quiere decir que no se rediseñan; siguen en el menú de `staging` para los roles que ya los veían. En el pase a `main` salen del menú porque ahí no tienen ruta (junto con Mi Turno y Salarios).
 - **Alcance ampliado el 11-nov:** el estilo carta se lleva también a los módulos (tanda 2 de las colas) antes del pase a `main`.
+
+## Condiciones del pase a `main` (auditoría externa del 11-nov, 195, 199 y 200)
+Detalle completo en `docs/rediseno/auditorias/2026-11-11-preprod.md`. La revisión que arme la rama `claude/rediseno-prod-…` las cumple todas:
+1. **Autorización** de Ismael en `DECISIONES.md`, con la lista de tareas que entran.
+2. **Rama desde `main`** (con el Club ya en `main` si entró). Cherry-pick `-m 1` de cada merge del rediseño, en orden, uno por uno con build y tests entre cada uno.
+3. **`modulos.ts` de prod (195):** la lista de `main`, sin `mi-turno`, `comandero`, `kds` ni `salarios` (no tienen ruta en `main`); `roles` del resto byte a byte iguales; `ROLE_LANDING` igual al de `main`; tests de grilla con la lista de `main` y un test nuevo «cada `path` de `MODULES` tiene `<Route>` en `App.tsx`».
+4. **Club (200):** si #59 ya está en `main`, `club` en `modulos.ts` con `roles: ['owner','manager','cajero']` idénticos y sus excepciones como un pendiente de `pendientes.ts` (solo owner y manager). Si no, la señal se pierde.
+5. **Conflictos previstos (199):** `ProductosAdmin.tsx` no existe en `main` (`git rm`); descartar los hunks de `index.css` que caen en el bloque que solo existe en `staging` (clases `.cm-*`, `.sal-*`, `.fx-*`); `HomePage.tsx` sin el `MODULES` de 17.
+6. **Verificar el diff de la rama contra `main`:** nada en `supabase/`, sagrados, escrituras nuevas, `ProductosAdmin.tsx`, `pos/`, `salarios/` ni rutas nuevas; `App.tsx` solo con import, `conMenu` y el wrapper; `vite.config.ts` sin tocar.
+7. **Gates del PROTOCOLO** en la rama y **validación visual** en su vista previa con owner, manager, contador, cajero, salonero y cocina.
+8. **Rollback:** tag `pre-rediseno` sobre `main` antes del merge; si falla, volver al deploy anterior en Cloudflare y después `git revert -m 1`. No hay datos que revertir.
+9. PR a `main` sin mergear; lo mergea una sesión con el OK explícito de Ismael, fuera de 19–22 h.

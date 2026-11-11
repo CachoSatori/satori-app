@@ -34,7 +34,7 @@
 - **Medición sin login:** tamaño de los chunks por vista y consultas que dispara cada vista al abrir.
 - **Reporte:** si alguna vista hace más de 3 consultas pesadas al abrir, proponer el arreglo en el reporte, sin aplicarlo.
 
-## A5 · Ventas carga a pedido · `en revisión #116` (aprobada por la revisión 15:40, espera OK de Ismael) (reporte `2026-11-11-1451-A-A5.md`) · aprobada por Ismael el 11-nov 14:10 (cambia *cuándo* se consulta; excepción autorizada a «no cambiar consultas»)
+## A5 · Ventas carga a pedido · `hecha` (merge #116 a `staging` el 11-nov 15:52, OK de Ismael por chat) (reporte `2026-11-11-1451-A-A5.md`) · aprobada por Ismael el 11-nov 14:10 (cambia *cuándo* se consulta; excepción autorizada a «no cambiar consultas»)
 - Sale de A4 (arreglos 1–3). No cambia qué se consulta ni cómo se calcula; cambia **cuándo**:
   1. la historia completa del PoS (`cargarDeFondo`) se pide solo al entrar a una vista que la usa (Análisis, Histórico, Calendario, Mix, Ventas, Metas, Ing. Menú, Evaluación, ICP);
   2. En vivo, Paridad y Por línea se pintan sin esperar la carga de 90 días;
@@ -57,6 +57,7 @@
   - sub-pestaña activa en `var(--c-oro-texto)` en vez de `ENTRADA_COLOR` (`VentasModule.tsx`); sacar los oros viejos `#c8a050`/`#c8a96e`;
   - `aria-controls` en cada pestaña y `role="tabpanel"` en el contenido; flechas izquierda/derecha para moverse;
   - un `?tab=` inválido o ajeno se limpia de la URL.
+  - auditoría 203: cambiar de pestaña agrega una entrada al historial (no `replace`), así el botón Atrás vuelve a la pestaña anterior; abrir Ventas sin `?tab=` sigue con `replace`.
 - **Estilos en línea de `src/modules/ventas/**`:** colores fijos → `var(--c-*)`; `monospace`/`'DM Mono'` → `var(--font-sans)` + `tabular-nums`; sin mayúsculas; fondos oscuros → blanco o panel; números grandes en `var(--font-serif)`.
 - No tocar `ventasTabs.ts`, roles, cálculos ni consultas (A5 ya está).
 - **Aceptación:** diff solo de estilo y ARIA; tests de Ventas verdes; capturas o link de vista previa; guía 6.4 si cambia algo que el encargado nombra.

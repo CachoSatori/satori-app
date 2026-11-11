@@ -15,4 +15,4 @@
 | 2026-11-11 15:15 | Alcance antes del pase a `main` | **Todo junto:** el estilo carta se lleva a los módulos (Ventas, Caja, Propinas, Resumen, Admin, Inventario) antes del pase. Se arreglan los hallazgos de la auditoría externa del 11-nov (195–207). |
 | 2026-11-11 15:15 | Archivos de la línea A | **Ampliados:** `src/modules/cash/**` (solo pantalla; sin sagrados ni lógica de cierres; todo archivo de cierre lleva FIRMA), `src/modules/tips/**` (sin `tipCalculations.ts`), `src/modules/inventario/**`. |
 | 2026-11-11 15:15 | Formato de colones | **Al estándar:** «₡1.460.000» (₡ pegado, punto de miles) en toda la app, incluidos los textos que se comparten. Cambia solo la presentación. |
-
+| 2026-11-11 15:51 | Merge de A5 (#116) a `staging` | Aprobado por Ismael en el chat («a5 ya habíamos dicho que sí»). Gates corridos de nuevo por la revisión; mergeado (`f80b117`). |

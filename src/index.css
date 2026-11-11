@@ -1,50 +1,49 @@
 /* ============================================================
    SATORI APP — Estilos globales
-   Paleta: negro/blanco, estética japonesa minimalista
+   Paleta: diseño C («estilo carta») — fondo blanco, tinta, filetes de oro
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;600&family=Noto+Sans+JP:wght@300;400;500&family=DM+Mono:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:wght@400;500;600&family=Noto+Serif+JP:wght@400;600&display=swap');
 
-/* ── Colores: una sola fuente (rediseño B1) ──────────────────────────────
-   Nombres semánticos --c-*. Valores = los de antes (sin cambio visual).
+/* ── Colores: una sola fuente (B1) · valores del diseño C (B2) ───────────
+   Nombres semánticos --c-*. Valores del diseño C («estilo carta», docs/rediseno/PLAN.md).
    Las variables viejas (--black, --accent, --t-*, --vt-*…) quedan como alias. */
 :root {
-  --c-tinta:          #0d0d0d;   /* texto principal / fondo oscuro de Ventas */
-  --c-negro:          #0a0a0a;   /* negro de base (shell viejo) */
-  --c-papel:          #f5f0e8;   /* fondo papel */
-  --c-blanco:         #f5f5f0;   /* blanco cálido */
-  --c-gris:           #8a8070;   /* texto secundario */
-  --c-gris-texto:     #5a5040;   /* secundario legible sobre papel */
-  --c-gris-oscuro:    #1a1a1a;
-  --c-gris-medio:     #444444;
-  --c-gris-claro:     #999999;
-  --c-gris-palido:    #e8e8e3;
-  --c-linea:          #d4cfc4;   /* líneas y bordes */
-  --c-panel:          #ede8de;   /* fondo de recuadro */
-  --c-oro:            #c8a96e;   /* filetes y acento */
-  --c-oro-texto:      #a07830;   /* oro legible como texto */
-  --c-laca:           #c23b22;   /* malo / alerta */
-  --c-laca-fondo:     #fdf0ee;
-  --c-laca-borde:     #f0b0b0;
-  --c-error:          #c0392b;   /* error (shell viejo) */
-  --c-musgo:          #4a7c59;   /* bueno */
-  --c-musgo-texto:    #2a7a4a;
-  --c-musgo-fondo:    #e8f5ec;
-  --c-musgo-borde:    #b0d8b8;
-  --c-exito:          #27ae60;   /* éxito (shell viejo) */
+  --c-fondo:          #ffffff;   /* fondo de la app: blanco */
+  --c-tinta:          #1f2120;   /* texto principal · botón principal · barras oscuras */
+  --c-papel:          #ffffff;   /* fondo de los módulos (antes crema): blanco */
+  --c-gris:           #6e706c;   /* texto secundario */
+  --c-gris-texto:     #6e706c;   /* secundario legible */
+  --c-gris-oscuro:    #3a3c3a;   /* hover del botón en tinta · filetes sobre barra oscura */
+  --c-gris-medio:     #9a9b96;   /* gris claro: marcadores, pies */
+  --c-gris-claro:     #9a9b96;
+  --c-linea:          #e6e4de;   /* líneas y bordes */
+  --c-panel:          #f6f5f2;   /* único fondo de recuadro */
+  --c-oro:            #b48e50;   /* solo filetes y barra destacada de gráficos */
+  --c-oro-texto:      #8a6a33;   /* oro como texto */
+  --c-oro-fondo:      #f4f0e6;   /* fondo de «pendiente» */
+  --c-laca:           #a3392d;   /* malo / alerta */
+  --c-laca-fondo:     #f6e4e1;
+  --c-laca-borde:     #e3bdb6;
+  --c-error:          var(--c-laca);
+  --c-musgo:          #3e6a4c;   /* bueno */
+  --c-musgo-texto:    #3e6a4c;
+  --c-musgo-fondo:    #e6efe8;
+  --c-musgo-borde:    #bcd2c2;
+  --c-exito:          var(--c-musgo);
   --c-teal:           #2a7a6a;
   --c-teal-fondo:     rgba(42,122,106,0.13);
   --c-azul:           #2a4a6b;
   --c-azul-delivery:  #2a6080;
 
   /* Alias de compatibilidad — no usar en código nuevo */
-  --black:       var(--c-negro);
-  --white:       var(--c-blanco);
-  --gray-dark:   var(--c-gris-oscuro);
-  --gray-mid:    var(--c-gris-medio);
-  --gray-light:  var(--c-gris-claro);
-  --gray-pale:   var(--c-gris-palido);
-  --accent:      var(--c-oro);
+  --black:       var(--c-fondo);      /* era el fondo negro del shell */
+  --white:       var(--c-tinta);      /* era el texto claro del shell */
+  --gray-dark:   var(--c-panel);
+  --gray-mid:    var(--c-gris-claro);
+  --gray-light:  var(--c-gris);
+  --gray-pale:   var(--c-gris);
+  --accent:      var(--c-oro-texto);
   --error:       var(--c-error);
   --success:     var(--c-exito);
 
@@ -72,8 +71,9 @@
   --vt-delivery:  var(--c-azul-delivery);
   --vt-muted:     var(--c-gris-texto);
 
-  --font-serif:  'Noto Serif JP', Georgia, serif;
-  --font-sans:   'Noto Sans JP', system-ui, sans-serif;
+  --font-serif:  'Cormorant Garamond', 'Noto Serif JP', Georgia, serif;   /* títulos y números grandes; kanji cae en Noto Serif JP */
+  --font-sans:   'DM Sans', 'Noto Sans JP', system-ui, sans-serif;
+  --font-mono:   var(--font-sans);   /* sin monoespaciadas: DM Sans con tabular-nums */
 
   --radius:      2px;
   --transition:  150ms ease;
@@ -90,7 +90,8 @@ html, body, #root {
   background: var(--black);
   color: var(--white);
   font-family: var(--font-sans);
-  font-weight: 300;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -141,6 +142,8 @@ html, body, #root {
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid var(--c-oro);   /* filete de oro */
 }
 
 .login-mark {
@@ -187,7 +190,7 @@ html, body, #root {
 
 .field input {
   background: var(--gray-dark);
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   color: var(--white);
   font-family: var(--font-sans);
@@ -234,7 +237,7 @@ html, body, #root {
 }
 
 .login-btn:hover:not(:disabled) {
-  background: var(--gray-pale);
+  background: var(--c-gris-oscuro);
 }
 
 .login-btn:disabled {
@@ -253,7 +256,7 @@ html, body, #root {
 .auth-toggle {
   display: flex;
   gap: 0;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   overflow: hidden;
 }
@@ -298,7 +301,7 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid var(--c-oro);   /* filete de oro */
   background: var(--black);
   position: sticky;
   top: 0;
@@ -340,14 +343,14 @@ html, body, #root {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
-  background: rgba(200, 169, 110, 0.1);
+  background: rgba(180, 142, 80, 0.1);
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius);
 }
 
 .btn-signout {
   background: none;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   color: var(--gray-light);
   cursor: pointer;
@@ -384,8 +387,8 @@ html, body, #root {
   gap: 1px;
   width: 100%;
   max-width: 700px;
-  background: #1e1e1e;
-  border: 1px solid #1e1e1e;
+  background: var(--c-linea);
+  border: 1px solid var(--c-linea);
 }
 
 .module-card {
@@ -445,7 +448,7 @@ html, body, #root {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--gray-mid);
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--c-linea);
   padding: 0.15rem 0.4rem;
   border-radius: var(--radius);
 }
@@ -454,7 +457,7 @@ html, body, #root {
 
 .app-footer {
   padding: 1rem 1.5rem;
-  border-top: 1px solid #1e1e1e;
+  border-top: 1px solid var(--c-linea);
   text-align: center;
   font-size: 0.65rem;
   letter-spacing: 0.1em;
@@ -495,7 +498,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(192, 57, 43, 0.1);
+  background: rgba(163, 57, 45, 0.1);
   border: 1px solid var(--error);
   border-radius: var(--radius);
   color: var(--error);
@@ -519,11 +522,11 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid var(--c-oro);   /* filete de oro */
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--t-ink, var(--c-negro));
+  background: var(--c-fondo);
 }
 
 .module-header-left {
@@ -559,7 +562,7 @@ html, body, #root {
 
 .tab-btn {
   background: none;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   color: var(--gray-light);
   cursor: pointer;
@@ -641,7 +644,7 @@ html, body, #root {
   border-radius: 2px;
   color: #777;
   cursor: pointer;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -732,11 +735,11 @@ html, body, #root {
 }
 
 .tips-input-dark {
-  background: var(--c-negro);
+  background: var(--c-tinta);
   border: 1px solid #2a2a2a;
   border-radius: 2px;
   color: #f0ece4;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   outline: none;
   padding: 0.5rem 0.75rem;
@@ -860,7 +863,7 @@ html, body, #root {
   border: 1px solid #333;
   border-radius: 2px;
   color: #f0ece4;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   outline: none;
   padding: 0.4rem 0.5rem 0.4rem 1.4rem;
@@ -994,7 +997,7 @@ html, body, #root {
   border: 1px solid var(--t-border);
   border-radius: 2px;
   color: var(--t-ink);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
   outline: none;
   padding: 0.35rem 0.5rem;
@@ -1026,7 +1029,7 @@ html, body, #root {
   border: 1px solid var(--t-border);
   border-radius: 2px;
   color: var(--t-ink);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
   outline: none;
   padding: 0.35rem 0.35rem 0.35rem 1.1rem;
@@ -1111,7 +1114,7 @@ html, body, #root {
   border-radius: 2px;
   color: var(--t-gold);
   cursor: pointer;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -1128,7 +1131,7 @@ html, body, #root {
   border-radius: 2px;
   color: #fff;
   cursor: pointer;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -1145,7 +1148,7 @@ html, body, #root {
   border-radius: 2px;
   color: var(--t-muted);
   cursor: pointer;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -1162,7 +1165,7 @@ html, body, #root {
   border-radius: 2px;
   color: #fff;
   cursor: pointer;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -1296,7 +1299,7 @@ html, body, #root {
 
 .form-card {
   background: var(--gray-dark);
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   max-width: 440px;
   margin: 0 auto;
@@ -1352,7 +1355,7 @@ html, body, #root {
 
 .btn-secondary {
   background: none;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   color: var(--gray-light);
   cursor: pointer;
@@ -1397,7 +1400,7 @@ html, body, #root {
   gap: 2rem;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid var(--c-linea);
 }
 
 .session-info-item {
@@ -1441,21 +1444,21 @@ html, body, #root {
   color: var(--gray-light);
   padding: 0.6rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid var(--c-linea);
   white-space: nowrap;
 }
 
 .tips-table td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #111;
+  border-bottom: 1px solid var(--c-panel);
   vertical-align: middle;
 }
 
 .tip-row.has-entry td { background: rgba(255,255,255,0.02); }
 
 .tip-input {
-  background: #111;
-  border: 1px solid #2a2a2a;
+  background: var(--c-panel);
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   color: var(--white);
   font-family: var(--font-sans);
@@ -1472,7 +1475,7 @@ html, body, #root {
   font-size: 0.65rem;
   letter-spacing: 0.05em;
   color: var(--accent);
-  background: rgba(200,169,110,0.08);
+  background: rgba(180, 142, 80,0.08);
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius);
 }
@@ -1493,7 +1496,7 @@ html, body, #root {
 
 .btn-delete-inline {
   background: none;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   color: var(--gray-mid);
   cursor: pointer;
@@ -1510,8 +1513,8 @@ html, body, #root {
 /* ── Tip Summary ─────────────────────────────────────────── */
 
 .tip-summary {
-  background: #111;
-  border: 1px solid #1e1e1e;
+  background: var(--c-panel);
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   padding: 1.25rem 1.5rem;
   margin-bottom: 1.5rem;
@@ -1572,7 +1575,7 @@ html, body, #root {
 }
 
 .history-item {
-  border: 1px solid #1e1e1e;
+  border: 1px solid var(--c-linea);
   border-radius: var(--radius);
   margin-bottom: 0.5rem;
   overflow: hidden;
@@ -1592,7 +1595,7 @@ html, body, #root {
   transition: background var(--transition);
 }
 
-.history-row:hover { background: #111; }
+.history-row:hover { background: var(--c-panel); }
 
 .history-date { font-size: 0.9rem; flex: 1; }
 
@@ -1606,9 +1609,9 @@ html, body, #root {
 .history-toggle { color: var(--gray-mid); font-size: 0.7rem; }
 
 .history-detail {
-  border-top: 1px solid #1e1e1e;
+  border-top: 1px solid var(--c-linea);
   padding: 1rem;
-  background: #080808;
+  background: var(--c-panel);
 }
 
 .history-loading {
@@ -1782,7 +1785,7 @@ html, body, #root {
 .cash-summary-val {
   font-size: 1.05rem;
   font-weight: 600;
-  font-family: var(--font-mono, 'DM Mono', monospace);
+  font-family: var(--font-mono);
 }
 .cash-summary-val.green { color: #27874f; }
 .cash-summary-val.red   { color: var(--c-error); }
@@ -1851,7 +1854,7 @@ html, body, #root {
   text-overflow: ellipsis;
 }
 .cash-mov-amount {
-  font-family: var(--font-mono, 'DM Mono', monospace);
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   font-weight: 500;
 }
@@ -2139,7 +2142,7 @@ html, body, #root {
   width: 100%;
   border: 1px solid var(--t-border, var(--c-linea));
   padding: 0.5rem 0.6rem 0.5rem 1.75rem;
-  font-family: var(--font-mono, 'DM Mono', monospace);
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   background: var(--t-paper, var(--c-papel));
   border-radius: 2px;
@@ -2509,7 +2512,7 @@ html, body, #root {
 .cierre-resumen-row:last-child { border-bottom: none; }
 .cierre-resumen-row .lbl { color: #6a6250; }
 .cierre-resumen-row .val {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 700;
   color: var(--t-ink, var(--c-tinta));
   white-space: nowrap;
@@ -2618,7 +2621,7 @@ html, body, #root {
   outline: none;
   color: var(--t-ink, var(--c-tinta));
   padding: 0 8px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* barra de fases (dorado=pendiente, verde=ok, gris=esperando) */
@@ -3292,7 +3295,7 @@ html, body, #root {
   margin-bottom: 0.4rem;
 }
 .vt-kpi-val {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 1.1rem;
   font-weight: 800;
   color: var(--vt-gold);
@@ -3326,7 +3329,7 @@ html, body, #root {
 }
 .vt-range-btn {
   padding: 0.35rem 0.75rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3350,7 +3353,7 @@ html, body, #root {
   border: 1px solid var(--vt-border);
   padding: 0.3rem 0.5rem;
   font-size: 0.78rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   background: var(--vt-paper);
   border-radius: 2px;
   color: var(--vt-ink);
@@ -3369,7 +3372,7 @@ html, body, #root {
 }
 .vt-tab-btn {
   padding: 0.35rem 0.75rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3444,7 +3447,7 @@ html, body, #root {
   border-bottom: 1px solid var(--vt-border);
 }
 .vt-hoy-fecha {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 1.25rem;
   font-weight: 800;
   color: var(--vt-ink);
@@ -3478,7 +3481,7 @@ html, body, #root {
 .vt-tbl tbody tr   { border-bottom: 1px solid var(--vt-border); transition: background 0.1s; }
 .vt-tbl tbody tr:hover { background: var(--vt-panel); }
 .vt-tbl td { padding: 0.6rem 0.75rem; }
-.vt-tbl td.r { text-align: right; font-family: 'DM Mono', monospace; font-weight: 600; }
+.vt-tbl td.r { text-align: right; font-family: var(--font-mono); font-weight: 600; }
 .vt-bold { font-weight: 700; }
 .vt-tbl tbody tr.tr-best  { background: #f0fbf4; }
 .vt-tbl tbody tr.tr-worst { background: #fdf4f2; }
@@ -3494,7 +3497,7 @@ html, body, #root {
 }
 .vt-tbl-footer td.r {
   text-align: right;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.88rem;
 }
 
@@ -3523,7 +3526,7 @@ html, body, #root {
 .vt-dow-card.best  { border-top: 2px solid var(--vt-green); }
 .vt-dow-card.worst { border-top: 2px solid var(--vt-red); }
 .vt-dow-label { font-size: 0.65rem; color: #aaa; letter-spacing: 0.1em; text-transform: uppercase; }
-.vt-dow-val   { font-family: 'DM Mono', monospace; font-size: 0.88rem; font-weight: 700; color: var(--vt-gold); margin-top: 0.2rem; }
+.vt-dow-val   { font-family: var(--font-mono); font-size: 0.88rem; font-weight: 700; color: var(--vt-gold); margin-top: 0.2rem; }
 .vt-dow-sub   { font-size: 0.6rem; color: var(--c-gris-claro); margin-top: 0.15rem; }
 
 /* ── Sort tabs ──────────────────────────────────────────────── */
@@ -3643,7 +3646,7 @@ html, body, #root {
   margin-left: 0.2rem;
 }
 .vt-sal-total {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 1.2rem;
   font-weight: 800;
   color: var(--vt-ink);
@@ -3672,7 +3675,7 @@ html, body, #root {
 }
 .vt-sal-kpi:last-child { border-right: none; }
 .vt-sal-kpi-label { font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: #555; }
-.vt-sal-kpi-val   { font-family: 'DM Mono', monospace; font-size: 0.75rem; font-weight: 700; color: var(--vt-ink); margin-top: 0.2rem; }
+.vt-sal-kpi-val   { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; color: var(--vt-ink); margin-top: 0.2rem; }
 .vt-sal-detail {
   padding: 0.875rem 1.1rem;
   background: var(--vt-panel);
@@ -3775,7 +3778,7 @@ html, body, #root {
 .vt-meta-input-sm {
   border: none;
   background: transparent;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   color: var(--vt-ink);
   outline: none;
@@ -3833,7 +3836,7 @@ html, body, #root {
 }
 .vt-comp-rank-row:last-child { border-bottom: none; }
 .vt-comp-rank-num {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 1rem;
   font-weight: 800;
   width: 24px;
@@ -4075,7 +4078,7 @@ html, body, #root {
   color: #555;
 }
 .xr-current-val {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 1.3rem;
   font-weight: 800;
   color: var(--t-gold);
@@ -4150,7 +4153,7 @@ html, body, #root {
 .resumen-module {
   min-height: 100vh;
   background: var(--t-ink);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
 }
 .resumen-header {
   display: flex;
@@ -4228,7 +4231,7 @@ html, body, #root {
   flex-shrink: 0;
 }
 .resumen-status.ok      { background: rgba(78,164,126,0.15); color: #7ec8a0; }
-.resumen-status.open    { background: rgba(200,169,110,0.15); color: var(--t-gold); }
+.resumen-status.open    { background: rgba(180, 142, 80,0.15); color: var(--t-gold); }
 .resumen-status.pending { background: rgba(255,255,255,0.06); color: #555; }
 .resumen-card-body { padding: 1rem 1.25rem; }
 .resumen-kpi-row {
@@ -4244,7 +4247,7 @@ html, body, #root {
   color: #555;
 }
 .resumen-kpi-val {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.95rem;
   font-weight: 800;
   color: var(--t-paper);
@@ -4502,7 +4505,7 @@ html, body, #root {
   content: counter(sop); position: absolute; left: 0; top: 0;
   width: 1.4rem; height: 1.4rem; border-radius: 50%;
   background: var(--t-teal-dim); color: var(--t-teal);
-  font-family: 'DM Mono', monospace; font-size: 0.72rem; font-weight: 700;
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
 .sop-content .sop-ul > li { position: relative; padding-left: 1.1rem; margin-bottom: 0.35rem; }
@@ -4512,12 +4515,12 @@ html, body, #root {
 }
 .sop-content strong { font-weight: 700; color: var(--t-ink); }
 .sop-content code {
-  font-family: 'DM Mono', monospace; font-size: 0.82rem;
+  font-family: var(--font-mono); font-size: 0.82rem;
   background: rgba(0,0,0,0.05); padding: 0.05rem 0.35rem; border-radius: 3px;
 }
 .sop-content a { color: var(--t-teal); text-decoration: underline; word-break: break-all; }
 .sop-content .sop-note {
-  background: rgba(200,169,110,0.1); border-left: 3px solid var(--t-gold);
+  background: rgba(180, 142, 80,0.1); border-left: 3px solid var(--t-gold);
   border-radius: 2px; padding: 0.55rem 0.85rem; margin: 0 0 0.9rem;
   font-size: 0.85rem; color: var(--t-ink);
 }
@@ -4531,7 +4534,7 @@ html, body, #root {
 .sop-editor-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .sop-textarea {
   width: 100%; border: 1px solid var(--t-border); border-radius: 2px;
-  padding: 0.75rem 0.875rem; font-family: 'DM Mono', monospace; font-size: 0.82rem;
+  padding: 0.75rem 0.875rem; font-family: var(--font-mono); font-size: 0.82rem;
   background: var(--t-paper); color: var(--t-ink); outline: none; resize: vertical;
   line-height: 1.6;
 }
@@ -4601,7 +4604,7 @@ html, body, #root {
   margin-bottom: 0.2rem;
 }
 .vt-eval-metric-val {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--vt-paper);
@@ -4658,7 +4661,7 @@ html, body, #root {
   text-transform: uppercase;
 }
 .vt-meta-proy-stat-val {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   font-weight: 800;
   color: var(--vt-paper);
@@ -4769,7 +4772,7 @@ html, body, #root {
     border-radius: 99px;
   }
   .cd-mov-mobile-card-amount {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 1rem;
     font-weight: 800;
   }
@@ -4995,7 +4998,7 @@ html, body, #root {
   color: #6a6250; font-weight: 700;
 }
 .mr-dow-val {
-  font-family: 'DM Mono', monospace; font-size: 0.92rem; font-weight: 800;
+  font-family: var(--font-mono); font-size: 0.92rem; font-weight: 800;
   color: var(--t-ink, var(--c-tinta)); margin-top: 0.25rem; line-height: 1;
 }
 .mr-dow-sub { font-size: 0.58rem; color: var(--c-gris); margin-top: 0.2rem; line-height: 1.35; }
@@ -5028,7 +5031,7 @@ html, body, #root {
   white-space: nowrap;
 }
 .mr-tbl th.r, .mr-tbl td.r { text-align: right; }
-.mr-tbl td.r { font-family: 'DM Mono', monospace; }
+.mr-tbl td.r { font-family: var(--font-mono); }
 .mr-tbl td { padding: 0.5rem 0.7rem; color: var(--t-ink, var(--c-tinta)); border-bottom: 1px solid #eee5d8; }
 .mr-tbl tbody tr:last-child td { border-bottom: none; }
 .mr-tbl tbody tr.best { background: #f0fbf4; }
@@ -5057,7 +5060,7 @@ html, body, #root {
 }
 .mr-prod-bar { width: 54px; height: 5px; background: var(--t-panel, var(--c-panel)); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
 .mr-prod-bar-fill { height: 100%; border-radius: 3px; background: var(--t-gold, var(--c-oro)); }
-.mr-prod-val { font-family: 'DM Mono', monospace; font-size: 0.8rem; font-weight: 700; color: var(--t-ink, var(--c-tinta)); flex-shrink: 0; min-width: 62px; text-align: right; }
+.mr-prod-val { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 700; color: var(--t-ink, var(--c-tinta)); flex-shrink: 0; min-width: 62px; text-align: right; }
 
 /* ICP + benchmark del equipo */
 .mr-icp { display: grid; grid-template-columns: 1fr 1fr; gap: 0.625rem; margin-bottom: 1.25rem; }
@@ -5067,7 +5070,7 @@ html, body, #root {
 }
 .mr-icp-card.team { border-left-color: #6a6250; }
 .mr-icp-label { font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: #6a6250; margin-bottom: 0.3rem; }
-.mr-icp-val { font-family: 'DM Mono', monospace; font-size: 1.3rem; font-weight: 800; color: var(--t-teal, var(--c-teal)); line-height: 1; }
+.mr-icp-val { font-family: var(--font-mono); font-size: 1.3rem; font-weight: 800; color: var(--t-teal, var(--c-teal)); line-height: 1; }
 .mr-icp-card.team .mr-icp-val { color: var(--t-ink, var(--c-tinta)); }
 .mr-icp-sub { font-size: 0.62rem; margin-top: 0.3rem; color: var(--c-gris); }
 

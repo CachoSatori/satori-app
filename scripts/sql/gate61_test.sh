@@ -56,6 +56,12 @@ MIN_OBJETOS=100 caso 'prod: MIN_OBJETOS bajo el piso → 5'                   5 
 caso 'prod: dos archivos idénticos, distintos → 0'          0 --archivos "$T/a.txt" "$T/b.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
 caso 'prod: diferencia sin esperar → 1'                     1 --archivos "$T/a.txt" "$T/b_falta.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
 MIN_OBJETOS=50 caso 'staging: MIN_OBJETOS bajo (sin prod) se respeta → 0'  0 --archivos "$T/corto.txt" "$T/corto2.txt" --esperadas "$T/esp_vacio.txt"
+# (11-nov) un hecho repetido (dos filas iguales en pg_depend) se espera tantas veces como aparece
+{ cat "$T/a.txt"; echo 'dep policy p_x on table t_x -> function get_my_role() (n)'; echo 'dep policy p_x on table t_x -> function get_my_role() (n)'; } > "$T/a_dup.txt"
+{ echo '- dep policy p_x on table t_x -> function get_my_role() (n)'; echo '- dep policy p_x on table t_x -> function get_my_role() (n)'; } > "$T/esp_dup2.txt"; firmar "$T/esp_dup2.txt"
+{ echo '- dep policy p_x on table t_x -> function get_my_role() (n)'; } > "$T/esp_dup1.txt"; firmar "$T/esp_dup1.txt"
+caso 'hecho repetido, esperado las dos veces → 0'           0 --archivos "$T/a_dup.txt" "$T/b.txt" --esperadas "$T/esp_dup2.txt"
+caso 'hecho repetido, esperado una sola vez → 1'            1 --archivos "$T/a_dup.txt" "$T/b.txt" --esperadas "$T/esp_dup1.txt"
 # (10-nov) el CSV del editor SQL de prod → archivo de hechos (gate61_desde_csv.py), sin base
 C="$RAIZ/scripts/sql/gate61_desde_csv.py"
 csvcaso() {   # csvcaso NOMBRE CODIGO_ESPERADO entrada.csv

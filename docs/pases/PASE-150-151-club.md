@@ -66,7 +66,7 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.6 | **✅ (11-nov, sobre `60a977e`).** vitest 1542 (incluye `supabase/migraciones.test.ts` 6/6 y las pruebas de `club-web/functions` y `club-web/worker`), `tsc` sin errores, `npm run build` de la app, build de club-web (con `VITE_CLUB_URL` de prueba) y sus 43 pruebas, `gate61_test.sh` 25/25 sin red, `club_paridad_cuerpo_test.sh` 10/10, migrador 132. El repo no corre pruebas en los PR: estas corridas son el gate (como en la 091, Grok 125) | checks del PR |
 | 0.7 | Staging en verde con estos mismos archivos (§3), **el día del pase** | anotado |
 | 0.8 | **✅ Cumplido (11-nov).** Pages `satori-club` (rama de producción `main`, sin previews, variables de §11.1) y **Turnstile de prod** (10-nov); el dominio queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). **Worker `satori-club-api`** desplegado **a mano** con `wrangler deploy` desde el #59 @ `66c950d` (Version `ae142f3a…`), **sin** rutas ni `workers.dev` ni repositorio conectado, con `RL_CREAR` y `RL_LEER` y sus 4 variables apuntando a **prod** (`SUPABASE_URL`, `SUPABASE_ANON_KEY`; `TURNSTILE_SECRET` y `CLUB_WEB_KEY` como Secret). **`CLUB_WEB_KEY` de prod creada el 11-nov y cargada en el Worker y en Pages**; su sha256 lo tiene el dueño y va a la base el jueves, **después de la 150** (§6.3 paso 2). Ningún valor en este documento. **Falta una cosa (§11.4 paso 4b):** volver a desplegar el Worker, a mano, desde la **cabeza nueva del #59** (la que se firma): el #93 cambió `club-web/functions/_lib/api.js` (la baja por POST, Grok 183), y el Worker corre ese código | §10 |
-| 0.9 | G-61 «antes» hecho y sus diferencias esperadas **firmadas en este PR** (`scripts/sql/gate61_esperadas.txt`) | §1.5 |
+| 0.9 | **✅ G-61 «antes» hecho (11-nov 14:30)** y sus 63 diferencias explicadas en `scripts/sql/gate61_esperadas.txt` (sha256 de las entradas `e5f1c7c0c78e40e4aaf0c8a05d1bc9720ddc8824845ff1d4cba2d8ba15587226`). **Las firma el dueño** al aprobar el #59 (§1.5) | §1.5 |
 | 0.10 | **✅ Cumplido (11-nov, firmado a las 10:14).** `carga.sql` sha256 **`150f0c8e5ba0de07369bd42f0e52866aa905628549c40696c58ae6817d6b461f`**, emitido con el código de `d6c117b` desde el export final del 10-nov 15:46; esperados de los restos firmados **115 / 174** (`vencimientos_restos` / `vencimientos_restos_personas`, Grok 171); sin papel; ensayo en staging OK (`guardado: false`). Los archivos, fuera del repo. Se aplica el jueves con `aplicar-firmado`, sobre la base del Club **vacía** y antes de la prueba interna (§6.5) | §10 |
 | 0.11 | **✅ Cumplido.** El agente nuevo del puente (#83) en prod (11-nov). Era recomendado, no bloqueaba | anotado |
 
@@ -135,8 +135,17 @@ CSV). Son las tablas fuera del Club que el pase toca (un trigger y filas nuevas 
 1. En el editor SQL de PROD: pegar `scripts/sql/gate61_catalogo.sql` entero entre `begin read only;` y `rollback;`, correrlo y
    **Download CSV**. Sale una fila con una columna `cat` (unos 3.000–3.700 hechos: nombres de objetos, roles y md5; **sin
    datos de personas**).
-2. Pasarle el CSV a Claude, que **no lee prod**: lo convierte (`python3 -I scripts/sql/gate61_desde_csv.py prod.csv prod.txt`)
-   y lo compara con staging.
+2. Pasarle el CSV a Claude, que **no lee prod**: `bash scripts/sql/gate61_prod_csv.sh prod.csv --antes` lo convierte
+   (`gate61_desde_csv.py`), lee staging (solo lectura) y compara los hechos de afuera del Club (saca `club_` y las
+   líneas `cron …`, que solo listan tareas `club%`).
+   **✅ Hecho el 11-nov 14:30 (CSV del dueño):** prod 333 hechos, ninguno del Club; staging 3.765 (391 de afuera).
+   **63 diferencias, todas explicadas** en `scripts/sql/gate61_esperadas.txt` (5 grupos: el nombre del trigger de
+   `auth.users`, el orden del enum `user_role`, 10 columnas de Salarios en `employees`, 31 dependencias de policies de
+   Salarios y BioTime y 18 del PoS propio de staging; todo de migraciones que solo están en staging o de nombres/orden).
+   Sale 0 con las esperadas firmadas (sha256 de las entradas `e5f1c7c0…87226`). **pg_cron:** prod dice «cron ausente»
+   porque todavía no hay ninguna tarea `club%`; la extensión está (`ext pg_cron existe=t esquema=pg_catalog
+   version_min_1.4=ok`, igual que en staging, desde la 003), así que la 150 programa `club_socios_mantenimiento`
+   (`if exists pg_extension pg_cron then cron.schedule(…)`): se verifica en §5.3 (`15 9 * * *`).
 3. **Antes del pase, prod no tiene el Club:** lo que importa son los hechos de afuera (`grep -v club_`): privilegios por
    defecto, extensiones, roles, `user_role`, `get_my_role`, triggers de `auth.users`, columnas de `profiles`, `employees` y
    `pos_ndf_*`, y las políticas que dependen de `get_my_role`. Cada diferencia se explica por su origen. **Las que ya se
@@ -211,7 +220,7 @@ Todo lo demás, en transacciones descartadas:
 | ídem | Mutaciones S2 y 136 | caen 1 y 4, como antes |
 | 10-nov | `gate61_test.sh` (sin red) · `migraciones.test.ts` · vitest | 25/25 · 6/6 · 1526 |
 
-Desde ahora el G-61 se corre con `gate61.sh` tal cual (staging ya tiene la 151; `gate61_staging_con_151.sh` se niega).
+Desde ahora el G-61 se corre con `gate61.sh` tal cual (staging ya tiene la 151; `gate61_staging_con_151.sh` se niega). (11-nov) Con prod: `gate61_prod_csv.sh`. Staging contra staging, ahora que hay esperadas: `--esperadas /dev/null`.
 
 **Auditoría del 10-nov (partes A y B): arreglos en la 150, probados sin escribir en staging.** Staging tiene la 150 del
 mediodía. La 150 nueva se probó **aplicada encima, dentro de la transacción descartada** de cada tramo
@@ -318,9 +327,10 @@ SoP: nada nuevo en rojo. **Después**, además: la app muestra el acceso al Club
    rollback;
    ```
 4. **G-61 después** (bloquea la prueba interna): el dueño vuelve a bajar el CSV del catálogo (§1.5, paso 1). Claude:
-   `gate61_desde_csv.py`, el lado staging con `gate61.sh` (staging ya tiene la 150 y la 151) y
-   `bash scripts/sql/gate61.sh --archivos staging.txt prod.txt --modo-prod` con las esperadas firmadas de §1.5.
-   **Tiene que salir 0.**
+   `bash scripts/sql/gate61_prod_csv.sh prod.csv --despues` (catálogo COMPLETO, modo prod: piso de 3000 hechos), con las
+   mismas esperadas de §1.5. **Tiene que salir 0:** los hechos del Club coinciden uno por uno, la tarea
+   `club_socios_mantenimiento` incluida (si sale con otro `user=`, se para y se explica). Simulado el 11-nov: staging + las
+   63 diferencias conocidas sale 0; con una función del Club cambiada (`secdef`) sale 1.
 5. **Humo:** 4a con los valores de «Después», 4b igual que antes y 4c sin rojos.
 
 ## 6. Configuración del local (datos; después de §5, el mismo jueves)
@@ -478,7 +488,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | ✅ 11-nov: `60a977e` (main `ced6621` ancestro; migraciones: solo 150 y 151) |
 | 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` con `wrangler deploy` manual, sin repositorio conectado, sin URL pública, con sus variables (§11.4) · `CLUB_WEB_KEY` en Pages y en el Worker | | ✅ 11-nov: Worker desde `66c950d` (Version `ae142f3a…`), 4 variables a prod; `CLUB_WEB_KEY` creada y cargada en los dos |
 | §11.4 paso 4b · Worker otra vez a mano desde la cabeza firmada (SHA, Version nueva) | | |
-| 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | | |
+| 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | 0 sin esperar | ✅ 11-nov 14:30: 63 esperadas, sale 0 · sha256 `e5f1c7c0…87226` · firma del dueño: |
 | 0.10 carga única: export, sha256 de `carga.sql` y esperados de restos (N y personas) firmados (o «la prueba va sin carga») | | ✅ 11-nov 10:14: sha256 `150f0c8e…6b461f`, esperados 115 / 174, ensayo en staging OK |
 | 1.1 ledger: 65 · 095 · 089–095 presentes · nada del Club (Grok 181) | 65 · 095 | |
 | 1.2 0 · 0 · 0 | | |

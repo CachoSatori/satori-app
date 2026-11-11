@@ -94,7 +94,9 @@ if [ -s "$TMP/esp" ]; then
   fi
   echo "esperadas: $(wc -l < "$TMP/esp") · $firma"
 fi
-sort -u "$TMP/esp" > "$TMP/esp.s"
+# (11-nov) SIN -u: un hecho que sale dos veces (p. ej. una policy que usa get_my_role en USING y en WITH CHECK) se
+# espera dos veces. Con -u, la segunda copia quedaba como «sin esperar».
+sort "$TMP/esp" > "$TMP/esp.s"
 comm -23 "$TMP/dif" "$TMP/esp.s" > "$TMP/inesperadas"
 comm -13 "$TMP/dif" "$TMP/esp.s" > "$TMP/sobrantes"
 rc=0

@@ -8,4 +8,95 @@
 # archivo solo cambia por PR revisado por el dueño (nunca en un commit directo a main ni durante la corrida del gate), y el
 # gate se corre contra el archivo de la rama ya mergeada.
 #
-# Hoy (08-nov): sin entradas. La primera lectura de prod (con firma) dirá cuáles hay; cada una se corrige o se anota acá.
+# 11-nov 14:30 (CR): primera lectura de prod (G-61 «antes» del pase del Club, CSV del dueño; scripts/sql/gate61_prod_csv.sh --antes).
+# Prod: 333 hechos, ninguno del Club. Staging: 3.765 (391 de afuera del Club). 63 diferencias de afuera del Club, todas
+# explicadas abajo; ninguna la usa ni la toca la 150 o la 151. Valen igual para el G-61 «después» (§5.4): ahí, además,
+# los hechos del Club tienen que coincidir uno por uno (ninguno es esperado).
+# Lo que no está acá: las líneas «cron …». El catálogo solo lista las tareas `club%` de pg_cron y escribe «cron ausente»
+# cuando no hay ninguna (o cuando no existe cron.job). Antes del pase, en prod no hay ninguna tarea del Club; pg_cron sí
+# está instalado (`ext pg_cron existe=t … version_min_1.4=ok`, igual que en staging). gate61_prod_csv.sh --antes las saca de los
+# dos lados; en el «después» las dos bases tienen que mostrar la misma tarea club_socios_mantenimiento.
+
+# (1) El trigger de alta de usuarios en auth.users tiene otro NOMBRE en cada base; la misma función (handle_new_user) con
+#     el mismo md5. Prod lo tiene como trg_on_auth_user_created; staging, como lo crea la 001 (on_auth_user_created).
+#     El Club no lo usa.
++ authtrg trg_on_auth_user_created enabled=O fn=handle_new_user() md5=8e802fd4fd00d159dd91826bf1337f1b
+- authtrg on_auth_user_created enabled=O fn=handle_new_user() md5=8e802fd4fd00d159dd91826bf1337f1b
+
+# (2) El enum user_role tiene los MISMOS 10 valores en otro orden: en staging «contador» quedó después de «owner»; en prod,
+#     después de «cocina». El orden de un enum solo importa para comparar con < o >, o para ordenar: la 150 y la 151 solo
+#     comparan por igualdad (= / in), y la app no ordena por rol.
++ enum user_role owner,manager,cajero,salonero,barman,barback,runner,cocina,contador,proveedor
+- enum user_role owner,contador,manager,cajero,salonero,barman,barback,runner,cocina,proveedor
+
+# (3) Columnas de employees que solo existen en staging: Salarios y BioTime (055–061 y 084, solo en staging; nunca fueron
+#     a prod). La 150 no las usa (lee id, full_name, pos_login, profile_id, role e is_active).
+- col employees.banco text notnull=f def=- ident= gen=
+- col employees.biotime_emp_code text notnull=f def=- ident= gen=
+- col employees.cuenta_iban_alias text notnull=f def=- ident= gen=
+- col employees.fecha_ingreso date notnull=f def=- ident= gen=
+- col employees.fixed_salary_crc numeric notnull=t def=0 ident= gen=
+- col employees.hora_entrada_habitual time without time zone notnull=f def=- ident= gen=
+- col employees.hora_salida_habitual time without time zone notnull=f def=- ident= gen=
+- col employees.hourly_rate_crc numeric notnull=t def=0 ident= gen=
+- col employees.nombre_homebanking text notnull=f def=- ident= gen=
+- col employees.participa_servicio boolean notnull=t def=true ident= gen=
+
+# (4) Policies de tablas que solo existen en staging, de Salarios y BioTime (055–061 y 084), con su dependencia de
+#     get_my_role(). Las que aparecen dos veces usan get_my_role en USING y en WITH CHECK (dos filas de pg_depend).
+- dep policy employee_bank_info_all on table employee_bank_info -> function get_my_role() (n)
+- dep policy employee_bank_info_all on table employee_bank_info -> function get_my_role() (n)
+- dep policy employee_payments_select on table employee_payments -> function get_my_role() (n)
+- dep policy employee_payments_write on table employee_payments -> function get_my_role() (n)
+- dep policy employee_payments_write on table employee_payments -> function get_my_role() (n)
+- dep policy employee_payroll_delete on table employee_payroll -> function get_my_role() (n)
+- dep policy employee_payroll_insert on table employee_payroll -> function get_my_role() (n)
+- dep policy employee_payroll_select on table employee_payroll -> function get_my_role() (n)
+- dep policy employee_payroll_update on table employee_payroll -> function get_my_role() (n)
+- dep policy employee_payroll_update on table employee_payroll -> function get_my_role() (n)
+- dep policy employee_wage_rates_select on table employee_wage_rates -> function get_my_role() (n)
+- dep policy employee_wage_rates_write on table employee_wage_rates -> function get_my_role() (n)
+- dep policy employee_wage_rates_write on table employee_wage_rates -> function get_my_role() (n)
+- dep policy payroll_config_select on table payroll_config -> function get_my_role() (n)
+- dep policy payroll_config_write on table payroll_config -> function get_my_role() (n)
+- dep policy payroll_config_write on table payroll_config -> function get_my_role() (n)
+- dep policy punch_exceptions_select on table punch_exceptions -> function get_my_role() (n)
+- dep policy punch_exceptions_update on table punch_exceptions -> function get_my_role() (n)
+- dep policy punch_exceptions_update on table punch_exceptions -> function get_my_role() (n)
+- dep policy salary_lines_select on table salary_lines -> function get_my_role() (n)
+- dep policy salary_lines_write on table salary_lines -> function get_my_role() (n)
+- dep policy salary_lines_write on table salary_lines -> function get_my_role() (n)
+- dep policy salary_periods_delete on table salary_periods -> function get_my_role() (n)
+- dep policy salary_periods_insert on table salary_periods -> function get_my_role() (n)
+- dep policy salary_periods_select on table salary_periods -> function get_my_role() (n)
+- dep policy salary_periods_update on table salary_periods -> function get_my_role() (n)
+- dep policy salary_periods_update on table salary_periods -> function get_my_role() (n)
+- dep policy time_punches_select on table time_punches -> function get_my_role() (n)
+- dep policy work_days_select on table work_days -> function get_my_role() (n)
+- dep policy work_days_write on table work_days -> function get_my_role() (n)
+- dep policy work_days_write on table work_days -> function get_my_role() (n)
+
+# (5) Policies de tablas que solo existen en staging, del PoS propio de staging (022–037: pedidos, cobros, menú,
+#     modificadores, mesas, FE, fotos de productos en storage), con su dependencia de get_my_role(). Incluye
+#     pos_locations_write sobre locations (022): en staging locations tiene 4 policies y en prod 2 (las de la 091), como
+#     ya dice el PASE §1.3.
+- dep policy fe_documentos_write on table fe_documentos -> function get_my_role() (n)
+- dep policy menu_categories_write on table menu_categories -> function get_my_role() (n)
+- dep policy menu_families_write on table menu_families -> function get_my_role() (n)
+- dep policy pos_checks_write on table pos_checks -> function get_my_role() (n)
+- dep policy pos_locations_write on table locations -> function get_my_role() (n)
+- dep policy pos_modifier_groups_write on table modifier_groups -> function get_my_role() (n)
+- dep policy pos_modifiers_write on table modifiers -> function get_my_role() (n)
+- dep policy pos_payments_write on table pos_payments -> function get_my_role() (n)
+- dep policy pos_pmo_write on table product_modifier_options -> function get_my_role() (n)
+- dep policy pos_pos_kds_settings_write on table pos_kds_settings -> function get_my_role() (n)
+- dep policy pos_pos_order_items_write on table pos_order_items -> function get_my_role() (n)
+- dep policy pos_pos_orders_write on table pos_orders -> function get_my_role() (n)
+- dep policy pos_pos_prices_write on table pos_prices -> function get_my_role() (n)
+- dep policy pos_product_modifier_groups_write on table product_modifier_groups -> function get_my_role() (n)
+- dep policy pos_salon_tables_write on table salon_tables -> function get_my_role() (n)
+- dep policy productos_delete on table storage.objects -> function get_my_role() (n)
+- dep policy productos_insert on table storage.objects -> function get_my_role() (n)
+- dep policy productos_update on table storage.objects -> function get_my_role() (n)
+
+firma: dueño (revisión del PR #59) 2026-11-11 sha256=e5f1c7c0c78e40e4aaf0c8a05d1bc9720ddc8824845ff1d4cba2d8ba15587226

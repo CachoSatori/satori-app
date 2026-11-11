@@ -1106,6 +1106,43 @@ export function esJornadaEnCurso(fecha: string, ahora: Date = new Date()): boole
 
 // ── La carga (I/O) ─────────────────────────────────────────────────────────────────────────
 
+// ── A5 · Lo que no cambia en la jornada, una sola vez ─────────────────────────────────────
+// «En vivo» se refresca cada 30 s. Las 4 jornadas comparables (facturas + líneas) ya cerraron y
+// los nombres de los saloneros no cambian en el servicio: se piden UNA vez por jornada mirada y
+// se guardan en memoria. Mismas funciones, mismos parámetros, misma cuenta: cambia solo CUÁNDO.
+// Un error no se guarda: el próximo refresco lo vuelve a pedir.
+
+const cacheNeto4Sem = new Map<string, Promise<Record<string, number>>>()
+const cacheNombres  = new Map<string, Promise<Awaited<ReturnType<typeof getSaloneroNombres>>>>()
+
+function unaVez<T>(cache: Map<string, Promise<T>>, clave: string, pedir: () => Promise<T>): Promise<T> {
+  const hit = cache.get(clave)
+  if (hit) return hit
+  const p = pedir()
+  cache.set(clave, p)
+  p.catch(() => { if (cache.get(clave) === p) cache.delete(clave) })
+  return p
+}
+
+function neto4SemDe(local: LocalId, jornada: string): Promise<Record<string, number>> {
+  return unaVez(cacheNeto4Sem, `${local}|${jornada}`, async () => {
+    const comparables = jornadasComparables(jornada)
+    const ticketsComparables = await getTicketsDeJornadas(local, comparables)
+    const lineasComparables  = await getLineasDeTickets(ticketsComparables.map(t => t.id))
+    return netaPorJornada(ticketsComparables, lineasComparables, comparables)
+  })
+}
+
+function nombresDeJornada(jornada: string) {
+  return unaVez(cacheNombres, jornada, () => getSaloneroNombres())
+}
+
+/** Solo para tests: vacía lo guardado en memoria. */
+export function olvidarCacheEnVivo(): void {
+  cacheNeto4Sem.clear()
+  cacheNombres.clear()
+}
+
 /**
  * Misma firma que el mock (más una fecha opcional): la pantalla no se entera del resto.
  *
@@ -1132,12 +1169,10 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
   const lineasR = provisionales.length > 0 ? await getLineasDeTickets(provisionales.map(t => t.id)) : []
   const netasProvisionales = netaPorTicket(provisionales, lineasR)
   const provisional = resumirProvisional(crudos, t => netasProvisionales.get(t.id) ?? 0)
-  const nombres = await getSaloneroNombres()
+  const nombres = await nombresDeJornada(jornada)
   // La comparativa en la MISMA neta que el día: facturas de las 4 jornadas + sus líneas.
-  const comparables = jornadasComparables(jornada)
-  const ticketsComparables = await getTicketsDeJornadas(local, comparables)
-  const lineasComparables  = await getLineasDeTickets(ticketsComparables.map(t => t.id))
-  const neto4Sem = netaPorJornada(ticketsComparables, lineasComparables, comparables)
+  // Son jornadas cerradas: se piden UNA vez por jornada mirada (A5), no en cada refresco.
+  const neto4Sem = await neto4SemDe(local, jornada)
   // El snapshot de mesas abiertas es de AHORA: mirando un día viejo no significa nada.
   const crudas = enCurso ? await getMesasAbiertas(local) : []
   // La llave de exclusión y el latido del agente solo se piden cuando hay algo en vivo que mirar.

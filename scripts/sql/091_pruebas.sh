@@ -70,13 +70,23 @@ compara() { # $1 etiqueta, $2 esperado (o antes), $3 obtenido (o después)
   if [ -z "$por" ]; then echo "OK    $1"; ok=$((ok+1)); else echo "FALLA $1 ($por)"; echo "  esperado: $(limpio "$2")"; echo "  obtenido: $(limpio "$3")"; fallas=$((fallas+1)); fi
 }
 
+# Grok 174: los 6 casos de «antes / después» comparan la base SIN la 091 contra la base CON la 091. Si la 091 ya está
+# aplicada, «antes» ya la tiene y la comparación no prueba nada: quedan NO PROBADO (nunca OK). La evidencia válida de esos
+# 6 es la corrida del 10-nov a las 10:59 CR (24 OK, script @ 47829f6), antes de aplicar la 091 en staging (11:02:50).
+noprobado=0
+YA091=$(q "select (to_regprocedure('public.mis_locales()') is not null)::text as x" | jq -r '.[0].x // empty')
 echo "== Santa Teresa idéntica (postgres) =="
+if [ "$YA091" = "true" ]; then
+  echo "NO PROBADO postgres: filas, totales, saldo CF y cierres (la 091 ya está aplicada; ver la corrida de las 10:59)"; noprobado=$((noprobado+1))
+else
 A=$(q "begin; $FOTO; rollback;" | uno)
 D=$(q "begin; $MIG; $FOTO; rollback;" | uno)
 compara "postgres: filas, totales, saldo CF y cierres" "$A" "$D"
+fi
 
 echo "== Lo que ve cada rol, antes y después =="
 for rol in owner manager contador cajero salonero; do
+  if [ "$YA091" = "true" ]; then echo "NO PROBADO $rol ve lo mismo (la 091 ya está aplicada; ver la corrida de las 10:59)"; noprobado=$((noprobado+1)); continue; fi
   A=$(q "begin; $(como_rol $rol) $FOTO; rollback;" | uno)
   D=$(q "begin; $MIG; $(como_rol $rol) $FOTO; rollback;" | uno)
   compara "$rol ve lo mismo" "$A" "$D"
@@ -184,5 +194,5 @@ else
   fi
 fi
 
-echo "== Resultado: $ok OK · $fallas falla(s) =="
-[ "$fallas" -eq 0 ]
+echo "== Resultado: $ok OK · $fallas falla(s) · ${noprobado:-0} NO PROBADO =="
+[ "$fallas" -eq 0 ] && [ "${noprobado:-0}" -eq 0 ]

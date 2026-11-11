@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, Suspense, lazy, Fragment } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
 import { fusionarProductMap } from './ventasUtils'
@@ -9,6 +9,7 @@ import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/type
 import { cargarDeFondo, cargarDiasEager, cargarHistEager, type EstadoPos } from './ventasFuente'
 import AvisoFuentePos from './AvisoFuentePos'
 import './ventasNav.css'
+import { type Tab, resolverTab, entradasVisibles, entradaDe, labelDe } from './ventasTabs'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
 const VentasHoy          = lazy(() => import('./VentasHoy'))
@@ -32,59 +33,30 @@ const VentasICP          = lazy(() => import('./VentasICP'))
 const VentasCalendario   = lazy(() => import('./VentasCalendario'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
 
-type Tab = 'hoy'|'envivo'|'paridad'|'ventas'|'saloneros'|'salolineas'|'evaluacion'|'icp'|'cajeros'|'historico'|'mix'|'analisis'|'calendario'|'menueng'|'metas'|'competencias'|'xls'|'config'
-
-interface TabDef { id: Tab; label: string; group: string; roles: string[] }
-const TABS: TabDef[] = [
-  { id: 'hoy',          label: 'Hoy',          group: 'ops',   roles: ['owner','manager','contador'] },
-  // Va DESPUÉS de 'hoy' a propósito: `visibleTabs[0]` es la pestaña por defecto, y con los
-  // mismos roles que 'hoy' nadie puede ver esta sin ver aquella primero. La pestaña de
-  // arranque no cambia para ningún rol.
-  { id: 'envivo',       label: 'En vivo',       group: 'ops',   roles: ['owner','manager','contador'] },
-  // P3, TEMPORAL: diagnóstico para firmar el swap de fuente. Solo owner, y se saca al cerrar P3.
-  { id: 'paridad',      label: 'Paridad (validación)', group: 'ops', roles: ['owner'] },
-  { id: 'saloneros',    label: 'Saloneros',     group: 'ops',   roles: ['owner','manager'] },
-  // Saloneros por LÍNEA (Parte B): las dos lentes. Va al lado de 'saloneros' porque es la misma
-  // pregunta con otra fuente — el mesero de la línea en vez del mesero del pedido.
-  { id: 'salolineas',   label: 'Saloneros x línea', group: 'ops', roles: ['owner','manager'] },
-  { id: 'evaluacion',   label: 'Evaluación',    group: 'team',  roles: ['owner','manager'] },
-  { id: 'icp',          label: 'ICP',           group: 'team',  roles: ['owner','manager','contador'] },
-  { id: 'cajeros',      label: 'Cajeros',       group: 'ops',   roles: ['owner','manager','contador'] },
-  { id: 'ventas',       label: 'Ventas',        group: 'fin',   roles: ['owner','manager','contador'] },
-  { id: 'historico',    label: 'Histórico',     group: 'fin',   roles: ['owner','manager','contador'] },
-  { id: 'mix',          label: 'Mix Ventas',    group: 'fin',   roles: ['owner','manager','contador'] },
-  { id: 'analisis',     label: 'Análisis',      group: 'fin',   roles: ['owner','manager','contador'] },
-  { id: 'calendario',   label: 'Calendario',    group: 'fin',   roles: ['owner','manager','contador'] },
-  { id: 'menueng',      label: 'Ing. Menú',     group: 'fin',   roles: ['owner','manager'] },
-  { id: 'metas',        label: 'Metas',         group: 'fin',   roles: ['owner','manager','contador'] },
-  { id: 'competencias', label: 'Competencias',  group: 'team',  roles: ['owner','manager'] },
-  { id: 'xls',          label: 'Cargar XLS',    group: 'ops',   roles: ['owner','manager'] },
-  { id: 'config',       label: 'Productos',     group: 'admin', roles: ['owner','manager'] },
-]
-
-const GROUP_COLORS: Record<string, string> = {
-  ops:   '#c8a050',
-  fin:   '#c8a96e',
-  team:  '#6a9a6a',
-  admin: '#8a8aaa',
+// Grupo de color de cada entrada (el mismo que tenía cada vista antes del rediseño).
+const ENTRADA_COLOR: Record<string, string> = {
+  hoy: '#c8a050', envivo: '#c8a050', saloneros: '#c8a050',
+  analisis: '#c8a96e', historico: '#c8a96e', menueng: '#c8a96e', metas: '#c8a96e',
+  ajustes: '#8a8aaa',
 }
-
-// Etiquetas y orden de los grupos en el índice (como en el dashboard)
-const GROUP_NAMES: Record<string, string> = {
-  ops:   'Operaciones',
-  team:  'Equipo',
-  fin:   'Finanzas',
-  admin: 'Config',
-}
-const GROUP_ORDER = ['ops', 'team', 'fin', 'admin']
 
 export default function VentasModule() {
   const { profile } = useAuth()
   const navigate    = useNavigate()
   const role        = profile?.role ?? ''
 
-  const visibleTabs = TABS.filter(t => t.roles.includes(role))
-  const [tab, setTab] = useState<Tab>(visibleTabs[0]?.id ?? 'hoy')
+  // La vista activa vive en la URL (`/ventas?tab=<id>`). Sin `tab`, o con uno que el rol no
+  // ve, se abre la misma pestaña de arranque de antes del rediseño.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = resolverTab(role, searchParams.get('tab'))
+  const setTab = (t: Tab) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', t)
+    setSearchParams(next, { replace: true })
+  }
+  const entradas  = entradasVisibles(role)
+  const entrada   = entradas.find(e => e.id === entradaDe(tab).id)
+  const color     = ENTRADA_COLOR[entradaDe(tab).id]
   const [loading, setLoading] = useState(true)
   const [error, setError]   = useState<string | null>(null)
 
@@ -191,31 +163,43 @@ export default function VentasModule() {
         </div>
       </div>
 
-      {/* Nav tabs — agrupadas con etiqueta de grupo (estilo dashboard) */}
+      {/* Menú de Ventas: entradas y, si la entrada agrupa varias vistas, sub-pestañas */}
       <div className="vt-nav-tabs" role="tablist" aria-label="Vistas de Ventas">
-        {GROUP_ORDER.map(g => {
-          const groupTabs = visibleTabs.filter(t => t.group === g)
-          if (!groupTabs.length) return null
+        {entradas.map(e => {
+          const activa = e.id === entrada?.id
           return (
-            <Fragment key={g}>
-              <span className="vt-nav-group">{GROUP_NAMES[g]}</span>
-              {groupTabs.map(t => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === t.id}
-                  key={t.id}
-                  className={`vt-nav-tab ${tab === t.id ? 'active' : ''}`}
-                  style={tab === t.id ? { borderBottomColor: GROUP_COLORS[t.group], color: GROUP_COLORS[t.group] } : {}}
-                  onClick={() => setTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </Fragment>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activa}
+              key={e.id}
+              className={`vt-nav-tab ${activa ? 'active' : ''}`}
+              style={activa ? { borderBottomColor: ENTRADA_COLOR[e.id], color: ENTRADA_COLOR[e.id] } : {}}
+              onClick={() => { if (!activa) setTab(e.vistas[0]) }}
+            >
+              {e.label}
+            </button>
           )
         })}
       </div>
+
+      {entrada && entrada.vistas.length > 1 && (
+        <div className="vt-subnav" role="tablist" aria-label={`Vistas de ${entrada.label}`}>
+          {entrada.vistas.map(v => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === v}
+              key={v}
+              className={`vt-subnav-tab ${tab === v ? 'active' : ''}`}
+              style={tab === v ? { borderColor: color, color } : {}}
+              onClick={() => setTab(v)}
+            >
+              {labelDe(v)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <AvisoFuentePos estado={fuentePos.estado} ultimoDiaXls={fuentePos.ultimoDiaXls} />
 

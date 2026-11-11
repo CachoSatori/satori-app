@@ -36,8 +36,15 @@ vi.mock('../shared/api/supabase', () => {
 let alertaDias: string[] = []
 let cierresFalla = false
 let jornadasFalla = false
+let cierresLecturas = 0
+let cierresEnEspera: Promise<void> | null = null   // la alerta tarda hasta que se resuelva
 vi.mock('../shared/api/cash', () => ({
-  getCierresDia: async () => { if (cierresFalla) throw new Error('sin conexión'); return [] },
+  getCierresDia: async () => {
+    cierresLecturas++
+    if (cierresEnEspera) await cierresEnEspera
+    if (cierresFalla) throw new Error('sin conexión')
+    return []
+  },
   getAllCashMovements: async () => [],
   getCashSessions: async () => alertaDias.map((f, i) => ({ id: `s${i}`, status: 'open', session_date: f, cajero_name: null })),
 }))
@@ -46,6 +53,7 @@ vi.mock('../shared/api/jornadasConVentas', () => ({
 }))
 
 import HomePage from './HomePage'
+import { olvidarAlertaInicio } from './alertaInicio'
 
 function montar() {
   return render(<MemoryRouter><HomePage /></MemoryRouter>)
@@ -59,6 +67,9 @@ beforeEach(() => {
   cierresFalla = false
   jornadasFalla = false
   baseCaida = false
+  cierresLecturas = 0
+  cierresEnEspera = null
+  olvidarAlertaInicio()
   sessionStorage.clear()
 })
 
@@ -174,5 +185,53 @@ describe('Inicio (B5) · si una lectura falla', () => {
     montar()
     await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
     sinOrden()
+  })
+})
+
+// B5 · auditoría 197 (DECISIONES 11-nov 15:55): la alerta se lee una vez por sesión.
+describe('Inicio (B5) · alerta de días sin cierre una vez por sesión', () => {
+  it('la segunda visita al Inicio reusa la alerta: no la vuelve a leer', async () => {
+    const { unmount } = montar()
+    await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
+    expect(cierresLecturas).toBe(1)
+    unmount()
+    montar()
+    await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
+    expect(cierresLecturas).toBe(1)
+  })
+
+  it('si la lectura falló no se guarda: la próxima visita reintenta', async () => {
+    cierresFalla = true
+    const { unmount } = montar()
+    await waitFor(() => expect(screen.getByText('No se pudo comprobar todo — revisá Caja.')).toBeTruthy())
+    unmount()
+    cierresFalla = false
+    montar()
+    await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
+    expect(cierresLecturas).toBe(2)
+  })
+
+  it('mientras llega la alerta, los otros pendientes ya se ven (y nada de «Todo en orden»)', async () => {
+    let soltar = () => {}
+    cierresEnEspera = new Promise<void>(r => { soltar = r })
+    tablas.cash_movements = { data: [], count: 3 }
+    montar()
+    await waitFor(() => expect(screen.getByText('3 por revisar')).toBeTruthy())
+    expect(screen.getByText('Revisando los días sin cierre…')).toBeTruthy()
+    soltar()
+    await waitFor(() => expect(screen.queryByText('Revisando los días sin cierre…')).toBeNull())
+    expect(screen.getByText('Queda un pendiente para hoy.')).toBeTruthy()
+  })
+
+  it('sin otros pendientes, no dice «Todo en orden» hasta que llega la alerta', async () => {
+    let soltar = () => {}
+    cierresEnEspera = new Promise<void>(r => { soltar = r })
+    montar()
+    await waitFor(() => expect(screen.getByText('Venta de hoy')).toBeTruthy())
+    await new Promise(r => setTimeout(r, 20))
+    expect(screen.getByText('Revisando el día…')).toBeTruthy()
+    expect(screen.queryByText('Todo en orden')).toBeNull()
+    soltar()
+    await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
   })
 })

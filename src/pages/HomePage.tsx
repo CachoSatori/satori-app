@@ -8,9 +8,8 @@ import { monthRangeBounds } from '../shared/utils/dateRange'
 import { ROLE_LABELS } from '../shared/constants'
 import { modulosPara } from '../shared/layout/modulos'
 import { calcularPendientes, fraseEstado, TODAS_LAS_SENALES, type Pendiente, type Senal } from '../shared/layout/pendientes'
-import { getCashSessions, getAllCashMovements, getCierresDia } from '../shared/api/cash'
-import { getJornadasConVentas } from '../shared/api/jornadasConVentas'
-import { calcularAlertaCierres, desdeVentanaVentas, type AlertaCierres } from '../modules/cash/diasSinCierre'
+import type { AlertaCierres } from '../modules/cash/diasSinCierre'
+import { alertaGuardada, leerAlertaInicio } from './alertaInicio'
 
 // La lista de módulos vive en `shared/layout/modulos.ts`: es la misma fuente del menú global (B3).
 
@@ -277,26 +276,25 @@ export default function HomePage() {
   const isManager = ['owner', 'manager', 'contador'].includes(role)
 
   // Días sin cierre (B4): la MISMA alerta que ve Caja, con las mismas lecturas y el mismo filtro de rol
-  // (owner y manager). Solo lectura. B5: si alguna de sus lecturas falla, queda «sin comprobar»
-  // (antes quedaba en cero y el Inicio podía decir «Todo en orden»).
+  // (owner y manager). Solo lectura. B5: se lee una vez por sesión (`alertaInicio.ts`, auditoría 197) y
+  // si alguna de sus lecturas falla queda «sin comprobar» (antes quedaba en cero y el Inicio podía decir
+  // «Todo en orden»).
   const veAlerta = role === 'owner' || role === 'manager'
-  const [alerta, setAlerta] = useState<AlertaCierres | 'fallo' | null>(null)
+  const usuario = profile?.id ?? ''
+  const [alerta, setAlerta] = useState<AlertaCierres | 'fallo' | null>(
+    () => (veAlerta ? alertaGuardada(usuario, todayCR()) : null))
   useEffect(() => {
     if (mustLand || !veAlerta) return
-    let vivo = true
     const hoy = todayCR()
-    const [y, m, d] = hoy.split('-').map(Number)
-    const ayer = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10)
-    Promise.all([
-      getCierresDia(),
-      getAllCashMovements(),
-      getCashSessions(),
-      getJornadasConVentas(desdeVentanaVentas(hoy), ayer),
-    ]).then(([cierres, movements, sessions, jornadasConVentas]) => {
-      if (vivo) setAlerta(calcularAlertaCierres({ hoy, cierres, movements, sessions, jornadasConVentas }))
-    }).catch(() => { if (vivo) setAlerta('fallo') })
+    if (alertaGuardada(usuario, hoy)) return   // ya leída en esta sesión: el estado inicial la trae
+    let vivo = true
+    leerAlertaInicio(usuario, hoy)
+      .then(a => { if (vivo) setAlerta(a) })
+      .catch(() => { if (vivo) setAlerta('fallo') })
     return () => { vivo = false }
-  }, [mustLand, veAlerta])
+  }, [mustLand, veAlerta, usuario])
+  // Mientras se lee la alerta, los otros pendientes ya se muestran (sin «Todo en orden» todavía).
+  const alertaCargando = veAlerta && !alerta
 
   const pendientes = useMemo<Pendiente[] | null>(() => {
     if (!isManager) return null
@@ -305,7 +303,6 @@ export default function HomePage() {
     const esLunes = new Date(todayCR() + 'T12:00:00').getDay() === 1
     if (statusFallo) return calcularPendientes({ ...SIN_DATOS, esLunes }, visibles)
     if (!status) return null
-    if (veAlerta && !alerta) return null
     const alertaOk = alerta && alerta !== 'fallo' ? alerta : null
     const sinComprobar = [...status.fallas]
     if (alerta === 'fallo') sinComprobar.push('cierres')
@@ -323,7 +320,7 @@ export default function HomePage() {
       turnosViejos:  alertaOk ? alertaOk.turnos.length : null,
       sinComprobar,
     }, visibles)
-  }, [status, statusFallo, alerta, isManager, veAlerta, role])
+  }, [status, statusFallo, alerta, isManager, role])
 
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol
@@ -351,6 +348,7 @@ export default function HomePage() {
             <ResumenDelDia
               status={status}
               statusFallo={statusFallo}
+              alertaCargando={alertaCargando}
               pendientes={pendientes}
               onIr={path => navigate(path)}
             />
@@ -386,10 +384,12 @@ export default function HomePage() {
 }
 
 // ── Frase, 3 números del día y «Para hacer hoy» (owner, manager y contador) ──
-function ResumenDelDia({ status, statusFallo, pendientes, onIr }: {
-  status:      HomeStatus | null
-  statusFallo: boolean
-  pendientes:  Pendiente[] | null
+function ResumenDelDia({ status, statusFallo, alertaCargando, pendientes, onIr }: {
+  status:         HomeStatus | null
+  statusFallo:    boolean
+  /** La alerta de días sin cierre todavía no llegó: no se puede decir «Todo en orden». */
+  alertaCargando: boolean
+  pendientes:     Pendiente[] | null
   onIr:        (path: string) => void
 }) {
   const cargando = !pendientes
@@ -400,7 +400,7 @@ function ResumenDelDia({ status, statusFallo, pendientes, onIr }: {
   const sub = (l: Lectura, texto: string) =>
     falta(l) ? <span className="pildora pildora-pendiente">sin comprobar</span> : texto
   const frase = statusFallo ? 'No se pudo cargar el día.'
-    : cargando ? 'Revisando el día…' : fraseEstado(pendientes)
+    : cargando || (alertaCargando && pendientes.length === 0) ? 'Revisando el día…' : fraseEstado(pendientes)
   const tipSub = !status ? '' : status.tipStatus === 'closed'
     ? `Cerrado · ${status.tipWorkers} ${status.tipWorkers === 1 ? 'persona' : 'personas'}`
     : status.tipOpen ? `Abierto · ${status.tipShift}` : 'Sin turno hoy'
@@ -441,7 +441,7 @@ function ResumenDelDia({ status, statusFallo, pendientes, onIr }: {
 
       <section className="inicio-seccion" aria-labelledby="inicio-hoy">
         <h2 id="inicio-hoy" className="inicio-subtitulo">Para hacer hoy</h2>
-        {cargando ? (
+        {cargando || (alertaCargando && pendientes.length === 0) ? (
           <p className="inicio-vacio">Cargando…</p>
         ) : pendientes.length === 0 && !statusFallo ? (
           <div className="inicio-en-orden">
@@ -463,6 +463,9 @@ function ResumenDelDia({ status, statusFallo, pendientes, onIr }: {
               </li>
             ))}
           </ul>
+        )}
+        {!cargando && alertaCargando && pendientes.length > 0 && (
+          <p className="inicio-vacio">Revisando los días sin cierre…</p>
         )}
       </section>
     </>

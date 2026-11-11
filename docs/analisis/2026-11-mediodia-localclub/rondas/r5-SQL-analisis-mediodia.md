@@ -27,7 +27,7 @@ limit 200;
 | 936 | PRUEBA | 3 | — |
 
 - **LOCAL CLUB e INVITADO:** cada unidad es una persona recurrente.
-- **BOXING** (confirmado por Ismael, 03/11): cargo por caja de delivery para cubrir los empaques biodegradables. Es venta real (netaVenta lo cuenta). Antes servía para contar los pedidos de delivery.
+- **BOXING** (confirmado por el dueño, 03/11): cargo por caja de delivery para cubrir los empaques biodegradables. Es venta real (netaVenta lo cuenta). Antes servía para contar los pedidos de delivery.
 
 ## Q12 — Local Club e Invitado por mes, turno y tipo de mesa
 ```sql

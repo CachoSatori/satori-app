@@ -23,7 +23,7 @@
 > el historial de git (`git show 43e843d:PROMPT-CONTINUACION.md`), y sus líneas propias están al final de este
 > archivo.
 
-**Firmas:** 🖊️ = necesita firma de Ismael · 👁️ = validación en piso · 🔐 = seguridad · 🧹 = limpieza.
+**Firmas:** 🖊️ = necesita firma del dueño · 👁️ = validación en piso · 🔐 = seguridad · 🧹 = limpieza.
 
 ---
 
@@ -40,19 +40,19 @@
   - en el primer ingreso el cambio es obligatorio (flag en `app_metadata`, que solo baja la función);
   - el login ya no tiene «Crear cuenta»;
   - **Auth de prod:** `site_url` → `https://cachosatori.github.io/satori-app/`, redirects → `https://cachosatori.github.io/satori-app/**`, contraseña mínima 8. Nada más cambió (`disable_signup` sigue en `true`);
-  - **Ismael lo validó en prod.**
+  - **El dueño lo validó en prod.**
 - **Antes, 04–05/11:** SEC-01 (068), SEC-01b (069), SEC-03 y SEC-04 (072 y 073), todas en prod. La 070 está solo en staging (va con el pase del PoS propio).
 
 ## 🟥 Pendiente — en este orden
 
-> **⏸️ Pendiente de decisión (Ismael + contador, 08/11): montos de Salarios que todavía ve el manager.** La mig 084
+> **⏸️ Pendiente de decisión (el dueño + contador, 08/11): montos de Salarios que todavía ve el manager.** La mig 084
 > (SAL-AUD-01) saca la planilla de `employees` y deja `employee_payroll` y `employee_wage_rates` solo para owner y
 > contador activos. **Quedan como están por ahora:** `salary_lines` (pago por horas, salario fijo, total) y
 > `employee_payments` (monto neto), que el manager sigue viendo, y `employee_payments`, que el manager sigue
 > escribiendo (registra los pagos). Decidir con el contador antes del pase de Salarios a prod.
 
 1. ✅ **Alerta de días sin cierre: en prod el 06/11 (#43, merge `8c992fc`).** Owner/manager, solo lectura. (Era lo único que quedaba de la cola de caja.) Los huecos que muestra en prod: el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
-2. **⏸️ POSPUESTO por Ismael (06/11): rotar los secretos de ingesta** (los 3: `POS_INGEST_SECRET` de prod y de staging y el `INGEST_SECRET` de BioTime, con su copia en los `.env` de la PC del PoS y de la PC del reloj). El plan está en el Paso 0 de CC del 06/11; ver también el handoff. **`claude-code-prod`:** Ismael tiene que identificarlo en Supabase → Account → Access Tokens antes de tocarlo. Si es la credencial de las sesiones de CC, se **reemplaza**: nunca se revoca solo.
+2. **⏸️ POSPUESTO por el dueño (06/11): rotar los secretos de ingesta** (los 3: `POS_INGEST_SECRET` de prod y de staging y el `INGEST_SECRET` de BioTime, con su copia en los `.env` de la PC del PoS y de la PC del reloj). El plan está en el Paso 0 de CC del 06/11; ver también el handoff. **`claude-code-prod`:** El dueño tiene que identificarlo en Supabase → Account → Access Tokens antes de tocarlo. Si es la credencial de las sesiones de CC, se **reemplaza**: nunca se revoca solo.
 3. ✅ **SEC-02**: cerrado en prod el 06/11 (`monthly-report` v10 con `verify_jwt` on; el cron con `Authorization` desde el Vault).
 4. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las 6 funciones con su `verify_jwt` actual:
    - `monthly-report` false · `extract-document` true · `cierre-email` true · `pago-notificar` true · `ingest-ndf` false · `alta-empleado` true;
@@ -61,7 +61,7 @@
    - **ojo:** el `config.toml` también sincroniza `[auth]`/`[api]` de prod. Tiene que copiar la config actual (`disable_signup = true`, el `site_url` y los redirects nuevos, mínimo 8) o un merge la pisaría.
    - Hasta cerrarlo, **ningún PR a `main` con `supabase/functions/`**. Detalle: P2 #11 de abajo.
 5. ✅ **`staging` sincronizada con `main` el 06/11** (merge `4793cf3`, sin conflictos). Sigue abierto: al ledger de staging le faltan las filas 065/066 (ítem 15).
-6. **🔐 Mig 079 · SoP solo para usuarios activos:** `sops_read` (010) y `sops_storage_read` (077) pasan a exigir `public.get_my_role() is not null`. **Aplicada y probada en staging el 06/11**; en prod la aplica Branching al mergear su PR (OK de Ismael, fuera de 19–22 h). Detalle en [ESTADO.md](ESTADO.md) § Migraciones.
+6. **🔐 Mig 079 · SoP solo para usuarios activos:** `sops_read` (010) y `sops_storage_read` (077) pasan a exigir `public.get_my_role() is not null`. **Aplicada y probada en staging el 06/11**; en prod la aplica Branching al mergear su PR (OK del dueño, fuera de 19–22 h). Detalle en [ESTADO.md](ESTADO.md) § Migraciones.
 
 **También abierto, sin orden:**
 - **Club Satori** F1–F3: la 075 está reservada y solo en staging. Spec en [docs/club-satori/](docs/club-satori/).
@@ -84,7 +84,7 @@
 5. **🖊️ Umbrales del ICP** (hoy ≥13 % excelente, 10–13 % bueno, <10 % a mejorar): recalibrar contra el histórico
    real, que da **5–9 %**. Con el PoS, el ICP del equipo de octubre es 10,6 %. *(Nuevo, 30/10.)*
 6. **Usuarios de la app para RODRI, FRANCO y MAXI BARRA** (barmans activos sin perfil de login). El perfil
-   «NACHO» (`satorisushibarnacho@gmail.com`) es la cuenta de prueba de Ismael, sin empleado vinculado a
+   «NACHO» es la cuenta de prueba del dueño, sin empleado vinculado a
    propósito: no hay nada que decidir. *(Nuevo, 29–30/10; corregido 30/10.)*
 7. **👁️ El deploy de #16 quedó en `waiting`** (job `deploy` del run #247: creado 17:42, arrancó 17:55 UTC). En
    GitHub Actions eso es una regla de protección del environment `github-pages` (aprobación o temporizador). El
@@ -104,7 +104,7 @@
 11. **`version.json` lleva al login** desde el navegador: el service worker responde `index.html` a toda
     navegación bajo `/satori-app/`. Arreglo: agregar `/\/version\.json$/` a `navigateFallbackDenylist` en
     `vite.config.ts`. Mientras tanto se ve con Cmd+Shift+R o `view-source:`. *(Nuevo, 30/10.)*
-12. **Mi Rendimiento · Semana → Por día.** Pedido de Ismael; definir con él el alcance (fusionar la pestaña Semana
+12. **Mi Rendimiento · Semana → Por día.** Pedido del dueño; definir con él el alcance (fusionar la pestaña Semana
     en Por día o renombrarla). *(Nuevo, 30/10.)*
 13. **Empleados inactivos sin nombre para el salonero.** El RLS de `employees` solo le deja ver los activos, así
     que en 'pos' las facturas de empleados inactivos le quedan con el código del PoS en vez del nombre (el owner
@@ -134,7 +134,47 @@
      Logins identificados (`0909` Rocío · `333` Emma · `999` Jazmín · `03` Alan · `04` Wesley · `02` genérico,
      fuera del ranking). El nombre vale desde 2025-01-01 (Rocío desde 07/01, Wesley desde 23/02) hasta el último
      día de cada titular; 2024 queda como «login XXXX» a propósito, porque no se puede confirmar quién usaba los
-     códigos ese año. Validado físicamente por Ismael en staging.
+     códigos ese año. Validado físicamente por el dueño en staging.
+
+22c. **🧹 Nombre del dueño en los comentarios de `supabase/migrations/`** (decisión del dueño, 10-nov): se limpian
+     **después del pase del Club**, en un PR aparte y con el mismo reemplazo que el #94/#95 («el dueño»). No toca la
+     base: Branching no vuelve a aplicar una versión que ya está en el ledger, y el ledger de prod conserva el texto viejo.
+     **Salvo los 4 que están dentro de funciones de la 150** (líneas 1667, 2811, 3023 y 3521 del archivo): cambiarían la
+     huella de esas funciones y romperían la paridad y el G-61. Quedan hasta que cada función se reescriba en una
+     migración nueva. *(Nuevo, 10/11.)*
+22d. **📮 Correo personal del dueño en `cierre-email` y `monthly-report`** (valor por defecto de `REPORT_TO_EMAIL`):
+     **después del piloto** (decisión del dueño, 10-nov). En este orden: (1) confirmar que `REPORT_TO_EMAIL` está cargado
+     en los secretos de las Edge Functions de prod; (2) sacar el valor por defecto, para que la función falle si falta;
+     (3) volver a desplegar las dos funciones en prod. *(Nuevo, 10/11.)*
+22e. **🧹 Al cerrar las ramas viejas** (sin apuro): sacar la contraseña de prueba (9 ramas), el nombre de la PC y el usuario
+     de SQL de `pos-bridge/config.test.ts`, y el nombre del dueño de las líneas propias de cada rama. La
+     `POS_DB_PASSWORD` de ese archivo es de mentira (confirmado por el dueño). *(Nuevo, 10/11.)*
+
+22f. **🔒 Grok 160 · bloquear el canje de un crédito cuya factura R se anuló** (decisión del dueño, 10-nov): **después del
+     piloto**. Para el piloto se MITIGA: la R que respaldaba un crédito pasa a X → alerta prioritaria arriba en Excepciones
+     (revisión diaria, «Revisado» con nota), sin bloquear ni revertir (PASE-150-151 §12). Lo que falta: que el canje frene
+     (o pida aprobación) mientras haya una alerta sin revisar sobre esos créditos. *(Nuevo, 10/11.)*
+     **Residual de la alerta (Grok 164, 10-nov):** hoy alerta solo el paso R→X de un crédito de los últimos 7 días con
+     cruce por factura o pedido, y solo con un UPDATE del ticket. Queda afuera: una factura **C** que se anula (C→X), un
+     crédito con **cruce manual** (`club_cruces_manuales`), uno de **más de 7 días**, y un ticket que se borra o se inserta ya
+     anulado (no es UPDATE). Se revisa junto con el bloqueo del canje.
+22g. **📧 Grok 184 · correo personal en los commits:** desde el 10-nov los commits de Claude salen con
+     `noreply@anthropic.com`. Los merges hechos por la API de GitHub salen con el correo de la cuenta del dueño: activar
+     en GitHub → Settings → Emails «Keep my email addresses private» (y «Block command line pushes that expose my email»).
+     El historial no se reescribe (decisión del dueño). *(Nuevo, 10/11.)*
+22h. **🧾 Cédula jurídica en `extract-document`** (decisión del dueño, 10-nov): es un dato público del Registro y queda por
+     ahora en el texto del Edge (`supabase/functions/extract-document/index.ts`). **Después del piloto** pasa a una variable
+     del Edge. *(Nuevo, 10/11.)*
+22i. **🔑 Grok 168 · secreto compartido Pages → Worker** (decisión del dueño, 10-nov): **después del piloto**. Hoy el Worker
+     `satori-club-api` no tiene URL pública y solo lo alcanza el service binding de Pages; la IP llega en `x-club-ip`. Sumar un
+     secreto compartido (un encabezado que el Worker exige y Pages manda) como segunda barrera, por si algún día el Worker
+     queda con una ruta o con `workers.dev` encendido. *(Nuevo, 10/11.)*
+22j. **📧 Grok 169 · los correos @gmail que quedan** (la prueba `src/walletRepo.test.ts` los tiene en su lista de
+     pendientes, que solo se achica): el correo del negocio como login del owner en los scripts de staging
+     (`STAGING.md`, `scripts/clone_prod_to_staging.py`, `scripts/refresh-staging/*`, `scripts/t0-reconciliacion-cajas/`)
+     pasa a una variable de entorno; el ejemplo «+nombre» del alta de empleados (`NuevoEmpleado`, `UserApprovals`) pasa a
+     un correo ficticio (cambia una pantalla: guía de admin en el mismo PR); los dos archivos históricos se limpian con las
+     ramas viejas (22e). El correo personal de `cierre-email` y `monthly-report` es el 22d. *(Nuevo, 10/11.)*
 
 ## 🟨 P2 — Esperan decisión o firma del dueño
 
@@ -333,7 +373,7 @@
      Ver [`_handoff/acl-prod-2026-07-27.md`](_handoff/acl-prod-2026-07-27.md) y el bloque `anon` de HALLAZGOS.
 4. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
-5. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+5. **⏳ Smoke real de C3** — el email del cierre nocturno (al correo del dueño por la restricción
    sandbox de Resend) se manda solo al confirmarse un cierre completo.
 6. **🧹 Deuda de limpieza en `main` (barrer en el PRÓXIMO pase a prod, NO suelta).** `main` todavía
    carga archivos que `staging` ya eliminó y que no aportan nada: `src/shared/api/auth.ts` (código
@@ -396,7 +436,7 @@
    (monthly-report false · extract-document true · cierre-email true · pago-notificar true · ingest-ndf false) y
    validar en un proyecto aparte. Con firma.
 
-12. **🖊️ Ventas · merch de mostrador (familia 21) en una categoría propia (decide Ismael).** Hoy una remera
+12. **🖊️ Ventas · merch de mostrador (familia 21) en una categoría propia (decide el dueño).** Hoy una remera
    vendida en la caja va a «salón» en el PoS (canal real del pedido) y a «delivery» en el .xls (venta de caja sin
    10% de servicio) — p. ej. factura 111584, 03/10, ₡14.000. Propuesta: canal/categoría «mostrador» para merch
    (familias 21/23/24/26/27), fuera de salón y de delivery. Sin construir hasta la decisión.
@@ -435,7 +475,7 @@
 1. **🔴 Reconciliación del ledger de migraciones — ANTES de aplicar nada nuevo a prod.** En staging, `schema_migrations` tiene 022–038 pero **039–045 se aplicaron out-of-band** (039 dashboard, 040–044 `db query`, 045 `db query --linked`), y arrastra 009 (drift) + 035 (fantasma, solo en `propina-pool`). `db push` se frena por 009/035. Hay que decidir cómo queda el ledger de **prod** (que hoy está en ≤021) para que las migs nuevas entren limpias. Sesión de reconciliación primero, o al menos su plan firmado. **Sin esto, aplicar migs a prod es a ciegas.**
 2. **Cherry-pick FF-only de la ola a `main`, en orden** (`a4b1be3` → `4fddc5e` → `46ab5c6` → `86739f5` → `a628dbf` → `d5c8138` → `2784d93` → `e959fe5` → `a0e361c` → `380cb9a` → `ddb1c08`). Recordar que gran parte de la ola **depende del esquema 038–045** (Revisión, cascada, autorización por contraseña) → el código no funciona en prod sin las migraciones aplicadas. Evaluar si el pase de código y el de esquema van juntos o el esquema primero.
 3. **Aplicar migraciones 038–045 en PROD** (con el resultado del paso 1). Verificar cada una; `verify_manager_password` (045) es SECURITY DEFINER — revisar grants/`revoke` como en staging.
-4. **Replicar el secret `ANTHROPIC_MODEL=claude-sonnet-4-5`** en el proyecto Supabase de **prod** (`supabase secrets set --project-ref yiczgdtirrkdvohdquzf ANTHROPIC_MODEL=claude-sonnet-4-5`). Hoy solo está en staging; mejora la lectura de facturas (validado por Ismael). Reversible al instante (env var).
+4. **Replicar el secret `ANTHROPIC_MODEL=claude-sonnet-4-5`** en el proyecto Supabase de **prod** (`supabase secrets set --project-ref yiczgdtirrkdvohdquzf ANTHROPIC_MODEL=claude-sonnet-4-5`). Hoy solo está en staging; mejora la lectura de facturas (validado por el dueño). Reversible al instante (env var).
 5. **Sinceramiento USD de Caja Fuerte en prod:** repetir el ajuste inicial (los −$2678 son espejo de staging) con el **conteo físico USD del día del pase** (Movimientos → Ingreso · Otro CF, USD = físico − saldo ledger, ₡ = 0). Recién la fórmula USD firmada empieza a cuadrar desde ese punto.
 6. **Verificar el deploy vivo:** `version.json` de GitHub Pages = el `main` nuevo, y smoke físico con la dueña.
 
@@ -871,7 +911,7 @@ riesgo sin ganancia funcional). Dos grupos:
 > L50:    (`employees.pos_name`, idempotente, ya viva out-of-band) queda en el repo esperando un push firmado.
 > L51:    ⚠️ **047 sigue RESERVADA** para proveedores — el hueco 046→048 es intencional. Detalle → [ESTADO.md](ESTADO.md) §c.
 > L52: 3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
-> L54: 4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+> L54: 4. **⏳ Smoke real de C3** — el email del cierre nocturno (al correo del dueño por la restricción
 > L59: 1. **🖊️ SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de **DNS**
 > L60:    (dominio propio en Resend; hoy el sender sandbox solo entrega a una dirección).
 > L69: 6. **🖊️👁️ Hora-CR en bordes de período.** Las queries de plata (P&L, `finance.ts`) acotan `created_at`

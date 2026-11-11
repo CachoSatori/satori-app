@@ -87,7 +87,7 @@ export const SIN_CODIGO = '(sin codigo)'
 // Para agregar un mesero nuevo: UNA fila acá. Para unificar dos códigos en una persona: los dos
 // códigos en `codigos`, el canónico primero. Nada más se toca.
 
-// Vigencias de los logins viejos: firmadas por Ismael el 2026-11-03 (`FAC_Empleados` + actividad en
+// Vigencias de los logins viejos: firmadas por el dueño el 2026-11-03 (`FAC_Empleados` + actividad en
 // `FAC_Pedidos.UsuarioRegistra`). Lo anterior a 2025 queda AFUERA a propósito: `333`, `999`, `03` y
 // `04` tienen líneas en 2024 y no se puede confirmar quién usaba cada código ese año, así que 2024
 // sale «login XXXX». Los huecos de 2025 (Alan, Emma) son de ellos: no cortan la vigencia.
@@ -114,7 +114,7 @@ const PERSONAS: readonly PersonaNdf[] = [
     vigencias: { '04': { desde: '2025-02-23', hasta: '2025-05-07' } } },
   { id: '030',  rol: 'mesero', etiqueta: 'Jota',      codigos: ['030']  },
   { id: '033',  rol: 'mesero', etiqueta: 'Federico',  codigos: ['033']  },
-  // Barmen: también comandan y van al ranking (firmado por Ismael, 2026-10-29).
+  // Barmen: también comandan y van al ranking (firmado por el dueño, 2026-10-29).
   { id: '035',  rol: 'mesero', etiqueta: 'Rodri',     codigos: ['035']  },
   { id: '036',  rol: 'mesero', etiqueta: 'Franco',    codigos: ['036']  },
   { id: '037',  rol: 'mesero', etiqueta: 'Valentino', codigos: ['037']  },

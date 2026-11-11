@@ -1,5 +1,5 @@
 -- Rollback de la 089: le devuelve a anon EXACTAMENTE lo que la 089 le saca (lo que tenía el 08-nov: prod, más las
--- tres tablas que solo existen en staging). Solo si Ismael lo pide; no abre nada por sí mismo (RLS sigue igual).
+-- tres tablas que solo existen en staging). Solo si el dueño lo pide; no abre nada por sí mismo (RLS sigue igual).
 -- PUBLIC: la 089 también revoca a PUBLIC, que el 09-nov no tenía ningún permiso en estas tablas (leído en prod): no hay nada que devolverle.
 begin;
 do $$

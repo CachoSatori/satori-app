@@ -47,7 +47,7 @@
   | CORS | origen ajeno sin header; preview y prod con el header |
 
   Staging tiene `RESEND_API_KEY` y no tiene `REPORT_TO_EMAIL`, así que un envío real habría ido al destinatario por defecto. Por eso todo fue en seco.
-- **✅ En prod el 06/11 (firmado por Ismael), en este orden, entre las 08:01 y las 08:10 CR:**
+- **✅ En prod el 06/11 (firmado por el dueño), en este orden, entre las 08:01 y las 08:10 CR:**
   1. `service_role_key` en el Vault de prod (`ref` de prod, rol `service_role`) y `Authorization: Bearer <vault>` en los jobs 3 y 4, **sin cambiar horario (02:00 CR) ni body**.
   2. Merge del PR #42 (botón con JWT) y deploy de Pages en verde (run #268).
   3. `monthly-report` **v10** desplegada a mano con `verify_jwt = true` (rama `claude/sec-02-monthly-report-fn`, `9ac28b0`).
@@ -63,7 +63,7 @@
   3. Desplegar la función nueva con `verify_jwt = true`.
   4. Probar sin escribir: sin token → 401, anon → 401, service_role en seco → 200.
 
-  **Decisiones para Ismael:** el horario (02:00 CR hoy) y si el job del 15 pasa a «propinas del mes en curso» como dice la 003. Además, en staging, apuntar sus jobs a la URL de staging o apagarlos.
+  **Decisiones para el dueño:** el horario (02:00 CR hoy) y si el job del 15 pasa a «propinas del mes en curso» como dice la 003. Además, en staging, apuntar sus jobs a la URL de staging o apagarlos.
 
 ## 👤 Noviembre 2026 — Alta de empleados desde Admin (✅ prod, 06/11, PR #39)
 
@@ -117,10 +117,10 @@
   - **Dentro de tolerancia** (₡500 / US$1): sin pasos extra, igual que antes.
   - **Fuera de tolerancia:** al pedir el cierre aparece «El conteo no cuadra» con dos opciones:
     - **«↺ Recontar»** (una sola vez): el primer conteo se guarda en `cash_cierres_dia.primer_conteo_crc/usd` (mig 074) y las 6 separaciones quedan en blanco; ventas, retiro y notas no se tocan. Si después sigue fuera, el motivo es obligatorio y no hay un segundo reconteo.
-    - **«No recontar — registrar el motivo»** (se queda, firmado por Ismael): motivo obligatorio y `primer_conteo_*` en null.
+    - **«No recontar — registrar el motivo»** (se queda, firmado por el dueño): motivo obligatorio y `primer_conteo_*` en null.
   - El resumen muestra «Primer conteo (antes del reconteo)» cuando lo hubo.
   - No cambian la tolerancia, `requiresAjuste`, `cuadra`/`cuadraUSD` ni los montos que se guardan.
-- **Antes se probó un conteo ciego** (#31: esperado oculto hasta «Confirmar conteo»). Ismael lo descartó y se revirtió (#32) **sin tocar la base**: la 074 quedó con columnas nulas, compatible con el cliente de la 071.
+- **Antes se probó un conteo ciego** (#31: esperado oculto hasta «Confirmar conteo»). El dueño lo descartó y se revirtió (#32) **sin tocar la base**: la 074 quedó con columnas nulas, compatible con el cliente de la 071.
 - ⚠️ **Revertido el 06/11** (ver la sección de arriba): el cierre de turno volvió a contar efectivo.
 - **Cierre de turno:** ya no pide efectivo ni muestra «debería / Cuadra». `final_cash_*` queda null y ningún cálculo lo usa; CashResumen lo muestra como «Caja Diaria al cerrar (histórico)», con «—» si falta.
   - **Por qué:** el «debería» de un solo cajón queda incompleto **por diseño del pozo** (`pozo.ts`, REPORTE-T1B §3.1). La plata pasa entre la Caja Fuerte, la Registradora y la Caja Diaria sin registrar el traspaso, y las propinas salen de la Registradora (`propinaPago.ts`), así que daba negativos imposibles (−₡119.800 el 17/08). El control real del efectivo es el **cierre del día**.
@@ -271,7 +271,7 @@ Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
 
 ### Aplicación y verificación (las dos migraciones)
 
-- **Staging (05/11, ~19:30 UTC):** cada una corrida dos veces (idempotentes), ledger 70 → 72. Ismael validó en `satori-staging.pages.dev` con owner y salonero.
+- **Staging (05/11, ~19:30 UTC):** cada una corrida dos veces (idempotentes), ledger 70 → 72. El dueño validó en `satori-staging.pages.dev` con owner y salonero.
 - **Prod (05/11, ~20:05 UTC = 14:05 CR):** Paso 0 repetido sin cambios; aplicadas a mano dos veces **antes del merge** (Branching), ledger 48 → 50.
 - **Verificado en las dos bases:**
   - `has_table_privilege('anon', …)` = `false` para cada permiso revocado (INSERT/UPDATE/DELETE en las 4 del CRM; SELECT en las 5 de SEC-04); `authenticated` conserva SELECT.
@@ -497,7 +497,7 @@ El dueño validó en piso el pase completo en PROD y **todo pasó**: `version.js
 ### 🆕 Hallazgos 2026-07-03 (ola grande de Caja/Cierre/Revisión — todo en STAGING)
 
 - **El FALTANTE FANTASMA del cierre — CAUSA RAÍZ ENCONTRADA Y ENTERRADA.** El cierre tiraba un faltante que no era real. Venía de un **desacople**: la fórmula del "debería" **restaba las propinas** (tipeadas), pero el movimiento `'Ventas cierre'` ingresaba el efectivo **BRUTO** a Caja Fuerte (sin descontar propinas). Resultado: el ledger de CF quedaba en `contado + propinas` → faltante fantasma cada día con propinas. **Muerto con "propinas por la vía real"** (`380cb9a`): ahora las propinas se pagan como movimiento real (egreso desde Registradora), la matemática resta las **efectivamente pagadas**, y `'Ventas cierre'` ingresa el **NETO** → `ledger = contado` exacto. El test del gap, que **documentaba** el desfase, se **dio vuelta** y ahora lo **afirma**. Validado físicamente: el cierre "cuadra correctamente" con propinas pagadas y el ledger arranca sincero a la mañana siguiente.
-- **Ledger de Caja Fuerte con DÉFICIT HISTÓRICO USD (−$2678).** La fórmula USD firmada (`46ab5c6`: `calcDeberiaUSD` ahora suma `saldoBase.usd`) **destapó** que el ledger de CF nunca contó bien los dólares — retiros USD sin registrar eran **invisibles** para el cuadre viejo (solo miraba ventas). El −$2678 de staging es **espejo de prod**. **Reconciliado en staging** con un ajuste inicial firmado (Ismael cargó Movimientos → Ingreso · Otro CF, USD = físico + 2678). **Prod pendiente:** repetir con el conteo físico del día del pase (§PASE A PROD paso 5).
+- **Ledger de Caja Fuerte con DÉFICIT HISTÓRICO USD (−$2678).** La fórmula USD firmada (`46ab5c6`: `calcDeberiaUSD` ahora suma `saldoBase.usd`) **destapó** que el ledger de CF nunca contó bien los dólares — retiros USD sin registrar eran **invisibles** para el cuadre viejo (solo miraba ventas). El −$2678 de staging es **espejo de prod**. **Reconciliado en staging** con un ajuste inicial firmado (el dueño cargó Movimientos → Ingreso · Otro CF, USD = físico + 2678). **Prod pendiente:** repetir con el conteo físico del día del pase (§PASE A PROD paso 5).
 - **La EDICIÓN de un pago NO es un UPDATE — es `delete_movement_cascade` + `persistPago` recreate.** Por eso "editar un pago como cajero" fallaba sin pedir credenciales: el bloqueo real no estaba en un UPDATE (no existe) sino en el **reenvío de credenciales al path de plata** (la RPC de borrado re-valida server-side). Fundamenta por qué la mig 045 (autorización por contraseña) y el envolver el edit-path con `requireManager` + reenvío de credenciales. Confirmado leyendo `CashTurno.confirmPago` en modo edición.
 - **El cambio de modelo de IA de `extract-document` es una ENV VAR, no código.** `ANTHROPIC_MODEL` (leído en `extract-document/index.ts` con default `claude-haiku-4-5`) → cambiar a `claude-sonnet-4-5` es `supabase secrets set`, **sin deploy de código, reversible al instante**. Aplica a las functions sin redeploy. **Trampa de handoff:** no viaja con el cherry-pick a prod → hay que replicarlo aparte (§PASE A PROD paso 4).
 - **La verificación de la migración out-of-band se hace por privilegio, no por ledger.** `verify_manager_password` (045) se aplicó a staging con `db query --linked` y se verificó con `has_function_privilege('anon', ..., 'execute') = false` + `pg_proc.prosecdef = true`. Patrón repetible para el pase a prod.

@@ -1,5 +1,5 @@
 {
-  "_que_es": "Registro de numeración de migraciones (decisión de Ismael, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
+  "_que_es": "Registro de numeración de migraciones (decisión del dueño, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
   "bloques": {
     "caja": {
       "tipo": "creacion",

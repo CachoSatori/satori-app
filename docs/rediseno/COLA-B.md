@@ -20,7 +20,7 @@
 - **No se toca:** ningún componente; solo CSS.
 - **Reporte:** capturas de la pantalla de login y de la build local en 390 px y 1280 px.
 
-## B3 · Shell: menú lateral y barra inferior · `lista` · validación visual
+## B3 · Shell: menú lateral y barra inferior · `en revisión #114` · validación visual
 - **Componentes:** `src/shared/layout/AppShell.tsx` (nuevo) envuelve las rutas privadas.
 - **El menú:**
   - sale de `MODULES`, con un campo `grupo` agregado;

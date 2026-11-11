@@ -30,6 +30,6 @@
 - **Aceptación:** el diff de `CashCierre.tsx` es solo de JSX; los tests de CashCierre (borrarDia, recontar, etc.) pasan.
 - El PR lleva en la descripción qué va a ver el encargado.
 
-## A4 · Medir Ventas · `lista`
+## A4 · Medir Ventas · `en revisión` (sin PR: solo reporte, `reportes/2026-11-11-1311-A-A4.md`)
 - **Medición sin login:** tamaño de los chunks por vista y consultas que dispara cada vista al abrir.
 - **Reporte:** si alguna vista hace más de 3 consultas pesadas al abrir, proponer el arreglo en el reporte, sin aplicarlo.

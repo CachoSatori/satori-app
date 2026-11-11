@@ -32,7 +32,7 @@
 - **Las rutas, `PrivateRoute` y el aterrizaje del cajero no cambian.**
 - **Aceptación:** un test por rol confirma que el menú muestra exactamente los módulos que hoy muestra la grilla del Inicio.
 
-## B4 · Inicio con pendientes · `hecha` (#115, validada por Ismael y mergeada el 11-nov 14:10) · validación visual
+## B4 · Inicio con pendientes · `hecha` (#115, validada por Ismael y mergeada el 11-nov 14:25) · validación visual
 - **Qué muestra la grilla de Inicio:**
   1. una frase de estado;
   2. «Para hacer hoy», con los mismos datos que hoy alimentan los badges, más los días sin cierre de `diasSinCierre`;
@@ -42,3 +42,26 @@
 - **Aceptación:**
   - tests de qué pendientes salen según los datos;
   - guía 6.1 actualizada.
+
+---
+### Tanda 2 · Auditoría y estilo en los módulos (decidido por Ismael el 11-nov 15:15)
+
+## B5 · Inicio que nunca dice «Todo en orden» sin comprobar · `lista`
+- **Auditoría 196:** en `src/pages/HomePage.tsx`, primero escribí en el reporte qué pasa en pantalla cuando falla cada lectura de la alerta y de `fetchHomeStatus`. Después:
+  - estado de error: si alguna señal falló, la frase es «No se pudo comprobar todo — revisá Caja», con una píldora oro «sin comprobar» que abre `/caja`. **Nunca** «Todo en orden» ni el Daruma si algo falló;
+  - en `fetchHomeStatus`, las lecturas rechazadas se marcan como «sin comprobar» en vez de quedar en 0;
+  - si `fetchHomeStatus` falla entero: «No se pudo cargar el día», no «Revisando el día…» para siempre.
+- **Auditoría 197 (espera decisión de Ismael):** no hacer nada con *cuándo* se lee la alerta hasta que esté en `DECISIONES.md`.
+- No cambiar qué se consulta. Tests de render para cada falla.
+- **Aceptación:** tests verdes; guía 6.1; link de vista previa.
+
+## B6 · Cáscara y clases de módulo con estilo carta · `pendiente` (después de B5) · validación visual
+- **Mayúsculas:** sacar `text-transform: uppercase` del menú (`AppShell.css`), del Inicio y de las clases de módulo de `index.css` (`.vt-nav-tab`, `.shell-grupo-titulo`, `.login-btn` y las 93 de `index.css`), con letra de 44 px de alto donde sea pestaña o botón (auditoría 201).
+- **Barras y paneles oscuros:** `.vt-module`, `.vt-module-header`, `.vt-nav-tabs`, `.module-header` y las clases de Caja, Propinas e Inventario pasan a fondo blanco con filete de oro, texto en tinta; pestaña activa en `--c-oro-texto`.
+- **Botones secundarios** (`--gray-pale`, auditoría 204): borde `var(--c-linea)`, fondo transparente, texto tinta (`App.tsx`, `src/pages/auth/CambiarPasswordInicial.tsx`, `src/shared/ErrorBoundary.tsx`).
+- **Hoja «Más»** (auditoría 202): `aria-modal="true"`, foco al cerrar al abrir y de vuelta a «Más» al cerrar, Escape la cierra.
+- **OfflineBanner** (204): que no tape la barra inferior.
+- **Fuentes sin internet** (206): Cormorant Garamond (500, 600, 500 itálica) y DM Sans (400, 500, 600) en `public/fonts/` con `@font-face`; sacar el `@import` de Google para esas dos (Noto Serif JP puede quedar como respaldo de los kanji).
+- No tocar componentes de `src/modules/` (eso es de la línea A).
+- **Aceptación:** build y tests verdes; capturas 390 y 1280 de login, Inicio, Ventas, Caja y Propinas; guía 6.1 e `INVENTARIO.md` si cambia algo.
+

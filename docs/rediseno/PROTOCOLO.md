@@ -47,7 +47,7 @@
 
 | Línea A | Línea B |
 |---|---|
-| `src/modules/resumen/**` · `src/modules/ventas/**` · `src/modules/cash/CashCierre.tsx` (solo JSX, con firma) · `src/modules/prueba/**` · `src/modules/admin/**` · guías 6.2, 6.4 y 6.6 | `src/index.css` · `src/App.tsx` · `src/pages/HomePage.tsx` · `src/shared/layout/**` (nuevo) · `public/marca/**` · guías 6.1 e `INVENTARIO.md` |
+| `src/modules/resumen/**` · `src/modules/ventas/**` · `src/modules/prueba/**` · `src/modules/admin/**` · `src/modules/inventario/**` · `src/modules/tips/**` (nunca `tipCalculations.ts`) · `src/modules/cash/**` (solo pantalla: nunca `cashUtils.ts`, `cierrePozo`, `diasSinCierre.ts` ni la lógica de cierres; **cualquier archivo `Cash*Cierre*` o de cierre lleva FIRMA**) · `fi()` en `src/shared/utils/index.ts` (solo la tarea de colones) · guías 6.2, 6.3, 6.4 y 6.6 | `src/index.css` · `src/App.tsx` · `src/pages/**` · `src/shared/layout/**` · `src/shared/ErrorBoundary.tsx` (solo estilo) · `public/marca/**` · `public/fonts/**` (nuevo) · guías 6.1 e `INVENTARIO.md` |
 
 ## Reglas para la revisión
 
@@ -83,6 +83,12 @@
 ## Vista previa para validar
 
 Cloudflare Pages publica cada rama: `https://<rama con / y . cambiados por ->.satori-staging.pages.dev` (por ejemplo `claude-rediseno-b3.satori-staging.pages.dev`). La revisión le pasa ese link a Ismael para la validación visual, en vez de esperar a `staging`.
+
+## Estilo en los módulos (desde el 11-nov)
+
+- La línea B lleva el estilo carta a las **clases de `src/index.css`** de cada módulo (barras y paneles oscuros, mayúsculas, oros viejos).
+- La línea A lleva el estilo a los **estilos en línea** (`style={{…}}`) de los componentes de cada módulo: colores fijos → `var(--c-*)`, `monospace`/`'DM Mono'` → `var(--font-sans)` con `tabular-nums`, sin `textTransform: 'uppercase'`, oro de texto `--c-oro-texto`, fondos oscuros → blanco o panel.
+- **Nunca** se toca un cálculo, una condición, un `onClick` ni una consulta. El diff de cada archivo tiene que ser solo de estilo o texto.
 
 ## Estados de las colas
 

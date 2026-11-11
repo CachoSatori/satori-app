@@ -52,3 +52,8 @@
 ## Cuándo
 - **Temporada alta:** arranca a mediados de diciembre.
 - **Pase a `main`:** lo de navegación (B3 y B4) pasa solo si Ismael lo valida en staging antes del ~10-dic. Si no, queda para después de Semana Santa.
+
+## Notas de la auditoría externa (11-nov, hallazgo 207)
+- **B4 sí agrega lecturas** al Inicio (las mismas que Caja usa para «días sin cierre»), permitidas por COLA-B bajo la RLS actual. El resto del rediseño no cambia consultas; A5 cambia *cuándo* se consulta, con aprobación de Ismael.
+- **«Se descartó el KDS y el Comandero»** quiere decir que no se rediseñan; siguen en el menú de `staging` para los roles que ya los veían. En el pase a `main` salen del menú porque ahí no tienen ruta (junto con Mi Turno y Salarios).
+- **Alcance ampliado el 11-nov:** el estilo carta se lleva también a los módulos (tanda 2 de las colas) antes del pase a `main`.

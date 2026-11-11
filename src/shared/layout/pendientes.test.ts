@@ -77,3 +77,32 @@ describe('B4 · Para hacer hoy', () => {
       .toBe('Hay una cosa para resolver hoy.')
   })
 })
+
+describe('B5 · lecturas que fallaron: «sin comprobar», nunca «Todo en orden»', () => {
+  it('una señal que falló agrega «sin comprobar» primero (lleva a Caja) y cambia la frase', () => {
+    const p = calcularPendientes({ ...TRANQUILO, sinComprobar: ['movimientos'] }, visibles('owner'))
+    expect(p.map(x => [x.id, x.path, x.tono, x.estado])).toEqual([
+      ['sin-comprobar', '/caja', 'pendiente', 'sin comprobar'],
+    ])
+    expect(fraseEstado(p)).toBe('No se pudo comprobar todo — revisá Caja.')
+  })
+
+  it('la señal que falló no inventa su pendiente (procedimientos en 0 por la falla)', () => {
+    expect(ids({ sopsCount: 0, sinComprobar: ['procedimientos'] })).toEqual(['sin-comprobar'])
+  })
+
+  it('las demás señales se siguen mostrando, después del aviso', () => {
+    expect(ids({ pendingCount: 2, invOutStock: 1, sinComprobar: ['cierres'] }))
+      .toEqual(['sin-comprobar', 'sin-stock', 'movimientos'])
+  })
+
+  it('una falla en un número del día también impide «Todo en orden»', () => {
+    const p = calcularPendientes({ ...TRANQUILO, sinComprobar: ['venta'] }, visibles('contador'))
+    expect(fraseEstado(p)).toBe('No se pudo comprobar todo — revisá Caja.')
+  })
+
+  it('la falla de un módulo que el rol no ve no cuenta', () => {
+    // contador no ve Procedimientos
+    expect(ids({ sinComprobar: ['procedimientos'] }, 'contador')).toEqual([])
+  })
+})

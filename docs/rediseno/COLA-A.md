@@ -30,6 +30,14 @@
 - **Aceptación:** el diff de `CashCierre.tsx` es solo de JSX; los tests de CashCierre (borrarDia, recontar, etc.) pasan.
 - El PR lleva en la descripción qué va a ver el encargado.
 
-## A4 · Medir Ventas · `en revisión` (sin PR: solo reporte, `reportes/2026-11-11-1311-A-A4.md`)
+## A4 · Medir Ventas · `hecha` (reporte `2026-11-11-1311-A-A4.md`, sin PR; revisado 11-nov 14:05)
 - **Medición sin login:** tamaño de los chunks por vista y consultas que dispara cada vista al abrir.
 - **Reporte:** si alguna vista hace más de 3 consultas pesadas al abrir, proponer el arreglo en el reporte, sin aplicarlo.
+
+## A5 · Ventas carga a pedido · `pendiente` · **espera decisión de Ismael** (cambia *cuándo* se consulta)
+- Sale de A4 (arreglos 1–3). No cambia qué se consulta ni cómo se calcula; cambia **cuándo**:
+  1. la historia completa del PoS (`cargarDeFondo`) se pide solo al entrar a una vista que la usa (Análisis, Histórico, Calendario, Mix, Ventas, Metas, Ing. Menú, Evaluación, ICP);
+  2. En vivo, Paridad y Por línea se pintan sin esperar la carga de 90 días;
+  3. En vivo: las 4 jornadas comparables y los nombres se piden una vez por jornada; cada 30 s solo se relee lo de hoy.
+- Archivos: `VentasModule.tsx`, `VentasEnVivo.tsx`, `ventasEnVivoDatos.ts` (línea A). **No** `src/shared/api/posNdf.ts` ni migraciones.
+- **Aceptación:** test de que cada vista muestra los mismos números que antes con los mismos datos; medición antes/después de llamadas en el reporte.

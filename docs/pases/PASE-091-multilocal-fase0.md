@@ -1,6 +1,8 @@
 # Pase a PROD de la mig 091 `multilocal_fase0`
 
-> **Estado: preparado, SIN ejecutar.** Formato del `PASE-089` (`docs/pases/PASE-089-anon-sin-politica.md`): qué cambia,
+> **Estado: EJECUTADO y CERRADO (10-nov-2026). La 091 está en prod (PR #103, merge `b8cb74d`, 22:44:57 -06:00; ledger 61 · 091). Resultado en §9.**
+>
+> Antes: Formato del `PASE-089` (`docs/pases/PASE-089-anon-sin-politica.md`): qué cambia,
 > lecturas previas, prueba en staging, humo de solo lectura, vuelta atrás y firma.
 >
 > **Nada de este documento se ejecuta en prod hasta que el dueño lo firme (§9).** Si algo no coincide con lo que dice
@@ -333,19 +335,19 @@ pasan. Después va el pase del Club (la 075 como 150 y la 100 como 151). La 100 
 ## 9. Firma y bitácora
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
-| Responsables (ejecución / control) | | |
-| 0.4 rama al día con `main` · diff solo los archivos de la 091 | | |
-| 0.7 la 090 en prod con su pase cerrado | | |
-| 1.1 ledger 60 · 090 · ninguna versión ≥ 091 | 60 · 090 | |
-| 1.2 nada de la 091 en prod | todo false / 0 | |
-| 1.3 foto de Santa Teresa (n y huella por tabla; **sin montos**) | | |
-| 1.4 funciones SECURITY DEFINER sobre las 4 tablas (lista) | | |
-| 4a antes (activas), justo antes del merge | | |
-| Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | |
-| §2 merge (SHA, hora) | | |
-| 5.1 Branching success · log con la 091 | | |
-| 5.2 exactamente 1 fila 091 con `name = 'multilocal_fase0'` (statements: anotar) | 61 · 091 · 1 | |
-| 5.3 catálogo como lo esperado | | |
-| 5.4 foto igual a 1.3 · 4a después = antes · 4b sin rojos | | |
-| Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | |
+| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | 10-nov: «Firmo: autorizo el pase de la 091 (PR #103, claude/multilocal-fase0 @ 5b6cd05f7e7179748c0d97f42f01613b40d4724e)». GO de Grok: delta 091–095 del 10-nov 19:15 (GO condicionado sobre `5b6cd05`; 137 cerrado). **Excepción a la regla de las 17:00–23:00, escrita por el dueño:** restaurante cerrado temprano, caja sin movimiento, sin usuarios en la app |
+| Responsables (ejecución / control) | | el dueño (el merge lo hizo Claude por su indicación explícita) / la encargada del turno |
+| 0.4 rama al día con `main` · diff solo los archivos de la 091 | | `main` @ `7543347` ancestro; el merge trae solo los 8 archivos de la 091 (migración md5 `1838dd21…`) |
+| 0.7 la 090 en prod con su pase cerrado | | ✅ (60 · 090) |
+| 1.1 ledger 60 · 090 · ninguna versión ≥ 091 | 60 · 090 | **60 · 090** |
+| 1.2 nada de la 091 en prod | todo false / 0 | OK: nada de la 091 en prod |
+| 1.3 foto de Santa Teresa (n y huella por tabla; **sin montos**) | | tomada a las 22:36 y repetida a las 22:4x, justo antes del merge: idéntica (mismos n y huella en las 5 tablas). Guardada fuera del repo |
+| 1.4 funciones SECURITY DEFINER sobre las 4 tablas (lista) | | no informado a esta sesión (informativo) |
+| 4a antes (activas), justo antes del merge | | guardado |
+| Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | aceptado por el dueño sin CI de pruebas (125): el repo no corre pruebas en PRs; la 091 se probó en staging (24 OK antes de aplicarla) y la auditó Grok |
+| §2 merge (SHA, hora) | | PR #103 · `b8cb74dffedddc3b8c0e0287b54891e5251f7629`, 10-nov **22:44:57 -06:00** (padres `7543347` y `5b6cd05`) |
+| 5.1 Branching success · log con la 091 | | «Supabase Preview» **success** (run 130328187725, 22:45:30 -06:00) |
+| 5.2 exactamente 1 fila 091 con `name = 'multilocal_fase0'` (statements: anotar) | 61 · 091 · 1 | **61 · 091 · 1 fila**, **31 statements** |
+| 5.3 catálogo como lo esperado | | todo lo esperado |
+| 5.4 foto igual a 1.3 · 4a después = antes · 4b sin rojos | | foto idéntica antes y después · 4a idéntico en los 5 roles · 4b pantallas OK |
+| Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | **PASA · pase CERRADO (10-nov, 22:51 -06:00)** |

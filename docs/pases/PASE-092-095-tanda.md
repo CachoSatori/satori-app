@@ -1,6 +1,8 @@
 # Pase a PROD de la tanda 092 → 095 (un solo merge)
 
-> **Estado: preparado, SIN ejecutar.** Formato del `PASE-089`. **Decisión del dueño (10-nov):** el 11-nov van **dos tandas**:
+> **Estado: EJECUTADO y CERRADO (10-nov-2026, adelantado del 11 por decisión del dueño). La 092, la 093, la 094 y la 095 están en prod (PR #107, merge `c41e18b`, 22:57:17 -06:00; ledger 65 · 095). Resultado en §9.**
+>
+> Antes: preparado. Formato del `PASE-089`. **Decisión del dueño (10-nov):** el 11-nov van **dos tandas**:
 > 1. la **091 sola**, con su `PASE-091` (cabeza `5b6cd05`);
 > 2. **la 092, la 093, la 094 y la 095 juntas, en UN merge** de `claude/contador-lee-caja` (`c78b4c2`, que trae las
 >    cuatro), **después** de que la 091 esté en prod con su pase cerrado.
@@ -667,27 +669,27 @@ sus guías y sus documentos:
 - bloque C: igual que «antes».
 
 ## 8. Orden en prod
-**085 ✅ → 089 ✅ → 090 ✅ → 091 (tanda 1, el 11-nov) → 092 + 093 + 094 + 095 (tanda 2, un merge) → Club (075 como 150,
+**085 ✅ → 089 ✅ → 090 ✅ → 091 ✅ (10-nov) → 092 + 093 + 094 + 095 ✅ (10-nov, un merge) → sigue el Club (075 como 150,
 100 como 151).** La tanda 2 arranca solo con la tanda 1 cerrada. Si la tanda 2 hace vuelta atrás, el pase del Club espera.
 La MAINTAIN de `authenticated` (75 tablas) va después de abrir el Club, en el bloque 152+ (decisión del dueño).
 
 ## 9. Firma única de la tanda y bitácora
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| **Firma del dueño** (fecha y hora `-06:00`): «autorizo el pase de la tanda 092–095 en un merge del PR #107 @ **<cabeza nueva de `claude/contador-lee-caja`, al día con `main` con la 091 (Grok 176)>**», con los md5 de las cuatro migraciones y rollbacks de la tabla de huellas y el PASE combinado (#108 @ <su cabeza>) | | |
-| **Condición 3 de Grok, texto que firma el dueño:** «Para esta tanda, el humo combinado después del merge y la vuelta atrás de la tanda entera por defecto reemplazan la condición de cerrar cada pase antes del siguiente» | | |
-| 176: la cabeza nueva contra `c78b4c2`: solo el merge de `main`; blobs de 092–095 (migraciones y rollbacks) iguales | | |
-| Responsables (ejecución / control) | | |
-| 0.4 la 091 en prod con su pase cerrado | 61 · 091 | |
-| 0.5 ninguna versión ≥ 092 | `desde_092` [] | |
-| 0.6 rama al día con `main` (con la 091) · diff solo 092–095 | | |
-| Bloque A antes (el JSON entero) | §1 | |
-| Bloque B: **20** tablas · respaldo **guardado fuera del repo** · `sha256_relacl` · `sha256_normalizado` (Grok 185) | | |
-| Bloque C antes (justo antes del merge; `inactiva.hay_cuenta` true) | | |
-| Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | |
-| §2 merge (SHA, hora) | | |
-| 5.1 Branching success · log con 092, 093, 094 y 095 en orden | | |
-| 5.2 bloque D: 65 · 095 · `tanda` con 4 filas y su `name` · `repetidas` [] · `names_ok` 4 · statements (anotar) | | |
-| 5.3 bloque A después, como lo esperado (`write_md5` igual; `policies` de antes + 3) | | |
-| 5.4 bloque C después según las reglas · pantallas sin rojos | | |
-| Cierre: pasa / vuelta atrás (qué se deshizo según 7.1; bloque D final) | | |
+| **Firma del dueño** (fecha y hora `-06:00`): «autorizo el pase de la tanda 092–095 en un merge del PR #107 @ **<cabeza nueva de `claude/contador-lee-caja`, al día con `main` con la 091 (Grok 176)>**», con los md5 de las cuatro migraciones y rollbacks de la tabla de huellas y el PASE combinado (#108 @ <su cabeza>) | | 10-nov: firma del dueño sobre el **#107 @ `44b0db80d4b7a66d6c05e4c8f9148cd2034dbe26`** (el texto completo está en su conversación con Claude, fuera del repo; el cuerpo del merge lleva su autorización textual, los md5 y la referencia al PASE combinado, #108 @ `570e292`). **Excepción a la regla de las 17:00–23:00, escrita por el dueño:** restaurante cerrado, caja sin movimiento |
+| **Condición 3 de Grok, texto que firma el dueño:** «Para esta tanda, el humo combinado después del merge y la vuelta atrás de la tanda entera por defecto reemplazan la condición de cerrar cada pase antes del siguiente» | | **firmada, textual**, dentro de la firma del dueño |
+| 176: la cabeza nueva contra `c78b4c2`: solo el merge de `main`; blobs de 092–095 (migraciones y rollbacks) iguales | | cabeza `44b0db8` = `c78b4c2` + el merge de `main` @ `b8cb74d` (único commit nuevo; 0 archivos distintos); los 8 md5 iguales a la tabla de huellas |
+| Responsables (ejecución / control) | | el dueño (el merge lo hizo Claude por su indicación explícita) / la encargada |
+| 0.4 la 091 en prod con su pase cerrado | 61 · 091 | ✅ pase de la 091 cerrado a las 22:51 (61 · 091) |
+| 0.5 ninguna versión ≥ 092 | `desde_092` [] | ✅ (bloque A antes sin parada) |
+| 0.6 rama al día con `main` (con la 091) · diff solo 092–095 | | `main` @ `b8cb74d` ancestro; 22 archivos, todos de la 092–095; ninguna `09[2-9]` en `main` antes del merge |
+| Bloque A antes (el JSON entero) | §1 | OK, **freno sin parada**: 61 · 091 · `write_md5` `6ffc8c73…` · `anon_otros` 14 · `authenticated_maintain` 20 (el JSON entero, fuera del repo) |
+| Bloque B: **20** tablas · respaldo **guardado fuera del repo** · `sha256_relacl` · `sha256_normalizado` (Grok 185) | | **20** tablas · respaldo guardado fuera del repo · `sha256_relacl` `86b111cc29c7712d8d31f78576437fc0c7654d1668ffcd6b3ff98d37ef4072e1` · `sha256_normalizado` `79813f6a4f2f96bb4df0edc7b40982c174a5098fbc5b9e9ee40db5738cec13eb` |
+| Bloque C antes (justo antes del merge; `inactiva.hay_cuenta` true) | | OK (22:56) |
+| Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | el PR no corre pruebas (125); en la cabeza `44b0db8`, `supabase/migraciones.test.ts` 6/6 en local. La aceptación textual del dueño para esta tanda: no informado a esta sesión |
+| §2 merge (SHA, hora) | | PR #107 · `c41e18bd8dd34bbeccd726c910433696ca392780`, 10-nov **22:57:17 -06:00** (padres `b8cb74d` y `44b0db8`). Los #104, #105 y #106 quedaron incluidos |
+| 5.1 Branching success · log con 092, 093, 094 y 095 en orden | | «Supabase Preview» **success** (run 130332556647, 22:58:21 -06:00) |
+| 5.2 bloque D: 65 · 095 · `tanda` con 4 filas y su `name` · `repetidas` [] · `names_ok` 4 · statements (anotar) | | **65 · 095** · `names_ok` 4 · statements: 092 = 12, 093 = 7, 094 = 3, 095 = 9 |
+| 5.3 bloque A después, como lo esperado (`write_md5` igual; `policies` de antes + 3) | | **freno sin parada**; huellas `c25aabee…` y `bd9d17e1…`, iguales a staging |
+| 5.4 bloque C después según las reglas · pantallas sin rojos | | OK (23:05) · pantallas OK. **Nota:** `employees` pasó de 45 a 46 entre antes (22:56) y después (23:05) en owner, manager y `base`. **No es parada:** también está en `base` (una fila nueva, no un cambio de permisos). Origen: _<completar cuando el dueño confirme>_ |
+| Cierre: pasa / vuelta atrás (qué se deshizo según 7.1; bloque D final) | | **PASA · tanda CERRADA (10-nov)**, sin vuelta atrás |

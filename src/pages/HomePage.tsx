@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../shared/hooks/useAuth'
 import type { UserRole } from '../shared/types/database'
@@ -7,6 +7,10 @@ import { todayCR, fi } from '../shared/utils'
 import { monthRangeBounds } from '../shared/utils/dateRange'
 import { ROLE_LABELS } from '../shared/constants'
 import { modulosPara } from '../shared/layout/modulos'
+import { calcularPendientes, fraseEstado, type Pendiente } from '../shared/layout/pendientes'
+import { getCashSessions, getAllCashMovements, getCierresDia } from '../shared/api/cash'
+import { getJornadasConVentas } from '../shared/api/jornadasConVentas'
+import { calcularAlertaCierres, desdeVentanaVentas, type AlertaCierres } from '../modules/cash/diasSinCierre'
 
 // La lista de módulos vive en `shared/layout/modulos.ts`: es la misma fuente del menú global (B3).
 
@@ -198,31 +202,6 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
   }
 }
 
-// ── Status badge component ─────────────────────────────────────
-function StatusBadge({ color, text }: { color: 'open' | 'ok' | 'warn' | 'dim'; text: string }) {
-  const styles: Record<string, string> = {
-    open: 'var(--t-teal)',
-    ok:   '#27874f',
-    warn: '#c0392b',
-    dim:  '#888',
-  }
-  return (
-    <span style={{
-      display:      'inline-flex',
-      alignItems:   'center',
-      gap:          '0.2rem',
-      fontSize:     '0.6rem',
-      fontWeight:   700,
-      letterSpacing:'0.06em',
-      textTransform:'uppercase',
-      color:        styles[color],
-    }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: styles[color], display: 'inline-block' }} />
-      {text}
-    </span>
-  )
-}
-
 // ── Aterrizaje por rol (operación por roles, 06-12) ───────────
 // Al ABRIR la app, cada puesto cae directo en SU pantalla: la compu del cajero en
 // Caja, la tablet del salonero en el Comandero. Sucede UNA vez por sesión de pestaña
@@ -254,68 +233,53 @@ export default function HomePage() {
     fetchHomeStatus().then(setStatus).catch(() => {})
   }, [mustLand])
 
+  const role = profile?.role ?? ''
+  const isManager = ['owner', 'manager', 'contador'].includes(role)
+
+  // Días sin cierre (B4): la MISMA alerta que ve Caja, con las mismas lecturas y el mismo filtro de rol
+  // (owner y manager). Solo lectura; si algo falla, el pendiente simplemente no sale.
+  const veAlerta = role === 'owner' || role === 'manager'
+  const [alerta, setAlerta] = useState<AlertaCierres | null>(null)
+  useEffect(() => {
+    if (mustLand || !veAlerta) return
+    let vivo = true
+    const hoy = todayCR()
+    const [y, m, d] = hoy.split('-').map(Number)
+    const ayer = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10)
+    Promise.all([
+      getCierresDia(),
+      getAllCashMovements(),
+      getCashSessions(),
+      getJornadasConVentas(desdeVentanaVentas(hoy), ayer).catch(() => [] as string[]),
+    ]).then(([cierres, movements, sessions, jornadasConVentas]) => {
+      if (vivo) setAlerta(calcularAlertaCierres({ hoy, cierres, movements, sessions, jornadasConVentas }))
+    }).catch(() => { if (vivo) setAlerta({ dias: [], turnos: [] }) })
+    return () => { vivo = false }
+  }, [mustLand, veAlerta])
+
+  const pendientes = useMemo<Pendiente[] | null>(() => {
+    if (!status || !isManager) return null
+    if (veAlerta && !alerta) return null
+    const visibles = new Set(modulosPara(role).map(m => m.id))
+    return calcularPendientes({
+      cashOpen:      status.cashOpen,
+      cashOpenHours: status.cashOpenHours,
+      tipOpen:       status.tipOpen,
+      tipOpenHours:  status.tipOpenHours,
+      pendingCount:  status.pendingCount,
+      invOutStock:   status.invOutStock,
+      invLowStock:   status.invLowStock,
+      sopsCount:     status.sopsCount,
+      esLunes:       new Date(todayCR() + 'T12:00:00').getDay() === 1,
+      diasSinCierre: alerta ? alerta.dias.length : null,
+      turnosViejos:  alerta ? alerta.turnos.length : null,
+    }, visibles)
+  }, [status, alerta, isManager, veAlerta, role])
+
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol
 
   const available = modulosPara(profile.role)
-  const isManager = ['owner', 'manager', 'contador'].includes(profile.role)
-
-  // Build status for each module
-  const getStatus = (id: string) => {
-    if (!status || !isManager) return null
-    switch (id) {
-      case 'tips':
-        if (status.tipPool > 0) {
-          if (status.tipStatus === 'closed') {
-            return <StatusBadge color="ok" text={`${fi(status.tipPool)} · ${status.tipWorkers} emps`} />
-          }
-          if (status.tipOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.tipOpenHours}h`} />
-          return <StatusBadge color="open" text={`● ${status.tipShift} · ${fi(status.tipPool)}`} />
-        }
-        if (status.tipOpen) {
-          if (status.tipOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.tipOpenHours}h`} />
-          return <StatusBadge color="open" text={`● ${status.tipShift} abierto`} />
-        }
-        return null
-      case 'cash':
-        if (status.cajaSaldo !== 0 || status.cajaIngresos > 0) {
-          const saldoColor = status.cajaStatus === 'closed' ? 'ok' : status.cashOpenHours >= 20 ? 'warn' : 'open'
-          const prefix = status.cajaStatus === 'closed' ? '' : '● '
-          return <StatusBadge color={saldoColor} text={`${prefix}Saldo ${status.cajaSaldo >= 0 ? '+' : ''}${fi(status.cajaSaldo)}`} />
-        }
-        if (status.cashOpen) {
-          if (status.cashOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.cashOpenHours}h`} />
-          return <StatusBadge color="open" text={`● ${status.cashCajero || 'Abierto'}`} />
-        }
-        if (status.pendingCount > 0) return <StatusBadge color="warn" text={`${status.pendingCount} pendiente${status.pendingCount > 1 ? 's' : ''}`} />
-        return null
-      case 'dashboard':
-        if (status.ventaNeta > 0) {
-          const metaTxt = status.metaPct !== null ? ` · Meta ${status.metaPct.toFixed(0)}%` : ''
-          const color = status.metaPct !== null ? (status.metaPct >= 100 ? 'ok' : status.metaPct >= 70 ? 'open' : 'warn') : 'ok'
-          return <StatusBadge color={color} text={`${fi(status.ventaNeta)}${metaTxt}`} />
-        }
-        if (status.ventasHoy) return <StatusBadge color="ok" text="Hoy cargado" />
-        return <StatusBadge color="dim" text="Sin datos hoy" />
-      case 'inventario':
-        if (status.invOutStock > 0) return <StatusBadge color="warn" text={`${status.invOutStock} sin stock`} />
-        if (status.invLowStock > 0) return <StatusBadge color="warn" text={`${status.invLowStock} stock bajo`} />
-        if (status.invTotal > 0)    return <StatusBadge color="ok" text="Stock OK" />
-        return <StatusBadge color="dim" text="Sin datos" />
-      case 'sops':
-        if (status.sopsCount > 0) return <StatusBadge color="dim" text={`${status.sopsCount} procedimientos`} />
-        return <StatusBadge color="warn" text="Sin contenido" />
-      case 'resumen':
-        return <StatusBadge color="dim" text={todayCR()} />
-      case 'semana': {
-        const dayN = new Date(todayCR() + 'T12:00:00').getDay()
-        if (dayN === 1) return <StatusBadge color="open" text="Lunes — revisar" />
-        return <StatusBadge color="dim" text="esta semana" />
-      }
-      default:
-        return null
-    }
-  }
 
   return (
     <div className="home-container">
@@ -333,24 +297,34 @@ export default function HomePage() {
       </header>
 
       <main className="home-main">
-        <div className="modules-grid">
-          {available.map(mod => {
-            const badge = getStatus(mod.id)
-            return (
-              <button
-                key={mod.id}
-                className={`module-card ${mod.ready ? 'ready' : ''}`}
-                disabled={!mod.ready}
-                onClick={() => mod.ready && navigate(mod.path)}
-              >
-                <span className="module-kanji">{mod.kanji}</span>
-                <span className="module-label">{mod.label}</span>
-                <span className="module-desc">{mod.description}</span>
-                {badge && <span className="module-status">{badge}</span>}
-                {!mod.ready && <span className="module-badge">Próximamente</span>}
-              </button>
-            )
-          })}
+        <div className="inicio">
+          {isManager && (
+            <ResumenDelDia
+              status={status}
+              pendientes={pendientes}
+              onIr={path => navigate(path)}
+            />
+          )}
+
+          <section className="inicio-seccion" aria-labelledby="inicio-modulos">
+            <h2 id="inicio-modulos" className="inicio-subtitulo">{isManager ? 'Módulos' : 'Tus módulos'}</h2>
+            <div className="modules-grid">
+              {available.map(mod => (
+                <button
+                  key={mod.id}
+                  type="button"
+                  className={`module-card ${mod.ready ? 'ready' : ''}`}
+                  disabled={!mod.ready}
+                  onClick={() => mod.ready && navigate(mod.path)}
+                >
+                  <span className="module-kanji">{mod.kanji}</span>
+                  <span className="module-label">{mod.label}</span>
+                  <span className="module-desc">{mod.description}</span>
+                  {!mod.ready && <span className="module-badge">Próximamente</span>}
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       </main>
 
@@ -358,5 +332,79 @@ export default function HomePage() {
         <span>Satori App v2.0 · Propinas · Caja · Ventas</span>
       </footer>
     </div>
+  )
+}
+
+// ── Frase, 3 números del día y «Para hacer hoy» (owner, manager y contador) ──
+function ResumenDelDia({ status, pendientes, onIr }: {
+  status:     HomeStatus | null
+  pendientes: Pendiente[] | null
+  onIr:       (path: string) => void
+}) {
+  const cargando = !status || !pendientes
+  const tipSub = !status ? '' : status.tipStatus === 'closed'
+    ? `Cerrado · ${status.tipWorkers} ${status.tipWorkers === 1 ? 'persona' : 'personas'}`
+    : status.tipOpen ? `Abierto · ${status.tipShift}` : 'Sin turno hoy'
+  const cajaSub = !status ? '' : status.cajaStatus === 'open' ? 'Turno abierto'
+    : status.cajaStatus === 'closed' ? 'Turno cerrado' : 'Sin turno hoy'
+  const ventaSub = !status ? '' : [
+    status.ventaPax > 0 ? `${status.ventaPax} PAX` : (status.ventasHoy ? '' : 'Sin datos hoy'),
+    status.metaPct !== null ? `meta del mes ${status.metaPct.toFixed(0)} %` : '',
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <>
+      <p className="inicio-frase" aria-live="polite">
+        {cargando ? 'Revisando el día…' : fraseEstado(pendientes)}
+      </p>
+
+      <dl className="inicio-cifras">
+        <div className="inicio-cifra">
+          <dt>Venta de hoy</dt>
+          <dd className="inicio-cifra-valor">{status ? (status.ventaNeta > 0 ? fi(status.ventaNeta) : '—') : '…'}</dd>
+          <dd className="inicio-cifra-sub">{ventaSub}</dd>
+        </div>
+        <div className="inicio-cifra">
+          <dt>Propinas del día</dt>
+          <dd className="inicio-cifra-valor">{status ? (status.tipPool > 0 ? fi(status.tipPool) : '—') : '…'}</dd>
+          <dd className="inicio-cifra-sub">{tipSub}</dd>
+        </div>
+        <div className="inicio-cifra">
+          <dt>Caja de hoy</dt>
+          <dd className="inicio-cifra-valor">
+            {status ? (status.cajaIngresos > 0 || status.cajaSaldo !== 0
+              ? `${status.cajaSaldo > 0 ? '+' : ''}${fi(status.cajaSaldo)}` : '—') : '…'}
+          </dd>
+          <dd className="inicio-cifra-sub">{cajaSub}</dd>
+        </div>
+      </dl>
+
+      <section className="inicio-seccion" aria-labelledby="inicio-hoy">
+        <h2 id="inicio-hoy" className="inicio-subtitulo">Para hacer hoy</h2>
+        {cargando ? (
+          <p className="inicio-vacio">Cargando…</p>
+        ) : pendientes.length === 0 ? (
+          <div className="inicio-en-orden">
+            <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" width={44} height={48} />
+            <div>
+              <p className="inicio-en-orden-titulo">Todo en orden</p>
+              <p className="inicio-vacio">No hay nada pendiente en tus módulos.</p>
+            </div>
+          </div>
+        ) : (
+          <ul className="inicio-pendientes">
+            {pendientes.map(p => (
+              <li key={p.id}>
+                <button type="button" className="inicio-pendiente" onClick={() => onIr(p.path)}>
+                  <span className="inicio-pendiente-texto">{p.texto}</span>
+                  <span className={`pildora pildora-${p.tono}`}>{p.estado}</span>
+                  <span className="inicio-pendiente-ir" aria-hidden="true">›</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
   )
 }

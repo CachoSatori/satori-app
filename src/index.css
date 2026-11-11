@@ -457,6 +457,147 @@ html, body, #root {
   border-radius: var(--radius);
 }
 
+/* ── Inicio con pendientes (rediseño B4) ─────────────────────
+   Frase con la conclusión, 3 cifras separadas por filetes, «Para hacer hoy» con líneas finas y
+   píldoras de estado, y la grilla de módulos. Sin tarjetas ni sombras. */
+.inicio {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.inicio-frase {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 1.9rem;
+  line-height: 1.2;
+  color: var(--c-tinta);
+  margin: 0;
+}
+
+.inicio-cifras {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0;
+  border-top: 1px solid var(--c-oro);
+  border-bottom: 1px solid var(--c-linea);
+}
+.inicio-cifra {
+  padding: 1rem 1rem 1rem 0;
+  min-width: 0;
+}
+.inicio-cifra + .inicio-cifra {
+  padding-left: 1rem;
+  border-left: 1px solid var(--c-linea);
+}
+.inicio-cifra dt {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-gris);
+}
+.inicio-cifra dd { margin: 0; }
+.inicio-cifra-valor {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 1.75rem;
+  line-height: 1.2;
+  margin-top: 0.25rem !important;
+  color: var(--c-tinta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inicio-cifra-sub {
+  font-size: 0.75rem;
+  color: var(--c-gris);
+  font-variant-numeric: tabular-nums;
+  min-height: 1.1em;
+}
+
+.inicio-seccion { display: flex; flex-direction: column; gap: 0.5rem; }
+.inicio-subtitulo {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-gris);
+  margin: 0;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--c-linea);
+}
+
+.inicio-pendientes { list-style: none; margin: 0; padding: 0; }
+.inicio-pendientes li { border-bottom: 1px solid var(--c-linea); }
+.inicio-pendiente {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--c-tinta);
+}
+.inicio-pendiente:hover .inicio-pendiente-texto { text-decoration: underline; text-underline-offset: 3px; }
+.inicio-pendiente:focus-visible { outline: 2px solid var(--c-oro); outline-offset: 2px; }
+.inicio-pendiente-texto { flex: 1; font-size: 0.95rem; line-height: 1.35; }
+.inicio-pendiente-ir { color: var(--c-gris-medio); font-size: 1.25rem; line-height: 1; }
+
+/* Píldoras de estado: laca = malo, oro = pendiente, musgo = bueno. */
+.pildora {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.pildora-malo      { color: var(--c-laca);      background: var(--c-laca-fondo); }
+.pildora-pendiente { color: var(--c-oro-texto); background: var(--c-oro-fondo); }
+.pildora-bueno     { color: var(--c-musgo);     background: var(--c-musgo-fondo); }
+
+.inicio-en-orden {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--c-linea);
+}
+.inicio-en-orden img { width: 44px; height: auto; flex-shrink: 0; }
+.inicio-en-orden-titulo {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 1.3rem;
+  color: var(--c-musgo);
+  margin: 0;
+}
+.inicio-vacio { font-size: 0.85rem; color: var(--c-gris); margin: 0; }
+
+.inicio .modules-grid { max-width: none; }
+.inicio .module-card:not(:disabled):hover { transform: none; box-shadow: none; }
+
+@media (max-width: 480px) {
+  .home-main { padding: 1.5rem 1rem; }
+  .inicio { gap: 1.5rem; }
+  .inicio-frase { font-size: 1.6rem; }
+  .inicio-cifras { grid-template-columns: 1fr; }
+  .inicio-cifra { padding: 0.75rem 0; display: grid; grid-template-columns: 1fr auto; align-items: baseline; column-gap: 0.75rem; }
+  .inicio-cifra + .inicio-cifra { padding-left: 0; border-left: none; border-top: 1px solid var(--c-linea); }
+  .inicio-cifra-valor { grid-column: 2; grid-row: 1 / span 2; font-size: 1.5rem; margin-top: 0 !important; text-align: right; }
+  .inicio-cifra-sub { grid-column: 1; }
+}
+
 /* ── App Footer ──────────────────────────────────────────── */
 
 .app-footer {

@@ -4977,8 +4977,10 @@ begin
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura,
                                numero_pedido, pedido_abierto_en, total_crc, cxc_crc) values
     ('993973', now() - interval '20 minutes', 'R', 'salon', 'cajero', true, 'ok', '71', '71', '9973', v_ab, 20000, 0);
-  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"993973"}'::jsonb);
+  begin   -- (10-nov) atrapado: con una mutación (S0b) la tarjeta falla y los casos caen, sin abortar el tramo
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"993973"}'::jsonb);
+  exception when others then null; end;
   perform pg_temp.yo();
   select id into v_mv from club_movimientos where miembro_id = v_m and pos_ref->>'numero_factura' = '993973';
   update pos_ndf_tickets set estado = 'X' where numero_factura = '993973';
@@ -5066,8 +5068,11 @@ do $$
 declare v_m uuid; v_op uuid := gen_random_uuid(); e text;
 begin
   insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Grok 159', 'app') returning id into v_m;
+  begin   -- (10-nov) atrapado, como en la 92
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_m, 2, 'FX159', v_op);
+  exception when others then null; end;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  perform public.club_tarjeta_manual(v_m, 2, 'FX159', v_op);
   begin
     perform public.club_tarjeta_manual(v_m, 5, 'FX159', v_op); e := 'ok';
   exception when others then e := sqlerrm; end;

@@ -24,12 +24,12 @@
   - un test cubre la pestaña por defecto de cada rol y el `?tab=`;
   - guía 6.4 actualizada.
 
-## A3 · «Borrar TODO el día» a «Más acciones» · `espera firma #113` (revisada 11-nov 12:45: pasa todo) · **FIRMA** (archivo de cierre)
+## A3 · «Borrar TODO el día» a «Más acciones» · `hecha` (#113, firmada por Ismael y mergeada el 11-nov 12:55) · **FIRMA** (archivo de cierre)
 - En `CashCierre.tsx`, sacar el botón de la barra superior, donde está pegado a la fecha. Pasa a un bloque «Más acciones» al pie del cierre, con estilo de peligro.
 - **Misma función, misma vista previa y mismos permisos.** Solo se mueve el JSX: no se toca ninguna función.
 - **Aceptación:** el diff de `CashCierre.tsx` es solo de JSX; los tests de CashCierre (borrarDia, recontar, etc.) pasan.
 - El PR lleva en la descripción qué va a ver el encargado.
 
-## A4 · Medir Ventas · `lista` (después de A3 en el orden)
+## A4 · Medir Ventas · `lista`
 - **Medición sin login:** tamaño de los chunks por vista y consultas que dispara cada vista al abrir.
 - **Reporte:** si alguna vista hace más de 3 consultas pesadas al abrir, proponer el arreglo en el reporte, sin aplicarlo.

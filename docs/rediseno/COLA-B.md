@@ -20,7 +20,7 @@
 - **No se toca:** ningún componente; solo CSS.
 - **Reporte:** capturas de la pantalla de login y de la build local en 390 px y 1280 px.
 
-## B3 · Shell: menú lateral y barra inferior · `en revisión #114` (revisada 11-nov 12:45: pasa todo; espera validación visual de Ismael en la vista previa) · validación visual
+## B3 · Shell: menú lateral y barra inferior · `hecha` (#114, validada por Ismael y mergeada el 11-nov 12:55) · validación visual
 - **Componentes:** `src/shared/layout/AppShell.tsx` (nuevo) envuelve las rutas privadas.
 - **El menú:**
   - sale de `MODULES`, con un campo `grupo` agregado;
@@ -32,7 +32,7 @@
 - **Las rutas, `PrivateRoute` y el aterrizaje del cajero no cambian.**
 - **Aceptación:** un test por rol confirma que el menú muestra exactamente los módulos que hoy muestra la grilla del Inicio.
 
-## B4 · Inicio con pendientes · `pendiente` (después de B3) · validación visual
+## B4 · Inicio con pendientes · `lista` · validación visual
 - **Qué muestra la grilla de Inicio:**
   1. una frase de estado;
   2. «Para hacer hoy», con los mismos datos que hoy alimentan los badges, más los días sin cierre de `diasSinCierre`;

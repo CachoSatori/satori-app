@@ -7,8 +7,8 @@
 
 | Sesión | Cuándo (hora CR) | Qué hace |
 |---|---|---|
-| **Línea A** (módulos) | 01:10 · 04:10 · 06:10 · 16:10 | Toma la primera tarea `lista` de `COLA-A.md`, la hace en su rama, abre el PR y deja su reporte. |
-| **Línea B** (shell y estética) | 02:50 · 04:50 · 06:50 · 16:50 | Lo mismo con `COLA-B.md`. |
+| **Línea A** (módulos) | 01:10 · 10:10 · 16:10 | Toma la primera tarea `lista` de `COLA-A.md`, la hace en su rama, abre el PR y deja su reporte. |
+| **Línea B** (shell y estética) | 02:50 · 10:50 · 16:50 | Lo mismo con `COLA-B.md`. |
 | **Revisión nocturna** (silenciosa) | 00:20 · 03:20 | Lo mismo que la revisión, pero no avisa: lo que necesita a Ismael queda anotado para la de 05:40. |
 | **Revisión** | 05:40 · 15:40 | Revisa los PR y reportes nuevos, mergea a `staging` lo que pasa, marca la tarea siguiente y avisa a Ismael **solo** si hay una decisión o un riesgo real. |
 | **Ismael** | Cuando lo avisa la revisión | Firma lo que toca un archivo de cierre, valida lo visual en staging y autoriza cada pase a `main`. **Decide solo por el chat del asesor**, que lo anota en `DECISIONES.md`. |

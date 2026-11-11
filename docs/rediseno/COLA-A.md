@@ -24,7 +24,7 @@
   - un test cubre la pestaña por defecto de cada rol y el `?tab=`;
   - guía 6.4 actualizada.
 
-## A3 · «Borrar TODO el día» a «Más acciones» · `pendiente` · **FIRMA** (archivo de cierre)
+## A3 · «Borrar TODO el día» a «Más acciones» · `lista` (después de A2 en el orden) · **FIRMA** (archivo de cierre)
 - En `CashCierre.tsx`, sacar el botón de la barra superior, donde está pegado a la fecha. Pasa a un bloque «Más acciones» al pie del cierre, con estilo de peligro.
 - **Misma función, misma vista previa y mismos permisos.** Solo se mueve el JSX: no se toca ninguna función.
 - **Aceptación:** el diff de `CashCierre.tsx` es solo de JSX; los tests de CashCierre (borrarDia, recontar, etc.) pasan.

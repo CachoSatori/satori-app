@@ -253,6 +253,7 @@ Después, sin `--antes`:
 | `gate61.sh` staging contra staging | **0** diferencias (3.765 hechos) |
 | Migrador (`test_migrar_firestore`, `test_saldos_papel`, `test_sql_g56`; ensayos en staging con ROLLBACK) | **132** (1 omitida: la de prod) |
 | Mutaciones 162 y 163 | caen **4** y **1** |
+| Las 14 mutaciones de `mutaciones_r7.json` (`mutar_bateria.py`, Grok 161) | **14 muerden · 0 con problema** (S0b y 160 caen 11 cada una: las tarjetas de la puesta a punto de la 92 y la 94 ahora se atrapan) |
 
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (§5.5).

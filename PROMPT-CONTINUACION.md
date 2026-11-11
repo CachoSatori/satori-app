@@ -1,15 +1,34 @@
-# Continuación — backlog priorizado (al día: 2026-11-07)
+# Continuación — backlog priorizado (al día: 2026-11-11)
 
-> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-06.md](docs/handoffs/HANDOFF-2026-11-06.md)** (06/11). Lo de abajo es el backlog detallado.
+> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md)** (11/11). El handoff
+> anterior es el del [06/11](docs/handoffs/HANDOFF-2026-11-06.md). Lo de abajo es el backlog detallado.
 
-> **Foto al 07/11:** `main` = **`6bcfafb`** + el merge de Prom/PAX (PROD; merges del 06/11: #44 turno como antes,
-> #42/#46 SEC-02, #43 alerta de días sin cierre, #48 handoff, #51 `.sql` de la 074, #52 `.sql` de la 076/077, #49 SoP,
-> #53–#57 docs de SoP, mig 079, guías del área 6 y limpieza de datos reales; 07/11: **Prom/PAX explicado**) ·
-> `staging` = **`fb29872`** (rama de producción de Cloudflare: `satori-staging.pages.dev`). **`FUENTE_VENTAS = 'pos'` en
-> prod desde el 30/10.** Migraciones en prod hasta la **080** (ledger **55**: 076/077/079 de SoP y 080 de Prom/PAX).
-> Staging tiene además 055–061, la **070** y la **075** (Club Satori F1a, reservada; ⚠️ queda por debajo de la 080, hay que
-> renumerarla antes de prod). **Próximo número libre: `081`.** Edge Functions: `alta-empleado` v1 y `monthly-report` v10
-> en prod (`verify_jwt` on, desplegadas a mano). Estado completo y reglas → [ESTADO.md](ESTADO.md).
+> **Foto al 11/11:** `main` = **`66b3b85`** (PROD; merges de docs #96 y #108 sobre `c41e18b`). **Ledger de prod: 65 · 095.**
+> Agente del PoS en prod: **`5da233a`** (desde el 10/11 23:37:18 -06:00). Staging: ledger **91 · 151**. **El Club Satori
+> todavía no está en prod:** pase el **jue 12/11** (#59 @ `66c950d`, paquete #93 @ `d6c117b`). **Próximo número libre:**
+> caja **096**; Club y lo que quede atrás, bloque de pase **152+**. Estado completo y reglas → [ESTADO.md](ESTADO.md).
+
+## ▶️ Lo próximo (en este orden)
+1. **Cerrar el #109** (agente nuevo): lecturas 5.2/5.4, logs del Edge y el cierre de caja del 11/11; después, el OK del
+   dueño para mergear.
+2. **Pase del Club, jue 12/11 por la mañana:** merge del #59 → Branching aplica la 150 y la 151 (65 · 095 → 67 · 151);
+   configuración del local; sha256 de la `CLUB_WEB_KEY`; carga única firmada con `aplicar-firmado`.
+3. **Prueba interna con el personal, jue 12/11 por la tarde**, con Santa Teresa encendido sin anunciarlo.
+4. **Apertura a clientes: vie 13 o lun 16**, después de revisar las excepciones de la prueba.
+5. **Google Wallet:** semana del 23/11 (#99).
+6. **Bloque 152+:** la 087, la 088 y la MAINTAIN de `authenticated` en las tablas de caja. Después del Club.
+
+## ✅ Hecho 10–11/11 (detalle en el [handoff del 11/11](docs/handoffs/HANDOFF-2026-11-11.md) y en el §9 de cada PASE)
+- **Pases a prod del 10/11**, todos cerrados sin vuelta atrás: **085** (#80), **089** (#90), **090** (#97), **091** (#103)
+  y la tanda **092–095** (#107, un solo merge). Ledger de prod 57 → 65.
+- **Agente nuevo del PoS en prod** (`4d3513a` → `5da233a`), al segundo intento. Cierre abierto en el #109.
+- **Cloudflare del Club (11/11):** Worker `satori-club-api` desplegado a mano, con sus variables y secretos cargados.
+- **Carga única del Club (G-56):** firmada por el dueño el 11/11; ensayo en staging OK. Se aplica el jueves.
+- **Staging:** de la 091 a la 095 aplicadas el 10/11; la sesión del Club renumeró la 075 a 150 y aplicó la 151.
+
+---
+
+> **De la foto anterior (07/11), como historia** (la foto completa está en `git show 66b3b85:PROMPT-CONTINUACION.md`):
 >
 > ✅ **Prom/PAX explicado en prod (07/11)** ([SPEC](docs/SPEC-prompax-explicado.md) v2.3, RPC = mig 080). Próximo: los
 > huecos de permisos de Caja y Propinas (handoff de SoP, §4.1).

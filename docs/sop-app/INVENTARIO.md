@@ -27,7 +27,7 @@ quedan para ellos.
 | Acceso / Login | `/login` | Público. Con sesión y perfil, va a `/` | Entrar, salir, «Cuenta deshabilitada» → «Reintentar» | Sin «Crear cuenta». Un solo mensaje de error: «Email o contraseña incorrectos» |
 | Primer ingreso | pantalla «Elegí tu contraseña» | Cuentas nuevas creadas desde Admin | Cambiar la contraseña temporal | Mínimo 8 caracteres, distinta de la temporal |
 | Registro de clientes | `/registro` | Público | Ninguna, está apagado | Muestra «El registro de clientes vuelve pronto con el Club Satori» |
-| Inicio | `/` | Todo usuario activo; cada tarjeta se filtra por rol (ver 6.1) | Navegar; estado en vivo para owner, manager y contador | El cajero entra directo a `/caja`. Una ruta sin permiso vuelve a `/` |
+| Inicio | `/` | Todo usuario activo; cada tarjeta se filtra por rol (ver 6.1) | Navegar; estado en vivo para owner, manager y contador | El cajero entra directo a `/caja`. Una ruta sin permiso vuelve a `/`. La lista de tarjetas vive en `src/shared/layout/modulos.ts` |
 | Caja | `/caja` | owner, manager, cajero: 6 pestañas («Caja Diaria», «🔒 Cierre del día», «Movimientos», «Proveedores», «Pendientes», «Resumen»). contador: las 4 últimas. La alerta de días sin cierre, solo owner y manager | Abrir y cerrar la Caja Diaria, pagos, gastos e ingresos (foto o manual), propinas, «Dar visto», cierre del día en dos fases con «↺ Recontar», deshacer, «🗑 Borrar TODO el día», saldo a favor, resumen | Una Caja Diaria por día. Cierre de turno: cuadra con menos de ₡500 de diferencia. Cierre del día: tolerancia ₡500 / US$1, un solo reconteo, motivo obligatorio fuera de tolerancia, «Ajuste de cierre» automático. Ingresos de más de ₡100.000 piden aprobación de manager. Cola offline solo para movimientos |
 | Propinas | `/propinas` | owner, manager y cajero operan; contador solo lee. «Quincenal», «Estadísticas», «Cocina», «✏ Editar» y «🗑 Eliminar», solo owner y manager | Abrir turno (fecha, AM/PM, tipo de cambio), cargar efectivo y electrónico, quién trabajó y sus horas, coberturas, cerrar, historial, quincenal (CSV e impresión), cocina semanal | Puntos = horas × puntos por hora del rol. Pago redondeado al colón. El tipo de cambio queda fijo al abrir. Solo el electrónico pasa a «Propinas por pagar» en Caja. Q1 = días 1 a 15, Q2 = 16 a fin de mes |
 | Mi Rendimiento | `/mi-rendimiento` | salonero, barman, barback, runner, cocina y manager (lo propio); owner además «Ver como», solo lectura | Pestañas «心 Resumen», «📅 Por día», «🍱 Productos», «🗓️ Semana», «¥ Propinas», «🏆 Competencias» | `FUENTE_VENTAS='pos'` (el PoS por encima del Excel). Todo es de solo lectura |
@@ -54,6 +54,7 @@ quedan para ellos.
 | Salarios | `/salarios` | owner, manager | Nómina y BioTime. Bloqueos humanos pendientes |
 | Admin › «🍣 PoS» | `/admin` (pestaña) | owner | Catálogo y productos del PoS propio |
 | Club Satori | `/club` | owner, manager, cajero (el cajero solo «Escanear»; «Locales» solo owner) | Guía 6.13 escrita contra la rama del PR #59; pasa con el pase del Club |
+| Menú global (rediseño B3) | todas las pantallas privadas | Quien tiene 4 tarjetas o más en «Inicio» | Lateral desde 1024 px; barra inferior de hasta 5 botones con «Más». Mismas tarjetas que «Inicio», agrupadas. Ver 6.1, Tarea 3 |
 
 ## Permisos
 

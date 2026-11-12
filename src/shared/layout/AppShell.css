@@ -35,10 +35,9 @@
 .shell-grupo { margin-top: 0.85rem; }
 .shell-grupo-titulo {
   padding: 0 1.25rem 0.3rem;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--c-gris-claro);
 }
 
@@ -176,6 +175,15 @@
   font-size: 1rem;
   color: var(--c-gris);
   cursor: pointer;
+}
+
+/* ── Aviso de sin conexión (B6, auditoría 204) ──────────── */
+/* OfflineBanner va fijo abajo con estilos en línea; con la barra inferior visible se apoya
+   encima de ella. El !important le gana al estilo en línea sin tocar el componente. */
+@media (max-width: 1023px) {
+  .offline-sobre-barra > div {
+    bottom: calc(var(--shell-barra-alto) + env(safe-area-inset-bottom, 0px)) !important;
+  }
 }
 
 /* ── Computadora: lateral, sin barra ────────────────────── */

@@ -52,7 +52,7 @@ quedan para ellos.
 | KDS | `/kds` | owner, manager, cocina, barman | Pantalla de cocina y barra |
 | Salarios | `/salarios` | owner, manager | Nómina y BioTime. Bloqueos humanos pendientes |
 | Admin › «🍣 PoS» | `/admin` (pestaña) | owner | Catálogo y productos del PoS propio |
-| Menú global (rediseño B3) | todas las pantallas privadas | Quien tiene 4 tarjetas o más en «Inicio» | Lateral desde 1024 px; barra inferior de hasta 5 botones con «Más». Mismas tarjetas que «Inicio», agrupadas. Ver 6.1, Tarea 3 |
+| Menú global (rediseño B3) | todas las pantallas privadas | Quien tiene 4 tarjetas o más en «Inicio» | Lateral desde 1024 px; barra inferior de hasta 5 botones con «Más» (hoja modal; Escape la cierra, rediseño B6). Mismas tarjetas que «Inicio», agrupadas. Ver 6.1, Tarea 3 |
 
 ## Permisos
 

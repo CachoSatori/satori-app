@@ -71,6 +71,29 @@ describe('AppShell', () => {
     expect(within(hoja).queryByRole('link', { name: /Admin/ })).toBeNull()
   })
 
+  it('hoja «Más»: modal, foco en «Cerrar», Escape la cierra y el foco vuelve a «Más»', () => {
+    role = 'cajero'
+    montar('/caja')
+    const mas = within(barra()).getByRole('button', { name: /Más/ })
+    fireEvent.click(mas)
+    const hoja = screen.getByRole('dialog', { name: 'Todos los módulos' })
+    expect(hoja.getAttribute('aria-modal')).toBe('true')
+    expect(document.activeElement).toBe(within(hoja).getByRole('button', { name: 'Cerrar' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(mas)
+  })
+
+  it('hoja «Más»: el botón ✕ también devuelve el foco a «Más»', () => {
+    role = 'cajero'
+    montar('/caja')
+    const mas = within(barra()).getByRole('button', { name: /Más/ })
+    fireEvent.click(mas)
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(mas)
+  })
+
   it.each(['runner', 'barback', 'cocina', 'proveedor'])('%s (3 módulos o menos): sin menú', r => {
     role = r
     montar('/')

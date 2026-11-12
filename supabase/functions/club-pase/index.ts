@@ -22,6 +22,9 @@
 //   GOOGLE_WALLET_ISSUER_ID  número del emisor (Google Pay & Wallet Console)
 //   GOOGLE_WALLET_SA_KEY     JSON de la cuenta de servicio con acceso al emisor (una clave por proyecto)
 //   CLUB_WEB_ORIGIN          el dominio del Club = club_config_global.club_url (sin él, 503)
+//   WALLET_ENTORNO           «stg» en staging, «prod» en prod (12-nov): staging y prod comparten el emisor de Google.
+//                            stg → clase …club-satori-stg y objetos …club-stg-<miembro>; prod → sin sufijo.
+//                            Falta o es otro valor → 503 (nunca cae en prod).
 //   WALLET_DISENO            (opcional) {"colorFondo":"#0d0d0d","logoUrl":"https://…","heroUrl":"https://…"}
 //   CLUB_PASE_SYNC_KEY       NO en el piloto (decisión del dueño, 12-nov): sin él, /sync responde 503
 // Sin cualquiera de los obligatorios: 503 a todo (falla cerrada), sin tocar la base.
@@ -67,6 +70,7 @@ Deno.serve(async (req) => {
       CLUB_WEB_ORIGIN: Deno.env.get('CLUB_WEB_ORIGIN') ?? undefined,
       WALLET_DISENO: Deno.env.get('WALLET_DISENO') ?? undefined,
       CLUB_PASE_SYNC_KEY: Deno.env.get('CLUB_PASE_SYNC_KEY') ?? undefined,
+      WALLET_ENTORNO: Deno.env.get('WALLET_ENTORNO') ?? undefined,
     }
     if (ruta === 'sync' || ruta === 'actualizar') return await manejarSync(req, ruta, env, rpc, fetchGoogle)
     return await manejarPase(req, ruta, env, rpc, fetchGoogle)

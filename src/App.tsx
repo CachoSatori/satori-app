@@ -54,7 +54,7 @@ function PendingApproval() {
           <button className="login-btn" style={{ maxWidth: 160 }} onClick={() => window.location.reload()}>
             Reintentar
           </button>
-          <button className="login-btn" style={{ maxWidth: 160, background: 'var(--gray-pale)' }} onClick={() => signOut()}>
+          <button className="login-btn secundario" style={{ maxWidth: 160 }} onClick={() => signOut()}>
             Cerrar sesión
           </button>
         </div>
@@ -139,6 +139,17 @@ function FloatingHomeBtn() {
   )
 }
 
+// Con la barra inferior del menú (celular), el aviso de sin conexión se apoya encima de ella en vez
+// de taparla (B6, auditoría 204). Solo cambia la posición: el aviso es el mismo.
+function OfflineBannerSobreMenu() {
+  const conMenu = useMenuVisible()
+  return (
+    <div className={conMenu ? 'offline-sobre-barra' : undefined} style={{ display: 'contents' }}>
+      <OfflineBanner />
+    </div>
+  )
+}
+
 // ── App ────────────────────────────────────────────────────────
 function AppRoutes() {
   return (
@@ -204,7 +215,7 @@ export default function App() {
               </AppShell>
             </ErrorBoundary>
             <FloatingHomeBtn />
-            <OfflineBanner />
+            <OfflineBannerSobreMenu />
           </BrowserRouter>
         </DeletionNoteProvider>
       </ManagerOverrideProvider>

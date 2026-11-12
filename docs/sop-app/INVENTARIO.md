@@ -54,7 +54,7 @@ quedan para ellos.
 | Salarios | `/salarios` | owner, manager | Nómina y BioTime. Bloqueos humanos pendientes |
 | Admin › «🍣 PoS» | `/admin` (pestaña) | owner | Catálogo y productos del PoS propio |
 | Club Satori | `/club` | owner, manager, cajero (el cajero solo «Escanear»; «Locales» solo owner) | Guía 6.13 escrita contra la rama del PR #59; pasa con el pase del Club |
-| Menú global (rediseño B3) | todas las pantallas privadas | Quien tiene 4 tarjetas o más en «Inicio» | Lateral desde 1024 px; barra inferior de hasta 5 botones con «Más». Mismas tarjetas que «Inicio», agrupadas. Ver 6.1, Tarea 3 |
+| Menú global (rediseño B3) | todas las pantallas privadas | Quien tiene 4 tarjetas o más en «Inicio» | Lateral desde 1024 px; barra inferior de hasta 5 botones con «Más» (hoja modal; Escape la cierra, rediseño B6). Mismas tarjetas que «Inicio», agrupadas. Ver 6.1, Tarea 3 |
 
 ## Permisos
 

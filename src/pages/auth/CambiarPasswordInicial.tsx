@@ -66,7 +66,7 @@ export default function CambiarPasswordInicial() {
           </div>
           {error && <p className="login-error" role="alert">{error}</p>}
           <button type="submit" className="login-btn" disabled={saving}>{saving ? 'Guardando…' : 'Guardar y entrar'}</button>
-          <button type="button" className="login-btn" style={{ background: 'var(--gray-pale)', marginTop: '0.5rem' }}
+          <button type="button" className="login-btn secundario" style={{ marginTop: '0.5rem' }}
             onClick={() => signOut()} disabled={saving}>Cerrar sesión</button>
         </form>
       </div>

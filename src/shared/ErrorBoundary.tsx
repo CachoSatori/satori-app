@@ -36,7 +36,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             <button className="login-btn" style={{ maxWidth: 160 }} onClick={() => window.location.reload()}>
               Recargar
             </button>
-            <button className="login-btn" style={{ maxWidth: 160, background: 'var(--gray-pale)' }}
+            <button className="login-btn secundario" style={{ maxWidth: 160 }}
               onClick={() => { window.location.href = import.meta.env.BASE_URL }}>
               Ir al inicio
             </button>

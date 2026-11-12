@@ -52,7 +52,7 @@
   - Ajustar los tests que fijan el formato viejo; no cambiar ningún otro valor esperado.
 - **Aceptación:** diff de `fi()` solo de formato; tests verdes; guía 6.6 si cambia algo visible en Admin.
 
-## A7 · Ventas con estilo carta · `lista` · validación visual (se valida junto con B6; los estilos en línea no dependen del CSS de B6)
+## A7 · Ventas con estilo carta · `en revisión #121` · validación visual (se valida junto con B6; los estilos en línea no dependen del CSS de B6)
 - **Auditoría 201/202/203:**
   - sub-pestaña activa en `var(--c-oro-texto)` en vez de `ENTRADA_COLOR` (`VentasModule.tsx`); sacar los oros viejos `#c8a050`/`#c8a96e`;
   - `aria-controls` en cada pestaña y `role="tabpanel"` en el contenido; flechas izquierda/derecha para moverse;

@@ -1,20 +1,20 @@
 // Rediseño B3: el menú global muestra exactamente los módulos que hoy muestra la grilla del Inicio.
-// La lista esperada por rol es la grilla de `HomePage.tsx` antes del menú (staging a0e959b),
+// La lista esperada por rol es la grilla de `HomePage.tsx` de `main` antes del pase (17a9efd, con el Club),
 // escrita a mano a propósito: si alguien cambia un `roles`, este test lo marca.
 import { describe, it, expect } from 'vitest'
 import { MODULES, modulosPara, menuPara, barraPara, llevaMenu, MAX_BOTONES_BARRA } from './modulos'
 import { entradasVisibles } from '../../modules/ventas/ventasTabs'
 
 const GRILLA_DE_HOY: Record<string, string[]> = {
-  owner:     ['resumen', 'semana', 'reporte-mensual', 'mi-rendimiento', 'cash', 'comandero', 'kds', 'tips', 'dashboard', 'inventario', 'clientes', 'finanzas', 'salarios', 'sops', 'admin', 'prueba'],
-  manager:   ['resumen', 'semana', 'reporte-mensual', 'mi-rendimiento', 'cash', 'comandero', 'kds', 'tips', 'dashboard', 'inventario', 'clientes', 'finanzas', 'salarios', 'sops'],
+  owner:     ['resumen', 'semana', 'reporte-mensual', 'mi-rendimiento', 'cash', 'tips', 'dashboard', 'inventario', 'clientes', 'club', 'finanzas', 'sops', 'admin', 'prueba'],
+  manager:   ['resumen', 'semana', 'reporte-mensual', 'mi-rendimiento', 'cash', 'tips', 'dashboard', 'inventario', 'clientes', 'club', 'finanzas', 'sops'],
   contador:  ['resumen', 'semana', 'reporte-mensual', 'cash', 'tips', 'dashboard', 'inventario', 'finanzas'],
-  cajero:    ['cash', 'comandero', 'tips', 'clientes', 'sops'],
-  salonero:  ['mi-turno', 'mi-rendimiento', 'comandero', 'sops'],
-  barman:    ['mi-turno', 'mi-rendimiento', 'comandero', 'kds', 'sops'],
+  cajero:    ['cash', 'tips', 'clientes', 'club', 'sops'],
+  salonero:  ['mi-rendimiento', 'sops'],
+  barman:    ['mi-rendimiento', 'sops'],
   barback:   ['mi-rendimiento', 'sops'],
   runner:    ['mi-rendimiento', 'sops'],
-  cocina:    ['mi-rendimiento', 'kds', 'sops'],
+  cocina:    ['mi-rendimiento', 'sops'],
   proveedor: [],
 }
 
@@ -53,7 +53,7 @@ describe('B3 · quién lleva menú', () => {
     expect(llevaMenu('runner')).toBe(false)
     expect(llevaMenu('cocina')).toBe(false)
     expect(llevaMenu('proveedor')).toBe(false)
-    expect(llevaMenu('salonero')).toBe(true)
+    expect(llevaMenu('salonero')).toBe(false)   // en main el salonero tiene 2 módulos (sin Mi Turno ni Comandero)
   })
 })
 
@@ -79,15 +79,13 @@ describe('B3 · Ventas en el menú', () => {
     expect(item.to).toBe('/ventas?tab=paridad')
   })
 
-  it('la barra inferior del cajero: Caja, Propinas, Comandero y «Más»', () => {
+  it('la barra inferior del cajero: Caja, Propinas, Club y «Más»', () => {
     const b = barraPara('cajero')
-    expect(b.directos.map(m => m.id)).toEqual(['cash', 'tips', 'comandero'])
+    expect(b.directos.map(m => m.id)).toEqual(['cash', 'tips', 'club'])
     expect(b.conMas).toBe(true)
   })
 
-  it('el salonero entra entero en la barra, sin «Más»', () => {
-    const b = barraPara('salonero')
-    expect(b.directos).toHaveLength(4)
-    expect(b.conMas).toBe(false)
+  it('salonero, barman y cocina no llevan menú (2 módulos)', () => {
+    for (const r of ['salonero', 'barman', 'cocina']) expect(llevaMenu(r)).toBe(false)
   })
 })

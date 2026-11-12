@@ -57,12 +57,12 @@ describe('AppShell', () => {
     expect(hist.getAttribute('aria-current')).toBe('page')
   })
 
-  it('cajero: barra con Inicio, Caja, Propinas, Comandero y «Más»; «Más» abre el resto', () => {
+  it('cajero: barra con Inicio, Caja, Propinas, Club y «Más»; «Más» abre el resto', () => {
     role = 'cajero'
     montar('/caja')
     const b = barra()
     expect(within(b).getAllByRole('link').map(a => a.textContent)).toEqual(
-      ['家Inicio', '金Caja', '心Propinas', '卓Comandero'],
+      ['家Inicio', '金Caja', '心Propinas', '縁Club'],
     )
     fireEvent.click(within(b).getByRole('button', { name: /Más/ }))
     const hoja = screen.getByRole('dialog', { name: 'Todos los módulos' })

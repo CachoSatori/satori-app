@@ -325,8 +325,9 @@ export default function HomePage() {
       diasSinCierre: alertaOk ? alertaOk.dias.length : null,
       turnosViejos:  alertaOk ? alertaOk.turnos.length : null,
       sinComprobar,
+      clubExcepciones: gestionaClub ? clubAbiertas : null,
     }, visibles)
-  }, [status, statusFallo, alerta, isManager, role])
+  }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas])
 
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol

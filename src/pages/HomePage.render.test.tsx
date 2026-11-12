@@ -111,7 +111,7 @@ describe('Inicio (B4)', () => {
     expect(screen.getByText('Tus módulos')).toBeTruthy()
     expect(screen.queryByText('Para hacer hoy')).toBeNull()
     expect(screen.queryByText('Venta de hoy')).toBeNull()
-    expect(screen.getByText('Mi Turno')).toBeTruthy()
+    expect(screen.getByText('Mi Rendimiento')).toBeTruthy()
   })
 })
 

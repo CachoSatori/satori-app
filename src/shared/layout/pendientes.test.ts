@@ -106,3 +106,19 @@ describe('B5 · lecturas que fallaron: «sin comprobar», nunca «Todo en orden�
     expect(ids({ sinComprobar: ['procedimientos'] }, 'contador')).toEqual([])
   })
 })
+
+describe('pendientes · Club (pase a producción)', () => {
+  const base = {
+    cashOpen: false, cashOpenHours: 0, tipOpen: false, tipOpenHours: 0, pendingCount: 0,
+    invOutStock: 0, invLowStock: 0, sopsCount: 3, esLunes: false, diasSinCierre: 0, turnosViejos: 0,
+  }
+  it('las excepciones del Club salen como pendiente si el rol ve el Club', () => {
+    const p = calcularPendientes({ ...base, clubExcepciones: 2 }, new Set(['club', 'cash']))
+    expect(p.map(x => [x.id, x.estado])).toEqual([['club-excepciones', '2 excepciones']])
+  })
+  it('sin excepciones, o sin el Club visible, no sale', () => {
+    expect(calcularPendientes({ ...base, clubExcepciones: 0 }, new Set(['club']))).toEqual([])
+    expect(calcularPendientes({ ...base, clubExcepciones: 3 }, new Set(['cash']))).toEqual([])
+    expect(calcularPendientes({ ...base, clubExcepciones: null }, new Set(['club']))).toEqual([])
+  })
+})

@@ -58,6 +58,8 @@ export interface SenalesInicio {
   turnosViejos:   number | null
   /** Señales cuya lectura falló (B5): no se calculan y se avisa «sin comprobar». */
   sinComprobar?:  readonly Senal[]
+  /** Excepciones del puente del Club abiertas (owner y manager; antes era el aviso de la tarjeta). */
+  clubExcepciones?: number | null
 }
 
 /** Desde cuántas horas un turno abierto se marca (el mismo umbral que tenían las tarjetas). */
@@ -116,6 +118,13 @@ export function calcularPendientes(s: SenalesInicio, modulosVisibles: ReadonlySe
     add({ id: 'stock-bajo', modulo: 'inventario', path: '/inventario', tono: 'pendiente',
       texto: 'Pedir lo que tiene stock bajo',
       estado: `${s.invLowStock} stock bajo` })
+  }
+
+  // ── Club: excepciones abiertas (el mismo aviso que antes iba en la tarjeta del Club) ──
+  if (s.clubExcepciones && s.clubExcepciones > 0) {
+    add({ id: 'club-excepciones', modulo: 'club', path: '/club', tono: 'pendiente',
+      texto: 'Revisar las excepciones del Club',
+      estado: plural(s.clubExcepciones, 'excepción', 'excepciones') })
   }
 
   // ── Semana (los lunes) ──

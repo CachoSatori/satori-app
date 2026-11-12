@@ -1,5 +1,8 @@
 // Módulos de la app: fuente única de la grilla de «Inicio» y del menú global (rediseño B3).
 //
+// VERSIÓN DE PRODUCCIÓN (pase del rediseño): la lista es la grilla de `main` (con el Club), roles idénticos.
+// Mi Turno, Comandero, KDS y Salarios no tienen ruta en `main` y no figuran (auditoría 195/200).
+//
 // Solo pantalla: los `roles` de cada módulo son los MISMOS que tenía la grilla del Inicio antes
 // del menú. Este arreglo NO es un permiso: la defensa por URL sigue en `PrivateRoute` (App.tsx).
 // Si se cambia un `roles` acá, se cambia también lo que ve la grilla, y el test lo marca.
@@ -39,11 +42,6 @@ export const MODULES: Module[] = [
     roles: ['owner', 'manager', 'contador'], grupo: 'gestion',
   },
   {
-    id: 'mi-turno', path: '/mi-turno', label: 'Mi Turno', kanji: '番',
-    description: 'Mis ventas · propinas · cierre', ready: true,
-    roles: ['salonero', 'barman'], grupo: 'equipo',
-  },
-  {
     id: 'mi-rendimiento', path: '/mi-rendimiento', label: 'Mi Rendimiento', kanji: '人',
     description: 'Mis stats del turno', ready: true,
     // manager: SOLO su propio rendimiento · owner: además «Ver como» a otro empleado (solo lectura).
@@ -55,16 +53,6 @@ export const MODULES: Module[] = [
     id: 'cash', path: '/caja', label: 'Caja', kanji: '金',
     description: 'Turnos y movimientos', ready: true,
     roles: ['owner', 'manager', 'cajero', 'contador'], grupo: 'operacion',
-  },
-  {
-    id: 'comandero', path: '/comandero', label: 'Comandero', kanji: '卓',
-    description: 'Mesas y pedidos (PoS)', ready: true,
-    roles: ['owner', 'manager', 'salonero', 'barman', 'cajero'], grupo: 'operacion',
-  },
-  {
-    id: 'kds', path: '/kds', label: 'KDS', kanji: '厨',
-    description: 'Pantalla de cocina/barra', ready: true,
-    roles: ['owner', 'manager', 'cocina', 'barman'], grupo: 'operacion',
   },
   {
     id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
@@ -87,14 +75,14 @@ export const MODULES: Module[] = [
     roles: ['owner', 'manager', 'cajero'], grupo: 'gestion',
   },
   {
+    id: 'club', path: '/club', label: 'Club', kanji: '縁',
+    description: 'Referentes · cupones · canjes', ready: true,
+    roles: ['owner', 'manager', 'cajero'], grupo: 'operacion',
+  },
+  {
     id: 'finanzas', path: '/finanzas', label: 'Finanzas', kanji: '財',
     description: 'P&L · Presupuesto vs Real', ready: true,
     roles: ['owner', 'manager', 'contador'], grupo: 'gestion',
-  },
-  {
-    id: 'salarios', path: '/salarios', label: 'Salarios', kanji: '給',
-    description: 'Tarifas · Nómina', ready: true,
-    roles: ['owner', 'manager'], grupo: 'equipo',
   },
   {
     id: 'sops', path: '/sops', label: 'SOPs', kanji: '書',
@@ -132,9 +120,9 @@ export const GRUPOS: { id: Grupo; label: string }[] = [
 
 /** Orden dentro de cada grupo (por id de módulo). */
 const ORDEN_EN_GRUPO: Record<Grupo, string[]> = {
-  operacion: ['cash', 'tips', 'comandero', 'kds'],
+  operacion: ['cash', 'tips', 'club'],
   ventas:    ['dashboard'],
-  equipo:    ['mi-turno', 'mi-rendimiento', 'sops', 'salarios'],
+  equipo:    ['mi-rendimiento', 'sops'],
   gestion:   ['resumen', 'semana', 'reporte-mensual', 'finanzas', 'inventario', 'clientes'],
   ajustes:   ['admin', 'prueba'],
 }
@@ -197,9 +185,9 @@ function itemDe(m: Module): ItemMenu {
 
 /** Qué módulos van primero en la barra inferior. Los que no entran quedan en «Más». */
 const PRIORIDAD_BARRA = [
-  'cash', 'tips', 'dashboard', 'mi-turno', 'mi-rendimiento', 'comandero', 'kds',
+  'cash', 'tips', 'dashboard', 'club', 'mi-rendimiento',
   'resumen', 'sops', 'inventario', 'finanzas', 'clientes', 'semana', 'reporte-mensual',
-  'salarios', 'admin', 'prueba',
+  'admin', 'prueba',
 ]
 
 export const MAX_BOTONES_BARRA = 5

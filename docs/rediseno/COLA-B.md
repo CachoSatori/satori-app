@@ -102,7 +102,7 @@
 - No tocar `src/modules/**`.
 - **Aceptación:** gates; capturas 390 y 1280 del Inicio y de la hoja «Más» abierta; guía 6.1 si cambia lo que se ve.
 
-## B10 · Kanji sin internet (auditoría 206) · `lista` (después de B9, misma línea)
+## B10 · Kanji sin internet (auditoría 206) · `en revisión #137`
 - Hoy `src/index.css` trae Noto Serif JP desde Google (`@import`); sin internet los kanji caen en la serif del sistema.
 - Servirla desde `public/fonts/` con `@font-face`, **recortada a los caracteres que usa la app**: juntar los kanji de `src/shared/layout/modulos.ts`, de los `loading-mark` y encabezados de `src/**` y de `LoginPage`/`CambiarPasswordInicial`, y generar un `woff2` con solo esos (por ejemplo con `pyftsubset`). Pesos: los que hoy se piden a Google.
 - Sacar el `@import` de Google de Noto Serif JP. Incluir la licencia OFL de la fuente en `public/fonts/`.

@@ -1,85 +1,133 @@
-/* Club Satori — páginas públicas. Paleta de la marca (tinta, papel, oro), legible al sol:
-   texto oscuro sobre papel claro; el oro solo sobre tinta (contraste AA). Sin webfonts. */
+/* Club Satori — páginas públicas con el «estilo carta» de la app (docs/rediseno/PLAN.md):
+   fondo blanco, texto en tinta, filetes de oro, Cormorant Garamond para títulos y números grandes y DM Sans para el resto.
+   El oro (#b48e50) solo en filetes; para texto, --oro-texto (AA). Fuentes servidas desde /fonts (sin Google: CSP). */
+@font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/cormorant-garamond-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/cormorant-garamond-latin-ext-500-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/cormorant-garamond-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/cormorant-garamond-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/dm-sans-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/dm-sans-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/dm-sans-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/dm-sans-latin-ext-500-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/dm-sans-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/dm-sans-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+
 :root {
-  --ink: #0d0d0d;
-  --paper: #f5f0e8;
-  --panel: #ffffff;
-  --border: #cfc7b8;
-  --gold: #c8a96e;        /* solo sobre --ink */
-  --gold-text: #6b5220;   /* oro oscuro para texto sobre papel (AA) */
-  --muted: #4f4636;       /* AA sobre papel */
-  --ok: #1f6b5b;
-  --err: #a8321c;
-  --serif: Georgia, 'Times New Roman', serif;
-  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --fondo: #ffffff;
+  --tinta: #1f2120;        /* 16,2:1 sobre blanco */
+  --gris: #6e706c;         /* 5,0:1 sobre blanco; 4,6:1 sobre panel */
+  --linea: #e6e4de;
+  --panel: #f6f5f2;
+  --oro: #b48e50;          /* solo filetes y bordes, nunca texto */
+  --oro-texto: #8a6a33;    /* 5,0:1 sobre blanco */
+  --laca: #a3392d;  --laca-fondo: #f6e4e1;    /* 5,4:1 */
+  --musgo: #3e6a4c; --musgo-fondo: #e6efe8;   /* 5,3:1 */
+  --foco: #1f5fbf;
+  --serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  --sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; background: var(--paper); min-height: 100%; }
-body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.5 var(--sans); }
+html { -webkit-text-size-adjust: 100%; background: var(--fondo); min-height: 100%; }
+body { margin: 0; background: var(--fondo); color: var(--tinta); font: 400 1.0625rem/1.55 var(--sans);
+       font-variant-numeric: lining-nums tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-.top { background: var(--ink); color: var(--gold); display: flex; align-items: center; justify-content: space-between;
-       padding: 0.75rem 1rem; padding-top: max(0.75rem, env(safe-area-inset-top)); }
-.marca { display: flex; align-items: baseline; gap: 0.5rem; font-family: var(--serif); }
+/* ── Encabezado: blanco con filete de oro ─────────────────────────────── */
+.top { background: var(--fondo); color: var(--tinta); display: flex; align-items: center; justify-content: space-between;
+       gap: 0.75rem; flex-wrap: wrap; border-bottom: 1px solid var(--oro);
+       padding: 0.6rem 1rem; padding-top: max(0.6rem, env(safe-area-inset-top)); }
+.marca { display: flex; align-items: center; gap: 0.55rem; }
+.marca-img { height: 2.25rem; width: auto; }   /* el Daruma del Club */
+.nombre { font: 600 1.6rem/1 var(--serif); letter-spacing: 0.02em; }
 .kanji { font-size: 1.6rem; }
-.marca-img { height: 2rem; width: auto; align-self: center; }   /* el daruma del Club (foto del daruma real, sin fondo) */
-.nombre { letter-spacing: 0.3em; font-weight: 700; font-size: 1.05rem; }
-.idioma { display: flex; gap: 4px; }
-.idioma button { background: transparent; color: #e8dcc2; border: 1px solid #6d5f45; border-radius: 6px;
+.idioma { display: flex; gap: 0.35rem; }
+.idioma button { background: transparent; color: var(--tinta); border: 1px solid var(--linea); border-radius: 4px;
                  min-width: 48px; min-height: 44px; font: 600 0.95rem var(--sans); cursor: pointer; }
-.idioma button[aria-pressed='true'] { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.idioma button[aria-pressed='true'] { background: var(--tinta); color: var(--fondo); border-color: var(--tinta); }
 
-main { max-width: 480px; margin: 0 auto; padding: 1.25rem 1rem 3rem; outline: none; }
-h1 { font-family: var(--serif); font-size: 1.6rem; line-height: 1.2; margin: 0.25rem 0 0.5rem; }
-h2 { font-family: var(--serif); font-size: 1.2rem; margin: 1.5rem 0 0.5rem; }
-p { margin: 0.4rem 0; }
-.sub { color: var(--muted); }
-.cargando { text-align: center; color: var(--muted); padding: 3rem 0; }
+/* ── Página ──────────────────────────────────────────────────────────── */
+main { max-width: 520px; margin: 0 auto; padding: 1.5rem 1.25rem 3.5rem; outline: none; }
+h1 { font: 600 2.1rem/1.1 var(--serif); margin: 0.25rem 0 0.6rem; }
+h2 { font: 600 1.45rem/1.2 var(--serif); margin: 0 0 0.5rem; }
+p { margin: 0.45rem 0; }
+.sub { color: var(--gris); }
+.cargando { text-align: center; color: var(--gris); padding: 3rem 0; }
+a { color: var(--tinta); text-underline-offset: 3px; }
 
-.btn { display: block; width: 100%; min-height: 56px; border-radius: 10px; border: 2px solid var(--ink);
-       background: var(--ink); color: #fff; font: 700 1.15rem var(--sans); cursor: pointer; padding: 0.75rem 1rem;
-       text-align: center; text-decoration: none; margin-top: 1rem; }
-.btn.sec { background: var(--panel); color: var(--ink); }
+/* Un solo botón principal, en tinta; los secundarios, con filete */
+.btn { display: block; width: 100%; min-height: 52px; border-radius: 4px; border: 1px solid var(--tinta);
+       background: var(--tinta); color: var(--fondo); font: 600 1.05rem/1.25 var(--sans); cursor: pointer;
+       padding: 0.8rem 1rem; text-align: center; text-decoration: none; margin-top: 1rem; }
+.btn.sec { background: transparent; color: var(--tinta); border-color: var(--linea); }
 .btn[disabled] { opacity: 0.55; cursor: default; }
-.btn:focus-visible, .idioma button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid #1f5fbf; outline-offset: 2px; }
-.fila { display: flex; gap: 0.5rem; } .fila .btn { flex: 1; }
+.btn:focus-visible, .idioma button:focus-visible, .tab:focus-visible, input:focus-visible, select:focus-visible,
+a:focus-visible, summary:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+.fila { display: flex; flex-wrap: wrap; gap: 0.5rem; } .fila .btn { flex: 1 1 10rem; }
 
-.tarjeta { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-top: 1rem; }
-.cupon { border: 3px dashed var(--ink); text-align: center; }
-.cupon .etq { font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-text); }
-.cupon canvas, .portal-qr canvas, .canje canvas { width: min(280px, 78vw); height: auto; image-rendering: pixelated; display: block; margin: 0.75rem auto; }
-.codigo { font: 800 1.6rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.18em; }
-.local { color: var(--muted); font-size: 0.95rem; margin-top: 0.75rem; }
-.local a { color: var(--ink); font-weight: 700; }
+/* Secciones: sin tarjetas ni sombras, separadas por un filete de oro */
+.tarjeta { border-top: 1px solid var(--oro); padding: 1.25rem 0 0.25rem; margin-top: 1.5rem; }
+main > .tarjeta:first-child, main > h1 + .tarjeta, main > .sub + .tarjeta { margin-top: 1rem; }
 
-.aviso { border-radius: 10px; padding: 0.9rem 1rem; margin-top: 1rem; font-weight: 600; border: 2px solid; }
-.aviso.err { color: var(--err); border-color: var(--err); background: #fbeeea; }
-.aviso.ok { color: var(--ok); border-color: var(--ok); background: #e9f4f1; }
+/* El cupón y los códigos: un recuadro con filete de oro, fondo blanco (el QR necesita blanco y margen) */
+.cupon, .canje { border: 1px solid var(--oro); border-radius: 4px; padding: 1.25rem; background: var(--fondo); }
+.cupon { text-align: center; }
+.cupon .etq { font: 600 1.6rem/1.2 var(--serif); color: var(--oro-texto); margin: 0; }
+.cupon canvas, .portal-qr canvas, .canje canvas { width: min(300px, 80vw); height: auto; image-rendering: pixelated;
+       display: block; margin: 1rem auto; background: #fff; }
+.codigo { font: 600 1.5rem/1.2 var(--sans); letter-spacing: 0.14em; font-variant-numeric: lining-nums tabular-nums; word-break: break-all; }
+.local { color: var(--gris); font-size: 0.95rem; margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px solid var(--linea); }
+.local a { font-weight: 600; }
+
+/* Avisos de estado: color con su fondo y un filete a la izquierda */
+.aviso { border-radius: 4px; padding: 0.85rem 1rem; margin-top: 1rem; font-weight: 500; border-left: 3px solid; }
+.aviso.err { color: var(--laca); border-color: var(--laca); background: var(--laca-fondo); }
+.aviso.ok { color: var(--musgo); border-color: var(--musgo); background: var(--musgo-fondo); }
 .aviso::before { margin-right: 0.4rem; }
 .aviso.err::before { content: '⚠'; }
 .aviso.ok::before { content: '✓'; }
 
-label { display: block; font-weight: 600; margin-top: 0.75rem; }
-input[type=text], input[type=tel], input[type=email] { width: 100%; min-height: 48px; font: 1rem var(--sans); padding: 0.6rem 0.75rem;
-       border: 2px solid var(--border); border-radius: 8px; background: #fff; color: var(--ink); margin-top: 0.25rem; }
-.check { display: flex; gap: 0.6rem; align-items: flex-start; font-weight: 400; }
-.check input { width: 26px; height: 26px; flex: none; margin-top: 2px; }
-details summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+/* Formularios */
+label { display: block; font-weight: 500; margin-top: 0.9rem; }
+input[type=text], input[type=tel], input[type=email], select { width: 100%; min-height: 48px; font: 1rem var(--sans);
+       padding: 0.6rem 0.75rem; border: 1px solid var(--gris); border-radius: 4px; background: var(--fondo);
+       color: var(--tinta); margin-top: 0.3rem; }
+.check { display: flex; gap: 0.65rem; align-items: flex-start; font-weight: 400; }
+.check input { width: 26px; height: 26px; flex: none; margin-top: 2px; accent-color: var(--tinta); }
+details summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: '›'; color: var(--oro-texto); font: 600 1.4rem/1 var(--sans); transition: transform 0.15s; }
+details[open] > summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { details summary::before { transition: none; } }
+details.tarjeta > summary { font: 600 1.25rem/1.25 var(--serif); }
+.aviso-priv { background: var(--panel); border-radius: 4px; padding: 0.25rem 1rem 0.5rem; margin-top: 1rem; font-size: 0.95rem; }
+.aviso-priv .sub { color: var(--gris); }
+.turnstile { margin-top: 1rem; }
 
-.saldo { display: flex; align-items: baseline; gap: 0.5rem; }
-.saldo .num { font: 800 3rem/1 var(--serif); }
+/* Portal: saldo grande en serif, movimientos con líneas finas */
+.saldo { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.25rem 0.6rem; margin: 0; }
+.saldo .num { font: 600 3.6rem/1 var(--serif); }
 .movs { list-style: none; padding: 0; margin: 0; }
-.movs li { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
-.movs .mas { color: var(--ok); font-weight: 700; }
-.movs .menos { color: var(--err); font-weight: 700; }
-.movs .f { color: var(--muted); font-size: 0.9rem; }
+.movs li { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.7rem 0; border-bottom: 1px solid var(--linea); }
+.movs li:last-child { border-bottom: 0; }
+.movs .mas { color: var(--musgo); font-weight: 600; white-space: nowrap; }
+.movs .menos { color: var(--laca); font-weight: 600; white-space: nowrap; }
+.movs .f { color: var(--gris); font-size: 0.9rem; }
 
-.canje { border: 3px solid var(--ink); }
-.cuenta { text-align: center; font: 700 1.3rem var(--sans); }
+.cuenta { text-align: center; font: 600 1.6rem/1.2 var(--serif); }
 
-/* A4.5: pestañas del portal (Mi Club / Anfitrión) */
-.tabs { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.75rem; }
-.tab { flex: 1; min-height: 44px; border: 1px solid var(--border); background: var(--panel); color: var(--ink);
-       border-radius: 10px; font: 600 1rem var(--sans); cursor: pointer; }
-.tab[aria-selected='true'] { background: var(--ink); color: var(--gold); border-color: var(--ink); }
-.socio-qr canvas { display: block; width: min(240px, 70vw); height: auto; margin: 0.5rem auto; }
+/* A4.5: pestañas del portal (Mi Club / Anfitrión): subrayado de oro en la activa */
+.tabs { display: flex; gap: 0.25rem; margin: 0.75rem 0 0.25rem; border-bottom: 1px solid var(--linea); }
+.tab { flex: 1; min-height: 48px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--gris);
+       font: 500 1rem var(--sans); cursor: pointer; margin-bottom: -1px; }
+.tab[aria-selected='true'] { color: var(--oro-texto); border-bottom-color: var(--oro); font-weight: 600; }
+.socio-qr canvas { display: block; width: min(260px, 72vw); height: auto; margin: 0.75rem auto; background: #fff; }
+
+@media (min-width: 768px) {
+  main { padding-top: 2.5rem; }
+  h1 { font-size: 2.5rem; }
+}
+
+/* El atajo `font` reinicia las variantes: los números de Cormorant (de estilo antiguo por defecto) van alineados en todos lados */
+h1, h2, .nombre, .cupon .etq, .saldo .num, .cuenta, .codigo, .btn, .tab, details.tarjeta > summary, label, input, select {
+  font-variant-numeric: lining-nums tabular-nums;
+}

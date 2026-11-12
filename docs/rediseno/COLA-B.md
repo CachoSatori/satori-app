@@ -95,7 +95,7 @@
 ---
 ### Tanda 3 · pedida por Ismael el 12-nov 06:40 («hagamos tanda 3», todo)
 
-## B9 · Hoja «Más» con foco atrapado, monospace del CSS y un solo Daruma en el Inicio · `en revisión #134`
+## B9 · Hoja «Más» con foco atrapado, monospace del CSS y un solo Daruma en el Inicio · `hecha` (#134, mergeada a staging el 12-nov 07:25, `b3b3134`; validación visual pendiente)
 - **Auditoría 202:** en la hoja «Más» de `src/shared/layout/AppShell.tsx`, el Tab y Shift+Tab quedan dentro de la hoja mientras está abierta (último → primero y al revés). Se mantiene lo de B6: `aria-modal`, foco al abrir, Escape cierra y el foco vuelve a «Más». Test de render del ciclo de foco.
 - **Auditoría 205 (parte de B):** las 4 `font-family: var(--font-mono, …monospace)` de `src/index.css` (líneas ~4592, 5343, 5359, 5410 en `staging`) → `var(--font-sans)` + `font-variant-numeric: tabular-nums`. Si alguna es de un bloque que solo existe en `staging` (`.cm-*`, `.sal-*`, `.fx-*`), igual se cambia, pero anotarlo en el reporte para el pase.
 - **Un solo Daruma en el Inicio en computadora** (duda de B8, decidido por Ismael): desde 1024 px se vuelve a ocultar `.header-daruma` de la barra de arriba; queda el de la marca del menú. En celular no cambia.

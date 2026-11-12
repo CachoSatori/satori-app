@@ -53,7 +53,7 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
     <div className="cd-modal-overlay" onClick={onClose}>
       <div className="cd-modal" onClick={e => e.stopPropagation()}>
         <div className="cd-modal-title">Registrar saldo a favor · {supplier.name}</div>
-        <div style={{ background: 'rgba(200,169,110,.12)', border: '1px solid #c8a030', borderRadius: 8, padding: '0.6rem 0.8rem', fontSize: '0.78rem', marginBottom: '1rem' }}>
+        <div style={{ background: 'var(--c-oro-fondo)', border: '1px solid var(--c-oro-texto)', borderRadius: 8, padding: '0.6rem 0.8rem', fontSize: '0.78rem', marginBottom: '1rem' }}>
           ⚠️ Esto <strong>NO mueve plata</strong>: solo reconoce un prepago que YA le hiciste al proveedor.
         </div>
         {error && <div className="tips-error" style={{ marginBottom: '1rem' }}><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
@@ -214,18 +214,18 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
       <div className="cd-modal-overlay" onClick={onClose}>
         <div className="cd-modal" onClick={e => e.stopPropagation()}>
           <div className="cd-modal-title">Comprobante · {supplier.name}</div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--t-muted)', marginBottom: '0.6rem' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--c-gris)', marginBottom: '0.6rem' }}>
             Saldo a favor aplicado{r.creditoRef ? ` · ${r.creditoRef}` : ''}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: 260, overflowY: 'auto' }}>
             {r.items.map((it, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {it.fecha} · <span style={{ color: 'var(--t-muted)' }}>{it.desc}</span>
+                  {it.fecha} · <span style={{ color: 'var(--c-gris)' }}>{it.desc}</span>
                 </span>
                 <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <strong>{fi(it.monto)}</strong>
-                  <div style={{ fontSize: '0.66rem', color: it.residual <= 0.001 ? 'var(--t-teal)' : '#c8a030' }}>
+                  <div style={{ fontSize: '0.66rem', color: it.residual <= 0.001 ? 'var(--c-teal)' : 'var(--c-oro-texto)' }}>
                     {it.residual <= 0.001 ? 'saldada ✓' : `residual ${fi(it.residual)}`}
                   </div>
                 </span>
@@ -234,7 +234,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
           </div>
           <div style={{ display: 'flex', gap: '1.5rem', margin: '0.75rem 0', fontSize: '0.85rem', flexWrap: 'wrap' }}>
             <div>Total aplicado: <strong>{fi(r.totalAplicado)}</strong></div>
-            <div>Saldo restante: <strong style={{ color: 'var(--t-teal)' }}>{fi(r.saldoRestante)}</strong></div>
+            <div>Saldo restante: <strong style={{ color: 'var(--c-teal)' }}>{fi(r.saldoRestante)}</strong></div>
           </div>
           <div className="cd-modal-actions">
             <button className="tips-btn-ghost" onClick={descargarComp}>Descargar comprobante</button>
@@ -250,7 +250,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
     return (
       <div className="cd-modal-overlay" onClick={onClose}><div className="cd-modal" onClick={e => e.stopPropagation()}>
         <div className="cd-modal-title">Aplicar crédito · {supplier.name}</div>
-        <p style={{ color: 'var(--t-muted)', fontSize: '0.85rem' }}>
+        <p style={{ color: 'var(--c-gris)', fontSize: '0.85rem' }}>
           {!misCreditos.length ? 'Este proveedor no tiene saldo a favor disponible.' : 'No hay facturas pendientes para aplicar.'}
         </p>
         <div className="cd-modal-actions"><button className="tips-btn-ghost" onClick={onClose}>Cerrar</button></div>
@@ -284,18 +284,18 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
               const resultante = r - v
               const over = v > r + 0.001
               return (
-                <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center', padding: '0.3rem 0', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center', padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
                   <div style={{ fontSize: '0.75rem', minWidth: 0 }}>
                     <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {m.created_at.slice(0, 10)} · <span style={{ color: 'var(--t-muted)' }}>{(m.description || m.subcategory || '').slice(0, 26)}</span>
+                      {m.created_at.slice(0, 10)} · <span style={{ color: 'var(--c-gris)' }}>{(m.description || m.subcategory || '').slice(0, 26)}</span>
                     </div>
-                    <div style={{ fontSize: '0.66rem', color: 'var(--t-muted)' }}>
+                    <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)' }}>
                       residual {fi(r)}
-                      {v > 0 && <> → quedará <strong style={{ color: resultante <= 0.001 ? 'var(--t-teal)' : '#c8a030' }}>{fi(Math.max(0, resultante))}</strong>{resultante <= 0.001 && ' ✓ aprobada'}</>}
+                      {v > 0 && <> → quedará <strong style={{ color: resultante <= 0.001 ? 'var(--c-teal)' : 'var(--c-oro-texto)' }}>{fi(Math.max(0, resultante))}</strong>{resultante <= 0.001 && ' ✓ aprobada'}</>}
                     </div>
                   </div>
                   <input className="tips-input-dark" inputMode="numeric" placeholder="0"
-                    style={{ width: 108, textAlign: 'right', borderColor: over ? '#c0392b' : undefined }}
+                    style={{ width: 108, textAlign: 'right', borderColor: over ? 'var(--c-laca)' : undefined }}
                     value={montos[m.id] ?? ''}
                     onChange={e => { const val = e.target.value.replace(/[^\d.]/g, ''); setMontos(prev => ({ ...prev, [m.id]: val })) }} />
                 </div>
@@ -306,11 +306,11 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
 
         <div style={{ display: 'flex', gap: '1.5rem', margin: '1rem 0 0.25rem', fontSize: '0.85rem', flexWrap: 'wrap' }}>
           <div>Crédito: <strong>{fi(saldoCred)}</strong></div>
-          <div>Repartido: <strong style={{ color: overCredit ? '#c0392b' : 'var(--t-ink)' }}>{fi(sumMontos)}</strong></div>
-          <div>Restante: <strong style={{ color: credRestante < -0.001 ? '#c0392b' : 'var(--t-teal)' }}>{fi(Math.max(0, credRestante))}</strong></div>
+          <div>Repartido: <strong style={{ color: overCredit ? 'var(--c-laca)' : 'var(--c-tinta)' }}>{fi(sumMontos)}</strong></div>
+          <div>Restante: <strong style={{ color: credRestante < -0.001 ? 'var(--c-laca)' : 'var(--c-teal)' }}>{fi(Math.max(0, credRestante))}</strong></div>
         </div>
-        {overCredit && <div style={{ fontSize: '0.78rem', color: '#c0392b', marginBottom: '0.5rem' }}>El total repartido supera el crédito disponible.</div>}
-        {anyOver && !overCredit && <div style={{ fontSize: '0.78rem', color: '#c0392b', marginBottom: '0.5rem' }}>Algún monto supera el residual de su factura.</div>}
+        {overCredit && <div style={{ fontSize: '0.78rem', color: 'var(--c-laca)', marginBottom: '0.5rem' }}>El total repartido supera el crédito disponible.</div>}
+        {anyOver && !overCredit && <div style={{ fontSize: '0.78rem', color: 'var(--c-laca)', marginBottom: '0.5rem' }}>Algún monto supera el residual de su factura.</div>}
 
         <div className="cd-modal-actions">
           <button className="tips-btn-ghost" onClick={onClose}>Cancelar</button>

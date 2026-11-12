@@ -101,13 +101,13 @@ export default function EmployeeHours({ employees }: Props) {
     : `${MONTH_NAMES[ym.slice(5, 7)]} Hs`
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Cargando historial…</div>
+    return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--c-gris)' }}>Cargando historial…</div>
   }
 
   if (allRows.length === 0) {
     return (
       <div className="admin-section">
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>
+        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--c-gris)' }}>
           <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📋</div>
           <div>Sin registros de asistencia todavía</div>
           <div style={{ fontSize: '0.78rem', marginTop: '0.3rem' }}>
@@ -140,10 +140,10 @@ export default function EmployeeHours({ employees }: Props) {
           <option value="all">Todos los años</option>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <div style={{ display: 'flex', border: '1px solid var(--t-border)', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', border: '1px solid var(--c-linea)', borderRadius: 2, overflow: 'hidden' }}>
           {(['resumen','detalle'] as const).map(v => (
             <button key={v}
-              style={{ padding: '0.3rem 0.75rem', fontSize: '0.72rem', background: view === v ? 'var(--t-ink)' : '#fff', color: view === v ? 'var(--t-gold)' : '#5a5040', border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.06em' }}
+              style={{ padding: '0.3rem 0.75rem', fontSize: '0.72rem', background: view === v ? 'var(--c-tinta)' : 'var(--c-fondo)', color: view === v ? 'var(--c-fondo)' : 'var(--c-gris)', border: 'none', cursor: 'pointer', minHeight: 44 }}
               onClick={() => setView(v)}>
               {v}
             </button>
@@ -176,43 +176,43 @@ export default function EmployeeHours({ employees }: Props) {
                   <td className="admin-emp-name">{emp.full_name}</td>
                   <td><span className="role-tag">{ROLE_LABELS[emp.role] ?? emp.role}</span></td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{shifts}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--t-teal)' }}>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--c-teal)' }}>
                     {hours.toLocaleString('es-CR', { maximumFractionDigits: 1 })}h
                   </td>
-                  <td style={{ textAlign: 'right', color: '#5a5040' }}>
+                  <td style={{ textAlign: 'right', color: 'var(--c-gris)' }}>
                     {shifts > 0 ? (hours / shifts).toFixed(1) : '—'}h
                   </td>
                   {monthCols.map(ym => (
-                    <td key={ym} style={{ textAlign: 'right', fontSize: '0.82rem', color: '#5a5040' }}>
+                    <td key={ym} style={{ textAlign: 'right', fontSize: '0.82rem', color: 'var(--c-gris)' }}>
                       {byMonth[ym]?.hours.toFixed(1) ?? '—'}
                     </td>
                   ))}
-                  <td style={{ textAlign: 'right', color: 'var(--t-teal)', fontWeight: 600 }}>
+                  <td style={{ textAlign: 'right', color: 'var(--c-teal)', fontWeight: 600 }}>
                     {payout > 0 ? fi(payout) : '—'}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr style={{ borderTop: '2px solid var(--t-border, #2a2a2a)', fontWeight: 700 }}>
+              <tr style={{ borderTop: '2px solid var(--c-linea)', fontWeight: 700 }}>
                 <td className="admin-emp-name">TOTAL{year !== 'all' ? ` ${year}` : ''}</td>
-                <td style={{ color: '#888', fontSize: '0.72rem' }}>{summary.length} empl.</td>
+                <td style={{ color: 'var(--c-gris)', fontSize: '0.72rem' }}>{summary.length} empl.</td>
                 <td style={{ textAlign: 'right' }}>{totals.shifts}</td>
-                <td style={{ textAlign: 'right', color: 'var(--t-teal)' }}>
+                <td style={{ textAlign: 'right', color: 'var(--c-teal)' }}>
                   {totals.hours.toLocaleString('es-CR', { maximumFractionDigits: 1 })}h
                 </td>
-                <td style={{ textAlign: 'right', color: '#5a5040' }}>
+                <td style={{ textAlign: 'right', color: 'var(--c-gris)' }}>
                   {totals.shifts > 0 ? (totals.hours / totals.shifts).toFixed(1) : '—'}h
                 </td>
                 {monthCols.map(ym => {
                   const mh = summary.reduce((s, x) => s + (x.byMonth[ym]?.hours ?? 0), 0)
-                  return <td key={ym} style={{ textAlign: 'right', fontSize: '0.82rem', color: '#5a5040' }}>{mh > 0 ? mh.toFixed(1) : '—'}</td>
+                  return <td key={ym} style={{ textAlign: 'right', fontSize: '0.82rem', color: 'var(--c-gris)' }}>{mh > 0 ? mh.toFixed(1) : '—'}</td>
                 })}
-                <td style={{ textAlign: 'right', color: 'var(--t-teal)' }}>{totals.payout > 0 ? fi(totals.payout) : '—'}</td>
+                <td style={{ textAlign: 'right', color: 'var(--c-teal)' }}>{totals.payout > 0 ? fi(totals.payout) : '—'}</td>
               </tr>
             </tfoot>
           </table>
-          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.5rem' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginTop: '0.5rem' }}>
             Hacé click en un empleado para ver el detalle por turno · Datos: últimos {FETCH_MONTHS} meses
           </div>
         </>
@@ -240,13 +240,13 @@ export default function EmployeeHours({ employees }: Props) {
               return (
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.82rem' }}>
-                    <strong>{s.shifts}</strong> <span style={{ color: '#888' }}>turnos</span>
+                    <strong>{s.shifts}</strong> <span style={{ color: 'var(--c-gris)' }}>turnos</span>
                   </span>
                   <span style={{ fontSize: '0.82rem' }}>
-                    <strong style={{ color: 'var(--t-teal)' }}>{s.hours.toFixed(1)}h</strong> <span style={{ color: '#888' }}>totales</span>
+                    <strong style={{ color: 'var(--c-teal)' }}>{s.hours.toFixed(1)}h</strong> <span style={{ color: 'var(--c-gris)' }}>totales</span>
                   </span>
                   <span style={{ fontSize: '0.82rem' }}>
-                    <strong style={{ color: 'var(--t-teal)' }}>{fi(s.payout)}</strong> <span style={{ color: '#888' }}>propinas</span>
+                    <strong style={{ color: 'var(--c-teal)' }}>{fi(s.payout)}</strong> <span style={{ color: 'var(--c-gris)' }}>propinas</span>
                   </span>
                 </div>
               )
@@ -270,15 +270,15 @@ export default function EmployeeHours({ employees }: Props) {
                 return (
                   <tr key={i} className="admin-row">
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.session_date)}</td>
-                    <td><span className="role-tag" style={{ background: (r.shift_type === 'PM' || r.shift_type === 'Noche') ? 'rgba(42,122,106,0.12)' : 'rgba(200,169,110,0.12)', color: (r.shift_type === 'PM' || r.shift_type === 'Noche') ? 'var(--t-teal)' : '#a07830' }}>{shiftLabel(r.shift_type)}</span></td>
+                    <td><span className="role-tag" style={{ background: (r.shift_type === 'PM' || r.shift_type === 'Noche') ? 'var(--c-teal-fondo)' : 'var(--c-oro-fondo)', color: (r.shift_type === 'PM' || r.shift_type === 'Noche') ? 'var(--c-teal)' : 'var(--c-oro-texto)' }}>{shiftLabel(r.shift_type)}</span></td>
                     {selected === 'all' && <td className="admin-emp-name">{emp?.full_name ?? '—'}</td>}
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>
                       {r.hours_worked}h
                     </td>
-                    <td style={{ textAlign: 'right', color: '#5a5040' }}>
+                    <td style={{ textAlign: 'right', color: 'var(--c-gris)' }}>
                       {r.points != null ? r.points.toFixed(1) : '—'}
                     </td>
-                    <td style={{ textAlign: 'right', color: r.payout_crc ? 'var(--t-teal)' : '#aaa', fontWeight: r.payout_crc ? 600 : 400 }}>
+                    <td style={{ textAlign: 'right', color: r.payout_crc ? 'var(--c-teal)' : 'var(--c-tinta)', fontWeight: r.payout_crc ? 600 : 400 }}>
                       {r.payout_crc ? fi(r.payout_crc) : '—'}
                     </td>
                   </tr>
@@ -287,7 +287,7 @@ export default function EmployeeHours({ employees }: Props) {
             </tbody>
           </table>
           {filteredRows.length > 200 && (
-            <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.5rem' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginTop: '0.5rem' }}>
               Mostrando primeros 200 registros — filtrá por año o empleado para ver todo
             </div>
           )}

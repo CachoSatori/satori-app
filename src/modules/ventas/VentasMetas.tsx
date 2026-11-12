@@ -69,10 +69,10 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
               <div className="vt-meta-proy-sub">Seguimiento en tiempo real</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.7rem', color: '#aaa', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              <div style={{ fontSize: '0.7rem', color: 'var(--c-tinta)'}}>
                 Meta
               </div>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.1rem', fontWeight: 800, color: 'var(--vt-gold)' }}>
+              <div style={{ fontFamily: 'var(--font-serif)', fontVariantNumeric: 'tabular-nums', fontSize: '1.1rem', fontWeight: 800, color: 'var(--c-oro-texto)' }}>
                 {fi(curProg.meta)}
               </div>
             </div>
@@ -81,31 +81,31 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
           {/* Main progress bar */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-              <span style={{ fontSize: '0.82rem', color: 'var(--vt-paper)' }}>
+              <span style={{ fontSize: '0.82rem', color: 'var(--c-tinta)' }}>
                 <strong>{fi(curProg.ventasMes)}</strong> acumulado
               </span>
               <span style={{
                 fontSize: '0.88rem', fontWeight: 800,
-                color: curProg.onTrack ? '#7ec8a0' : '#f08070',
+                color: curProg.onTrack ? 'var(--c-musgo)' : 'var(--c-laca)',
               }}>
                 {curProg.pct.toFixed(1)}%
               </span>
             </div>
-            <div style={{ height: 10, background: '#2a2a2a', borderRadius: 5, overflow: 'hidden' }}>
+            <div style={{ height: 10, background: 'var(--c-panel)', borderRadius: 5, overflow: 'hidden' }}>
               <div style={{
                 height: '100%',
                 width: `${Math.min(curProg.pct, 100)}%`,
-                background: curProg.onTrack ? '#4a7c59' : '#c23b22',
+                background: curProg.onTrack ? 'var(--c-musgo)' : 'var(--c-laca)',
                 borderRadius: 5,
                 transition: 'width 0.5s ease',
               }} />
             </div>
             {/* Projection marker */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem' }}>
-              <span style={{ fontSize: '0.68rem', color: '#555' }}>
+              <span style={{ fontSize: '0.68rem', color: 'var(--c-gris)' }}>
                 Día {curProg.passDays} de {totalDays}
               </span>
-              <span style={{ fontSize: '0.68rem', color: '#555' }}>
+              <span style={{ fontSize: '0.68rem', color: 'var(--c-gris)' }}>
                 {(curProg.passDays / totalDays * 100).toFixed(0)}% del mes transcurrido
               </span>
             </div>
@@ -116,11 +116,11 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
             <div className="vt-meta-proy-stat">
               <div className="vt-meta-proy-stat-label">Proyección</div>
               <div className="vt-meta-proy-stat-val" style={{
-                color: curProg.onTrack ? '#7ec8a0' : '#f08070',
+                color: curProg.onTrack ? 'var(--c-musgo)' : 'var(--c-laca)',
               }}>
                 {fi(curProg.projection)}
               </div>
-              <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '0.1rem' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)', marginTop: '0.1rem' }}>
                 {curProg.onTrack ? '✓ En camino' : '⚠ Debajo del objetivo'}
               </div>
             </div>
@@ -129,23 +129,23 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
               <div className="vt-meta-proy-stat-val">
                 {fi(Math.max(0, curProg.meta - curProg.ventasMes))}
               </div>
-              <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '0.1rem' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)', marginTop: '0.1rem' }}>
                 {totalDays - curProg.passDays} días restantes
               </div>
             </div>
             <div className="vt-meta-proy-stat">
               <div className="vt-meta-proy-stat-label">Esfuerzo diario</div>
-              <div className="vt-meta-proy-stat-val" style={{ color: 'var(--vt-gold)' }}>
+              <div className="vt-meta-proy-stat-val" style={{ color: 'var(--c-oro-texto)' }}>
                 {fi(curProg.effort)}
               </div>
-              <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '0.1rem' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)', marginTop: '0.1rem' }}>
                 por día para alcanzar la meta
               </div>
             </div>
             <div className="vt-meta-proy-stat">
               <div className="vt-meta-proy-stat-label">Meta/día</div>
               <div className="vt-meta-proy-stat-val">{fi(curProg.metaDia)}</div>
-              <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '0.1rem' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)', marginTop: '0.1rem' }}>
                 promedio requerido
               </div>
             </div>
@@ -155,7 +155,7 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
 
       {!curProg && (
         <div className="vt-meta-proyeccion" style={{ opacity: 0.6 }}>
-          <div style={{ color: '#aaa', fontSize: '0.85rem', textAlign: 'center', padding: '1rem 0' }}>
+          <div style={{ color: 'var(--c-tinta)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem 0' }}>
             Configurá la meta de {fmtMonthLabel(curMonth)} para ver la proyección
           </div>
         </div>

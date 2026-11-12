@@ -242,12 +242,12 @@ export default function ResumenDiario() {
       {/* Header */}
       <div className="resumen-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--t-gold)' }}>日</span>
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--c-oro-texto)' }}>日</span>
           <div>
-            <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '1rem', color: 'var(--t-gold)' }}>
+            <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '1rem', color: 'var(--c-oro-texto)' }}>
               Resumen del Día
             </div>
-            <div style={{ fontSize: '0.6rem', letterSpacing: '0.25em', color: '#555', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)' }}>
               Satori · Santa Teresa
             </div>
           </div>
@@ -258,44 +258,44 @@ export default function ResumenDiario() {
             value={date}
             max={todayCR()}
             onChange={e => setDate(e.target.value)}
-            style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 2, padding: '0.35rem 0.5rem', color: '#f0ece4', fontSize: '0.82rem', fontFamily: 'DM Mono, monospace' }}
+            style={{ background: 'var(--c-panel)', border: '1px solid var(--c-linea)', borderRadius: 2, padding: '0.35rem 0.5rem', color: 'var(--c-tinta)', fontSize: '0.82rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' }}
           />
           {snap && (snap.hasVentas || snap.hasTips || snap.hasCaja) && (
             <button
               onClick={() => shareResumen(buildShareText(date, snap), setCopied)}
-              style={{ padding:'0.35rem 0.75rem', borderRadius:2, border:'1px solid #2a4a2a', background: copied ? 'rgba(74,154,106,.2)' : 'transparent', color: copied ? '#4a9a6a' : '#7aaa7a', fontSize:'0.75rem', cursor:'pointer', whiteSpace:'nowrap', transition:'all .2s' }}>
+              style={{ padding:'0.35rem 0.75rem', borderRadius:2, border:'1px solid var(--c-musgo-borde)', background: copied ? 'var(--c-musgo-fondo)' : 'transparent', color: copied ? 'var(--c-musgo)' : 'var(--c-musgo)', fontSize:'0.75rem', cursor:'pointer', whiteSpace:'nowrap', transition:'all .2s' }}>
               {copied ? '✓ Copiado' : '📤 Compartir'}
             </button>
           )}
-          <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888' }}
+          <button className="cash-back-btn" style={{ borderColor: 'var(--c-linea)', color: 'var(--c-gris)' }}
             onClick={() => navigate('/')}>← Inicio</button>
         </div>
       </div>
 
       {/* Day navigation bar */}
-      <div style={{ background:'#0d0d0d', borderBottom:'1px solid #1a1a1a', padding:'0.4rem 1rem', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem' }}>
+      <div style={{ background:'var(--c-panel)', borderBottom:'1px solid var(--c-linea)', padding:'0.4rem 1rem', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem' }}>
         <button onClick={goPrev} disabled={!hasPrev}
-          style={{ padding:'4px 12px', borderRadius:2, border:'1px solid #2a2a2a', background:'transparent', color: hasPrev ? '#888' : '#333', cursor: hasPrev ? 'pointer' : 'default', fontSize:'0.8rem' }}>
+          style={{ padding:'4px 12px', borderRadius:2, border:'1px solid var(--c-linea)', background:'transparent', color: hasPrev ? 'var(--c-gris)' : 'var(--c-gris-claro)', cursor: hasPrev ? 'pointer' : 'default', fontSize:'0.8rem' }}>
           ‹ Anterior
         </button>
-        <div style={{ fontSize:'0.72rem', color:'#555', textAlign:'center' }}>
+        <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', textAlign:'center' }}>
           {new Date(date + 'T12:00:00').toLocaleDateString('es-CR', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}
           {date !== today && (
             <button onClick={goToday}
-              style={{ marginLeft:'0.75rem', fontSize:'0.65rem', padding:'2px 8px', border:'1px solid #2a2a2a', background:'transparent', color:'#c8a030', borderRadius:10, cursor:'pointer' }}>
+              style={{ marginLeft:'0.75rem', fontSize:'0.65rem', padding:'2px 8px', border:'1px solid var(--c-linea)', background:'transparent', color:'var(--c-oro-texto)', borderRadius:10, cursor:'pointer' }}>
               Hoy
             </button>
           )}
         </div>
         <button onClick={goNext} disabled={!hasNext}
-          style={{ padding:'4px 12px', borderRadius:2, border:'1px solid #2a2a2a', background:'transparent', color: hasNext ? '#888' : '#333', cursor: hasNext ? 'pointer' : 'default', fontSize:'0.8rem' }}>
+          style={{ padding:'4px 12px', borderRadius:2, border:'1px solid var(--c-linea)', background:'transparent', color: hasNext ? 'var(--c-gris)' : 'var(--c-gris-claro)', cursor: hasNext ? 'pointer' : 'default', fontSize:'0.8rem' }}>
           Siguiente ›
         </button>
       </div>
 
       {loading ? (
         <div className="resumen-body">
-          <div style={{ padding: '4rem', textAlign: 'center', color: '#555' }}>Cargando…</div>
+          <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--c-gris)' }}>Cargando…</div>
         </div>
       ) : snap ? (
         <div className="resumen-body">
@@ -334,12 +334,12 @@ export default function ResumenDiario() {
                     </div>
                   </div>
                   <div className="resumen-split-bar">
-                    <div style={{ fontSize: '0.72rem', color: '#555', marginBottom: '0.3rem' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginBottom: '0.3rem' }}>
                       Salón {fi(snap.salon)} · Delivery {fi(snap.delivery)}
                     </div>
                     {snap.ventaNeta > 0 && (
-                      <div style={{ height: 4, background: '#2a2a2a', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${snap.salon/snap.ventaNeta*100}%`, background: 'var(--t-teal)' }} />
+                      <div style={{ height: 4, background: 'var(--c-panel)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${snap.salon/snap.ventaNeta*100}%`, background: 'var(--c-teal)' }} />
                       </div>
                     )}
                   </div>
@@ -369,15 +369,15 @@ export default function ResumenDiario() {
                     <div className="resumen-kpi-row">
                       <div className="resumen-kpi">
                         <div className="resumen-kpi-label">Ingresos</div>
-                        <div className="resumen-kpi-val" style={{ color: '#7ec8a0' }}>{fi(snap.cajaIngresos)}</div>
+                        <div className="resumen-kpi-val" style={{ color: 'var(--c-musgo)' }}>{fi(snap.cajaIngresos)}</div>
                       </div>
                       <div className="resumen-kpi">
                         <div className="resumen-kpi-label">Egresos</div>
-                        <div className="resumen-kpi-val" style={{ color: '#f08070' }}>{fi(snap.cajaEgresos)}</div>
+                        <div className="resumen-kpi-val" style={{ color: 'var(--c-laca)' }}>{fi(snap.cajaEgresos)}</div>
                       </div>
                       <div className="resumen-kpi">
                         <div className="resumen-kpi-label">Saldo neto</div>
-                        <div className="resumen-kpi-val" style={{ color: snap.cajaSaldo >= 0 ? '#7ec8a0' : '#f08070' }}>
+                        <div className="resumen-kpi-val" style={{ color: snap.cajaSaldo >= 0 ? 'var(--c-musgo)' : 'var(--c-laca)' }}>
                           {fi(snap.cajaSaldo)}
                         </div>
                       </div>
@@ -413,7 +413,7 @@ export default function ResumenDiario() {
                       </div>
                       <div className="resumen-kpi">
                         <div className="resumen-kpi-label">Distribuido</div>
-                        <div className="resumen-kpi-val" style={{ color: '#7ec8a0' }}>{fi(snap.tipPayout)}</div>
+                        <div className="resumen-kpi-val" style={{ color: 'var(--c-musgo)' }}>{fi(snap.tipPayout)}</div>
                       </div>
                       <div className="resumen-kpi">
                         <div className="resumen-kpi-label">Empleados</div>
@@ -443,11 +443,11 @@ export default function ResumenDiario() {
               </div>
               <div className="resumen-reconcile-row">
                 <span>Propinas distribuidas</span>
-                <strong style={{ color: '#f08070' }}>- {fi(snap.tipPayout)}</strong>
+                <strong style={{ color: 'var(--c-laca)' }}>- {fi(snap.tipPayout)}</strong>
               </div>
               <div className="resumen-reconcile-row resumen-reconcile-total">
                 <span>Diferencia ventas vs caja</span>
-                <strong style={{ color: Math.abs(snap.ventaNeta - snap.cajaIngresos) < 10000 ? '#7ec8a0' : '#f08070' }}>
+                <strong style={{ color: Math.abs(snap.ventaNeta - snap.cajaIngresos) < 10000 ? 'var(--c-musgo)' : 'var(--c-laca)' }}>
                   {fi(snap.ventaNeta - snap.cajaIngresos)}
                 </strong>
               </div>

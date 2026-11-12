@@ -59,10 +59,10 @@ const MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct
 
 // Colores Caja: verde/dorado/rojo según % de meta
 function metaCol(ratio: number): string {
-  if (!isFinite(ratio) || ratio <= 0) return '#8a8070'
-  if (ratio >= 1)    return '#27874f'
-  if (ratio >= 0.85) return '#c8a030'
-  return '#c0392b'
+  if (!isFinite(ratio) || ratio <= 0) return 'var(--c-gris)'
+  if (ratio >= 1)    return 'var(--c-musgo)'
+  if (ratio >= 0.85) return 'var(--c-oro-texto)'
+  return 'var(--c-laca)'
 }
 
 const PERIODS: { id: PeriodKind; label: string }[] = [
@@ -307,7 +307,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
             {periodKind === 'rango' && (
               <span style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
                 <input type="date" className="vt-date-input" value={rangeFrom} max={today} onChange={e => setRangeFrom(e.target.value)} />
-                <span style={{ color: '#8a8070' }}>→</span>
+                <span style={{ color: 'var(--c-gris)' }}>→</span>
                 <input type="date" className="vt-date-input" value={rangeTo} max={today} onChange={e => setRangeTo(e.target.value)} />
               </span>
             )}
@@ -378,8 +378,8 @@ function Header({ profile, name, navigate }: { profile: { role?: string; full_na
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <span className="tips-kanji" style={{ fontSize: '1.6rem' }}>人</span>
         <div>
-          <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--t-ink)' }}>Mi Rendimiento</div>
-          <div style={{ fontSize: '0.68rem', letterSpacing: '0.15em', color: '#888', textTransform: 'uppercase' }}>
+          <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--c-tinta)' }}>Mi Rendimiento</div>
+          <div style={{ fontSize: '0.68rem', color: 'var(--c-gris)' }}>
             Satori · {name || profile?.full_name || 'Empleado'}
           </div>
         </div>
@@ -407,7 +407,7 @@ function Kpi({ label, value, accent, delta, meta, sub }: {
         </div>
       )}
       {meta && (
-        <div className="mr-meta-chip" style={{ background: metaCol(meta.pctOfMeta / 100) + '22', color: metaCol(meta.pctOfMeta / 100) }}>
+        <div className="mr-meta-chip" style={{ background: `color-mix(in srgb, ${metaCol(meta.pctOfMeta / 100)} 13%, transparent)`, color: metaCol(meta.pctOfMeta / 100) }}>
           {meta.pctOfMeta.toFixed(0)}% de meta
         </div>
       )}
@@ -453,18 +453,18 @@ function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
         <div className="mr-card accent" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontSize: '1.5rem' }}>{dayRank.pos === 1 ? '🥇' : dayRank.pos === 2 ? '🥈' : dayRank.pos === 3 ? '🥉' : '🏅'}</span>
           <div>
-            <div style={{ fontWeight: 800, fontFamily: "'DM Mono',monospace", fontSize: '1.05rem', color: 'var(--t-ink)' }}>
-              #{dayRank.pos} <span style={{ color: '#8a8070', fontWeight: 400 }}>de {dayRank.of} en ventas · {period.label}</span>
+            <div style={{ fontWeight: 800, fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1.05rem', color: 'var(--c-tinta)' }}>
+              #{dayRank.pos} <span style={{ color: 'var(--c-gris)', fontWeight: 400 }}>de {dayRank.of} en ventas · {period.label}</span>
             </div>
           </div>
         </div>
       )}
 
       <div className="cd-saldos-bar">
-        <Kpi label="Prom/PAX"         value={fi(myAgg.promPax)} accent="#27874f" delta={delta(myAgg.promPax, genAgg.promPax)} meta={metaChip('promPax', myAgg.promPax)} />
+        <Kpi label="Prom/PAX"         value={fi(myAgg.promPax)} accent="var(--c-musgo)" delta={delta(myAgg.promPax, genAgg.promPax)} meta={metaChip('promPax', myAgg.promPax)} />
         <Kpi label="PAX"              value={String(Math.round(myAgg.pax))} delta={delta(myAgg.pax, genAgg.pax)} />
-        <Kpi label="Comida/PAX (uds)" value={comidaPax.toFixed(2)} accent="#c8a96e" delta={delta(comidaPax, genComidaPax)} />
-        <Kpi label="Bebida/PAX (uds)" value={myAgg.bebPax.toFixed(2)} accent="#2a7a6a" delta={delta(myAgg.bebPax, genAgg.bebPax)} meta={metaChip('bebPax', myAgg.bebPax)} />
+        <Kpi label="Comida/PAX (uds)" value={comidaPax.toFixed(2)} accent="var(--c-oro-texto)" delta={delta(comidaPax, genComidaPax)} />
+        <Kpi label="Bebida/PAX (uds)" value={myAgg.bebPax.toFixed(2)} accent="var(--c-teal)" delta={delta(myAgg.bebPax, genAgg.bebPax)} meta={metaChip('bebPax', myAgg.bebPax)} />
       </div>
 
       <div className="vt-sl">Detalle</div>
@@ -568,7 +568,7 @@ function DiaTab({ dowRows, bestDow, maxDowProm }: {
                   <td className="r muted">{r.days}</td>
                   <td className="r" style={{ fontWeight: 700 }}>{fi(r.mine.promPax)}</td>
                   <td className="r muted">{fi(r.rest.promPax)}</td>
-                  <td className="r" style={{ color: diff >= 0 ? '#27874f' : '#c0392b', fontWeight: 700 }}>
+                  <td className="r" style={{ color: diff >= 0 ? 'var(--c-musgo)' : 'var(--c-laca)', fontWeight: 700 }}>
                     {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
                   </td>
                 </tr>
@@ -690,28 +690,28 @@ function PromPaxLineChart({ series, today }: {
         {gridVals.map(v => (
           <g key={v}>
             <line x1={padL} y1={yOf(v)} x2={padL + plotW} y2={yOf(v)}
-                  stroke="rgba(138,128,112,0.22)" strokeWidth={1} strokeDasharray="3 4" />
+                  stroke="var(--c-linea)" strokeWidth={1} strokeDasharray="3 4" />
             <text x={padL - 6} y={yOf(v) + 3} textAnchor="end" fontSize={10}
-                  fill="#8a8070" fontFamily="'DM Mono',monospace">{kLabel(v)}</text>
+                  fill="var(--c-gris-claro)" fontFamily="var(--font-sans)">{kLabel(v)}</text>
           </g>
         ))}
         {/* Eje X (base) */}
-        <line x1={padL} y1={yOf(0)} x2={padL + plotW} y2={yOf(0)} stroke="rgba(138,128,112,0.5)" strokeWidth={1} />
+        <line x1={padL} y1={yOf(0)} x2={padL + plotW} y2={yOf(0)} stroke="var(--c-gris-claro)" strokeWidth={1} />
         {/* Etiquetas X (fechas) */}
         {labelIdxs.map(i => (
           <text key={series[i].date} x={xOf(series[i].date)} y={H - 9} textAnchor="middle" fontSize={10}
-                fill="#8a8070" fontFamily="'DM Mono',monospace">{ddmm(series[i].date)}</text>
+                fill="var(--c-gris-claro)" fontFamily="var(--font-sans)">{ddmm(series[i].date)}</text>
         ))}
         {/* Línea fina diaria + puntos */}
         <polyline points={dailyPts.map(p => `${p.x},${p.y}`).join(' ')}
-                  fill="none" stroke="#bcae91" strokeWidth={1.3} strokeLinejoin="round" opacity={0.9} />
-        {dailyPts.map((p, i) => <circle key={series[i].date} cx={p.x} cy={p.y} r={2} fill="#a89a7c" />)}
+                  fill="none" stroke="var(--c-gris-claro)" strokeWidth={1.3} strokeLinejoin="round" opacity={0.9} />
+        {dailyPts.map((p, i) => <circle key={series[i].date} cx={p.x} cy={p.y} r={2} fill="var(--c-gris-claro)" />)}
         {/* Línea gruesa de tendencia (dorada) */}
-        <path d={smoothPath(trendPts)} fill="none" stroke="#c8a96e" strokeWidth={2.6}
+        <path d={smoothPath(trendPts)} fill="none" stroke="var(--c-oro)" strokeWidth={2.6}
               strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <div className="mr-icp-sub" style={{ marginTop: '0.35rem', marginBottom: '1.1rem' }}>
-        Línea fina: Prom/PAX por día trabajado · <span style={{ color: '#a07830', fontWeight: 700 }}>línea dorada</span>: tendencia (prom. móvil {win}).
+        Línea fina: Prom/PAX por día trabajado · <span style={{ color: 'var(--c-oro-texto)', fontWeight: 700 }}>línea dorada</span>: tendencia (prom. móvil {win}).
       </div>
     </>
   )
@@ -731,16 +731,16 @@ function SemanaTab({ weekData, series, today }: {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
         {weekData.map((w, i) => (
           <div key={w.label} className={`mr-card ${i === 0 ? 'accent' : ''}`}>
-            <div style={{ fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: i === 0 ? '#a07830' : '#8a8070', fontWeight: 700, marginBottom: '0.4rem' }}>{w.label}</div>
+            <div style={{ fontSize: '0.62rem', color: i === 0 ? 'var(--c-oro-texto)' : 'var(--c-gris)', fontWeight: 700, marginBottom: '0.4rem' }}>{w.label}</div>
             {w.days > 0 ? (
               <>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.25rem', fontWeight: 800, color: 'var(--t-ink)' }}>
-                  {fi(w.promPax)}<span style={{ fontSize: '0.68rem', color: '#8a8070', fontWeight: 600 }}> /PAX</span>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1.25rem', fontWeight: 800, color: 'var(--c-tinta)' }}>
+                  {fi(w.promPax)}<span style={{ fontSize: '0.68rem', color: 'var(--c-gris)', fontWeight: 600 }}> /PAX</span>
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#8a8070', marginTop: 4 }}>{w.days} día{w.days !== 1 ? 's' : ''} · {w.pax} PAX · {w.paxPerDay.toFixed(1)} PAX/día</div>
-                <div style={{ fontSize: '0.74rem', color: '#5a5040', marginTop: 2 }}>{w.bebPax.toFixed(2)} beb/px · {w.comidaPax.toFixed(2)} com/px</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginTop: 4 }}>{w.days} día{w.days !== 1 ? 's' : ''} · {w.pax} PAX · {w.paxPerDay.toFixed(1)} PAX/día</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--c-gris)', marginTop: 2 }}>{w.bebPax.toFixed(2)} beb/px · {w.comidaPax.toFixed(2)} com/px</div>
               </>
-            ) : <div style={{ color: '#b8ad98', fontSize: '0.78rem' }}>Sin datos</div>}
+            ) : <div style={{ color: 'var(--c-gris)', fontSize: '0.78rem' }}>Sin datos</div>}
           </div>
         ))}
       </div>
@@ -755,7 +755,7 @@ function SemanaTab({ weekData, series, today }: {
           <tbody>
             {worked.map((w, i) => (
               <tr key={w.label} style={{ fontWeight: i === 0 ? 700 : 400 }}>
-                <td style={{ color: i === 0 ? '#a07830' : undefined }}>{w.label}</td>
+                <td style={{ color: i === 0 ? 'var(--c-oro-texto)' : undefined }}>{w.label}</td>
                 <td className="r muted">{w.days}</td>
                 <td className="r">{w.pax}</td>
                 <td className="r muted">{w.paxPerDay.toFixed(1)}</td>
@@ -803,17 +803,17 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
     <>
       {/* Totales */}
       <div className="cd-saldos-bar">
-        <Kpi label="Este mes"        value={fi(totals.curEarn)} accent="#2a7a6a" />
+        <Kpi label="Este mes"        value={fi(totals.curEarn)} accent="var(--c-teal)" />
         <Kpi label="Turnos (12m)"    value={String(totals.totalShifts)} />
         <Kpi label="Horas (12m)"     value={totals.totalHours.toFixed(0) + 'h'} />
-        <Kpi label="Total cobrado"   value={fi(totals.totalEarned)} accent="#c8a96e" sub="últimos 12 meses" />
+        <Kpi label="Total cobrado"   value={fi(totals.totalEarned)} accent="var(--c-oro-texto)" sub="últimos 12 meses" />
       </div>
 
       {/* Selector de mes */}
       <div className="mr-period-bar" style={{ justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button className="vt-range-btn" onClick={() => setSelMonth(shiftMonth(selMonth, -1))}>← Mes ant.</button>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: 'var(--t-ink)', minWidth: 120, textAlign: 'center' }}>{monthLabelLong(selMonth)}</span>
+          <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, color: 'var(--c-tinta)', minWidth: 120, textAlign: 'center' }}>{monthLabelLong(selMonth)}</span>
           <button className="vt-range-btn" disabled={!canNext} style={canNext ? undefined : { opacity: 0.4, cursor: 'default' }} onClick={() => canNext && setSelMonth(shiftMonth(selMonth, 1))}>Mes sig. →</button>
         </div>
         {monthsWithData.length > 0 && (
@@ -837,7 +837,7 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
             <div className="mr-icp-card team">
               <div className="mr-icp-label">Equipo (benchmark)</div>
               <div className="mr-icp-val">{icp.team.toFixed(1)}%</div>
-              <div className="mr-icp-sub" style={{ color: icp.diff >= 0 ? '#27874f' : '#c0392b', fontWeight: 700 }}>
+              <div className="mr-icp-sub" style={{ color: icp.diff >= 0 ? 'var(--c-musgo)' : 'var(--c-laca)', fontWeight: 700 }}>
                 {icp.diff >= 0 ? '▲ +' : '▼ '}{Math.abs(icp.diff).toFixed(1)} pts vs equipo
               </div>
             </div>
@@ -859,27 +859,27 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
       ) : (
         <div className="mr-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <span style={{ fontWeight: 700, color: 'var(--t-ink)' }}>{monthLabelLong(selMonth)}</span>
-            <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: '#2a7a6a', fontSize: '1.05rem' }}>{fi(total)}</span>
+            <span style={{ fontWeight: 700, color: 'var(--c-tinta)' }}>{monthLabelLong(selMonth)}</span>
+            <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, color: 'var(--c-teal)', fontSize: '1.05rem' }}>{fi(total)}</span>
           </div>
           {/* Prom/turno general del mes (cobrado / turnos) */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--t-panel)', borderRadius: 3, padding: '0.5rem 0.75rem', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6a6250' }}>Prom / turno</span>
-            <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: 'var(--t-ink)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--c-panel)', borderRadius: 3, padding: '0.5rem 0.75rem', marginBottom: '0.5rem' }}>
+            <span style={{ fontSize: '0.62rem', color: 'var(--c-gris)' }}>Prom / turno</span>
+            <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, color: 'var(--c-tinta)' }}>
               {avgShift(sel.q1Earn + sel.q2Earn, sel.q1Days + sel.q2Days)}
-              <span style={{ fontSize: '0.62rem', color: '#8a8070', fontWeight: 600 }}> · {sel.q1Days + sel.q2Days} turno{(sel.q1Days + sel.q2Days) !== 1 ? 's' : ''}</span>
+              <span style={{ fontSize: '0.62rem', color: 'var(--c-gris)', fontWeight: 600 }}> · {sel.q1Days + sel.q2Days} turno{(sel.q1Days + sel.q2Days) !== 1 ? 's' : ''}</span>
             </span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             {[
-              { label: 'Q1 (1–15)',   days: sel.q1Days, hours: sel.q1Hours, earn: sel.q1Earn, color: '#2a7a6a' },
-              { label: 'Q2 (16–fin)', days: sel.q2Days, hours: sel.q2Hours, earn: sel.q2Earn, color: '#a07830' },
+              { label: 'Q1 (1–15)',   days: sel.q1Days, hours: sel.q1Hours, earn: sel.q1Earn, color: 'var(--c-teal)' },
+              { label: 'Q2 (16–fin)', days: sel.q2Days, hours: sel.q2Hours, earn: sel.q2Earn, color: 'var(--c-oro-texto)' },
             ].map(q => (
-              <div key={q.label} style={{ background: 'var(--t-panel)', borderRadius: 3, padding: '0.6rem 0.75rem' }}>
-                <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6a6250', marginBottom: '0.25rem' }}>{q.label}</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, fontSize: '0.95rem', color: q.color }}>{q.earn > 0 ? fi(q.earn) : '—'}</div>
-                <div style={{ fontSize: '0.64rem', color: '#8a8070', marginTop: '0.15rem' }}>{q.days} turnos · {q.hours.toFixed(1)}h</div>
-                <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: '0.15rem', fontWeight: 700 }}>Prom/turno {avgShift(q.earn, q.days)}</div>
+              <div key={q.label} style={{ background: 'var(--c-panel)', borderRadius: 3, padding: '0.6rem 0.75rem' }}>
+                <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)', marginBottom: '0.25rem' }}>{q.label}</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '0.95rem', color: q.color }}>{q.earn > 0 ? fi(q.earn) : '—'}</div>
+                <div style={{ fontSize: '0.64rem', color: 'var(--c-gris)', marginTop: '0.15rem' }}>{q.days} turnos · {q.hours.toFixed(1)}h</div>
+                <div style={{ fontSize: '0.64rem', color: 'var(--c-gris)', marginTop: '0.15rem', fontWeight: 700 }}>Prom/turno {avgShift(q.earn, q.days)}</div>
               </div>
             ))}
           </div>
@@ -903,8 +903,8 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
                       <td style={{ fontWeight: isSel ? 700 : 400 }}>{MONTHS_SHORT[Number(ym.slice(5, 7)) - 1]} {ym.slice(2, 4)}</td>
                       <td className="r muted">{d.q1Days + d.q2Days}</td>
                       <td className="r muted">{(d.q1Hours + d.q2Hours).toFixed(0)}h</td>
-                      <td className="r" style={{ color: '#2a7a6a' }}>{d.q1Earn > 0 ? fi(d.q1Earn) : '—'}</td>
-                      <td className="r" style={{ color: '#a07830' }}>{d.q2Earn > 0 ? fi(d.q2Earn) : '—'}</td>
+                      <td className="r" style={{ color: 'var(--c-teal)' }}>{d.q1Earn > 0 ? fi(d.q1Earn) : '—'}</td>
+                      <td className="r" style={{ color: 'var(--c-oro-texto)' }}>{d.q2Earn > 0 ? fi(d.q2Earn) : '—'}</td>
                       <td className="r" style={{ fontWeight: 700 }}>{fi(t)}</td>
                     </tr>
                   )
@@ -954,35 +954,35 @@ function CompetenciasTab({ comps, activeName, dates, dias, pm, today }: {
         const myRank = ranking.findIndex(r => r.sal === activeName) + 1
         const myPts  = ranking.find(r => r.sal === activeName)?.pts ?? 0
         const leader = ranking[0]
-        const statusColor = status === 'active' ? '#27874f' : status === 'upcoming' ? '#c8a030' : '#8a8070'
+        const statusColor = status === 'active' ? 'var(--c-musgo)' : status === 'upcoming' ? 'var(--c-oro-texto)' : 'var(--c-gris)'
         const statusLabel = status === 'active' ? '● En curso' : status === 'upcoming' ? '○ Próxima' : '✓ Finalizada'
         return (
           <div key={comp.id} className="mr-card" style={{ borderLeft: `3px solid ${statusColor}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.6rem' }}>
               <div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '0.95rem', fontWeight: 800, color: 'var(--t-ink)' }}>{comp.nombre}</div>
-                <div style={{ fontSize: '0.66rem', color: '#8a8070', marginTop: 2 }}>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '0.95rem', fontWeight: 800, color: 'var(--c-tinta)' }}>{comp.nombre}</div>
+                <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 2 }}>
                   {comp.inicio} → {comp.fin}
-                  {comp.premio && <span style={{ color: '#a07830', marginLeft: '0.5rem' }}>🏅 {comp.premio}</span>}
+                  {comp.premio && <span style={{ color: 'var(--c-oro-texto)', marginLeft: '0.5rem' }}>🏅 {comp.premio}</span>}
                 </div>
               </div>
               <span style={{ fontSize: '0.66rem', color: statusColor, fontWeight: 700 }}>{statusLabel}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              <div style={{ background: 'var(--t-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.58rem', color: '#6a6250', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Mi posición</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.3rem', fontWeight: 800, color: myRank === 1 ? '#a07830' : '#2a7a6a' }}>
+              <div style={{ background: 'var(--c-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.58rem', color: 'var(--c-gris)' }}>Mi posición</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1.3rem', fontWeight: 800, color: myRank === 1 ? 'var(--c-oro-texto)' : 'var(--c-teal)' }}>
                   {myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : `#${myRank}`}
                 </div>
               </div>
-              <div style={{ background: 'var(--t-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.58rem', color: '#6a6250', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Mis puntos</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.3rem', fontWeight: 800, color: '#a07830' }}>{myPts}</div>
+              <div style={{ background: 'var(--c-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.58rem', color: 'var(--c-gris)' }}>Mis puntos</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1.3rem', fontWeight: 800, color: 'var(--c-oro-texto)' }}>{myPts}</div>
               </div>
-              <div style={{ background: 'var(--t-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.58rem', color: '#6a6250', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Líder</div>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#5a5040', marginTop: 4 }}>{leader?.sal ?? '—'}</div>
-                <div style={{ fontSize: '0.66rem', color: '#8a8070' }}>{leader?.pts ?? 0} pts</div>
+              <div style={{ background: 'var(--c-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.58rem', color: 'var(--c-gris)' }}>Líder</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--c-gris)', marginTop: 4 }}>{leader?.sal ?? '—'}</div>
+                <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)' }}>{leader?.pts ?? 0} pts</div>
               </div>
             </div>
             {ranking.length > 0 && (
@@ -992,7 +992,7 @@ function CompetenciasTab({ comps, activeName, dates, dias, pm, today }: {
                   <tbody>
                     {ranking.map((r, i) => (
                       <tr key={r.sal} className={r.sal === activeName ? 'best' : ''}>
-                        <td style={{ fontWeight: 700, color: i === 0 ? '#a07830' : '#8a8070' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                        <td style={{ fontWeight: 700, color: i === 0 ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
                         <td style={{ fontWeight: r.sal === activeName ? 700 : 400 }}>{r.sal === activeName ? `▶ ${r.sal}` : r.sal}</td>
                         <td className="r" style={{ fontWeight: 700 }}>{r.pts}</td>
                       </tr>

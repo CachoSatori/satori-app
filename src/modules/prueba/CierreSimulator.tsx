@@ -14,6 +14,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { CashMovement, CashCierreDia } from '../../shared/types/database'
 import { getAllCashMovements, getCierresDia } from '../../shared/api/cash'
 import { saldoCajaFuerte, fi, fd, todayStr } from '../cash/cashUtils'
+import { useAuth } from '../../shared/hooks/useAuth'
 
 function N(v: number | ''): number { return Number(v) || 0 }
 
@@ -36,6 +37,8 @@ function Field({ label, value, onChange }: { label: string; value: number | ''; 
 
 export default function CierreSimulator() {
   const today = todayStr()
+  const { profile } = useAuth()
+  const esOwner = profile?.role === 'owner'
   const [fecha, setFecha] = useState(today)
   const [movs, setMovs] = useState<CashMovement[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,7 +115,7 @@ export default function CierreSimulator() {
               {fi(saldoLedgerFull.crc)}{saldoLedgerFull.usd ? <span style={{ fontSize: '1rem', color: '#7ab4d4', marginLeft: 8 }}>{fd(saldoLedgerFull.usd)}</span> : null}
             </div>
             <div style={{ fontSize: '0.66rem', color: '#9a9488', marginTop: 4 }}>
-              Base del cálculo (sin las ventas-de-cierre de {fecha}, que se suman del formulario): <span style={num}>{fi(saldoBase.crc)}</span>
+              Base del cálculo (sin las ventas en efectivo del cierre del {fecha}, que se suman desde el formulario): <span style={num}>{fi(saldoBase.crc)}</span>
             </div>
           </div>
 
@@ -163,10 +166,18 @@ export default function CierreSimulator() {
           </div>
 
           <div style={{ fontSize: '0.66rem', color: '#888', marginTop: '0.75rem', lineHeight: 1.5 }}>
-            <code>saldoCajaFuerte</code> ya usa la lógica canónica: + ingresos efectivo con <code>caja_origen='Caja Fuerte'</code>
-            (ventas de cierre), − egresos no pendientes (caja_origen 'Caja Fuerte' o método 'Efectivo'); excluye pendientes,
-            traspasos y transferencias. Es el mismo helper que usa el cierre real del día.
+            El saldo de Caja Fuerte se calcula igual que en el cierre real del día: suma las ventas en efectivo que
+            entran a Caja Fuerte y resta los gastos ya pagados desde Caja Fuerte o en efectivo. No cuenta los gastos
+            pendientes, los traspasos entre cajas ni las transferencias.
           </div>
+          {esOwner && (
+            <details style={{ fontSize: '0.66rem', color: '#888', marginTop: '0.5rem', lineHeight: 1.5 }}>
+              <summary style={{ cursor: 'pointer' }}>Info técnica</summary>
+              <code>saldoCajaFuerte</code> usa la lógica canónica: + ingresos efectivo con <code>caja_origen='Caja Fuerte'</code>
+              (ventas de cierre), − egresos no pendientes (caja_origen 'Caja Fuerte' o método 'Efectivo'); excluye pendientes,
+              traspasos y transferencias. Es el mismo helper que usa el cierre real del día.
+            </details>
+          )}
         </>
       )}
     </div>

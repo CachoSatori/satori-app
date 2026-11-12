@@ -57,7 +57,7 @@ function DeletionNoteModal({ context, onResult }: { context?: string; onResult: 
     <div className="cd-modal-overlay" onClick={() => onResult(null)}>
       <form className="cd-modal" onClick={e => e.stopPropagation()} onSubmit={submit} style={{ maxWidth: 420 }}>
         <div className="cd-modal-title">🗑 Motivo del borrado</div>
-        <p style={{ fontSize: '0.8rem', color: 'var(--t-muted)', margin: '0 0 0.75rem' }}>
+        <p style={{ fontSize: '0.8rem', color: 'var(--c-gris)', margin: '0 0 0.75rem' }}>
           {label}. Queda registrado en la auditoría (el borrado arrastra el inventario ligado).
         </p>
         <textarea className="tips-input-dark" autoFocus value={note} onChange={e => setNote(e.target.value)}

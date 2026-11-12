@@ -28,7 +28,7 @@ interface EditRow {
 
 const MSHORT = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const BAR_ROLES = new Set(['barman', 'barback'])
-const MUTED = '#5a5040', BORDER = 'var(--t-border,#d4cfc4)', GOLD = '#a07830', TEAL = '#2a7a6a', RED = '#c23b22'
+const MUTED = 'var(--c-gris)', BORDER = 'var(--c-linea)', GOLD = 'var(--c-oro-texto)', TEAL = 'var(--c-teal)', RED = 'var(--c-laca)'
 
 // Pool total a la vista sin click. Fuente de verdad = pool_total_crc (SAGRADO calcHistory().totalPool
 // persistido al cerrar/editar, mig 051): incluye la propinaSala (propinas individuales de sala) que el
@@ -304,7 +304,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                   <div className="hist-total">{formatCRC(total)}</div>
                   <button
                     onClick={e => { e.stopPropagation(); openModal(s) }}
-                    style={{ fontSize: '0.7rem', padding: '4px 12px', border: `1px solid ${TEAL}`, background: 'rgba(42,122,106,0.08)', color: TEAL, borderRadius: 3, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}
+                    style={{ fontSize: '0.7rem', padding: '4px 12px', border: `1px solid ${TEAL}`, background: 'var(--c-teal-fondo)', color: TEAL, borderRadius: 3, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}
                     title="Ver detalle y acciones">
                     Ver
                   </button>
@@ -328,7 +328,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                         {(filteredRows ?? calc.rows).map(row => {
                           const split = barraSplit(row, calc.generalRate)
                           return (
-                            <div key={row.employeeId} className="hist-emp-row" style={{ background: filterEmp === row.employeeId ? 'rgba(200,169,110,.08)' : undefined }}>
+                            <div key={row.employeeId} className="hist-emp-row" style={{ background: filterEmp === row.employeeId ? 'var(--c-oro-fondo)' : undefined }}>
                               <div>
                                 <div className="hist-emp-name" style={{ color: filterEmp === row.employeeId ? GOLD : undefined }}>{row.employeeName}</div>
                                 <div className="hist-emp-meta">
@@ -342,7 +342,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                         })}
                       </div>
                       {s.notes && (
-                        <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.04)', borderRadius: 2, fontSize: '0.78rem', color: MUTED, borderLeft: `2px solid ${GOLD}` }}>📝 {s.notes}</div>
+                        <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'var(--c-panel)', borderRadius: 2, fontSize: '0.78rem', color: MUTED, borderLeft: `2px solid ${GOLD}` }}>📝 {s.notes}</div>
                       )}
                     </>
                   )}
@@ -374,21 +374,21 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         <div onClick={() => { if (!saving) closeModal() }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '1rem', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: 'var(--t-paper,#f5f0e8)', color: 'var(--t-ink,#0d0d0d)', borderRadius: 8, maxWidth: editMode ? 640 : 560, width: '100%', marginTop: '4vh', boxShadow: '0 12px 48px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
+            style={{ background: 'var(--c-fondo)', color: 'var(--c-tinta)', borderRadius: 8, maxWidth: editMode ? 640 : 560, width: '100%', marginTop: '4vh', boxShadow: '0 12px 48px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
             {/* Header */}
-            <div style={{ background: 'var(--t-ink,#0d0d0d)', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: 'var(--c-tinta)', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ color: GOLD, fontWeight: 700, fontSize: '1rem' }}>
                   {editMode && <span style={{ color: TEAL }}>✏ Editando · </span>}
                   {modalSession.session_date} · {shiftLabel(modalSession.shift_type)}
                 </div>
-                <div style={{ color: '#bbb', fontSize: '0.72rem' }}>
-                  Pool total: <strong style={{ color: '#f0ece4' }}>{formatCRC(headPool)}</strong>
+                <div style={{ color: 'var(--c-gris-claro)', fontSize: '0.72rem' }}>
+                  Pool total: <strong style={{ color: 'var(--c-fondo)' }}>{formatCRC(headPool)}</strong>
                   {!editMode && modalCalc && modalCalc.barraPool > 0 && <span> · 🍸 Barra {formatCRC(modalCalc.barraPool)}</span>}
                   {editMode && <span> · TC ₡{modalSession.exchange_rate?.toLocaleString('es-CR')}</span>}
                 </div>
               </div>
-              <button onClick={() => { if (!saving) closeModal() }} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1 }} title="Cerrar (Esc)">✕</button>
+              <button onClick={() => { if (!saving) closeModal() }} style={{ background: 'none', border: 'none', color: 'var(--c-gris-claro)', fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1 }} title="Cerrar (Esc)">✕</button>
             </div>
 
             {/* ── Cuerpo ── */}
@@ -401,7 +401,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                     <thead>
                       <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                        <th style={{ textAlign: 'left', padding: '0.4rem 0.3rem', color: MUTED, fontWeight: 500, fontSize: '0.66rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Empleado</th>
+                        <th style={{ textAlign: 'left', padding: '0.4rem 0.3rem', color: MUTED, fontWeight: 500, fontSize: '0.66rem', letterSpacing: '0.06em' }}>Empleado</th>
                         <th style={{ textAlign: 'right', padding: '0.4rem 0.3rem', color: MUTED, fontWeight: 500, fontSize: '0.66rem' }}>Hs</th>
                         <th style={{ textAlign: 'right', padding: '0.4rem 0.3rem', color: MUTED, fontWeight: 500, fontSize: '0.66rem' }}>Pts</th>
                         <th style={{ textAlign: 'right', padding: '0.4rem 0.3rem', color: MUTED, fontWeight: 500, fontSize: '0.66rem' }}>Propina</th>
@@ -459,13 +459,13 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                   </div>
 
                   {/* Empleados */}
-                  <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 2 }}>
+                  <div style={{ background: 'var(--c-fondo)', border: `1px solid ${BORDER}`, borderRadius: 2 }}>
                     {eRows.map(r => {
                       const eff = (r.coveredRole || r.role) as UserRole
                       const hasPropina = !NO_PROPINA_ROLES.includes(eff)
                       const pay = payoutMap.get(r.employeeId) ?? 0
                       return (
-                        <div key={r.employeeId} style={{ borderBottom: `1px solid ${BORDER}`, padding: '0.5rem 0.7rem', background: r.active ? 'rgba(42,122,106,0.05)' : undefined }}>
+                        <div key={r.employeeId} style={{ borderBottom: `1px solid ${BORDER}`, padding: '0.5rem 0.7rem', background: r.active ? 'var(--c-teal-fondo)' : undefined }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                             <input type="checkbox" checked={r.active} onChange={e => setRow(r.employeeId, { active: e.target.checked })}
                               style={{ width: 15, height: 15, accentColor: TEAL, cursor: 'pointer', flexShrink: 0 }} />
@@ -483,12 +483,12 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                           {r.active && (
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.45rem', paddingLeft: '1.6rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                               <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>Horas</span>
+                                <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>Horas</span>
                                 <input type="number" className="tips-input-dark" min={0} step={0.5} value={r.hours} style={{ width: 70 }}
                                   onChange={e => setRow(r.employeeId, { hours: e.target.value === '' ? '' : Number(e.target.value) })} />
                               </label>
                               <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>👥 Cubrió como</span>
+                                <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>👥 Cubrió como</span>
                                 <select className="tips-input-dark" value={r.coveredRole} style={{ minWidth: 110 }}
                                   onChange={e => {
                                     const nv = (e.target.value || '') as UserRole | ''
@@ -506,12 +506,12 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                               {hasPropina && (
                                 <>
                                   <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                    <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>Electrónico ₡</span>
+                                    <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>Electrónico ₡</span>
                                     <input type="number" className="tips-input-dark" min={0} step={100} value={r.propina_crc} style={{ width: 90 }}
                                       onChange={e => setRow(r.employeeId, { propina_crc: e.target.value === '' ? '' : Number(e.target.value) })} />
                                   </label>
                                   <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                    <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>Electrónico $</span>
+                                    <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>Electrónico $</span>
                                     <input type="number" className="tips-input-dark" min={0} step={0.01} value={r.propina_usd} style={{ width: 80 }}
                                       onChange={e => setRow(r.employeeId, { propina_usd: e.target.value === '' ? '' : Number(e.target.value) })} />
                                   </label>
@@ -527,16 +527,16 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                 </>
               )}
               {!editMode && modalSession.notes && (
-                <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.04)', borderRadius: 2, fontSize: '0.78rem', color: MUTED, borderLeft: `2px solid ${GOLD}` }}>📝 {modalSession.notes}</div>
+                <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'var(--c-panel)', borderRadius: 2, fontSize: '0.78rem', color: MUTED, borderLeft: `2px solid ${GOLD}` }}>📝 {modalSession.notes}</div>
               )}
             </div>
 
             {/* ── Acciones ── */}
-            <div style={{ display: 'flex', gap: '0.5rem', padding: '0.875rem 1.25rem', borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap', justifyContent: 'flex-end', background: 'rgba(0,0,0,0.02)' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', padding: '0.875rem 1.25rem', borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap', justifyContent: 'flex-end', background: 'var(--c-panel)' }}>
               {editMode ? (
                 <>
                   <button onClick={() => handleSaveEdit(modalSession, modalCalc)} disabled={saving}
-                    style={{ padding: '7px 16px', borderRadius: 4, border: `1px solid ${TEAL}`, background: TEAL, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+                    style={{ padding: '7px 16px', borderRadius: 4, border: `1px solid ${TEAL}`, background: TEAL, color: 'var(--c-fondo)', fontWeight: 700, fontSize: '0.82rem', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
                     {saving ? 'Guardando…' : '💾 Guardar cambios'}
                   </button>
                   <button onClick={() => { setEditMode(false); setEditErr(null) }} disabled={saving}
@@ -548,7 +548,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                 <>
                   {isManager && (
                     <button onClick={() => startEdit(modalSession, modalCalc)} disabled={!modalCalc}
-                      style={{ padding: '7px 14px', borderRadius: 4, border: `1px solid ${TEAL}`, background: 'rgba(42,122,106,0.1)', color: TEAL, fontWeight: 700, fontSize: '0.8rem', cursor: modalCalc ? 'pointer' : 'default', opacity: modalCalc ? 1 : 0.5 }}>
+                      style={{ padding: '7px 14px', borderRadius: 4, border: `1px solid ${TEAL}`, background: 'var(--c-teal-fondo)', color: TEAL, fontWeight: 700, fontSize: '0.8rem', cursor: modalCalc ? 'pointer' : 'default', opacity: modalCalc ? 1 : 0.5 }}>
                       ✏ Editar
                     </button>
                   )}

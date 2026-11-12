@@ -73,7 +73,7 @@ export default function AdminModule() {
           <span className="role-badge">Owner</span>
         </div>
         <div className="module-header-actions">
-          <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888' }}
+          <button className="cash-back-btn" style={{ borderColor:'var(--c-linea)', color:'var(--c-gris)' }}
             onClick={() => navigate('/')}>← Inicio</button>
         </div>
       </div>
@@ -83,7 +83,7 @@ export default function AdminModule() {
         <div className={`vt-nav-tab ${tab === 'employees' ? 'active' : ''}`} onClick={() => setTab('employees')}>Empleados</div>
         <div className={`vt-nav-tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>
           Usuarios{pendingUsers > 0 && (
-            <span style={{ marginLeft: '0.4rem', background: 'var(--t-red)', color: '#fff', borderRadius: 10, fontSize: '0.6rem', fontWeight: 700, padding: '0.05rem 0.4rem' }}>
+            <span style={{ marginLeft: '0.4rem', background: 'var(--c-laca)', color: 'var(--c-fondo)', borderRadius: 10, fontSize: '0.6rem', fontWeight: 700, padding: '0.05rem 0.4rem' }}>
               {pendingUsers}
             </span>
           )}
@@ -94,8 +94,8 @@ export default function AdminModule() {
       </div>
 
       {/* Email report button */}
-      <div style={{ padding: '0.625rem 1.5rem', borderBottom: '1px solid var(--t-border)', background: 'var(--t-panel)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.68rem', color: '#5a5040', letterSpacing: '0.04em', marginRight: '0.25rem' }}>
+      <div style={{ padding: '0.625rem 1.5rem', borderBottom: '1px solid var(--c-linea)', background: 'var(--c-panel)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.68rem', color: 'var(--c-gris)', letterSpacing: '0.04em', marginRight: '0.25rem' }}>
           📧 Reportes automáticos — día 1 (mes anterior) · día 15 (propinas quincenal):
         </span>
         {(['ventas','propinas','ambos'] as const).map(tipo => (
@@ -117,7 +117,7 @@ export default function AdminModule() {
           </button>
         ))}
         {reportMsg && (
-          <span style={{ fontSize: '0.78rem', color: reportMsg.startsWith('✓') ? 'var(--t-teal)' : 'var(--t-red)', fontWeight: 600, marginLeft: '0.5rem' }}>
+          <span style={{ fontSize: '0.78rem', color: reportMsg.startsWith('✓') ? 'var(--c-teal)' : 'var(--c-laca)', fontWeight: 600, marginLeft: '0.5rem' }}>
             {reportMsg}
           </span>
         )}

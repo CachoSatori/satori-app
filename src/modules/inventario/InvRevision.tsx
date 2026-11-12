@@ -142,8 +142,8 @@ export default function InvRevision({ ingredients, onRefresh }: {
   return (
     <div style={{ padding: '0.5rem 1.5rem 2rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
-        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--vt-gold)' }}>
-          🧾 Revisión de inventario <span style={{ color: 'var(--t-muted)', fontWeight: 400 }}>· {filtered.length} pendiente{filtered.length === 1 ? '' : 's'}</span>
+        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--c-oro-texto)' }}>
+          🧾 Revisión de inventario <span style={{ color: 'var(--c-gris)', fontWeight: 400 }}>· {filtered.length} pendiente{filtered.length === 1 ? '' : 's'}</span>
         </div>
         <div style={{ flex: 1 }} />
         <select className="cd-tbl-select" value={fSupplier} onChange={e => setFSupplier(e.target.value)} style={{ minWidth: 160 }}>
@@ -160,7 +160,7 @@ export default function InvRevision({ ingredients, onRefresh }: {
       {loading ? (
         <div style={{ padding: '2rem', textAlign: 'center', opacity: 0.4 }}>⏳ Cargando…</div>
       ) : filtered.length === 0 ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--t-muted)', fontSize: '0.82rem' }}>
+        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--c-gris)', fontSize: '0.82rem' }}>
           No hay facturas de insumos pendientes de revisión. 🎉
         </div>
       ) : (
@@ -169,16 +169,16 @@ export default function InvRevision({ ingredients, onRefresh }: {
             const doc = docForTask(t)
             const thumb = doc ? urls[doc.id] : undefined
             return (
-              <div key={t.id} style={{ border: '1px solid #2a2a2a', borderRadius: 8, padding: '0.7rem', background: '#161616', display: 'flex', gap: '0.7rem' }}>
-                <div style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: '#0d0d0d', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div key={t.id} style={{ border: '1px solid var(--c-linea)', borderRadius: 8, padding: '0.7rem', background: 'var(--c-panel)', display: 'flex', gap: '0.7rem' }}>
+                <div style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: 'var(--c-panel)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {thumb
                     ? <a href={thumb} target="_blank" rel="noreferrer"><img src={thumb} alt="factura" style={{ width: 56, height: 56, objectFit: 'cover' }} /></a>
                     : <span style={{ fontSize: '1.2rem', opacity: 0.4 }}>📄</span>}
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{supName(t.supplier_id)}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--t-muted)' }}>{t.entry_date ?? '—'}</div>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--vt-gold)', marginTop: 2 }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)' }}>{t.entry_date ?? '—'}</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--c-oro-texto)', marginTop: 2 }}>
                     {t.amount_crc != null ? money(t.amount_crc, t.currency) : '—'}
                   </div>
                   <button className="cd-btn-green" style={{ marginTop: 6, padding: '0.25rem 0.6rem', fontSize: '0.72rem' }} onClick={() => setSelId(t.id)}>
@@ -477,14 +477,14 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
       <div className="invrev-cols">
       <div className="invrev-main">
         <div className="cd-modal-title">Revisión — {curSupName}</div>
-        <p style={{ fontSize: '0.74rem', color: 'var(--t-muted)', margin: '0.2rem 0 0.75rem' }}>
+        <p style={{ fontSize: '0.74rem', color: 'var(--c-gris)', margin: '0.2rem 0 0.75rem' }}>
           Emparejá cada ítem con un ingrediente. Al completar entra al stock y queda auditado (el gasto ya está en Caja). Si no corresponde, descartá con motivo.
         </p>
         {err && <div className="tips-error" style={{ marginBottom: '0.6rem' }}><span>{err}</span><button onClick={() => setErr(null)}>✕</button></div>}
-        {savedMsg && <div style={{ marginBottom: '0.6rem', padding: '0.4rem 0.7rem', borderRadius: 4, background: 'rgba(74,154,106,.12)', border: '1px solid #4a9a6a', color: '#4a9a6a', fontSize: '0.78rem' }}>{savedMsg}</div>}
+        {savedMsg && <div style={{ marginBottom: '0.6rem', padding: '0.4rem 0.7rem', borderRadius: 4, background: 'var(--c-musgo-fondo)', border: '1px solid var(--c-musgo)', color: 'var(--c-musgo)', fontSize: '0.78rem' }}>{savedMsg}</div>}
         {/* Trazabilidad: quién registró el pago de mercadería (pedido del dueño). */}
         {movement && (
-          <div style={{ fontSize: '0.7rem', color: 'var(--t-muted)', marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)', marginBottom: '0.5rem' }}>
             Registrado por <strong>{creatorName ?? '—'}</strong>
             {movement.created_at ? ` · ${new Date(movement.created_at).toLocaleString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
           </div>
@@ -500,14 +500,14 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
             se duplica — vive en el panel). En móvil sigue siendo la única foto, como hoy. */}
         {doc?.image_path && (
           <div className="invrev-thumb-block" style={{ marginBottom: '0.6rem' }}>
-            <div style={{ fontSize: '0.7rem', color: 'var(--t-muted)', marginBottom: 4 }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)', marginBottom: 4 }}>
               Factura adjunta — tocá la foto para ampliarla y comparar contra los ítems leídos.
             </div>
             <FacturaThumbs paths={[doc.image_path]} size={120} resolve={signedUrl} />
           </div>
         )}
         {!doc && !pendingAttach && (
-          <div style={{ marginBottom: '0.6rem', padding: '0.6rem 0.7rem', border: '1px dashed var(--vt-gold)', borderRadius: 6, background: 'rgba(200,169,110,.06)' }}>
+          <div style={{ marginBottom: '0.6rem', padding: '0.6rem 0.7rem', border: '1px dashed var(--c-oro)', borderRadius: 6, background: 'var(--c-oro-fondo)' }}>
             <div style={{ fontSize: '0.78rem', marginBottom: '0.45rem' }}>
               Esta tarea no tiene factura enlazada (el pago se hizo sin foto). Adjuntá la factura para poder completar el inventario — el gasto ya está registrado; esto <strong>solo agrega la factura</strong>, no toca el pago.
             </div>
@@ -525,7 +525,7 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
           const difiere    = totalDifiere(leidoTotal, movAmount)
           const cur        = movement?.currency ?? 'CRC'
           return (
-            <div style={{ marginBottom: '0.6rem', padding: '0.6rem 0.7rem', border: '1px solid var(--vt-gold)', borderRadius: 6, background: 'rgba(200,169,110,.08)' }}>
+            <div style={{ marginBottom: '0.6rem', padding: '0.6rem 0.7rem', border: '1px solid var(--c-oro)', borderRadius: 6, background: 'var(--c-oro-fondo)' }}>
               <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.45rem' }}>¿Esta factura corresponde a este pago?</div>
               <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'flex-start' }}>
                 <div style={{ width: 96, flexShrink: 0 }}>
@@ -537,11 +537,11 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
                 </div>
                 <div style={{ fontSize: '0.76rem', minWidth: 0, flex: 1, display: 'grid', gap: '0.25rem' }}>
                   <div>Proveedor leído: <strong>{leidoProv ?? '— (la IA no lo leyó)'}</strong></div>
-                  <div style={{ color: 'var(--t-muted)' }}>Proveedor del pago: {curSupName}</div>
+                  <div style={{ color: 'var(--c-gris)' }}>Proveedor del pago: {curSupName}</div>
                   <div>Total leído: <strong>{leidoTotal != null ? money(leidoTotal, cur) : '— (la IA no lo leyó)'}</strong></div>
-                  <div style={{ color: 'var(--t-muted)' }}>Monto del pago: {movAmount != null ? money(movAmount, cur) : '—'}</div>
+                  <div style={{ color: 'var(--c-gris)' }}>Monto del pago: {movAmount != null ? money(movAmount, cur) : '—'}</div>
                   {difiere && (
-                    <div style={{ color: 'var(--t-red, #d66)', fontWeight: 600 }}>
+                    <div style={{ color: 'var(--c-laca)', fontWeight: 600 }}>
                       ⚠ El total leído no coincide con el monto del pago. Confirmá solo si es la factura correcta — el movimiento NO se modifica.
                     </div>
                   )}
@@ -558,9 +558,9 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
         })()}
 
         {!loaded ? (
-          <div style={{ padding: '1rem', color: '#888' }}>Cargando…</div>
+          <div style={{ padding: '1rem', color: 'var(--c-gris)' }}>Cargando…</div>
         ) : items.length === 0 ? (
-          <div style={{ padding: '1rem', color: 'var(--t-muted)', fontSize: '0.8rem' }}>La factura no tiene ítems para ingresar.</div>
+          <div style={{ padding: '1rem', color: 'var(--c-gris)', fontSize: '0.8rem' }}>La factura no tiene ítems para ingresar.</div>
         ) : (
           <InvLineTable lines={lines} ingredients={ingredients} onUpdate={upd} onSelIngredient={onSelIngredient} />
         )}
@@ -568,21 +568,21 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
         {!discarding ? (
           <div style={{ marginTop: '0.85rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.6rem' }}>
             <div>
-              <label style={{ fontSize: '0.7rem', color: 'var(--t-muted)' }}>Proveedor</label>
+              <label style={{ fontSize: '0.7rem', color: 'var(--c-gris)' }}>Proveedor</label>
               <select className="cd-tbl-select" value={supplierId} onChange={e => { setSupplierId(e.target.value); setSavedMsg(null) }} style={{ width: '100%' }}>
                 <option value="">— sin proveedor —</option>
                 {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-              <div style={{ fontSize: '0.64rem', color: 'var(--t-muted)', marginTop: 2 }}>Se sincroniza con el movimiento de caja (supplier_id + nombre).</div>
+              <div style={{ fontSize: '0.64rem', color: 'var(--c-gris)', marginTop: 2 }}>Se sincroniza con el movimiento de caja (supplier_id + nombre).</div>
             </div>
             <div>
-              <label style={{ fontSize: '0.7rem', color: 'var(--t-muted)' }}>Nota {movement ? '(se guarda en el movimiento)' : '(solo auditoría al completar)'}</label>
+              <label style={{ fontSize: '0.7rem', color: 'var(--c-gris)' }}>Nota {movement ? '(se guarda en el movimiento)' : '(solo auditoría al completar)'}</label>
               <textarea className="cd-tbl-input" value={note} onChange={e => { setNote(e.target.value); setSavedMsg(null) }} rows={2} style={{ width: '100%', resize: 'vertical' }} placeholder="Comentario / descripción…" />
             </div>
           </div>
         ) : (
           <div style={{ marginTop: '0.75rem' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--t-muted)' }}>Motivo del descarte (obligatorio)</label>
+            <label style={{ fontSize: '0.7rem', color: 'var(--c-gris)' }}>Motivo del descarte (obligatorio)</label>
             <textarea className="cd-tbl-input" value={reason} onChange={e => setReason(e.target.value)} rows={2} autoFocus style={{ width: '100%', resize: 'vertical' }} placeholder="Por qué se descarta esta revisión…" />
           </div>
         )}

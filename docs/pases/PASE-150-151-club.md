@@ -6,7 +6,8 @@
 > **Nada de este documento se ejecuta en prod hasta que el dueño lo firme (§10).** Si algo no coincide con lo que dice
 > acá, **se para y se avisa**: no se improvisa en prod.
 >
-> - **Fecha prevista: jueves 12-nov, por la mañana** (nunca entre las 17:00 y las 23:00 CR). La tarde del mismo día es la
+> - **✅ HECHO el mié 11-nov a las 23:22:08 CR** (merge `17a9efd`; el dueño adelantó la fecha prevista del jueves 12; pase **cerrado: pasa**, bitácora en §10). La configuración del local (§6) y lo de Cloudflare siguen el jue 12 por la mañana.
+> - **Fecha prevista (texto original): jueves 12-nov, por la mañana** (nunca entre las 17:00 y las 23:00 CR). La tarde del mismo día es la
 >   prueba interna con el personal (plan: `docs/club-satori/PLAN-ACTIVACION-PILOTO.md` §3).
 > - **Orden en prod: 085 → 089 → 090 → 091 → 092 → 093 → 094 → 095 (todas en prod desde el 10-nov noche: ledger 65 · 095) → 150 → 151.** Supabase no
 >   aplica una migración con número menor que la última aplicada: el Club va **después** de toda la caja que esté en prod.
@@ -376,7 +377,7 @@ Verificar: `/api/salud` → todo en `true` (`club_web_key` y `turnstile` incluid
 | Códigos del PoS y sección de cortesías | `club_config` | 856 (LOCAL CLUB), 857 (INVITADO), 1123 (PROMO CLUB 10 %); cortesías 17 / 40 | 856 · 857 · — |
 | Aviso de privacidad | `club_config.aviso_privacidad_version` | el de club-web: `v1.1` | `v1.1` |
 | Retención de contactos de ofertas | `club_config_global.contactos_ofertas_meses` | 24 (09-nov) | 24 |
-| Tarjeta física | `club_config.tarjeta_manual_activa` | apagada | false |
+| Tarjeta física (modo transición) | `club_config.tarjeta_manual_activa` y `tarjeta_manual_tope_dia` | **Encendida, con tope de 12 personas por anfitrión por día** (decisión del dueño, 11-nov): se enciende **después de la carga única**, con los SQL de §6.5b. Carga owner, manager o cajero; la revisa owner o manager (nunca quien la cargó), todos los días. Se apaga cuando las tarjetas viejas sean menos del 15 % de las visitas de anfitriones dos semanas seguidas (revisión cada 2 semanas) | false · 30 |
 
 ```sql
 update public.club_config set socio_visitas_semana_max = 7, anfitrion_tope_mes_crc = 150000,
@@ -391,6 +392,7 @@ select g.socio_visitas_por_dia, g.contactos_ofertas_meses, c.socio_visitas_seman
        c.tarjeta_manual_activa, c.lc_excepciones_desde, c.club_activo
   from public.club_config c cross join public.club_config_global g where c.location_id = 'santa-teresa';
 -- 1 · 24 · 7 · 150000 · 1 · 30 · 20 · 60 · 30 · 18000 · 6 · 856 · 857 · 1123 · 17 · 40 · v1.1 · false · 2026-11-12 · false
+-- (después de §6.5b, el antepenúltimo valor pasa a true: la tarjeta vieja del modo transición)
 select count(*) filter (where pos_login is not null) as con_login, count(*) as activos
   from public.employees where is_active;                                                          -- anotar
 ```
@@ -403,6 +405,46 @@ select count(*) filter (where pos_login is not null) as con_login, count(*) as a
 («cero socios»), y la prueba interna ya crea socios. Procedimiento: RUNBOOK §8 y `docs/club-satori/piloto/saldos-papel.md`
 §A (`migrar_firestore.py aplicar-firmado` con el sha256 firmado; con restos vencidos, el dueño firma también `vencimientos_restos` y `vencimientos_restos_personas`, que van en `--esperados` dentro del `carga.sql`, Grok 171). Si los datos no están el jueves, la prueba interna se hace
 sin ellos y la carga se replanifica con firma (el migrador frena con la base no vacía).
+
+**6.5b Modo transición: tarjeta vieja de papel, tope 12** (decisión del dueño, 11-nov). Después de la carga única (los
+anfitriones tienen que estar cargados) y antes de la prueba interna. Es un cambio de **datos**, con rastro en
+`club_config_historial`. Probado el 11-nov en staging en una transacción descartada.
+```sql
+-- A. antes (solo lectura)
+begin read only;
+select location_id, club_activo, tarjeta_manual_activa, tarjeta_manual_tope_dia
+  from public.club_config order by location_id;
+-- esperado: nosara · false · false · 30   y   santa-teresa · false · false · 30
+select count(*) as anfitriones_activos from public.club_miembros
+ where location_id = 'santa-teresa' and estado = 'activo' and tipo in ('referente', 'concierge_pm', 'equipo');
+-- esperado: más de 0 (los de la carga única). Con 0, PARAR: la carga no entró.
+rollback;
+```
+```sql
+-- B. el cambio (una transacción; primero el tope, después encender)
+begin;
+update public.club_config set tarjeta_manual_tope_dia = 12
+ where location_id = 'santa-teresa' and tarjeta_manual_tope_dia = 30
+returning location_id, tarjeta_manual_tope_dia;                          -- 1 fila · santa-teresa · 12
+update public.club_config set tarjeta_manual_activa = true
+ where location_id = 'santa-teresa' and tarjeta_manual_activa = false
+returning location_id, tarjeta_manual_activa, tarjeta_manual_tope_dia;   -- 1 fila · santa-teresa · true · 12
+commit;
+-- el editor muestra la última: santa-teresa · true · 12. Si alguna dice «0 filas»: rollback; en lugar de commit;
+```
+```sql
+-- C. después (solo lectura)
+begin read only;
+select location_id, club_activo, tarjeta_manual_activa, tarjeta_manual_tope_dia
+  from public.club_config order by location_id;                          -- santa-teresa · … · true · 12
+select campo, valor_anterior, valor_nuevo, cambiado_en from public.club_config_historial
+ where location_id = 'santa-teresa' and campo in ('tarjeta_manual_activa', 'tarjeta_manual_tope_dia')
+ order by cambiado_en desc, campo limit 2;                               -- false → true   y   30 → 12
+rollback;
+```
+Volver atrás (inmediato): `update public.club_config set tarjeta_manual_activa = false where location_id = 'santa-teresa';`.
+Paso a paso de la caja: `docs/club-satori/piloto/guia-rapida-caja.pdf`, página 2 (#100). El botón «Tarjeta vieja (sin QR)»,
+el QR de caja y el contador de transición llegan con el #118.
 
 **6.6 Encender Santa Teresa: en la prueba interna** (jue 12 por la tarde, antes del servicio). Owner → Club → Locales →
 **Encender**. Antes: una cortesía activa (§6.4), §5.4 en 0 y `/api/salud` en verde. Nosara queda apagado.
@@ -471,6 +513,12 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 - **085 → 089 → 090 → 091 → 092 → 093 → 094 → 095 (en prod, 10-nov) → 150 → 151.** La 087 y la 088 (y cualquier migración de caja que
   quede después del Club) toman **152+** al armar su paquete.
 - Después del pase: actualizar `ESTADO.md` (ledger de prod) y el «Resultado» abajo. Staging ya está alineado (§3).
+- **Resultado (11-nov):** el Club está en prod. Merge `17a9efd` a las 23:22:08 CR; ledger de prod **67 · 151**; G-61
+  «después» en 0; humo igual que antes; pase cerrado: **pasa**, sin vuelta atrás. La fecha se adelantó del jueves 12 al
+  11-nov a la noche por decisión del dueño. Con el Club apagado y sin locales: la configuración (§6) sigue el jue 12.
+- **Modo transición (decisión del dueño, 11-nov):** la tarjeta vieja (de papel, sin QR) queda encendida en Santa Teresa
+  con tope de 12 personas por anfitrión por día, después de la carga única (§6.5b). No es una migración: es un dato de
+  `club_config`, con su rastro en `club_config_historial`.
 - Después del pase, en un PR aparte: sacar el nombre del dueño de los comentarios de `supabase/migrations/` (decisión del
   dueño, 10-nov; backlog 22c). En la 150 solo los comentarios de afuera de las funciones: los 4 de adentro quedan.
 - **Pendiente después del piloto** (decisión del dueño, 10-nov): la cédula jurídica de la sociedad está escrita en el
@@ -482,27 +530,27 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 ## 10. Firma y bitácora
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del #59) | | |
-| Responsables (ejecución / control) | | |
+| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del #59) | | ✅ 11-nov, en el chat con Claude, después de las 23:00 -06:00, sobre `3f208d853f9f6e9235f1314ab37067bf92d8ce63`: autoriza el pase por merge del #59, **adelanta la fecha del jueves 12 al 11-nov a la noche**, con el GO de Grok condicionado sobre `d6c117b` más su aceptación del delta. El texto está en el cuerpo del merge `17a9efd` (con los roles en lugar de los nombres) |
+| Responsables (ejecución / control) | | El dueño (ejecución; el merge lo hizo Claude por indicación explícita del dueño) / la responsable de control. Sin nombres en el repo |
 | 0.4 la 091–095 en prod | ledger 65 · 095 | ✅ 10-nov noche (lo informó el dueño): 091 por el merge `b8cb74d` (pase cerrado), 092–095 por el merge `c41e18b`; ledger 65 · 095 |
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | ✅ 11-nov: `60a977e` (main `ced6621` ancestro; migraciones: solo 150 y 151) |
 | 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` con `wrangler deploy` manual, sin repositorio conectado, sin URL pública, con sus variables (§11.4) · `CLUB_WEB_KEY` en Pages y en el Worker | | ✅ 11-nov: Worker desde `66c950d` (Version `ae142f3a…`), 4 variables a prod; `CLUB_WEB_KEY` creada y cargada en los dos |
-| §11.4 paso 4b · Worker otra vez a mano desde la cabeza firmada (SHA, Version nueva) | | |
+| §11.4 paso 4b · Worker otra vez a mano desde la cabeza firmada (SHA, Version nueva) | | ⏳ **No se hizo el 11-nov:** wrangler avisaba que el deploy pisaba `preview_urls` y las variables cargadas en el panel, y el dueño no siguió. Pasa al jue 12 por la mañana, **antes de encender**, desde `main` con el #125 adentro (`preview_urls = false` explícito y `keep_vars = true`): §11.4 paso 4c |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | 0 sin esperar | ✅ 11-nov 14:30: 63 esperadas, sale 0 · sha256 `e5f1c7c0…87226` · firma del dueño: |
 | 0.10 carga única: export, sha256 de `carga.sql` y esperados de restos (N y personas) firmados (o «la prueba va sin carga») | | ✅ 11-nov 10:14: sha256 `150f0c8e…6b461f`, esperados 115 / 174, ensayo en staging OK |
-| 1.1 ledger: 65 · 095 · 089–095 presentes · nada del Club (Grok 181) | 65 · 095 | |
-| 1.2 0 · 0 · 0 | | |
-| 1.3 true · true · true · 2 · 2 · false · true · 3 · true · pgcrypto · pg_cron | | |
-| 1.4 respaldo de `employees`, `profiles` y `locations`: cifrado, dónde quedó (sin la contraseña), sha256 y fecha de borrado | | |
-| 4a antes: 0 · null · 0 | | |
-| 4b antes (activas), justo antes del merge | | |
-| Gate de CI en la cabeza del #59 (enlace), o la aceptación del dueño sin ese verde, con el motivo | | |
-| §2 merge (SHA, hora) | | |
-| 5.1 Branching success · log con la 150 y la 151 | | |
-| 5.2 ledger 67 · 151 · 1 fila 150 y 1 fila 151 con su `name` (statements: anotar) | | |
-| 5.3 0 · 1 · 0 · true · 1 · 1 · `15 9 * * *` · false · false · true · 1 · 0 | | |
-| 5.4 G-61 después: sale 0 | | |
-| 4a después: 10 · (las 10) · 0 · 4b = antes · 4c sin rojos | | |
+| 1.1 ledger: 65 · 095 · 089–095 presentes · nada del Club (Grok 181) | 65 · 095 | ✅ 65 · 095 · 0 filas del Club · 089–095 presentes |
+| 1.2 0 · 0 · 0 | | ✅ 0 · 0 · 0 |
+| 1.3 true · true · true · 2 · 2 · false · true · 3 · true · pgcrypto · pg_cron | | ✅ true · true · true · 2 · 2 · false · true · 3 · true · 1.3 · 1.6.4 |
+| 1.4 respaldo de `employees`, `profiles` y `locations`: cifrado, dónde quedó (sin la contraseña), sha256 y fecha de borrado | | ✅ cifrado, fuera del repo (en poder del dueño) · sha256 `18108dd5f5e19f03b02c8380397680a7bb1a984534a8f48d5859fac5a02bfef9` · se borra el **18-nov** si no hubo vuelta atrás |
+| 4a antes: 0 · null · 0 | | ✅ 0 · null · 0 |
+| 4b antes (activas), justo antes del merge | | ✅ 23:17 CR (conteos): movimientos 2563 · sesiones 279 · propinas 2138 · empleados 46 / 12 · cuenta inactiva 0 |
+| Gate de CI en la cabeza del #59 (enlace), o la aceptación del dueño sin ese verde, con el motivo | | ✅ Aceptación del dueño sin CI de pruebas en el PR (Grok 125: el repo no corre pruebas en los PR). Las corridas de §0.6 fueron el gate. **Ojo:** el «build de club-web en verde» de §0.6 no era un build limpio (ver «Pages `satori-club`» abajo) |
+| §2 merge (SHA, hora) | | ✅ `17a9efd7284be14bb621e359001c31c52767d1a6` · **11-nov 23:22:08 CR** · merge commit (ni squash ni rebase) · con el cierre de caja de la noche hecho · el árbol de `main` quedó idéntico al de `3f208d8` |
+| 5.1 Branching success · log con la 150 y la 151 | | ✅ «Supabase Preview» del merge commit: **success** (check 130992076785, 6 s). El log no se anotó; que entraron las dos lo confirman 5.2 y 5.3 |
+| 5.2 ledger 67 · 151 · 1 fila 150 y 1 fila 151 con su `name` (statements: anotar) | | ✅ **67 · 151** · 150 `club_satori_esquema` con **713** statements · 151 `club_catalogo_locales` con **17** |
+| 5.3 0 · 1 · 0 · true · 1 · 1 · `15 9 * * *` · false · false · true · 1 · 0 | | ✅ 0 · 1 · 0 · true · 1 · 1 · `15 9 * * *` · false · false · true · 1 · 0 |
+| 5.4 G-61 después: sale 0 | | ✅ 23:33 CR, `gate61_prod_csv.sh --despues` desde `main` @ `17a9efd`: **0 fuera de la lista** (63 de 63 esperadas, sha256 `e5f1c7c0…87226`; 0 sobrantes) · staging 3.765 hechos, prod 3.706 · los **3.374 hechos del Club idénticos** a staging · tarea `club_socios_mantenimiento` con `user=postgres`, igual que staging · CSV de prod sha256 `70bffc08422b781e44eeaf55e07d0f378411ceb92c9a6c4eee2f7e71e8ab6a90` |
+| 4a después: 10 · (las 10) · 0 · 4b = antes · 4c sin rojos | | ✅ 10 (las 10 esperadas) · 0 · 4b idéntico a antes · 4c pantallas OK (el Club visible, sin locales) |
 | 6.1 dos locales, los dos apagados · `locations` como se espera | | |
 | 6.2 dominio | | |
 | 6.3 `CLUB_WEB_KEY` cargada, sha256 en la base, `/api/salud` en verde | | |
@@ -510,10 +558,13 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | §11.3 `/api/salud`: `x-club-api: worker` y todo en `true` · prueba de fuego | | |
 | 6.4 valores del local (la fila de verificación) · empleados con login | | |
 | 6.5 carga única (sha256, conteos) o «replanificada» | | |
+| 6.5b modo transición: tope 12 y `tarjeta_manual_activa` encendida en Santa Teresa, después de la carga única (§6.5b) | antes: false · 30 → después: true · 12 · 2 filas en `club_config_historial` | |
+| Pages `satori-club`: primer deploy de producción | Deployed | ❌ 11-nov 23:2x: **Build failed** (check 130992048866). Causa reproducida en limpio: `tsc --noEmit` revisaba los archivos de prueba de `club-web/src`, que usan `vitest` (instalado en la raíz, no en `club-web`). El «build en verde» de §0.6 se había corrido con las dependencias de la raíz a la vista. No afecta la base ni la app. Arreglo: **#125** (se mergea el 12-nov después de las 07:00) |
+| #125 mergeado · deploy de `satori-club` en verde (SHA, hora) | Deployed | |
 | 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
 | `lc_excepciones_desde`: `2026-11-12` en §6.4 (provisorio) | 2026-11-12 | |
 | `lc_excepciones_desde`: el día de la apertura, antes de abrir | (fecha) | |
-| Cierre: pasa / vuelta atrás (hasta qué paso de §8) | | |
+| Cierre: pasa / vuelta atrás (hasta qué paso de §8) | | ✅ **PASA** (11-nov, lo cerró el dueño). Sin vuelta atrás. Queda para el jue 12 por la mañana, en este orden: §6.1 → §6.2 → §6.3 → §6.4 → #125 → Worker (4c) → paso 7 → §6.5 → §6.5b → §11.3 → §6.6 |
 | Respaldo de 1.4 borrado (fecha) | | |
 
 ## 11. Cloudflare: el proyecto de Pages, el dominio en SiteGround y `/api` con o sin Worker
@@ -599,6 +650,18 @@ a la rama del #59: una rama de trabajo conectada desplegaría sola con cada push
    despliegue y cambia `club-web/functions/_lib/api.js` (la baja por POST con la llave en el cuerpo, Grok 183), que es el
    código que corre el Worker. Sin esto, entre el merge y el paso 7 la página nueva le pediría al Worker una ruta que no
    tiene. Las variables no se tocan (`keep_vars = true`). Anotar en §10 el SHA y la Version nueva.
+4c. **(12-nov) El 4b no se hizo el 11-nov** (wrangler avisaba que pisaba `preview_urls` y las variables del panel). Se hace
+   el jue 12 por la mañana, **después de mergear el #125** y antes de encender, desde `main`:
+   `git checkout main && git pull && git rev-parse --short HEAD` (anotar el SHA) y
+   `cd club-web/worker && npx wrangler deploy`. Con el #125, `wrangler.toml` dice `preview_urls = false` (ni
+   `workers.dev` ni URLs de vista previa) y `keep_vars = true` (no borra las variables de texto del panel; los Secrets no
+   se tocan nunca en un deploy). Si wrangler muestra diferencias con el panel y pregunta si sigue: revisar que lo único
+   que cambia sea `preview_urls` a apagado y contestar que sí. **Antes**, anotar los nombres de las 4 variables del panel.
+   **Verificar después:** en la salida, `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)` y el Version ID nuevo; en
+   Settings → Variables and Secrets siguen las 4 (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TURNSTILE_SECRET`,
+   `CLUB_WEB_KEY`); en Settings → Domains & Routes, `workers.dev` y Preview URLs apagados y sin rutas. La prueba de que
+   las variables quedaron es §11.3: `supabase`, `turnstile` y `club_web_key` en `true`. Si faltara alguna, se vuelve a
+   cargar en el panel (los valores los tiene el dueño) y no hace falta otro deploy.
 5. Worker → Settings → **Variables and Secrets** (Production), los mismos valores que en Pages:
 
 | Nombre | Tipo | Cuándo |

@@ -1,9 +1,9 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-11.** Los hashes de este bloque se verificaron contra `origin` el 11-nov, y el ledger de staging
-contra la base (solo lectura). Lo de prod y lo de Cloudflare lo informó el dueño: Claude no corre nada en prod.
-**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md).** Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
+**Al día: 2026-11-12.** Los hashes de este bloque se verificaron contra `origin` el 12-nov (el ledger de staging, contra
+la base el 11-nov, solo lectura; el 12-nov no hubo migraciones). Lo de prod y lo de Cloudflare lo informó el dueño: Claude no corre nada en prod.
+**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-12.md](docs/handoffs/HANDOFF-2026-11-12.md)** (el del 11-nov sigue en `docs/handoffs/`). Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
 está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin actualizar este bloque ⚡ARRANQUE, en el
@@ -12,8 +12,8 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`17a9efd`** (11/11 23:22:08 -06:00: merge del #59, el Club Satori, con la 150 y la 151) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. El 11/11 entró el Club (#59, `17a9efd`: la 150 y la 151). Ledger de prod: **67 · 151**. |
-| `staging` | **`fb29872`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
+| `main` | **`38675bf`** (12/11 10:40 -06:00: merge del #139, tanda 3 del rediseño) | **PROD.** GitHub Pages (base `/satori-app/`). El 12/11 entraron, sin migraciones: el rediseño «estilo carta» (#128 `9efde77`, #131 `37cd66e`, #139 `38675bf`), club-web con Pages solo por panel (#129 `a4300ab`) y club-web con estilo carta y «usted» (#138 `e3d0fde`). El último merge con migraciones sigue siendo el del Club (#59, `17a9efd`: la 150 y la 151). Ledger de prod: **67 · 151**. |
+| `staging` | **`383af90`** (12/11, merge del #137, B10) | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS + el rediseño completo (A1–A12, B1–B10). Proyecto Supabase de staging. **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático; las demás ramas salen como preview (`<rama>.satori-staging.pages.dev`). |
 | `integracion/analitica-staging` | **`850a22f`** | ⚠️ Rama vieja, 123 commits atrás de `staging`. **No la publica Cloudflare** (lo de septiembre ya no vale: la rama de producción es `staging`). |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
@@ -43,6 +43,15 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 | #56 · #57 | `bb1a488` · `6bcfafb` | 06/11 | Saca nombres y correos reales de comentarios, tests y docs. |
 | este PR | — | 07/11 | **Prom/PAX explicado** (Ventas → Análisis) + **mig 080** `pos_prompax_agregado`, que la aplica el merge (Branching). Firmado por Ismael el 06/11. |
 
+- **📍 Foto del 12/11 (lo nuevo desde el 11/11; el detalle, en el [handoff del 12-nov](docs/handoffs/HANDOFF-2026-11-12.md)):**
+  - **`main` = `38675bf`.** Entró el rediseño «estilo carta» completo (#128, #131 y #139), con su respaldo previo en las
+    ramas `respaldo/pre-rediseno`, `respaldo/pre-daruma` y `respaldo/pre-tanda3`. club-web pasó al estilo carta y a «usted»
+    (#138) y se configura solo por panel (#129). **Sin migraciones: ledger de prod 67 · 151.**
+  - **Abierto con revisión hecha, espera firma:** #133 (pruebas en CI antes de publicar) y #132 («hoy» en hora de Costa Rica
+    en Ventas). **Riesgo anotado:** las fechas por defecto de Caja (créditos), Bandeja e Inventario usan la fecha UTC; van
+    con firma.
+  - **Borrador:** #140, aviso de privacidad del Club v1.2 con «usted» (mig **152**, origen 101).
+  - **Tareas programadas del rediseño: pausadas** (12/11).
 - **📍 Foto del 11/11 a la noche (lo nuevo desde el 10/11; el detalle, en el handoff):**
   - **`main` = `17a9efd`** (merge del #59, el Club, el 11/11 a las 23:22:08 -06:00). **Ledger de prod: 67 · 151.** El 10/11
     entraron por Branching la 085, la 089, la 090, la 091 y la tanda 092–095, cada una con su PASE cerrado en `docs/pases/`.

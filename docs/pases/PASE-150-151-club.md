@@ -516,6 +516,10 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 - **Resultado (11-nov):** el Club está en prod. Merge `17a9efd` a las 23:22:08 CR; ledger de prod **67 · 151**; G-61
   «después» en 0; humo igual que antes; pase cerrado: **pasa**, sin vuelta atrás. La fecha se adelantó del jueves 12 al
   11-nov a la noche por decisión del dueño. Con el Club apagado y sin locales: la configuración (§6) sigue el jue 12.
+- **Pages `satori-club` (12-nov):** los deploys del 11-nov fallaron porque Pages rechazaba `club-web/wrangler.toml` (los
+  topes `[[unsafe.bindings]]`). El #129 lo borró y el proyecto se configura solo en el panel, con el binding `CLUB_API` →
+  `satori-club-api` (§11.1b). Merge `a4300ab` a las 06:57:34 CR; deploy **en verde** (~07:00 CR). Quedan el Worker desde
+  `main` (§11.4 paso 4c) y `/api/salud` (§11.3), que hace el dueño.
 - **Modo transición (decisión del dueño, 11-nov):** la tarjeta vieja (de papel, sin QR) queda encendida en Santa Teresa
   con tope de 12 personas por anfitrión por día, después de la carga única (§6.5b). No es una migración: es un dato de
   `club_config`, con su rastro en `club_config_historial`.
@@ -536,6 +540,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | ✅ 11-nov: `60a977e` (main `ced6621` ancestro; migraciones: solo 150 y 151) |
 | 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` con `wrangler deploy` manual, sin repositorio conectado, sin URL pública, con sus variables (§11.4) · `CLUB_WEB_KEY` en Pages y en el Worker | | ✅ 11-nov: Worker desde `66c950d` (Version `ae142f3a…`), 4 variables a prod; `CLUB_WEB_KEY` creada y cargada en los dos |
 | §11.4 paso 4b · Worker otra vez a mano desde la cabeza firmada (SHA, Version nueva) | | ⏳ **No se hizo el 11-nov:** wrangler avisaba que el deploy pisaba `preview_urls` y las variables cargadas en el panel, y el dueño no siguió. Pasa al jue 12 por la mañana, **antes de encender**, desde `main` con el #125 adentro (`preview_urls = false` explícito y `keep_vars = true`): §11.4 paso 4c |
+| §11.4 paso 4c · Worker desde `main` (`a4300ab` o posterior): `npx wrangler deploy` en `club-web/worker` · Version nueva · `RL_CREAR` y `RL_LEER` en la salida · sin aviso de pisar variables, `preview_urls` ni rutas | Version ID · 2 ratelimit | ⏳ 12-nov: lo hace el dueño. Desde la sesión de Claude no hay credenciales de Cloudflare y la red no llega a `api.cloudflare.com` |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | 0 sin esperar | ✅ 11-nov 14:30: 63 esperadas, sale 0 · sha256 `e5f1c7c0…87226` · firma del dueño: |
 | 0.10 carga única: export, sha256 de `carga.sql` y esperados de restos (N y personas) firmados (o «la prueba va sin carga») | | ✅ 11-nov 10:14: sha256 `150f0c8e…6b461f`, esperados 115 / 174, ensayo en staging OK |
 | 1.1 ledger: 65 · 095 · 089–095 presentes · nada del Club (Grok 181) | 65 · 095 | ✅ 65 · 095 · 0 filas del Club · 089–095 presentes |
@@ -555,12 +560,12 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 6.2 dominio | | |
 | 6.3 `CLUB_WEB_KEY` cargada, sha256 en la base, `/api/salud` en verde | | |
 | **§11.4 paso 7 · CORTE BLOQUEANTE:** Worker conectado a `main` y desplegado desde `main` (SHA, hora); sin despliegues desde otra rama. Sin esto no se sigue | | |
-| §11.3 `/api/salud`: `x-club-api: worker` y todo en `true` · prueba de fuego | | |
+| §11.3 `/api/salud`: `x-club-api: worker` y todo en `true` · prueba de fuego | worker · 5 × true | ⏳ 12-nov: lo hace el dueño, después de 4c. Desde la sesión de Claude la red no llega al dominio del Club ni a `*.pages.dev` |
 | 6.4 valores del local (la fila de verificación) · empleados con login | | |
 | 6.5 carga única (sha256, conteos) o «replanificada» | | |
 | 6.5b modo transición: tope 12 y `tarjeta_manual_activa` encendida en Santa Teresa, después de la carga única (§6.5b) | antes: false · 30 → después: true · 12 · 2 filas en `club_config_historial` | |
-| Pages `satori-club`: primer deploy de producción | Deployed | ❌ 11-nov 23:2x: **Build failed** (check 130992048866). Causa reproducida en limpio: `tsc --noEmit` revisaba los archivos de prueba de `club-web/src`, que usan `vitest` (instalado en la raíz, no en `club-web`). El «build en verde» de §0.6 se había corrido con las dependencias de la raíz a la vista. No afecta la base ni la app. Arreglo: **#125** (se mergea el 12-nov después de las 07:00) |
-| #125 mergeado · deploy de `satori-club` en verde (SHA, hora) | Deployed | |
+| Pages `satori-club`: primer deploy de producción | Deployed | ❌ 11-nov a la noche: **Build failed** en `17a9efd`, `980cd74` y `cf1a61d` (checks 130992048866, 131000778968 y 131002778386). **Causa real (log de `cf1a61d`, 12-nov):** «Configuration file for Pages projects does not support "unsafe"» → «Failed: unable to read the Wrangler configuration file with code: 1»; el build nunca corrió (§11.1b). El problema de vitest en `tsc --noEmit` también era real, pero estaba detrás: lo arregló el #125 |
+| #125 y #129 mergeados · deploy de `satori-club` en verde (SHA, hora) | Deployed | #125: `cf1a61d5fff80f9869cbd3181a0c8b48bf99f678`, 11-nov 23:50:27 CR (por indicación del dueño; deploy **Build failed** por la causa de arriba) · **#129** (se borra `club-web/wrangler.toml`; el binding `CLUB_API` → `satori-club-api` cargado antes en el panel, Production, y build, rama y las 7 variables verificadas por el dueño): firma del dueño 12-nov 06:55 CR sobre `b29702e` · merge `a4300ab9dddbc214ff2d09c613f481f40f40801e` a las **06:57:34 CR** (merge commit, lo hizo Claude) · ✅ «Cloudflare Pages: satori-club» **Deployed successfully** (check 131198782258, ~07:00 CR). El log del deploy queda en el panel: falta que el dueño confirme que avisó «sin archivo de wrangler» y corrió `npm ci && npm run build` |
 | 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
 | `lc_excepciones_desde`: `2026-11-12` en §6.4 (provisorio) | 2026-11-12 | |
 | `lc_excepciones_desde`: el día de la apertura, antes de abrir | (fecha) | |
@@ -696,8 +701,9 @@ a la rama del #59: una rama de trabajo conectada desplegaría sola con cada push
    `git checkout main && git pull && git rev-parse --short HEAD` (anotar el SHA) y
    `cd club-web/worker && npx wrangler deploy`. Con el #125, `wrangler.toml` dice `preview_urls = false` (ni
    `workers.dev` ni URLs de vista previa) y `keep_vars = true` (no borra las variables de texto del panel; los Secrets no
-   se tocan nunca en un deploy). Si wrangler muestra diferencias con el panel y pregunta si sigue: revisar que lo único
-   que cambia sea `preview_urls` a apagado y contestar que sí. **Antes**, anotar los nombres de las 4 variables del panel.
+   se tocan nunca en un deploy). **(12-nov, regla del dueño) Si wrangler avisa que va a pisar o borrar configuración del
+   panel (variables, `preview_urls`, rutas) y pregunta si sigue: contestar NO, parar y copiar el aviso tal cual.**
+   **Antes**, anotar los nombres de las 4 variables del panel.
    **Verificar después:** en la salida, `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)` y el Version ID nuevo; en
    Settings → Variables and Secrets siguen las 4 (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TURNSTILE_SECRET`,
    `CLUB_WEB_KEY`); en Settings → Domains & Routes, `workers.dev` y Preview URLs apagados y sin rutas. La prueba de que

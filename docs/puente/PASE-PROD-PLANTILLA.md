@@ -72,6 +72,13 @@ tocan `supabase` ni `src` (el diff contra la rama es vacío).
   resultados que le leen. No ve ningún secreto.
 
 ## Consola: fail-stop (Grok 102). PowerShell 5.1, nada de bash
+**Notas de ejecución (corrección 10-nov, del pase del agente nuevo):**
+- **PowerShell ISE:** `git` y `npm` escriben a stderr, y con `$ErrorActionPreference = 'Stop'` el ISE corta el bloque
+  aunque el comando haya salido bien. En los bloques con comandos nativos (`git`, `npm.cmd`, `node`, `supabase`) se pone
+  `$ErrorActionPreference = 'Continue'` antes de correrlos y se vuelve a `'Stop'` después. Los `Ok '…'` y los `throw`
+  siguen frenando igual. En la consola normal de PowerShell no hace falta.
+- **El SQL va en el editor SQL de Supabase**, no en PowerShell.
+
 **Qué PowerShell se usa el día del pase:** el **Windows PowerShell 5.1** de la PC del PoS (el que trae Windows; es con
 el que corre el agente). Los bloques pasaron el ensayo en seco en 5.1 **y** en 7 (§9), así que si la PC tiene PowerShell 7
 también sirve, pero el día se usa **una sola** para todo el pase, la misma en todas las consolas. Antes de empezar, en

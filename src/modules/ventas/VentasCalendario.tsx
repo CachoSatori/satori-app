@@ -69,7 +69,7 @@ export default function VentasCalendario({ dias, hist }: Props) {
   // Which months are expanded (default: most recent one open)
   const [openMonths, setOpenMonths] = useState<Set<string>>(() => new Set([monthKeys[0] ?? '']))
   function toggleMonth(mk: string) {
-    setOpenMonths(prev => { const s = new Set(prev); s.has(mk) ? s.delete(mk) : s.add(mk); return s })
+    setOpenMonths(prev => { const s = new Set(prev); if (s.has(mk)) s.delete(mk); else s.add(mk); return s })
   }
 
   if (!allDays.length) {

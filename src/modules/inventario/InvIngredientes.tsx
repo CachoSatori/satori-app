@@ -34,6 +34,7 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
   const [importing,setImporting]= useState(false)
   const [prices,   setPrices]   = useState<IngredientPrice[]>([])
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     if (!editId) { setPrices([]); return }
     getIngredientPrices(editId).then(setPrices).catch(() => setPrices([]))
   }, [editId])

@@ -30,6 +30,7 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
     } finally { setLoading(false) }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { load() }, [load])
 
   const empOf = (profileId: string) => employees.find(e => e.profile_id === profileId)

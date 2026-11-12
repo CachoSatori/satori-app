@@ -151,6 +151,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
   }, [items, medianUds, medianMgn])
 
   // Sorted table
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- se mantiene el useCallback/useMemo manual; el compilador solo omite optimizar, sin impacto funcional
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
       const va = a[sortCol] as number

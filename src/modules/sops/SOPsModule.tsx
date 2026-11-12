@@ -46,6 +46,7 @@ export default function SOPsModule() {
     setLoading(true)
     getSOPs().then(setSops).catch(console.error).finally(() => setLoading(false))
   }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { load() }, [])
 
   // Agrupado por área (o por categoría si la fila todavía no tiene área), orden por código.

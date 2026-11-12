@@ -29,7 +29,7 @@ const filas = await q(ref, token, `select p.proname,
   order by has_function_privilege('anon', p.oid, 'execute') desc, p.proname`)
 
 console.log(`\n🔐 funciones SECURITY DEFINER en public: ${filas.length}\n`)
-const expuestas = filas.filter((f: any) => f.anon_execute)
+const expuestas = filas.filter(f => f.anon_execute)
 for (const f of filas) {
   const flag = f.anon_execute ? '🔴' : '✅'
   console.log(`   ${flag} ${String(f.proname).padEnd(30)} anon=${String(f.anon_execute).padEnd(5)} auth=${f.auth_execute}`)

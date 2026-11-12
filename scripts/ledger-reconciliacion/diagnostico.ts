@@ -15,7 +15,7 @@ await smoke(ref, token)
 
 const ledger = await q(ref, token, SQL_LEDGER)
 console.log(`\n📒 LEDGER — ${ledger.length} filas:`)
-console.log(`   ${ledger.map((r: any) => r.version).join(', ')}`)
+console.log(`   ${ledger.map(r => r.version).join(', ')}`)
 
 const T = (t: string) => `exists(select 1 from information_schema.tables where table_schema='public' and table_name='${t}')`
 const C = (t: string, c: string) => `exists(select 1 from information_schema.columns where table_schema='public' and table_name='${t}' and column_name='${c}')`
@@ -59,7 +59,7 @@ try {
   const b = await q(ref, token, `select id, public from storage.buckets where id = 'facturas'`)
   console.log(`\n🪣 bucket 'facturas': ${b.length ? `✅ existe (public=${b[0].public})` : '❌ no existe'}`)
   const p = await q(ref, token, `select policyname from pg_policies where schemaname='storage' and tablename='objects' and policyname like 'facturas%' order by policyname`)
-  console.log(`   políticas: ${p.map((r: any) => r.policyname).join(', ') || '(ninguna)'}`)
+  console.log(`   políticas: ${p.map(r => r.policyname).join(', ') || '(ninguna)'}`)
 } catch (e) {
   console.log(`\n🪣 bucket 'facturas': ⚠️ ${(e as Error).message.slice(0, 120)}`)
 }

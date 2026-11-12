@@ -11,6 +11,7 @@ const VentasPromPaxExplicado = lazy(() => import('./VentasPromPaxExplicado'))
 const MN_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const QUARTERS: [number, number, number][] = [[1,2,3],[4,5,6],[7,8,9],[10,11,12]]
+const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12]
 
 function varStr(pct: number | null, big = false): { text: string; color: string } {
   if (pct === null) return { text: '—', color: '#444' }
@@ -30,7 +31,6 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
   const [mode, setMode] = useState<'compare'|'year'|'proyeccion'|'prompax'>('compare')
   const [selYear, setSelYear] = useState(years[0] ?? new Date().getFullYear())
 
-  const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12]
 
   const yearData = useMemo(() =>
     years.reduce((acc, y) => {

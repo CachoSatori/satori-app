@@ -123,6 +123,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
   }, [allProds, typeFilter, clasFilter, search, showPending, pending, pm])
 
   // Reset a la primera página cuando cambian los filtros
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { setPage(0) }, [typeFilter, clasFilter, search, showPending])
 
   // Página actual (50 por página)
@@ -245,7 +246,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
 
   // ── Multi-select ─────────────────────────────────────────────
   function toggleSelect(n: string) {
-    setSelected(prev => { const s = new Set(prev); s.has(n) ? s.delete(n) : s.add(n); return s })
+    setSelected(prev => { const s = new Set(prev); if (s.has(n)) s.delete(n); else s.add(n); return s })
   }
   function selectAll()    { setSelected(new Set(filtered)) }
   function deselectAll()  { setSelected(new Set()) }

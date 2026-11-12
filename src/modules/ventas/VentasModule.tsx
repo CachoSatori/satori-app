@@ -101,6 +101,7 @@ export default function VentasModule() {
   })
   const [comps, setComps] = useState<Comp[]>([])
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- se mantiene el useCallback/useMemo manual; el compilador solo omite optimizar, sin impacto funcional
   const loadAll = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -162,6 +163,7 @@ export default function VentasModule() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { loadAll() }, [loadAll])
 
   if (loading) {

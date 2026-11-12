@@ -29,6 +29,7 @@ export default function EmployeeHours({ employees }: Props) {
   const [view, setView]         = useState<'resumen'|'detalle'>('resumen')
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     setLoading(true)
     getAttendanceHistory(FETCH_MONTHS)
       .then(setAllRows)

@@ -46,7 +46,7 @@ vi.mock('@supabase/supabase-js', () => ({
       },
       getSession: () => mock.getSession(),
       refreshSession: () => mock.refreshSession(),
-      signOut: (_opts?: { scope?: string }) => { mock.calls.signOut++; return Promise.resolve({ error: null }) },
+      signOut: () => { mock.calls.signOut++; return Promise.resolve({ error: null }) },
       startAutoRefresh: async () => { /* noop */ },
       stopAutoRefresh: async () => { /* noop */ },
     },
@@ -289,6 +289,7 @@ describe('safeNavigatorLock — escape del lock muerto + invariante de timeouts'
     const sentinel = Symbol('corrió-sin-lock')
     // Lock muerto: el request queda pendiente hasta que el AbortController del propio safeNavigatorLock lo aborta.
     const heldLocks = {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- el mock replica la firma de LockManager.request (name, options, cb); solo usa options
       request: (_name: string, options: { signal: AbortSignal }, _cb: () => Promise<unknown>): Promise<unknown> =>
         new Promise<unknown>((_resolve, reject) => {
           options.signal.addEventListener('abort', () => {

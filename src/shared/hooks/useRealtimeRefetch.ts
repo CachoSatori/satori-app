@@ -29,11 +29,13 @@ export function useRealtimeRefetch(
   opts?: { pauseWhileTyping?: boolean; pauseWhile?: () => boolean },
 ) {
   const cbRef = useRef(onChange)
+  // eslint-disable-next-line react-hooks/refs -- patrón "latest ref" intencional: guarda el último callback sin re-suscribir el canal
   cbRef.current = onChange
   const pause = opts?.pauseWhileTyping ?? false
   // Predicado de pausa (ej. "hay un modal abierto"): si devuelve true, el refetch se
   // pospone para no refrescar la lista bajo los pies del salonero. Ref para no re-suscribir.
   const pauseWhileRef = useRef(opts?.pauseWhile)
+  // eslint-disable-next-line react-hooks/refs -- patrón "latest ref" intencional: guarda el último callback sin re-suscribir el canal
   pauseWhileRef.current = opts?.pauseWhile
 
   useEffect(() => {

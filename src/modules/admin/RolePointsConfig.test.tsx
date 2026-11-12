@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { RoleTipPoints } from '../../shared/types/database'
 
 // Mock de la API: capturamos el upsert para verificar que el toggle persiste.
-const upsert = vi.fn(async (_role?: string, _points?: number, _recibe?: boolean) => {})
+const upsert = vi.fn<(role?: string, points?: number, recibe?: boolean) => Promise<void>>(async () => {})
 vi.mock('../../shared/api/admin', () => ({
   upsertRoleTipConfig: (role: string, points: number, recibe: boolean) => upsert(role, points, recibe),
 }))

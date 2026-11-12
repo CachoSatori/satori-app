@@ -278,7 +278,7 @@ export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: st
 
 // ── aggSalonero ──────────────────────────────────────────────
 export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: ProductMap): AggSalonero {
-  let total = 0, com = 0, beb = 0, pax = 0, iCom = 0, iBeb = 0, iva = 0, serv = 0
+  let total = 0, com = 0, beb = 0, pax = 0, iCom = 0, iBeb = 0
   let days = 0
   const prods: Record<string, { q: number; m: number }> = {}
 
@@ -295,8 +295,6 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
     pax   += s.pax ?? 0
     iCom  += s.iCom ?? 0
     iBeb  += s.iBeb ?? 0
-    iva   += s.iva ?? 0
-    serv  += s.serv ?? 0
     for (const [pname, qty, monto] of (s.prods ?? [])) {
       if (!prods[pname]) prods[pname] = { q: 0, m: 0 }
       prods[pname].q += qty

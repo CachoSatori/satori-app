@@ -96,6 +96,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
     const missing = monthSessions.filter(s => !calcCache[s.id] && !localCache[s.id])
     if (!missing.length) return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     setLoading(true)
     ;(async () => {
       const out: Record<string, HistoryCalc> = {}

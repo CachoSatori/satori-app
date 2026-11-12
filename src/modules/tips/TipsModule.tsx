@@ -175,6 +175,7 @@ export default function TipsModule() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { loadData() }, [loadData])
 
   // Tiempo real: si otro dispositivo abre/cierra el turno o edita entradas,
@@ -373,6 +374,7 @@ export default function TipsModule() {
     }))
     // La línea queda inactiva: persistir la baja para que el refetch no la resucite.
     if (!openSession?.id) return
+    // eslint-disable-next-line react-hooks/purity -- Date.now() corre en un handler de evento, no durante el render
     lastLocalWriteRef.current = Date.now()
     deleteTipEntry(openSession.id, empId).catch(() => {})
   }

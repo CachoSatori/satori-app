@@ -185,8 +185,8 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
   const [openClas,  setOpenClas]  = useState<Set<string>>(new Set())
   const [openSubcl, setOpenSubcl] = useState<Set<string>>(new Set())
 
-  const toggleClas  = useCallback((id: string) => setOpenClas(prev  => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }), [])
-  const toggleSubcl = useCallback((id: string) => setOpenSubcl(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }), [])
+  const toggleClas  = useCallback((id: string) => setOpenClas(prev  => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s }), [])
+  const toggleSubcl = useCallback((id: string) => setOpenSubcl(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s }), [])
 
   // Expand/collapse all
   const [allExpanded, setAllExpanded] = useState(false)
@@ -229,7 +229,7 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
       const tots  = calcTotals(PM, canal)
       return { key, label: labelPeriod(key), PM, CM, tots }
     })
-  }, [cmpPeriods, dias, hist, pm, canal, allMonths])
+  }, [cmpPeriods, dias, hist, pm, canal])
 
   // Union PM for comparar table
   const masterPM = useMemo(() => {
@@ -802,7 +802,7 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
   }
 
   const rows: ReactElement[] = []
-  let gTs = new Array(N).fill(0)
+  const gTs = new Array(N).fill(0)
 
   for (const sec of SECTIONS) {
     const secClas = Object.keys(masterCM).filter(c =>

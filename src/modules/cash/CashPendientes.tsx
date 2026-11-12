@@ -22,6 +22,7 @@ const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(
 
 // waNumber (formato internacional para wa.me) vive ahora en ./comprobante (compartido con la
 // liquidación de crédito); se re-exporta acá para no romper importadores/tests existentes.
+// eslint-disable-next-line react-refresh/only-export-components -- hook/re-export junto al componente a propósito; solo afecta el HMR en dev
 export { waNumber }
 
 interface Row {
@@ -124,10 +125,10 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
   }, [movements])
 
   const toggleSel = (id: string) => setSelected(prev => {
-    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n
   })
   const toggleCollapse = (key: string) => setCollapsed(prev => {
-    const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n
+    const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n
   })
   const selGroupAll = (g: Group, on: boolean) => setSelected(prev => {
     const n = new Set(prev); g.rows.forEach(r => on ? n.add(r.id) : n.delete(r.id)); return n

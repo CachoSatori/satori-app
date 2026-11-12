@@ -131,7 +131,6 @@ export default function CashTurno({
       } else { setCarryFrom(null); setCarrySugerido(null) }
     }).catch(() => {})
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apFecha, openSession])
 
   // Turno state: pagos + ingresos adicionales.

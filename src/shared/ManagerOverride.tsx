@@ -103,6 +103,7 @@ type RequireManager = () => Promise<ManagerAuth>
 const Ctx = createContext<RequireManager>(() => Promise.resolve({ ok: false }))
 
 /** Devuelve `requireManager()` que resuelve { ok, managerEmail?, managerId?, managerPassword? }. */
+// eslint-disable-next-line react-refresh/only-export-components -- hook/re-export junto al componente a propósito; solo afecta el HMR en dev
 export const useManagerOverride = () => useContext(Ctx)
 
 export function ManagerOverrideProvider({ children }: { children: ReactNode }) {

@@ -70,6 +70,7 @@ export default function InboxModule() {
     } finally { setLoading(false) }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { loadAll() }, [loadAll])
 
   // ── Procesar una imagen (cámara, galería o compartida) ────────

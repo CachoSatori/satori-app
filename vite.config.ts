@@ -90,7 +90,9 @@ export default defineConfig({
         importScripts: [`${BASE}sw-share.js`],   // handler del Share Target
         navigateFallback: `${BASE}index.html`,
         navigateFallbackAllowlist: [new RegExp('^' + BASE)],
-        navigateFallbackDenylist: [/\/inbox\/share$/],   // el POST de compartir lo maneja sw-share.js
+        // /inbox/share: el POST de compartir lo maneja sw-share.js.
+        // /version.json: abrirlo en el navegador tiene que mostrar el JSON del build, no el login (backlog).
+        navigateFallbackDenylist: [/\/inbox\/share$/, /\/version\.json$/],
         // Claim clients immediately so new SW takes over all tabs right away
         clientsClaim: true,
         skipWaiting: true,

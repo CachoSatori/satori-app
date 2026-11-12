@@ -14,6 +14,11 @@
    — y agregar su código al unicode-range de abajo. Sin esto, ese kanji cae en la serif del sistema. */
 @font-face { font-family: 'Noto Serif JP'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/noto-serif-jp-kanji-400-normal.woff2') format('woff2'); unicode-range: U+4EBA,U+5206,U+5353,U+53A8,U+53D7,U+58F2,U+5BA2,U+5BB6,U+5EAB,U+5FC3,U+627F,U+65E5,U+66F8,U+6708,U+756A,U+796D,U+7BA1,U+7D66,U+8A55,U+8A66,U+8CA1,U+9031,U+91CC,U+91D1,U+9375; }
 @font-face { font-family: 'Noto Serif JP'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/noto-serif-jp-kanji-600-normal.woff2') format('woff2'); unicode-range: U+4EBA,U+5206,U+5353,U+53A8,U+53D7,U+58F2,U+5BA2,U+5BB6,U+5EAB,U+5FC3,U+627F,U+65E5,U+66F8,U+6708,U+756A,U+796D,U+7BA1,U+7D66,U+8A55,U+8A66,U+8CA1,U+9031,U+91CC,U+91D1,U+9375; }
+/* Pase a main (12-nov): main tiene además el Club (縁, U+7E01), que staging no tiene. Va en un archivo aparte para no
+   cambiar los dos de B10; sacado de @fontsource/noto-serif-jp 5.3.1 (archivo «japanese», SIL OFL 1.1) con
+   pyftsubset --text="縁" --flavor=woff2 --layout-features='' --no-hinting --desubroutinize --name-IDs='*'. */
+@font-face { font-family: 'Noto Serif JP'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/noto-serif-jp-kanji-extra-400-normal.woff2') format('woff2'); unicode-range: U+7E01; }
+@font-face { font-family: 'Noto Serif JP'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/noto-serif-jp-kanji-extra-600-normal.woff2') format('woff2'); unicode-range: U+7E01; }
 
 /* ── Fuentes locales (B6): funcionan sin internet ─────────────────────────
    Archivos en public/fonts/ (licencia SIL OFL 1.1, ver OFL-*.txt). Subconjuntos latin + latin-ext (₡). */

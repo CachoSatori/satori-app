@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense, lazy, type KeyboardEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
@@ -10,7 +10,7 @@ import { cargarDeFondo, cargarDiasEager, cargarHistEager, type EstadoPos } from 
 import AvisoFuentePos from './AvisoFuentePos'
 import './ventasNav.css'
 import {
-  type Tab, resolverTab, entradasVisibles, entradaDe, labelDe, VISTAS_SIN_DIAS, VISTAS_CON_FONDO,
+  type Tab, resolverTab, puedeVer, entradasVisibles, entradaDe, labelDe, VISTAS_SIN_DIAS, VISTAS_CON_FONDO,
 } from './ventasTabs'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
@@ -35,11 +35,29 @@ const VentasICP          = lazy(() => import('./VentasICP'))
 const VentasCalendario   = lazy(() => import('./VentasCalendario'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
 
-// Grupo de color de cada entrada (el mismo que tenía cada vista antes del rediseño).
-const ENTRADA_COLOR: Record<string, string> = {
-  hoy: '#c8a050', envivo: '#c8a050', saloneros: '#c8a050',
-  analisis: '#c8a96e', historico: '#c8a96e', menueng: '#c8a96e', metas: '#c8a96e',
-  ajustes: '#8a8aaa',
+/** Ids de ARIA: cada pestaña controla el mismo panel de contenido. */
+const PANEL_ID = 'vt-panel'
+const idEntrada = (id: string) => `vt-tab-${id}`
+const idVista   = (id: string) => `vt-subtab-${id}`
+
+/**
+ * Flechas izquierda/derecha (e Inicio/Fin) dentro de un `role="tablist"`: mueven el foco a la
+ * pestaña vecina y la activan, como un clic. Solo teclado; no cambia qué abre cada pestaña.
+ */
+function moverConFlechas(e: KeyboardEvent<HTMLDivElement>) {
+  const teclas = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+  if (!teclas.includes(e.key)) return
+  const tabs = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+  const actual = tabs.indexOf(document.activeElement as HTMLButtonElement)
+  if (actual < 0 || tabs.length === 0) return
+  e.preventDefault()
+  const n = tabs.length
+  const destino = e.key === 'Home' ? 0
+    : e.key === 'End' ? n - 1
+    : e.key === 'ArrowRight' ? (actual + 1) % n
+    : (actual - 1 + n) % n
+  tabs[destino].focus()
+  tabs[destino].click()
 }
 
 export default function VentasModule() {
@@ -50,15 +68,24 @@ export default function VentasModule() {
   // La vista activa vive en la URL (`/ventas?tab=<id>`). Sin `tab`, o con uno que el rol no
   // ve, se abre la misma pestaña de arranque de antes del rediseño.
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = resolverTab(role, searchParams.get('tab'))
+  const tabParam = searchParams.get('tab')
+  const tab = resolverTab(role, tabParam)
+  // Cambiar de pestaña agrega una entrada al historial: «Atrás» vuelve a la pestaña anterior.
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(searchParams)
     next.set('tab', t)
-    setSearchParams(next, { replace: true })
+    setSearchParams(next)
   }
+  // Un `?tab=` inválido o de otro rol se limpia de la URL (sin entrada nueva en el historial).
+  // Se espera a tener el rol, para no borrar un `tab` válido mientras carga el perfil.
+  useEffect(() => {
+    if (!role || !tabParam || puedeVer(role, tabParam)) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('tab')
+    setSearchParams(next, { replace: true })
+  }, [role, tabParam, searchParams, setSearchParams])
   const entradas  = entradasVisibles(role)
   const entrada   = entradas.find(e => e.id === entradaDe(tab).id)
-  const color     = ENTRADA_COLOR[entradaDe(tab).id]
   const [error, setError]   = useState<string | null>(null)
 
   const [dias,     setDias]     = useState<DiasMap>({})
@@ -201,20 +228,20 @@ export default function VentasModule() {
       {/* Header */}
       <div className="vt-module-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.5rem', color: 'var(--vt-gold)' }}>里</span>
-          <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.15rem', fontWeight: 700, color: 'var(--vt-gold)', letterSpacing: '0.18em' }}>
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.5rem', color: 'var(--c-oro-texto)' }}>里</span>
+          <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.15rem', fontWeight: 700, color: 'var(--c-oro-texto)', letterSpacing: '0.18em' }}>
             SATORI
           </div>
           {role && <span className="role-badge">{role}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888' }}
+          <button className="cash-back-btn" style={{ borderColor: 'var(--c-linea)', color: 'var(--c-gris)' }}
             onClick={() => navigate('/')}>← Inicio</button>
         </div>
       </div>
 
       {/* Menú de Ventas: entradas y, si la entrada agrupa varias vistas, sub-pestañas */}
-      <div className="vt-nav-tabs" role="tablist" aria-label="Vistas de Ventas">
+      <div className="vt-nav-tabs" role="tablist" aria-label="Vistas de Ventas" onKeyDown={moverConFlechas}>
         {entradas.map(e => {
           const activa = e.id === entrada?.id
           return (
@@ -222,9 +249,12 @@ export default function VentasModule() {
               type="button"
               role="tab"
               aria-selected={activa}
+              aria-controls={PANEL_ID}
+              id={idEntrada(e.id)}
+              tabIndex={activa ? 0 : -1}
               key={e.id}
               className={`vt-nav-tab ${activa ? 'active' : ''}`}
-              style={activa ? { borderBottomColor: ENTRADA_COLOR[e.id], color: ENTRADA_COLOR[e.id] } : {}}
+              style={activa ? { borderBottomColor: 'var(--c-oro)', color: 'var(--c-oro-texto)' } : {}}
               onClick={() => { if (!activa) setTab(e.vistas[0]) }}
             >
               {e.label}
@@ -234,15 +264,18 @@ export default function VentasModule() {
       </div>
 
       {entrada && entrada.vistas.length > 1 && (
-        <div className="vt-subnav" role="tablist" aria-label={`Vistas de ${entrada.label}`}>
+        <div className="vt-subnav" role="tablist" aria-label={`Vistas de ${entrada.label}`} onKeyDown={moverConFlechas}>
           {entrada.vistas.map(v => (
             <button
               type="button"
               role="tab"
               aria-selected={tab === v}
+              aria-controls={PANEL_ID}
+              id={idVista(v)}
+              tabIndex={tab === v ? 0 : -1}
               key={v}
               className={`vt-subnav-tab ${tab === v ? 'active' : ''}`}
-              style={tab === v ? { borderColor: color, color } : {}}
+              style={tab === v ? { borderColor: 'var(--c-oro)', color: 'var(--c-oro-texto)' } : {}}
               onClick={() => setTab(v)}
             >
               {labelDe(v)}
@@ -256,7 +289,7 @@ export default function VentasModule() {
       {/* La historia completa llega en segundo plano (P2-perf). Sin este aviso, Análisis e
           Histórico muestran los años viejos del Excel y parecen "mal" hasta que el PoS entra. */}
       {cargandoFondo && (
-        <div style={{ margin: '0.75rem 1.5rem', fontSize: '0.75rem', color: '#888' }}>
+        <div style={{ margin: '0.75rem 1.5rem', fontSize: '0.75rem', color: 'var(--c-gris)' }}>
           Cargando la historia completa del PoS… mientras tanto, los años anteriores se muestran
           desde el Excel.
         </div>
@@ -275,7 +308,12 @@ export default function VentasModule() {
         return (
           <Suspense fallback={<TabLoader />}>
             {usaDias && !eagerListo ? <TabLoader /> : (
-            <div className="vt-content">
+            <div
+              className="vt-content"
+              role="tabpanel"
+              id={PANEL_ID}
+              aria-labelledby={entrada && entrada.vistas.length > 1 ? idVista(tab) : idEntrada(entradaDe(tab).id)}
+            >
               {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
               {tab === 'envivo'      && <VentasEnVivo       metas={metas} />}
               {tab === 'paridad'     && <VentasParidad     />}

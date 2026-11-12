@@ -3,17 +3,16 @@ import type {
   AggSalonero, AggGeneral, AggCajero, ContabilidadDay,
   ProductMap, HistMap, Meta,
 } from '../../shared/types/ventas'
-import { isCajeroName, todayCR } from '../../shared/utils'
+import { fi, isCajeroName, todayCR } from '../../shared/utils'
 import { claveCajeroDeTurno } from './baldesNoMesero'
 
 // ── Cajeros detection ────────────────────────────────────────
 export function esCajero(name: string): boolean { return isCajeroName(name) }
 
 // ── Formatters ───────────────────────────────────────────────
-export function fi(n: number | null | undefined): string {
-  if (n == null || isNaN(n)) return '—'
-  return '₡ ' + Math.round(n).toLocaleString('es-CR')
-}
+// `fi` es el compartido (estándar de los reportes: «₡1.460.000»). Se re-exporta para que las
+// vistas de Ventas lo sigan importando desde acá.
+export { fi }
 export function fip(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return '—'
   return n >= 0 ? '+' + fi(n) : fi(n)

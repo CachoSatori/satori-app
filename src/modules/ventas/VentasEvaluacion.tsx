@@ -98,13 +98,13 @@ function calcAdvanced(
 function pctColor(pct: number | null): string {
   if (pct === null) return ''
   if (pct >= 100)   return 'var(--vt-green)'
-  if (pct >= 85)    return 'var(--vt-gold-dark,#a07830)'
+  if (pct >= 85)    return 'var(--c-oro-texto)'
   return 'var(--vt-red)'
 }
 
 function consistenciaColor(c: number): string {
   if (c >= 70) return 'var(--vt-green)'
-  if (c >= 40) return 'var(--vt-gold-dark,#a07830)'
+  if (c >= 40) return 'var(--c-oro-texto)'
   return 'var(--vt-red)'
 }
 
@@ -223,7 +223,7 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
           </div>
           <button
             onClick={() => window.print()}
-            style={{ padding:'5px 12px', borderRadius:2, border:'1px solid #2a2a2a', background:'transparent', color:'#888', fontSize:'0.75rem', cursor:'pointer' }}>
+            style={{ padding:'5px 12px', borderRadius:2, border:'1px solid var(--c-linea)', background:'transparent', color:'var(--c-gris)', fontSize:'0.75rem', cursor:'pointer' }}>
             🖨 Imprimir
           </button>
         </div>
@@ -295,7 +295,7 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
                   )}
                   {/* Racha badge */}
                   {racha >= 3 && (
-                    <div style={{ fontSize: '0.72rem', color: 'var(--vt-gold-dark,#a07830)', marginTop: '0.1rem' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--c-oro-texto)', marginTop: '0.1rem' }}>
                       🔥 {racha} días seguidos
                     </div>
                   )}
@@ -466,9 +466,9 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
                 const trend   = prev > 0 ? ((latest - prev) / prev * 100) : 0
 
                 return (
-                  <div key={name} style={{ background: 'var(--vt-ink)', borderRadius: 2, padding: '0.75rem 0.875rem' }}>
+                  <div key={name} style={{ background: 'var(--c-panel)', borderRadius: 2, padding: '0.75rem 0.875rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--vt-paper)' }}>{name}</div>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--c-tinta)' }}>{name}</div>
                       <div style={{ fontSize: '0.65rem', fontWeight: 700, color: trend >= 0 ? 'var(--vt-green)' : 'var(--vt-red)' }}>
                         {trend >= 0 ? '▲' : '▼'}{Math.abs(trend).toFixed(0)}%
                       </div>
@@ -478,13 +478,13 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
                       {weeklyVals.map((v, i) => {
                         const h = v > 0 ? Math.max(4, Math.round((v - minNonZero * 0.8) / (maxVal - minNonZero * 0.8) * 100)) : 2
                         const isLast = i === weeklyVals.length - 1
-                        const col = isLast ? 'var(--vt-gold)' : v > 0 ? '#3a6a9a' : '#1a1a1a'
+                        const col = isLast ? 'var(--vt-gold)' : v > 0 ? 'var(--c-azul)' : 'var(--c-panel)'
                         return <div key={i} style={{ flex: 1, height: `${Math.min(h,100)}%`, background: col, borderRadius: 1, transition: 'height 0.3s', minHeight: 2 }} />
                       })}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', fontSize: '0.6rem', color: '#555' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', fontSize: '0.6rem', color: 'var(--c-gris)' }}>
                       <span>12 sem</span>
-                      <span style={{ color: 'var(--vt-gold)', fontWeight: 700 }}>Ahora: {fi(latest)}</span>
+                      <span style={{ color: 'var(--c-oro-texto)', fontWeight: 700 }}>Ahora: {fi(latest)}</span>
                     </div>
                   </div>
                 )
@@ -514,7 +514,7 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
                     { id:'racha',        label:'Racha' },
                   ].map(col => (
                     <th key={col.id} className="r"
-                      style={{ cursor:'pointer', color: sortCol === col.id ? 'var(--vt-gold)' : undefined }}
+                      style={{ cursor:'pointer', color: sortCol === col.id ? 'var(--c-oro-texto)' : undefined }}
                       onClick={() => setSortCol(col.id)}>
                       {col.label}{sortCol === col.id ? ' ▼' : ''}
                     </th>
@@ -535,7 +535,7 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
                     <tr key={name}>
                       <td style={{ fontWeight:700, textAlign:'center' }}>{medal}</td>
                       <td style={{ fontWeight:600 }}>{name}</td>
-                      <td className="r" style={{ color:'#888' }}>{data.totalWorked}</td>
+                      <td className="r" style={{ color:'var(--c-gris)' }}>{data.totalWorked}</td>
                       <td className="r vt-bold">{fi(data.agg.total)}</td>
                       <td className="r" style={{ color:cPP, fontWeight:700 }}>{fi(data.agg.promPax)}</td>
                       <td className="r" style={{ color:cBP }}>{data.agg.bebPax.toFixed(2)}</td>
@@ -548,7 +548,7 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
                       </td>
                       <td className="r">
                         {data.racha > 0 ? (
-                          <span style={{ color: rachaPct >= 50 ? 'var(--vt-green)' : 'var(--vt-gold-dark,#a07830)' }}>
+                          <span style={{ color: rachaPct >= 50 ? 'var(--vt-green)' : 'var(--c-oro-texto)' }}>
                             🔥{data.racha}d
                           </span>
                         ) : '—'}
@@ -560,7 +560,7 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
               <tfoot>
                 <tr className="vt-tbl-footer">
                   <td colSpan={2}>GENERAL</td>
-                  <td className="r" style={{ color:'#888' }}>{evalDates.length}</td>
+                  <td className="r" style={{ color:'var(--c-gris)' }}>{evalDates.length}</td>
                   <td className="r">{fi(genAgg.total + genAgg.cajTotal)}</td>
                   <td className="r vt-bold">{fi(genAgg.promPax)}</td>
                   <td className="r">{genAgg.bebPax.toFixed(2)}</td>
@@ -570,7 +570,7 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
               </tfoot>
             </table>
           </div>
-          <div style={{ fontSize:'0.65rem', color:'#444', marginTop:'0.5rem' }}>
+          <div style={{ fontSize:'0.65rem', color:'var(--c-gris-claro)', marginTop:'0.5rem' }}>
             Consist. = % días sobre el promedio general. Tendencia = últimos 7 días vs 7 anteriores. Racha = días consecutivos sobre meta.
           </div>
         </>

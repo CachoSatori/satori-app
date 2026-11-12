@@ -41,12 +41,12 @@ const MSHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov
 const QUADRANTS = [
   {
     id: 'estrella', label: 'ESTRELLAS', emoji: '⭐',
-    color: '#4a9a6a', bg: 'rgba(74,154,106,.1)',
+    color: 'var(--c-musgo)', bg: 'var(--c-musgo-fondo)',
     desc: 'Alta popularidad · Alto margen → Defender y promover activamente',
   },
   {
     id: 'caballo', label: 'CABALLOS', emoji: '🐄',
-    color: '#c8a96e', bg: 'rgba(200,169,110,.1)',
+    color: 'var(--c-oro-texto)', bg: 'var(--c-oro-fondo)',
     desc: 'Alta popularidad · Bajo margen → Revisar precio o reducir costo',
   },
   {
@@ -56,7 +56,7 @@ const QUADRANTS = [
   },
   {
     id: 'perro', label: 'PERROS', emoji: '🐕',
-    color: '#c23b22', bg: 'rgba(194,59,34,.08)',
+    color: 'var(--c-laca)', bg: 'var(--c-laca-fondo)',
     desc: 'Baja popularidad · Bajo margen → Evaluar eliminar de carta',
   },
 ]
@@ -185,7 +185,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
     <div className="vt-section">
 
       {/* Period + Canal selector */}
-      <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1rem' }}>
+      <div style={{ background:'var(--c-panel)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1rem' }}>
         <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.5rem' }}>
           <div className="vt-tab-group">
             {(['todos','salon','delivery'] as const).map(c => (
@@ -205,7 +205,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
         </div>
         {allYears.map(y => (
           <div key={y} style={{ display:'flex', gap:'0.3rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.3rem' }}>
-            <span style={{ fontSize:'0.62rem', color:'#555', minWidth:42, textTransform:'uppercase', letterSpacing:'0.1em' }}>{y}:</span>
+            <span style={{ fontSize:'0.62rem', color:'var(--c-gris)', minWidth:42 }}>{y}:</span>
             <button className={`vt-range-btn ${period===`todo-${y}`?'active':''}`} onClick={() => setPeriod(`todo-${y}`)}>Todo {y}</button>
             <select
               className={`date-filter ${!period.startsWith('todo-') && period.startsWith(String(y)) ? 'active' : ''}`}
@@ -229,16 +229,16 @@ export default function VentasMenuEng({ dias, pm }: Props) {
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Cobertura costos</div>
-          <div className="vt-kpi-val" style={{ color: withCostPct > 80 ? 'var(--vt-green)' : withCostPct > 50 ? '#c8a96e' : 'var(--vt-red)' }}>
+          <div className="vt-kpi-val" style={{ color: withCostPct > 80 ? 'var(--vt-green)' : withCostPct > 50 ? 'var(--c-oro-texto)' : 'var(--vt-red)' }}>
             {withCostPct.toFixed(0)}%
           </div>
           <div className="vt-kpi-sub">de ítems con costo</div>
         </div>
         {withCost.length > 0 && (
           <>
-            <div className="vt-kpi" style={{ borderLeftColor: avgFoodCost <= 30 ? 'var(--vt-green)' : avgFoodCost <= 38 ? '#c8a96e' : 'var(--vt-red)' }}>
+            <div className="vt-kpi" style={{ borderLeftColor: avgFoodCost <= 30 ? 'var(--vt-green)' : avgFoodCost <= 38 ? 'var(--c-oro)' : 'var(--vt-red)' }}>
               <div className="vt-kpi-label">Food Cost % promedio</div>
-              <div className="vt-kpi-val" style={{ color: avgFoodCost <= 30 ? 'var(--vt-green)' : avgFoodCost <= 38 ? '#c8a96e' : 'var(--vt-red)' }}>
+              <div className="vt-kpi-val" style={{ color: avgFoodCost <= 30 ? 'var(--vt-green)' : avgFoodCost <= 38 ? 'var(--c-oro-texto)' : 'var(--vt-red)' }}>
                 {avgFoodCost.toFixed(1)}%
               </div>
               <div className="vt-kpi-sub">ideal: 28-35%</div>
@@ -247,7 +247,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
               <div className="vt-kpi-label">Margen máx</div>
               <div className="vt-kpi-val">{topMgn.toFixed(1)}%</div>
             </div>
-            <div className="vt-kpi" style={{ borderLeftColor: '#4a9a6a' }}>
+            <div className="vt-kpi" style={{ borderLeftColor: 'var(--c-musgo)' }}>
               <div className="vt-kpi-label">⭐ Estrellas</div>
               <div className="vt-kpi-val">{grouped.estrella.length}</div>
               <div className="vt-kpi-sub">{fi(grouped.estrella.reduce((s,i)=>s+i.monto,0))}</div>
@@ -258,7 +258,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
 
       {/* No cost data warning */}
       {withCost.length === 0 && (
-        <div style={{ background:'rgba(200,169,110,.12)', border:'1px solid rgba(200,169,110,.3)', borderRadius:2, padding:'0.875rem 1rem', marginBottom:'1.25rem', fontSize:'0.82rem', color:'#c8a96e' }}>
+        <div style={{ background:'var(--c-oro-fondo)', border:'1px solid var(--c-oro)', borderRadius:2, padding:'0.875rem 1rem', marginBottom:'1.25rem', fontSize:'0.82rem', color:'var(--c-oro-texto)' }}>
           ⚠ Ningún producto tiene costo unitario cargado. Ingresá los costos en la tab <strong>Productos</strong> para ver el análisis de margen completo.
         </div>
       )}
@@ -273,14 +273,14 @@ export default function VentasMenuEng({ dias, pm }: Props) {
               const qVentas = qItems.reduce((s,i)=>s+i.monto,0)
               const topItems = [...qItems].sort((a,b)=>b.monto-a.monto).slice(0,6)
               return (
-                <div key={q.id} style={{ background:q.bg, border:`1px solid ${q.color}44`, borderRadius:2, padding:'0.875rem' }}>
+                <div key={q.id} style={{ background:q.bg, border:`1px solid color-mix(in srgb, ${q.color} 27%, transparent)`, borderRadius:2, padding:'0.875rem' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'0.5rem' }}>
                     <div style={{ fontSize:'0.78rem', fontWeight:700, color:q.color, letterSpacing:'0.08em' }}>
                       {q.emoji} {q.label}
                     </div>
-                    <div style={{ fontSize:'0.72rem', color:'#666' }}>{qItems.length} items</div>
+                    <div style={{ fontSize:'0.72rem', color:'var(--c-gris)' }}>{qItems.length} items</div>
                   </div>
-                  <div style={{ fontSize:'0.62rem', color:'#555', marginBottom:'0.6rem', lineHeight:1.4 }}>{q.desc}</div>
+                  <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:'0.6rem', lineHeight:1.4 }}>{q.desc}</div>
                   {qVentas > 0 && (
                     <div style={{ fontSize:'0.72rem', color:q.color, fontWeight:700, marginBottom:'0.5rem' }}>
                       {fi(qVentas)} · {totalVentas > 0 ? (qVentas/totalVentas*100).toFixed(1) : 0}% del mix
@@ -288,15 +288,15 @@ export default function VentasMenuEng({ dias, pm }: Props) {
                   )}
                   <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
                     {topItems.map((item, i) => (
-                      <div key={item.nombre} style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'0.2rem 0', borderBottom:'1px solid rgba(255,255,255,.04)', fontSize:'0.72rem' }}>
+                      <div key={item.nombre} style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'0.2rem 0', borderBottom:'1px solid var(--c-linea)', fontSize:'0.72rem' }}>
                         <div style={{ display:'flex', gap:'0.3rem', alignItems:'baseline', flex:1, overflow:'hidden' }}>
-                          <span style={{ color:'#444', minWidth:14 }}>{i+1}</span>
-                          <span style={{ color:'#bbb', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={item.nombre}>{item.nombre}</span>
+                          <span style={{ color:'var(--c-gris-claro)', minWidth:14 }}>{i+1}</span>
+                          <span style={{ color:'var(--c-tinta)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={item.nombre}>{item.nombre}</span>
                         </div>
                         <div style={{ display:'flex', gap:'0.5rem', flexShrink:0, marginLeft:'0.5rem' }}>
-                          <span style={{ color:'#666' }}>{item.unidades}u</span>
+                          <span style={{ color:'var(--c-gris)' }}>{item.unidades}u</span>
                           {item.hasCoste && (
-                            <span style={{ color: item.marginPct >= medianMgn ? '#4a9a6a' : '#c23b22', fontWeight:600 }}>
+                            <span style={{ color: item.marginPct >= medianMgn ? 'var(--c-musgo)' : 'var(--c-laca)', fontWeight:600 }}>
                               {item.marginPct.toFixed(0)}%mg
                             </span>
                           )}
@@ -304,10 +304,10 @@ export default function VentasMenuEng({ dias, pm }: Props) {
                       </div>
                     ))}
                     {qItems.length > 6 && (
-                      <div style={{ fontSize:'0.65rem', color:'#444', marginTop:2 }}>+{qItems.length-6} más…</div>
+                      <div style={{ fontSize:'0.65rem', color:'var(--c-gris-claro)', marginTop:2 }}>+{qItems.length-6} más…</div>
                     )}
                     {qItems.length === 0 && (
-                      <div style={{ fontSize:'0.72rem', color:'#333', padding:'0.5rem 0' }}>Sin ítems en este cuadrante</div>
+                      <div style={{ fontSize:'0.72rem', color:'var(--c-gris-claro)', padding:'0.5rem 0' }}>Sin ítems en este cuadrante</div>
                     )}
                   </div>
                 </div>
@@ -317,24 +317,24 @@ export default function VentasMenuEng({ dias, pm }: Props) {
 
           {/* Sin costo section */}
           {grouped['sin-costo'].length > 0 && (
-            <div style={{ background:'#0f0f0f', border:'1px solid #222', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1.25rem' }}>
-              <div style={{ fontSize:'0.75rem', color:'#555', fontWeight:700, letterSpacing:'0.1em', marginBottom:'0.4rem' }}>
+            <div style={{ background:'var(--c-fondo)', border:'1px solid var(--c-linea)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1.25rem' }}>
+              <div style={{ fontSize:'0.75rem', color:'var(--c-gris)', fontWeight:700, letterSpacing:'0.1em', marginBottom:'0.4rem' }}>
                 ⬜ SIN COSTO CARGADO — {grouped['sin-costo'].length} items
               </div>
-              <div style={{ fontSize:'0.68rem', color:'#444', display:'flex', flexWrap:'wrap', gap:'0.4rem' }}>
+              <div style={{ fontSize:'0.68rem', color:'var(--c-gris-claro)', display:'flex', flexWrap:'wrap', gap:'0.4rem' }}>
                 {grouped['sin-costo'].slice(0,20).map(i => (
-                  <span key={i.nombre} style={{ padding:'1px 6px', border:'1px solid #222', borderRadius:2, color:'#555' }}>{i.nombre}</span>
+                  <span key={i.nombre} style={{ padding:'1px 6px', border:'1px solid var(--c-linea)', borderRadius:2, color:'var(--c-gris)' }}>{i.nombre}</span>
                 ))}
-                {grouped['sin-costo'].length > 20 && <span style={{ color:'#333' }}>+{grouped['sin-costo'].length-20} más</span>}
+                {grouped['sin-costo'].length > 20 && <span style={{ color:'var(--c-gris-claro)' }}>+{grouped['sin-costo'].length-20} más</span>}
               </div>
             </div>
           )}
 
           {/* Legend */}
-          <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.75rem 1rem', fontSize:'0.7rem', color:'#555' }}>
-            <strong style={{ color:'#777' }}>Cómo leer el cuadrante:</strong>{' '}
+          <div style={{ background:'var(--c-panel)', borderRadius:2, padding:'0.75rem 1rem', fontSize:'0.7rem', color:'var(--c-gris)' }}>
+            <strong style={{ color:'var(--c-gris)' }}>Cómo leer el cuadrante:</strong>{' '}
             Popularidad = unidades vendidas vs mediana ({medianUds} uds). Margen = precio promedio - costo unitario, comparado vs mediana ({medianMgn.toFixed(1)}% margen bruto).
-            {withCostPct < 80 && <span style={{ color:'#c8a96e', marginLeft:'0.5rem' }}>Tip: cargá más costos en Productos para mejorar la precisión.</span>}
+            {withCostPct < 80 && <span style={{ color:'var(--c-oro-texto)', marginLeft:'0.5rem' }}>Tip: cargá más costos en Productos para mejorar la precisión.</span>}
           </div>
         </>
       )}
@@ -383,22 +383,22 @@ export default function VentasMenuEng({ dias, pm }: Props) {
                       {q ? (
                         <span style={{ fontSize:'0.68rem', color:q.color, fontWeight:600 }}>{q.emoji} {q.label}</span>
                       ) : (
-                        <span style={{ fontSize:'0.68rem', color:'#444' }}>⬜ sin costo</span>
+                        <span style={{ fontSize:'0.68rem', color:'var(--c-gris-claro)' }}>⬜ sin costo</span>
                       )}
                     </td>
                     <td className="r">{item.unidades.toLocaleString('es-CR')}</td>
                     <td className="r vt-bold">{fi(item.monto)}</td>
                     <td className="r">{fi(item.avgPrice)}</td>
-                    <td className="r" style={{ color: item.hasCoste ? '#888' : '#333' }}>
+                    <td className="r" style={{ color: item.hasCoste ? 'var(--c-gris)' : 'var(--c-gris-claro)' }}>
                       {item.hasCoste ? fi(item.costo) : '—'}
                     </td>
-                    <td className="r" style={{ color: item.hasCoste ? (item.margin > 0 ? 'var(--vt-green)' : 'var(--vt-red)') : '#333' }}>
+                    <td className="r" style={{ color: item.hasCoste ? (item.margin > 0 ? 'var(--vt-green)' : 'var(--vt-red)') : 'var(--c-gris-claro)' }}>
                       {item.hasCoste ? fi(item.margin) : '—'}
                     </td>
-                    <td className="r" style={{ color: item.hasCoste ? (item.marginPct >= medianMgn ? '#4a9a6a' : '#c23b22') : '#333', fontWeight: item.hasCoste ? 700 : 400 }}>
+                    <td className="r" style={{ color: item.hasCoste ? (item.marginPct >= medianMgn ? 'var(--c-musgo)' : 'var(--c-laca)') : 'var(--c-gris-claro)', fontWeight: item.hasCoste ? 700 : 400 }}>
                       {item.hasCoste ? item.marginPct.toFixed(1) + '%' : '—'}
                     </td>
-                    <td className="r" style={{ color: foodCost !== null ? (foodCost <= 30 ? '#4a9a6a' : foodCost <= 38 ? '#c8a96e' : '#c23b22') : '#333', fontSize:'0.8rem' }}>
+                    <td className="r" style={{ color: foodCost !== null ? (foodCost <= 30 ? 'var(--c-musgo)' : foodCost <= 38 ? 'var(--c-oro-texto)' : 'var(--c-laca)') : 'var(--c-gris-claro)', fontSize:'0.8rem' }}>
                       {foodCost !== null ? foodCost.toFixed(1) + '%' : '—'}
                     </td>
                   </tr>

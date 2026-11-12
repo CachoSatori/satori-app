@@ -64,7 +64,7 @@ export default function VentasHistorico({ dias, hist, pm }: Props) {
     }).filter(Boolean) as Record<string, number | string>[]
   }, [rangeDates, dias, pm, sals])
 
-  const COLORS = ['#c8a96e','#7ec8a0','#7ab4d4','#c87ea0','#a0c87e','#c8a07e','#7ea0c8','#c87e7e']
+  const COLORS = ['var(--c-oro)','#7ec8a0','#7ab4d4','#c87ea0','#a0c87e','#c8a07e','#7ea0c8','#c87e7e']
 
   const [visibleSals, setVisibleSals] = useState<Record<string, boolean>>({ General: true })
 
@@ -133,16 +133,16 @@ export default function VentasHistorico({ dias, hist, pm }: Props) {
           <div style={{ height: 280, marginBottom: '1.5rem' }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#888' }}
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--c-linea)" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--c-gris)' }}
                   tickFormatter={d => d.slice(5)} />
-                <YAxis tick={{ fontSize: 10, fill: '#888' }}
+                <YAxis tick={{ fontSize: 10, fill: 'var(--c-gris)' }}
                   tickFormatter={v => `₡${Math.round(v/1000)}k`} />
                 <Tooltip
                   formatter={(value: unknown) => typeof value === 'number' ? fi(value) : String(value)}
                   labelFormatter={d => fmtDate(String(d))}
-                  contentStyle={{ background: '#111', border: '1px solid #333', fontSize: '0.75rem' }}
-                  labelStyle={{ color: '#c8a96e' }} />
+                  contentStyle={{ background: 'var(--c-panel)', border: '1px solid var(--c-linea)', fontSize: '0.75rem' }}
+                  labelStyle={{ color: 'var(--c-oro-texto)' }} />
                 <Legend wrapperStyle={{ display: 'none' }} />
                 {['General', ...sals].map((n, i) =>
                   visibleSals[n] !== false ? (

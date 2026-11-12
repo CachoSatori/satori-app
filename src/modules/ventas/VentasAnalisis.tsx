@@ -13,8 +13,8 @@ const MN_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
 const QUARTERS: [number, number, number][] = [[1,2,3],[4,5,6],[7,8,9],[10,11,12]]
 
 function varStr(pct: number | null, big = false): { text: string; color: string } {
-  if (pct === null) return { text: '—', color: '#444' }
-  const c = pct > 0 ? 'var(--vt-green)' : pct < 0 ? 'var(--vt-red)' : '#888'
+  if (pct === null) return { text: '—', color: 'var(--c-gris-claro)' }
+  const c = pct > 0 ? 'var(--vt-green)' : pct < 0 ? 'var(--vt-red)' : 'var(--c-gris)'
   const t = `${pct >= 0 ? '▲ +' : '▼ '}${Math.abs(pct).toFixed(big ? 0 : 1)}%`
   return { text: t, color: c }
 }
@@ -139,7 +139,7 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                 <tr>
                   <th>Mes</th>
                   {years.map(y => <th key={y} className="r">{y}</th>)}
-                  {years.map((y, i) => i > 0 ? <th key={`v${y}`} className="r" style={{ color:'#555', fontSize:'0.65rem' }}>vs {years[i-1]}</th> : null)}
+                  {years.map((y, i) => i > 0 ? <th key={`v${y}`} className="r" style={{ color:'var(--c-gris)', fontSize:'0.65rem' }}>vs {years[i-1]}</th> : null)}
                 </tr>
               </thead>
               <tbody>
@@ -186,8 +186,8 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
           <div className="vt-sl">Por trimestre (Q1–Q4)</div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'0.75rem', marginBottom:'1.5rem' }}>
             {QUARTERS.map((qMonths, qi) => (
-              <div key={qi} style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.875rem' }}>
-                <div style={{ fontSize:'0.65rem', letterSpacing:'0.15em', textTransform:'uppercase', color:'#555', marginBottom:'0.625rem', fontWeight:700 }}>
+              <div key={qi} style={{ background:'var(--c-panel)', borderRadius:2, padding:'0.875rem' }}>
+                <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:'0.625rem', fontWeight:700 }}>
                   Q{qi+1} · {mNames[qMonths[0]-1]}–{mNames[qMonths[2]-1]}
                 </div>
                 {years.map((y, i) => {
@@ -196,10 +196,10 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                   const vp  = prev > 0 ? (tot - prev) / prev * 100 : null
                   const vs  = varStr(vp)
                   return (
-                    <div key={y} style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'0.4rem', paddingBottom:'0.4rem', borderBottom:'1px solid #111' }}>
-                      <span style={{ fontSize:'0.78rem', color:'#666' }}>{y}</span>
+                    <div key={y} style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'0.4rem', paddingBottom:'0.4rem', borderBottom:'1px solid var(--c-linea)' }}>
+                      <span style={{ fontSize:'0.78rem', color:'var(--c-gris)' }}>{y}</span>
                       <div style={{ textAlign:'right' }}>
-                        <div style={{ fontSize:'0.85rem', fontWeight:700, color:'var(--vt-gold)' }}>{fi(tot)}</div>
+                        <div style={{ fontSize:'0.85rem', fontWeight:700, color:'var(--c-oro-texto)' }}>{fi(tot)}</div>
                         {vp !== null && <div style={{ fontSize:'0.68rem', color:vs.color }}>{vs.text}</div>}
                       </div>
                     </div>
@@ -234,7 +234,7 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
             return (
               <div className="vt-kpi-grid">
                 {[
-                  { label:`Venta Neta ${selYear}`, val:d.ventaNeta, pp:vpKPI(d.ventaNeta, prev?.ventaNeta), color:'var(--vt-gold)' },
+                  { label:`Venta Neta ${selYear}`, val:d.ventaNeta, pp:vpKPI(d.ventaNeta, prev?.ventaNeta), color:'var(--c-oro-texto)' },
                   { label:'Venta Bruta', val:d.ventaBruta, pp:vpKPI(d.ventaBruta, prev?.ventaBruta) },
                   { label:'PAX', val:d.pax, pp:vpKPI(d.pax, prev?.pax), fmt:(v:number)=>v.toLocaleString('es-CR') },
                   { label:'Prom/PAX', val:promPAX, pp:null },
@@ -292,7 +292,7 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                         <td className="r vt-bold">{fi(d.ventaNeta)}</td>
                         <td className="r" style={{ color:vMA.color, fontSize:'0.8rem' }}>{vMA.text}</td>
                         <td className="r" style={{ color:vYA.color, fontSize:'0.8rem' }}>{vYA.text}</td>
-                        <td className="r" style={{ color:'#888', fontSize:'0.8rem' }}>{fi(d.ventaBruta)}</td>
+                        <td className="r" style={{ color:'var(--c-gris)', fontSize:'0.8rem' }}>{fi(d.ventaBruta)}</td>
                         <td className="r vt-muted" style={{ fontSize:'0.78rem' }}>{fi(d.iva)}</td>
                         <td className="r vt-muted" style={{ fontSize:'0.78rem' }}>{fi(d.serv)}</td>
                         <td className="r">{d.pax.toLocaleString('es-CR')}</td>
@@ -313,7 +313,7 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                   <td>TOTAL {selYear}</td>
                   <td className="r">{fi(yearData[selYear].ventaNeta)}</td>
                   <td/><td/>
-                  <td className="r" style={{ color:'#888' }}>{fi(yearData[selYear].ventaBruta)}</td>
+                  <td className="r" style={{ color:'var(--c-gris)' }}>{fi(yearData[selYear].ventaBruta)}</td>
                   <td className="r vt-muted" style={{ fontSize:'0.78rem' }}>{fi(MONTHS.reduce((s,m)=>s+(monthData[selYear]?.[m]?.iva??0),0))}</td>
                   <td className="r vt-muted" style={{ fontSize:'0.78rem' }}>{fi(MONTHS.reduce((s,m)=>s+(monthData[selYear]?.[m]?.serv??0),0))}</td>
                   <td className="r">{yearData[selYear].pax.toLocaleString('es-CR')}</td>
@@ -432,27 +432,27 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
         return (
           <div>
             {/* Main projection card */}
-            <div style={{ background: 'var(--vt-ink)', borderRadius: 3, padding: '1.25rem', marginBottom: '1.5rem', color: 'var(--vt-paper)' }}>
+            <div style={{ background: 'var(--c-fondo)', borderRadius: 3, padding: '1.25rem', marginBottom: '1.5rem', color: 'var(--c-tinta)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
                 {[
-                  { label: `YTD ${curYear} (${ytdDays.length} días)`, val: fi(ytdVentas), color: 'var(--vt-gold)' },
-                  { label: 'Proyección año completo', val: fi(projection), color: projectedTotal >= metaYear ? 'var(--vt-green)' : '#f08070' },
+                  { label: `YTD ${curYear} (${ytdDays.length} días)`, val: fi(ytdVentas), color: 'var(--c-oro-texto)' },
+                  { label: 'Proyección año completo', val: fi(projection), color: projectedTotal >= metaYear ? 'var(--vt-green)' : 'var(--c-laca)' },
                   { label: 'Promedio por día', val: fi(avgPerDay), color: '' },
                   { label: 'Mes en curso — meta', val: fi(metaYear), color: 'var(--vt-muted)' },
                 ].map(k => (
                   <div key={k.label}>
-                    <div style={{ fontSize: '0.62rem', color: '#555', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{k.label}</div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.1rem', fontWeight: 800, color: k.color || 'var(--vt-paper)' }}>{k.val}</div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--c-gris)', marginBottom: '0.3rem' }}>{k.label}</div>
+                    <div style={{ fontFamily: 'var(--font-serif)', fontVariantNumeric: 'tabular-nums', fontSize: '1.1rem', fontWeight: 800, color: k.color || 'var(--c-tinta)' }}>{k.val}</div>
                   </div>
                 ))}
               </div>
               {/* Progress bar: % of year elapsed */}
               <div style={{ marginTop: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#555', marginBottom: '0.3rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--c-gris)', marginBottom: '0.3rem' }}>
                   <span>Año transcurrido: {pctYear.toFixed(0)}%</span>
                   <span>Día {dayOfYear} de {daysInYear}</span>
                 </div>
-                <div style={{ height: 6, background: '#2a2a2a', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: 6, background: 'var(--c-panel)', borderRadius: 3, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${pctYear}%`, background: 'var(--vt-gold)', borderRadius: 3 }} />
                 </div>
               </div>
@@ -472,14 +472,14 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                       <div style={{ width: '100%', height: `${actH}%`, background: d.isCur ? 'var(--vt-gold)' : 'var(--vt-green)', borderRadius: 2, opacity: d.isPast ? 1 : 0.6 }} />
                     )}
                     {!d.actual && d.projected > 0 && (
-                      <div style={{ width: '100%', height: `${projH}%`, background: '#333', borderRadius: 2, borderTop: '2px dashed var(--vt-muted)' }} />
+                      <div style={{ width: '100%', height: `${projH}%`, background: 'var(--c-panel)', borderRadius: 2, borderTop: '2px dashed var(--vt-muted)' }} />
                     )}
                     {metaH > 0 && (
                       <div style={{ position: 'relative', width: '100%', height: 0 }}>
                         <div style={{ position: 'absolute', bottom: 0, width: '100%', borderBottom: '1px solid var(--vt-red)', opacity: 0.6 }} />
                       </div>
                     )}
-                    <div style={{ fontSize: '0.55rem', color: d.isCur ? 'var(--vt-gold)' : '#555', fontWeight: d.isCur ? 700 : 400 }}>
+                    <div style={{ fontSize: '0.55rem', color: d.isCur ? 'var(--c-oro-texto)' : 'var(--c-gris)', fontWeight: d.isCur ? 700 : 400 }}>
                       {mNames[d.m - 1]}
                     </div>
                   </div>
@@ -502,7 +502,7 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                 <tbody>
                   {monthlyData.map(d => (
                     <tr key={d.m} style={{ fontWeight: d.isCur ? 700 : 400 }}>
-                      <td style={{ color: d.isCur ? 'var(--vt-gold-dark,#a07830)' : undefined }}>
+                      <td style={{ color: d.isCur ? 'var(--c-oro-texto)' : undefined }}>
                         {mNames[d.m - 1]} {d.isCur ? '← hoy' : ''}
                       </td>
                       <td className="r vt-bold">{d.actual > 0 ? fi(d.actual) : '—'}</td>

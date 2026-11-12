@@ -39,11 +39,14 @@
 | `CLUB_WEB_KEY` | La clave de club-web **de ese proyecto** (la de staging en staging, la de prod en prod) | Es el portón: el header `x-club-web` tiene que traer esta clave |
 | `CLUB_WEB_ORIGIN` | El dominio del Club **de ese proyecto**: el resultado de `select club_url from public.club_config_global;` | Sin barra final. El QR del pase tiene que empezar con este dominio |
 | `WALLET_DISENO` | `{"colorFondo":"#0d0d0d","logoUrl":"https://<dominio>/pase/logo.png","heroUrl":"https://<dominio>/pase/hero.png"}` | Opcional. Las imágenes tienen que estar publicadas (llegan con el PR de `main`). Sin él, el pase sale sin logo ni franja |
+| `WALLET_ENTORNO` | **`stg`** en staging · **`prod`** en prod (en minúsculas, nada más) | **Obligatorio.** Staging y prod comparten el emisor de Google y los IDs de miembro pueden coincidir (el clon de prod a staging los copia; la carga única los trae escritos). Con `stg`, la clase es `…club-satori-stg` y los objetos `…club-stg-<miembro>`; con `prod`, sin sufijo. Falta o tiene otro valor → 503: nunca cae en prod |
 | `CLUB_PASE_SYNC_KEY` | — | **No va en el piloto** |
 
 `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` los pone Supabase solo. Los secretos de Edge son **del proyecto**: los ven
-todas las Edge Functions de ese proyecto. Sin `CLUB_WEB_KEY`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SA_KEY` o
-`CLUB_WEB_ORIGIN`, todo responde 503 sin tocar la base (falla cerrada).
+todas las Edge Functions de ese proyecto. Sin `CLUB_WEB_KEY`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SA_KEY`,
+`CLUB_WEB_ORIGIN` o un `WALLET_ENTORNO` válido, todo responde 503 sin tocar la base ni Google (falla cerrada).
+**La clase que ya existe en Google no se pisa:** el Edge la crea si no está (POST) y, si ya existe (409), la deja como
+está. Además, antes de escribir nada comprueba que la clase y el objeto sean de su propio ambiente.
 
 **Crear la clave de la cuenta de servicio** (el dueño, en su PC; nada pasa por el chat):
 1. Google Cloud Console → el proyecto de Wallet → **IAM y administración** → **Cuentas de servicio** → la cuenta del
@@ -57,7 +60,8 @@ todas las Edge Functions de ese proyecto. Sin `CLUB_WEB_KEY`, `GOOGLE_WALLET_ISS
 
 ## 2. Desplegar el Edge en STAGING y probarlo (el dueño, desde su terminal)
 **Antes:** Supabase CLI 2.122.0 o más nueva (`supabase --version`) y la sesión iniciada (`supabase login`). No hace falta
-Docker: se despliega con `--use-api`. Los secretos de §1 ya cargados **en staging**. Nunca durante el servicio (19–22 h).
+Docker: se despliega con `--use-api`. Los secretos de §1 ya cargados **en staging**, con **`WALLET_ENTORNO` = `stg`**
+(sin él todo da 503). Nunca durante el servicio (19–22 h).
 
 1. Traer la rama y anotar el SHA (va a la bitácora):
    ```bash
@@ -121,8 +125,9 @@ club-pase --project-ref <ref>`. El portal y la caja siguen funcionando sin el pa
 2. **Usuarios** de la consola: la cuenta de servicio sigue como **Desarrollador** (alcanza para crear clases y objetos).
 3. Google Cloud: la **Google Wallet API** sigue habilitada en el proyecto.
 4. **Cuentas de prueba:** agregar la cuenta de Google del Android de prueba (el nombre exacto del menú se confirma en la consola).
-5. La clase `…club-satori` **la crea el Edge** con el primer pase: no hace falta crearla a mano. Después del paso 6 de §2,
-   verificar que aparece en la consola.
+5. La clase **la crea el Edge** con el primer pase: no hace falta crearla a mano. Después del paso 6 de §2 (staging),
+   verificar que aparece **`…club-satori-stg`** en la consola. Esa clase alcanza para pedir la publicación (decisión del
+   dueño, 12-nov). La de prod (`…club-satori`, sin sufijo) aparece recién con el primer pase pedido en prod.
 6. **Pedir el acceso de publicación** con la prueba hecha: Google suele pedir capturas del pase y del flujo «Agregar a
    Google Wallet». Las imágenes del pase tienen que estar publicadas en el dominio del Club (llegan con el PR de `main`).
    Hasta la aprobación, solo las cuentas de prueba pueden guardar el pase.
@@ -131,8 +136,9 @@ club-pase --project-ref <ref>`. El portal y la caja siguen funcionando sin el pa
    **Apagar:** `VITE_WALLET_GOOGLE` vacío y volver a desplegar.
 
 ## 4. La clase y el objeto (para el pedido de publicación)
-Tipo **genérico** (`genericClass` / `genericObject`). La clase es `<issuer>.club-satori` y el objeto, `<issuer>.club-<miembro>`:
-no cambian aunque se regenere el QR.
+Tipo **genérico** (`genericClass` / `genericObject`). En prod, la clase es `<issuer>.club-satori` y el objeto,
+`<issuer>.club-<miembro>`; en staging, `<issuer>.club-satori-stg` y `<issuer>.club-stg-<miembro>` (`WALLET_ENTORNO`). No
+cambian aunque se regenere el QR.
 
 | Elemento | Valor | De dónde sale |
 |---|---|---|

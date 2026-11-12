@@ -1,7 +1,8 @@
 // B1: el flujo del Edge club-pase con una base simulada y una cuenta de servicio FALSA generada en memoria.
 import { describe, it, expect, beforeAll } from 'vitest'
 import { manejarPase, manejarSync, type EnvPase, type Rpc } from './edgePase'
-import type { PaseDatos } from './googlePase'
+import { armarClase, armarObjeto, configurarBaseClub, type PaseDatos } from './googlePase'
+import { guardarEnGoogle } from './sincronizar'
 
 const ISSUER = '3388000000012345678'
 const CLAVE_WEB = 'k'.repeat(40)
@@ -23,7 +24,7 @@ beforeAll(async () => {
     { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify'])
   const der = new Uint8Array(await crypto.subtle.exportKey('pkcs8', par.privateKey))
   const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----\n`
-  env = { CLUB_WEB_KEY: CLAVE_WEB, GOOGLE_WALLET_ISSUER_ID: ISSUER, CLUB_WEB_ORIGIN: 'https://club.ejemplo.test',
+  env = { CLUB_WEB_KEY: CLAVE_WEB, GOOGLE_WALLET_ISSUER_ID: ISSUER, CLUB_WEB_ORIGIN: 'https://club.ejemplo.test', WALLET_ENTORNO: 'prod',
           GOOGLE_WALLET_SA_KEY: JSON.stringify({ client_email: 'pase-prueba@proyecto-falso.iam.gserviceaccount.com', private_key: pem }) }
 })
 
@@ -96,6 +97,70 @@ describe('club-pase (Edge)', () => {
       expect(await r.json()).toEqual({ error: 'servicio' })
       expect(llamadas.map(l => l.fn)).not.toContain('club_pase_emitido')
     }
+  })
+
+  it('(12-nov) sin WALLET_ENTORNO o con un valor raro → 503 en /google, /actualizar y /sync; sin base y sin Google', async () => {
+    const SYNC = 's'.repeat(40)
+    for (const raro of [undefined, '', 'staging', 'PROD', 'produccion']) {
+      const e = { ...env, WALLET_ENTORNO: raro, CLUB_PASE_SYNC_KEY: SYNC }
+      const { rpc, llamadas } = base({ club_pase_por_token: { data: MIEMBRO, error: null }, club_pase_datos: { data: datos(), error: null } })
+      const g = google()
+      expect((await manejarPase(pedido({ token: TOKEN }), 'google', e, rpc, g.fetch)).status, String(raro)).toBe(503)
+      expect((await manejarSync(pedido({ token: TOKEN }), 'actualizar', e, rpc, g.fetch)).status, String(raro)).toBe(503)
+      const sync = new Request('https://edge.ejemplo/club-pase/sync', { method: 'POST', headers: { 'x-club-pase-sync': SYNC } })
+      expect((await manejarSync(sync, 'sync', e, rpc, g.fetch)).status, String(raro)).toBe(503)
+      expect(llamadas).toHaveLength(0)
+      expect(g.llamadas).toHaveLength(0)
+    }
+  })
+
+  it('(12-nov) WALLET_ENTORNO=stg: clase «club-satori-stg», objeto «club-stg-<miembro>», JWT y registro con esos IDs', async () => {
+    const { rpc, llamadas } = base({ club_pase_por_token: { data: MIEMBRO, error: null }, club_pase_datos: { data: datos(), error: null } })
+    const g = google()
+    const r = await manejarPase(pedido({ token: TOKEN }), 'google', { ...env, WALLET_ENTORNO: 'stg' }, rpc, g.fetch)
+    expect(r.status).toBe(200)
+    const j = await r.json() as { url: string; object_id: string }
+    expect(j.object_id).toBe(`${ISSUER}.club-stg-${MIEMBRO}`)
+    expect(JSON.parse(g.llamadas[1].body!).id).toBe(`${ISSUER}.club-satori-stg`)
+    expect(JSON.parse(g.llamadas[2].body!)).toMatchObject({ id: `${ISSUER}.club-stg-${MIEMBRO}`, classId: `${ISSUER}.club-satori-stg` })
+    const claims = JSON.parse(Buffer.from(j.url.split('/').pop()!.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
+    expect(claims.payload).toEqual({ genericObjects: [{ id: `${ISSUER}.club-stg-${MIEMBRO}`, classId: `${ISSUER}.club-satori-stg` }] })
+    expect(llamadas.find(l => l.fn === 'club_pase_emitido')?.args.p_object_id).toBe(`${ISSUER}.club-stg-${MIEMBRO}`)
+    // ninguna llamada nombra la clase o un objeto de prod
+    expect(g.llamadas.some(l => (l.body ?? '').includes(`${ISSUER}.club-satori"`) || l.url.includes(encodeURIComponent(`${ISSUER}.club-${MIEMBRO}`)))).toBe(false)
+  })
+
+  it('(12-nov) la clase que ya existe (409) se deja como está: nunca PUT ni PATCH de la clase, en ningún ambiente', async () => {
+    for (const ent of ['prod', 'stg']) {
+      const { rpc } = base({ club_pase_por_token: { data: MIEMBRO, error: null }, club_pase_datos: { data: datos(), error: null } })
+      const g = google({ clase: 409, objeto: 409 })
+      expect((await manejarPase(pedido({ token: TOKEN }), 'google', { ...env, WALLET_ENTORNO: ent }, rpc, g.fetch)).status).toBe(200)
+      const aClase = g.llamadas.filter(l => l.url.includes('/genericClass'))
+      expect(aClase.map(l => l.method)).toEqual(['POST'])
+      expect(g.llamadas.filter(l => l.method === 'PATCH').map(l => decodeURIComponent(l.url.split('/').pop()!)))
+        .toEqual([ent === 'stg' ? `${ISSUER}.club-stg-${MIEMBRO}` : `${ISSUER}.club-${MIEMBRO}`])
+    }
+  })
+
+  it('(12-nov) guardarEnGoogle no escribe la clase ni el objeto de OTRO ambiente: error y ninguna llamada a Google', async () => {
+    configurarBaseClub('https://club.ejemplo.test')
+    const deProd = { clase: armarClase(ISSUER, 'prod'), objeto: armarObjeto(ISSUER, 'prod', datos()) as unknown as { id: string; classId: string } }
+    const deStg = { clase: armarClase(ISSUER, 'stg'), objeto: armarObjeto(ISSUER, 'stg', datos()) as unknown as { id: string; classId: string } }
+    const g = google()
+    expect(await guardarEnGoogle(g.fetch, 't', ISSUER, 'stg', deProd.clase, deProd.objeto)).toBe('ids de otro ambiente')
+    expect(await guardarEnGoogle(g.fetch, 't', ISSUER, 'prod', deStg.clase, deStg.objeto)).toBe('ids de otro ambiente')
+    expect(await guardarEnGoogle(g.fetch, 't', ISSUER, 'stg', deStg.clase, deProd.objeto)).toBe('ids de otro ambiente')
+    expect(g.llamadas).toHaveLength(0)
+    expect(await guardarEnGoogle(g.fetch, 't', ISSUER, 'stg', deStg.clase, deStg.objeto)).toBe('ok')
+  })
+
+  it('(12-nov) «Actualizar mi pase» en stg: PATCH del objeto «club-stg-<miembro>», nunca del de prod', async () => {
+    const { rpc } = base({ club_pase_por_token: { data: MIEMBRO, error: null }, club_pase_datos: { data: datos(), error: null } })
+    const g = google()
+    const r = await manejarSync(pedido({ token: TOKEN }), 'actualizar', { ...env, WALLET_ENTORNO: 'stg' }, rpc, g.fetch)
+    expect(await r.json()).toEqual({ resultado: 'actualizado' })
+    const patch = g.llamadas.filter(l => l.method === 'PATCH')
+    expect(patch.map(l => decodeURIComponent(l.url.split('/').pop()!))).toEqual([`${ISSUER}.club-stg-${MIEMBRO}`])
   })
 
   it('falla cerrada: sin algún secreto → 503 y no llama a la base', async () => {

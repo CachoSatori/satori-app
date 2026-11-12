@@ -137,6 +137,9 @@ marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
 
 ### Notas de B1 (08-nov)
 - **Tipo de pase:** genérico (`genericClass` `<issuerId>.club-satori`, `genericObject` `<issuerId>.club-<miembro_id>`).
+  **(12-nov) Por ambiente:** staging y prod comparten el emisor, así que staging usa `<issuerId>.club-satori-stg` y
+  `<issuerId>.club-stg-<miembro_id>` (`WALLET_ENTORNO` = `stg`; prod = `prod`, sin sufijo; otro valor → 503). La clase que
+  ya existe no se pisa (409 → se deja), y el Edge no escribe la clase ni objetos de otro ambiente (`idsDelAmbiente`).
   Código en `src/shared/wallet/` y el Edge en `supabase/functions/club-pase/` (rama `claude/club-wallet`).
 - **Largo del JWT:** el completo (clase + objeto) ronda los **3 KB**; Google recomienda ≤ ~1.800 caracteres.
   **(12-nov, decisión del dueño) Link corto:** al pedir el pase, el Edge crea la clase (409 = ya existe) y crea el objeto

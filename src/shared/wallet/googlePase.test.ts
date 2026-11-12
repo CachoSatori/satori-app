@@ -2,8 +2,8 @@
 // (nunca hay una clave escrita en el repo, ni de prueba).
 import { describe, it, expect, beforeAll } from 'vitest'
 import {
-  armarClase, armarObjeto, fechaCR, sinRolVigente, colones, disenoPropuesto, configurarBaseClub, firmarJwt, firmarJwtFlaco, LARGO_JWT_RECOMENDADO, urlGuardar, validarDatos, leerCuentaServicio, beneficioEn, idObjeto,
-  type PaseDatos, type CuentaServicio,
+  armarClase, armarObjeto, fechaCR, sinRolVigente, entornoValido, idsDelAmbiente, idClase, colones, disenoPropuesto, configurarBaseClub, firmarJwt, firmarJwtFlaco, LARGO_JWT_RECOMENDADO, urlGuardar, validarDatos, leerCuentaServicio, beneficioEn, idObjeto,
+  type PaseDatos, type CuentaServicio, type Entorno,
 } from './googlePase'
 configurarBaseClub('https://club.ejemplo.test')   // (08-nov noche) el dominio es configuración
 
@@ -72,8 +72,8 @@ describe('validarDatos (contrato v1)', () => {
 
 describe('armarObjeto', () => {
   it('socio y anfitrión: QR del socio como código de barras, cupones y Canjear en el reverso, créditos y cortesía', () => {
-    const o = obj(armarObjeto(ISSUER, base()))
-    expect(o.id).toBe(idObjeto(ISSUER, '00000000-0000-4000-8000-00000000c0de'))
+    const o = obj(armarObjeto(ISSUER, 'prod', base()))
+    expect(o.id).toBe(idObjeto(ISSUER, '00000000-0000-4000-8000-00000000c0de', 'prod'))
     expect(o.classId).toBe(`${ISSUER}.club-satori`)
     expect(o.state).toBe('ACTIVE')
     expect(o.barcode).toEqual({ type: 'QR_CODE', value: 'https://club.ejemplo.test/s/ABCD2345K', alternateText: 'ABCD2345K' })
@@ -88,13 +88,13 @@ describe('armarObjeto', () => {
   })
 
   it('(10-nov, el dueño) el nombre visible del pase es «Satori», en los dos idiomas', () => {
-    const o = obj(armarObjeto(ISSUER, base())) as unknown as { cardTitle: { defaultValue: { value: string }; translatedValues: Array<{ value: string }> } }
+    const o = obj(armarObjeto(ISSUER, 'prod', base())) as unknown as { cardTitle: { defaultValue: { value: string }; translatedValues: Array<{ value: string }> } }
     expect(o.cardTitle.defaultValue.value).toBe('Satori')
     expect(o.cardTitle.translatedValues[0].value).toBe('Satori')
   })
 
   it('créditos claros (el dueño, 08-nov): el saldo en colones y las personas del mes en otra línea, ES/EN', () => {
-    const o = obj(armarObjeto(ISSUER, base()))
+    const o = obj(armarObjeto(ISSUER, 'prod', base()))
     const cred = o.textModulesData.find((t) => t.id === 'creditos')
     expect(cred?.body).toBe('₡36.000 disponibles')
     expect(cred?.localizedBody.translatedValues[0]).toEqual({ language: 'en', value: '₡36,000 available' })
@@ -104,10 +104,10 @@ describe('armarObjeto', () => {
     expect(o.textModulesData.some((t) => / · \d+ personas/.test(t.body))).toBe(false)
     // medio crédito y una sola persona; sin referidos en el mes no hay línea
     const b = base()
-    const uno = obj(armarObjeto(ISSUER, { ...b, anfitrion: { ...b.anfitrion!, creditos: 0.5, referidos_mes: 1 } }))
+    const uno = obj(armarObjeto(ISSUER, 'prod', { ...b, anfitrion: { ...b.anfitrion!, creditos: 0.5, referidos_mes: 1 } }))
     expect(uno.textModulesData.find((t) => t.id === 'creditos')?.body).toBe('₡9.000 disponibles')
     expect(uno.textModulesData.find((t) => t.id === 'referidos')?.body).toBe('1 persona referida este mes')
-    const cero = obj(armarObjeto(ISSUER, { ...b, anfitrion: { ...b.anfitrion!, creditos: 0, referidos_mes: 0 } }))
+    const cero = obj(armarObjeto(ISSUER, 'prod', { ...b, anfitrion: { ...b.anfitrion!, creditos: 0, referidos_mes: 0 } }))
     expect(cero.textModulesData.find((t) => t.id === 'creditos')?.body).toBe('₡0 disponibles')
     expect(cero.textModulesData.some((t) => t.id === 'referidos')).toBe(false)
   })
@@ -119,7 +119,7 @@ describe('armarObjeto', () => {
   })
 
   it('Club compartido: el socio ve «Vale en todos los Satori» (ES/EN) y el pase no lista promociones', () => {
-    const o = obj(armarObjeto(ISSUER, base()))
+    const o = obj(armarObjeto(ISSUER, 'prod', base()))
     const soc = o.textModulesData.find((t) => t.id === 'socio')
     expect(soc?.body).toBe('Vale en todos los Satori')
     expect(soc?.localizedBody.translatedValues[0]).toEqual({ language: 'en', value: 'Valid at every Satori' })
@@ -127,7 +127,7 @@ describe('armarObjeto', () => {
   })
 
   it('solo anfitrión: el código de barras es el QR de cupones y no se repite como link', () => {
-    const o = obj(armarObjeto(ISSUER, base({
+    const o = obj(armarObjeto(ISSUER, 'prod', base({
       pestanas: ['anfitrion'], socio: null,
       codigo_barras: { tipo: 'cupones', valor: 'https://club.ejemplo.test/r/ABCD2345' },
     })))
@@ -137,7 +137,7 @@ describe('armarObjeto', () => {
   })
 
   it('socio pendiente: aviso de validar, sin beneficio ni cortesías', () => {
-    const o = obj(armarObjeto(ISSUER, base({
+    const o = obj(armarObjeto(ISSUER, 'prod', base({
       pestanas: ['mi_club'], anfitrion: null, canjear_url: null, promociones: [],
       socio: { estado: 'pendiente', desde: '2026-11-10', qr_url: 'https://club.ejemplo.test/s/ABCD2345K', beneficio: null, visitas_mes: 0, cortesias: [] },
     })))
@@ -148,14 +148,14 @@ describe('armarObjeto', () => {
 
   it('(12-nov) la fecha y la hora de Costa Rica de los datos: «Créditos al …» o una línea «Actualizado»', () => {
     // actualizado_en 2026-11-07T19:30:00Z = 7-nov 13:30 en Costa Rica (UTC−6)
-    const o = obj(armarObjeto(ISSUER, base())) as unknown as { textModulesData: Array<{ id: string; header: string; localizedHeader: { translatedValues: Array<{ value: string }> } }> }
+    const o = obj(armarObjeto(ISSUER, 'prod', base())) as unknown as { textModulesData: Array<{ id: string; header: string; localizedHeader: { translatedValues: Array<{ value: string }> } }> }
     const cred = o.textModulesData.find((t) => t.id === 'creditos')
     expect(cred?.header).toBe('Créditos al 7-nov 13:30')
     expect(cred?.localizedHeader.translatedValues[0].value).toBe('Credits as of Nov 7, 13:30')
     expect(o.textModulesData.some((t) => t.id === 'actualizado')).toBe(false)   // con créditos, la fecha va en ese encabezado
-    const soloSocio = obj(armarObjeto(ISSUER, base({ pestanas: ['mi_club'], anfitrion: null, canjear_url: null })))
+    const soloSocio = obj(armarObjeto(ISSUER, 'prod', base({ pestanas: ['mi_club'], anfitrion: null, canjear_url: null })))
     expect(soloSocio.textModulesData.find((t) => t.id === 'actualizado')?.body).toBe('7-nov 13:30')
-    const sinFecha = obj(armarObjeto(ISSUER, base({ actualizado_en: 'no-es-fecha' }))) as unknown as { textModulesData: Array<{ id: string; header: string }> }
+    const sinFecha = obj(armarObjeto(ISSUER, 'prod', base({ actualizado_en: 'no-es-fecha' }))) as unknown as { textModulesData: Array<{ id: string; header: string }> }
     expect(sinFecha.textModulesData.find((t) => t.id === 'creditos')?.header).toBe('Créditos')
   })
 
@@ -172,39 +172,73 @@ describe('armarObjeto', () => {
     const sinRoles = base({ pestanas: [], anfitrion: { ...base().anfitrion!, activo: false },
       socio: { ...base().socio!, estado: 'baja' } })
     expect(sinRolVigente(sinRoles)).toBe(true)
-    const o = obj(armarObjeto(ISSUER, sinRoles))
+    const o = obj(armarObjeto(ISSUER, 'prod', sinRoles))
     expect(o.state).toBe('EXPIRED')
     expect(o.barcode).toBeUndefined()
     expect(o.textModulesData.some((t) => t.id === 'actualizado')).toBe(false)
     // socio pendiente sin anfitrión: sigue vigente (tiene que poder validar el alta en caja)
     const pend = base({ pestanas: ['mi_club'], anfitrion: null, canjear_url: null, socio: { ...base().socio!, estado: 'pendiente' } })
     expect(sinRolVigente(pend)).toBe(false)
-    expect(obj(armarObjeto(ISSUER, pend)).state).toBe('ACTIVE')
+    expect(obj(armarObjeto(ISSUER, 'prod', pend)).state).toBe('ACTIVE')
     expect(sinRolVigente(base())).toBe(false)
   })
 
   it('baja: el pase queda EXPIRED y sin código de barras', () => {
-    const o = obj(armarObjeto(ISSUER, base({ estado: 'baja' })))
+    const o = obj(armarObjeto(ISSUER, 'prod', base({ estado: 'baja' })))
     expect(o.state).toBe('EXPIRED')
     expect(o.barcode).toBeUndefined()
   })
 
   it('token de pase revocado (canjear_url null): sin botón Canjear', () => {
-    const o = obj(armarObjeto(ISSUER, base({ canjear_url: null })))
+    const o = obj(armarObjeto(ISSUER, 'prod', base({ canjear_url: null })))
     expect(o.linksModuleData.uris.map((u) => u.id)).toEqual(['cupones'])
   })
 
   it('nunca lleva contactos ni el token del portal; issuer inválido → error', () => {
-    const txt = JSON.stringify(armarObjeto(ISSUER, base()))
+    const txt = JSON.stringify(armarObjeto(ISSUER, 'prod', base()))
     expect(txt).not.toMatch(/@|\+506|\/p\/[0-9a-f]{64}/)
-    expect(() => armarObjeto('abc', base())).toThrow(/issuerId/)
-    expect(() => armarClase('abc')).toThrow(/issuerId/)
+    expect(() => armarObjeto('abc', 'prod', base())).toThrow(/issuerId/)
+    expect(() => armarClase('abc', 'prod')).toThrow(/issuerId/)
+  })
+
+  it('(12-nov) ambiente: prod sin sufijo; stg → clase «club-satori-stg» y objetos «club-stg-<miembro>»', () => {
+    const m = base().miembro_id
+    expect(idClase(ISSUER, 'prod')).toBe(`${ISSUER}.club-satori`)
+    expect(idObjeto(ISSUER, m, 'prod')).toBe(`${ISSUER}.club-${m}`)
+    expect(idClase(ISSUER, 'stg')).toBe(`${ISSUER}.club-satori-stg`)
+    expect(idObjeto(ISSUER, m, 'stg')).toBe(`${ISSUER}.club-stg-${m}`)
+    expect(armarClase(ISSUER, 'stg').id).toBe(`${ISSUER}.club-satori-stg`)
+    const o = obj(armarObjeto(ISSUER, 'stg', base()))
+    expect([o.id, o.classId]).toEqual([`${ISSUER}.club-stg-${m}`, `${ISSUER}.club-satori-stg`])
+    // un valor que no es prod ni stg no arma nada (desde JS, sin el chequeo de tipos)
+    expect(() => idClase(ISSUER, 'staging' as unknown as Entorno)).toThrow(/ambiente/)
+    expect(() => armarObjeto(ISSUER, undefined as unknown as Entorno, base())).toThrow(/ambiente/)
+  })
+
+  it('(12-nov) WALLET_ENTORNO: solo «prod» o «stg»; vacío, otro nombre o mayúsculas → null (el Edge responde 503)', () => {
+    expect(entornoValido('prod')).toBe('prod')
+    expect(entornoValido('stg')).toBe('stg')
+    expect(entornoValido(' stg\n')).toBe('stg')
+    for (const raro of [undefined, null, '', ' ', 'PROD', 'Stg', 'staging', 'produccion', 'prod,stg', 'dev']) expect(entornoValido(raro)).toBeNull()
+  })
+
+  it('(12-nov) idsDelAmbiente: la clase y el objeto tienen que ser de ESE ambiente, en los dos sentidos', () => {
+    const m = base().miembro_id
+    const de = (e: Entorno) => ({ clase: armarClase(ISSUER, e), objeto: obj(armarObjeto(ISSUER, e, base())) })
+    const p = de('prod'), s = de('stg')
+    expect(idsDelAmbiente(ISSUER, 'prod', p.clase, p.objeto)).toBe(true)
+    expect(idsDelAmbiente(ISSUER, 'stg', s.clase, s.objeto)).toBe(true)
+    expect(idsDelAmbiente(ISSUER, 'stg', p.clase, p.objeto)).toBe(false)   // staging no escribe lo de prod
+    expect(idsDelAmbiente(ISSUER, 'prod', s.clase, s.objeto)).toBe(false)  // ni prod lo de staging
+    expect(idsDelAmbiente(ISSUER, 'prod', p.clase, { id: `${ISSUER}.club-stg-${m}`, classId: p.clase.id })).toBe(false)
+    expect(idsDelAmbiente(ISSUER, 'stg', s.clase, { ...s.objeto, classId: p.clase.id })).toBe(false)
+    expect(idsDelAmbiente('1234567890123456', 'prod', p.clase, p.objeto)).toBe(false)   // otro emisor
   })
 
   it('diseño: sin aprobar no lleva logo ni franja; con la propuesta, sí (https del Club)', () => {
-    const sin = armarObjeto(ISSUER, base()) as Record<string, unknown>
+    const sin = armarObjeto(ISSUER, 'prod', base()) as Record<string, unknown>
     expect(sin.logo).toBeUndefined(); expect(sin.heroImage).toBeUndefined()
-    const con = armarObjeto(ISSUER, base(), disenoPropuesto('https://club.ejemplo.test')) as { logo: { sourceUri: { uri: string } }; heroImage: { sourceUri: { uri: string } }; hexBackgroundColor: string }
+    const con = armarObjeto(ISSUER, 'prod', base(), disenoPropuesto('https://club.ejemplo.test')) as { logo: { sourceUri: { uri: string } }; heroImage: { sourceUri: { uri: string } }; hexBackgroundColor: string }
     expect(con.logo.sourceUri.uri).toBe('https://club.ejemplo.test/pase/logo.png')
     expect(con.heroImage.sourceUri.uri).toBe('https://club.ejemplo.test/pase/hero.png')
     expect(con.hexBackgroundColor).toBe('#0d0d0d')
@@ -219,8 +253,8 @@ describe('armarObjeto', () => {
 
 describe('firmarJwt («Save to Google Wallet»)', () => {
   it('RS256 verificable con la clave pública; claims de Google; clase y objeto adentro', async () => {
-    const clase = armarClase(ISSUER)
-    const objeto = armarObjeto(ISSUER, base())
+    const clase = armarClase(ISSUER, 'prod')
+    const objeto = armarObjeto(ISSUER, 'prod', base())
     const ahora = new Date('2026-11-08T08:00:00Z')
     const jwt = await firmarJwt(sa, clase, objeto, ['https://club.ejemplo.test'], ahora)
     const [h, p, f] = jwt.split('.')
@@ -236,8 +270,8 @@ describe('firmarJwt («Save to Google Wallet»)', () => {
   })
 
   it('el completo pasa el largo recomendado; el flaco (solo id y classId) entra y no lleva datos', async () => {
-    const objeto = armarObjeto(ISSUER, base())
-    const completo = await firmarJwt(sa, armarClase(ISSUER), objeto, ['https://club.ejemplo.test'])
+    const objeto = armarObjeto(ISSUER, 'prod', base())
+    const completo = await firmarJwt(sa, armarClase(ISSUER, 'prod'), objeto, ['https://club.ejemplo.test'])
     const flaco = await firmarJwtFlaco(sa, objeto, ['https://club.ejemplo.test'])
     expect(completo.length).toBeGreaterThan(LARGO_JWT_RECOMENDADO)
     expect(flaco.length).toBeLessThan(LARGO_JWT_RECOMENDADO)

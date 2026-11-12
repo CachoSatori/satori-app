@@ -65,12 +65,12 @@ export default function NuevoEmpleado({ employees, onClose, onCreated }: Props) 
             <div style={{ fontSize: '0.8rem', margin: '0.75rem 0 0.4rem' }}>Correo: <strong>{creado.email}</strong></div>
             <div style={{ fontSize: '0.8rem', marginBottom: '0.3rem' }}>Contraseña temporal:</div>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <code data-testid="temp-password" style={{ fontSize: '1.05rem', padding: '0.35rem 0.6rem', border: '1px solid var(--t-border)', borderRadius: 2, letterSpacing: '0.06em' }}>
+              <code data-testid="temp-password" style={{ fontSize: '1.05rem', padding: '0.35rem 0.6rem', border: '1px solid var(--c-linea)', borderRadius: 2, letterSpacing: '0.06em' }}>
                 {creado.temp_password}
               </code>
               <button type="button" className="btn-save-inline" onClick={copiar}>{copiado ? '✓ Copiada' : 'Copiar'}</button>
             </div>
-            <p style={{ fontSize: '0.74rem', lineHeight: 1.5, color: '#8a5040', marginBottom: '1rem' }}>
+            <p style={{ fontSize: '0.74rem', lineHeight: 1.5, color: 'var(--c-laca)', marginBottom: '1rem' }}>
               ⚠ No se vuelve a mostrar. Entregásela en persona; al entrar por primera vez la va a tener que cambiar.
             </p>
             <div className="cd-modal-actions">

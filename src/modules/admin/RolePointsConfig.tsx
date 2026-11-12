@@ -105,7 +105,7 @@ export default function RolePointsConfig({ rolePoints, onRefresh }: Props) {
                       disabled={saving}
                       aria-label={`Recibe propina: ${ROLE_LABELS[role]}`}
                     />
-                    <span style={{ color: rcv ? 'var(--success, #27874f)' : 'var(--gray-light, #888)', fontWeight: 600 }}>
+                    <span style={{ color: rcv ? 'var(--success, var(--c-musgo))' : 'var(--gray-light, var(--c-gris))', fontWeight: 600 }}>
                       {rcv ? 'Sí' : 'No'}
                     </span>
                   </label>

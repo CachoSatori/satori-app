@@ -12,13 +12,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { Ingredient } from '../../shared/types/inventario'
 import { supabase } from '../../shared/api/supabase'
-import { todayCR } from '../../shared/utils'
+import { todayCR, fi } from '../../shared/utils'
 import { monthRangeBounds } from '../../shared/utils/dateRange'
 
 interface Props { ingredients: Ingredient[] }
 
 const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-function fi(n: number) { return '₡ ' + Math.round(n).toLocaleString('es-CR') }
 function pctStr(a: number, b: number) { return b > 0 ? (a / b * 100).toFixed(1) + '%' : '—' }
 function fmtMonth(ym: string) { const [y, m] = ym.split('-'); return `${MN[Number(m)]} ${y}` }
 
@@ -121,14 +120,14 @@ export default function InvFoodCost({ ingredients }: Props) {
       <div style={{ display:'flex', gap:'0.6rem', alignItems:'center', flexWrap:'wrap', marginBottom:'1rem' }}>
         <div className="vt-sl" style={{ margin:0 }}>💰 Food cost: teórico vs real</div>
         <select value={ym} onChange={e => setYm(e.target.value)}
-          style={{ marginLeft:'auto', background:'var(--vt-ink)', color:'var(--vt-gold)', border:'1px solid #2a2a2a', padding:'5px 10px', fontSize:'0.82rem', borderRadius:2, fontWeight:600 }}>
+          style={{ marginLeft:'auto', background:'var(--c-panel)', color:'var(--c-oro-texto)', border:'1px solid var(--c-linea)', padding:'5px 10px', fontSize:'0.82rem', borderRadius:2, fontWeight:600 }}>
           {months.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}
         </select>
       </div>
 
-      {error && <div style={{ color:'#c23b22', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
+      {error && <div style={{ color:'var(--c-laca)', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
       {loading ? (
-        <div style={{ padding:'2rem', textAlign:'center', color:'#888' }}>Calculando…</div>
+        <div style={{ padding:'2rem', textAlign:'center', color:'var(--c-gris)' }}>Calculando…</div>
       ) : calc && (
         <>
           <div className="vt-kpi-grid" style={{ marginBottom:'1.25rem' }}>
@@ -136,19 +135,19 @@ export default function InvFoodCost({ ingredients }: Props) {
               <div className="vt-kpi-label">Ventas netas</div>
               <div className="vt-kpi-val">{fi(calc.ventas)}</div>
             </div>
-            <div className="vt-kpi" style={{ borderLeftColor:'#4a9a6a' }}>
+            <div className="vt-kpi" style={{ borderLeftColor:'var(--c-musgo)' }}>
               <div className="vt-kpi-label">COGS teórico (recetas)</div>
-              <div className="vt-kpi-val" style={{ color:'#4a9a6a' }}>{fi(calc.cogsTeorico)}</div>
+              <div className="vt-kpi-val" style={{ color:'var(--c-musgo)' }}>{fi(calc.cogsTeorico)}</div>
               <div className="vt-kpi-sub">Food cost teórico: {pctStr(calc.cogsTeorico, calc.ventas)}</div>
             </div>
-            <div className="vt-kpi" style={{ borderLeftColor:'#c8a96e' }}>
+            <div className="vt-kpi" style={{ borderLeftColor:'var(--c-oro)' }}>
               <div className="vt-kpi-label">Compras mercadería (Caja)</div>
-              <div className="vt-kpi-val" style={{ color:'#c8a96e' }}>{fi(calc.compras)}</div>
+              <div className="vt-kpi-val" style={{ color:'var(--c-oro-texto)' }}>{fi(calc.compras)}</div>
               <div className="vt-kpi-sub">{pctStr(calc.compras, calc.ventas)} de ventas</div>
             </div>
-            <div className="vt-kpi" style={{ borderLeftColor: variacion > 0 ? '#c23b22' : '#4a9a6a' }}>
+            <div className="vt-kpi" style={{ borderLeftColor: variacion > 0 ? 'var(--c-laca)' : 'var(--c-musgo)' }}>
               <div className="vt-kpi-label">Variación (compras − teórico)</div>
-              <div className="vt-kpi-val" style={{ color: variacion > 0 ? '#c23b22' : '#4a9a6a' }}>
+              <div className="vt-kpi-val" style={{ color: variacion > 0 ? 'var(--c-laca)' : 'var(--c-musgo)' }}>
                 {variacion >= 0 ? '+' : ''}{fi(variacion)}
               </div>
               <div className="vt-kpi-sub">merma / acopio / variación de stock</div>
@@ -157,12 +156,12 @@ export default function InvFoodCost({ ingredients }: Props) {
 
           {/* Merma + ajustes */}
           <div style={{ display:'flex', gap:'1.5rem', flexWrap:'wrap', fontSize:'0.82rem', marginBottom:'1.25rem' }}>
-            <span style={{ color:'#5a5040' }}>🗑 Merma registrada: <strong style={{ color:'#c23b22' }}>{fi(calc.merma)}</strong></span>
-            <span style={{ color:'#5a5040' }}>📋 Ajustes de conteo: <strong style={{ color: calc.ajustes < 0 ? '#c23b22' : '#4a9a6a' }}>{calc.ajustes >= 0 ? '+' : ''}{fi(calc.ajustes)}</strong></span>
+            <span style={{ color:'var(--c-gris)' }}>🗑 Merma registrada: <strong style={{ color:'var(--c-laca)' }}>{fi(calc.merma)}</strong></span>
+            <span style={{ color:'var(--c-gris)' }}>📋 Ajustes de conteo: <strong style={{ color: calc.ajustes < 0 ? 'var(--c-laca)' : 'var(--c-musgo)' }}>{calc.ajustes >= 0 ? '+' : ''}{fi(calc.ajustes)}</strong></span>
           </div>
 
           {/* Interpretación */}
-          <div style={{ fontSize:'0.78rem', color:'#888', background:'var(--vt-ink)', border:'1px solid #222', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1.25rem', lineHeight:1.5 }}>
+          <div style={{ fontSize:'0.78rem', color:'var(--c-gris)', background:'var(--c-panel)', border:'1px solid var(--c-linea)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1.25rem', lineHeight:1.5 }}>
             {calc.cogsTeorico === 0
               ? 'Aún no hay consumo teórico registrado este mes. Procesá el consumo por ventas (pestaña Consumo) con recetas cargadas para ver el food cost teórico.'
               : variacion > calc.cogsTeorico * 0.15
@@ -181,7 +180,7 @@ export default function InvFoodCost({ ingredients }: Props) {
                     {calc.topConsumo.map(t => (
                       <tr key={t.name}>
                         <td style={{ fontSize:'0.82rem' }}>{t.name}</td>
-                        <td className="r" style={{ color:'#4a9a6a', fontWeight:600 }}>{fi(t.value)}</td>
+                        <td className="r" style={{ color:'var(--c-musgo)', fontWeight:600 }}>{fi(t.value)}</td>
                       </tr>
                     ))}
                   </tbody>

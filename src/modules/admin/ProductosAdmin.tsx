@@ -109,29 +109,29 @@ export default function ProductosAdmin({ locationId, onError }: { locationId: st
           {(['activos', 'desactivados', 'todos'] as Filtro[]).map(f => (
             <button key={f} onClick={() => setFiltro(f)}
               style={{ padding: '3px 10px', borderRadius: 12, fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer',
-                border: '1px solid var(--t-border,#d4cfc4)', background: filtro === f ? '#0d0d0d' : 'transparent', color: filtro === f ? '#c8a96e' : '#5a5040' }}>{f}</button>
+                border: '1px solid var(--c-linea)', background: filtro === f ? 'var(--c-tinta)' : 'transparent', color: filtro === f ? 'var(--c-fondo)' : 'var(--c-gris)' }}>{f}</button>
           ))}
           <button onClick={exportCSV} title="Exporta lo filtrado"
-            style={{ marginLeft: 'auto', padding: '3px 10px', borderRadius: 3, fontSize: '0.7rem', cursor: 'pointer', border: '1px solid var(--t-border,#d4cfc4)', background: 'transparent', color: '#5a5040' }}>⬇ CSV</button>
+            style={{ marginLeft: 'auto', padding: '3px 10px', borderRadius: 3, fontSize: '0.7rem', cursor: 'pointer', border: '1px solid var(--c-linea)', background: 'transparent', color: 'var(--c-gris)' }}>⬇ CSV</button>
         </div>
         <input className={inp} placeholder="Buscar nombre / categoría / subcategoría…" value={q} onChange={e => setQ(e.target.value)} style={{ width: '100%', marginBottom: 6 }} />
-        {sinPrecio > 0 && <div style={{ fontSize: '0.7rem', color: '#c23b22', fontWeight: 700, marginBottom: 4 }}>⚠ {sinPrecio} activos sin precio (el comandero no los envía)</div>}
+        {sinPrecio > 0 && <div style={{ fontSize: '0.7rem', color: 'var(--c-laca)', fontWeight: 700, marginBottom: 4 }}>⚠ {sinPrecio} activos sin precio (el comandero no los envía)</div>}
         <button className="cd-btn-green" style={{ width: '100%', marginBottom: 6 }} onClick={() => setCreating(true)}>+ Producto nuevo</button>
         {/* Árbol FAMILIA → categoría → productos (mig 032). La familia de cada
             categoría es editable acá mismo (el dueño reacomoda sin tocar código). */}
         <div style={{ maxHeight: 520, overflowY: 'auto' }}>
           {tree.groups.map(({ family, cats }) => (
             <div key={family?.id ?? 'sin'} style={{ marginBottom: 4 }}>
-              <div style={{ position: 'sticky', top: 0, background: '#0d0d0d', color: '#c8a96e', padding: '0.3rem 0.4rem', fontWeight: 800, fontSize: '0.78rem', borderRadius: 3 }}>
+              <div style={{ position: 'sticky', top: 0, background: 'var(--c-panel)', color: 'var(--c-oro-texto)', padding: '0.3rem 0.4rem', fontWeight: 800, fontSize: '0.78rem', borderRadius: 3 }}>
                 {family ? `${family.icon} ${family.label}` : '📦 Sin familia'}
               </div>
               {cats.map(cat => (
                 <div key={cat} style={{ marginBottom: 2 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.25rem 0.4rem', background: 'rgba(0,0,0,.04)' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.72rem', flex: 1 }}>{cat} <span style={{ color: '#5a5040', fontWeight: 400 }}>({tree.byCat.get(cat)!.length})</span></span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.25rem 0.4rem', background: 'var(--c-panel)' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.72rem', flex: 1 }}>{cat} <span style={{ color: 'var(--c-gris)', fontWeight: 400 }}>({tree.byCat.get(cat)!.length})</span></span>
                     <select value={catMap.get(cat.trim().toUpperCase())?.family_id ?? ''} title="Familia de esta categoría"
                       onChange={e => setCatFamily(cat, e.target.value || null)}
-                      style={{ fontSize: '0.66rem', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 3, padding: '1px 3px', background: 'var(--t-paper,#fff)' }}>
+                      style={{ fontSize: '0.66rem', border: '1px solid var(--c-linea)', borderRadius: 3, padding: '1px 3px', background: 'var(--c-fondo)' }}>
                       <option value="">— sin familia —</option>
                       {families.map(f => <option key={f.id} value={f.id}>{f.icon} {f.label}</option>)}
                     </select>
@@ -141,11 +141,11 @@ export default function ProductosAdmin({ locationId, onError }: { locationId: st
                     const noPrice = (pr?.price_final_crc ?? null) == null
                     return (
                       <div key={p.nombre} onClick={() => setSel(p.nombre)}
-                        style={{ padding: '0.3rem 0.4rem 0.3rem 0.8rem', cursor: 'pointer', borderBottom: '1px solid var(--t-border,#eee)', fontSize: '0.8rem',
-                          background: sel === p.nombre ? 'rgba(160,120,48,.12)' : 'transparent', opacity: p.is_active ? 1 : 0.5 }}>
-                        {noPrice && p.is_active && <span style={{ color: '#c23b22' }}>⚠ </span>}
+                        style={{ padding: '0.3rem 0.4rem 0.3rem 0.8rem', cursor: 'pointer', borderBottom: '1px solid var(--c-linea)', fontSize: '0.8rem',
+                          background: sel === p.nombre ? 'var(--c-oro-fondo)' : 'transparent', opacity: p.is_active ? 1 : 0.5 }}>
+                        {noPrice && p.is_active && <span style={{ color: 'var(--c-laca)' }}>⚠ </span>}
                         <strong>{p.nombre}</strong>
-                        <span style={{ color: '#5a5040', fontSize: '0.66rem' }}>{p.subclasificacion ? ` · ${p.subclasificacion}` : ''}
+                        <span style={{ color: 'var(--c-gris)', fontSize: '0.66rem' }}>{p.subclasificacion ? ` · ${p.subclasificacion}` : ''}
                           {pr?.price_final_crc != null && ` · ${fi(pr.price_final_crc)}`}{!p.is_active && ' · DESACTIVADO'}</span>
                       </div>
                     )
@@ -154,12 +154,12 @@ export default function ProductosAdmin({ locationId, onError }: { locationId: st
               ))}
             </div>
           ))}
-          {shown.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.78rem', padding: '0.75rem 0' }}>Sin productos en esta vista.</div>}
+          {shown.length === 0 && <div style={{ color: 'var(--c-gris)', fontSize: '0.78rem', padding: '0.75rem 0' }}>Sin productos en esta vista.</div>}
         </div>
       </div>
 
       <div className="admin-table" style={{ padding: '0.75rem' }}>
-        {!product && !creating && <div style={{ color: '#5a5040', fontSize: '0.8rem' }}>Elegí un producto de la lista (o creá uno) — acá vive TODO su ciclo de vida: ficha, precio fiscal, costo y margen, modificadores, receta y estado.</div>}
+        {!product && !creating && <div style={{ color: 'var(--c-gris)', fontSize: '0.8rem' }}>Elegí un producto de la lista (o creá uno) — acá vive TODO su ciclo de vida: ficha, precio fiscal, costo y margen, modificadores, receta y estado.</div>}
         {creating && <NuevoProducto productos={products} onDone={n => { setCreating(false); load().then(() => setSel(n)) }} onCancel={() => setCreating(false)} onError={onError} />}
         {product && !creating && (
           <FichaProducto key={product.nombre} p={product} price={prices.get(product.nombre)} locationId={locationId}
@@ -182,9 +182,9 @@ function NuevoProducto({ productos, onDone, onCancel, onError }: {
   return (
     <div>
       <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: 6 }}>Producto nuevo</div>
-      <div style={{ fontSize: '0.68rem', color: '#5a5040', marginBottom: 6 }}>⚠ El nombre es <strong>inmutable</strong> después de crear (es la llave del histórico de ventas) — elegilo bien.</div>
+      <div style={{ fontSize: '0.68rem', color: 'var(--c-gris)', marginBottom: 6 }}>⚠ El nombre es <strong>inmutable</strong> después de crear (es la llave del histórico de ventas) — elegilo bien.</div>
       <input className={inp} style={{ width: '100%', marginBottom: 6 }} placeholder="NOMBRE (ej: MOJITO MARACUYÁ)" value={nombre} onChange={e => setNombre(e.target.value.toUpperCase())} />
-      {dup && <div style={{ color: '#c23b22', fontSize: '0.72rem', marginBottom: 4 }}>Ya existe un producto con ese nombre.</div>}
+      {dup && <div style={{ color: 'var(--c-laca)', fontSize: '0.72rem', marginBottom: 4 }}>Ya existe un producto con ese nombre.</div>}
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         <input className={inp} style={{ flex: 1 }} placeholder="Categoría" list="tipos-list" value={tipo} onChange={e => setTipo(e.target.value)} />
         <datalist id="tipos-list">{tipos.map(t => <option key={t} value={t} />)}</datalist>
@@ -221,8 +221,8 @@ function FichaProducto({ p, price, locationId, onFicha, onPriceSaved, onError, o
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <strong style={{ fontSize: '0.95rem' }}>{p.nombre}</strong>
-        <span style={{ fontSize: '0.66rem', color: '#5a5040' }}>(nombre inmutable — llave del histórico)</span>
-        <label style={{ marginLeft: 'auto', fontSize: '0.74rem', fontWeight: 700, color: p.is_active ? '#2a7a6a' : '#c23b22' }}>
+        <span style={{ fontSize: '0.66rem', color: 'var(--c-gris)' }}>(nombre inmutable — llave del histórico)</span>
+        <label style={{ marginLeft: 'auto', fontSize: '0.74rem', fontWeight: 700, color: p.is_active ? 'var(--c-teal)' : 'var(--c-laca)' }}>
           <input type="checkbox" checked={p.is_active} onChange={e => {
             if (!e.target.checked && !window.confirm(`¿Desactivar "${p.nombre}"? Deja de aparecer en el comandero (el histórico no se toca). "Eliminar" = esto.`)) return
             onFicha({ is_active: e.target.checked })
@@ -240,7 +240,7 @@ function FichaProducto({ p, price, locationId, onFicha, onPriceSaved, onError, o
 
 
       {/* Precio fiscal */}
-      <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '0.5rem', margin: '6px 0' }}>
+      <div style={{ border: '1px solid var(--c-linea)', borderRadius: 4, padding: '0.5rem', margin: '6px 0' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.74rem', fontWeight: 700 }}>Precio final (IVA incl.)</span>
           ₡<input type="number" className={inp} style={{ width: 100 }} defaultValue={final ?? ''} placeholder="—"
@@ -248,7 +248,7 @@ function FichaProducto({ p, price, locationId, onFicha, onPriceSaved, onError, o
           <select className={inp} value={tax} onChange={e => savePrice({ tax_type: e.target.value as TaxType })}>
             {TAX_TYPES.map(t => <option key={t} value={t}>{TAX_LABEL[t]}</option>)}
           </select>
-          <span style={{ fontSize: '0.72rem', color: '#5a5040' }}>neto {final != null ? fi(neto) : '—'} · IVA {final != null ? fi(iva) : '—'} <em>(derivado)</em></span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>neto {final != null ? fi(neto) : '—'} · IVA {final != null ? fi(iva) : '—'} <em>(derivado)</em></span>
         </div>
         <label style={{ fontSize: '0.74rem', display: 'block', marginTop: 4 }}>
           <input type="checkbox" checked={p.aplica_servicio} onChange={e => onFicha({ aplica_servicio: e.target.checked })} />{' '}
@@ -261,7 +261,7 @@ function FichaProducto({ p, price, locationId, onFicha, onPriceSaved, onError, o
         <span style={{ fontSize: '0.74rem', fontWeight: 700 }}>Costo</span>
         ₡<input type="number" className={inp} style={{ width: 90 }} defaultValue={costo ?? ''} placeholder="—"
           onBlur={e => { const v = e.target.value.trim() === '' ? null : Math.max(0, Number(e.target.value) || 0); if (v !== costo) onFicha({ costo_unitario: v }) }} />
-        <span style={{ fontSize: '0.72rem', color: margen != null && margen < 50 ? '#c23b22' : '#2a7a6a', fontWeight: 700 }}>
+        <span style={{ fontSize: '0.72rem', color: margen != null && margen < 50 ? 'var(--c-laca)' : 'var(--c-teal)', fontWeight: 700 }}>
           {margen != null ? `margen ${margen}% (sobre neto)` : 'margen — (falta precio o costo)'}
         </span>
         <button className="tips-btn-ghost" onClick={onReceta} title="El costo de receta pisa la carga rápida">🧾 Crear/editar receta</button>
@@ -296,7 +296,7 @@ function FichaProducto({ p, price, locationId, onFicha, onPriceSaved, onError, o
             onBlur={e => { const v = e.target.value.trim() === '' ? null : e.target.value.trim(); if (v !== p.cabys) onFicha({ cabys: v }) }} />
         </label>
         {(!p.ciiu || !p.cabys) && (
-          <span style={{ fontSize: '0.72rem', color: '#c2861f', fontWeight: 700 }}>⚠ pendiente de código fiscal</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--c-oro-texto)', fontWeight: 700 }}>⚠ pendiente de código fiscal</span>
         )}
       </div>
 
@@ -333,9 +333,9 @@ function ModificadoresDelProducto({ productName, locationId, onError }: { produc
   }
 
   return (
-    <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '0.5rem', marginTop: 8 }}>
+    <div style={{ border: '1px solid var(--c-linea)', borderRadius: 4, padding: '0.5rem', marginTop: 8 }}>
       <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: 4 }}>Modificadores de este producto</div>
-      {groups.length === 0 && <div style={{ fontSize: '0.72rem', color: '#5a5040' }}>No hay grupos definidos — crealos una vez en la pestaña "🍹 Catálogo PoS" y asignalos acá.</div>}
+      {groups.length === 0 && <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>No hay grupos definidos — crealos una vez en la pestaña "🍹 Catálogo PoS" y asignalos acá.</div>}
       {groups.map(g => {
         const linked = links.has(g.id)
         const gmods = mods.filter(m => m.group_id === g.id && m.is_active)
@@ -343,7 +343,7 @@ function ModificadoresDelProducto({ productName, locationId, onError }: { produc
           <div key={g.id} style={{ marginBottom: 6 }}>
             <label style={{ fontSize: '0.78rem', fontWeight: 700 }}>
               <input type="checkbox" checked={linked} onChange={e => toggleGroup(g, e.target.checked)} />{' '}
-              {g.name} {g.required && <span style={{ color: '#c23b22', fontSize: '0.66rem' }}>obligatorio</span>}
+              {g.name} {g.required && <span style={{ color: 'var(--c-laca)', fontSize: '0.66rem' }}>obligatorio</span>}
             </label>
             {linked && gmods.map(m => {
               const o = opts.get(m.id)
@@ -354,7 +354,7 @@ function ModificadoresDelProducto({ productName, locationId, onError }: { produc
                   <label style={{ flex: 1, opacity: enabled ? 1 : 0.45 }}>
                     <input type="checkbox" checked={enabled} onChange={e => setOpt(m.id, { enabled: e.target.checked })} /> {m.name}
                   </label>
-                  <span style={{ color: '#5a5040', fontSize: '0.68rem' }}>por defecto +{fi(m.price_delta_crc)}</span>
+                  <span style={{ color: 'var(--c-gris)', fontSize: '0.68rem' }}>por defecto +{fi(m.price_delta_crc)}</span>
                   <span style={{ fontSize: '0.68rem' }}>override ₡</span>
                   <input type="number" className={inp} style={{ width: 80 }} defaultValue={override ?? ''} placeholder="—" disabled={!enabled}
                     onBlur={e => { const v = e.target.value.trim() === '' ? null : Number(e.target.value) || 0; if (v !== override) setOpt(m.id, { price_delta_override_crc: v }) }} />
@@ -364,7 +364,7 @@ function ModificadoresDelProducto({ productName, locationId, onError }: { produc
           </div>
         )
       })}
-      <div style={{ fontSize: '0.64rem', color: '#5a5040' }}>El comandero solo ofrece las variantes habilitadas; el override pisa el delta default SOLO en este producto.</div>
+      <div style={{ fontSize: '0.64rem', color: 'var(--c-gris)' }}>El comandero solo ofrece las variantes habilitadas; el override pisa el delta default SOLO en este producto.</div>
     </div>
   )
 }
@@ -394,15 +394,15 @@ function FotoProducto({ p, onFicha, onError }: {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0' }}>
       {p.photo_url
-        ? <img src={p.photo_url} alt={p.nombre} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--t-border,#d4cfc4)' }} />
-        : <span style={{ width: 56, height: 56, borderRadius: 6, border: '1px dashed var(--t-border,#d4cfc4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', color: '#8a8378' }}>🍽️</span>}
-      <label style={{ cursor: 'pointer', fontSize: '0.76rem', fontWeight: 700, color: '#5a5040', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 6, padding: '8px 12px', minHeight: 40, display: 'inline-flex', alignItems: 'center' }}>
+        ? <img src={p.photo_url} alt={p.nombre} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--c-linea)' }} />
+        : <span style={{ width: 56, height: 56, borderRadius: 6, border: '1px dashed var(--c-linea)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', color: 'var(--c-gris)' }}>🍽️</span>}
+      <label style={{ cursor: 'pointer', fontSize: '0.76rem', fontWeight: 700, color: 'var(--c-gris)', border: '1px solid var(--c-linea)', borderRadius: 6, padding: '8px 12px', minHeight: 40, display: 'inline-flex', alignItems: 'center' }}>
         {busy ? 'Subiendo…' : p.photo_url ? '📷 Cambiar foto' : '📷 Agregar foto'}
         <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={busy}
           onChange={e => { onPick(e.target.files?.[0]); e.target.value = '' }} />
       </label>
       {p.photo_url && <button type="button" onClick={quitar} disabled={busy}
-        style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 6, padding: '8px 12px', minHeight: 40, fontSize: '0.74rem', cursor: 'pointer' }}>Quitar</button>}
+        style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 6, padding: '8px 12px', minHeight: 40, fontSize: '0.74rem', cursor: 'pointer' }}>Quitar</button>}
     </div>
   )
 }

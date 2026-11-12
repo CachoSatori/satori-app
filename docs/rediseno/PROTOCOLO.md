@@ -47,7 +47,7 @@
 
 | Línea A | Línea B |
 |---|---|
-| `src/modules/resumen/**` · `src/modules/ventas/**` · `src/modules/prueba/**` · `src/modules/admin/**` · `src/modules/inventario/**` · `src/modules/tips/**` (nunca `tipCalculations.ts`) · `src/modules/cash/**` (solo pantalla: nunca `cashUtils.ts`, `cierrePozo`, `diasSinCierre.ts` ni la lógica de cierres; **cualquier archivo `Cash*Cierre*` o de cierre lleva FIRMA**) · `fi()` en `src/shared/utils/index.ts` (solo la tarea de colones) · guías 6.2, 6.3, 6.4 y 6.6 | `src/index.css` · `src/App.tsx` · `src/pages/**` · `src/shared/layout/**` · `src/shared/ErrorBoundary.tsx` (solo estilo) · `public/marca/**` · `public/fonts/**` (nuevo) · guías 6.1 e `INVENTARIO.md` |
+| `src/modules/resumen/**` · `src/modules/ventas/**` · `src/modules/prueba/**` · `src/modules/admin/**` · `src/modules/inventario/**` · `src/modules/tips/**` (nunca `tipCalculations.ts`) · `src/modules/cash/**` (solo pantalla: nunca `cashUtils.ts`, `cierrePozo`, `diasSinCierre.ts` ni la lógica de cierres; **cualquier archivo `Cash*Cierre*` o de cierre lleva FIRMA**) · `fi()` en `src/shared/utils/index.ts` (solo la tarea de colones) · guías 6.2, 6.3, 6.4 y 6.6 | `src/index.css` · `src/App.tsx` · `src/pages/**` (incluye `pages/auth/LoginPage.tsx`) · `src/shared/layout/**` · `src/shared/ErrorBoundary.tsx` (solo estilo) · `public/marca/**` · `public/fonts/**` (nuevo) · guías 6.1 e `INVENTARIO.md` |
 
 ## Reglas para la revisión
 

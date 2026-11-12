@@ -22,7 +22,7 @@
 - **Etiquetas de estado:** con color, en forma de píldora: «Abierta», «2 por revisar», «sin foto».
 - **Botones principales:** en celular, fijos abajo.
 - **Botones táctiles:** de 44 px como mínimo.
-- **Daruma** (`public/marca/daruma.png`): aparece en solo tres lugares:
+- **Daruma** (`public/marca/daruma.png`) — **ampliado por Ismael el 12-nov (B8):** también en el login, en las pantallas de carga y arriba a la izquierda de cada pantalla. Antes aparecía en solo tres lugares:
   - en la marca del menú;
   - en el encabezado del celular;
   - en el estado «todo en orden».

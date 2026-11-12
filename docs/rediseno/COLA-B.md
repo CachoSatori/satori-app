@@ -77,3 +77,17 @@
 - Cambiar las copias locales de `fi` con el formato viejo en `inventario/*` por el `fi()` compartido.
 - **Nunca** un cálculo, una condición, un `onClick` ni una consulta. Diff solo de estilo y texto.
 - **Aceptación:** tests verdes; gates del PROTOCOLO; guías si cambia algo visible; link de vista previa.
+
+---
+### Tanda 3 · pedido de Ismael del 12-nov
+
+## B8 · Daruma en el login, en las cargas y en cada encabezado · `lista` · validación visual
+- **Login** (`src/pages/auth/LoginPage.tsx`): el `login-mark` («祭») pasa a ser la imagen del Daruma (`${import.meta.env.BASE_URL}marca/daruma.png`), con `alt=""`; mismo lugar y tamaño parecido (~56–64 px).
+- **Cuando las pantallas cargan** (`.loading-mark`, hoy un kanji en 13 módulos y en el `Suspense` de `App.tsx`): que se vea el Daruma en vez de la letra, con una animación suave (respirar o balancearse lento; sin girar rápido) y respetando `prefers-reduced-motion`.
+  - **Preferido:** hacerlo desde `src/index.css` (por ejemplo, ocultando el texto de `.loading-mark` y poniendo el Daruma de fondo), para **no tocar los módulos**.
+- **Encabezado de cada pantalla, arriba a la izquierda, al lado de la letra (kanji):** un Daruma chico (~20–24 px) en `.module-header-left`, `.tips-header-left`, `.vt-module-header` y los demás encabezados de módulo, y en el encabezado del Inicio en computadora (hoy B3 lo oculta desde 1024 px: mostrarlo también ahí).
+  - **Preferido:** también desde `src/index.css` (`::before` con el Daruma de fondo). Si en algún módulo no se puede sin tocar su JSX, anotarlo en el reporte y no tocarlo.
+- La URL del Daruma en CSS tiene que funcionar con la base de producción (`/satori-app/`): verificar en el build que queda reescrita.
+- No tocar lógica, consultas ni permisos. Nunca en tablas ni botones.
+- **Aceptación:** gates del PROTOCOLO; capturas 390 y 1280 de login, una carga, Inicio, Caja y Ventas; guía 6.1 si cambia lo que se ve al entrar.
+

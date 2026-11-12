@@ -57,9 +57,10 @@ export default defineConfig({
         // Long-press del ícono (Android/desktop) → atajo directo al puesto.
         // iOS no soporta shortcuts, pero el aterrizaje por rol cubre lo mismo.
         shortcuts: [
-          { name: 'Registrar proveedor', url: `${BASE}proveedor`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
-          { name: 'Comandero',           url: `${BASE}comandero`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          // Solo rutas que existen en `main` (src/atajosPwa.test.ts lo verifica). «Registrar proveedor»
+          // (/proveedor, fusionada en la Bandeja) y «Comandero» (/comandero, solo en staging) llevaban al Inicio.
           { name: 'Caja',                url: `${BASE}caja`,      icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Bandeja de facturas', url: `${BASE}inbox`,     icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
           { name: 'Propinas',            url: `${BASE}propinas`,  icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
         ],
         // Compartir una foto desde WhatsApp/galería → Satori (Bandeja). El POST

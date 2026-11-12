@@ -84,6 +84,8 @@
 
 Cloudflare Pages publica cada rama: `https://<rama con / y . cambiados por ->.satori-staging.pages.dev` (por ejemplo `claude-rediseno-b3.satori-staging.pages.dev`). La revisión le pasa ese link a Ismael para la validación visual, en vez de esperar a `staging`.
 
+**Excepción temporal (11-nov 22:50):** mientras B7 esté abierta, `src/modules/resumen/**`, `src/modules/admin/**`, `src/modules/inventario/**` y `src/modules/ventas/MiRendimiento.tsx` son de la **línea B** (solo para B7); la línea A no los toca.
+
 ## Estilo en los módulos (desde el 11-nov)
 
 - La línea B lleva el estilo carta a las **clases de `src/index.css`** de cada módulo (barras y paneles oscuros, mayúsculas, oros viejos).

@@ -8,11 +8,11 @@
  *
  * Portón (CONTRATO-pase.md §5): solo club-web llama (header x-club-web, el mismo secreto que la base usa para las
  * funciones públicas); el tope por IP lo pone club-web (B2). Falla CERRADA: sin CLUB_WEB_KEY, GOOGLE_WALLET_ISSUER_ID
- * o GOOGLE_WALLET_SA_KEY responde 503 y no llama a la base. Nunca devuelve mensajes crudos de la base ni de Google.
+ * o GOOGLE_WALLET_SA_KEY, o sin un WALLET_ENTORNO válido (prod | stg), responde 503 y no llama a la base. Nunca devuelve mensajes crudos de la base ni de Google.
  */
 import {
   armarClase, armarObjeto, firmarJwtFlaco, leerCuentaServicio, urlGuardar, validarDatos, idObjeto, DISENO_POR_DEFECTO, configurarBaseClub,
-  type PaseDatos, type DisenoPase,
+  entornoValido, type PaseDatos, type DisenoPase,
 } from './googlePase.ts'
 import { sincronizar, actualizarUno, guardarEnGoogle, tokenGoogle, type Fetch } from './sincronizar.ts'
 
@@ -26,6 +26,8 @@ export interface EnvPase {
   WALLET_DISENO?: string
   /** B3: secreto del programador que llama a /club-pase/sync (header x-club-pase-sync). ≥ 32 caracteres. */
   CLUB_PASE_SYNC_KEY?: string
+  /** (12-nov) `prod` o `stg` (staging y prod comparten el emisor de Google). Falta o es otro valor → 503. */
+  WALLET_ENTORNO?: string
 }
 export type Rpc = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
 
@@ -66,9 +68,11 @@ export async function manejarSync(req: Request, ruta: 'sync' | 'actualizar', env
   if (!configurarBaseClub(env.CLUB_WEB_ORIGIN)) return json(503, { error: 'servicio_no_disponible' })
   if (req.method !== 'POST') return json(405, { error: 'metodo' })
   if (!env.GOOGLE_WALLET_ISSUER_ID || !env.GOOGLE_WALLET_SA_KEY) return json(503, { error: 'servicio_no_disponible' })
+  const entorno = entornoValido(env.WALLET_ENTORNO)
+  if (!entorno) return json(503, { error: 'servicio_no_disponible' })   // (12-nov) sin ambiente no se toca nada
   let sa
   try { sa = leerCuentaServicio(env.GOOGLE_WALLET_SA_KEY) } catch { return json(503, { error: 'servicio_no_disponible' }) }
-  const deps = { rpc, fetch: fetchFn, sa, issuer: env.GOOGLE_WALLET_ISSUER_ID, diseno: diseno(env), ahora }
+  const deps = { rpc, fetch: fetchFn, sa, issuer: env.GOOGLE_WALLET_ISSUER_ID, entorno, diseno: diseno(env), ahora }
   if (ruta === 'sync') {
     if (!env.CLUB_PASE_SYNC_KEY || env.CLUB_PASE_SYNC_KEY.length < 32) return json(503, { error: 'servicio_no_disponible' })
     if (!igualSeguro(req.headers.get('x-club-pase-sync') ?? '', env.CLUB_PASE_SYNC_KEY)) return json(401, { error: 'no_autorizado' })
@@ -102,6 +106,9 @@ export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc:
   if (!env.CLUB_WEB_KEY || env.CLUB_WEB_KEY.length < 32 || !env.GOOGLE_WALLET_ISSUER_ID || !env.GOOGLE_WALLET_SA_KEY) {
     return json(503, { error: 'servicio_no_disponible' })
   }
+  // (12-nov) staging y prod comparten el emisor: sin un ambiente válido (prod | stg) no se toca la base ni Google
+  const entorno = entornoValido(env.WALLET_ENTORNO)
+  if (!entorno) return json(503, { error: 'servicio_no_disponible' })
   if (!igualSeguro(req.headers.get('x-club-web') ?? '', env.CLUB_WEB_KEY)) return json(401, { error: 'no_autorizado' })
 
   let cuerpo: { token?: unknown }
@@ -133,15 +140,15 @@ export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc:
   const issuer = env.GOOGLE_WALLET_ISSUER_ID
   let clase: { id: string }, objeto: { id: string; classId: string }
   try {
-    clase = armarClase(issuer)
-    objeto = armarObjeto(issuer, datos, diseno(env)) as unknown as { id: string; classId: string }
+    clase = armarClase(issuer, entorno)
+    objeto = armarObjeto(issuer, entorno, datos, diseno(env)) as unknown as { id: string; classId: string }
   } catch { return json(503, { error: 'servicio_no_disponible' }) }
 
   // 4. (12-nov) se crean o actualizan en Google por la API, y recién ahí el JWT corto (solo los IDs)
   let jwt: string
   try {
     const tok = await tokenGoogle(sa, fetchFn, ahora)
-    const g = await guardarEnGoogle(fetchFn, tok, clase, objeto)
+    const g = await guardarEnGoogle(fetchFn, tok, issuer, entorno, clase, objeto)
     if (g !== 'ok') { console.error('club-pase: Google', g); return json(502, { error: 'servicio' }) }
     jwt = await firmarJwtFlaco(sa, objeto, [env.CLUB_WEB_ORIGIN as string], ahora)
   } catch (e) {
@@ -150,7 +157,7 @@ export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc:
   }
 
   // 5. registrar el pase emitido (para «Actualizar mi pase» y, después del piloto, la sincronización)
-  const objectId = idObjeto(issuer, miembro)
+  const objectId = idObjeto(issuer, miembro, entorno)
   const e = await rpc('club_pase_emitido', { p_miembro: miembro, p_plataforma: 'google', p_object_id: objectId })
   if (e.error) return json(502, { error: 'servicio' })
 

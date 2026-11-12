@@ -22,7 +22,7 @@
  *    Si la lista de pases emitidos falla, el cursor no pasa del primer evento global (como antes). La base solo deja
  *    avanzar el cursor (CLUB-AUD-70); PATCH es idempotente.
  */
-import { armarObjeto, idObjeto, importarClave, validarDatos, type CuentaServicio, type DisenoPase, type PaseDatos } from './googlePase.ts'
+import { armarObjeto, idObjeto, idsDelAmbiente, importarClave, validarDatos, type CuentaServicio, type DisenoPase, type Entorno, type PaseDatos } from './googlePase.ts'
 
 export type Rpc = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
 export type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ status: number; json: () => Promise<unknown> }>
@@ -60,11 +60,15 @@ export async function tokenGoogle(sa: CuentaServicio, fetchFn: Fetch, ahora = ne
 /**
  * (12-nov, el dueño) Link de «Guardar» CORTO: la clase y el objeto se crean (o actualizan) por la API ANTES de firmar,
  * y el JWT lleva solo los IDs (`firmarJwtFlaco`). El JWT completo pasaba los 1.800 caracteres que recomienda Google.
- *  · clase: POST; 409 = ya existe (no se toca: no lleva diseño propio).
+ *  · clase: POST; 409 = ya existe → **se deja como está** (nunca PUT ni PATCH de la clase: no lleva diseño propio).
  *  · objeto: POST; 409 = ya existe → PATCH con los datos de ahora (la persona vuelve a pedir el pase).
+ *  · (12-nov) antes de escribir nada, la clase y el objeto tienen que ser de ESTE ambiente (`idsDelAmbiente`): staging no
+ *    toca la clase ni los objetos de prod, ni al revés.
  * Devuelve 'ok' o un error corto, sin el cuerpo de la respuesta de Google.
  */
-export async function guardarEnGoogle(fetchFn: Fetch, token: string, clase: { id: string }, objeto: { id: string }): Promise<'ok' | string> {
+export async function guardarEnGoogle(fetchFn: Fetch, token: string, issuer: string, entorno: Entorno,
+                                      clase: { id: string }, objeto: { id: string; classId: string }): Promise<'ok' | string> {
+  if (!idsDelAmbiente(issuer, entorno, clase, objeto)) return 'ids de otro ambiente'
   const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   const c = await fetchFn(`${API_WALLET}/genericClass`, { method: 'POST', headers: h, body: JSON.stringify(clase) })
   if (c.status !== 200 && c.status !== 409) return `clase HTTP ${c.status}`
@@ -110,6 +114,8 @@ export interface DepsSync {
   fetch: Fetch
   sa: CuentaServicio
   issuer: string
+  /** (12-nov) `prod` o `stg`: los IDs de la clase y de los objetos llevan el sufijo del ambiente. */
+  entorno: Entorno
   diseno?: DisenoPase
   limite?: number
   ahora?: Date
@@ -174,8 +180,8 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
       if (d.data === null) st = 'nada'                    // el miembro ya no existe: nada que actualizar
       else if (validarDatos(d.data) !== null) { fallo(m, 'contrato'); continue }
       else {
-        const objeto = armarObjeto(issuer, d.data as PaseDatos, deps.diseno)
-        const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, m))}`, {
+        const objeto = armarObjeto(issuer, deps.entorno, d.data as PaseDatos, deps.diseno)
+        const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, m, deps.entorno))}`, {
           method: 'PATCH', headers: { Authorization: `Bearer ${await auth()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
         if (r.status === 200) { res.actualizados++; st = 'ok' }
         else if (r.status === 404) { res.sin_pase++; st = 'sin_pase' }
@@ -207,7 +213,7 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
   if (al.error) res.errores.push('alertas')
   for (const a of ((al.error ? [] : al.data ?? []) as Array<{ id: number; miembro_id: string; creditos: number; saldo_creditos: number }>)) {
     const t = mensajeCanje(Number(a.creditos), Number(a.saldo_creditos))
-    const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, a.miembro_id))}/addMessage`, {
+    const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, a.miembro_id, deps.entorno))}/addMessage`, {
       method: 'POST', headers: { Authorization: `Bearer ${await auth()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: {
         id: `canje-${a.id}`, messageType: 'TEXT_AND_NOTIFY', header: t.es.header, body: t.es.body,
@@ -243,9 +249,9 @@ export async function actualizarUno(deps: Omit<DepsSync, 'limite'>, miembro: str
   const d = await deps.rpc('club_pase_datos', { p_miembro: miembro })
   if (d.error || d.data === null || validarDatos(d.data) !== null) return 'error'
   const datos = d.data as PaseDatos
-  const objeto = armarObjeto(deps.issuer, datos, deps.diseno)
+  const objeto = armarObjeto(deps.issuer, deps.entorno, datos, deps.diseno)
   const token = await tokenGoogle(deps.sa, deps.fetch, deps.ahora)
-  const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(deps.issuer, miembro))}`, {
+  const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(deps.issuer, miembro, deps.entorno))}`, {
     method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
   if (r.status === 404) return 'sin_pase'
   if (r.status !== 200) return 'error'

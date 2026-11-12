@@ -30,6 +30,9 @@ vencido sin roles vigentes, línea «Créditos al …» con la hora de Costa Ric
 «Guardar» corto (la clase y el objeto se crean por la API; el JWT lleva solo los IDs). El Issuer ID sale de `SPEC.md`. El
 Edge vive en `claude/club-pase-edge` y se despliega a mano (`WALLET-GOOGLE-ACTIVACION.md` §2). B3 (programador y
 reintentos) queda para después del piloto.
+**12-nov (tarde) · ambiente en los IDs del pase.** Staging y prod comparten el emisor de Google y los IDs de miembro pueden
+coincidir: `WALLET_ENTORNO` (`stg` → clase `club-satori-stg`, objetos `club-stg-<miembro>`; `prod` sin sufijo; otro valor
+→ 503). La clase existente no se pisa y el Edge no escribe IDs de otro ambiente.
 
 ## Bitácora
 - 07-nov · Plan aprobado (6c1a5fb) con ajustes. Arranca A1.

@@ -9,6 +9,8 @@
  *
  * Tipo de pase: genérico (`genericClass` / `genericObject`). Un pase por persona: el objectId es
  * `<issuerId>.club-<miembro_id>` y no cambia aunque se regenere el QR o el token.
+ * (12-nov) Staging y prod comparten el emisor de Google: en staging la clase es `<issuerId>.club-satori-stg` y los objetos
+ * `<issuerId>.club-stg-<miembro_id>` (`WALLET_ENTORNO`); prod no lleva sufijo. Sin un ambiente válido no se arma nada.
  */
 
 // ── Contrato v1 (lo que devuelve club_pase_datos) ───────────────────────────────
@@ -138,13 +140,36 @@ export function sinRolVigente(d: PaseDatos): boolean {
   return !soc && !anf
 }
 
-export const idClase = (issuerId: string) => `${issuerId}.club-satori`
-export const idObjeto = (issuerId: string, miembroId: string) => `${issuerId}.club-${miembroId}`
+/**
+ * (12-nov) Ambiente del pase: `prod` o `stg`, de la variable `WALLET_ENTORNO` del Edge. Staging y prod usan el MISMO
+ * emisor de Google y los IDs de miembro pueden coincidir (el clon de prod a staging copia `club_miembros` con sus `id`;
+ * la carga única lleva sus `id` escritos en el archivo): sin sufijo, staging podría escribir el pase de una persona de
+ * prod. Cualquier otro valor (vacío, «staging», «PROD», …) es null: el Edge responde 503 (falla cerrada, nunca cae en prod).
+ */
+export type Entorno = 'prod' | 'stg'
+export function entornoValido(v: string | null | undefined): Entorno | null {
+  const x = typeof v === 'string' ? v.trim() : ''
+  return x === 'prod' || x === 'stg' ? x : null
+}
+const sufijo = (entorno: Entorno) => {
+  if (entorno === 'prod') return ''
+  if (entorno === 'stg') return '-stg'
+  throw new Error('ambiente del pase no válido')
+}
+export const idClase = (issuerId: string, entorno: Entorno) => `${issuerId}.club-satori${sufijo(entorno)}`
+export const idObjeto = (issuerId: string, miembroId: string, entorno: Entorno) => `${issuerId}.club${sufijo(entorno)}-${miembroId}`
+/** ¿Estos IDs son de ESTE ambiente? (el Edge no escribe la clase ni el objeto de otro). */
+export function idsDelAmbiente(issuerId: string, entorno: Entorno, clase: { id?: unknown }, objeto: { id?: unknown; classId?: unknown }): boolean {
+  const c = idClase(issuerId, entorno)
+  const pre = `${issuerId}.club${sufijo(entorno)}-`
+  if (clase.id !== c || objeto.classId !== c || typeof objeto.id !== 'string' || !objeto.id.startsWith(pre)) return false
+  return RE_UUID.test(objeto.id.slice(pre.length))   // lo que sigue al prefijo es un id de miembro (en prod, nunca «stg-…»)
+}
 
-export function armarClase(issuerId: string) {
+export function armarClase(issuerId: string, entorno: Entorno) {
   if (!RE_ISSUER.test(issuerId)) throw new Error('issuerId no válido')
   return {
-    id: idClase(issuerId),
+    id: idClase(issuerId, entorno),
     // Sin plantilla propia por ahora: Google arma el diseño estándar con los módulos del objeto.
     enableSmartTap: false,
     multipleDevicesAndHoldersAllowedStatus: 'ONE_USER_ALL_DEVICES',
@@ -168,7 +193,7 @@ const link = (id: string, uri: string, d: Txt): LinkUri =>
  *  · (12-nov) Una línea con la fecha y la hora de Costa Rica de los datos: «Créditos al 12-nov 13:20» (anfitrión) o
  *    «Actualizado · 12-nov 13:20» (solo socio). Sin sincronización automática en el piloto, dice de cuándo son.
  */
-export function armarObjeto(issuerId: string, d: PaseDatos, diseno: DisenoPase = DISENO_POR_DEFECTO) {
+export function armarObjeto(issuerId: string, entorno: Entorno, d: PaseDatos, diseno: DisenoPase = DISENO_POR_DEFECTO) {
   const err = validarDatos(d)
   if (err) throw new Error(`Datos del pase no válidos: ${err}`)
   if (!RE_ISSUER.test(issuerId)) throw new Error('issuerId no válido')
@@ -230,8 +255,8 @@ export function armarObjeto(issuerId: string, d: PaseDatos, diseno: DisenoPase =
     : { es: 'Club Satori', en: 'Club Satori' }
 
   const objeto: Record<string, unknown> = {
-    id: idObjeto(issuerId, d.miembro_id),
-    classId: idClase(issuerId),
+    id: idObjeto(issuerId, d.miembro_id, entorno),
+    classId: idClase(issuerId, entorno),
     state: vencido ? 'EXPIRED' : 'ACTIVE',
     cardTitle: loc({ es: 'Satori', en: 'Satori' }),   // (10-nov, el dueño) nombre visible del pase: «Satori»
     header: loc({ es: d.nombre_pila, en: d.nombre_pila }),

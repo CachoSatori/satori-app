@@ -45,20 +45,21 @@
 ---
 ### Tanda 2 · Auditoría y estilo en los módulos (decidido por Ismael el 11-nov 15:15)
 
-## A6 · Admin legible y colones al estándar · `en revisión #120`
+## A6 · Admin legible y colones al estándar · `hecha` (#120, mergeada el 11-nov 22:05)
 - **Auditoría 198:** `src/modules/admin/EmployeeList.tsx:207`, el selector de rol tiene `background:'#111'` y `color:'var(--white)'` (ahora tinta): queda ilegible. Pasarlo a `background: var(--c-fondo)`, `color: var(--c-tinta)` y borde `var(--c-linea)`. Buscar con `rg "var\(--(white|black)\)"` otros casos sobre fondos fijos en archivos de la línea A.
 - **Colones:** `fi()` en `src/shared/utils/index.ts` pasa de «₡ 1 460 000» a «₡1.460.000» (₡ pegado, punto de miles, sin decimales). Revisar `fd()` y otros formateadores de la misma carpeta solo si muestran colones.
   - Antes de cambiar: listar dónde se usa `fi()` y confirmar que **ningún resultado se guarda en la base ni se vuelve a leer como número** (si alguno se guarda o se parsea, frenar y anotarlo).
   - Ajustar los tests que fijan el formato viejo; no cambiar ningún otro valor esperado.
 - **Aceptación:** diff de `fi()` solo de formato; tests verdes; guía 6.6 si cambia algo visible en Admin.
 
-## A7 · Ventas con estilo carta · `pendiente` (después de A5 y de B6) · validación visual
+## A7 · Ventas con estilo carta · `lista` · validación visual (se valida junto con B6; los estilos en línea no dependen del CSS de B6)
 - **Auditoría 201/202/203:**
   - sub-pestaña activa en `var(--c-oro-texto)` en vez de `ENTRADA_COLOR` (`VentasModule.tsx`); sacar los oros viejos `#c8a050`/`#c8a96e`;
   - `aria-controls` en cada pestaña y `role="tabpanel"` en el contenido; flechas izquierda/derecha para moverse;
   - un `?tab=` inválido o ajeno se limpia de la URL.
   - auditoría 203: cambiar de pestaña agrega una entrada al historial (no `replace`), así el botón Atrás vuelve a la pestaña anterior; abrir Ventas sin `?tab=` sigue con `replace`.
 - **Estilos en línea de `src/modules/ventas/**`:** colores fijos → `var(--c-*)`; `monospace`/`'DM Mono'` → `var(--font-sans)` + `tabular-nums`; sin mayúsculas; fondos oscuros → blanco o panel; números grandes en `var(--font-serif)`.
+- Cambiar las copias locales de `fi` con el formato viejo (`ventasUtils.ts`) por el `fi()` compartido.
 - No tocar `ventasTabs.ts`, roles, cálculos ni consultas (A5 ya está).
 - **Aceptación:** diff solo de estilo y ARIA; tests de Ventas verdes; capturas o link de vista previa; guía 6.4 si cambia algo que el encargado nombra.
 

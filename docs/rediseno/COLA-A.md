@@ -63,7 +63,7 @@
 - No tocar `ventasTabs.ts`, roles, cálculos ni consultas (A5 ya está).
 - **Aceptación:** diff solo de estilo y ARIA; tests de Ventas verdes; capturas o link de vista previa; guía 6.4 si cambia algo que el encargado nombra.
 
-## A8 · Caja con estilo carta · `lista` (no depende de A7: archivos distintos) · **FIRMA** · validación visual
+## A8 · Caja con estilo carta · `en revisión #123` (no depende de A7: archivos distintos) · **FIRMA** · validación visual
 - Estilos en línea de `src/modules/cash/**` como en A7. `CashCierre.tsx` tiene 13 `monospace`.
 - **Prohibido:** `cashUtils.ts`, `cierrePozo`, `diasSinCierre.ts`, cualquier función, condición, cálculo o consulta. Solo `style`, `className` y textos.
 - Lleva firma porque toca archivos de cierre: la descripción del PR dice qué va a ver el encargado, pantalla por pantalla.

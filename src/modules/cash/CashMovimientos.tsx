@@ -301,56 +301,56 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     <div>
       {/* Saldos */}
       <div className="cd-saldos-bar">
-        <div className={`cd-saldo-card ${cfSaldo < 0 ? 'red' : ''}`} style={{ borderLeftColor: '#c8a96e' }}>
+        <div className={`cd-saldo-card ${cfSaldo < 0 ? 'red' : ''}`} style={{ borderLeftColor: 'var(--c-oro-texto)' }}>
           <div className="cd-saldo-label">{tarjeta.esPozo ? 'Efectivo en caja' : 'Caja Fuerte'}</div>
           <div className={`cd-saldo-val ${cfSaldo < 0 ? 'red' : ''}`}>{fi(cfSaldo)}</div>
-          {cfSaldoUSD !== 0 && <div style={{ fontSize: '13px', color: '#3a7bd5', fontFamily: "'DM Mono', monospace", marginTop: '2px' }}>{fd(cfSaldoUSD)}</div>}
+          {cfSaldoUSD !== 0 && <div style={{ fontSize: '13px', color: 'var(--c-azul)', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', marginTop: '2px' }}>{fd(cfSaldoUSD)}</div>}
           {tarjeta.esPozo && (
-            <div data-testid="tarjeta-subtitulo" style={{ fontSize: '9px', color: '#888', marginTop: '3px', lineHeight: 1.3 }}>
+            <div data-testid="tarjeta-subtitulo" style={{ fontSize: '9px', color: 'var(--c-gris)', marginTop: '3px', lineHeight: 1.3 }}>
               Caja Fuerte + Proveedores + Registradora
               {tarjeta.desdeApertura && <> · desde la apertura del {tarjeta.desdeApertura}</>}
             </div>
           )}
           {tarjeta.esPozo && tarjeta.indeterminados.cantidad > 0 && (
-            <div style={{ fontSize: '9px', color: '#8a5a1f', marginTop: '2px' }}>
+            <div style={{ fontSize: '9px', color: 'var(--c-oro-texto)', marginTop: '2px' }}>
               ⚠ {tarjeta.indeterminados.cantidad} traspaso(s) sin dirección ({fi(tarjeta.indeterminados.crc)}) — neutros
             </div>
           )}
         </div>
-        <div className="cd-saldo-card" style={{ borderLeftColor: pendTotal > 0 ? '#c8a030' : '#444' }}>
+        <div className="cd-saldo-card" style={{ borderLeftColor: pendTotal > 0 ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>
           <div className="cd-saldo-label">Pend. Transferencia</div>
-          <div className="cd-saldo-val" style={{ color: pendTotal > 0 ? '#c8a030' : '#555', fontSize: pendTotal > 0 ? '17px' : '13px' }}>
+          <div className="cd-saldo-val" style={{ color: pendTotal > 0 ? 'var(--c-oro-texto)' : 'var(--c-gris)', fontSize: pendTotal > 0 ? '17px' : '13px' }}>
             {pendTotal > 0 ? fi(pendTotal) : 'Sin pendientes'}
           </div>
-          {pendTotal > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{pendCount} pago{pendCount !== 1 ? 's' : ''}</div>}
+          {pendTotal > 0 && <div style={{ fontSize: '9px', color: 'var(--c-gris)', marginTop: '3px' }}>{pendCount} pago{pendCount !== 1 ? 's' : ''}</div>}
         </div>
-        <div className="cd-saldo-card" style={{ borderLeftColor: '#27874f' }}>
+        <div className="cd-saldo-card" style={{ borderLeftColor: 'var(--c-musgo)' }}>
           <div className="cd-saldo-label">Ingresos (período)</div>
-          <div className="cd-saldo-val" style={{ color: '#27874f' }}>{fi(totIngresos)}</div>
+          <div className="cd-saldo-val" style={{ color: 'var(--c-musgo)' }}>{fi(totIngresos)}</div>
         </div>
-        <div className="cd-saldo-card" style={{ borderLeftColor: '#c0392b' }}>
+        <div className="cd-saldo-card" style={{ borderLeftColor: 'var(--c-laca)' }}>
           <div className="cd-saldo-label">Egresos (período)</div>
-          <div className="cd-saldo-val" style={{ color: '#c0392b' }}>{fi(totEgresos)}</div>
+          <div className="cd-saldo-val" style={{ color: 'var(--c-laca)' }}>{fi(totEgresos)}</div>
         </div>
-        <div className="cd-saldo-card" style={{ borderLeftColor: '#8a7a4a' }}>
+        <div className="cd-saldo-card" style={{ borderLeftColor: 'var(--c-oro-texto)' }}>
           <div className="cd-saldo-label">Ajustes de cierre</div>
           {/* Patrón Caja Fuerte: ₡ arriba, $ debajo (secundario). Cada moneda solo si ≠ 0;
               signo y color por moneda (verde sobrante / rojo faltante / gris cero). */}
           {ajustesCount === 0 && ajustesNetUsd === 0 ? (
-            <div className="cd-saldo-val" style={{ color: '#555', fontSize: '13px' }}>Sin diferencias</div>
+            <div className="cd-saldo-val" style={{ color: 'var(--c-gris)', fontSize: '13px' }}>Sin diferencias</div>
           ) : (
             <>
               {ajustesCount > 0 && (
-                <div className="cd-saldo-val" style={{ color: ajustesNet < 0 ? '#c0392b' : ajustesNet > 0 ? '#27874f' : '#555', fontSize: '17px' }}>
+                <div className="cd-saldo-val" style={{ color: ajustesNet < 0 ? 'var(--c-laca)' : ajustesNet > 0 ? 'var(--c-musgo)' : 'var(--c-gris)', fontSize: '17px' }}>
                   {`${ajustesNet >= 0 ? '+' : ''}${fi(ajustesNet)}`}
                 </div>
               )}
               {ajustesNetUsd !== 0 && (
-                <div style={{ fontSize: '13px', fontFamily: "'DM Mono', monospace", marginTop: '2px', color: ajustesNetUsd < 0 ? '#c0392b' : '#27874f' }}>
+                <div style={{ fontSize: '13px', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', marginTop: '2px', color: ajustesNetUsd < 0 ? 'var(--c-laca)' : 'var(--c-musgo)' }}>
                   {ajustesNetUsd >= 0 ? '+' : ''}{fd(ajustesNetUsd)}
                 </div>
               )}
-              {ajustesCount > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{ajustesCount} cierre{ajustesCount !== 1 ? 's' : ''} con diferencia</div>}
+              {ajustesCount > 0 && <div style={{ fontSize: '9px', color: 'var(--c-gris)', marginTop: '3px' }}>{ajustesCount} cierre{ajustesCount !== 1 ? 's' : ''} con diferencia</div>}
             </>
           )}
         </div>
@@ -386,7 +386,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         <div className="cd-modal-overlay" onClick={() => setNmOpen(false)}>
           <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
             <div className="cd-modal-title">Nuevo movimiento</div>
-            <p style={{ fontSize: '0.74rem', color: 'var(--t-muted)', margin: '0.2rem 0 0.75rem' }}>
+            <p style={{ fontSize: '0.74rem', color: 'var(--c-gris)', margin: '0.2rem 0 0.75rem' }}>
               Movimientos administrativos sin foto ni turno (ej. ingreso de banco a caja fuerte, gasto suelto).
             </p>
             {nmErr && <div className="tips-error" style={{ marginBottom: '0.75rem' }}><span>{nmErr}</span><button onClick={() => setNmErr(null)}>✕</button></div>}
@@ -414,7 +414,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   min={puedeBackdatear ? undefined : todayStr()} max={todayStr()}
                   onChange={e => setNmFecha(e.target.value)} />
                 {!puedeBackdatear && (
-                  <div style={{ fontSize: '0.66rem', color: 'var(--t-muted)', marginTop: 3 }}>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 3 }}>
                     🔒 Fija en hoy. Pedí a un encargado, dueño o contador que inicie sesión para registrar en otra fecha.
                   </div>
                 )}
@@ -436,14 +436,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
 
       {/* Barra de acción masiva */}
       {selected.size > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.85rem', marginBottom: '0.75rem', background: 'rgba(194,59,34,0.08)', border: '1px solid rgba(194,59,34,0.3)', borderRadius: 3 }}>
-          <span style={{ fontSize: '0.82rem', color: 'var(--t-ink)', fontWeight: 600 }}>{selected.size} seleccionado(s)</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.85rem', marginBottom: '0.75rem', background: 'var(--c-laca-fondo)', border: '1px solid var(--c-laca-borde)', borderRadius: 3 }}>
+          <span style={{ fontSize: '0.82rem', color: 'var(--c-tinta)', fontWeight: 600 }}>{selected.size} seleccionado(s)</span>
           <button onClick={handleBulkDelete} disabled={saving === 'bulk'}
-            style={{ background: 'var(--t-red)', color: '#fff', border: 'none', borderRadius: 3, padding: '4px 12px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
+            style={{ background: 'var(--c-laca)', color: 'var(--c-fondo)', border: 'none', borderRadius: 3, padding: '4px 12px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
             {saving === 'bulk' ? 'Eliminando…' : `🗑 Eliminar ${selected.size}`}
           </button>
           <button onClick={() => setSelected(new Set())}
-            style={{ background: 'none', border: '1px solid var(--t-border)', color: 'var(--t-muted)', borderRadius: 3, padding: '4px 10px', fontSize: '0.78rem', cursor: 'pointer' }}>
+            style={{ background: 'none', border: '1px solid var(--c-linea)', color: 'var(--c-gris)', borderRadius: 3, padding: '4px 10px', fontSize: '0.78rem', cursor: 'pointer' }}>
             Limpiar selección
           </button>
         </div>
@@ -475,7 +475,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={13} style={{ textAlign: 'center', padding: '2rem', color: '#888', fontSize: '0.85rem' }}>
+              <tr><td colSpan={13} style={{ textAlign: 'center', padding: '2rem', color: 'var(--c-gris)', fontSize: '0.85rem' }}>
                 Sin movimientos en el período
               </td></tr>
             )}
@@ -491,7 +491,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
                     {movFecha(m) || '—'}
                     {m._pending && <span title="En cola offline — se sincroniza al volver la red"
-                      style={{ marginLeft: 4, color: '#a07830', fontWeight: 700 }}>⏳</span>}
+                      style={{ marginLeft: 4, color: 'var(--c-oro-texto)', fontWeight: 700 }}>⏳</span>}
                   </td>
                   <td style={{ fontSize: '0.78rem' }}>
                     <select className="cd-tbl-select" value={m.shift ?? ''}
@@ -547,7 +547,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   <td className="r">
                     <input key={m.id + '-usd'} className="cd-tbl-input r" type="number" min={0}
                       defaultValue={m.amount_usd || ''}
-                      style={{ color: '#7ab4d4' }}
+                      style={{ color: 'var(--c-azul)' }}
                       onBlur={e => handleFieldChange(m.id, 'amount_usd', Number(e.target.value) || 0)}
                       disabled={saving === m.id} />
                   </td>
@@ -575,7 +575,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   </td>
                   <td>
                     <select className="cd-tbl-select"
-                      style={{ fontWeight: 700, color: isPend ? '#c8a030' : '#4a7c59' }}
+                      style={{ fontWeight: 700, color: isPend ? 'var(--c-oro-texto)' : 'var(--c-musgo)' }}
                       value={isPend ? 'Pendiente' : 'Pagado'}
                       onChange={e => handleFieldChange(m.id, 'status', e.target.value === 'Pendiente' ? 'pendiente' : 'aprobado', m)}
                       disabled={saving === m.id}>
@@ -595,7 +595,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
             <tfoot>
               <tr className="cd-tbl-footer">
                 <td colSpan={6}>{filtered.length} movimientos · Resultado del período</td>
-                <td className="r" style={{ color: totIngresos - totEgresos >= 0 ? '#7ec8a0' : '#c23b22', fontWeight: 800 }}>
+                <td className="r" style={{ color: totIngresos - totEgresos >= 0 ? 'var(--c-musgo)' : 'var(--c-laca)', fontWeight: 800 }}>
                   {totIngresos - totEgresos >= 0 ? '+' : ''}{fi(totIngresos - totEgresos)}
                 </td>
                 <td colSpan={6}></td>
@@ -610,25 +610,25 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         {filtered.map(m => {
           const isIng  = m.movement_type === 'ingreso'
           const isEg   = isEgreso(m.movement_type as MovementType)
-          const amtColor = isIng ? '#27874f' : isEg ? '#c0392b' : '#5a5040'
-          const typeBg   = isIng ? '#d4edda' : isEg ? '#f8d7da' : 'rgba(0,0,0,0.06)'
-          const typeCol  = isIng ? '#155724' : isEg ? '#721c24' : 'var(--t-ink)'
+          const amtColor = isIng ? 'var(--c-musgo)' : isEg ? 'var(--c-laca)' : 'var(--c-tinta)'
+          const typeBg   = isIng ? 'var(--c-musgo-fondo)' : isEg ? 'var(--c-laca-fondo)' : 'var(--c-panel)'
+          const typeCol  = isIng ? 'var(--c-musgo)' : isEg ? 'var(--c-laca)' : 'var(--c-tinta)'
           const isPend   = m.status === 'pendiente'
           return (
             <div key={m.id} style={{
-              background: isPend ? '#fffdf5' : '#fff',
-              border: `1px solid ${isPend ? '#e0c878' : 'var(--t-border)'}`,
+              background: isPend ? 'var(--c-oro-fondo)' : 'var(--c-fondo)',
+              border: `1px solid ${isPend ? 'var(--c-oro)' : 'var(--c-linea)'}`,
               borderRadius: 2, padding: '0.75rem 0.875rem',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.3rem' }}>
                 <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: 99, background: typeBg, color: typeCol }}>
                   {MOVEMENT_LABELS[m.movement_type as MovementType] ?? m.movement_type}
                 </span>
-                <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, fontSize: '0.95rem', color: amtColor }}>
+                <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '0.95rem', color: amtColor }}>
                   {isIng ? '+' : isEg ? '−' : ''}{fi(m.amount_crc)}
                 </span>
               </div>
-              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--t-ink)', marginBottom: '0.15rem' }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--c-tinta)', marginBottom: '0.15rem' }}>
                 {m.description || m.supplier_name || m.employee_name || '—'}
               </div>
               {movementAttachments(m).length > 0 && (
@@ -637,17 +637,17 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               {docsLoaded && isEg && (
                 <div style={{ marginBottom: '0.3rem' }}><FacturaVerify movement={m} doc={docMap[m.id] ?? null} onVerified={onRefresh} /></div>
               )}
-              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.68rem', color: '#5a5040' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.68rem', color: 'var(--c-tinta)' }}>
                 <span>{movFecha(m) || '—'}</span>
                 <span>{m.method}</span>
                 <span>{m.caja_origen}</span>
-                {isPend && <span style={{ color: '#c8a030', fontWeight: 700 }}>Pendiente</span>}
+                {isPend && <span style={{ color: 'var(--c-oro-texto)', fontWeight: 700 }}>Pendiente</span>}
               </div>
             </div>
           )
         })}
         {filtered.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '2rem', color: '#888', fontSize: '0.85rem' }}>
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--c-gris)', fontSize: '0.85rem' }}>
             Sin movimientos en el período
           </div>
         )}

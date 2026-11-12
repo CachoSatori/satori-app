@@ -21,10 +21,10 @@ export default function AlertaDiasSinCierre({ alerta, onIrADia, onIrATurno }: Pr
   const visibles = verTodos ? dias : dias.slice(0, MAX_VISIBLES)
   return (
     <div role="alert" className="alerta-cierres"
-      style={{ margin: '0.75rem 1.5rem 0', padding: '0.7rem 0.9rem', border: '2px solid #c23b22', borderRadius: 3, background: '#fdf0ee', fontSize: '0.78rem' }}>
+      style={{ margin: '0.75rem 1.5rem 0', padding: '0.7rem 0.9rem', border: '2px solid var(--c-laca)', borderRadius: 3, background: 'var(--c-laca-fondo)', fontSize: '0.78rem' }}>
       {dias.length > 0 && (
         <>
-          <div style={{ fontWeight: 700, color: '#c23b22', marginBottom: '0.35rem' }}>
+          <div style={{ fontWeight: 700, color: 'var(--c-laca)', marginBottom: '0.35rem' }}>
             ⚠ {dias.length === 1 ? 'Hay 1 día sin cierre completo' : `Hay ${dias.length} días sin cierre completo`}
           </div>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -34,7 +34,7 @@ export default function AlertaDiasSinCierre({ alerta, onIrADia, onIrATurno }: Pr
                   onClick={() => onIrADia(d.fecha)} aria-label={`Ir al cierre del ${d.fecha}`}>
                   {formatDate(d.fecha)} →
                 </button>
-                <span style={{ color: '#8a5040' }}>
+                <span style={{ color: 'var(--c-gris)' }}>
                   {d.motivos.map(m => ETIQUETA_MOTIVO[m]).join(' · ')}
                   {d.movimientos > 0 ? ` (${d.movimientos} mov · ${fi(d.crc)})` : ''}
                 </span>
@@ -51,7 +51,7 @@ export default function AlertaDiasSinCierre({ alerta, onIrADia, onIrATurno }: Pr
       )}
       {turnos.length > 0 && (
         <div style={{ marginTop: dias.length ? '0.5rem' : 0 }}>
-          <span style={{ fontWeight: 700, color: '#c23b22' }}>
+          <span style={{ fontWeight: 700, color: 'var(--c-laca)' }}>
             ⚠ {turnos.length === 1 ? 'Turno de Caja Diaria abierto de un día anterior' : `${turnos.length} turnos de Caja Diaria abiertos de días anteriores`}:
           </span>{' '}
           {turnos.map(t => `${formatDate(t.fecha)}${t.cajero ? ` (${t.cajero})` : ''}`).join(' · ')}{' '}

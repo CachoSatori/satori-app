@@ -322,7 +322,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         {vista === 'opciones' ? (
           /* ── Pantalla inicial (flujo guiado): foto protagonista, manual secundario ── */
           <>
-            <p style={{ fontSize: '0.78rem', color: '#8a8378', margin: '0.4rem 0 1rem' }}>
+            <p style={{ fontSize: '0.78rem', color: 'var(--c-gris)', margin: '0.4rem 0 1rem' }}>
               ¿Cómo querés cargar el movimiento?
             </p>
             <button className="cd-btn-green" style={{ width: '100%', padding: '1.1rem 1rem', fontSize: '1rem', lineHeight: 1.35 }}
@@ -360,10 +360,10 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           </button>
           {photo && photo.extracted && (
             <div style={{ fontSize: '0.66rem', marginTop: 3 }}>
-              <div style={{ color: '#4a9a6a' }}>
+              <div style={{ color: 'var(--c-musgo)' }}>
                 ✓ Factura leída{photo.extracted.items?.length ? ` · ${photo.extracted.items.length} ítem(s)` : ''} · confianza {lecturaPct}% — revisá y corregí los campos antes de confirmar.
               </div>
-              <div style={{ color: lecturaCuadra ? '#4a9a6a' : '#a07030', marginTop: 2 }}>
+              <div style={{ color: lecturaCuadra ? 'var(--c-musgo)' : 'var(--c-oro-texto)', marginTop: 2 }}>
                 {lecturaCuadra ? '✓ los ítems cuadran con el total leído' : '⚠ los ítems no suman el total — puede faltar alguna línea, revisá'}
               </div>
               {lecturaAlerta && (
@@ -374,7 +374,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             </div>
           )}
           {photo && !photo.extracted && (
-            <div style={{ fontSize: '0.66rem', color: '#a07030', marginTop: 3 }}>
+            <div style={{ fontSize: '0.66rem', color: 'var(--c-oro-texto)', marginTop: 3 }}>
               La IA no pudo leer la factura — completá los campos a mano. La foto igual se enlaza al pago.
             </div>
           )}
@@ -397,7 +397,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
               </div>
             ))}
           </div>
-          <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 4 }}>
+          <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 4 }}>
             Es una sugerencia: confirmala o cambiala. Ingreso se elige a mano (no se deduce del texto).
           </div>
         </div>
@@ -410,7 +410,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             placeholder="Nombre del proveedor, si aplica" autoFocus={!photo}
             value={supplierName} onChange={e => { setSupplierName(e.target.value); setPickedSupplierId(null) }} />
           {resolvedSupplier && (
-            <div style={{ fontSize: '0.66rem', color: '#4a9a6a', marginTop: 3 }}>✓ Proveedor reconocido: {resolvedSupplier.name}</div>
+            <div style={{ fontSize: '0.66rem', color: 'var(--c-musgo)', marginTop: 3 }}>✓ Proveedor reconocido: {resolvedSupplier.name}</div>
           )}
           {supplierUnknown && (
             <div style={{ marginTop: 4 }}>
@@ -418,7 +418,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
                 ⚠ «{nameTrimmed}» no existe en el sistema — puede ser un error de lectura. Elegí uno existente o crealo.
               </div>
               {similares.length > 0 && (
-                <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                   ¿Quisiste decir?
                   {similares.map(s => (
                     <button key={s.id} type="button" className="tips-btn-ghost" style={{ padding: '2px 8px', fontSize: '0.7rem' }}
@@ -496,7 +496,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           <div className="tips-field-label">Fecha de la factura (opcional)</div>
           <input type="date" className="tips-input-dark" style={{ width: '100%' }} aria-label="Fecha de factura"
             value={fechaFactura} onChange={e => setFechaFactura(e.target.value)} />
-          <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 3 }}>
+          <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 3 }}>
             La fecha de registro es HOY (entra hoy a la caja). La de la factura, si difiere, va a la descripción.
           </div>
         </div>
@@ -505,12 +505,12 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         {lineItems.length > 0 && (
           <div className="tips-field" style={{ marginTop: '0.75rem' }}>
             <div className="tips-field-label">Ítems leídos por la IA ({lineItems.length}) — revisá antes de confirmar</div>
-            <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, overflow: 'hidden', fontSize: '0.7rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 44px 78px 82px', gap: 4, padding: '4px 8px', fontWeight: 700, color: '#8a8378', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+            <div style={{ border: '1px solid var(--c-linea)', borderRadius: 4, overflow: 'hidden', fontSize: '0.7rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 44px 78px 82px', gap: 4, padding: '4px 8px', fontWeight: 700, color: 'var(--c-gris)', borderBottom: '1px solid var(--c-linea)' }}>
                 <span>Descripción</span><span style={{ textAlign: 'right' }}>Cant.</span><span style={{ textAlign: 'right' }}>P. unit.</span><span style={{ textAlign: 'right' }}>Total</span>
               </div>
               {lineItems.map((it, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 44px 78px 82px', gap: 4, padding: '4px 8px', borderBottom: i < lineItems.length - 1 ? '1px solid var(--t-border,#ece8df)' : 'none' }}>
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 44px 78px 82px', gap: 4, padding: '4px 8px', borderBottom: i < lineItems.length - 1 ? '1px solid var(--c-linea)' : 'none' }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.descripcion}>{it.descripcion}</span>
                   <span style={{ textAlign: 'right' }}>{it.cantidad ?? '—'}</span>
                   <span style={{ textAlign: 'right' }}>{it.precio_unitario != null ? fmtMoney(it.precio_unitario) : '—'}</span>
@@ -518,7 +518,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: '0.64rem', color: '#8a8378', marginTop: 3 }}>
+            <div style={{ fontSize: '0.64rem', color: 'var(--c-gris)', marginTop: 3 }}>
               Solo lectura. El emparejamiento ítem↔ingrediente se hace en Revisión de inventario.
             </div>
           </div>
@@ -537,7 +537,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
                   </option>
                 ))}
               </select>
-              <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 3 }}>{PAGO_META[pago].label}</div>
+              <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 3 }}>{PAGO_META[pago].label}</div>
             </div>
 
             {clase === 'operativa' && (
@@ -565,7 +565,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
         <div className="tips-field" style={{ marginTop: '0.75rem' }}>
           <div className="tips-field-label">Resultado</div>
-          <div style={{ fontSize: '0.78rem', color: '#5a5040' }}>{preview}{montoOk ? ` · ${fi(amountCRC)}` : ''}</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--c-tinta)' }}>{preview}{montoOk ? ` · ${fi(amountCRC)}` : ''}</div>
         </div>
 
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>

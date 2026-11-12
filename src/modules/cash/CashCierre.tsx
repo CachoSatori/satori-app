@@ -499,7 +499,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     return m ? (m.movement_type === 'ingreso' ? 1 : -1) * (m.amount_usd || 0) : 0
   })()
 
-  if (loading) return <div style={{ padding:'2rem', textAlign:'center', color:'#888' }}>Cargando…</div>
+  if (loading) return <div style={{ padding:'2rem', textAlign:'center', color:'var(--c-gris)' }}>Cargando…</div>
 
   // ── Propinas del día — la VÍA REAL (una sola fuente de verdad, FIRMADO) ──
   // Plegada por defecto y ubicada DEBAJO de los campos de venta de la fase en curso (Fase 1
@@ -509,20 +509,20 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     <CollapsibleSection
       title={`Propinas del día · ${propinasPorPagar.length} · ${fi2(propinasPorPagarTotal)}`}
       icon="💁" color="#8a5aa8" open={propinasOpen} onToggle={() => setPropinasOpen(o => !o)}>
-      <div style={{ fontSize:'0.74rem', color:'#6a6250', marginBottom:'0.6rem' }}>
+      <div style={{ fontSize:'0.74rem', color:'var(--c-gris)', marginBottom:'0.6rem' }}>
         Pagadas hoy (movimientos reales): <strong style={{ color:'#8a5aa8' }}>{fi2(propinasPagadasDia)}</strong>.
         Lo que pagués acá crea el egreso real y se descuenta del cierre; lo pendiente <strong>no resta</strong> (la plata sigue en la caja).
       </div>
       {propinasPorPagar.length === 0 ? (
-        <div style={{ fontSize:'0.76rem', color:'#8a8272' }}>✓ Sin propinas por pagar.</div>
+        <div style={{ fontSize:'0.76rem', color:'var(--c-gris)' }}>✓ Sin propinas por pagar.</div>
       ) : propinasPorPagar.map(p => (
-        <div key={p.session_id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem', padding:'0.45rem 0.25rem', borderBottom:'1px solid var(--t-border, #d4cfc4)' }}>
+        <div key={p.session_id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem', padding:'0.45rem 0.25rem', borderBottom:'1px solid var(--c-linea)' }}>
           <div>
             <div style={{ fontSize:'0.8rem', fontWeight:600 }}>Propinas {shiftLabel(p.shift_type)} · {formatDate(p.session_date)}</div>
-            <div style={{ fontSize:'0.68rem', color:'#8a8272' }}>pendiente de pago</div>
+            <div style={{ fontSize:'0.68rem', color:'var(--c-gris)' }}>pendiente de pago</div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
-            <span style={{ fontFamily:"'DM Mono',monospace", fontWeight:700 }}>{fi2(p.total_electronico_crc)}</span>
+            <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight:700 }}>{fi2(p.total_electronico_crc)}</span>
             <button onClick={() => pagarPropinaCierre(p)} disabled={payingProp !== null || saving}
               className="cierre-btn gold" style={{ padding:'5px 12px', fontSize:'0.74rem', width:'auto' }}>
               {payingProp === p.session_id ? 'Pagando…' : '💵 Pagar ahora'}
@@ -540,27 +540,27 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem', flexWrap:'wrap', gap:'0.5rem' }}>
         <div>
           <div style={{ fontSize:'0.95rem', fontWeight:700, letterSpacing:'0.03em' }}>Cierre del día</div>
-          <div style={{ fontSize:'0.72rem', color:'#6a6250', marginTop:4, display:'flex', alignItems:'center', gap:'0.4rem' }}>
+          <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', marginTop:4, display:'flex', alignItems:'center', gap:'0.4rem' }}>
             <span>TC ₡/$</span>
             <input type="number" min={300} max={900} step={5} value={tc}
               disabled={!!parcial}
               onChange={e => setTc(Number(e.target.value) || tc)}
               title={parcial ? 'Sellado en Fase 1' : 'Tipo de cambio del día'}
               className="cierre-input"
-              style={{ width:64, color:'#8a6d1f', padding:'2px 6px', fontSize:'0.74rem', fontFamily:'DM Mono, monospace', opacity: parcial ? 0.6 : 1 }} />
+              style={{ width:64, color:'var(--c-oro-texto)', padding:'2px 6px', fontSize:'0.74rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', opacity: parcial ? 0.6 : 1 }} />
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
           {(parcial || completo) && (
             <button onClick={handleDeshacer} disabled={saving} title="Deshacer SOLO el cierre (no borra los movimientos del día)"
-              style={{ background:'transparent', border:'1px solid #c23b22', color:'#c23b22', borderRadius:2, padding:'5px 10px', fontSize:'0.76rem', cursor:'pointer' }}>
+              style={{ background:'transparent', border:'1px solid var(--c-laca)', color:'var(--c-laca)', borderRadius:2, padding:'5px 10px', fontSize:'0.76rem', cursor:'pointer' }}>
               ↩ Deshacer cierre
             </button>
           )}
           <input type="date" value={fecha} max={today}
             onChange={e => setFecha(e.target.value)}
             className="cierre-input"
-            style={{ color:'#8a6d1f', padding:'5px 10px', fontSize:'0.82rem' }} />
+            style={{ color:'var(--c-oro-texto)', padding:'5px 10px', fontSize:'0.82rem' }} />
         </div>
       </div>
 
@@ -575,7 +575,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
       {error && (
         <div className="cierre-hint red" style={{ fontSize:'0.82rem', display:'flex', justifyContent:'space-between' }}>
           <span>{error}</span>
-          <button onClick={() => setError(null)} style={{ background:'none', border:'none', color:'#c23b22', cursor:'pointer' }}>✕</button>
+          <button onClick={() => setError(null)} style={{ background:'none', border:'none', color:'var(--c-laca)', cursor:'pointer' }}>✕</button>
         </div>
       )}
       {msg && (
@@ -588,7 +588,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           <span style={{ fontSize:'0.9rem' }}>{parcial ? '✅' : '☀️'}</span>
           <span>Fase 1 — Mediodía {parcial ? '(sellado)' : '(pendiente)'}</span>
         </div>
-        <span style={{ color:'#b0a890', fontSize:'1rem', flexShrink:0 }}>→</span>
+        <span style={{ color:'var(--c-gris-claro)', fontSize:'1rem', flexShrink:0 }}>→</span>
         <div className={`cierre-fase ${completo ? 'ok' : parcial ? 'pend' : 'wait'}`}>
           <span style={{ fontSize:'0.9rem' }}>{completo ? '✅' : '🌙'}</span>
           <span>Fase 2 — Noche {completo ? '(cerrado)' : parcial ? '(en progreso)' : '(esperando)'}</span>
@@ -597,18 +597,18 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
 
       {/* ── CIERRE YA COMPLETO ── */}
       {completo && (
-        <div style={{ background:'#e8f5ec', border:'2px solid #4a9a6a', borderRadius:2, padding:'1.25rem' }}>
-          <div style={{ fontSize:'0.88rem', fontWeight:700, color:'#2a7a4a', marginBottom:'1rem', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+        <div style={{ background:'var(--c-musgo-fondo)', border:'2px solid var(--c-musgo)', borderRadius:2, padding:'1.25rem' }}>
+          <div style={{ fontSize:'0.88rem', fontWeight:700, color:'var(--c-musgo)', marginBottom:'1rem', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             ✅ Día cerrado — {fecha}
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.75rem', marginBottom:'1rem' }}>
             {[
-              { label:'Remanente CF',    val: completo.remanente_crc,    color:'#8a6d1f' },
-              { label:'Caja Diaria mañana', val: completo.sep_diaria_crc, color:'#2a7a4a' },
+              { label:'Remanente CF',    val: completo.remanente_crc,    color:'var(--c-oro-texto)' },
+              { label:'Caja Diaria mañana', val: completo.sep_diaria_crc, color:'var(--c-musgo)' },
             ].map(k => (
-              <div key={k.label} style={{ background:'#fff', border:'1px solid var(--t-border, #d4cfc4)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
-                <div style={{ fontSize:'0.6rem', color:'#6a6250', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>{k.label}</div>
-                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.1rem', fontWeight:800, color:k.color }}>
+              <div key={k.label} style={{ background:'var(--c-fondo)', border:'1px solid var(--c-linea)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
+                <div style={{ fontSize:'0.6rem', color:'var(--c-gris)', letterSpacing:'0.1em', marginBottom:4 }}>{k.label}</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'1.1rem', fontWeight:800, color:k.color }}>
                   {fi2(k.val)}
                 </div>
               </div>
@@ -616,19 +616,19 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
             {/* Diferencia — ₡ y US$ discriminadas con signo y color por moneda (verde sobrante /
                 rojo faltante); una moneda en 0 no se muestra. ₡ del cierre guardado; US$ derivada
                 del movimiento de ajuste (Opción B). Solo presentación — la lógica no cambia. */}
-            <div style={{ background:'#fff', border:'1px solid var(--t-border, #d4cfc4)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
-              <div style={{ fontSize:'0.6rem', color:'#6a6250', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>Diferencia</div>
+            <div style={{ background:'var(--c-fondo)', border:'1px solid var(--c-linea)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
+              <div style={{ fontSize:'0.6rem', color:'var(--c-gris)', letterSpacing:'0.1em', marginBottom:4 }}>Diferencia</div>
               {completo.diferencia_crc === 0 && ajusteUsdCerrado === 0 ? (
-                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.9rem', fontWeight:700, color:'#2a7a4a' }}>✓ Sin diferencia</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.9rem', fontWeight:700, color:'var(--c-musgo)' }}>✓ Sin diferencia</div>
               ) : (
                 <>
                   {completo.diferencia_crc !== 0 && (
-                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.1rem', fontWeight:800, color: completo.diferencia_crc < 0 ? '#c23b22' : '#2a7a4a' }}>
+                    <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'1.1rem', fontWeight:800, color: completo.diferencia_crc < 0 ? 'var(--c-laca)' : 'var(--c-musgo)' }}>
                       {completo.diferencia_crc >= 0 ? '+' : ''}{fi2(completo.diferencia_crc)}
                     </div>
                   )}
                   {ajusteUsdCerrado !== 0 && (
-                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize: completo.diferencia_crc !== 0 ? '0.82rem' : '1.1rem', fontWeight:800, color: ajusteUsdCerrado < 0 ? '#c23b22' : '#2a7a4a', marginTop: completo.diferencia_crc !== 0 ? 2 : 0 }}>
+                    <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: completo.diferencia_crc !== 0 ? '0.82rem' : '1.1rem', fontWeight:800, color: ajusteUsdCerrado < 0 ? 'var(--c-laca)' : 'var(--c-musgo)', marginTop: completo.diferencia_crc !== 0 ? 2 : 0 }}>
                       US$ {ajusteUsdCerrado >= 0 ? '+' : ''}{ajusteUsdCerrado.toFixed(2)}
                     </div>
                   )}
@@ -637,7 +637,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
             </div>
           </div>
           {completo.notas && (
-            <div style={{ fontSize:'0.78rem', color:'#6a6250', padding:'0.5rem 0.75rem', background:'var(--t-panel, #ede8de)', borderRadius:2 }}>
+            <div style={{ fontSize:'0.78rem', color:'var(--c-gris)', padding:'0.5rem 0.75rem', background:'var(--c-panel)', borderRadius:2 }}>
               📝 {completo.notas}
             </div>
           )}
@@ -649,7 +649,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
         <>
           {!parcial ? (
             /* Formulario Fase 1 */
-            <Section title="Ventas mediodía" icon="☀️" color="#8a6d1f">
+            <Section title="Ventas mediodía" icon="☀️" color="var(--c-oro-texto)">
               <Row2>
                 <Field label={postCorte ? 'Ventas en efectivo BRUTAS ₡ (sin restar propinas)' : 'Ventas PoS ₡'}>
                   <MontoInput prefix="₡" value={vmCRC} onChange={setVmCRC} />
@@ -661,27 +661,27 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               {(N(vmCRC) > 0 || N(vmUSD) > 0) && (
                 <div className="cierre-hint gold">
                   Efectivo real ₡ (ventas − dólares): <strong>{fi2(efRealM)}</strong>
-                  {N(vmUSD) > 0 && <span style={{ color:'#6a6250' }}> · dólares físicos: <strong>${N(vmUSD).toFixed(2)}</strong></span>}
+                  {N(vmUSD) > 0 && <span style={{ color:'var(--c-gris)' }}> · dólares físicos: <strong>${N(vmUSD).toFixed(2)}</strong></span>}
                 </div>
               )}
               {/* Propinas: ya NO se tipean — se pagan por la vía real (sección "Propinas del día")
                   y acá se muestra lo efectivamente pagado, que es lo que resta del neto. */}
               <Row2>
                 <Field label="Propinas pagadas ₡ (vía real — se sella con la Fase 1)">
-                  <div className="cierre-monto" style={{ height:38, alignItems:'center', display:'flex', padding:'0 10px', fontFamily:"'DM Mono',monospace", fontWeight:700, color:'#8a5aa8' }}>
+                  <div className="cierre-monto" style={{ height:38, alignItems:'center', display:'flex', padding:'0 10px', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight:700, color:'#8a5aa8' }}>
                     {fi2(propinasPagadasDia)}
                   </div>
                 </Field>
                 <div />
               </Row2>
               {ventasMCeroReal && (
-                <label style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdf6e3', border:'1px solid #d8b84a', borderRadius:2, fontSize:'0.78rem', color:'#6a5320', cursor:'pointer', marginTop:'0.25rem' }}>
+                <label style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'var(--c-oro-fondo)', border:'1px solid var(--c-oro-texto)', borderRadius:2, fontSize:'0.78rem', color:'var(--c-oro-texto)', cursor:'pointer', marginTop:'0.25rem' }}>
                   <input type="checkbox" checked={confirmVentasCeroM} onChange={e => setConfirmVentasCeroM(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
                   <span>Confirmo que las ventas del turno fueron <strong>₡0</strong> — no es un error de carga.</span>
                 </label>
               )}
               {postCorte && ventaSospechosaDeSerNeta(N(vmCRC), propinasPagadasDia) && (
-                <label data-testid="aviso-venta-neta-m" style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdecea', border:'1px solid #c23b22', borderRadius:2, fontSize:'0.78rem', color:'#7a2417', cursor:'pointer', marginTop:'0.25rem' }}>
+                <label data-testid="aviso-venta-neta-m" style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'var(--c-laca-fondo)', border:'1px solid var(--c-laca)', borderRadius:2, fontSize:'0.78rem', color:'var(--c-laca)', cursor:'pointer', marginTop:'0.25rem' }}>
                   <input type="checkbox" checked={confirmVentaBrutaM} onChange={e => setConfirmVentaBrutaM(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
                   <span>
                     ⚠ Las ventas ({fi2(N(vmCRC))}) son <strong>menores</strong> que las propinas pagadas hoy ({fi2(propinasPagadasDia)}).
@@ -705,11 +705,11 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
                   <span>🔒</span>
                   <div>
-                    <div style={{ fontSize:'0.82rem', fontWeight:600, color:'var(--t-ink, #0d0d0d)' }}>Ventas mediodía — sellado</div>
-                    <div style={{ fontSize:'0.65rem', color:'#8a8272' }}>Registrado · no editable</div>
+                    <div style={{ fontSize:'0.82rem', fontWeight:600, color:'var(--c-tinta)' }}>Ventas mediodía — sellado</div>
+                    <div style={{ fontSize:'0.65rem', color:'var(--c-gris)' }}>Registrado · no editable</div>
                   </div>
                 </div>
-                <span style={{ fontSize:'0.65rem', color:'#2a7a4a', background:'#e8f5ec', padding:'2px 8px', borderRadius:10, border:'1px solid #b0d8b8' }}>✓ Confirmado</span>
+                <span style={{ fontSize:'0.65rem', color:'var(--c-musgo)', background:'var(--c-musgo-fondo)', padding:'2px 8px', borderRadius:10, border:'1px solid var(--c-musgo-borde)' }}>✓ Confirmado</span>
               </div>
               {[
                 { l:'Ventas PoS ₡', v: fi2(parcial.vm_crc) },
@@ -724,8 +724,8 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 </div>
               ))}
               <div className="cierre-kv total">
-                <span style={{ color:'#6a6250', fontSize:'0.68rem', textTransform:'uppercase', letterSpacing:'0.08em' }}>Efectivo neto mediodía</span>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.9rem', fontWeight:700, color:'#8a6d1f' }}>
+                <span style={{ color:'var(--c-gris)', fontSize:'0.68rem', letterSpacing:'0.08em' }}>Efectivo neto mediodía</span>
+                <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.9rem', fontWeight:700, color:'var(--c-oro-texto)' }}>
                   {fi2((parcial.ef_real_m_crc||0) - (parcial.propinas_m_crc||0) - (parcial.otros_m_crc||0))}
                 </span>
               </div>
@@ -738,7 +738,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           {/* ── FASE 2: Noche (solo si Fase 1 cerrada) ── */}
           {parcial && (
             <>
-              <Section title="Ventas noche" icon="🌙" color="#3a7794">
+              <Section title="Ventas noche" icon="🌙" color="var(--c-azul)">
                 <Row2>
                   <Field label="Ventas PoS ₡">
                     <MontoInput prefix="₡" value={vnCRC} onChange={setVnCRC} />
@@ -750,17 +750,17 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 {(N(vnCRC) > 0 || N(vnUSD) > 0) && (
                   <div className="cierre-hint blue">
                     Efectivo real ₡ (ventas − dólares): <strong>{fi2(efRealN)}</strong>
-                    {N(vnUSD) > 0 && <span style={{ color:'#6a6250' }}> · dólares físicos: <strong>${N(vnUSD).toFixed(2)}</strong></span>}
+                    {N(vnUSD) > 0 && <span style={{ color:'var(--c-gris)' }}> · dólares físicos: <strong>${N(vnUSD).toFixed(2)}</strong></span>}
                   </div>
                 )}
                 {ventasNCeroReal && (
-                  <label style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdf6e3', border:'1px solid #d8b84a', borderRadius:2, fontSize:'0.78rem', color:'#6a5320', cursor:'pointer', marginBottom:'0.6rem' }}>
+                  <label style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'var(--c-oro-fondo)', border:'1px solid var(--c-oro-texto)', borderRadius:2, fontSize:'0.78rem', color:'var(--c-oro-texto)', cursor:'pointer', marginBottom:'0.6rem' }}>
                     <input type="checkbox" checked={confirmVentasCeroN} onChange={e => setConfirmVentasCeroN(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
                     <span>Confirmo que las ventas del turno fueron <strong>₡0</strong> — no es un error de carga.</span>
                   </label>
                 )}
                 {postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && (
-                  <label data-testid="aviso-venta-neta-n" style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdecea', border:'1px solid #c23b22', borderRadius:2, fontSize:'0.78rem', color:'#7a2417', cursor:'pointer', marginBottom:'0.6rem' }}>
+                  <label data-testid="aviso-venta-neta-n" style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'var(--c-laca-fondo)', border:'1px solid var(--c-laca)', borderRadius:2, fontSize:'0.78rem', color:'var(--c-laca)', cursor:'pointer', marginBottom:'0.6rem' }}>
                     <input type="checkbox" checked={confirmVentaBrutaN} onChange={e => setConfirmVentaBrutaN(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
                     <span>
                       ⚠ Las ventas ({fi2(N(vnCRC))}) son <strong>menores</strong> que las propinas pagadas hoy ({fi2(propinasPagadasDia)}).
@@ -771,7 +771,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 <Row2>
                   {/* Pierna N = pagadas por la vía real DESPUÉS del sellado de Fase 1. */}
                   <Field label="Propinas pagadas tras Fase 1 ₡ (vía real)">
-                    <div className="cierre-monto" style={{ height:38, alignItems:'center', display:'flex', padding:'0 10px', fontFamily:"'DM Mono',monospace", fontWeight:700, color:'#8a5aa8' }}>
+                    <div className="cierre-monto" style={{ height:38, alignItems:'center', display:'flex', padding:'0 10px', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight:700, color:'#8a5aa8' }}>
                       {fi2(propNLeg)}
                     </div>
                   </Field>
@@ -790,8 +790,8 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               {propinasDelDia}
 
               {/* Separaciones */}
-              <Section title="Conteo físico — separaciones" icon="📊" color="#2a7a4a">
-                <div style={{ fontSize:'0.72rem', color:'#6a6250', marginBottom:'0.75rem' }}>
+              <Section title="Conteo físico — separaciones" icon="📊" color="var(--c-musgo)">
+                <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', marginBottom:'0.75rem' }}>
                   Juntá todo el efectivo, separás las asignaciones y contás el remanente de Caja Fuerte.
                 </div>
                 <table className="cierre-table">
@@ -804,14 +804,14 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                   </thead>
                   <tbody>
                     {[
-                      { label:'Caja Diaria mañana', sub:'separación día siguiente', color:'#2a7a4a', crc:sepDiariaCRC, setCRC:setSepDiariaCRC, usd:sepDiariaUSD, setUSD:setSepDiariaUSD },
-                      { label:'Caja Registradora',  sub:'para vuelto mañana',       color:'#6a6250', crc:sepRegCRC,    setCRC:setSepRegCRC,    usd:sepRegUSD,    setUSD:setSepRegUSD    },
+                      { label:'Caja Diaria mañana', sub:'separación día siguiente', color:'var(--c-musgo)', crc:sepDiariaCRC, setCRC:setSepDiariaCRC, usd:sepDiariaUSD, setUSD:setSepDiariaUSD },
+                      { label:'Caja Registradora',  sub:'para vuelto mañana',       color:'var(--c-gris)', crc:sepRegCRC,    setCRC:setSepRegCRC,    usd:sepRegUSD,    setUSD:setSepRegUSD    },
                       { label:'Remanente CF',        sub:'queda en Caja Fuerte',     color:'#8a5aa8', crc:remCRC,       setCRC:setRemCRC,       usd:remUSD,       setUSD:setRemUSD       },
                     ].map(row => (
                       <tr key={row.label} style={{ background: row.color === '#8a5aa8' ? 'rgba(138,90,168,.06)' : undefined }}>
                         <td style={{ padding:'0.625rem 0.75rem' }}>
                           <div style={{ fontSize:'0.8rem', fontWeight:600, color:row.color }}>{row.label}</div>
-                          <div style={{ fontSize:'0.65rem', color:'#8a8272', marginTop:1 }}>{row.sub}</div>
+                          <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginTop:1 }}>{row.sub}</div>
                         </td>
                         <td style={{ padding:'0.3rem 0.5rem' }}>
                           <MontoInput prefix="₡" value={row.crc} onChange={row.setCRC} compact />
@@ -822,11 +822,11 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                       </tr>
                     ))}
                     <tr className="total">
-                      <td style={{ padding:'0.625rem 0.75rem', fontSize:'0.78rem', color:'#6a6250' }}>Total contado</td>
-                      <td style={{ padding:'0.625rem 0.5rem', fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'#2a7a4a', textAlign:'center' }}>
+                      <td style={{ padding:'0.625rem 0.75rem', fontSize:'0.78rem', color:'var(--c-gris)' }}>Total contado</td>
+                      <td style={{ padding:'0.625rem 0.5rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color:'var(--c-musgo)', textAlign:'center' }}>
                         {totalContadoCRC > 0 ? fi2(totalContadoCRC) : '—'}
                       </td>
-                      <td style={{ padding:'0.625rem 0.5rem', fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'#2a7a4a', textAlign:'center' }}>
+                      <td style={{ padding:'0.625rem 0.5rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color:'var(--c-musgo)', textAlign:'center' }}>
                         {totalContadoUSD > 0 ? `$${totalContadoUSD.toFixed(2)}` : '—'}
                       </td>
                     </tr>
@@ -834,7 +834,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 </table>
 
                 {primerConteo && (
-                  <div style={{ fontSize:'0.72rem', color:'#8a5040', margin:'0.5rem 0' }}>
+                  <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', margin:'0.5rem 0' }}>
                     ↺ Reconteo — el primer conteo ({fi2(primerConteo.crc)}{primerConteo.usd ? ` · $${primerConteo.usd.toFixed(2)}` : ''}) quedó guardado.
                   </div>
                 )}
@@ -878,7 +878,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                           )}
                           {dPozo.indeterminados.cantidad > 0 && (
                             <div className="cierre-resumen-row">
-                              <span className="lbl" style={{ color:'#8a5a1f' }}>
+                              <span className="lbl" style={{ color:'var(--c-oro-texto)' }}>
                                 ⚠ {dPozo.indeterminados.cantidad} traspaso(s) sin dirección legible ({fi2(dPozo.indeterminados.crc)}) — neutros
                               </span>
                               <span className="val">—</span>
@@ -930,8 +930,8 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
 
                 {/* Ajuste obligatorio si hay diferencia */}
                 {requiresAjuste && (
-                  <div style={{ background:'#fdf0ee', border:'2px solid #c23b22', borderRadius:2, padding:'0.875rem', marginBottom:'0.75rem' }}>
-                    <div style={{ fontSize:'0.82rem', fontWeight:700, color:'#c23b22', marginBottom:'0.4rem' }}>
+                  <div style={{ background:'var(--c-laca-fondo)', border:'2px solid var(--c-laca)', borderRadius:2, padding:'0.875rem', marginBottom:'0.75rem' }}>
+                    <div style={{ fontSize:'0.82rem', fontWeight:700, color:'var(--c-laca)', marginBottom:'0.4rem' }}>
                       {recuentoResuelto
                         ? '⚠ Diferencia detectada — registrá el motivo para cerrar'
                         : '⚠ Diferencia detectada — al cerrar vas a poder recontar una vez'}
@@ -941,22 +941,22 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                     <div style={{ display:'grid', gridTemplateColumns:'6em 1fr', rowGap:4, alignItems:'baseline', marginBottom:'0.75rem' }}>
                       {diferencia !== null && !cuadra && (
                         <>
-                          <span style={{ fontSize:'0.66rem', color:'#8a5040', textTransform:'uppercase', letterSpacing:'0.1em' }}>₡ Colones</span>
-                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'#c23b22' }}>
+                          <span style={{ fontSize:'0.66rem', color:'var(--c-gris)', letterSpacing:'0.1em' }}>₡ Colones</span>
+                          <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color:'var(--c-laca)' }}>
                             {diferencia >= 0 ? '+' : ''}{fi2(diferencia)}
                           </span>
                         </>
                       )}
                       {difUSD !== null && !cuadraUSD && (
                         <>
-                          <span style={{ fontSize:'0.66rem', color:'#8a5040', textTransform:'uppercase', letterSpacing:'0.1em' }}>US$ Dólares</span>
-                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'#c23b22' }}>
+                          <span style={{ fontSize:'0.66rem', color:'var(--c-gris)', letterSpacing:'0.1em' }}>US$ Dólares</span>
+                          <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color:'var(--c-laca)' }}>
                             {difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}
                           </span>
                         </>
                       )}
                     </div>
-                    <div style={{ fontSize:'0.68rem', color:'#8a5040', marginBottom:'0.75rem' }}>
+                    <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginBottom:'0.75rem' }}>
                       Al confirmar, la diferencia queda registrada como movimiento de <strong>Ajuste de cierre</strong> en Caja Fuerte (faltante resta · sobrante suma) — el saldo del sistema arranca mañana del físico contado.
                     </div>
                     {recuentoResuelto && (
@@ -964,16 +964,16 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                       <Field label="Tipo">
                         {/* Ítem 3: derivado del signo de la diferencia — solo lectura (no un select que contradiga la plata). */}
                         <div className="cierre-input" aria-label="Tipo de ajuste"
-                          style={{ width:'100%', padding:'6px 8px', fontSize:'0.82rem', display:'flex', alignItems:'center', gap:6, background:'#f3efe6' }}>
+                          style={{ width:'100%', padding:'6px 8px', fontSize:'0.82rem', display:'flex', alignItems:'center', gap:6, background:'var(--c-panel)' }}>
                           <strong>{ajusteTipoDerivado}</strong>
-                          <span style={{ fontSize:'0.66rem', color:'#8a8378' }}>(según el signo de la diferencia)</span>
+                          <span style={{ fontSize:'0.66rem', color:'var(--c-gris)' }}>(según el signo de la diferencia)</span>
                         </div>
                       </Field>
                       <Field label="Motivo *">
                         <input value={ajusteMotivo} onChange={e => setAjusteMotivo(e.target.value)}
                           placeholder="Descripción obligatoria…"
                           className="cierre-input"
-                          style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem', ...(ajusteMotivo ? {} : { border:'1px solid #c23b22' }) }} />
+                          style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem', ...(ajusteMotivo ? {} : { border:'1px solid var(--c-laca)' }) }} />
                       </Field>
                     </div>
                     )}
@@ -1004,15 +1004,15 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
       )}
 
       {/* ── Más acciones: lo destructivo va al pie, lejos de la fecha (rediseño A3). Misma función y permisos. ── */}
-      <div style={{ marginTop:'2rem', paddingTop:'1rem', borderTop:'1px solid #e6e4de' }}>
-        <div style={{ fontSize:'0.65rem', color:'#6e706c', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'0.5rem' }}>Más acciones</div>
+      <div style={{ marginTop:'2rem', paddingTop:'1rem', borderTop:'1px solid var(--c-linea)' }}>
+        <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', letterSpacing:'0.1em', marginBottom:'0.5rem' }}>Más acciones</div>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.75rem', flexWrap:'wrap',
-                      background:'#f6e4e1', border:'1px solid #a3392d', borderRadius:4, padding:'0.75rem 1rem' }}>
-          <div style={{ fontSize:'0.78rem', color:'#a3392d', flex:'1 1 220px' }}>
+                      background:'var(--c-laca-fondo)', border:'1px solid var(--c-laca)', borderRadius:4, padding:'0.75rem 1rem' }}>
+          <div style={{ fontSize:'0.78rem', color:'var(--c-laca)', flex:'1 1 220px' }}>
             Deshace el cierre y borra todos los movimientos del día, para recargarlo desde cero. Antes muestra una vista previa.
           </div>
           <button type="button" onClick={handleBorrarDia} disabled={saving} title="Deshacer el cierre Y borrar TODOS los movimientos del día (recargar de cero)"
-            style={{ background:'#a3392d', border:'none', color:'#fff', borderRadius:4, padding:'0 14px', minHeight:44, fontSize:'0.82rem', fontWeight:600, cursor:'pointer' }}>
+            style={{ background:'var(--c-laca)', border:'none', color:'var(--c-fondo)', borderRadius:4, padding:'0 14px', minHeight:44, fontSize:'0.82rem', fontWeight:600, cursor:'pointer' }}>
             🗑 Borrar TODO el día
           </button>
         </div>
@@ -1030,7 +1030,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 {difUSD !== null && !cuadraUSD ? `${diferencia !== null && !cuadra ? ' · ' : ''}US$ ${difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}` : ''}
               </span>
             </div>
-            <div style={{ fontSize:'0.75rem', color:'#6a6250', marginBottom:'1rem' }}>
+            <div style={{ fontSize:'0.75rem', color:'var(--c-gris)', marginBottom:'1rem' }}>
               Si recontás, este primer conteo queda guardado y las separaciones quedan en blanco para contar de nuevo. Si después sigue fuera, se pide el motivo.
             </div>
             <div className="cd-modal-actions">
@@ -1072,7 +1072,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
             <div className="cd-resumen-block">
               <div className="cd-resumen-row">
                 <span>Caja Diaria mañana</span>
-                <strong style={{ color:'#2a7a4a' }}>{fi2(N(sepDiariaCRC))}{N(sepDiariaUSD) > 0 ? ` · $${N(sepDiariaUSD).toFixed(2)}` : ''}</strong>
+                <strong style={{ color:'var(--c-musgo)' }}>{fi2(N(sepDiariaCRC))}{N(sepDiariaUSD) > 0 ? ` · $${N(sepDiariaUSD).toFixed(2)}` : ''}</strong>
               </div>
               <div className="cd-resumen-row">
                 <span>Caja Registradora</span>
@@ -1080,7 +1080,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               </div>
               <div className="cd-resumen-row">
                 <span>Remanente CF</span>
-                <strong style={{ color:'#8a6d1f' }}>{fi2(N(remCRC))}{N(remUSD) > 0 ? ` · $${N(remUSD).toFixed(2)}` : ''}</strong>
+                <strong style={{ color:'var(--c-oro-texto)' }}>{fi2(N(remCRC))}{N(remUSD) > 0 ? ` · $${N(remUSD).toFixed(2)}` : ''}</strong>
               </div>
               <div className="cd-resumen-row total">
                 <span>Total contado</span>
@@ -1148,10 +1148,10 @@ function CollapsibleSection({ title, icon, color, open, onToggle, children }: {
     <div className="cierre-card">
       <button type="button" className="cierre-card-head" aria-expanded={open} onClick={onToggle}
         style={{ width:'100%', font:'inherit', textAlign:'left', cursor:'pointer', border:'none',
-                 borderBottom: open ? '1px solid var(--t-border, #d4cfc4)' : 'none' }}>
+                 borderBottom: open ? '1px solid var(--c-linea)' : 'none' }}>
         <span style={{ fontSize:'1.1rem' }}>{icon}</span>
         <div style={{ fontSize:'0.85rem', fontWeight:600, color, flex:1 }}>{title}</div>
-        <span style={{ color:'#8a8272', fontSize:'0.8rem' }}>{open ? '▼' : '▶'}</span>
+        <span style={{ color:'var(--c-gris)', fontSize:'0.8rem' }}>{open ? '▼' : '▶'}</span>
       </button>
       {open && <div className="cierre-card-body">{children}</div>}
     </div>
@@ -1165,7 +1165,7 @@ function Row2({ children }: { children: React.ReactNode }) {
 function Field({ label, children }: { label:string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize:'0.65rem', color:'#6a6250', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', letterSpacing:'0.1em', marginBottom:4 }}>{label}</div>
       {children}
     </div>
   )

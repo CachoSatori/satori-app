@@ -22,8 +22,8 @@ function N(v: number | ''): number { return Number(v) || 0 }
 // los inputs en cada tecla y la regla react-hooks/static-components).
 const card = { background: 'var(--t-paper,#f5f0e8)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '0.875rem 1rem' } as const
 const lbl  = { fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase' as const, color: '#5a5040' }
-const num  = { fontFamily: "'DM Mono', monospace", fontWeight: 700 } as const
-const inputStyle = { width: '100%', background: '#111', border: '1px solid #2a2a2a', color: 'var(--t-gold,#a07830)', padding: '6px 10px', borderRadius: 2, fontSize: '0.9rem', fontFamily: "'DM Mono', monospace" } as const
+const num  = { fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700 } as const
+const inputStyle = { width: '100%', background: 'var(--c-fondo)', border: '1px solid var(--c-linea)', color: 'var(--c-tinta)', padding: '6px 10px', borderRadius: 2, fontSize: '0.9rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' } as const
 
 function Field({ label, value, onChange }: { label: string; value: number | ''; onChange: (v: number | '') => void }) {
   return (

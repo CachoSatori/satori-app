@@ -503,7 +503,7 @@ function Mini({ label, val, color }: { label: string; val: string; color?: strin
   return (
     <div style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 2, padding: '0.4rem 0.5rem' }}>
       <div style={{ fontSize: '0.56rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#5a5040' }}>{label}</div>
-      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: color ?? 'var(--t-ink,#0d0d0d)', fontFamily: 'DM Mono, monospace' }}>{val}</div>
+      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: color ?? 'var(--t-ink,#0d0d0d)', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' }}>{val}</div>
     </div>
   )
 }

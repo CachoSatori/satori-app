@@ -52,6 +52,12 @@ vi.mock('../shared/api/jornadasConVentas', () => ({
   getJornadasConVentas: async () => { if (jornadasFalla) throw new Error('sin conexión'); return [] },
 }))
 
+let clubFalla = false
+let clubExcepciones = 0
+vi.mock('../shared/api/club', () => ({
+  getExcepcionesAbiertas: async () => { if (clubFalla) throw new Error('sin conexión'); return clubExcepciones },
+}))
+
 import HomePage from './HomePage'
 import { olvidarAlertaInicio } from './alertaInicio'
 
@@ -69,6 +75,8 @@ beforeEach(() => {
   baseCaida = false
   cierresLecturas = 0
   cierresEnEspera = null
+  clubFalla = false
+  clubExcepciones = 0
   olvidarAlertaInicio()
   sessionStorage.clear()
 })
@@ -232,6 +240,33 @@ describe('Inicio (B5) · alerta de días sin cierre una vez por sesión', () => 
     expect(screen.getByText('Revisando el día…')).toBeTruthy()
     expect(screen.queryByText('Todo en orden')).toBeNull()
     soltar()
+    await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
+  })
+})
+
+// Pase a producción (auditoría 208): la lectura de excepciones del Club también cuenta.
+describe('Inicio · Club (pase a producción)', () => {
+  it('owner: si falla la lectura del Club, nunca «Todo en orden»; sale «sin comprobar»', async () => {
+    clubFalla = true
+    montar()
+    await waitFor(() => expect(screen.getByText('No se pudo comprobar todo — revisá Caja.')).toBeTruthy())
+    expect(screen.queryByText('Todo en orden.')).toBeNull()
+    expect(screen.getByText('sin comprobar', { selector: '.inicio-pendiente .pildora' })).toBeTruthy()
+  })
+  it('owner con 0 excepciones y todo bien: «Todo en orden.»', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
+  })
+  it('owner con excepciones abiertas: sale «Revisar las excepciones del Club»', async () => {
+    clubExcepciones = 2
+    montar()
+    await waitFor(() => expect(screen.getByText('Revisar las excepciones del Club')).toBeTruthy())
+    expect(screen.queryByText('Todo en orden.')).toBeNull()
+  })
+  it('contador: la lectura del Club no le afecta (no ve el Club)', async () => {
+    role = 'contador'
+    clubFalla = true
+    montar()
     await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
   })
 })

@@ -122,3 +122,18 @@ describe('pendientes · Club (pase a producción)', () => {
     expect(calcularPendientes({ ...base, clubExcepciones: null }, new Set(['club']))).toEqual([])
   })
 })
+
+describe('pendientes · lectura del Club fallida (auditoría 208)', () => {
+  const base = {
+    cashOpen: false, cashOpenHours: 0, tipOpen: false, tipOpenHours: 0, pendingCount: 0,
+    invOutStock: 0, invLowStock: 0, sopsCount: 3, esLunes: false, diasSinCierre: 0, turnosViejos: 0,
+  }
+  it('con el Club y Caja visibles: «sin comprobar» y la frase nunca es «Todo en orden»', () => {
+    const p = calcularPendientes({ ...base, sinComprobar: ['club'] }, new Set(['club', 'cash']))
+    expect(p.map(x => x.id)).toEqual(['sin-comprobar'])
+    expect(fraseEstado(p)).not.toBe('Todo en orden.')
+  })
+  it('si el rol no ve el Club, la falla no cuenta', () => {
+    expect(calcularPendientes({ ...base, sinComprobar: ['club'] }, new Set(['cash']))).toEqual([])
+  })
+})

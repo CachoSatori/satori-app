@@ -250,6 +250,7 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [status, setStatus] = useState<HomeStatus | null>(null)
   const [clubAbiertas, setClubAbiertas] = useState(0)   // excepciones del puente abiertas (owner, manager)
+  const [clubFallo, setClubFallo] = useState(false)    // la lectura de excepciones del Club falló (208)
   // B5: si `fetchHomeStatus` falla entero, se dice — no «Revisando el día…» para siempre.
   const [statusFallo, setStatusFallo] = useState(false)
 
@@ -275,7 +276,10 @@ export default function HomePage() {
   const gestionaClub = profile?.role === 'owner' || profile?.role === 'manager'
   useEffect(() => {
     if (mustLand || !gestionaClub) return
-    import('../shared/api/club').then(m => m.getExcepcionesAbiertas(30)).then(setClubAbiertas).catch(() => {})
+    // Auditoría 208: si la lectura del Club falla, el Inicio dice «sin comprobar» (nunca «Todo en orden»).
+    import('../shared/api/club').then(m => m.getExcepcionesAbiertas(30))
+      .then(n => { setClubAbiertas(n); setClubFallo(false) })
+      .catch(() => setClubFallo(true))
   }, [mustLand, gestionaClub])
 
   const role = profile?.role ?? ''
@@ -312,6 +316,7 @@ export default function HomePage() {
     const alertaOk = alerta && alerta !== 'fallo' ? alerta : null
     const sinComprobar = [...status.fallas]
     if (alerta === 'fallo') sinComprobar.push('cierres')
+    if (gestionaClub && clubFallo) sinComprobar.push('club')
     return calcularPendientes({
       cashOpen:      status.cashOpen,
       cashOpenHours: status.cashOpenHours,
@@ -325,9 +330,9 @@ export default function HomePage() {
       diasSinCierre: alertaOk ? alertaOk.dias.length : null,
       turnosViejos:  alertaOk ? alertaOk.turnos.length : null,
       sinComprobar,
-      clubExcepciones: gestionaClub ? clubAbiertas : null,
+      clubExcepciones: gestionaClub && !clubFallo ? clubAbiertas : null,
     }, visibles)
-  }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas])
+  }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas, clubFallo])
 
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol

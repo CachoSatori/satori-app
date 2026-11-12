@@ -25,13 +25,15 @@ export interface Pendiente {
  * se marca «sin comprobar» y el Inicio nunca dice «Todo en orden».
  */
 export type Senal = 'caja' | 'movimientos' | 'cierres' | 'propinas' | 'inventario' | 'procedimientos'
+  // Pase a producción (auditoría 208): excepciones del Club (owner y manager).
+  | 'club'
   // Las de los 3 números del día: no generan pendientes, pero si fallan tampoco hay «Todo en orden».
   | 'venta' | 'meta' | 'propinasDia' | 'cajaDia'
 
 /** Módulo de cada lectura: la falla solo cuenta si el rol ve ese módulo. */
 const MODULO_DE_SENAL: Record<Senal, string> = {
   caja: 'cash', movimientos: 'cash', cierres: 'cash',
-  propinas: 'tips', inventario: 'inventario', procedimientos: 'sops',
+  propinas: 'tips', inventario: 'inventario', procedimientos: 'sops', club: 'club',
   venta: 'dashboard', meta: 'dashboard', propinasDia: 'tips', cajaDia: 'cash',
 }
 

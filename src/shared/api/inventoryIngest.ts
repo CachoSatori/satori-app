@@ -170,8 +170,8 @@ export async function commitInventoryForDocument(params: {
   return { ingresados }
 }
 
-// ── Edición de líneas (UI compartida: Bandeja InventoryStep ↔ Revisión InvRevision) ──
-// Extraído de InventoryStep para que ambos flujos resuelvan el mapeo con la MISMA lógica.
+// ── Edición de líneas (la usa Revisión de inventario, InvRevision) ──
+// Extraído del paso de inventario que tenía la Bandeja (InventoryStep, retirado el 12-nov por no tener uso).
 export const NONE = '__none__'
 export const NEW = '__new__'
 export const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
@@ -213,7 +213,7 @@ export function resolveLine(it: DocItem, map: SupplierItemMap[], ingredients: In
 
 // Resolver las líneas editadas → InvLine[], creando ingredientes nuevos al vuelo.
 // Lanza Error con mensaje legible si falta una selección. `proveedorName` queda como dueño
-// del ingrediente recién creado. (Igual que el confirmar de InventoryStep, sin el commit.)
+// del ingrediente recién creado. (Igual que el confirmar del paso viejo de la Bandeja, sin el commit.)
 export async function resolveEditLines(lines: EditLine[], ingredients: Ingredient[], proveedorName: string): Promise<InvLine[]> {
   const resolved: InvLine[] = []
   for (const l of lines) {

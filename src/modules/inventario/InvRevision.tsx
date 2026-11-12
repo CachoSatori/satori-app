@@ -5,7 +5,7 @@
  * insumos en Caja (classification='mercaderia') que todavía no tiene su inventario
  * ingresado. El revisor (owner/manager/contador — cajero EXCLUIDO) empareja los ítems
  * de la factura con ingredientes y COMPLETA (→ complete_inventory_review) o DESCARTA
- * con motivo (→ discard_inventory_review). Reusa el mapeo de InventoryStep vía InvLineTable.
+ * con motivo (→ discard_inventory_review). Reusa el mapeo de líneas vía InvLineTable.
  *
  * F4: además de mapear, se puede editar METADATOS — proveedor y nota — que se sincronizan
  * con el cash_movement ligado (supplier_id/supplier_name → ambos; nota → description).

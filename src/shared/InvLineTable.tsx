@@ -4,7 +4,7 @@ import { N, NONE, NEW, type EditLine } from './api/inventoryIngest'
 /**
  * Tabla editable de líneas de factura → ingrediente (dropdown + cantidad/factor/precio).
  * Presentacional: el estado de las líneas vive en el padre. La comparte la Bandeja
- * (InventoryStep) y la cola de Revisión de inventario (InvRevision) para no duplicar el mapeo.
+ * (el paso de inventario que tenía la Bandeja, ya retirado) y la cola de Revisión de inventario (InvRevision) para no duplicar el mapeo.
  */
 export default function InvLineTable({ lines, ingredients, onUpdate, onSelIngredient }: {
   lines: EditLine[]

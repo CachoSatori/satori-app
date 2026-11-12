@@ -522,8 +522,13 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
   (Success en 34 s, alias `club.satoricostarica.com`).
 - **Configuración del 12-nov (el dueño):** Worker desde `main` 07:05 CR (Version `fa9383cf…`); `/api/salud` 07:05 con
   `x-club-api: worker` y todo en `true`; §6.1–6.4 a las 07:07 en una transacción; carga única (§6.5) aplicada a las 07:14
-  con 0 diferencias; modo transición (§6.5b) a las 07:16. **Santa Teresa sigue apagado** (`club_activo` false): falta §6.6.
-  Por confirmar: la conexión del Worker al repo (§11.4 paso 7) y las 2 filas de `club_config_historial` de §6.5b.
+  con 0 diferencias; modo transición (§6.5b) a las 07:16.
+- **Cierre del 12-nov:** el #138 (estilo carta del sitio del Club) entró a `main` (`e3d0fde`, 09:21 CR) con deploy de Pages en
+  verde. A las 10:21 el dueño verificó `/api/salud` (`x-club-api: worker`, todo en `true`) y el portal del hotel con el
+  estilo nuevo en el celular. **El Club está encendido en Santa Teresa** (§6.6), con la promoción «Local Club» al 15 %
+  vigente y las cortesías Crepe (397) y Banana flambé (398) activas. Nosara sigue apagado.
+  Quedan por anotar: la conexión del Worker al repo (§11.4 paso 7), las 2 filas de `club_config_historial` de §6.5b, la
+  prueba de fuego (§11.3) y `lc_excepciones_desde` del día de la apertura.
 - **Deuda:** en `club-web/worker/wrangler.toml`, pasar los topes de `[[unsafe.bindings]]` a `[[ratelimits]]` (el formato
   propio de wrangler para rate limiting), para que el aviso del deploy deje de listarlos como diferencia (§11.4 paso 4c).
   En el backlog: `PROMPT-CONTINUACION.md`, P1 22w.
@@ -573,10 +578,11 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 6.5b modo transición: tope 12 y `tarjeta_manual_activa` encendida en Santa Teresa, después de la carga única (§6.5b) | antes: false · 30 → después: true · 12 · 2 filas en `club_config_historial` | ✅ 12-nov **07:16 CR**: `santa-teresa` · `tarjeta_manual_activa` true · tope 12 · `club_activo` false. `nosara` sin cambios. Las 2 filas de `club_config_historial`: no informado |
 | Pages `satori-club`: primer deploy de producción | Deployed | ❌ 11-nov a la noche: **Build failed** en `17a9efd`, `980cd74` y `cf1a61d` (checks 130992048866, 131000778968 y 131002778386). **Causa real (log de `cf1a61d`, 12-nov):** «Configuration file for Pages projects does not support "unsafe"» → «Failed: unable to read the Wrangler configuration file with code: 1»; el build nunca corrió (§11.1b). El problema de vitest en `tsc --noEmit` también era real, pero estaba detrás: lo arregló el #125 · ✅ **12-nov:** deploy `98813ce0` de `a4300ab`, **Success en 34 s** (fila de abajo) |
 | #125 y #129 mergeados · deploy de `satori-club` en verde (SHA, hora) | Deployed | #125: `cf1a61d5fff80f9869cbd3181a0c8b48bf99f678`, 11-nov 23:50:27 CR (por indicación del dueño; deploy **Build failed** por la causa de arriba) · **#129** (se borra `club-web/wrangler.toml`; el binding `CLUB_API` → `satori-club-api` cargado antes en el panel, Production, y build, rama y las 7 variables verificadas por el dueño): firma del dueño 12-nov 06:55 CR sobre `b29702e` · merge `a4300ab9dddbc214ff2d09c613f481f40f40801e` a las **06:57:34 CR** (merge commit, lo hizo Claude) · ✅ «Cloudflare Pages: satori-club» **Deployed successfully** (check 131198782258): deploy `98813ce0`, **Success en 34 s**, alias `club.satoricostarica.com`. Log verificado por el dueño en el panel |
-| 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
+| #138 (estilo carta del sitio del Club) · deploy de `satori-club` | Deployed | ✅ 12-nov: merge → `main` `e3d0fde6adcd96ce2fcf1264cd84aabc47366372` a las **09:21 CR** · deploy de `satori-club` **Success**. Verificación del dueño **10:21 CR**: `/api/salud` con `x-club-api: worker` y todo en `true`; el portal del hotel con el estilo nuevo, en el celular |
+| 6.6 Santa Teresa encendido en la prueba interna (hora) | | ✅ 12-nov: **Club encendido en Santa Teresa** (verificado por el dueño a las 10:21 CR; la hora exacta del encendido no se informó). Promoción «Local Club» **15 %** vigente · cortesías **Crepe (397)** y **Banana flambé (398)** activas · Nosara apagado |
 | `lc_excepciones_desde`: `2026-11-12` en §6.4 (provisorio) | 2026-11-12 | ✅ 07:07 CR, con §6.4 |
 | `lc_excepciones_desde`: el día de la apertura, antes de abrir | (fecha) | |
-| Cierre: pasa / vuelta atrás (hasta qué paso de §8) | | ✅ **PASA** (11-nov, lo cerró el dueño). Sin vuelta atrás. Queda para el jue 12 por la mañana, en este orden: §6.1 → §6.2 → §6.3 → §6.4 → #125 → Worker (4c) → paso 7 → §6.5 → §6.5b → §11.3 → §6.6 |
+| Cierre: pasa / vuelta atrás (hasta qué paso de §8) | | ✅ **PASA** (11-nov, lo cerró el dueño). Sin vuelta atrás. Queda para el jue 12 por la mañana, en este orden: §6.1 → §6.2 → §6.3 → §6.4 → #125 → Worker (4c) → paso 7 → §6.5 → §6.5b → §11.3 → §6.6 · ✅ **12-nov: configuración cerrada** (§6.1 → §6.6 hechos; el Club opera en Santa Teresa desde la prueba interna) |
 | Respaldo de 1.4 borrado (fecha) | | |
 
 ## 11. Cloudflare: el proyecto de Pages, el dominio en SiteGround y `/api` con o sin Worker

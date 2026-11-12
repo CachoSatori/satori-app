@@ -81,14 +81,14 @@
 ---
 ### Tanda 3 · pedida por Ismael el 12-nov 06:40 («hagamos tanda 3», todo)
 
-## A11 · Daruma en Semana y Reporte mensual · `hecha` (#135, mergeada a staging el 12-nov 07:25, `2e1f73c`; validada por Ismael 07:35)
+## A11 · Daruma en Semana y Reporte mensual · `hecha` (#135, mergeada a staging el 12-nov 07:25, `2e1f73c`; validada por Ismael 07:35; pase a main en PR #139)
 - `src/modules/resumen/ResumenSemanal.tsx` y `src/modules/resumen/ReporteMensual.tsx` no tienen clase de encabezado que el CSS de B8 pueda tomar.
 - Agregar en el encabezado de cada una, a la izquierda del título, un `<img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" width={22} height={24} />` (como el login de B8), con el mismo tamaño y separación que el `::before` de los otros módulos (22×24 px, ver `.module-header-left::before` en `src/index.css`).
 - En Reporte mensual, solo en la barra `no-print`: el Daruma **no** sale al imprimir.
 - Nada más: ni cálculos, ni condiciones, ni `onClick`, ni consultas.
 - **Aceptación:** gates del PROTOCOLO; capturas 390 y 1280 de las dos pantallas; guía de Resumen si cambia lo que se ve.
 
-## A12 · Monospace que queda en los módulos (auditoría 205) · `en revisión #136`
+## A12 · Monospace que queda en los módulos (auditoría 205) · `hecha` (#136, mergeada a staging el 12-nov 10:35, `41cde89`; pase a main en PR #139)
 - **Archivos habilitados solo para esta tarea** (además de los de la línea A): `src/modules/inbox/InboxModule.tsx` y `src/modules/crm/ClientesModule.tsx`, **solo** la línea con `DM Mono` de cada uno.
 - Casos (en `staging` al 12-nov):
   - `src/modules/prueba/CierreSimulator.tsx` 25–26: `num` e `inputStyle` → `var(--font-sans)` + `tabular-nums`; el input oscuro (`#111`, `#2a2a2a`) → fondo `var(--c-fondo)`, borde `var(--c-linea)`, texto `var(--c-tinta)`, como en A7;

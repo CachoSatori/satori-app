@@ -95,14 +95,14 @@
 ---
 ### Tanda 3 · pedida por Ismael el 12-nov 06:40 («hagamos tanda 3», todo)
 
-## B9 · Hoja «Más» con foco atrapado, monospace del CSS y un solo Daruma en el Inicio · `hecha` (#134, mergeada a staging el 12-nov 07:25, `b3b3134`; validada por Ismael 07:35)
+## B9 · Hoja «Más» con foco atrapado, monospace del CSS y un solo Daruma en el Inicio · `hecha` (#134, mergeada a staging el 12-nov 07:25, `b3b3134`; validada por Ismael 07:35; pase a main en PR #139)
 - **Auditoría 202:** en la hoja «Más» de `src/shared/layout/AppShell.tsx`, el Tab y Shift+Tab quedan dentro de la hoja mientras está abierta (último → primero y al revés). Se mantiene lo de B6: `aria-modal`, foco al abrir, Escape cierra y el foco vuelve a «Más». Test de render del ciclo de foco.
 - **Auditoría 205 (parte de B):** las 4 `font-family: var(--font-mono, …monospace)` de `src/index.css` (líneas ~4592, 5343, 5359, 5410 en `staging`) → `var(--font-sans)` + `font-variant-numeric: tabular-nums`. Si alguna es de un bloque que solo existe en `staging` (`.cm-*`, `.sal-*`, `.fx-*`), igual se cambia, pero anotarlo en el reporte para el pase.
 - **Un solo Daruma en el Inicio en computadora** (duda de B8, decidido por Ismael): desde 1024 px se vuelve a ocultar `.header-daruma` de la barra de arriba; queda el de la marca del menú. En celular no cambia.
 - No tocar `src/modules/**`.
 - **Aceptación:** gates; capturas 390 y 1280 del Inicio y de la hoja «Más» abierta; guía 6.1 si cambia lo que se ve.
 
-## B10 · Kanji sin internet (auditoría 206) · `en revisión #137`
+## B10 · Kanji sin internet (auditoría 206) · `hecha` (#137, mergeada a staging el 12-nov 10:35, `383af90`; pase a main en PR #139, con el 縁 del Club agregado)
 - Hoy `src/index.css` trae Noto Serif JP desde Google (`@import`); sin internet los kanji caen en la serif del sistema.
 - Servirla desde `public/fonts/` con `@font-face`, **recortada a los caracteres que usa la app**: juntar los kanji de `src/shared/layout/modulos.ts`, de los `loading-mark` y encabezados de `src/**` y de `LoginPage`/`CambiarPasswordInicial`, y generar un `woff2` con solo esos (por ejemplo con `pyftsubset`). Pesos: los que hoy se piden a Google.
 - Sacar el `@import` de Google de Noto Serif JP. Incluir la licencia OFL de la fuente en `public/fonts/`.

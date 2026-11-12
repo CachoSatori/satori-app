@@ -81,7 +81,7 @@
 ---
 ### Tanda 3 · pedido de Ismael del 12-nov
 
-## B8 · Daruma en el login, en las cargas y en cada encabezado · `en revisión #130` · validación visual
+## B8 · Daruma en el login, en las cargas y en cada encabezado · `hecha` (#130, validada y mergeada el 12-nov 03:15; pase a main en PR #131)
 - **Login** (`src/pages/auth/LoginPage.tsx`): el `login-mark` («祭») pasa a ser la imagen del Daruma (`${import.meta.env.BASE_URL}marca/daruma.png`), con `alt=""`; mismo lugar y tamaño parecido (~56–64 px).
 - **Cuando las pantallas cargan** (`.loading-mark`, hoy un kanji en 13 módulos y en el `Suspense` de `App.tsx`): que se vea el Daruma en vez de la letra, con una animación suave (respirar o balancearse lento; sin girar rápido) y respetando `prefers-reduced-motion`.
   - **Preferido:** hacerlo desde `src/index.css` (por ejemplo, ocultando el texto de `.loading-mark` y poniendo el Daruma de fondo), para **no tocar los módulos**.

@@ -29,3 +29,4 @@
 | 2026-11-12 00:28 | Respaldo del pase | El tag `pre-rediseno` no se pudo crear desde la sesión (el proxy bloquea escribir tags). Ismael eligió la alternativa «a»: rama `respaldo/pre-rediseno` sobre `main` `cf1a61d`, creada antes del merge. |
 | 2026-11-12 00:29 | **#128 mergeado a `main`** | Merge `9efde77` (head `918447b`, verificado con `sha`). Deploy a GitHub Pages `9efde77`: build y deploy ✅. Vuelta atrás: rollback del deploy o `git revert -m 1 9efde77`; rama `respaldo/pre-rediseno`. |
 | 2026-11-12 00:35 | **Daruma en más lugares** (cambia la regla del PLAN «solo en 3 lugares») | Ismael: en el login en lugar de la letra; mientras las pantallas cargan; y arriba a la izquierda de cada pantalla, al lado de la letra (kanji). Tarea B8. |
+| 2026-11-12 03:15 | B8 (#130) | Validada por Ismael («b8 ok») y mergeada a `staging` (`154208d`). Pase chico a `main` armado: PR #131, sin mergear (espera firma). |

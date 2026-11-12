@@ -9,7 +9,8 @@
 name = "satori-club-api"
 main = "index.js"
 compatibility_date = "2025-10-01"
-workers_dev = false   # sin URL pública *.workers.dev: el Worker solo responde por la ruta del dominio
+workers_dev = false   # sin URL pública *.workers.dev: al Worker solo lo llama el service binding de Pages
+preview_urls = false  # (11-nov) sin URLs de vista previa: explícito, para que un deploy no las encienda ni las deje a criterio del panel
 keep_vars = true      # un deploy no borra las variables cargadas en el panel
 
 # Topes por IP (CLUB-AUD-14 y 24): los mismos que en ../wrangler.toml. Espacios de nombres propios del Worker.

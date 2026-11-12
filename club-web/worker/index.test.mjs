@@ -97,6 +97,7 @@ test('wrangler.toml del Worker: los mismos topes que Pages, sin URL *.workers.de
   assert.match(w, /^main = "index\.js"$/m)
   assert.match(w, /^workers_dev = false/m)
   assert.match(w, /^keep_vars = true/m)
+  assert.match(w, /^preview_urls = false/m)   // (11-nov) ni workers.dev ni URLs de vista previa
   assert.doesNotMatch(w, /^\s*(routes|route|\[vars\])/m)
 })
 

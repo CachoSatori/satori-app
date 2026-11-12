@@ -121,11 +121,28 @@ html, body, #root {
   background: var(--black);
 }
 
+/* B8 · Daruma mientras carga: la letra (kanji) queda en el DOM pero no se ve;
+   el Daruma va de fondo y se mece lento. Sin tocar los módulos. */
 .loading-mark {
-  font-family: var(--font-serif);
-  font-size: 3rem;
-  color: var(--accent);
-  animation: pulse 2s ease-in-out infinite;
+  display: inline-block;
+  width: 44px;
+  height: 48px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-indent: 200%;
+  color: transparent;
+  background: url('/marca/daruma.png') center / contain no-repeat;
+  transform-origin: 50% 90%;
+  animation: daruma-mecer 2.6s ease-in-out infinite;
+}
+
+@keyframes daruma-mecer {
+  0%, 100% { transform: rotate(-5deg); }
+  50%       { transform: rotate(5deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-mark { animation: none; }
 }
 
 @keyframes pulse {
@@ -167,6 +184,13 @@ html, body, #root {
   font-size: 3rem;
   color: var(--accent);
   line-height: 1;
+}
+
+/* B8 · En el login el Daruma reemplaza a la letra. */
+.login-daruma {
+  display: block;
+  width: 58px;
+  height: auto;
 }
 
 .login-header h1 {
@@ -343,9 +367,23 @@ html, body, #root {
   color: var(--accent);
 }
 
-/* Daruma: solo en el encabezado del celular (en computadora va en la marca del menú). */
+/* Daruma en el encabezado del Inicio, en celular y en computadora (B8). */
 .header-daruma { display: block; width: 22px; height: auto; }
-@media (min-width: 1024px) { .header-daruma { display: none; } }
+
+/* B8 · Daruma chico arriba a la izquierda de cada pantalla, al lado de la letra (kanji).
+   Va como ::before del bloque izquierdo del encabezado, así no se toca el JSX de los módulos. */
+.module-header-left::before,
+.tips-header-left::before,
+.cd-module-header > :first-child::before,
+.vt-module-header > :first-child::before,
+.resumen-header > :first-child::before,
+.sop-header > :first-child::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 22px;
+  height: 24px;
+  background: url('/marca/daruma.png') center / contain no-repeat;
+}
 
 .header-title {
   font-size: 0.72rem;

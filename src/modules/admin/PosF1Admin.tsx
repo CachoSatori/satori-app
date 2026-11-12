@@ -31,19 +31,19 @@ export default function PosF1Admin() {
         {(['salon', 'catalogo', 'productos', 'kds', 'locales'] as Section[]).map(s => (
           <button key={s} onClick={() => setSection(s)}
             style={{ padding: '5px 14px', borderRadius: 3, fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
-              border: '1px solid var(--t-border,#d4cfc4)',
-              background: section === s ? 'var(--t-ink,#0d0d0d)' : 'transparent',
-              color: section === s ? 'var(--t-gold,#c8a96e)' : '#5a5040' }}>
+              border: '1px solid var(--c-linea)',
+              background: section === s ? 'var(--c-tinta)' : 'transparent',
+              color: section === s ? 'var(--c-fondo)' : 'var(--c-gris)' }}>
             {s === 'salon' ? '🪑 Editor de Salón' : s === 'catalogo' ? '🍹 Catálogo PoS'
               : s === 'productos' ? '📦 Productos' : s === 'kds' ? '🖥 KDS' : '🏝 Locales'}
           </button>
         ))}
-        <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#5a5040' }}>Local activo:</span>
+        <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--c-gris)' }}>Local activo:</span>
         <select className="tips-input-dark" value={activeLoc} onChange={e => setActiveLoc(e.target.value)}>
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
       </div>
-      {error && <div style={{ color: 'var(--t-red,#c23b22)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>{error}</div>}
+      {error && <div style={{ color: 'var(--c-laca)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>{error}</div>}
       {section === 'locales'  && <LocalesSection locations={locations} onChange={setLocations} onError={setError} />}
       {section === 'catalogo' && <CatalogoSection locationId={activeLoc} onError={setError} />}
       {section === 'salon'    && <SalonSection locationId={activeLoc} onError={setError} />}
@@ -65,14 +65,14 @@ function LocalesSection({ locations, onChange, onError }: {
   }
   return (
     <div className="admin-table" style={{ padding: '0.875rem' }}>
-      <div style={{ fontSize: '0.72rem', color: '#5a5040', marginBottom: '0.625rem' }}>
+      <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginBottom: '0.625rem' }}>
         Multi-local desde el diseño: todo lo nuevo del PoS (catálogo, salón, pedidos) cuelga de un local.
       </div>
       {locations.map(l => (
-        <div key={l.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.4rem 0', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
-          <code style={{ fontSize: '0.7rem', color: '#5a5040', minWidth: 110 }}>{l.id}</code>
+        <div key={l.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.4rem 0', borderBottom: '1px solid var(--c-linea)' }}>
+          <code style={{ fontSize: '0.7rem', color: 'var(--c-gris)', minWidth: 110 }}>{l.id}</code>
           <input className="tips-input-dark" defaultValue={l.name} onBlur={e => { if (e.target.value !== l.name) save({ id: l.id, name: e.target.value }) }} />
-          <label style={{ fontSize: '0.72rem', color: '#5a5040' }}>
+          <label style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>
             <input type="checkbox" checked={l.is_active} onChange={e => save({ id: l.id, name: l.name, is_active: e.target.checked })} /> activo
           </label>
         </div>
@@ -138,9 +138,9 @@ function CatalogoSection({ locationId, onError }: { locationId: string; onError:
         {groups.map(g => (
           <div key={g.id} onClick={() => { setSel(g.id); setPreviewSel({}) }}
             style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', borderRadius: 3, marginBottom: 2,
-              background: sel === g.id ? 'rgba(160,120,48,.12)' : 'transparent', border: '1px solid var(--t-border,#d4cfc4)' }}>
+              background: sel === g.id ? 'var(--c-oro-fondo)' : 'transparent', border: '1px solid var(--c-linea)' }}>
             <strong style={{ fontSize: '0.82rem' }}>{g.name}</strong>
-            <div style={{ fontSize: '0.66rem', color: '#5a5040' }}>
+            <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)' }}>
               {g.required ? `OBLIGATORIO · ${Math.max(1, g.min_selections)}–${g.max_selections}` : `opcional · hasta ${g.max_selections}`}
               {!g.is_active && ' · inactivo'}
             </div>
@@ -151,7 +151,7 @@ function CatalogoSection({ locationId, onError }: { locationId: string; onError:
       </div>
 
       <div className="admin-table" style={{ padding: '0.75rem' }}>
-        {!group && <div style={{ color: '#5a5040', fontSize: '0.8rem' }}>Elegí un grupo (o creá uno) para editarlo. Caso de referencia: "Licor" obligatorio para Mojito.</div>}
+        {!group && <div style={{ color: 'var(--c-gris)', fontSize: '0.8rem' }}>Elegí un grupo (o creá uno) para editarlo. Caso de referencia: "Licor" obligatorio para Mojito.</div>}
         {group && (
           <>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -176,18 +176,18 @@ function CatalogoSection({ locationId, onError }: { locationId: string; onError:
                 <input type="number" className="tips-input-dark" style={{ width: 100 }} defaultValue={m.price_delta_crc}
                   onBlur={e => Number(e.target.value) !== m.price_delta_crc && saveModifier({ ...m, price_delta_crc: Number(e.target.value) || 0 }).then(load).catch(er => onError(er.message))} />
                 <button onClick={() => deleteModifier(m.id).then(load).catch(er => onError(er.message))}
-                  style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', cursor: 'pointer' }}>×</button>
+                  style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 3, padding: '2px 8px', cursor: 'pointer' }}>×</button>
               </div>
             ))}
             <button onClick={() => saveModifier({ group_id: group.id, name: 'Nueva opción', price_delta_crc: 0, sort_order: groupMods.length }).then(load).catch(er => onError(er.message))}
-              style={{ background: 'none', border: '1px dashed var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '4px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>+ Opción</button>
+              style={{ background: 'none', border: '1px dashed var(--c-linea)', color: 'var(--c-gris)', borderRadius: 3, padding: '4px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>+ Opción</button>
 
             <div style={{ fontWeight: 700, fontSize: '0.76rem', margin: '0.875rem 0 0.25rem' }}>Productos con este grupo</div>
             {groupLinks.map(l => (
-              <span key={l.product_name} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(42,122,106,.1)', border: '1px solid #2a7a6a', borderRadius: 12, padding: '2px 10px', fontSize: '0.72rem', margin: '0 4px 4px 0' }}>
+              <span key={l.product_name} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--c-teal-fondo)', border: '1px solid var(--c-teal)', borderRadius: 12, padding: '2px 10px', fontSize: '0.72rem', margin: '0 4px 4px 0' }}>
                 {l.product_name}
                 <button onClick={() => unlinkProductGroup(l.product_name, group.id).then(load).catch(er => onError(er.message))}
-                  style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer' }}>×</button>
+                  style={{ background: 'none', border: 'none', color: 'var(--c-laca)', cursor: 'pointer' }}>×</button>
               </span>
             ))}
             <div style={{ position: 'relative', marginTop: 4 }}>
@@ -205,11 +205,11 @@ function CatalogoSection({ locationId, onError }: { locationId: string; onError:
               )}
             </div>
 
-            <div style={{ marginTop: '1rem', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '0.75rem', background: 'rgba(0,0,0,.02)' }}>
+            <div style={{ marginTop: '1rem', border: '1px solid var(--c-linea)', borderRadius: 4, padding: '0.75rem', background: 'var(--c-panel)' }}>
               <div style={{ fontWeight: 700, fontSize: '0.76rem', marginBottom: 4 }}>👁 Vista previa — así lo verá el salonero (base de ejemplo ₡{PREVIEW_BASE.toLocaleString()})</div>
               {previewGroups.map(g => (
                 <div key={g.id} style={{ marginBottom: 6 }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700 }}>{g.name}{g.required && <span style={{ color: '#c23b22' }}> *</span>}</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700 }}>{g.name}{g.required && <span style={{ color: 'var(--c-laca)' }}> *</span>}</div>
                   {g.modifiers.map(m => {
                     const picked = (previewSel[g.id] ?? []).includes(m.id)
                     return (
@@ -220,8 +220,8 @@ function CatalogoSection({ locationId, onError }: { locationId: string; onError:
                         return { ...prev, [g.id]: next }
                       })}
                         style={{ margin: '2px 4px 2px 0', padding: '4px 10px', borderRadius: 14, fontSize: '0.74rem', cursor: 'pointer',
-                          border: `1px solid ${picked ? '#2a7a6a' : 'var(--t-border,#d4cfc4)'}`,
-                          background: picked ? 'rgba(42,122,106,.15)' : 'transparent' }}>
+                          border: `1px solid ${picked ? 'var(--c-teal)' : 'var(--c-linea)'}`,
+                          background: picked ? 'var(--c-teal-fondo)' : 'transparent' }}>
                         {m.name}{m.price_delta_crc > 0 ? ` +${fi(m.price_delta_crc)}` : ''}
                       </button>
                     )
@@ -230,8 +230,8 @@ function CatalogoSection({ locationId, onError }: { locationId: string; onError:
               ))}
               <div style={{ fontSize: '0.82rem', fontWeight: 700, marginTop: 4 }}>
                 Total: {fi(computeItemPrice(PREVIEW_BASE, previewPicked))}
-                {previewError && <span style={{ color: '#c23b22', fontWeight: 400, fontSize: '0.72rem' }}> · ⛔ {previewError}</span>}
-                {!previewError && <span style={{ color: '#2a7a6a', fontWeight: 400, fontSize: '0.72rem' }}> · ✓ se puede enviar</span>}
+                {previewError && <span style={{ color: 'var(--c-laca)', fontWeight: 400, fontSize: '0.72rem' }}> · ⛔ {previewError}</span>}
+                {!previewError && <span style={{ color: 'var(--c-teal)', fontWeight: 400, fontSize: '0.72rem' }}> · ✓ se puede enviar</span>}
               </div>
             </div>
           </>
@@ -297,7 +297,7 @@ function SalonSection({ locationId, onError }: { locationId: string; onError: (e
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '3fr minmax(230px, 1fr)', gap: '0.875rem' }}>
       {/* Plano (vista previa del salón) */}
-      <div className="admin-table" style={{ position: 'relative', minHeight: 460, overflow: 'auto', background: '#f5f0e8', touchAction: 'none' }}
+      <div className="admin-table" style={{ position: 'relative', minHeight: 460, overflow: 'auto', background: 'var(--c-panel)', touchAction: 'none' }}
         onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
         {tables.filter(x => x.is_active).map(x => {
           const { w, h } = sizeOf(x)
@@ -307,9 +307,9 @@ function SalonSection({ locationId, onError }: { locationId: string; onError: (e
             <div key={x.id} onPointerDown={onDown(x)}
               style={{ position: 'absolute', left: px, top: py, width: w, height: h, cursor: 'grab',
                 borderRadius: decor ? 4 : (x.shape === 'round' ? '50%' : 8),
-                border: `2px ${decor ? 'dashed' : 'solid'} ${sel === x.id ? '#a07830' : decor ? '#8a8378' : '#0d0d0d'}`,
-                background: decor ? '#d8d2c4' : (sel === x.id ? '#a07830' : '#0d0d0d'),
-                color: decor ? '#5a5040' : '#f5f0e8',
+                border: `2px ${decor ? 'dashed' : 'solid'} ${sel === x.id ? 'var(--c-oro)' : decor ? 'var(--c-gris-claro)' : 'var(--c-tinta)'}`,
+                background: decor ? 'var(--c-panel)' : (sel === x.id ? 'var(--c-oro-fondo)' : 'var(--c-fondo)'),
+                color: decor ? 'var(--c-gris)' : 'var(--c-tinta)',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 fontSize: '0.64rem', fontWeight: 700, userSelect: 'none', overflow: 'hidden' }}>
               <div>{x.name}</div>
@@ -318,7 +318,7 @@ function SalonSection({ locationId, onError }: { locationId: string; onError: (e
           )
         })}
         {tables.filter(x => x.is_active).length === 0 && (
-          <div style={{ padding: '2rem', color: '#5a5040', fontSize: '0.8rem' }}>Salón vacío — agregá mesas y elementos con los botones.</div>
+          <div style={{ padding: '2rem', color: 'var(--c-gris)', fontSize: '0.8rem' }}>Salón vacío — agregá mesas y elementos con los botones.</div>
         )}
       </div>
 
@@ -336,7 +336,7 @@ function SalonSection({ locationId, onError }: { locationId: string; onError: (e
             </button>
           ))}
         </div>
-        {!t && <div style={{ fontSize: '0.74rem', color: '#5a5040' }}>Tocá un elemento del plano: lo podés <strong>arrastrar</strong> directo, o moverlo con las flechas.</div>}
+        {!t && <div style={{ fontSize: '0.74rem', color: 'var(--c-gris)' }}>Tocá un elemento del plano: lo podés <strong>arrastrar</strong> directo, o moverlo con las flechas.</div>}
         {t && (
           <>
             <input className="tips-input-dark" style={{ width: '100%' }} defaultValue={t.name} key={t.id}
@@ -364,12 +364,12 @@ function SalonSection({ locationId, onError }: { locationId: string; onError: (e
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 4, justifyContent: 'center', margin: '0.5rem 0' }}>
               <span /><button className="tips-btn-ghost" onClick={() => move(0, -1)}>↑</button><span />
               <button className="tips-btn-ghost" onClick={() => move(-1, 0)}>←</button>
-              <span style={{ fontSize: '0.62rem', color: '#5a5040', alignSelf: 'center', textAlign: 'center' }}>{t.pos_x},{t.pos_y}</span>
+              <span style={{ fontSize: '0.62rem', color: 'var(--c-gris)', alignSelf: 'center', textAlign: 'center' }}>{t.pos_x},{t.pos_y}</span>
               <button className="tips-btn-ghost" onClick={() => move(1, 0)}>→</button>
               <span /><button className="tips-btn-ghost" onClick={() => move(0, 1)}>↓</button><span />
             </div>
             <button onClick={() => deactivateSalonTable(t.id).then(() => { setSel(null); load() }).catch(e => onError(e.message))}
-              style={{ width: '100%', background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '5px', fontSize: '0.74rem', cursor: 'pointer' }}>
+              style={{ width: '100%', background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 3, padding: '5px', fontSize: '0.74rem', cursor: 'pointer' }}>
               Quitar del plano
             </button>
           </>
@@ -403,7 +403,7 @@ function KdsSection({ locationId, onError }: { locationId: string; onError: (e: 
     } catch (e) { onError(e instanceof Error ? e.message : 'Error guardando config del KDS'); load() }
   }
 
-  if (!settings) return <div style={{ padding: '1rem', color: '#5a5040', fontSize: '0.8rem' }}>Cargando…</div>
+  if (!settings) return <div style={{ padding: '1rem', color: 'var(--c-gris)', fontSize: '0.8rem' }}>Cargando…</div>
   const order = settings.category_order
   const notInOrder = allTipos.filter(t => !order.includes(t))
 
@@ -418,24 +418,24 @@ function KdsSection({ locationId, onError }: { locationId: string; onError: (e: 
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 1fr', gap: '0.875rem' }}>
       <div className="admin-table" style={{ padding: '0.875rem' }}>
         <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: 4 }}>Orden de categorías en el KDS</div>
-        <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: '0.625rem' }}>Define en qué orden aparecen los ítems dentro de cada comanda (por categoría del catálogo).</div>
+        <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)', marginBottom: '0.625rem' }}>Define en qué orden aparecen los ítems dentro de cada comanda (por categoría del catálogo).</div>
         {order.map((c, i) => (
-          <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.3rem 0', borderBottom: '1px solid var(--t-border,#eee)' }}>
-            <span style={{ width: 18, color: '#5a5040', fontSize: '0.72rem' }}>{i + 1}.</span>
+          <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
+            <span style={{ width: 18, color: 'var(--c-gris)', fontSize: '0.72rem' }}>{i + 1}.</span>
             <strong style={{ flex: 1, fontSize: '0.82rem' }}>{c}</strong>
             <button className="tips-btn-ghost" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
             <button className="tips-btn-ghost" disabled={i === order.length - 1} onClick={() => move(i, 1)}>↓</button>
             <button onClick={() => persist({ ...settings, category_order: order.filter(x => x !== c) })}
-              style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '1px 7px', cursor: 'pointer' }}>×</button>
+              style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 3, padding: '1px 7px', cursor: 'pointer' }}>×</button>
           </div>
         ))}
-        {order.length === 0 && <div style={{ fontSize: '0.74rem', color: '#5a5040' }}>Sin orden configurado — los ítems salen por categoría alfabética.</div>}
+        {order.length === 0 && <div style={{ fontSize: '0.74rem', color: 'var(--c-gris)' }}>Sin orden configurado — los ítems salen por categoría alfabética.</div>}
         {notInOrder.length > 0 && (
           <div style={{ marginTop: '0.625rem' }}>
-            <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: 4 }}>Agregar categoría:</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)', marginBottom: 4 }}>Agregar categoría:</div>
             {notInOrder.map(t => (
               <button key={t} onClick={() => persist({ ...settings, category_order: [...order, t] })}
-                style={{ margin: '0 4px 4px 0', padding: '3px 10px', borderRadius: 12, fontSize: '0.72rem', cursor: 'pointer', border: '1px dashed var(--t-border,#d4cfc4)', background: 'transparent', color: '#5a5040' }}>+ {t}</button>
+                style={{ margin: '0 4px 4px 0', padding: '3px 10px', borderRadius: 12, fontSize: '0.72rem', cursor: 'pointer', border: '1px dashed var(--c-linea)', background: 'transparent', color: 'var(--c-gris)' }}>+ {t}</button>
             ))}
           </div>
         )}
@@ -443,7 +443,7 @@ function KdsSection({ locationId, onError }: { locationId: string; onError: (e: 
 
       <div className="admin-table" style={{ padding: '0.875rem' }}>
         <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: 4 }}>Umbrales del timer (verde→rojo) por curso</div>
-        <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: '0.625rem' }}>Segundos desde que se marcha hasta ponerse en rojo. Ámbar al 66%.</div>
+        <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)', marginBottom: '0.625rem' }}>Segundos desde que se marcha hasta ponerse en rojo. Ámbar al 66%.</div>
         {(['bebida', 'entrada', 'principal'] as const).map(course => {
           const v = settings.course_thresholds[course] ?? 0
           return (
@@ -454,7 +454,7 @@ function KdsSection({ locationId, onError }: { locationId: string; onError: (e: 
                   const n = Math.max(0, Number(e.target.value) || 0)
                   if (n !== v) persist({ ...settings, course_thresholds: { ...settings.course_thresholds, [course]: n } })
                 }} />
-              <span style={{ fontSize: '0.72rem', color: '#5a5040' }}>seg · {fmtElapsed(v)} min</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>seg · {fmtElapsed(v)} min</span>
             </div>
           )
         })}
@@ -469,14 +469,14 @@ function KdsSection({ locationId, onError }: { locationId: string; onError: (e: 
           <span style={{ fontSize: '0.74rem' }}>Timer propio de postres</span>
           <input type="number" className="tips-input-dark" style={{ width: 80 }} defaultValue={settings.postres_threshold ?? 240} key={'pt' + (settings.postres_threshold ?? 240)}
             onBlur={e => { const n = Math.max(0, Number(e.target.value) || 0); if (n !== settings.postres_threshold) persist({ ...settings, postres_threshold: n }) }} />
-          <span style={{ fontSize: '0.72rem', color: '#5a5040' }}>seg (más corto que los cursos)</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>seg (más corto que los cursos)</span>
         </div>
-        <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: 4 }}>Evolución documentada en ROADMAP: carril propio de postres en el KDS.</div>
+        <div style={{ fontSize: '0.64rem', color: 'var(--c-gris)', marginTop: 4 }}>Evolución documentada en ROADMAP: carril propio de postres en el KDS.</div>
       </div>
 
       <div className="admin-table" style={{ padding: '0.875rem', gridColumn: '1 / -1' }}>
         <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: 4 }}>Orden ESCALONADO por subcategoría (dentro de cada comanda)</div>
-        <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: '0.625rem' }}>Ej. del dueño: 1° crudos/pesca local · 2° nigiris y sashimis · 3° rolls/principales. Los postres prioritarios saltan al frente igual.</div>
+        <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)', marginBottom: '0.625rem' }}>Ej. del dueño: 1° crudos/pesca local · 2° nigiris y sashimis · 3° rolls/principales. Los postres prioritarios saltan al frente igual.</div>
         {(settings.subcategory_order ?? []).map((c, i) => {
           const order = settings.subcategory_order ?? []
           const move = (dir: -1 | 1) => {
@@ -486,19 +486,19 @@ function KdsSection({ locationId, onError }: { locationId: string; onError: (e: 
             persist({ ...settings, subcategory_order: next })
           }
           return (
-            <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.3rem 0', borderBottom: '1px solid var(--t-border,#eee)' }}>
-              <span style={{ width: 18, color: '#5a5040', fontSize: '0.72rem' }}>{i + 1}.</span>
+            <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
+              <span style={{ width: 18, color: 'var(--c-gris)', fontSize: '0.72rem' }}>{i + 1}.</span>
               <strong style={{ flex: 1, fontSize: '0.82rem' }}>{c}</strong>
               <button className="tips-btn-ghost" disabled={i === 0} onClick={() => move(-1)}>↑</button>
               <button className="tips-btn-ghost" disabled={i === order.length - 1} onClick={() => move(1)}>↓</button>
               <button onClick={() => persist({ ...settings, subcategory_order: order.filter(x => x !== c) })}
-                style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '1px 7px', cursor: 'pointer' }}>×</button>
+                style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 3, padding: '1px 7px', cursor: 'pointer' }}>×</button>
             </div>
           )
         })}
         {allSubcats.filter(t => !(settings.subcategory_order ?? []).includes(t)).map(t => (
           <button key={t} onClick={() => persist({ ...settings, subcategory_order: [...(settings.subcategory_order ?? []), t] })}
-            style={{ margin: '4px 4px 0 0', padding: '3px 10px', borderRadius: 12, fontSize: '0.72rem', cursor: 'pointer', border: '1px dashed var(--t-border,#d4cfc4)', background: 'transparent', color: '#5a5040' }}>+ {t}</button>
+            style={{ margin: '4px 4px 0 0', padding: '3px 10px', borderRadius: 12, fontSize: '0.72rem', cursor: 'pointer', border: '1px dashed var(--c-linea)', background: 'transparent', color: 'var(--c-gris)' }}>+ {t}</button>
         ))}
       </div>
     </div>

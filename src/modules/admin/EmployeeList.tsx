@@ -225,16 +225,16 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                   <td className="admin-emp-name">
                     {emp.full_name}
                     {emp.pos_name && (
-                      <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)', marginTop: '1px' }}>
                         Ventas: {emp.pos_name}
                       </div>
                     )}
                   </td>
                   <td><span className="role-tag">{ROLE_LABELS[emp.role] ?? emp.role}</span></td>
-                  <td style={{ fontSize: '0.72rem', color: '#5a5040' }}>
+                  <td style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>
                     {/* Profile link selector */}
                     <select
-                      style={{ fontSize: '0.72rem', background: 'var(--t-paper)', border: '1px solid var(--t-border)', borderRadius: 2, padding: '0.2rem 0.4rem', color: emp.profile_id ? 'var(--t-teal)' : '#888' }}
+                      style={{ fontSize: '0.72rem', background: 'var(--c-fondo)', border: '1px solid var(--c-linea)', borderRadius: 2, padding: '0.2rem 0.4rem', color: emp.profile_id ? 'var(--c-teal)' : 'var(--c-gris)' }}
                       value={emp.profile_id ?? ''}
                       onChange={e => handleLink(emp.id, e.target.value)}
                       disabled={linkingId === emp.id}
@@ -261,7 +261,7 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
           {inactive.length > 0 && (
             <>
               <tr>
-                <td colSpan={3} style={{ padding: '12px 12px 4px', fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-mid)' }}>
+                <td colSpan={3} style={{ padding: '12px 12px 4px', fontSize: '0.65rem', color: 'var(--gray-mid)' }}>
                   Inactivos
                 </td>
               </tr>
@@ -324,16 +324,16 @@ function BulkImport({ employees, onRefresh }: { employees: Employee[]; onRefresh
   }
 
   return (
-    <div style={{ marginTop:'1.5rem', borderTop:'1px solid #eee', paddingTop:'1rem' }}>
+    <div style={{ marginTop:'1.5rem', borderTop:'1px solid var(--c-linea)', paddingTop:'1rem' }}>
       <button
         onClick={() => setOpen(o => !o)}
-        style={{ fontSize:'0.78rem', padding:'6px 14px', border:'1px solid #ddd', borderRadius:2, background:'transparent', cursor:'pointer', color:'#888' }}>
+        style={{ fontSize:'0.78rem', padding:'6px 14px', border:'1px solid var(--c-linea)', borderRadius:2, background:'transparent', cursor:'pointer', color:'var(--c-gris)' }}>
         {open ? '▲ Cerrar' : '📋 Importar empleados en masa'}
       </button>
 
       {open && (
-        <div style={{ marginTop:'0.75rem', background:'#f9f7f2', border:'1px solid #ddd', borderRadius:2, padding:'1rem' }}>
-          <div style={{ fontSize:'0.72rem', color:'#888', marginBottom:'0.5rem' }}>
+        <div style={{ marginTop:'0.75rem', background:'var(--c-panel)', border:'1px solid var(--c-linea)', borderRadius:2, padding:'1rem' }}>
+          <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', marginBottom:'0.5rem' }}>
             Pegá los nombres, uno por línea. Se agregarán los que no existan (los duplicados se ignoran).
           </div>
           <div style={{ display:'flex', gap:'0.75rem', alignItems:'flex-start', flexWrap:'wrap' }}>
@@ -342,29 +342,29 @@ function BulkImport({ employees, onRefresh }: { employees: Employee[]; onRefresh
               onChange={e => setText(e.target.value)}
               placeholder={'FRANCISCO\nMARIA\nJUAN\n...'}
               rows={6}
-              style={{ flex:1, minWidth:180, padding:'8px 10px', border:'1px solid #ccc', borderRadius:2, fontFamily:'monospace', fontSize:'0.82rem', resize:'vertical', background:'#fff' }}
+              style={{ flex:1, minWidth:180, padding:'8px 10px', border:'1px solid var(--c-linea)', borderRadius:2, fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.82rem', resize:'vertical', background:'var(--c-fondo)' }}
             />
             <div style={{ minWidth:160 }}>
-              <div style={{ fontSize:'0.68rem', color:'#888', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.1em' }}>Rol para todos</div>
+              <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginBottom:4 }}>Rol para todos</div>
               <select value={role} onChange={e => setRole(e.target.value as UserRole)}
-                style={{ width:'100%', padding:'6px 8px', border:'1px solid #ccc', borderRadius:2, fontSize:'0.82rem', marginBottom:'0.75rem' }}>
+                style={{ width:'100%', padding:'6px 8px', border:'1px solid var(--c-linea)', borderRadius:2, fontSize:'0.82rem', marginBottom:'0.75rem' }}>
                 {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
               </select>
 
               {preview.length > 0 && (
                 <div style={{ fontSize:'0.72rem', marginBottom:'0.75rem' }}>
-                  {newOnes.length > 0 && <div style={{ color:'#2a7a4a' }}>+ {newOnes.length} nuevo{newOnes.length > 1 ? 's' : ''}</div>}
-                  {dupOnes.length > 0 && <div style={{ color:'#888' }}>⊘ {dupOnes.length} ya exist{dupOnes.length > 1 ? 'en' : 'e'}</div>}
+                  {newOnes.length > 0 && <div style={{ color:'var(--c-musgo)' }}>+ {newOnes.length} nuevo{newOnes.length > 1 ? 's' : ''}</div>}
+                  {dupOnes.length > 0 && <div style={{ color:'var(--c-gris)' }}>⊘ {dupOnes.length} ya exist{dupOnes.length > 1 ? 'en' : 'e'}</div>}
                 </div>
               )}
 
               <button
                 onClick={handleImport}
                 disabled={saving || newOnes.length === 0}
-                style={{ width:'100%', padding:'7px', borderRadius:2, background: newOnes.length > 0 ? '#2a7a4a' : '#ccc', color:'#fff', fontWeight:700, fontSize:'0.82rem', border:'none', cursor: newOnes.length > 0 ? 'pointer' : 'not-allowed' }}>
+                style={{ width:'100%', padding:'7px', borderRadius:2, background: newOnes.length > 0 ? 'var(--c-tinta)' : 'var(--c-linea)', color:'var(--c-fondo)', fontWeight:700, fontSize:'0.82rem', border:'none', cursor: newOnes.length > 0 ? 'pointer' : 'not-allowed' }}>
                 {saving ? 'Importando…' : `Importar ${newOnes.length}`}
               </button>
-              {msg && <div style={{ marginTop:'0.5rem', fontSize:'0.75rem', color: msg.startsWith('✓') ? '#2a7a4a' : '#c23b22' }}>{msg}</div>}
+              {msg && <div style={{ marginTop:'0.5rem', fontSize:'0.75rem', color: msg.startsWith('✓') ? 'var(--c-musgo)' : 'var(--c-laca)' }}>{msg}</div>}
             </div>
           </div>
         </div>
@@ -386,16 +386,16 @@ function UnassignedNamesPanel({ names, employees, profiles, onRefresh }: {
   const [open, setOpen] = useState(true)
   if (names.length === 0) return null
   return (
-    <div style={{ margin: '0 0 1rem', background: '#fdf6e3', border: '1px solid #e6d9a8', borderRadius: 2, padding: '0.75rem 1rem' }}>
+    <div style={{ margin: '0 0 1rem', background: 'var(--c-panel)', border: '1px solid var(--c-oro)', borderRadius: 2, padding: '0.75rem 1rem' }}>
       <button
         onClick={() => setOpen(o => !o)}
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.82rem', fontWeight: 700, color: '#8a6d1a' }}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.82rem', fontWeight: 700, color: 'var(--c-oro-texto)' }}
       >
         {open ? '▼' : '▶'} Nombres en ventas sin asignar ({names.length})
       </button>
       {open && (
         <>
-          <div style={{ fontSize: '0.72rem', color: '#8a7a4a', margin: '0.4rem 0 0.7rem' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--c-oro-texto)', margin: '0.4rem 0 0.7rem' }}>
             Aparecen en los XLS de ventas pero no están vinculados a ningún empleado.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -460,7 +460,7 @@ function UnassignedRow({ name, employees, profiles, onRefresh }: {
 
   return (
     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', minWidth: 120, fontWeight: 700, color: '#5a5040' }}>
+      <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '0.82rem', minWidth: 120, fontWeight: 700, color: 'var(--c-gris)' }}>
         {name}
       </span>
       <select
@@ -468,7 +468,7 @@ function UnassignedRow({ name, employees, profiles, onRefresh }: {
         onChange={e => setRole(e.target.value as UserRole)}
         disabled={saving}
         title="Rol del nuevo empleado"
-        style={{ fontSize: '0.78rem', padding: '4px 8px', border: '1px solid #ccc', borderRadius: 2, background: '#fff' }}
+        style={{ fontSize: '0.78rem', padding: '4px 8px', border: '1px solid var(--c-linea)', borderRadius: 2, background: 'var(--c-fondo)' }}
       >
         {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
       </select>
@@ -477,7 +477,7 @@ function UnassignedRow({ name, employees, profiles, onRefresh }: {
         onChange={e => setProfileId(e.target.value)}
         disabled={saving}
         title="Usuario (opcional)"
-        style={{ fontSize: '0.78rem', padding: '4px 8px', border: '1px solid #ccc', borderRadius: 2, background: '#fff', color: profileId ? 'var(--t-teal)' : '#888' }}
+        style={{ fontSize: '0.78rem', padding: '4px 8px', border: '1px solid var(--c-linea)', borderRadius: 2, background: 'var(--c-fondo)', color: profileId ? 'var(--c-teal)' : 'var(--c-gris)' }}
       >
         <option value="">— sin usuario —</option>
         {availableProfiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
@@ -485,11 +485,11 @@ function UnassignedRow({ name, employees, profiles, onRefresh }: {
       <button
         onClick={handleAssign}
         disabled={saving}
-        style={{ fontSize: '0.78rem', padding: '5px 12px', borderRadius: 2, background: saving ? '#ccc' : '#2a7a4a', color: '#fff', fontWeight: 700, border: 'none', cursor: saving ? 'default' : 'pointer' }}
+        style={{ fontSize: '0.78rem', padding: '5px 12px', borderRadius: 2, background: saving ? 'var(--c-linea)' : 'var(--c-tinta)', color: 'var(--c-fondo)', fontWeight: 700, border: 'none', cursor: saving ? 'default' : 'pointer' }}
       >
         {saving ? 'Guardando…' : 'Crear + vincular'}
       </button>
-      {error && <span style={{ fontSize: '0.72rem', color: '#c23b22' }}>✗ {error}</span>}
+      {error && <span style={{ fontSize: '0.72rem', color: 'var(--c-laca)' }}>✗ {error}</span>}
     </div>
   )
 }

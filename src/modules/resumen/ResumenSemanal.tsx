@@ -178,36 +178,36 @@ export default function ResumenSemanal() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0d0d0d', fontFamily: 'var(--font-sans)', color: '#f5f0e8' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--c-panel)', fontFamily: 'var(--font-sans)', color: 'var(--c-tinta)' }}>
 
       {/* Header */}
-      <div style={{ background: '#0d0d0d', borderBottom: '1px solid #1a1a1a', padding: '0 1.75rem', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
+      <div style={{ background: 'var(--c-panel)', borderBottom: '1px solid var(--c-linea)', padding: '0 1.75rem', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.3rem', color: '#c8a96e' }}>週</span>
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.3rem', color: 'var(--c-oro-texto)' }}>週</span>
           <div>
-            <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '0.9rem', color: '#c8a96e' }}>Semana</div>
-            <div style={{ fontSize: '0.6rem', letterSpacing: '0.2em', color: '#555', textTransform: 'uppercase' }}>Satori</div>
+            <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--c-oro-texto)' }}>Semana</div>
+            <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)' }}>Satori</div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           {thisWeek && (
-            <span style={{ fontSize: '0.72rem', color: '#666' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>
               {fmtShort(thisWeek.from)} — {fmtShort(thisWeek.to)}
             </span>
           )}
           {thisWeek && thisWeek.ventaNeta > 0 && (
             <button onClick={doShare}
-              style={{ padding:'4px 10px', borderRadius:2, border:'1px solid #2a4a2a', background: copied ? 'rgba(74,154,106,.15)' : 'transparent', color: copied ? '#4a9a6a' : '#888', fontSize:'0.72rem', cursor:'pointer' }}>
+              style={{ padding:'4px 10px', borderRadius:2, border:'1px solid var(--c-musgo-borde)', background: copied ? 'var(--c-musgo-fondo)' : 'transparent', color: copied ? 'var(--c-musgo)' : 'var(--c-gris)', fontSize:'0.72rem', cursor:'pointer' }}>
               {copied ? '✓ Copiado' : '📤 Compartir'}
             </button>
           )}
-          <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888' }} onClick={() => navigate('/')}>← Inicio</button>
+          <button className="cash-back-btn" style={{ borderColor: 'var(--c-linea)', color: 'var(--c-gris)' }} onClick={() => navigate('/')}>← Inicio</button>
         </div>
       </div>
 
-      <div style={{ background: '#f5f0e8', color: '#0d0d0d', minHeight: 'calc(100vh - 52px)', padding: '1.5rem' }}>
+      <div style={{ background: 'var(--c-panel)', color: 'var(--c-tinta)', minHeight: 'calc(100vh - 52px)', padding: '1.5rem' }}>
         {loading ? (
-          <div style={{ padding: '4rem', textAlign: 'center', color: '#888' }}>Cargando semana…</div>
+          <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--c-gris)' }}>Cargando semana…</div>
         ) : !thisWeek ? null : (
           <>
             {/* Main KPIs vs last week */}
@@ -218,43 +218,43 @@ export default function ResumenSemanal() {
                   val: fi(thisWeek.ventaNeta),
                   sub: lastWeek && lastWeek.ventaNeta > 0 ? fi(lastWeek.ventaNeta) + ' sem. ant.' : undefined,
                   var: varVenta,
-                  color: '#c8a96e',
-                  border: '#c8a96e',
+                  color: 'var(--c-oro-texto)',
+                  border: 'var(--c-oro)',
                 },
                 {
                   label: 'PAX totales',
                   val: String(thisWeek.pax),
                   sub: 'Prom/PAX: ' + fi(thisWeek.promPax),
-                  color: '#f5f0e8',
-                  border: '#4a7c59',
+                  color: 'var(--c-tinta)',
+                  border: 'var(--c-musgo)',
                 },
                 {
                   label: 'Propinas pagadas',
                   val: fi(thisWeek.propinas),
                   sub: `${thisWeek.propTurnos} turnos`,
                   var: varProp,
-                  color: '#7ec8a0',
-                  border: '#4a7c59',
+                  color: 'var(--c-musgo)',
+                  border: 'var(--c-musgo)',
                 },
                 {
                   label: 'Días trabajados',
                   val: String(thisWeek.days.filter(d => d.ventaNeta > 0).length),
                   sub: `de ${thisWeek.days.length} días esta semana`,
-                  color: '#f5f0e8',
-                  border: '#555',
+                  color: 'var(--c-tinta)',
+                  border: 'var(--c-linea)',
                 },
               ].map(k => (
-                <div key={k.label} style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1rem 1.1rem', borderLeft: `3px solid ${k.border}` }}>
-                  <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555', marginBottom: '0.3rem' }}>{k.label}</div>
-                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.1rem', fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.val}</div>
-                  {k.sub && <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '0.2rem' }}>{k.sub}</div>}
+                <div key={k.label} style={{ background: 'var(--c-panel)', color: 'var(--c-tinta)', borderRadius: 3, padding: '1rem 1.1rem', borderLeft: `3px solid ${k.border}` }}>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--c-gris)', marginBottom: '0.3rem' }}>{k.label}</div>
+                  <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1.1rem', fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.val}</div>
+                  {k.sub && <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)', marginTop: '0.2rem' }}>{k.sub}</div>}
                   {k.var !== null && k.var !== undefined && enCurso && (
-                    <div style={{ fontSize: '0.72rem', fontWeight: 700, marginTop: '0.2rem', color: '#888' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, marginTop: '0.2rem', color: 'var(--c-gris)' }}>
                       En curso
                     </div>
                   )}
                   {k.var !== null && k.var !== undefined && !enCurso && (
-                    <div style={{ fontSize: '0.72rem', fontWeight: 700, marginTop: '0.2rem', color: k.var >= 0 ? '#7ec8a0' : '#f08070' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, marginTop: '0.2rem', color: k.var >= 0 ? 'var(--c-musgo)' : 'var(--c-laca)' }}>
                       {k.var >= 0 ? '▲' : '▼'} {Math.abs(k.var).toFixed(1)}% vs sem. ant.
                     </div>
                   )}
@@ -264,36 +264,36 @@ export default function ResumenSemanal() {
 
             {/* Day-by-day bars */}
             {thisWeek.days.filter(d => d.ventaNeta > 0).length > 0 && (
-              <div style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1.1rem', marginBottom: '1.25rem' }}>
-                <div style={{ fontSize: '0.68rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#c8a96e', marginBottom: '0.75rem', fontWeight: 700 }}>Ventas por día</div>
+              <div style={{ background: 'var(--c-panel)', color: 'var(--c-tinta)', borderRadius: 3, padding: '1.1rem', marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: '0.68rem', color: 'var(--c-oro-texto)', marginBottom: '0.75rem', fontWeight: 700 }}>Ventas por día</div>
                 {(() => {
                   const maxV = Math.max(...thisWeek.days.map(d => d.ventaNeta), 1)
                   return thisWeek.days.filter(d => d.ventaNeta > 0).map(d => (
                     <div key={d.fecha} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.4rem' }}>
-                      <div style={{ width: 36, fontSize: '0.68rem', color: '#555', flexShrink: 0 }}>
+                      <div style={{ width: 36, fontSize: '0.68rem', color: 'var(--c-gris)', flexShrink: 0 }}>
                         {dowLabel(d.fecha)}
                       </div>
-                      <div style={{ flex: 1, height: 14, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ flex: 1, height: 14, background: 'var(--c-panel)', borderRadius: 2, overflow: 'hidden' }}>
                         <div style={{
                           height: '100%',
                           width: `${d.ventaNeta / maxV * 100}%`,
-                          background: d.fecha === thisWeek.bestDay?.fecha ? '#c8a96e' : '#2a4a6b',
+                          background: d.fecha === thisWeek.bestDay?.fecha ? 'var(--c-oro)' : 'var(--c-gris-claro)',
                           borderRadius: 2,
                           transition: 'width 0.4s',
                         }} />
                       </div>
-                      <div style={{ width: 100, fontSize: '0.72rem', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontWeight: 600, color: d.fecha === thisWeek.bestDay?.fecha ? '#c8a96e' : '#aaa' }}>
+                      <div style={{ width: 100, fontSize: '0.72rem', textAlign: 'right', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: d.fecha === thisWeek.bestDay?.fecha ? 'var(--c-oro-texto)' : 'var(--c-tinta)' }}>
                         {fi(d.ventaNeta)}
                       </div>
                     </div>
                   ))
                 })()}
                 {thisWeek.bestDay && (
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#555', borderTop: '1px solid #1a1a1a', paddingTop: '0.5rem' }}>
-                    Mejor día: <strong style={{ color: '#c8a96e' }}>{dowLabel(thisWeek.bestDay.fecha)} {fmtShort(thisWeek.bestDay.fecha)}</strong> — {fi(thisWeek.bestDay.ventaNeta)}
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: 'var(--c-gris)', borderTop: '1px solid var(--c-linea)', paddingTop: '0.5rem' }}>
+                    Mejor día: <strong style={{ color: 'var(--c-oro-texto)' }}>{dowLabel(thisWeek.bestDay.fecha)} {fmtShort(thisWeek.bestDay.fecha)}</strong> — {fi(thisWeek.bestDay.ventaNeta)}
                     {thisWeek.worstDay && thisWeek.worstDay.fecha !== thisWeek.bestDay.fecha && (
                       <span style={{ marginLeft: '1rem' }}>
-                        Más bajo: <strong style={{ color: '#888' }}>{dowLabel(thisWeek.worstDay.fecha)}</strong> — {fi(thisWeek.worstDay.ventaNeta)}
+                        Más bajo: <strong style={{ color: 'var(--c-gris)' }}>{dowLabel(thisWeek.worstDay.fecha)}</strong> — {fi(thisWeek.worstDay.ventaNeta)}
                       </span>
                     )}
                   </div>
@@ -306,18 +306,18 @@ export default function ResumenSemanal() {
 
               {/* Top saloneros */}
               {thisWeek.topSal.length > 0 && (
-                <div style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1.1rem' }}>
-                  <div style={{ fontSize: '0.68rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#c8a96e', marginBottom: '0.75rem', fontWeight: 700 }}>
+                <div style={{ background: 'var(--c-panel)', color: 'var(--c-tinta)', borderRadius: 3, padding: '1.1rem' }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--c-oro-texto)', marginBottom: '0.75rem', fontWeight: 700 }}>
                     🏆 Top Prom/PAX
                   </div>
                   {thisWeek.topSal.map((s, i) => (
-                    <div key={s.nombre} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0', borderBottom: '1px solid #1a1a1a' }}>
+                    <div key={s.nombre} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0', borderBottom: '1px solid var(--c-linea)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span style={{ fontSize: '0.82rem' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`}</span>
                         <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{s.nombre}</span>
-                        <span style={{ fontSize: '0.62rem', color: '#555' }}>{s.days}d</span>
+                        <span style={{ fontSize: '0.62rem', color: 'var(--c-gris)' }}>{s.days}d</span>
                       </div>
-                      <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.85rem', color: '#c8a96e' }}>
+                      <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '0.85rem', color: 'var(--c-oro-texto)' }}>
                         {fi(s.promPax)}
                       </span>
                     </div>
@@ -327,8 +327,8 @@ export default function ResumenSemanal() {
 
               {/* vs last week */}
               {lastWeek && lastWeek.ventaNeta > 0 && (
-                <div style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1.1rem' }}>
-                  <div style={{ fontSize: '0.68rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#555', marginBottom: '0.75rem', fontWeight: 700 }}>
+                <div style={{ background: 'var(--c-panel)', color: 'var(--c-tinta)', borderRadius: 3, padding: '1.1rem' }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--c-gris)', marginBottom: '0.75rem', fontWeight: 700 }}>
                     vs Semana anterior ({fmtShort(lastWeek.from)}–{fmtShort(lastWeek.to)})
                   </div>
                   {[
@@ -338,14 +338,14 @@ export default function ResumenSemanal() {
                     { label: 'Propinas', cur: thisWeek.propinas, prev: lastWeek.propinas, esConteo: false },
                   ].map(row => {
                     const diff = row.prev > 0 ? (row.cur - row.prev) / row.prev * 100 : null
-                    const col  = diff === null ? '#555' : diff >= 0 ? '#7ec8a0' : '#f08070'
+                    const col  = diff === null ? 'var(--c-gris)' : diff >= 0 ? 'var(--c-musgo)' : 'var(--c-laca)'
                     return (
-                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0', borderBottom: '1px solid #1a1a1a', fontSize: '0.8rem' }}>
-                        <span style={{ color: '#888' }}>{row.label}</span>
+                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0', borderBottom: '1px solid var(--c-linea)', fontSize: '0.8rem' }}>
+                        <span style={{ color: 'var(--c-gris)' }}>{row.label}</span>
                         <div style={{ textAlign: 'right' }}>
-                          <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{row.esConteo ? row.cur.toLocaleString('es-CR') : fi(row.cur)}</span>
+                          <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{row.esConteo ? row.cur.toLocaleString('es-CR') : fi(row.cur)}</span>
                           {enCurso && (
-                            <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 700, color: '#555' }}>
+                            <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 700, color: 'var(--c-gris)' }}>
                               En curso
                             </span>
                           )}
@@ -371,7 +371,7 @@ export default function ResumenSemanal() {
                 { path: '/resumen',  label: '日 Resumen diario' },
               ].map(l => (
                 <button key={l.path} onClick={() => navigate(l.path)}
-                  style={{ background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: 2, padding: '0.4rem 0.875rem', color: '#888', fontSize: '0.72rem', cursor: 'pointer', letterSpacing: '0.06em' }}>
+                  style={{ background: 'var(--c-panel)', border: '1px solid var(--c-linea)', borderRadius: 2, padding: '0.4rem 0.875rem', color: 'var(--c-gris)', fontSize: '0.72rem', cursor: 'pointer', letterSpacing: '0.06em' }}>
                   {l.label}
                 </button>
               ))}

@@ -55,7 +55,7 @@ export function armarPassJson(d: PaseDatos, cfg: ConfigApple, tokenWs: string | 
   } else if (soc && soc.estado === 'activo') {
     secundarios.push({ key: 'socio', label: 'Local Club', value: 'Vale en todos los Satori' })
     const sorpresas = soc.cortesias.filter(c => c.sorpresa).reduce((s, c) => s + c.cantidad, 0)
-    if (sorpresas > 0) secundarios.push({ key: 'cortesia', label: 'Tu próxima visita', value: sorpresas === 1 ? '1 cortesía sorpresa' : `${sorpresas} cortesías sorpresa` })
+    if (sorpresas > 0) secundarios.push({ key: 'cortesia', label: 'Su próxima visita', value: sorpresas === 1 ? '1 cortesía sorpresa' : `${sorpresas} cortesías sorpresa` })
   }
   if (anf && anf.activo) {
     primarios.push({ key: 'creditos', label: 'Créditos', value: `${colones(anf.creditos * anf.valor_credito_crc, '.')} disponibles` })
@@ -66,7 +66,7 @@ export function armarPassJson(d: PaseDatos, cfg: ConfigApple, tokenWs: string | 
     reverso.push({ key: 'proximo', label: 'Para el próximo medio crédito',
                    value: `${anf.personas_proximo_medio} ${anf.personas_proximo_medio === 1 ? 'persona' : 'personas'}` })
     if (d.canjear_url) reverso.push({ key: 'canjear', label: 'Canjear créditos (código de 10 minutos)', value: d.canjear_url })
-    if (d.codigo_barras?.tipo === 'socio') reverso.push({ key: 'cupones', label: 'Tus cupones para compartir', value: anf.qr_url })
+    if (d.codigo_barras?.tipo === 'socio') reverso.push({ key: 'cupones', label: 'Sus cupones para compartir', value: anf.qr_url })
   }
   const subtitulo = d.pestanas.includes('mi_club') && d.pestanas.includes('anfitrion') ? 'Socio y anfitrión'
     : d.pestanas.includes('mi_club') ? 'Socio del Local Club' : d.pestanas.includes('anfitrion') ? 'Anfitrión' : 'Club Satori'

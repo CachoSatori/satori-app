@@ -38,7 +38,7 @@
 | `GOOGLE_WALLET_SA_KEY` | **El contenido entero** del JSON de la clave de la cuenta de servicio | Una clave para staging y **otra** para prod (si se filtra una, se borra sin tocar la otra). El Edge exige `client_email` de `….iam.gserviceaccount.com` y `private_key` |
 | `CLUB_WEB_KEY` | La clave de club-web **de ese proyecto** (la de staging en staging, la de prod en prod) | Es el portón: el header `x-club-web` tiene que traer esta clave |
 | `CLUB_WEB_ORIGIN` | El dominio del Club **de ese proyecto**: el resultado de `select club_url from public.club_config_global;` | Sin barra final. El QR del pase tiene que empezar con este dominio |
-| `WALLET_DISENO` | `{"colorFondo":"#0d0d0d","logoUrl":"https://<dominio>/pase/logo.png","heroUrl":"https://<dominio>/pase/hero.png"}` | Opcional. Las imágenes tienen que estar publicadas (llegan con el PR de `main`). Sin él, el pase sale sin logo ni franja |
+| `WALLET_DISENO` | **El mismo valor en staging y en prod** (son URLs públicas, no un secreto): `{"colorFondo":"#0d0d0d","logoUrl":"https://club.satoricostarica.com/pase/logo.png","heroUrl":"https://club.satoricostarica.com/pase/hero.png"}` | Opcional. Las imágenes son `club-web/public/pase/logo.png` (990×990) y `hero.png` (1032×336): Vite las copia a `dist/` y quedan en el dominio del Club **con el deploy de Pages del merge** del PR de `main`. Antes de eso esas URLs dan 404: hasta entonces, sin `WALLET_DISENO` (el pase sale sin logo ni franja). Staging usa las mismas imágenes del dominio de prod: no hay club-web de staging publicado. Lo cuida `club-web/src/paseImagenes.test.ts` |
 | `WALLET_ENTORNO` | **`stg`** en staging · **`prod`** en prod (en minúsculas, nada más) | **Obligatorio.** Staging y prod comparten el emisor de Google y los IDs de miembro pueden coincidir (el clon de prod a staging los copia; la carga única los trae escritos). Con `stg`, la clase es `…club-satori-stg` y los objetos `…club-stg-<miembro>`; con `prod`, sin sufijo. Falta o tiene otro valor → 503: nunca cae en prod |
 | `CLUB_PASE_SYNC_KEY` | — | **No va en el piloto** |
 
@@ -150,7 +150,7 @@ cambian aunque se regenere el QR.
 | Color de fondo | `#0d0d0d` (tinta) | `WALLET_DISENO` |
 | Código de barras | QR: el del socio (`/s/…`) o, si es solo anfitrión, el de cupones (`/r/…`), con el código corto debajo | contrato del pase |
 | Textos | socio: «Vale en todos los Satori» (o «Valide su alta en su próxima visita…» si está pendiente) y la cortesía sorpresa si hay; anfitrión: «Créditos al 12-nov 13:20 · ₡… disponibles», personas referidas del mes y cuántas faltan para el próximo medio crédito; solo socio: «Actualizado · 12-nov 13:20» | ídem |
-| Enlaces del reverso | «Canjear créditos (código de 10 minutos)» y, si corresponde, «Tus cupones para compartir» | ídem |
+| Enlaces del reverso | «Canjear créditos (código de 10 minutos)» y, si corresponde, «Sus cupones para compartir» | ídem |
 | Datos de contacto | **ninguno** (el Edge aborta si el objeto lleva un `@` o un `+506`) | `armarObjeto` |
 | Baja o sin rol vigente | el pase pasa a `EXPIRED`, sin QR | ídem |
 

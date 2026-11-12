@@ -117,7 +117,7 @@ Ya existe (R-01): una fila por canje (`tipo = 'canje'`, `miembro_id`, `movimient
 - `club_alertas_pendientes(p_limite int) → table(id, miembro_id, tipo, creditos, saldo_creditos, fecha)`
 - `club_alerta_enviada(p_id bigint, p_canal text)`: marca `enviado_en = now()` y `canal` (`google`, `apple`).
 
-B manda el mensaje del pase («Se canjearon 1,5 créditos de tu cuenta. Te quedan 2. ¿No fuiste vos? Avisanos.») y lo
+B manda el mensaje del pase («Se canjearon 1,5 créditos de su cuenta. Le quedan 2. ¿No fue usted? Avísenos.») y lo
 marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
 
 ## 5. Emisión: quién crea el pase

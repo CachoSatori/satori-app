@@ -84,7 +84,7 @@ export function mensajeCanje(creditos: number, saldo: number) {
   const n = (x: number, coma: boolean) => { const s = (Math.round(x * 10) / 10).toString(); return coma ? s.replace('.', ',') : s }
   const cr = (x: number, es: boolean) => (x === 1 ? (es ? 'crédito' : 'credit') : (es ? 'créditos' : 'credits'))
   return {
-    es: { header: 'Canje de créditos', body: `Se canjearon ${n(creditos, true)} ${cr(creditos, true)} de tu cuenta. Te quedan ${n(saldo, true)}. ¿No fuiste vos? Avisanos.` },
+    es: { header: 'Canje de créditos', body: `Se canjearon ${n(creditos, true)} ${cr(creditos, true)} de su cuenta. Le quedan ${n(saldo, true)}. ¿No fue usted? Avísenos.` },
     en: { header: 'Credits redeemed', body: `${n(creditos, false)} ${cr(creditos, false)} redeemed from your account. You have ${n(saldo, false)} left. Not you? Let us know.` },
   }
 }

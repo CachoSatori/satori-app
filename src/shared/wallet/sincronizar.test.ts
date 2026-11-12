@@ -176,7 +176,7 @@ describe('sincronizar (B3, núcleo)', () => {
     const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER, entorno: 'prod' as const })
     expect(r).toMatchObject({ mensajes_enviados: 1, mensajes_sin_pase: 1, errores: [] })
     const msg = JSON.parse(e.http.find(h => h.url.endsWith('/addMessage') && h.url.includes(A))?.body ?? '{}').message
-    expect(msg.body).toBe('Se canjearon 1,5 créditos de tu cuenta. Te quedan 2. ¿No fuiste vos? Avisanos.')
+    expect(msg.body).toBe('Se canjearon 1,5 créditos de su cuenta. Le quedan 2. ¿No fue usted? Avísenos.')
     expect(msg.localizedBody.translatedValues[0].value).toBe('1.5 credits redeemed from your account. You have 2 left. Not you? Let us know.')
     expect(e.rpcs.filter(x => x.fn === 'club_alerta_enviada').map(x => x.args)).toEqual([{ p_id: 7, p_canal: 'google' }])
   })
@@ -189,7 +189,7 @@ describe('sincronizar (B3, núcleo)', () => {
   })
 
   it('mensajeCanje: singular y plural', () => {
-    expect(mensajeCanje(1, 1).es.body).toBe('Se canjearon 1 crédito de tu cuenta. Te quedan 1. ¿No fuiste vos? Avisanos.')
+    expect(mensajeCanje(1, 1).es.body).toBe('Se canjearon 1 crédito de su cuenta. Le quedan 1. ¿No fue usted? Avísenos.')
     expect(mensajeCanje(2, 0).en.body).toBe('2 credits redeemed from your account. You have 0 left. Not you? Let us know.')
   })
 

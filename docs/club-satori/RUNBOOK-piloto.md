@@ -214,8 +214,10 @@ key y sin el header responde «Código no válido».
 **Rollback:** cargar otra clave (rota y revoca la anterior).
 
 ## 6. Cloudflare
-**Hacer:** en Pages `satori-club` (producción): `SUPABASE_URL` y `SUPABASE_ANON_KEY` de PROD, y los bindings `RL_CREAR`
-(5 por 60 s) y `RL_LEER` (60 por 60 s) de `wrangler.toml`. **Turnstile (LC-DES-07):** crear el widget en Cloudflare
+**Hacer:** en Pages `satori-club` (producción): `SUPABASE_URL` y `SUPABASE_ANON_KEY` de PROD, y el service binding
+`CLUB_API` → `satori-club-api`, que se carga en el panel (12-nov: `club-web/` ya no lleva `wrangler.toml`; los topes
+`RL_CREAR`, 5 por 60 s, y `RL_LEER`, 60 por 60 s, los pone el Worker; pasos en `docs/pases/PASE-150-151-club.md` §11.1b).
+**Turnstile (LC-DES-07):** crear el widget en Cloudflare
 para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKEY` (variable de build) y la secreta en el
 **Secret** `TURNSTILE_SECRET` (las carga Ismael; **sin ella la autoalta Y la creación de cupones responden 503**: desde
 Grok 24 el cupón también pide Turnstile). Después, el deploy y el dominio.

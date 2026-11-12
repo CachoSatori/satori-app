@@ -357,7 +357,7 @@ Cada alta siembra sus marcadores de descuento (856 y 857) y la promoción «Loca
 2. En el editor SQL de prod: `select public.club_web_clave_cargar('<sha256 de la clave>');` (el sha256, nunca la clave).
 3. Volver a desplegar `satori-club` (los Secrets toman efecto en el próximo deploy).
 4. **Plan B (activo desde el merge, §11.4 paso 6):** ✅ la misma clave ya está como Secret `CLUB_WEB_KEY` del Worker
-   `satori-club-api` (11-nov). En Pages queda igual, para poder volver al plan A sin esperar.
+   `satori-club-api` (11-nov). En Pages queda igual, aunque con el binding `CLUB_API` no la usa (12-nov: no hay plan A, §11.1b).
 
 Verificar: `/api/salud` → todo en `true` (`club_web_key` y `turnstile` incluidos). Una llamada directa a
 `/rest/v1/rpc/club_cupon_crear` con la anon key y sin el header responde «Código no válido».
@@ -527,6 +527,47 @@ Producción en `main`, root `club-web`, previews en **None**. En Production: `NO
 `VITE_TURNSTILE_SITEKEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `TURNSTILE_SECRET` (Secret). El build falla hasta que
 `club-web/` esté en `main`: es lo esperado, y no se publica nada. **Falta:** `CLUB_WEB_KEY` (Secret, el jueves, §6.3).
 
+#### 11.1b El proyecto de Pages se configura SOLO en el panel (12-nov)
+**Qué pasó.** Los deploys de producción de `satori-club` del 11-nov a la noche (`17a9efd`, `980cd74` y `cf1a61d`)
+fallaron. El log de `cf1a61d` dice: «Running configuration file validation for Pages: Configuration file for Pages projects
+does not support "unsafe"» → «Failed: unable to read the Wrangler configuration file with code: 1». **El build nunca
+corrió** (los otros dos tenían el mismo archivo y esa validación va antes del build). `club-web/wrangler.toml` tenía `pages_build_output_dir`, que lo vuelve la configuración del proyecto para
+Pages, y los dos topes `[[unsafe.bindings]]`, que Pages no admite en ese archivo. El arreglo del `tsconfig.json` (#125)
+hacía falta para el build, pero no era lo que frenaba el deploy. En la preparación se probó con `wrangler pages dev` en
+local, que sí acepta ese archivo: el deploy real de Pages no se había probado nunca.
+
+**Decisión del dueño (12-nov): camino B.** Se borra `club-web/wrangler.toml` y el proyecto de Pages queda configurado solo
+en el panel. El archivo no se dejó sin `pages_build_output_dir` porque, sin esa clave, ni Pages ni wrangler leen nada de
+él: quedaba una configuración que no configura nada. Sin archivo, Pages hace lo mismo que con el proyecto de la app
+(`satori-staging`, que no tiene `wrangler.toml` y desplegó bien `cf1a61d`): avisa que no encontró el archivo y sigue.
+El único archivo de wrangler es el del Worker (`club-web/worker/wrangler.toml`), que Pages no mira. Lo cuida
+`club-web/src/build.test.ts`.
+
+**Consecuencia: no hay plan A.** Pages no puede tener los topes `RL_CREAR` y `RL_LEER`. La API sale solo por el Worker
+`satori-club-api`, y el service binding `CLUB_API` deja de venir del repo: **se carga en el panel**. Sin el binding, la
+Pages Function contesta ella (`x-club-api: pages`), sin topes, y crear y leer responden 503: falla cerrada.
+
+**Pasos en el panel** (Workers & Pages → `satori-club` → **Settings**; arriba, elegir el entorno **Production**). Los
+nombres de los menús pueden variar un poco.
+
+| # | Dónde | Qué tiene que decir | Estado |
+|---|---|---|---|
+| 1 | Build → Build configuration | Build command **`npm ci && npm run build`** · Build output directory **`dist`** · Root directory **`club-web`** | Cargado el 10-nov: verificar |
+| 2 | Build → Branch control | Production branch **`main`** · Preview: **None** | Cargado el 10-nov: verificar |
+| 3 | Variables and Secrets | Para el build: **`NODE_VERSION`** = `22` · **`VITE_CLUB_URL`** = `https://club.satoricostarica.com` (sin barra final) · **`VITE_TURNSTILE_SITEKEY`**. De la función: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TURNSTILE_SECRET` (Secret), `CLUB_WEB_KEY` (Secret) | Cargadas el 10 y el 11-nov: verificar que están las 7. No se cambia ningún valor |
+| 4 | **Bindings** → **Add** → **Service binding** | Variable name **`CLUB_API`** · Service **`satori-club-api`** → **Save** | **NUEVO: hay que cargarlo** |
+| 5 | Runtime → Compatibility date | `2025-10-01` o posterior (la del día en que se creó el proyecto sirve) | Verificar |
+
+**Orden del 12-nov** (merge fuera de 17:00–23:00):
+1. Panel: los pasos 1 a 5. El 4 va **antes** del merge: un binding nuevo toma efecto recién en el deploy siguiente.
+2. Mergear el PR que borra `club-web/wrangler.toml` (merge commit). Pages despliega solo desde `main`.
+3. En el log del deploy (Deployments → el del merge → View details): tiene que avisar que **no encontró** un archivo de
+   configuración de wrangler y seguir, correr `npm ci && npm run build` y terminar en **Success**. Si vuelve a decir
+   «unable to read the Wrangler configuration file», **se para** y se pega el log.
+4. Si el binding se cargó después del deploy: Deployments → el último → **Retry deployment**.
+5. Worker: el redeploy desde `main` (§11.4, paso 7). No depende de Pages.
+6. §11.3: `/api/salud` con `x-club-api: worker` y todo en `true`.
+
 ### 11.2 El dominio `club.satoricostarica.com` con el DNS en SiteGround
 Pages acepta un **subdominio** con un CNAME en otro proveedor (el dominio raíz, no: ese necesita la zona en Cloudflare).
 El certificado lo emite Cloudflare solo, cuando ve el CNAME.
@@ -547,9 +588,9 @@ El certificado lo emite Cloudflare solo, cuando ve el CNAME.
 dominio no sirve ningún sitio, y así el certificado ya está listo el jueves.
 
 ### 11.3 Plan B desde el merge: cómo se verifica con `/api/salud` (jueves, después del merge y de §6.3)
-**Decisión del dueño (10-nov): el plan B entra activo con el #59.** El `[[services]]` de `club-web/wrangler.toml` va
-descomentado en el #98: desde el primer deploy, la Pages Function le pasa `/api` al Worker `satori-club-api` (§11.4), que
-tiene los topes. El plan A (la Pages Function con sus propios topes) queda como vuelta atrás.
+**Decisión del dueño (10-nov): el plan B entra activo con el #59.** La Pages Function le pasa `/api` al Worker
+`satori-club-api` (§11.4), que tiene los topes. **(12-nov) El binding `CLUB_API` se carga en el panel de Pages (§11.1b,
+paso 4), no en el repo, y el plan A ya no existe:** Pages no admite los topes.
 
 Abrir `https://club.satoricostarica.com/api/salud` y mirar el JSON y el encabezado `x-club-api` (DevTools → Network → la
 llamada → Headers). El Worker contesta `x-club-api: worker`; la Pages Function, `x-club-api: pages`.
@@ -559,7 +600,7 @@ llamada → Headers). El Worker contesta `x-club-api: worker`; la Pages Function
 | `x-club-api: worker` · todo en `true` | **B funciona** | Prueba de fuego (abajo) |
 | `x-club-api: worker` · `club_web_key` en `false` | Falta el Secret en el Worker | §11.4 paso 6 (y §6.3) |
 | `x-club-api: worker` · `rl_crear` o `rl_leer` en `false` | El Worker no tomó los topes | Revisar el log del deploy del Worker (§11.4 paso 4). Mientras tanto, crear cupones y el alta responden 503 (falla cerrada) |
-| `x-club-api: pages` | Pages no tomó el binding | **Se para** y se revisa el log del deploy de Pages (¿el Worker existía cuando se desplegó?) |
+| `x-club-api: pages` | Falta el binding `CLUB_API` en el panel, o se cargó después del último deploy. `rl_crear` y `rl_leer` salen en `false`; crear y leer responden 503 | **Se para**: §11.1b paso 4 y **Retry deployment** |
 | Error 500 o sin respuesta | El binding apunta a un Worker que no está | **Se para**: §11.4 pasos 1–5 |
 
 En todos los casos, `club_web_key`, `turnstile` y `supabase` tienen que estar en `true`. **Prueba de fuego:** 6 «Obtener mi
@@ -620,9 +661,9 @@ a la rama del #59: una rama de trabajo conectada desplegaría sola con cada push
    (el Worker quedaría con el código de una rama de trabajo).
 8. §11.3.
 
-**Vuelta atrás al plan A:** un PR de tres líneas a `main` que comenta el `[[services]]` de `club-web/wrangler.toml`
-(merge fuera de 17:00–23:00). Pages vuelve a desplegar y `/api` lo atiende la Pages Function: si Pages no toma los topes,
-crear cupones y el alta responden 503 (falla cerrada). El Worker puede quedar creado y sin uso.
+**Vuelta atrás (12-nov: ya no hay plan A, §11.1b).** Pages no admite los topes, así que la Pages Function sola no sirve
+la API: sin el binding `CLUB_API`, crear y leer responden 503 (falla cerrada). Para cerrar la API del Club sin tocar el
+repo: Pages → Settings → Bindings → quitar `CLUB_API` y **Retry deployment**.
 
 ### 11.5 Qué se probó hoy (10-nov, sin publicar nada) y qué queda para el jueves
 **Probado hoy, en local** (wrangler 4: `wrangler dev` para el Worker y `wrangler pages dev` para Pages, con el binding):

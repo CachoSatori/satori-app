@@ -86,13 +86,11 @@ test('pages, plan B: le pasa /api al Worker por el binding, con el host interno 
   assert.equal(r.headers.get('x-club-api'), 'worker')
 })
 
-test('wrangler.toml del Worker: los mismos topes que Pages, sin URL *.workers.dev ni rutas, sin borrar variables', () => {
+test('wrangler.toml del Worker: los topes por IP, sin URL *.workers.dev ni rutas, sin borrar variables', () => {
   const w = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8')
-  const p = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')
   const topes = t => [...t.matchAll(/name = "(RL_\w+)"\s*\ntype = "ratelimit"\s*\nnamespace_id = "\d+"\s*\nsimple = \{ limit = (\d+), period = (\d+) \}/g)]
     .map(m => `${m[1]} ${m[2]}/${m[3]}`)
-  assert.deepEqual(topes(w), ['RL_CREAR 5/60', 'RL_LEER 60/60'])
-  assert.deepEqual(topes(w), topes(p))
+  assert.deepEqual(topes(w), ['RL_CREAR 5/60', 'RL_LEER 60/60'])   // (12-nov) los únicos topes: Pages no tiene los suyos
   assert.match(w, /^name = "satori-club-api"$/m)
   assert.match(w, /^main = "index\.js"$/m)
   assert.match(w, /^workers_dev = false/m)
@@ -101,8 +99,17 @@ test('wrangler.toml del Worker: los mismos topes que Pages, sin URL *.workers.de
   assert.doesNotMatch(w, /^\s*(routes|route|\[vars\])/m)
 })
 
-test('wrangler.toml de Pages: el binding del plan B está ACTIVO y nombra al Worker (decisión del dueño, 10-nov)', () => {
-  const p = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')
-  assert.match(p, /^\[\[services\]\]\nbinding = "CLUB_API"\nservice = "satori-club-api"$/m)
-  assert.doesNotMatch(p, /^#\s*\[\[services\]\]/m)
+// (12-nov) El binding CLUB_API ya no sale de un wrangler.toml de Pages (Pages lo rechazaba: src/build.test.ts): se carga
+// en el panel de Pages (README, «Configuración en el panel»). Si faltara, la API no queda abierta:
+test('sin el binding CLUB_API, Pages no tiene topes: crear y leer responden 503 (falla cerrada) y /api/salud lo dice', async () => {
+  const env = { ...base }
+  delete env.RL_CREAR; delete env.RL_LEER
+  const pedir = (ruta, init) => onRequest({ request: new Request(`https://club.ejemplo.test/api/${ruta}`,
+    { ...init, headers: { 'CF-Connecting-IP': '198.51.100.23', 'content-type': 'application/json' } }), env, params: { path: ruta.split('/') } })
+  const salud = await pedir('salud')
+  assert.equal(salud.headers.get('x-club-api'), 'pages')
+  const j = await salud.json()
+  assert.equal(j.rl_crear, false); assert.equal(j.rl_leer, false)
+  assert.equal((await pedir('cupon', { method: 'POST', body: JSON.stringify({ referente: 'ABCDEFGH' }) })).status, 503)
+  assert.equal((await pedir('cupon/ABCDEFGHJK')).status, 503)
 })

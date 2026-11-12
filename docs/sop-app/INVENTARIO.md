@@ -15,7 +15,7 @@
 | 6.5 | [Mi Rendimiento](6.5%20Mi%20Rendimiento.md) (incluye Mis Propinas) | `/mi-rendimiento` | Sí |
 | 6.6 | [Admin](6.6%20Admin.md) | `/admin` | No |
 | 6.7 | [SoP](6.7%20SoP.md) | `/sops` | Sí |
-| 6.13 | [Club Satori](6.13%20Club%20Satori.md) (**solo staging**, PR #59; incluye multilocal, descuentos y las páginas públicas) | `/club` | Sí |
+| 6.13 | [Club Satori](6.13%20Club%20Satori.md) (en `main` desde el 11-nov, PR #59; el local se enciende aparte; incluye multilocal, descuentos y las páginas públicas) | `/club` | Sí |
 
 Todavía **sin guía**: Inventario, Clientes, Finanzas, Bandeja y Prueba (ver abajo). Los códigos 6.8 en adelante
 quedan para ellos.
@@ -43,6 +43,8 @@ quedan para ellos.
 | SOPs | `/sops` | Todos los roles menos contador | Buscar, leer, «Ver PDF», «Imprimir», «Libros», editar, desactivar | URL firmada de 10 min. «Eliminar» desactiva, no borra |
 | Admin | `/admin` | owner | «Empleados», «Usuarios» («+ Nuevo empleado», rol, Habilitar/Deshabilitar), «Puntos por rol», «Tipo de cambio», «Horas trabajadas», botones de reportes | La contraseña temporal se muestra una vez. No se puede crear un owner directo. Un tipo de cambio por fecha |
 | Prueba | `/prueba` | owner | «Simulador de cierre de Caja Fuerte» | Banco de pruebas |
+| Club Satori | `/club` | owner, manager, cajero (el cajero solo «Escanear»; «Locales» solo owner) | Ver la guía 6.13 | En `main` desde el 11-nov (PR #59). El local se enciende aparte (ver `docs/pases/PASE-150-151-club.md`) |
+| Menú global (rediseño B3) | todas las pantallas privadas | Quien tiene 4 tarjetas o más en «Inicio» | Lateral desde 1024 px; barra inferior de hasta 5 botones con «Más» (hoja modal; Escape la cierra, rediseño B6). Mismas tarjetas que «Inicio», agrupadas. Ver 6.1, Tarea 3 | En producción desde el 12-nov (PR #128). No cambia permisos: muestra las mismas tarjetas que «Inicio» |
 
 ## Solo en STAGING (no están en PROD; sin guía hasta que pasen)
 
@@ -53,8 +55,6 @@ quedan para ellos.
 | KDS | `/kds` | owner, manager, cocina, barman | Pantalla de cocina y barra |
 | Salarios | `/salarios` | owner, manager | Nómina y BioTime. Bloqueos humanos pendientes |
 | Admin › «🍣 PoS» | `/admin` (pestaña) | owner | Catálogo y productos del PoS propio |
-| Club Satori | `/club` | owner, manager, cajero (el cajero solo «Escanear»; «Locales» solo owner) | Guía 6.13 escrita contra la rama del PR #59; pasa con el pase del Club |
-| Menú global (rediseño B3) | todas las pantallas privadas | Quien tiene 4 tarjetas o más en «Inicio» | Lateral desde 1024 px; barra inferior de hasta 5 botones con «Más» (hoja modal; Escape la cierra, rediseño B6). Mismas tarjetas que «Inicio», agrupadas. Ver 6.1, Tarea 3 |
 
 ## Permisos
 

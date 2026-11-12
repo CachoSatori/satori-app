@@ -1,7 +1,22 @@
 # 📚 Índice de documentación — Satori App
 
-> **Actualizado 2026-07-22.** Todos los enlaces de este índice fueron verificados contra la rama
-> actual (`main`). Si algo no está enlazado, es porque **no existe en esta rama**.
+> **Actualizado 2026-11-12** (auditoría: se sumaron las carpetas nuevas y se corrigió lo que ya no era cierto).
+> Las secciones de más abajo sobre el pozo, los SPECs y los RCAs son de julio de 2026 y siguen valiendo como historia.
+
+## 🗂️ Carpetas de `docs/` (lo que se sumó desde julio)
+
+| Carpeta | Qué tiene | Por dónde empezar |
+|---|---|---|
+| [handoffs/](./handoffs/) | Un handoff por sesión importante | El más nuevo: [HANDOFF-2026-11-11.md](./handoffs/HANDOFF-2026-11-11.md) |
+| [pases/](./pases/) | Un paquete por pase a producción, con su bitácora (§9) | [PASE-150-151-club.md](./pases/PASE-150-151-club.md) |
+| [puente/](./puente/) | Agente del PoS: plantilla del pase, resultado y rotación del secreto | [PASE-PROD-PLANTILLA.md](./puente/PASE-PROD-PLANTILLA.md) |
+| [club-satori/](./club-satori/) | Club Satori: spec, runbook del piloto, estándar de reportes, material del piloto | [README.md](./club-satori/README.md) · [SPEC.md](./club-satori/SPEC.md) · [RUNBOOK-piloto.md](./club-satori/RUNBOOK-piloto.md) |
+| [sop-app/](./sop-app/) | Guías de uso de la app (área 6 de los SoP), una por módulo | [INVENTARIO.md](./sop-app/INVENTARIO.md) |
+| [analisis/](./analisis/) | Análisis de ventas con sus queries y datos | [README.md](./analisis/README.md) |
+| [rca/](./rca/) | Análisis de causa raíz | — |
+
+SPECs sueltos en esta carpeta: [SPEC-prompax-explicado.md](./SPEC-prompax-explicado.md) (Ventas → Análisis, en prod) ·
+[MULTILOCAL-relevamiento.md](./MULTILOCAL-relevamiento.md) y [MULTILOCAL-fase0.md](./MULTILOCAL-fase0.md) (la fase 0 está en prod, mig 091).
 
 Dos clases de documento conviven acá, y **no valen lo mismo**:
 
@@ -12,10 +27,9 @@ Dos clases de documento conviven acá, y **no valen lo mismo**:
 
 ## 🧭 Handoff — leer en este orden
 
-1. **[../ESTADO.md](../ESTADO.md)** — foto compacta del proyecto: el **modelo del POZO** (leerlo
-   antes de tocar caja), §(a) ramas, §(b) prod vs solo-staging, §(c) migraciones, §(d) build por
-   módulo, §(e) pendientes de **plata** con firma, §(f) pendientes humanos/técnicos, sagrados con
-   sus hashes, y las notas que ahorran una sesión.
+1. **[../ESTADO.md](../ESTADO.md)** — foto del proyecto: bloque de arranque con los hashes, reglas operativas
+   para tocar `main` o una base, migraciones, qué hay en prod y qué solo en staging, y las notas que ahorran
+   una sesión. Después, el handoff más nuevo de [handoffs/](./handoffs/).
 2. **[../PASE-POZO-A-PROD.md](../PASE-POZO-A-PROD.md)** — acta del pase del pozo a producción:
    diff auditado, gate, asiento de arranque, verificación final y rollback.
 3. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog vigente por prioridad:
@@ -23,8 +37,8 @@ Dos clases de documento conviven acá, y **no valen lo mismo**:
    migraciones) · **P2** decisiones/firmas del dueño · **P3** PILAR de auth + gran pase del PoS ·
    **⛔** lo que quedó fuera de alcance.
 4. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases; el rediseño de cajas va ✅ hecho y validado.
-5. **[../HALLAZGOS.md](../HALLAZGOS.md)** — backlog triado de hallazgos. Sigue abierto: #2
-   `monthly-report` sin auth, #3 `config.toml`, #14 deploy sin gate de tests, #5 RLS `cash_cierres_dia`.
+5. **[../HALLAZGOS.md](../HALLAZGOS.md)** — backlog triado de hallazgos. `monthly-report` sin auth se cerró el
+   06-nov (SEC-02). Siguen abiertos: `config.toml` (ítem 11) y el deploy sin gate de tests.
 
 ## 🧮 Caja y el modelo del POZO
 

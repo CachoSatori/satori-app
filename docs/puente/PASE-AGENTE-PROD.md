@@ -1,6 +1,6 @@
 # Pase a PROD del AGENTE NUEVO del puente (pos-bridge `4d3513a` → `5da233a`)
 
-> **Estado: EJECUTADO el 10-nov-2026 (agente `5da233a` en prod desde las 23:37:18 -06:00, al segundo intento). El cierre queda ABIERTO: faltan 5.2/5.4 y el cierre de caja del 11-nov. Bitácora en §9; las correcciones que dejó el pase están marcadas «corrección 10-nov».**
+> **Estado: EJECUTADO y CERRADO (11-nov-2026). El agente `5da233a` corre en prod desde el 10-nov a las 23:37:18 -06:00, al segundo intento; el 11-nov se verificaron 5.2–5.4 y el cierre de caja. Bitácora en §9; las correcciones que dejó el pase están marcadas «corrección 10-nov». Los nombres de equipo, las rutas y las huellas de la PC del PoS están en el registro privado del dueño (hallazgo 194), no acá.**
 >
 > Antes: preparado. Formato de [`PASE-PROD-PLANTILLA.md`](PASE-PROD-PLANTILLA.md).
 >
@@ -429,16 +429,16 @@ if ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -ne 'Running') 
 | Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | 10-nov: firma del dueño sobre el PR #83 @ `a5a3104` (agente `5da233a`); el texto está en su conversación con Claude, fuera del repo. Restaurante cerrado |
 | Responsables (ejecución / control) | | el dueño, en la PC del PoS / la encargada |
 | 0.3 ensayo en staging con `5da233a` (fechas, un cierre de caja, 5.1–5.4 contra staging) | latido sin error · claves con fecha · campos nuevos en las C · cierre de caja con R→C | **Hecho (staging, solo lectura).** El agente de staging corre `5da233a` desde el **09-nov 16:01**. Cierre de caja de las **16:06:11**: 9 facturas pasaron de R a C. Cierre de las **23:07:08**: **32 facturas en C (112548–112583), 0 en R**; la **112548**, que a las 16:36 estaba en R, pasó a C. **Las 41 C del día traen `mesa_factura`, `consecutivo_fe` y `clave_fe`**; las **6 X** traen `mesa_factura` sin consecutivo (esperado). Claves de los pedidos abiertos con fecha (`pedido:2026-11-09:11`, 16:36). **Latido sin error** (23:19:40, cursor 112583). Revisiones del 09-nov a las 16:36 y a las 23:20 CR |
-| 1.1 tarea → `pos-agente-prod.cmd` (md5) · agente `4d3513a6…` limpio | | ok: tarea → `C:\satori\pos-agente-prod.cmd`, md5 `71d7c1b0f875a817c563ea6e4ba05aea` · agente `4d3513a6` limpio · Running |
-| 1.2 entorno de la cuenta: «leído de» entero, sin `INGEST_`/`POS_` | | ok: cuenta SYSTEM (S-1-5-18), sin `INGEST_`/`POS_`; leído de máquina + `HKEY_USERS\S-1-5-18\Environment` |
+| 1.1 tarea → `pos-agente-prod.cmd` (md5) · agente `4d3513a6…` limpio | | ok: la tarea corre el `.cmd` del agente de prod (md5 anotado en el registro privado del dueño) · agente `4d3513a6` limpio · Running |
+| 1.2 entorno de la cuenta: «leído de» entero, sin `INGEST_`/`POS_` | | ok: cuenta SYSTEM, sin `INGEST_`/`POS_`; leído del entorno de la máquina y del de la cuenta |
 | 1.3 cursor sano · campos nuevos en 0 · claves viejas | | cursor 112615, latiendo (40 s) sin error · cerradas en 24 h: 29, campos nuevos 0 · pedidos abiertos 0 (restaurante cerrado) |
 | 2.1 carpeta nueva `5da233a5…` · árbol `5600ebbd…` · `npm.cmd ci` | | ok: `5da233a5`, árbol `5600ebbd`, `npm ci` en la raíz. **Faltó el `npm ci` dentro de `pos-bridge\`** (el paquete no lo pedía): ver el paso 3 |
 | 2.2 `.env` copiados idénticos (cuáles) · firma agregada | | `pos-bridge\.env` copiado idéntico. **La firma `POS_AGENTE_PROD_FIRMADO` ya existía en el `.env` de prod (2026-10-28):** no se agregó otra (el bloque frenó por su guarda anti-duplicado). El camino «la firma ya viene» (corrección 10-nov del 2.2) **no está en el ensayo en seco del kit**, pero se ejecutó de hecho en prod el 10-nov: lectura de la firma 2026-10-28 y 2.3 con el candado OK |
 | 2.3 mismo archivo que manda y mismo largo (64) · candado OK | | ok: mismo archivo, largo 64; el candado pasa con la firma del 28-oct |
 | 2.4 `.cmd` nuevo = viejo con la carpeta cambiada | | ok |
 | 3 `HORA_CAMBIO` · segundos detenida | | **Primer intento (23:32): el agente nuevo no arrancó** (`LastTaskResult` 1). **Vuelta atrás §6 ok a las 23:33:24**; el agente viejo latió a los 44 s. Causa: faltaba `npm ci` dentro de `pos-bridge\` (`mssql` sin instalar). Se corrió ahí (`mssql` antes: no; después: sí). **Segundo intento: ok**, detenida 21 s, `HORA_CAMBIO` **2026-11-10 23:37:18 -06:00** |
-| 4 latido · Edge sin `invalid` ni `401` | | dos latidos sin error (23:39:58 y 23:42:31); `last_factura` 112615 (sin ventas). **Logs del Edge:** no revisados el 10-nov; se revisan el 11-nov con las primeras facturas, junto con 5.2/5.4 |
-| 5 +15 / +30 / +45 / +60 (5.1–5.4) | | **pendiente:** 5.2 y 5.4 el 11-nov, con las primeras facturas |
-| Cierre de caja: 5.2 con consecutivo y clave FE en las que pasaron a C | | **pendiente:** el cierre de caja del 11-nov |
+| 4 latido · Edge sin `invalid` ni `401` | | dos latidos sin error (23:39:58 y 23:42:31); `last_factura` 112615 (sin ventas). **Logs del Edge:** no revisados; lo reemplaza el cursor sin error y las C ingresadas completas (11-nov) |
+| 5 +15 / +30 / +45 / +60 (5.1–5.4) | | **11-nov, con las primeras ventas.** **5.2 (13:15):** R 2 con mesa, área, pedido, apertura, consecutivo y clave FE; X 9 con mesa, área, pedido y apertura, sin FE. **5.3 (13:49):** pedidos abiertos 2, clave con fecha 2, clave vieja 0. **5.4:** una factura cobrada comparada contra el PoS por el dueño: líneas y total coinciden |
+| Cierre de caja: 5.2 con consecutivo y clave FE en las que pasaron a C | | **11-nov, después del cierre del turno de la mañana (18:30):** C 10 con todos los campos, incluidos consecutivo y clave FE; R 1; X 10. Cursor 112615 → 112626, latiendo (27 s), `last_error` null |
 | Gate de CI en la cabeza del PR (o la aceptación explícita del dueño) | | aceptación del dueño en la firma, textual: «Acepto sin CI de pruebas en el PR (el repo no corre pruebas en PRs; el agente corre en staging desde el 09-nov).» |
-| Cierre: pasa / vuelta atrás | | **el agente nuevo corre en prod desde el 10-nov 23:37:18.** El cierre queda **abierto** hasta 5.2/5.4 y el cierre de caja del 11-nov |
+| Cierre: pasa / vuelta atrás | | **PASA · pase CERRADO (11-nov).** El agente nuevo corre en prod desde el 10-nov 23:37:18 -06:00 |

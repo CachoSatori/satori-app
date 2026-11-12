@@ -150,7 +150,7 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
 ## 🔁 El camino de las ventas: PoS → app
 
 ```
-PoS «Nube de Fuego» (SQL Server, PC del PoS DESKTOP-25PRDR1)
+PoS «Nube de Fuego» (SQL Server, PC del PoS)
    │  lee FAC_* (read-only)
    ▼
 agente pos-bridge (tarea programada de Windows; dos instancias, una por entorno)
@@ -180,8 +180,8 @@ pos_ndf_tickets · pos_ndf_ticket_lines · pos_ndf_open · pos_ndf_cursor   (RLS
 
 | Agente | PC | Carpeta / versión | Publica a | Latido 30/10 |
 |---|---|---|---|---|
-| «Satori PoS Bridge» | PoS (`DESKTOP-25PRDR1`) | `C:\satori\satori-app` @ `14bd278` ¹ | staging · `ingest-ndf` v10 | `last_poll_at` 18:13 UTC, `last_error` null |
-| «Satori PoS Bridge PROD» | PoS (`DESKTOP-25PRDR1`) | `C:\satori\agente-prod-5da233a` @ **`5da233a`** (pase del agente nuevo, 10/11 23:37:18 -06:00; la tarea corre `C:\satori\pos-agente-prod-5da233a.cmd` como SYSTEM). La carpeta vieja (`C:\satori\satori-app-prod` @ `4d3513a`) y el `.cmd` viejo se quedan 7 días como vuelta atrás | **prod** · `ingest-ndf` **v3** (09/11) | `last_poll_at` 18:12 UTC, `last_error` null |
+| «Satori PoS Bridge» | PC del PoS | carpeta de staging @ `14bd278` ¹ | staging · `ingest-ndf` v10 | `last_poll_at` 18:13 UTC, `last_error` null |
+| «Satori PoS Bridge PROD» | PC del PoS | carpeta de prod nueva @ **`5da233a`** (pase del agente nuevo, 10/11 23:37:18 -06:00, cerrado el 11/11; la tarea corre el `.cmd` nuevo con la cuenta SYSTEM). La carpeta de prod vieja (@ `4d3513a`) y el `.cmd` viejo se quedan 7 días como vuelta atrás. Los nombres y las rutas, en el registro privado del dueño | **prod** · `ingest-ndf` **v3** (09/11) | `last_poll_at` 18:12 UTC, `last_error` null |
 | `biotime-bridge` | PC del reloj (ST) | — | staging · `ingest-punches` v6 | ⚠️ **última sync 14/09 17:12 UTC** (22.969 marcas): parado desde entonces |
 
 ¹ Versión según el backlog del 29/10 (no verificable desde fuera de la PC). Las dos tareas del PoS arrancan

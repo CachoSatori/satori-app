@@ -1,0 +1,85 @@
+/* Club Satori — páginas públicas. Paleta de la marca (tinta, papel, oro), legible al sol:
+   texto oscuro sobre papel claro; el oro solo sobre tinta (contraste AA). Sin webfonts. */
+:root {
+  --ink: #0d0d0d;
+  --paper: #f5f0e8;
+  --panel: #ffffff;
+  --border: #cfc7b8;
+  --gold: #c8a96e;        /* solo sobre --ink */
+  --gold-text: #6b5220;   /* oro oscuro para texto sobre papel (AA) */
+  --muted: #4f4636;       /* AA sobre papel */
+  --ok: #1f6b5b;
+  --err: #a8321c;
+  --serif: Georgia, 'Times New Roman', serif;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; background: var(--paper); min-height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.5 var(--sans); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.top { background: var(--ink); color: var(--gold); display: flex; align-items: center; justify-content: space-between;
+       padding: 0.75rem 1rem; padding-top: max(0.75rem, env(safe-area-inset-top)); }
+.marca { display: flex; align-items: baseline; gap: 0.5rem; font-family: var(--serif); }
+.kanji { font-size: 1.6rem; }
+.marca-img { height: 2rem; width: auto; align-self: center; }   /* el daruma del Club (foto del daruma real, sin fondo) */
+.nombre { letter-spacing: 0.3em; font-weight: 700; font-size: 1.05rem; }
+.idioma { display: flex; gap: 4px; }
+.idioma button { background: transparent; color: #e8dcc2; border: 1px solid #6d5f45; border-radius: 6px;
+                 min-width: 48px; min-height: 44px; font: 600 0.95rem var(--sans); cursor: pointer; }
+.idioma button[aria-pressed='true'] { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+
+main { max-width: 480px; margin: 0 auto; padding: 1.25rem 1rem 3rem; outline: none; }
+h1 { font-family: var(--serif); font-size: 1.6rem; line-height: 1.2; margin: 0.25rem 0 0.5rem; }
+h2 { font-family: var(--serif); font-size: 1.2rem; margin: 1.5rem 0 0.5rem; }
+p { margin: 0.4rem 0; }
+.sub { color: var(--muted); }
+.cargando { text-align: center; color: var(--muted); padding: 3rem 0; }
+
+.btn { display: block; width: 100%; min-height: 56px; border-radius: 10px; border: 2px solid var(--ink);
+       background: var(--ink); color: #fff; font: 700 1.15rem var(--sans); cursor: pointer; padding: 0.75rem 1rem;
+       text-align: center; text-decoration: none; margin-top: 1rem; }
+.btn.sec { background: var(--panel); color: var(--ink); }
+.btn[disabled] { opacity: 0.55; cursor: default; }
+.btn:focus-visible, .idioma button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid #1f5fbf; outline-offset: 2px; }
+.fila { display: flex; gap: 0.5rem; } .fila .btn { flex: 1; }
+
+.tarjeta { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-top: 1rem; }
+.cupon { border: 3px dashed var(--ink); text-align: center; }
+.cupon .etq { font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-text); }
+.cupon canvas, .portal-qr canvas, .canje canvas { width: min(280px, 78vw); height: auto; image-rendering: pixelated; display: block; margin: 0.75rem auto; }
+.codigo { font: 800 1.6rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.18em; }
+.local { color: var(--muted); font-size: 0.95rem; margin-top: 0.75rem; }
+.local a { color: var(--ink); font-weight: 700; }
+
+.aviso { border-radius: 10px; padding: 0.9rem 1rem; margin-top: 1rem; font-weight: 600; border: 2px solid; }
+.aviso.err { color: var(--err); border-color: var(--err); background: #fbeeea; }
+.aviso.ok { color: var(--ok); border-color: var(--ok); background: #e9f4f1; }
+.aviso::before { margin-right: 0.4rem; }
+.aviso.err::before { content: '⚠'; }
+.aviso.ok::before { content: '✓'; }
+
+label { display: block; font-weight: 600; margin-top: 0.75rem; }
+input[type=text], input[type=tel], input[type=email] { width: 100%; min-height: 48px; font: 1rem var(--sans); padding: 0.6rem 0.75rem;
+       border: 2px solid var(--border); border-radius: 8px; background: #fff; color: var(--ink); margin-top: 0.25rem; }
+.check { display: flex; gap: 0.6rem; align-items: flex-start; font-weight: 400; }
+.check input { width: 26px; height: 26px; flex: none; margin-top: 2px; }
+details summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+
+.saldo { display: flex; align-items: baseline; gap: 0.5rem; }
+.saldo .num { font: 800 3rem/1 var(--serif); }
+.movs { list-style: none; padding: 0; margin: 0; }
+.movs li { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+.movs .mas { color: var(--ok); font-weight: 700; }
+.movs .menos { color: var(--err); font-weight: 700; }
+.movs .f { color: var(--muted); font-size: 0.9rem; }
+
+.canje { border: 3px solid var(--ink); }
+.cuenta { text-align: center; font: 700 1.3rem var(--sans); }
+
+/* A4.5: pestañas del portal (Mi Club / Anfitrión) */
+.tabs { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.75rem; }
+.tab { flex: 1; min-height: 44px; border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+       border-radius: 10px; font: 600 1rem var(--sans); cursor: pointer; }
+.tab[aria-selected='true'] { background: var(--ink); color: var(--gold); border-color: var(--ink); }
+.socio-qr canvas { display: block; width: min(240px, 70vw); height: auto; margin: 0.5rem auto; }

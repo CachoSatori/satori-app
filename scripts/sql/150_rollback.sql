@@ -1,0 +1,167 @@
+-- 150_rollback.sql (antes 075_rollback.sql; renumerada en el pase del Club, 10-nov) — Club Satori F1a: borra TODO lo
+-- club_* y la fila del ledger (150 en prod; 075 en staging mientras su fila no se renumere).
+-- ⚠️ Destruye los datos del Club (miembros, movimientos, cupones, PM). Pensado para STAGING
+-- antes del piloto. En prod, solo con firma y después de exportar los datos.
+begin;
+
+drop trigger if exists club_config_auditar_trg on public.club_config;
+drop trigger if exists club_config_tasa_guardia_trg on public.club_config;
+drop function if exists public.club_config_tasa_guardia();
+drop function if exists public.club_reporte_cerrar(date, text, text);
+drop function if exists public.club_reporte_mes(date, text, boolean);
+drop function if exists public.club_visita_control(text, text, jsonb, text, uuid, int);
+drop function if exists public.club_config_auditar();
+drop function if exists public.club_resolver(text);
+drop function if exists public.club_tarjeta_manual(uuid, int, text, uuid, jsonb);
+drop function if exists public.club_tarjeta_manual(uuid, int, text, uuid);
+drop function if exists public.club_mesas_abiertas(text);
+drop function if exists public.club_pedidos_abiertos(text);
+drop function if exists public.club_facturas_recientes(text);
+drop function if exists public.club_sin_cruce_elegir(uuid, text, text);
+drop function if exists public.club_sin_cruce_candidatas(uuid, text);
+drop function if exists public.club_sin_cruce_candidatas(uuid);
+drop function if exists public.club_cruce_facturas(text, jsonb, text);
+drop function if exists public.club_cruce_provisional(text, jsonb);   -- S0 (09-nov)
+drop function if exists public.club_cruce_detalle(text, jsonb, text);
+drop function if exists public.club_cruce_auto(text, jsonb, text);
+drop function if exists public.club_buscar(text);
+drop function if exists public.club_miembro_token(uuid);
+drop function if exists public.club_miembro_regenerar_codigo(uuid);
+drop function if exists public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb);
+drop function if exists public.club_negocio_guardar(uuid, text, text, boolean);
+drop function if exists public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text);   -- LC-ML
+drop function if exists public.club_negocio_guardar(uuid, text, text, boolean, text);           -- LC-ML
+drop function if exists public.club_locales_activos();                                          -- LC-ML
+drop function if exists public.club_local(text, boolean) cascade;                                       -- LC-ML
+drop function if exists public.club_local_activo(text);                                         -- LC-ML
+drop function if exists public.club_reporte_mes(date, text);
+drop function if exists public.club_excepcion_resolver(text, text, text, text);
+drop function if exists public.club_excepciones_abiertas(int, text);
+drop function if exists public.club_excepciones(date, date, text);
+drop function if exists public.club_excepciones(date, date, text, text);
+drop function if exists public.club_nombre_limpio(text);
+drop function if exists public.club_factura_clave(text);
+drop function if exists public.club_cupon_contacto(text, jsonb);
+drop function if exists public.club_cupon_ver(text);
+drop function if exists public.club_nombre_pila(text);
+drop function if exists public.club_vencer(date, int);
+drop function if exists public.club_vencer_simular(date);
+drop function if exists public.club_vencer_candidatos(date);
+drop function if exists public.club_vencer(date);
+drop function if exists public.club_portal(text);
+drop function if exists public.club_ajuste(uuid, int, text, text, uuid);
+drop function if exists public.club_ajuste(uuid, int, text, text);
+drop function if exists public.club_canje(uuid, text, numeric, text, uuid, jsonb);   -- R-01
+drop function if exists public.club_canje_aprobado(uuid, numeric, text, uuid, jsonb, text);
+drop function if exists public.club_canje_aplicar(uuid, text, numeric, text, uuid, jsonb, text);
+drop function if exists public.club_canje_codigo_generar(text);
+drop function if exists public.club_canje(uuid, numeric, text, uuid, jsonb);
+drop function if exists public.club_canje(uuid, numeric, text, uuid);
+drop function if exists public.club_cupon_usar(text, int, text, uuid, jsonb);
+drop function if exists public.club_cupon_usar(text, int, text, uuid);
+drop function if exists public.club_pos_ref(jsonb, text);
+drop function if exists public.club_pos_ref(jsonb);
+drop function if exists public.club_visita_canonica(text, jsonb, text);
+drop function if exists public.club_cupon_crear(text, jsonb);
+drop function if exists public.club_saldo_personas(uuid);
+
+-- Ronda 3: cualquier función club_* que quede (las nuevas y las que dependen del tipo de una tabla).
+do $$
+declare r record;
+begin
+  for r in select p.oid::regprocedure as fn from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname like 'club\_%' and p.proname <> 'club_saldos' loop
+    execute format('drop function if exists %s cascade', r.fn);
+  end loop;
+end $$;
+drop view if exists public.club_saldos;
+
+drop table if exists public.club_excepciones_resueltas;
+drop table if exists public.club_reportes_cerrados;
+drop table if exists public.club_web_clave;
+drop function if exists public.club_web_ok();
+drop function if exists public.club_web_clave_cargar(text);
+drop function if exists public.club_reportes_cerrados_inmutable();
+drop table if exists public.club_codigos_canje;   -- R-01 (antes que club_movimientos)
+drop table if exists public.club_pase_eventos;      -- LC-A1
+drop table if exists public.club_pase_cursor;
+drop table if exists public.club_pases;
+drop table if exists public.club_personas_pendientes; -- LC-A4.4
+drop table if exists public.club_premios;              -- LC-A4.3
+drop table if exists public.club_visitas_socio;       -- LC-A4
+drop table if exists public.club_entorno;              -- CLUB-AUD-42 (marca de staging)
+drop table if exists public.club_promociones;          -- LC-A3
+drop table if exists public.club_descuentos_tipo;        -- LC-DT
+drop table if exists public.club_config_global;         -- (08-nov) tope diario único del Club
+drop table if exists public.club_marcadores_descuento;   -- LC-MD
+drop table if exists public.club_cortesias;
+drop table if exists public.club_socio_solicitudes;   -- CLAUDE-HALL-02
+drop table if exists public.club_miembro_roles;
+drop table if exists public.club_canje_intentos;
+drop table if exists public.club_alertas;
+drop table if exists public.club_auditoria;
+drop table if exists public.club_cruces_manuales_historial;
+drop table if exists public.club_comparacion_vieja;
+drop table if exists public.club_cupones_contactos;
+drop table if exists public.club_cruces_manuales;
+drop table if exists public.club_config_historial;
+drop table if exists public.club_visitas;
+drop table if exists public.club_pm_cargos;
+drop table if exists public.club_pm_pagos;
+drop table if exists public.club_movimientos;
+drop table if exists public.club_cupones;
+drop table if exists public.club_miembros_contacto;
+drop table if exists public.club_miembros;
+drop table if exists public.club_negocios;
+drop table if exists public.club_config;
+
+drop function if exists public.club_personas_proximo(bigint, int);
+drop function if exists public.club_norm_factura(text);
+drop function if exists public.club_norm_texto(text);
+drop function if exists public.club_norm_telefono(text);
+drop function if exists public.club_creditos(bigint, int);
+drop function if exists public.club_gen_codigo(int);
+
+-- (10-nov, paquete del pase) tres tablas que la lista de arriba no tenía: quedaban después del rollback.
+drop table if exists public.club_pos_login_historial;   -- historial de cambios de login del PoS (trigger en employees)
+drop table if exists public.club_cargas_papel;          -- carga de saldos de papel (G-56)
+drop table if exists public.club_avisos_privacidad;     -- versiones del aviso de privacidad
+
+-- LC-A2: tarea diaria de socios (si pg_cron está). (Grok 150, 10-nov) DENTRO de la transacción y antes de la guarda:
+-- si algo después aborta, tampoco se desprograma. Dinámico: sin pg_cron, el esquema cron no existe.
+do $$ declare j text; begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    for j in execute 'select jobname from cron.job where jobname like ''club\_%''' loop
+      perform cron.unschedule(j);
+    end loop;
+  end if;
+end $$;
+
+-- (10-nov) el rollback se verifica solo: si queda CUALQUIER objeto club_* en public (tabla, vista, secuencia, tipo,
+-- función), un trigger club_* sobre una tabla que no es del Club (p. ej. employees) o una tarea club_* de pg_cron
+-- (Grok 150), aborta y no se borra nada.
+do $$
+declare v text; v_cron text;
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute 'select string_agg(''cron.job '' || jobname, '', '') from cron.job where jobname like ''club\_%''' into v_cron;
+  end if;
+  select string_agg(x, ', ') into v from (
+    select v_cron as x where v_cron is not null
+    union all
+    select c.relname::text || ' (' || c.relkind::text || ')' as x from pg_class c
+     where c.relnamespace = 'public'::regnamespace and c.relname like 'club\_%'
+    union all select p.oid::regprocedure::text from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'club\_%'
+    union all select t.typname::text || ' (tipo)' from pg_type t
+     where t.typnamespace = 'public'::regnamespace and t.typname like 'club\_%' and t.typtype in ('e', 'd')
+    union all select t.tgname::text || ' on ' || t.tgrelid::regclass::text from pg_trigger t
+     where not t.tgisinternal and t.tgname like 'club\_%') z;
+  if v is not null then
+    raise exception 'rollback de la 150 incompleto, queda: %', v;
+  end if;
+end $$;
+
+delete from supabase_migrations.schema_migrations where version in ('075', '150');
+
+commit;
+

@@ -81,7 +81,7 @@
 ---
 ### Tanda 3 · pedida por Ismael el 12-nov 06:40 («hagamos tanda 3», todo)
 
-## A11 · Daruma en Semana y Reporte mensual · `lista`
+## A11 · Daruma en Semana y Reporte mensual · `en revisión #135` (reporte `2026-11-12-0707-A-A11.md`)
 - `src/modules/resumen/ResumenSemanal.tsx` y `src/modules/resumen/ReporteMensual.tsx` no tienen clase de encabezado que el CSS de B8 pueda tomar.
 - Agregar en el encabezado de cada una, a la izquierda del título, un `<img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" width={22} height={24} />` (como el login de B8), con el mismo tamaño y separación que el `::before` de los otros módulos (22×24 px, ver `.module-header-left::before` en `src/index.css`).
 - En Reporte mensual, solo en la barra `no-print`: el Daruma **no** sale al imprimir.

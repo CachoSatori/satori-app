@@ -12,7 +12,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`66b3b85`** (10/11: merges de docs #96 y #108; el último con migraciones es `c41e18b`, la tanda 092–095) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. Ledger de prod: **65 · 095**. |
+| `main` | **`17a9efd`** (11/11 23:22:08 -06:00: merge del #59, el Club Satori, con la 150 y la 151) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. El 11/11 entró el Club (#59, `17a9efd`: la 150 y la 151). Ledger de prod: **67 · 151**. |
 | `staging` | **`fb29872`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
 | `integracion/analitica-staging` | **`850a22f`** | ⚠️ Rama vieja, 123 commits atrás de `staging`. **No la publica Cloudflare** (lo de septiembre ya no vale: la rama de producción es `staging`). |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
@@ -43,14 +43,14 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 | #56 · #57 | `bb1a488` · `6bcfafb` | 06/11 | Saca nombres y correos reales de comentarios, tests y docs. |
 | este PR | — | 07/11 | **Prom/PAX explicado** (Ventas → Análisis) + **mig 080** `pos_prompax_agregado`, que la aplica el merge (Branching). Firmado por Ismael el 06/11. |
 
-- **📍 Foto del 11/11 (lo nuevo desde el 10/11; el detalle, en el handoff):**
-  - **`main` = `66b3b85`** (merges de docs #96 y #108 sobre `c41e18b`). **Ledger de prod: 65 · 095.** El 10/11 entraron
-    por Branching la 085, la 089, la 090, la 091 y la tanda 092–095, cada una con su PASE cerrado en `docs/pases/`.
-  - **Agente del PoS en prod: `5da233a`** desde el 10/11 a las 23:37:18 -06:00 (carpeta `C:\satori\agente-prod-5da233a`;
-    la carpeta vieja se queda 7 días). La bitácora y las correcciones del PASE están en el **#109**, abierto hasta las
-    lecturas 5.2/5.4 y el cierre de caja del 11/11.
-  - **Club Satori: pase a prod el jue 12/11**, sobre el paquete **#93 @ `d6c117b`** (la 150, md5 `04681f41…`; la 151, md5
-    `7a27ab08…`; ledger esperado 65 · 095 → 67 · 151). El Club entero está en el **#59 @ `66c950d`**.
+- **📍 Foto del 11/11 a la noche (lo nuevo desde el 10/11; el detalle, en el handoff):**
+  - **`main` = `17a9efd`** (merge del #59, el Club, el 11/11 a las 23:22:08 -06:00). **Ledger de prod: 67 · 151.** El 10/11
+    entraron por Branching la 085, la 089, la 090, la 091 y la tanda 092–095, cada una con su PASE cerrado en `docs/pases/`.
+  - **Agente del PoS en prod: `5da233a`** desde el 10/11 a las 23:37:18 -06:00 (carpeta de prod nueva en la PC del PoS;
+    la vieja se queda 7 días). **Pase cerrado el 11/11** (5.2–5.4 y el cierre de caja): bitácora en el §9 de
+    [docs/puente/PASE-AGENTE-PROD.md](docs/puente/PASE-AGENTE-PROD.md).
+  - **Club Satori: EN PROD desde el 11/11** (merge del #59, `17a9efd`; Branching aplicó la **150** y la **151**). **Pase
+    cerrado el 11/11; el local sigue apagado.** Paquete y bitácora: `docs/pases/PASE-150-151-club.md`.
   - **Cloudflare (11/11):** el Worker `satori-club-api` está desplegado a mano desde el #59 @ `66c950d` con wrangler
     4.160.1 (Version `ae142f3a-3bdf-46fd-b8e1-ab8d6ff70a59`), sin rutas ni `workers.dev`, con los bindings `RL_CREAR` y
     `RL_LEER`. Las variables están cargadas en el panel: `SUPABASE_URL` y `SUPABASE_ANON_KEY` apuntan a **prod**, igual
@@ -174,7 +174,7 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
 ## 🔁 El camino de las ventas: PoS → app
 
 ```
-PoS «Nube de Fuego» (SQL Server, PC del PoS DESKTOP-25PRDR1)
+PoS «Nube de Fuego» (SQL Server, PC del PoS)
    │  lee FAC_* (read-only)
    ▼
 agente pos-bridge (tarea programada de Windows; dos instancias, una por entorno)
@@ -204,8 +204,8 @@ pos_ndf_tickets · pos_ndf_ticket_lines · pos_ndf_open · pos_ndf_cursor   (RLS
 
 | Agente | PC | Carpeta / versión | Publica a | Latido 30/10 |
 |---|---|---|---|---|
-| «Satori PoS Bridge» | PoS (`DESKTOP-25PRDR1`) | `C:\satori\satori-app` @ `14bd278` ¹ | staging · `ingest-ndf` v10 | `last_poll_at` 18:13 UTC, `last_error` null |
-| «Satori PoS Bridge PROD» | PoS (`DESKTOP-25PRDR1`) | `C:\satori\agente-prod-5da233a` @ **`5da233a`** (pase del agente nuevo, 10/11 23:37:18 -06:00; la tarea corre `C:\satori\pos-agente-prod-5da233a.cmd` como SYSTEM). La carpeta vieja (`C:\satori\satori-app-prod` @ `4d3513a`) y el `.cmd` viejo se quedan 7 días como vuelta atrás | **prod** · `ingest-ndf` **v3** (09/11) | `last_poll_at` 18:12 UTC, `last_error` null |
+| «Satori PoS Bridge» | PC del PoS | carpeta de staging @ `14bd278` ¹ | staging · `ingest-ndf` v10 | `last_poll_at` 18:13 UTC, `last_error` null |
+| «Satori PoS Bridge PROD» | PC del PoS | carpeta de prod nueva @ **`5da233a`** (pase del agente nuevo, 10/11 23:37:18 -06:00, cerrado el 11/11; la tarea corre el `.cmd` nuevo con la cuenta SYSTEM). La carpeta de prod vieja (@ `4d3513a`) y el `.cmd` viejo se quedan 7 días como vuelta atrás. Los nombres y las rutas, en el registro privado del dueño | **prod** · `ingest-ndf` **v3** (09/11) | `last_poll_at` 18:12 UTC, `last_error` null |
 | `biotime-bridge` | PC del reloj (ST) | — | staging · `ingest-punches` v6 | ⚠️ **última sync 14/09 17:12 UTC** (22.969 marcas): parado desde entonces |
 
 ¹ Versión según el backlog del 29/10 (no verificable desde fuera de la PC). Las dos tareas del PoS arrancan
@@ -252,7 +252,7 @@ solas tras un reinicio (validado el 29/10).
 4. Un número usado no se reutiliza aunque la rama se abandone. Las versiones son **texto**, como en el
    ledger: `0090` y `0095` son históricas y distintas de una futura `090` / `095`.
 
-**Orden del pase a prod** (prod va hasta la **151** desde el 11/11): **085 ✅ → 089 ✅ → 090 ✅ → 091 ✅ → 092–095 ✅ (tanda, un merge) → Club ✅ (150 ← 075 y 151 ← 100, el 11/11 a las 23:22 CR, merge `17a9efd`) → sigue el bloque 152+.**
+**Orden del pase a prod** (prod va hasta la **151** desde el 11/11): **085 ✅ → 089 ✅ → 090 ✅ → 091 ✅ → 092–095 ✅ (tanda, un merge) → Club ✅ (075 como 150 y 100 como 151, 11/11) → sigue el bloque 152+.**
 1. ~~**081 → 082** (puente) primero, con su número.~~ **Hecho el 09/11** (pase del puente).
 2. ~~Después la **085** (SEC-01c), con su número: queda arriba de la 082.~~ **Hecho el 10/11** (#80, `bb12652`).
 3. Las que queden atrás (≤ al último de prod en su momento) toman **150+**, en el orden en que pasen:
@@ -260,7 +260,7 @@ solas tras un reinicio (validado el 29/10).
    (y cualquier migración de caja posterior al Club) toman **152+** cuando se arme su paquete.
 4. **Hecho el 10/11:** la **089** (#90, `fa1cbef`), la **090** (#97, `7543347`), la **091** (#103, `b8cb74d`) y la tanda
    **092–095** (#107, `c41e18b`). Detalle en el §9 de cada PASE (`docs/pases/`).
-5. **Sigue el Club:** la 075 como **150** y la 100 como **151**. La MAINTAIN de `authenticated` va después de abrir el
+5. **Hecho el 11/11:** el Club (#59, `17a9efd`), la 075 como **150** y la 100 como **151**. La MAINTAIN de `authenticated` va después de abrir el
    Club, en el bloque 152+ (decisión del dueño).
 
 **Ya usados (antes de los bloques)**
@@ -299,13 +299,13 @@ solas tras un reinicio (validado el 29/10).
 | Número | Nombre | Bloque | Rama | Dónde está aplicada |
 |---|---|---|---|---|
 | 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **renumerada a 151** en el pase del Club (`claude/pase-club`, 10-nov). El número 100 no se reutiliza (regla 4) |
-| 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | **PROD desde el 11/11 23:22 CR** (merge `17a9efd`, Branching, 713 statements). staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` |
-| 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | **PROD desde el 11/11 23:22 CR** (mismo merge, 17 statements). staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` |
+| 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
+| 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
-| **PROD** | **67 filas · última 151** (11/11 23:22 CR, pase del Club cerrado, lo informó el dueño: **150 `club_satori_esquema`, 713 statements, y 151 `club_catalogo_locales`, 17, por Branching al mergear el #59 (`17a9efd`)**; G-61 «después» en 0; antes 65 con la tanda 092–095, 61 con la 091 y 60 con la 090) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085 · 089 · 090 · 091 · 092 · 093 · 094 · 095 · 150 · 151` (**092, 093, 094 y 095 el 10/11 22:57:17 -06:00, en UN merge del #107 (`c41e18b`), Branching las aplicó en orden: 12, 7, 3 y 9 statements; pase de la tanda cerrado**; **091 el 10/11 22:44:57 -06:00, Branching al mergear el #103 (`b8cb74d`), 31 statements; pase cerrado 22:51**; **090 el 10/11 11:33:38 -06:00, Branching al mergear el #97 (`7543347`), 4 statements; pase cerrado**; **089 el 10/11 10:22:11 -06:00, Branching al mergear el #90 (`fa1cbef`), 3 statements; pase cerrado**; **085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
+| **PROD** | **67 filas** (11/11, según el pase del Club; antes 65 con la tanda 092–095) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085 · 089 · 090 · 091 · 092 · 093 · 094 · 095 · 150 · 151` (**092, 093, 094 y 095 el 10/11 22:57:17 -06:00, en UN merge del #107 (`c41e18b`), Branching las aplicó en orden: 12, 7, 3 y 9 statements; pase de la tanda cerrado**; **091 el 10/11 22:44:57 -06:00, Branching al mergear el #103 (`b8cb74d`), 31 statements; pase cerrado 22:51**; **090 el 10/11 11:33:38 -06:00, Branching al mergear el #97 (`7543347`), 4 statements; pase cerrado**; **089 el 10/11 10:22:11 -06:00, Branching al mergear el #90 (`fa1cbef`), 3 statements; pase cerrado**; **085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
 | **STAGING** | **91 filas, última 151** (leído el 11/11; el 10/11 a las 11:03 CR entraron la 091–095, y después la sesión del Club renumeró la 075 a 150 y aplicó la 151) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5); la 082 del puente está aplicada **sin su fila**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). **10/11 tarde:** la 150 nueva (auditoría A/B, md5 `919bcd54…`) aplicada encima con su fila, con el OK del dueño; batería 613/613 y paridad 992 = 992 sin `--antes`. **10/11 18:10 CR:** la 150 de la segunda vuelta (Grok 162–164, md5 `04681f41…`) con su fila, mismo procedimiento; batería 623/623, paridad 992 = 992. La 082 del puente está aplicada **con su fila**: la v3 (09/11), md5 `edb7ffc58976804e55968f75df530a05`, igual al archivo de `main`. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
 - **Próximo número libre: por bloque** (08/11): **CAJA / operación 096**, **CLUB SATORI + puente 100**. Ver «Numeración de migraciones» abajo. Antes de crear una migración, leer esa sección **en `main`** y registrar el número en el mismo PR.

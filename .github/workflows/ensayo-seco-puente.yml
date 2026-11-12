@@ -9,11 +9,12 @@
 name: ensayo-seco-puente
 on:
   push:
-    branches: [claude/pase-puente-resultado-2026-11-09, claude/puente-120-121]
+    branches: [claude/pase-puente-resultado-2026-11-09, claude/puente-120-121, claude/pase-agente-nuevo, claude/pase-agente-resultado]
     paths:
       - docs/puente/PASE-PROD-PLANTILLA.md
       - docs/puente/PASE-PROD-2026-11-09.md
       - docs/puente/ROTACION-SECRETO-AGENTE.md
+      - docs/puente/PASE-AGENTE-PROD.md
       - scripts/puente/ensayo_seco_paquete.ps1
       - .github/workflows/ensayo-seco-puente.yml
 permissions:
@@ -51,3 +52,6 @@ jobs:
       - name: Rotación del secreto del agente (${{ matrix.exe }}) → 0 FAIL
         shell: cmd
         run: ${{ matrix.exe }} -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\puente\ensayo_seco_paquete.ps1' -Paquete '.\docs\puente\ROTACION-SECRETO-AGENTE.md'; exit $LASTEXITCODE"
+      - name: Pase del agente nuevo (${{ matrix.exe }}) → 0 FAIL
+        shell: cmd
+        run: ${{ matrix.exe }} -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\puente\ensayo_seco_paquete.ps1' -Paquete '.\docs\puente\PASE-AGENTE-PROD.md'; exit $LASTEXITCODE"

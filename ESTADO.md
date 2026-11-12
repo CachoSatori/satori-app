@@ -353,6 +353,13 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 
 ### Pendientes de estabilización
 
+- **Agente del PoS · el login `01` se trata como login de sistema** (anotado el 08/11, auditoría del pase del puente).
+  El agente de prod (`4d3513a`) y la rama `claude/puente-item11-prod` (`e4678b3`) tienen
+  `LOGINS_SISTEMA = ['002', '01', '02']` en `src/shared/ndf/mapTicket.ts`, así que las facturas del `01` llegan con
+  `registrado_por = 'sistema'`. Decisión de Ismael del 29/10: el `01` es una **salonera** (unificada con su login de
+  manager en `personasNdf.ts`); `main` ya lo tiene. **Se arregla cuando se actualice el agente** (otra firma, después
+  del pase del lunes), y después se re-ingestan con el backfill los tickets del `01` ya guardados como `sistema`.
+  No cambia con el pase del Edge: el Edge solo valida el `registrado_por` que manda el agente.
 - **Propinas · reparto semanal de cocina:** mover la exclusión del reparto de cocina de un nombre fijo en el código a una marca en la base (requiere spec y firma: toca propinas).
 - **Privacidad · datos reales que siguen en el repo público** (tras #56 y #57, que limpiaron comentarios, tests y docs).
   No se sacaron porque hacerlo cambia el comportamiento o porque la zona está bloqueada:

@@ -24,3 +24,4 @@
 | 2026-11-11 23:40 | A8 (#123) y B7 (#124) | Validadas por Ismael («a8 ok, b7 ok») y mergeadas a `staging` (`0f59cf9`, `61f9e24`). A8 con su firma anticipada (condición cumplida, ver revisión 23:20). Adelantar A9. |
 | 2026-11-12 00:05 | A9 (#127) | Validada por Ismael («sí, mergear A9») y mergeada a `staging`. Con A9 termina el estilo carta en los módulos. |
 | 2026-11-12 00:15 | A9 en la rama de pase (PR #128, `c508e44`) | Ismael: «a9 ok» sobre la vista previa de la rama de pase. **No autoriza el merge a `main`:** faltan auditoría de Grok, validación física y su «mergear a main». |
+| 2026-11-12 00:10 | **A9 dentro del pase a `main`** (aclaración por la auditoría 210) | Ismael pidió por chat «suma ahora a9 a la rama y corre pruebas» (00:10) y validó la vista previa («a9 ok», 00:15). El alcance del pase es A1–A9 y B1–B7 con el Club. **El merge a `main` sigue sin autorizar.** |

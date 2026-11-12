@@ -71,7 +71,7 @@
 - **Aceptación:** build y tests verdes; capturas 390 y 1280 de login, Inicio, Ventas, Caja y Propinas; guía 6.1 e `INVENTARIO.md` si cambia algo.
 
 
-## B7 · Resumen, Admin e Inventario con estilo carta (ex A10) · `en revisión #124` · validación visual
+## B7 · Resumen, Admin e Inventario con estilo carta (ex A10) · `en revisión #124` (revisada 11-nov 23:20: pasa; espera validación visual) · validación visual
 - **Archivos habilitados solo para esta tarea:** `src/modules/resumen/**`, `src/modules/admin/**`, `src/modules/inventario/**`, `src/modules/ventas/MiRendimiento.tsx`, guías 6.5, 6.6 y la de Resumen. (La línea A no los toca mientras B7 esté abierta.)
 - Estilos en línea como en A7: colores fijos → `var(--c-*)`; `monospace`/`'DM Mono'` → `var(--font-sans)` + `tabular-nums`; sin `textTransform: 'uppercase'`; fondos oscuros → blanco o panel; números grandes en `var(--font-serif)`; oro de texto `--c-oro-texto`.
 - Cambiar las copias locales de `fi` con el formato viejo en `inventario/*` por el `fi()` compartido.

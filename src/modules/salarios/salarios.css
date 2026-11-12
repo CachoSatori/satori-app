@@ -24,12 +24,14 @@
    chunk lazy del módulo, así que la fuente se pide recién cuando alguien abre
    Salarios — el resto de la app no paga el pedido. Los fallbacks son reales: si
    Google Fonts no responde, la escala tipográfica se sostiene igual. */
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Tanda 4 (12-nov): sin fuentes de Google. Salarios usa las de la app, servidas desde public/fonts (funcionan sin
+   internet): Cormorant Garamond para títulos y DM Sans para el resto; los números con tabular-nums, sin monoespaciada. */
 
 /* Los tokens v3 pisan a los del shell heredado (`.tips-module` define los `--t-*` con
    un solo nombre de clase). La doble clase gana por especificidad, sin depender del
    orden en que el bundler concatene los CSS. */
 .tips-module.sal-v3 {
+  font-variant-numeric: tabular-nums;   /* tanda 4: números alineados sin monoespaciada */
   /* — Superficies y tinta (valores exactos del prototipo) — */
   --sal-ground:      #F5F8F7;
   --sal-surface:     #FFFFFF;
@@ -61,9 +63,9 @@
   --sal-r-sm:   9px;
   --sal-r-pill: 999px;
 
-  --sal-display: 'Fraunces', 'Hanken Grotesk', Georgia, serif;
-  --sal-ui:      'Hanken Grotesk', system-ui, sans-serif;
-  --sal-mono:    'JetBrains Mono', ui-monospace, monospace;
+  --sal-display: var(--font-serif);
+  --sal-ui:      var(--font-sans);
+  --sal-mono:    var(--font-sans);   /* sin monoespaciada: va con tabular-nums */
 
   /* Alias que ya usaban las reglas viejas del módulo. Se mantienen para no reescribir
      cada selector: apuntan a los tokens nuevos. */

@@ -39,16 +39,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setMasEn(abrir ? aqui : null)
   }
 
-  // Hoja «Más» accesible (B6, auditoría 202): al abrir, el foco va a «Cerrar»; Escape la cierra;
+  // Hoja «Más» accesible (B6 y B9, auditoría 202): al abrir, el foco va a «Cerrar»; Escape la cierra;
+  // Tab y Shift+Tab quedan dentro de la hoja (del último al primero y al revés);
   // al cerrar, el foco vuelve al botón «Más».
   const masBotonRef  = useRef<HTMLButtonElement>(null)
   const cerrarRef    = useRef<HTMLButtonElement>(null)
+  const hojaRef      = useRef<HTMLDivElement>(null)
   const estabaAbierto = useRef(false)
   useEffect(() => {
     if (masAbierto) {
       estabaAbierto.current = true
       cerrarRef.current?.focus()
-      const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') setMasEn(null) }
+      const alTeclear = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') { setMasEn(null); return }
+        if (e.key !== 'Tab' || !hojaRef.current) return
+        const enfocables = Array.from(
+          hojaRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
+        )
+        if (enfocables.length === 0) return
+        const primero = enfocables[0]
+        const ultimo  = enfocables[enfocables.length - 1]
+        const actual  = document.activeElement
+        const adentro = actual instanceof Node && hojaRef.current.contains(actual)
+        if (e.shiftKey && (actual === primero || !adentro)) {
+          e.preventDefault()
+          ultimo.focus()
+        } else if (!e.shiftKey && (actual === ultimo || !adentro)) {
+          e.preventDefault()
+          primero.focus()
+        }
+      }
       document.addEventListener('keydown', alTeclear)
       return () => document.removeEventListener('keydown', alTeclear)
     }
@@ -158,6 +178,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {masAbierto && (
         <div className="shell-mas-fondo" onClick={() => setMasAbierto(false)}>
           <div
+            ref={hojaRef}
             id="shell-mas"
             className="shell-mas"
             role="dialog"

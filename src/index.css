@@ -367,8 +367,9 @@ html, body, #root {
   color: var(--accent);
 }
 
-/* Daruma en el encabezado del Inicio, en celular y en computadora (B8). */
+/* Daruma en el encabezado del Inicio: solo en celular. En computadora queda el de la marca del menú (B9). */
 .header-daruma { display: block; width: 22px; height: auto; }
+@media (min-width: 1024px) { .header-daruma { display: none; } }
 
 /* B8 · Daruma chico arriba a la izquierda de cada pantalla, al lado de la letra (kanji).
    Va como ::before del bloque izquierdo del encabezado, así no se toca el JSX de los módulos. */
@@ -4589,7 +4590,8 @@ html, body, #root {
 /* Código del documento (mig 076): badge chico antes del título y en el detalle. */
 .sop-code {
   display: inline-block; margin-right: 0.45rem; padding: 1px 6px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
   color: var(--t-teal, var(--c-teal)); border: 1px solid var(--t-teal, var(--c-teal)); border-radius: 3px;
   vertical-align: 1px;

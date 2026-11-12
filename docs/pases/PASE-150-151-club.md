@@ -518,8 +518,15 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
   11-nov a la noche por decisión del dueño. Con el Club apagado y sin locales: la configuración (§6) sigue el jue 12.
 - **Pages `satori-club` (12-nov):** los deploys del 11-nov fallaron porque Pages rechazaba `club-web/wrangler.toml` (los
   topes `[[unsafe.bindings]]`). El #129 lo borró y el proyecto se configura solo en el panel, con el binding `CLUB_API` →
-  `satori-club-api` (§11.1b). Merge `a4300ab` a las 06:57:34 CR; deploy **en verde** (~07:00 CR). Quedan el Worker desde
-  `main` (§11.4 paso 4c) y `/api/salud` (§11.3), que hace el dueño.
+  `satori-club-api` (§11.1b). Firma del dueño 06:55 CR; merge `a4300ab` a las 06:57:34 CR; deploy `98813ce0` **en verde**
+  (Success en 34 s, alias `club.satoricostarica.com`).
+- **Configuración del 12-nov (el dueño):** Worker desde `main` 07:05 CR (Version `fa9383cf…`); `/api/salud` 07:05 con
+  `x-club-api: worker` y todo en `true`; §6.1–6.4 a las 07:07 en una transacción; carga única (§6.5) aplicada a las 07:14
+  con 0 diferencias; modo transición (§6.5b) a las 07:16. **Santa Teresa sigue apagado** (`club_activo` false): falta §6.6.
+  Por confirmar: la conexión del Worker al repo (§11.4 paso 7) y las 2 filas de `club_config_historial` de §6.5b.
+- **Deuda:** en `club-web/worker/wrangler.toml`, pasar los topes de `[[unsafe.bindings]]` a `[[ratelimits]]` (el formato
+  propio de wrangler para rate limiting), para que el aviso del deploy deje de listarlos como diferencia (§11.4 paso 4c).
+  En el backlog: `PROMPT-CONTINUACION.md`, P1 22w.
 - **Modo transición (decisión del dueño, 11-nov):** la tarjeta vieja (de papel, sin QR) queda encendida en Santa Teresa
   con tope de 12 personas por anfitrión por día, después de la carga única (§6.5b). No es una migración: es un dato de
   `club_config`, con su rastro en `club_config_historial`.
@@ -540,7 +547,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | ✅ 11-nov: `60a977e` (main `ced6621` ancestro; migraciones: solo 150 y 151) |
 | 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker `satori-club-api` con `wrangler deploy` manual, sin repositorio conectado, sin URL pública, con sus variables (§11.4) · `CLUB_WEB_KEY` en Pages y en el Worker | | ✅ 11-nov: Worker desde `66c950d` (Version `ae142f3a…`), 4 variables a prod; `CLUB_WEB_KEY` creada y cargada en los dos |
 | §11.4 paso 4b · Worker otra vez a mano desde la cabeza firmada (SHA, Version nueva) | | ⏳ **No se hizo el 11-nov:** wrangler avisaba que el deploy pisaba `preview_urls` y las variables cargadas en el panel, y el dueño no siguió. Pasa al jue 12 por la mañana, **antes de encender**, desde `main` con el #125 adentro (`preview_urls = false` explícito y `keep_vars = true`): §11.4 paso 4c |
-| §11.4 paso 4c · Worker desde `main` (`a4300ab` o posterior): `npx wrangler deploy` en `club-web/worker` · Version nueva · `RL_CREAR` y `RL_LEER` en la salida · sin aviso de pisar variables, `preview_urls` ni rutas | Version ID · 2 ratelimit | ⏳ 12-nov: lo hace el dueño. Desde la sesión de Claude no hay credenciales de Cloudflare y la red no llega a `api.cloudflare.com` |
+| §11.4 paso 4c · Worker desde `main` (`a4300ab` o posterior): `npx wrangler deploy` en `club-web/worker` · Version nueva · `RL_CREAR` y `RL_LEER` en la salida · sin aviso de pisar variables, `preview_urls` ni rutas | Version ID · 2 ratelimit | ✅ 12-nov **07:05 CR**, el dueño, a mano desde `main` @ `a4300ab` · Version **`fa9383cf-eaad-44c8-b4c4-0ca0695beca1`** · bindings `RL_CREAR` y `RL_LEER` · «No targets deployed», lo esperado (sin rutas ni `workers.dev`). El aviso de wrangler salió, como siempre (compara con el panel): regla en §11.4 paso 4c |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | 0 sin esperar | ✅ 11-nov 14:30: 63 esperadas, sale 0 · sha256 `e5f1c7c0…87226` · firma del dueño: |
 | 0.10 carga única: export, sha256 de `carga.sql` y esperados de restos (N y personas) firmados (o «la prueba va sin carga») | | ✅ 11-nov 10:14: sha256 `150f0c8e…6b461f`, esperados 115 / 174, ensayo en staging OK |
 | 1.1 ledger: 65 · 095 · 089–095 presentes · nada del Club (Grok 181) | 65 · 095 | ✅ 65 · 095 · 0 filas del Club · 089–095 presentes |
@@ -556,18 +563,18 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 5.3 0 · 1 · 0 · true · 1 · 1 · `15 9 * * *` · false · false · true · 1 · 0 | | ✅ 0 · 1 · 0 · true · 1 · 1 · `15 9 * * *` · false · false · true · 1 · 0 |
 | 5.4 G-61 después: sale 0 | | ✅ 23:33 CR, `gate61_prod_csv.sh --despues` desde `main` @ `17a9efd`: **0 fuera de la lista** (63 de 63 esperadas, sha256 `e5f1c7c0…87226`; 0 sobrantes) · staging 3.765 hechos, prod 3.706 · los **3.374 hechos del Club idénticos** a staging · tarea `club_socios_mantenimiento` con `user=postgres`, igual que staging · CSV de prod sha256 `70bffc08422b781e44eeaf55e07d0f378411ceb92c9a6c4eee2f7e71e8ab6a90` |
 | 4a después: 10 · (las 10) · 0 · 4b = antes · 4c sin rojos | | ✅ 10 (las 10 esperadas) · 0 · 4b idéntico a antes · 4c pantallas OK (el Club visible, sin locales) |
-| 6.1 dos locales, los dos apagados · `locations` como se espera | | |
-| 6.2 dominio | | |
-| 6.3 `CLUB_WEB_KEY` cargada, sha256 en la base, `/api/salud` en verde | | |
-| **§11.4 paso 7 · CORTE BLOQUEANTE:** Worker conectado a `main` y desplegado desde `main` (SHA, hora); sin despliegues desde otra rama. Sin esto no se sigue | | |
-| §11.3 `/api/salud`: `x-club-api: worker` y todo en `true` · prueba de fuego | worker · 5 × true | ⏳ 12-nov: lo hace el dueño, después de 4c. Desde la sesión de Claude la red no llega al dominio del Club ni a `*.pages.dev` |
-| 6.4 valores del local (la fila de verificación) · empleados con login | | |
-| 6.5 carga única (sha256, conteos) o «replanificada» | | |
-| 6.5b modo transición: tope 12 y `tarjeta_manual_activa` encendida en Santa Teresa, después de la carga única (§6.5b) | antes: false · 30 → después: true · 12 · 2 filas en `club_config_historial` | |
-| Pages `satori-club`: primer deploy de producción | Deployed | ❌ 11-nov a la noche: **Build failed** en `17a9efd`, `980cd74` y `cf1a61d` (checks 130992048866, 131000778968 y 131002778386). **Causa real (log de `cf1a61d`, 12-nov):** «Configuration file for Pages projects does not support "unsafe"» → «Failed: unable to read the Wrangler configuration file with code: 1»; el build nunca corrió (§11.1b). El problema de vitest en `tsc --noEmit` también era real, pero estaba detrás: lo arregló el #125 |
-| #125 y #129 mergeados · deploy de `satori-club` en verde (SHA, hora) | Deployed | #125: `cf1a61d5fff80f9869cbd3181a0c8b48bf99f678`, 11-nov 23:50:27 CR (por indicación del dueño; deploy **Build failed** por la causa de arriba) · **#129** (se borra `club-web/wrangler.toml`; el binding `CLUB_API` → `satori-club-api` cargado antes en el panel, Production, y build, rama y las 7 variables verificadas por el dueño): firma del dueño 12-nov 06:55 CR sobre `b29702e` · merge `a4300ab9dddbc214ff2d09c613f481f40f40801e` a las **06:57:34 CR** (merge commit, lo hizo Claude) · ✅ «Cloudflare Pages: satori-club» **Deployed successfully** (check 131198782258, ~07:00 CR). El log del deploy queda en el panel: falta que el dueño confirme que avisó «sin archivo de wrangler» y corrió `npm ci && npm run build` |
+| 6.1 dos locales, los dos apagados · `locations` como se espera | | ✅ 12-nov **07:07 CR** (6.1 a 6.4 en una transacción, el dueño): `santa-teresa` y `nosara`, los dos apagados. Verificado igual a lo esperado |
+| 6.2 dominio | | ✅ 07:07 CR: `club_url` = `https://club.satoricostarica.com` |
+| 6.3 `CLUB_WEB_KEY` cargada, sha256 en la base, `/api/salud` en verde | | ✅ 07:07 CR: `club_web_clave_cargar` = 1 (el sha256, nunca la clave). El Secret ya estaba en Pages y en el Worker desde el 11-nov. **Ojo:** el `/api/salud` en verde es de las 07:05, antes de cargar el sha256: `club_web_key: true` dice que el Worker tiene el Secret, no que coincide con la base. Eso lo prueba la primera llamada real (prueba de fuego o prueba interna) |
+| **§11.4 paso 7 · CORTE BLOQUEANTE:** Worker conectado a `main` y desplegado desde `main` (SHA, hora); sin despliegues desde otra rama. Sin esto no se sigue | | ✅ en parte: el Worker corre el código de `main` (`a4300ab`, deploy a mano de las 07:05, Version `fa9383cf…`). **Falta confirmar** la conexión del repo (Worker → Settings → Build → `main`, root `club-web/worker`): no se informó. Sin ella, el próximo cambio del Worker en `main` no se despliega solo |
+| §11.3 `/api/salud`: `x-club-api: worker` y todo en `true` · prueba de fuego | worker · 5 × true | ✅ 12-nov **07:05 CR**: HTTP 200 · `x-club-api: worker` · `rl_crear`, `rl_leer`, `club_web_key`, `turnstile` y `supabase` en `true` · alias `club.satoricostarica.com` en el deploy de Pages. Prueba de fuego (6 cupones seguidos): pendiente, con el local encendido |
+| 6.4 valores del local (la fila de verificación) · empleados con login | | ✅ 07:07 CR: `santa-teresa` 7 · 150000 · 1123 · 17 · 40 · `lc_excepciones_desde` 2026-11-12 (provisorio). Verificado igual a lo esperado. Empleados con login: no informado |
+| 6.5 carga única (sha256, conteos) o «replanificada» | | ✅ 12-nov. **Dry-run del día** 07:10 CR: los mismos números que la emisión (115 restos / 174 personas, 0 con medio crédito o más). **`aplicar-firmado`** 07:14 CR, sha256 `150f0c8e…6b461f`: aplicado `true`. Validación: miembros 338 · baja 88 · negocios 168 · contactos 274 · tarjetas 1816 · canjes 568 · créditos activos 64 (47 + 17) · cuentas 37 · vencimientos 90 / 65 / 115 · restos personas 174 · pm 104 / 21 · diferencias 0 · `restos_invalidos` 0 · `cuentas_baja_con_saldo` 0 · `barrido_anon_abiertas` 0. El monto pendiente lo registró el dueño fuera del repo (en el repo no van montos reales). Token de un solo uso, revocado |
+| 6.5b modo transición: tope 12 y `tarjeta_manual_activa` encendida en Santa Teresa, después de la carga única (§6.5b) | antes: false · 30 → después: true · 12 · 2 filas en `club_config_historial` | ✅ 12-nov **07:16 CR**: `santa-teresa` · `tarjeta_manual_activa` true · tope 12 · `club_activo` false. `nosara` sin cambios. Las 2 filas de `club_config_historial`: no informado |
+| Pages `satori-club`: primer deploy de producción | Deployed | ❌ 11-nov a la noche: **Build failed** en `17a9efd`, `980cd74` y `cf1a61d` (checks 130992048866, 131000778968 y 131002778386). **Causa real (log de `cf1a61d`, 12-nov):** «Configuration file for Pages projects does not support "unsafe"» → «Failed: unable to read the Wrangler configuration file with code: 1»; el build nunca corrió (§11.1b). El problema de vitest en `tsc --noEmit` también era real, pero estaba detrás: lo arregló el #125 · ✅ **12-nov:** deploy `98813ce0` de `a4300ab`, **Success en 34 s** (fila de abajo) |
+| #125 y #129 mergeados · deploy de `satori-club` en verde (SHA, hora) | Deployed | #125: `cf1a61d5fff80f9869cbd3181a0c8b48bf99f678`, 11-nov 23:50:27 CR (por indicación del dueño; deploy **Build failed** por la causa de arriba) · **#129** (se borra `club-web/wrangler.toml`; el binding `CLUB_API` → `satori-club-api` cargado antes en el panel, Production, y build, rama y las 7 variables verificadas por el dueño): firma del dueño 12-nov 06:55 CR sobre `b29702e` · merge `a4300ab9dddbc214ff2d09c613f481f40f40801e` a las **06:57:34 CR** (merge commit, lo hizo Claude) · ✅ «Cloudflare Pages: satori-club» **Deployed successfully** (check 131198782258): deploy `98813ce0`, **Success en 34 s**, alias `club.satoricostarica.com`. Log verificado por el dueño en el panel |
 | 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
-| `lc_excepciones_desde`: `2026-11-12` en §6.4 (provisorio) | 2026-11-12 | |
+| `lc_excepciones_desde`: `2026-11-12` en §6.4 (provisorio) | 2026-11-12 | ✅ 07:07 CR, con §6.4 |
 | `lc_excepciones_desde`: el día de la apertura, antes de abrir | (fecha) | |
 | Cierre: pasa / vuelta atrás (hasta qué paso de §8) | | ✅ **PASA** (11-nov, lo cerró el dueño). Sin vuelta atrás. Queda para el jue 12 por la mañana, en este orden: §6.1 → §6.2 → §6.3 → §6.4 → #125 → Worker (4c) → paso 7 → §6.5 → §6.5b → §11.3 → §6.6 |
 | Respaldo de 1.4 borrado (fecha) | | |
@@ -701,9 +708,16 @@ a la rama del #59: una rama de trabajo conectada desplegaría sola con cada push
    `git checkout main && git pull && git rev-parse --short HEAD` (anotar el SHA) y
    `cd club-web/worker && npx wrangler deploy`. Con el #125, `wrangler.toml` dice `preview_urls = false` (ni
    `workers.dev` ni URLs de vista previa) y `keep_vars = true` (no borra las variables de texto del panel; los Secrets no
-   se tocan nunca en un deploy). **(12-nov, regla del dueño) Si wrangler avisa que va a pisar o borrar configuración del
-   panel (variables, `preview_urls`, rutas) y pregunta si sigue: contestar NO, parar y copiar el aviso tal cual.**
-   **Antes**, anotar los nombres de las 4 variables del panel.
+   se tocan nunca en un deploy). **Antes**, anotar los nombres de las 4 variables del panel.
+   **El aviso de wrangler sale siempre** («differs from the remote configuration… Would you like to continue?»): compara el
+   archivo con lo que hay en el panel. **Regla del dueño (12-nov):** contestar **SÍ solo si** las diferencias que muestra
+   son exactamente estas:
+   - `vars`: `SUPABASE_URL` y `SUPABASE_ANON_KEY` (están en el panel y no en el archivo; las conserva `keep_vars = true`);
+   - ratelimits: `RL_CREAR` (namespace `2001`, 5 por 60 s) y `RL_LEER` (`2002`, 60 por 60 s), que el archivo declara como
+     `[[unsafe.bindings]]`.
+
+   **Con cualquier otra diferencia** (`preview_urls`, rutas, otra variable, otro tope o los mismos con otros números):
+   contestar **NO**, parar y copiar el aviso tal cual. Después del deploy, `/api/salud` (§11.3) confirma.
    **Verificar después:** en la salida, `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)` y el Version ID nuevo; en
    Settings → Variables and Secrets siguen las 4 (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TURNSTILE_SECRET`,
    `CLUB_WEB_KEY`); en Settings → Domains & Routes, `workers.dev` y Preview URLs apagados y sin rutas. La prueba de que

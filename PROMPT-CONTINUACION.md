@@ -174,6 +174,12 @@
      día de cada titular; 2024 queda como «login XXXX» a propósito, porque no se puede confirmar quién usaba los
      códigos ese año. Validado físicamente por Ismael en staging.
 
+22w. **🧹 Worker del Club: `[[unsafe.bindings]]` → `[[ratelimits]]`** en `club-web/worker/wrangler.toml` (los dos
+    topes, `RL_CREAR` 2001 · 5/60 y `RL_LEER` 2002 · 60/60, mismos nombres y números). Achica el aviso que wrangler
+    muestra en cada deploy (hoy los lista como diferencia con el panel; regla del dueño en
+    `docs/pases/PASE-150-151-club.md` §11.4 paso 4c). Con su prueba en `club-web/worker/index.test.mjs`; el deploy lo
+    hace el dueño y se verifica con `/api/salud`. *(Nuevo, 12/11.)*
+
 ## 🟨 P2 — Esperan decisión o firma del dueño
 
 23. **🖊️ Salarios:** pase a prod por fase (migs 055–061 solo en staging), insumos humanos (6 activos sin código

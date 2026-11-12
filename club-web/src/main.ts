@@ -5,7 +5,8 @@
  *   /p/{token}    portal del referente: saldo, QR para compartir, «Canjear» (código de 10 min) e historial
  *   /k/{codigo6}  código de canje: lo lee la caja; abierto en un navegador, solo un aviso
  *   /s/{codigo9}  QR fijo del socio del Local Club: lo lee la caja; abierto en un navegador, solo un aviso
- *   /alta         autoalta del socio (LC-DES-07): nombre + WhatsApp + aviso de privacidad + Turnstile → pendiente
+ *   /alta         autoalta del socio (LC-DES-07): nombre + WhatsApp + mayor de 18 + cumpleaños opcional (D6 A) + aviso
+ *                 de privacidad + Turnstile → pendiente
  *   /w/{token}    botón «Canjear» del pase de Wallet (token de pase, CLUB-AUD-69): solo genera el código de canje
  *   /b/{llave32}  baja del turista (LC-PRIV + 136): borra su contacto con la llave de baja que trae cada mensaje
  *   /privacidad   aviso de privacidad completo (la versión vigente)
@@ -15,6 +16,7 @@ import './styles.css'
 import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
+import { validarCumple } from './cumple'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -440,6 +442,13 @@ async function paginaAlta() {
   const nombre = h('input', { type: 'text', id: 'a-nombre', autocomplete: 'name', maxlength: '80' }) as HTMLInputElement
   const wa = h('input', { type: 'tel', id: 'a-wa', autocomplete: 'tel', inputmode: 'tel', maxlength: '32' }) as HTMLInputElement
   const ok = h('input', { type: 'checkbox', id: 'a-ok' }) as HTMLInputElement
+  // D6 A (14-nov): mayor de 18 obligatorio; cumpleaños opcional (día y mes, sin año) con permiso explícito
+  const mayor = h('input', { type: 'checkbox', id: 'a-mayor' }) as HTMLInputElement
+  const cDia = h('select', { id: 'a-cdia' }, h('option', { value: '' }, '—'),
+    ...Array.from({ length: 31 }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1)))) as HTMLSelectElement
+  const cMes = h('select', { id: 'a-cmes' }, h('option', { value: '' }, '—'),
+    ...t.meses.map((m, i) => h('option', { value: String(i + 1) }, m))) as HTMLSelectElement
+  const cPermiso = h('input', { type: 'checkbox', id: 'a-cpermiso' }) as HTMLInputElement
   const caja = h('div', { class: 'turnstile' })
   const enviar = h('button', { type: 'submit', class: 'btn' }, t.alta_enviar) as HTMLButtonElement
   let token = ''
@@ -448,11 +457,16 @@ async function paginaAlta() {
     onsubmit: async (e: Event) => {
       e.preventDefault(); err.replaceChildren()
       if (nombre.value.trim().length < 2 || !wa.value.trim() || !ok.checked || !token) { err.append(avisoEl('err', t.alta_falta)); return }
+      if (!mayor.checked) { err.append(avisoEl('err', t.alta_mayor_falta)); return }
+      const cumple = validarCumple(cDia.value, cMes.value, cPermiso.checked)
+      if (!cumple.ok) { err.append(avisoEl('err', cumple.error === 'falta' ? t.alta_cumple_falta : t.alta_cumple_invalido)); return }
       if (filaLocal.childElementCount > 0) localElegido = selLocal.value
       if (filaLocal.childElementCount > 0 && !localElegido) { err.append(avisoEl('err', t.alta_local_falta)); return }
       enviar.disabled = true; enviar.textContent = t.alta_enviando
       const r = await api<{ ok: boolean; portal?: string }>('alta', { method: 'POST', body: JSON.stringify({
         nombre: nombre.value, whatsapp: wa.value, acepto: AVISO_PRIVACIDAD_VERSION, ref: /^[A-HJ-NP-Z2-9]{8}$/.test(ref) ? ref : '', turnstile: token,
+        mayor_edad: true,
+        ...(cumple.cumple ? { cumple_dia: cumple.cumple.dia, cumple_mes: cumple.cumple.mes, cumple_permiso: true } : {}),
         ...(localElegido ? { local: localElegido } : {}) }) })
       if (r.ok) {
         const portal = r.data?.portal
@@ -472,6 +486,12 @@ async function paginaAlta() {
     h('label', { for: 'a-nombre' }, t.alta_nombre), nombre,
     h('label', { for: 'a-wa' }, t.alta_whatsapp), wa,
     filaLocal,
+    h('label', { class: 'check', for: 'a-mayor' }, mayor, h('span', {}, t.alta_mayor)),
+    h('fieldset', { class: 'cumple' }, h('legend', {}, t.alta_cumple),
+      h('p', { class: 'sub' }, t.alta_cumple_ayuda),
+      h('label', { for: 'a-cdia' }, t.alta_cumple_dia), cDia,
+      h('label', { for: 'a-cmes' }, t.alta_cumple_mes), cMes,
+      h('label', { class: 'check', for: 'a-cpermiso' }, cPermiso, h('span', {}, t.alta_cumple_permiso))),
     h('details', { class: 'aviso-priv', open: true }, h('summary', {}, t.alta_aviso_titulo), ...t.alta_aviso.split('\n').map((p) => h('p', {}, p)),
       h('p', { class: 'sub' }, `(${AVISO_PRIVACIDAD_VERSION})`)),
     h('label', { class: 'check', for: 'a-ok' }, ok, h('span', {}, t.alta_acepto)),

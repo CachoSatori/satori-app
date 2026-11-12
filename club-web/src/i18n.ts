@@ -76,20 +76,22 @@ const ES = {
   alta_nombre: 'Nombre y apellido',
   alta_whatsapp: 'WhatsApp',
   alta_aviso_titulo: 'Aviso de privacidad · Club Satori',
+  // v1.2 (12-nov, pedido del dueño): el mismo texto de v1.1 con «usted» en vez de «vos». (14-nov, D6 A firmada) suma, en ES y EN:
+  // «Edad» (solo mayores de 18, lo confirma al anotarse) y el cumpleaños opcional (día y mes, sin año, con permiso, para
+  // beneficios; no se cambia desde el portal; se borra con la baja). Sigue siendo v1.2: todavía no salió a prod.
   // v1.1 (el dueño, 08-nov noche): el texto de v1 + «y tu email, si lo das»; después (sin subir versión: nadie lo aceptó
   // en prod) las ofertas en «Para qué», los servidores fuera de Costa Rica, la retención de los contactos de ofertas
   // (24 meses, = club_config_global.contactos_ofertas_meses; confirmado por el dueño el 09-nov) y la dirección del
   // responsable (la pública del restaurante, confirmada el 09-nov). Sin marcas pendientes. Un párrafo por línea.
-  // (12-nov) El aviso legal sigue con «tu/vos» a propósito: pasarlo a «usted» cambia su huella sha256, registrada en la
-  // base (club_avisos_privacidad). Eso pide versión nueva y migración, con firma del dueño. El resto de los textos ya va con «usted».
   alta_aviso: [
     'Responsable: LCT Desarrollos (Satori Sushi Bar), Frente al Hotel Trópico Latino, Santa Teresa, Cóbano, Provincia de Puntarenas, 60111, Costa Rica.',
-    'Qué datos guardamos: tu nombre, tu número de WhatsApp y tu email, si lo das. Si sos socio, también tus visitas y los beneficios que usás.',
-    'Para qué: para identificarte en caja, aplicar tus beneficios, avisarte por WhatsApp sobre tu cuenta del Club y, solo si lo aceptaste, mandarte ofertas de Satori. No vendemos tus datos ni los usamos para nada más.',
-    'Quién los ve: solo el personal autorizado de Satori. Los guardamos en servicios tecnológicos que contratamos, con servidores fuera de Costa Rica. Si agregás el pase a Google Wallet o Apple Wallet, esa plataforma guarda el pase, sin tu teléfono.',
-    'Cuánto tiempo: mientras seas parte del Club. Si te anotás y no validás tu alta en caja dentro de 30 días, borramos tus datos del Local Club. Si nos dejaste tu contacto para recibir ofertas, lo guardamos hasta que te des de baja o hasta 24 meses desde que nos lo dejaste.',
-    'Tus derechos: podés ver, corregir o borrar tus datos, o darte de baja cuando quieras, desde tu portal o escribiendo a satorisushibar@gmail.com.',
-    'Al anotarte aceptás este aviso (Ley 8968, Costa Rica).',
+    'Qué datos guardamos: su nombre, su número de WhatsApp y su email, si lo da. Si nos da su cumpleaños con su permiso, solo el día y el mes (sin el año). Si es socio, también sus visitas y los beneficios que usa.',
+    'Edad: el Local Club es solo para mayores de 18 años. Al anotarse confirma que lo es.',
+    'Para qué: para identificarle en caja, aplicar sus beneficios (también el de su cumpleaños, si nos dio permiso), avisarle por WhatsApp sobre su cuenta del Club y, solo si lo aceptó, mandarle ofertas de Satori. No vendemos sus datos ni los usamos para nada más.',
+    'Quién los ve: solo el personal autorizado de Satori. Los guardamos en servicios tecnológicos que contratamos, con servidores fuera de Costa Rica. Si agrega el pase a Google Wallet o Apple Wallet, esa plataforma guarda el pase, sin su teléfono.',
+    'Cuánto tiempo: mientras sea parte del Club. Si se anota y no valida su alta en caja dentro de 30 días, borramos sus datos del Local Club. Si nos dejó su contacto para recibir ofertas, lo guardamos hasta que se dé de baja o hasta 24 meses desde que nos lo dejó.',
+    'Sus derechos: puede ver, corregir o borrar sus datos, o darse de baja cuando quiera, desde su portal o escribiendo a satorisushibar@gmail.com. El cumpleaños no se cambia desde el portal: para corregirlo o retirar el permiso, escríbanos. Si se da de baja, lo borramos.',
+    'Al anotarse acepta este aviso (Ley 8968, Costa Rica).',
   ].join('\n'),
   alta_acepto: 'Leí el aviso de privacidad y acepto.',
   alta_enviar: 'Quiero ser socio',
@@ -103,6 +105,17 @@ const ES = {
   alta_local: 'Local',
   alta_local_elegir: 'Elija su local',
   alta_local_falta: 'Elija en qué local se anota.',
+  // D6 A (14-nov, firmada): mayor de 18 obligatorio; cumpleaños día/mes opcional, con permiso explícito para beneficios.
+  alta_mayor: 'Confirmo que tengo 18 años o más.',
+  alta_mayor_falta: 'El Local Club es solo para mayores de 18 años: confirme su edad para anotarse.',
+  alta_cumple: 'Cumpleaños (opcional)',
+  alta_cumple_ayuda: 'Solo el día y el mes, sin el año. Después del alta no se cambia desde el portal.',
+  alta_cumple_dia: 'Día',
+  alta_cumple_mes: 'Mes',
+  alta_cumple_permiso: 'Acepto que Satori use mi cumpleaños (día y mes) para darme un beneficio.',
+  alta_cumple_falta: 'Para guardar su cumpleaños elija el día y el mes y marque el permiso; si no, déjelo vacío.',
+  alta_cumple_invalido: 'Esa fecha no existe: revise el día y el mes.',
+  meses: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'],
   local_no_disponible: 'El Club todavía no está abierto en ese local.',
   socio_titulo: 'Local Club',
   socio_pendiente: 'Su alta está pendiente: valídela en caja en su próxima visita. Hasta entonces el beneficio no aplica.',
@@ -209,11 +222,12 @@ const EN: Textos = {
   alta_aviso_titulo: 'Privacy notice · Club Satori',
   alta_aviso: [
     'Controller: LCT Desarrollos (Satori Sushi Bar), Across from Hotel Trópico Latino, Santa Teresa, Cóbano, Puntarenas Province, 60111, Costa Rica.',
-    'What we keep: your name, your WhatsApp number and your email, if you give it. If you are a member, also your visits and the benefits you use.',
-    "Why: to identify you at the register, apply your benefits, message you on WhatsApp about your Club account and, only if you agreed, send you Satori offers. We don't sell your data or use it for anything else.",
+    'What we keep: your name, your WhatsApp number and your email, if you give it. If you give us your birthday with your permission, only the day and month (no year). If you are a member, also your visits and the benefits you use.',
+    'Age: the Local Club is only for people 18 or older. By signing up you confirm you are.',
+    "Why: to identify you at the register, apply your benefits (including your birthday benefit, if you gave us permission), message you on WhatsApp about your Club account and, only if you agreed, send you Satori offers. We don't sell your data or use it for anything else.",
     'Who sees it: only authorized Satori staff. We store it with technology services we hire, on servers outside Costa Rica. If you add the pass to Google Wallet or Apple Wallet, that platform stores the pass, without your phone number.',
     "How long: while you are in the Club. If you sign up and don't validate at the register within 30 days, we delete your Local Club data. If you left your contact to receive offers, we keep it until you opt out or for up to 24 months from when you left it.",
-    'Your rights: you can see, correct or delete your data, or leave the Club at any time, from your portal or by writing to satorisushibar@gmail.com.',
+    'Your rights: you can see, correct or delete your data, or leave the Club at any time, from your portal or by writing to satorisushibar@gmail.com. Your birthday cannot be changed from the portal: to correct it or withdraw your permission, write to us. If you leave, we delete it.',
     'By signing up you accept this notice (Costa Rica Law 8968).',
   ].join('\n'),
   alta_acepto: 'I have read the privacy notice and I agree.',
@@ -228,6 +242,16 @@ const EN: Textos = {
   alta_local: 'Location',
   alta_local_elegir: 'Choose your location',
   alta_local_falta: 'Choose which location you are signing up at.',
+  alta_mayor: 'I confirm I am 18 or older.',
+  alta_mayor_falta: 'The Local Club is only for people 18 or older: confirm your age to sign up.',
+  alta_cumple: 'Birthday (optional)',
+  alta_cumple_ayuda: 'Only day and month, no year. After signing up it cannot be changed from the portal.',
+  alta_cumple_dia: 'Day',
+  alta_cumple_mes: 'Month',
+  alta_cumple_permiso: 'I agree that Satori may use my birthday (day and month) to give me a benefit.',
+  alta_cumple_falta: 'To save your birthday choose the day and the month and tick the permission; otherwise leave it empty.',
+  alta_cumple_invalido: 'That date does not exist: check the day and the month.',
+  meses: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
   local_no_disponible: 'The Club is not open at that location yet.',
   socio_titulo: 'Local Club',
   socio_pendiente: 'Your sign-up is pending: validate it at the register on your next visit. Until then the benefit does not apply.',

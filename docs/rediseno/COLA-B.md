@@ -91,3 +91,21 @@
 - No tocar lógica, consultas ni permisos. Nunca en tablas ni botones.
 - **Aceptación:** gates del PROTOCOLO; capturas 390 y 1280 de login, una carga, Inicio, Caja y Ventas; guía 6.1 si cambia lo que se ve al entrar.
 
+
+---
+### Tanda 3 · pedida por Ismael el 12-nov 06:40 («hagamos tanda 3», todo)
+
+## B9 · Hoja «Más» con foco atrapado, monospace del CSS y un solo Daruma en el Inicio · `lista`
+- **Auditoría 202:** en la hoja «Más» de `src/shared/layout/AppShell.tsx`, el Tab y Shift+Tab quedan dentro de la hoja mientras está abierta (último → primero y al revés). Se mantiene lo de B6: `aria-modal`, foco al abrir, Escape cierra y el foco vuelve a «Más». Test de render del ciclo de foco.
+- **Auditoría 205 (parte de B):** las 4 `font-family: var(--font-mono, …monospace)` de `src/index.css` (líneas ~4592, 5343, 5359, 5410 en `staging`) → `var(--font-sans)` + `font-variant-numeric: tabular-nums`. Si alguna es de un bloque que solo existe en `staging` (`.cm-*`, `.sal-*`, `.fx-*`), igual se cambia, pero anotarlo en el reporte para el pase.
+- **Un solo Daruma en el Inicio en computadora** (duda de B8, decidido por Ismael): desde 1024 px se vuelve a ocultar `.header-daruma` de la barra de arriba; queda el de la marca del menú. En celular no cambia.
+- No tocar `src/modules/**`.
+- **Aceptación:** gates; capturas 390 y 1280 del Inicio y de la hoja «Más» abierta; guía 6.1 si cambia lo que se ve.
+
+## B10 · Kanji sin internet (auditoría 206) · `lista` (después de B9, misma línea)
+- Hoy `src/index.css` trae Noto Serif JP desde Google (`@import`); sin internet los kanji caen en la serif del sistema.
+- Servirla desde `public/fonts/` con `@font-face`, **recortada a los caracteres que usa la app**: juntar los kanji de `src/shared/layout/modulos.ts`, de los `loading-mark` y encabezados de `src/**` y de `LoginPage`/`CambiarPasswordInicial`, y generar un `woff2` con solo esos (por ejemplo con `pyftsubset`). Pesos: los que hoy se piden a Google.
+- Sacar el `@import` de Google de Noto Serif JP. Incluir la licencia OFL de la fuente en `public/fonts/`.
+- En el reporte: lista de caracteres incluidos, peso del archivo (tiene que quedar chico, decenas de KB) y cómo regenerarlo si se agrega un kanji.
+- No tocar `vite.config.ts` ni el service worker (si el precache no toma el archivo nuevo solo, anotarlo, no arreglarlo).
+- **Aceptación:** gates; con la red cortada en la vista previa (DevTools offline después de la primera carga) los kanji del menú se ven con Noto Serif JP; guía 6.1 si cambia algo.

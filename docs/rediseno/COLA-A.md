@@ -77,3 +77,22 @@
 - Estilos en línea de `src/modules/resumen/**`, `src/modules/admin/**`, `src/modules/inventario/**` y `MiRendimiento.tsx` (11 `monospace`) como en A7.
 - **Aceptación:** diff solo de estilo; tests verdes; guías 6.6 y la de Resumen si cambia algo visible.
 
+
+---
+### Tanda 3 · pedida por Ismael el 12-nov 06:40 («hagamos tanda 3», todo)
+
+## A11 · Daruma en Semana y Reporte mensual · `lista`
+- `src/modules/resumen/ResumenSemanal.tsx` y `src/modules/resumen/ReporteMensual.tsx` no tienen clase de encabezado que el CSS de B8 pueda tomar.
+- Agregar en el encabezado de cada una, a la izquierda del título, un `<img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" width={22} height={24} />` (como el login de B8), con el mismo tamaño y separación que el `::before` de los otros módulos (22×24 px, ver `.module-header-left::before` en `src/index.css`).
+- En Reporte mensual, solo en la barra `no-print`: el Daruma **no** sale al imprimir.
+- Nada más: ni cálculos, ni condiciones, ni `onClick`, ni consultas.
+- **Aceptación:** gates del PROTOCOLO; capturas 390 y 1280 de las dos pantallas; guía de Resumen si cambia lo que se ve.
+
+## A12 · Monospace que queda en los módulos (auditoría 205) · `lista`
+- **Archivos habilitados solo para esta tarea** (además de los de la línea A): `src/modules/inbox/InboxModule.tsx` y `src/modules/crm/ClientesModule.tsx`, **solo** la línea con `DM Mono` de cada uno.
+- Casos (en `staging` al 12-nov):
+  - `src/modules/prueba/CierreSimulator.tsx` 25–26: `num` e `inputStyle` → `var(--font-sans)` + `tabular-nums`; el input oscuro (`#111`, `#2a2a2a`) → fondo `var(--c-fondo)`, borde `var(--c-linea)`, texto `var(--c-tinta)`, como en A7;
+  - `src/modules/ventas/ventasEnVivo.css` 46: `--apos-mono` → `var(--font-sans)` (y `font-variant-numeric: tabular-nums` donde se use);
+  - `src/modules/inbox/InboxModule.tsx` 212 y `src/modules/crm/ClientesModule.tsx` 506: `fontFamily` → `var(--font-sans)` + `tabular-nums`. **No** cambiar cómo se formatea el monto (si el formato no es el de `fi()`, anotarlo en el reporte, no arreglarlo).
+- No tocar `src/modules/salarios/**` (no está en `main`) ni `src/index.css` (es de B9).
+- **Aceptación:** diff solo de estilo; gates; `git grep -niE "monospace|DM Mono" -- src/modules ':!src/modules/salarios'` vacío salvo comentarios; guías 6.4 / Bandeja / Clientes solo si cambia algo que el encargado nombra (si no, decirlo en el PR).

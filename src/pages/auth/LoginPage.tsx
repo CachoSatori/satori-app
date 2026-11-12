@@ -27,7 +27,7 @@ export default function LoginPage() {
     <div className="login-container">
       <div className="login-card">
         <header className="login-header">
-          <div className="login-mark">祭</div>
+          <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" className="login-daruma" width={58} height={64} />
           <h1>Satori</h1>
           <p className="login-subtitle">Santa Teresa, Costa Rica</p>
         </header>

@@ -19,6 +19,19 @@ const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY          = Deno.env.get('SUPABASE_ANON_KEY')!
 // Haiku 4.5 = más barato; cambiá a 'claude-sonnet-4-5' por env si querés más precisión.
 const MODEL             = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5'
+// Sonnet 4.5 se retira de la API el 30-nov-2026; el reemplazo es claude-sonnet-5-5.
+// El tokenizer de 5.5 cuenta ~30 % más tokens para el mismo JSON: 3500 podía cortarlo.
+const MAX_TOKENS        = 8000
+
+// En Sonnet 5.5 el thinking viene encendido por defecto y `disabled` da 400: `between_tools` es
+// "sin thinking" (como corría con 4.5). Esos campos dan 400 en Sonnet 4.5 / Haiku 4.5, por eso
+// solo van si el secreto apunta a 5.5: el mismo código sirve antes y después del cambio de secreto.
+function opcionesModelo(model: string): Record<string, unknown> {
+  if (model.startsWith('claude-sonnet-5-5')) {
+    return { thinking: { type: 'between_tools' }, output_config: { effort: 'high' } }
+  }
+  return {}
+}
 
 // Allowlist de orígenes web conocidos. El '*' anterior dejaba que cualquier sitio
 // llamara la función desde el browser; ahora solo eco del Origin si está permitido.
@@ -129,7 +142,8 @@ Deno.serve(async (req) => {
       headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 3500,
+        max_tokens: MAX_TOKENS,
+        ...opcionesModelo(MODEL),
         messages: [{
           role: 'user',
           content: [
@@ -144,7 +158,12 @@ Deno.serve(async (req) => {
       return json({ documentos: [], error: `Anthropic ${resp.status}: ${t.slice(0, 200)}` }, 200)
     }
     const data = await resp.json()
-    const text: string = data?.content?.[0]?.text ?? ''
+    // Sonnet 5.5 puede abrir la respuesta con un bloque `thinking`: leer los bloques por tipo, no content[0].
+    const text: string = Array.isArray(data?.content)
+      ? data.content.filter((b: { type?: string }) => b?.type === 'text').map((b: { text?: string }) => b.text ?? '').join('')
+      : ''
+    if (data?.stop_reason === 'max_tokens') return json({ documentos: [], error: 'Respuesta cortada (max_tokens)' }, 200)
+    if (data?.stop_reason === 'refusal') return json({ documentos: [], error: 'El modelo no leyó el documento (refusal)' }, 200)
     return json({ documentos: parseDocs(text) }, 200)
   } catch (e) {
     return json({ documentos: [], error: String(e) }, 200)

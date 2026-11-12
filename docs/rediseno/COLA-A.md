@@ -88,7 +88,7 @@
 - Nada más: ni cálculos, ni condiciones, ni `onClick`, ni consultas.
 - **Aceptación:** gates del PROTOCOLO; capturas 390 y 1280 de las dos pantallas; guía de Resumen si cambia lo que se ve.
 
-## A12 · Monospace que queda en los módulos (auditoría 205) · `lista`
+## A12 · Monospace que queda en los módulos (auditoría 205) · `en revisión #136`
 - **Archivos habilitados solo para esta tarea** (además de los de la línea A): `src/modules/inbox/InboxModule.tsx` y `src/modules/crm/ClientesModule.tsx`, **solo** la línea con `DM Mono` de cada uno.
 - Casos (en `staging` al 12-nov):
   - `src/modules/prueba/CierreSimulator.tsx` 25–26: `num` e `inputStyle` → `var(--font-sans)` + `tabular-nums`; el input oscuro (`#111`, `#2a2a2a`) → fondo `var(--c-fondo)`, borde `var(--c-linea)`, texto `var(--c-tinta)`, como en A7;

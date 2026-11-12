@@ -214,7 +214,7 @@ export function armarObjeto(issuerId: string, entorno: Entorno, d: PaseDatos, di
       { es: 'Vale en todos los Satori', en: 'Valid at every Satori' }))
     const sorpresas = soc.cortesias.filter(c => c.sorpresa).reduce((s, c) => s + c.cantidad, 0)
     if (sorpresas > 0) {
-      textos.push(modulo('cortesia', { es: 'Tu próxima visita', en: 'Your next visit' },
+      textos.push(modulo('cortesia', { es: 'Su próxima visita', en: 'Your next visit' },
         { es: sorpresas === 1 ? '1 cortesía sorpresa' : `${sorpresas} cortesías sorpresa`,
           en: sorpresas === 1 ? '1 surprise treat' : `${sorpresas} surprise treats` }))
     }
@@ -237,7 +237,7 @@ export function armarObjeto(issuerId: string, entorno: Entorno, d: PaseDatos, di
       links.push(link('canjear', d.canjear_url, { es: 'Canjear créditos (código de 10 minutos)', en: 'Redeem credits (10-minute code)' }))
     }
     if (d.codigo_barras?.tipo === 'socio') {
-      links.push(link('cupones', anf.qr_url, { es: 'Tus cupones para compartir', en: 'Your coupons to share' }))
+      links.push(link('cupones', anf.qr_url, { es: 'Sus cupones para compartir', en: 'Your coupons to share' }))
     }
   }
 

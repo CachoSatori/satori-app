@@ -43,7 +43,7 @@
 
   --apos-r:      10px;
   --apos-r-sm:   6px;
-  --apos-mono:   'DM Mono', ui-monospace, monospace;
+  --apos-mono:   var(--font-sans);   /* sin monoespaciadas: DM Sans con tabular-nums */
 
   /* La pestaña vive DENTRO de `.vt-content`, que ya pone el fondo de papel: no se
      fuerza `min-height` ni se repinta el fondo del módulo. */
@@ -237,12 +237,14 @@
    identidad, el texto solo se tiene que leer. */
 .apos-axis {
   font-family: var(--apos-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 10px;
   fill: var(--apos-muted);
 }
 
 .apos-pico {
   font-family: var(--apos-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   font-weight: 500;
   fill: var(--apos-mark-fuerte);
@@ -343,6 +345,7 @@
 
 .apos-delta {
   font-family: var(--apos-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 0.74rem;
   font-weight: 500;
   white-space: nowrap;
@@ -784,7 +787,7 @@
   font-weight: 600;
 }
 
-/* El texto crudo del `last_error` del cursor: es un mensaje de máquina, va en mono y chico. */
+/* El texto crudo del `last_error` del cursor: es un mensaje de máquina, va chico. */
 .apos-mono-sm {
   font-family: var(--apos-mono);
   font-size: 0.7rem;

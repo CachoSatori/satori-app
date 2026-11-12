@@ -251,6 +251,8 @@ export default function ReporteMensual() {
       {/* Header / controls — hidden on print */}
       <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--c-panel)', borderBottom: '1px solid var(--c-linea)', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          {/* A11 · Daruma solo en la barra no-print: no sale al imprimir. 22×24 y 1rem hasta el kanji */}
+          <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" width={22} height={24} style={{ display: 'block', flex: '0 0 auto', objectFit: 'contain', marginRight: '0.4rem' }} />
           <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.2rem', color: 'var(--c-oro-texto)', fontWeight: 700 }}>里</span>
           <div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>Reporte mensual</div>

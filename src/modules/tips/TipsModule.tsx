@@ -515,7 +515,7 @@ export default function TipsModule() {
           </div>
           {profile?.role && <span className="role-badge">{profile.role}</span>}
         </div>
-        <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888', whiteSpace:'nowrap' }}
+        <button className="cash-back-btn" style={{ borderColor:'var(--c-linea)', color:'var(--c-gris)', whiteSpace:'nowrap' }}
           onClick={() => navigate('/')}>← Inicio</button>
       </div>
 
@@ -591,7 +591,7 @@ export default function TipsModule() {
 
               {/* Aviso: ya existe registro para esa fecha + turno */}
               {dupSession && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', background: 'rgba(194,59,34,0.08)', border: '1px solid rgba(194,59,34,0.35)', borderRadius: 2, padding: '0.6rem 0.85rem', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', background: 'var(--c-laca-fondo)', border: '1px solid var(--c-laca-borde)', borderRadius: 2, padding: '0.6rem 0.85rem', marginBottom: '0.75rem' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--t-red)', lineHeight: 1.4 }}>
                     Ya hay un registro para <strong>{fecha} · {shiftLabel(shiftType)}</strong> ({dupSession.status === 'open' ? 'abierto' : 'cerrado'}). No se puede crear otro. Para modificarlo, andá a Historial.
                   </span>
@@ -618,25 +618,25 @@ export default function TipsModule() {
           {openSession && (
             <>
               {/* ── Banner turno activo / editando ── */}
-              <div style={{ background: openSession?.session_date !== (fecha ?? '') ? 'rgba(200,144,232,.12)' : 'rgba(74,154,106,.12)', borderBottom:'2px solid #2a4a2a', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem' }}>
+              <div style={{ background: openSession?.session_date !== (fecha ?? '') ? 'var(--c-oro-fondo)' : 'var(--c-musgo-fondo)', borderBottom:'2px solid var(--c-musgo-borde)', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-                  <span style={{ fontSize:'0.72rem', color: '#4a9a6a', fontWeight:700, letterSpacing:'0.1em', textTransform:'uppercase' }}>
+                  <span style={{ fontSize:'0.72rem', color: 'var(--c-musgo)', fontWeight:700, letterSpacing:'0.1em' }}>
                     ● TURNO ACTIVO
                   </span>
-                  <span style={{ fontSize:'0.88rem', color:'var(--t-gold)', fontWeight:700 }}>
+                  <span style={{ fontSize:'0.88rem', color:'var(--c-oro-texto)', fontWeight:700 }}>
                     {openSession.session_date}
                   </span>
-                  <span style={{ fontSize:'0.78rem', color:'#888', background:'#1a2a1a', padding:'2px 8px', borderRadius:10, border:'1px solid #2a3a2a' }}>
+                  <span style={{ fontSize:'0.78rem', color:'var(--c-gris)', background:'var(--c-panel)', padding:'2px 8px', borderRadius:10, border:'1px solid var(--c-linea)' }}>
                     {shiftLabel(openSession.shift_type)}
                   </span>
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-                  <span style={{ fontSize:'0.72rem', color:'#555' }}>
+                  <span style={{ fontSize:'0.72rem', color:'var(--c-gris)' }}>
                     TC: ₡{openSession.exchange_rate?.toLocaleString('es-CR') ?? '—'} · {lines.filter(l=>l.active).length} empleados activos
                   </span>
                   {canOperate && (
                     <button onClick={handleDiscardSession}
-                      style={{ background:'#3a352c', border:'1px solid #5a5040', color:'#e8e2d6', borderRadius:3, fontSize:'0.7rem', fontWeight:600, padding:'3px 10px', cursor:'pointer', whiteSpace:'nowrap' }}
+                      style={{ background:'var(--c-tinta)', border:'1px solid var(--c-tinta)', color:'var(--c-fondo)', borderRadius:3, fontSize:'0.7rem', fontWeight:600, padding:'3px 10px', cursor:'pointer', whiteSpace:'nowrap' }}
                       title="Descartar este turno y volver a elegir fecha/turno">
                       ← Cambiar fecha/turno
                     </button>
@@ -700,7 +700,7 @@ export default function TipsModule() {
                         <span className="tips-barra-label">🍸 Pool Barra</span>
                         <div className="tips-efectivo-inputs">
                           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                            <span style={{ fontSize:'0.55rem', letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--t-muted)', fontWeight:700 }}>Barra efectivo</span>
+                            <span style={{ fontSize:'0.55rem', letterSpacing:'0.08em', color:'var(--t-muted)', fontWeight:700 }}>Barra efectivo</span>
                             <div className="tips-money-field">
                               <span className="tips-money-prefix">₡</span>
                               <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
@@ -710,7 +710,7 @@ export default function TipsModule() {
                             </div>
                           </div>
                           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                            <span style={{ fontSize:'0.55rem', letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--t-muted)', fontWeight:700 }}>Barra electrónico</span>
+                            <span style={{ fontSize:'0.55rem', letterSpacing:'0.08em', color:'var(--t-muted)', fontWeight:700 }}>Barra electrónico</span>
                             <div className="tips-money-field">
                               <span className="tips-money-prefix">₡</span>
                               <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
@@ -743,9 +743,9 @@ export default function TipsModule() {
                           <div key={line.employeeId} style={{ position:'relative' }}>
                             {isCob && (
                               <div style={{ position:'absolute', top:8, right:8, zIndex:2, display:'flex', alignItems:'center', gap:'0.3rem' }}>
-                                <span style={{ fontSize:'0.6rem', background:'#c8a030', color:'#0a0a0a', padding:'1px 6px', borderRadius:10, fontWeight:800, letterSpacing:'0.08em' }}>COB</span>
+                                <span style={{ fontSize:'0.6rem', background:'var(--c-oro-fondo)', color:'var(--c-oro-texto)', padding:'1px 6px', borderRadius:10, fontWeight:800, letterSpacing:'0.08em' }}>COB</span>
                                 <button onClick={() => removeCobertura(line.employeeId)}
-                                  style={{ background:'none', border:'none', color:'#c23b22', cursor:'pointer', fontSize:'0.75rem', lineHeight:1, padding:'0 2px' }} title="Quitar cobertura">×</button>
+                                  style={{ background:'none', border:'none', color:'var(--c-laca)', cursor:'pointer', fontSize:'0.75rem', lineHeight:1, padding:'0 2px' }} title="Quitar cobertura">×</button>
                               </div>
                             )}
                             <TipLineRow
@@ -770,22 +770,22 @@ export default function TipsModule() {
 
               {/* ── Sección coberturas ── */}
               {canOperate && (
-                <div style={{ marginTop:'0.75rem', background:'rgba(200,169,110,.05)', border:'1px solid rgba(200,169,110,.2)', borderRadius:2, padding:'0.75rem' }}>
+                <div style={{ marginTop:'0.75rem', background:'var(--c-panel)', border:'1px solid var(--c-linea)', borderRadius:2, padding:'0.75rem' }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: showCobPicker ? '0.75rem' : 0 }}>
-                    <div style={{ fontSize:'0.72rem', fontWeight:700, color:'#c8a030', letterSpacing:'0.08em', textTransform:'uppercase' }}>
+                    <div style={{ fontSize:'0.72rem', fontWeight:700, color:'var(--c-oro-texto)', letterSpacing:'0.08em' }}>
                       👥 Coberturas {Object.keys(coberturas).length > 0 && `(${Object.keys(coberturas).length})`}
                     </div>
                     <button onClick={() => setShowCobPicker(p => !p)}
-                      style={{ fontSize:'0.72rem', padding:'3px 10px', border:'1px solid #c8a030', background:'transparent', color:'#c8a030', borderRadius:2, cursor:'pointer' }}>
+                      style={{ fontSize:'0.72rem', padding:'3px 10px', border:'1px solid var(--c-oro-texto)', background:'transparent', color:'var(--c-oro-texto)', borderRadius:2, cursor:'pointer' }}>
                       {showCobPicker ? '✕ Cancelar' : '+ Agregar cobertura'}
                     </button>
                   </div>
                   {showCobPicker && (
                     <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'flex-end' }}>
                       <div>
-                        <div style={{ fontSize:'0.62rem', color:'#888', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.1em' }}>Empleado</div>
+                        <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:3, letterSpacing:'0.1em' }}>Empleado</div>
                         <select value={cobEmpId} onChange={e => setCobEmpId(e.target.value)}
-                          style={{ background:'#111', border:'1px solid #2a2a2a', color: cobEmpId ? 'var(--t-gold)' : '#888', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
+                          style={{ background:'var(--c-fondo)', border:'1px solid var(--c-linea)', color: cobEmpId ? 'var(--c-oro-texto)' : 'var(--c-gris)', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
                           <option value="">— seleccionar —</option>
                           {availableForCobertura(eligibleRoster(employees, rolePoints), lines).map(e => (
                             <option key={e.id} value={e.id}>{e.full_name}</option>
@@ -793,9 +793,9 @@ export default function TipsModule() {
                         </select>
                       </div>
                       <div>
-                        <div style={{ fontSize:'0.62rem', color:'#888', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.1em' }}>Cubre rol de</div>
+                        <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:3, letterSpacing:'0.1em' }}>Cubre rol de</div>
                         <select value={cobRole} onChange={e => setCobRole(e.target.value)}
-                          style={{ background:'#111', border:'1px solid #2a2a2a', color: cobRole ? 'var(--t-gold)' : '#888', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
+                          style={{ background:'var(--c-fondo)', border:'1px solid var(--c-linea)', color: cobRole ? 'var(--c-oro-texto)' : 'var(--c-gris)', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
                           <option value="">— seleccionar rol —</option>
                           {ROL_ORDER.map(r => <option key={r} value={r}>{ROL_NAMES[r]}</option>)}
                         </select>
@@ -803,13 +803,13 @@ export default function TipsModule() {
                       <button
                         onClick={() => addCobertura(cobEmpId, cobRole)}
                         disabled={!cobEmpId || !cobRole}
-                        style={{ padding:'5px 14px', borderRadius:2, background: cobEmpId && cobRole ? '#c8a030' : '#2a2a2a', color: cobEmpId && cobRole ? '#0a0a0a' : '#555', fontWeight:700, fontSize:'0.78rem', border:'none', cursor: cobEmpId && cobRole ? 'pointer' : 'not-allowed' }}>
+                        style={{ padding:'5px 14px', borderRadius:2, background: cobEmpId && cobRole ? 'var(--c-tinta)' : 'var(--c-panel)', color: cobEmpId && cobRole ? 'var(--c-fondo)' : 'var(--c-gris-claro)', fontWeight:700, fontSize:'0.78rem', border:'none', cursor: cobEmpId && cobRole ? 'pointer' : 'not-allowed' }}>
                         Agregar
                       </button>
                     </div>
                   )}
                   {Object.keys(coberturas).length === 0 && !showCobPicker && (
-                    <div style={{ fontSize:'0.72rem', color:'#555', marginTop:'0.25rem' }}>
+                    <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', marginTop:'0.25rem' }}>
                       Sin coberturas este turno · "Juan cubre a María en barra" → usá este picker
                     </div>
                   )}
@@ -1012,9 +1012,9 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
             </div>
             {/* Desglose de barra: pool barra exclusivo + parte del servicio general */}
             {isBarra && line.take_home > 0 && (
-              <div style={{ fontSize: '0.6rem', color: '#5a5040', marginTop: 3, lineHeight: 1.4, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div>🍸 Pool barra <strong style={{ color: '#a07830' }}>{formatCRC(poolBarra)}</strong></div>
-                <div>Servicio <strong style={{ color: '#2a7a6a' }}>{formatCRC(servicio)}</strong></div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)', marginTop: 3, lineHeight: 1.4, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <div>🍸 Pool barra <strong style={{ color: 'var(--c-oro-texto)' }}>{formatCRC(poolBarra)}</strong></div>
+                <div>Servicio <strong style={{ color: 'var(--c-teal)' }}>{formatCRC(servicio)}</strong></div>
               </div>
             )}
           </div>

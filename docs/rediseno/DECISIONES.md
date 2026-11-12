@@ -22,3 +22,4 @@
 | 2026-11-11 22:55 | A7 (#121) y B6 (#122) | Validadas por Ismael en las vistas previas («a7 ok b6 ok») y mergeadas a `staging` (`32c88bb`, `6510e21`). |
 | 2026-11-11 22:55 | **Firma anticipada de A8** (Caja con estilo carta) | Ismael firma A8 («a8 firmo») antes de que exista el PR. **Condición de la revisión:** vale solo si el diff de los archivos de cierre es exclusivamente de estilo y texto (sin funciones, condiciones, cálculos ni consultas). Si aparece algo más, se vuelve a pedir firma mostrando el cambio. |
 | 2026-11-11 23:40 | A8 (#123) y B7 (#124) | Validadas por Ismael («a8 ok, b7 ok») y mergeadas a `staging` (`0f59cf9`, `61f9e24`). A8 con su firma anticipada (condición cumplida, ver revisión 23:20). Adelantar A9. |
+| 2026-11-12 00:05 | A9 (#127) | Validada por Ismael («sí, mergear A9») y mergeada a `staging`. Con A9 termina el estilo carta en los módulos. |

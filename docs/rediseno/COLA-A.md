@@ -69,7 +69,7 @@
 - Lleva firma porque toca archivos de cierre: la descripción del PR dice qué va a ver el encargado, pantalla por pantalla.
 - **Aceptación:** diff solo de estilo; todos los tests de `cash` verdes; guía 6.2.
 
-## A9 · Propinas con estilo carta · `en revisión #127` (archivos distintos de A8) · validación visual
+## A9 · Propinas con estilo carta · `hecha` (#127, validada y mergeada el 12-nov 00:05; diff solo de estilo, sin `tipCalculations.ts`)
 - Estilos en línea de `src/modules/tips/**` como en A7 (24 mayúsculas, paneles oscuros en `TipQuincenal`, `TipStats`). **Nunca** `tipCalculations.ts`.
 - **Aceptación:** diff solo de estilo; tests de `tips` verdes; guía 6.3.
 

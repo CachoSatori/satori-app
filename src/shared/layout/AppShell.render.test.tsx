@@ -84,6 +84,43 @@ describe('AppShell', () => {
     expect(document.activeElement).toBe(mas)
   })
 
+  it('hoja «Más»: Tab y Shift+Tab quedan dentro de la hoja (B9)', () => {
+    role = 'cajero'
+    montar('/caja')
+    fireEvent.click(within(barra()).getByRole('button', { name: /Más/ }))
+    const hoja = screen.getByRole('dialog', { name: 'Todos los módulos' })
+    const enfocables = Array.from(hoja.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'))
+    const primero = enfocables[0]
+    const ultimo  = enfocables[enfocables.length - 1]
+    expect(primero).toBe(within(hoja).getByRole('button', { name: 'Cerrar' }))
+    expect(enfocables.length).toBeGreaterThan(2)
+
+    // Del último, Tab vuelve al primero.
+    ultimo.focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(primero)
+
+    // Del primero, Shift+Tab va al último.
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(ultimo)
+
+    // En el medio, Tab no se intercepta (lo resuelve el navegador).
+    const medio = enfocables[1]
+    medio.focus()
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    document.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(medio)
+
+    // Si el foco quedó afuera de la hoja, Tab lo trae al primero.
+    within(barra()).getByRole('button', { name: /Más/ }).focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(primero)
+
+    // Sigue abierta.
+    expect(screen.getByRole('dialog', { name: 'Todos los módulos' })).toBeTruthy()
+  })
+
   it('hoja «Más»: el botón ✕ también devuelve el foco a «Más»', () => {
     role = 'cajero'
     montar('/caja')

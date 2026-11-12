@@ -24,7 +24,7 @@ const NOMBRE_TRAMO: Record<TramoId, string> = {
 }
 
 const pctTxt = (x: number | null, dec = 1) => x === null ? '—' : `${x >= 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(dec).replace('.', ',')}%`
-const color = (x: number | null) => x === null || Math.abs(x) < 1e-9 ? '#888' : x > 0 ? 'var(--vt-green)' : 'var(--vt-red)'
+const color = (x: number | null) => x === null || Math.abs(x) < 1e-9 ? 'var(--c-gris)' : x > 0 ? 'var(--vt-green)' : 'var(--vt-red)'
 const rangoTxt = (p: Periodo) => p.tramo ? etiquetaTramo(rangoDeTramo(p.tramo.id, p.tramo.anio)) : `${diaLegible(p.desde)} – ${diaLegible(p.hasta)}`
 
 function descargar(nombre: string, csv: string) {
@@ -160,7 +160,7 @@ export default function VentasPromPaxExplicado() {
       {'error' in periodos ? (
         <div className="vt-empty"><div className="vt-empty-sub">{periodos.error}</div></div>
       ) : (
-        <div style={{ fontSize: '0.78rem', color: '#888', marginBottom: '1rem' }} data-testid="pp-periodos">
+        <div style={{ fontSize: '0.78rem', color: 'var(--c-gris)', marginBottom: '1rem' }} data-testid="pp-periodos">
           <strong>{rangoTxt(periodos.actual)}</strong> · comparado con {rangoTxt(periodos.comp)}.
           {' '}Turno por la hora de la factura (mañana 6–16 h, noche 17–24 h; después de medianoche cuenta como noche del mismo día).
         </div>
@@ -237,7 +237,7 @@ function Contenido({ a, turno, detalle, setDetalle, filasActual, periodos, resol
         <button className="vt-tab-btn" onClick={() => setDetalle(!detalle)}>{detalle ? 'Ocultar detalle' : 'Ver detalle'}</button>
       </div>
       {detalle && (
-        <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.75rem' }} data-testid="pp-leyenda">
+        <div style={{ fontSize: '0.75rem', color: 'var(--c-gris)', marginBottom: '0.75rem' }} data-testid="pp-leyenda">
           Rendimiento = el grupo vendió más o menos por persona. Mezcla = cambió cuánta gente atendió ese grupo.
           {a.cortes.dia.d && <> Venta de salón sin pax: {signoCrc(a.cortes.dia.d.ventaSinPax)} al prom/pax.</>}
         </div>

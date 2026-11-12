@@ -139,9 +139,9 @@ export default function VentasHistImport() {
       <div className="vt-sl" style={{ marginBottom: '0.75rem' }}>Importar datos históricos</div>
 
       {/* Info box */}
-      <div style={{ padding: '0.875rem 1rem', background: 'rgba(42,122,106,0.07)', borderLeft: '3px solid var(--vt-green)', borderRadius: '0 2px 2px 0', marginBottom: '1.25rem', fontSize: '0.82rem', lineHeight: 1.6 }}>
+      <div style={{ padding: '0.875rem 1rem', background: 'var(--c-musgo-fondo)', borderLeft: '3px solid var(--vt-green)', borderRadius: '0 2px 2px 0', marginBottom: '1.25rem', fontSize: '0.82rem', lineHeight: 1.6 }}>
         <strong>Formato CSV esperado:</strong> una fila por día con columnas en este orden:<br />
-        <code style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.05)', padding: '0.1rem 0.3rem', borderRadius: 2 }}>
+        <code style={{ fontSize: '0.72rem', background: 'var(--c-panel)', padding: '0.1rem 0.3rem', borderRadius: 2 }}>
           fecha, ventaNeta, ventaBruta, iva, servicio, salon, delivery, pax, promPax
         </code>
         <br />
@@ -214,7 +214,7 @@ export default function VentasHistImport() {
                   </tr>
                 ))}
                 {validRows.length > 50 && (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#888', fontSize: '0.78rem' }}>
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--c-gris)', fontSize: '0.78rem' }}>
                     ... y {validRows.length - 50} filas más
                   </td></tr>
                 )}
@@ -239,7 +239,7 @@ export default function VentasHistImport() {
       )}
 
       {msg && (
-        <div style={{ padding: '0.625rem 0.875rem', background: msg.startsWith('✓') ? 'rgba(78,164,126,0.1)' : 'rgba(192,57,43,0.1)', borderRadius: 2, fontSize: '0.82rem', color: msg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)', fontWeight: 600 }}>
+        <div style={{ padding: '0.625rem 0.875rem', background: msg.startsWith('✓') ? 'var(--c-musgo-fondo)' : 'var(--c-laca-fondo)', borderRadius: 2, fontSize: '0.82rem', color: msg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)', fontWeight: 600 }}>
           {msg}
         </div>
       )}

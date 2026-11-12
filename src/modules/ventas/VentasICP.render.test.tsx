@@ -51,8 +51,8 @@ describe('VentasICP', () => {
     // SEBASTIAN: 160.000 / 1.000.000 = 16,0 % — no 9,0 % (payout).
     expect(within(sebastian as HTMLElement).getByText('16.0%')).toBeTruthy()
     const plano = (t: string | null) => (t ?? '').replace(/\s/g, '')
-    expect(plano(sebastian.textContent)).toContain('₡90000')     // «cobrado del reparto», aparte
-    expect(plano(sebastian.textContent)).toContain('₡160000')    // propina electrónica
+    expect(plano(sebastian.textContent)).toContain('₡90.000')     // «cobrado del reparto», aparte
+    expect(plano(sebastian.textContent)).toContain('₡160.000')    // propina electrónica
     // MARCOS (barman): sin %; al final del ranking.
     expect(marcos.textContent).toContain('no aplica a barra')
     expect(marcos.textContent).not.toMatch(/\d+\.\d%/)

@@ -120,18 +120,18 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
     <div className="vt-section">
 
       {/* Form */}
-      <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'1rem', marginBottom:'1.5rem' }}>
-        <div style={{ fontSize:'0.75rem', letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--vt-gold)', marginBottom:'0.875rem', fontWeight:700 }}>
+      <div style={{ background:'var(--c-panel)', borderRadius:2, padding:'1rem', marginBottom:'1.5rem' }}>
+        <div style={{ fontSize:'0.75rem', color:'var(--c-oro-texto)', marginBottom:'0.875rem', fontWeight:700 }}>
           Registrar movimiento
         </div>
 
-        {error   && <div style={{ color:'#c23b22', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
-        {success && <div style={{ color:'#4a9a6a', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{success}</div>}
+        {error   && <div style={{ color:'var(--c-laca)', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
+        {success && <div style={{ color:'var(--c-musgo)', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{success}</div>}
 
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:'0.625rem', marginBottom:'0.75rem' }}>
           {/* Ingredient */}
           <div>
-            <div style={{ fontSize:'0.65rem', color:'#555', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.08em' }}>Ingrediente *</div>
+            <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>Ingrediente *</div>
             <select className="cd-tbl-select" value={ingId} onChange={e => setIngId(e.target.value)}>
               <option value="">— elegir —</option>
               {ingredients.map(i => (
@@ -144,7 +144,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
 
           {/* Movement type */}
           <div>
-            <div style={{ fontSize:'0.65rem', color:'#555', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.08em' }}>Tipo</div>
+            <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>Tipo</div>
             <select className="cd-tbl-select" value={movType}
               onChange={e => setMovType(e.target.value as InventoryMovement['movement_type'])}>
               {MOV_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -154,7 +154,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
           {/* Quantity OR new stock level */}
           {isCountAdj ? (
             <div>
-              <div style={{ fontSize:'0.65rem', color:'#555', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+              <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>
                 Nuevo nivel de stock {selectedIng ? `(${selectedIng.unit})` : ''} *
               </div>
               <input className="cd-tbl-input" type="number" min="0" step="0.001"
@@ -163,7 +163,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
             </div>
           ) : (
             <div>
-              <div style={{ fontSize:'0.65rem', color:'#555', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+              <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>
                 Cantidad {selectedIng ? `(${selectedIng.unit})` : ''} *
               </div>
               <input className="cd-tbl-input" type="number" min="0.001" step="0.001"
@@ -174,7 +174,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
           {/* Cost (only for purchases) */}
           {isPurchase && (
             <div>
-              <div style={{ fontSize:'0.65rem', color:'#555', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.08em' }}>Costo unitario ₡</div>
+              <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>Costo unitario ₡</div>
               <input className="cd-tbl-input" type="number" min="0" step="1"
                 placeholder="opcional" value={unitCost} onChange={e => setUnitCost(e.target.value)} />
             </div>
@@ -182,7 +182,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
 
           {/* Notes */}
           <div>
-            <div style={{ fontSize:'0.65rem', color:'#555', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.08em' }}>Notas</div>
+            <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>Notas</div>
             <input className="cd-tbl-input" type="text" placeholder="opcional"
               value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
@@ -190,21 +190,21 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
 
         {/* Compra → Caja */}
         {isPurchase && (
-          <label style={{ display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.75rem', color:'#aaa', marginBottom:'0.625rem', cursor:'pointer' }}>
+          <label style={{ display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.75rem', color:'var(--c-tinta)', marginBottom:'0.625rem', cursor:'pointer' }}>
             <input type="checkbox" checked={linkCaja} onChange={e => setLinkCaja(e.target.checked)} />
             Registrar egreso en Caja (egreso_mercaderia)
             {unitCost && qty && (
-              <span style={{ color:'#c8a96e', fontWeight:600 }}>
+              <span style={{ color:'var(--c-oro-texto)', fontWeight:600 }}>
                 · ₡{Math.round((parseFloat(qty)||0) * (parseFloat(unitCost)||0)).toLocaleString('es-CR')}
               </span>
             )}
-            <span style={{ color:'#555', fontSize:'0.68rem' }}>(requiere turno de caja abierto)</span>
+            <span style={{ color:'var(--c-gris)', fontSize:'0.68rem' }}>(requiere turno de caja abierto)</span>
           </label>
         )}
 
         {/* Preview */}
         {selectedIng && (
-          <div style={{ fontSize:'0.72rem', color:'#666', marginBottom:'0.625rem', padding:'0.4rem 0.625rem', background:'#111', borderRadius:2 }}>
+          <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', marginBottom:'0.625rem', padding:'0.4rem 0.625rem', background:'var(--c-panel)', borderRadius:2 }}>
             {isCountAdj ? (
               <span>
                 {selectedIng.name}: {selectedIng.current_stock} {selectedIng.unit}
@@ -220,7 +220,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
         )}
 
         <button className="vt-range-btn"
-          style={{ borderColor:'var(--vt-green)', color:'var(--vt-green)' }}
+          style={{ borderColor:'var(--c-musgo)', color:'var(--c-musgo)' }}
           disabled={saving} onClick={handleSubmit}>
           {saving ? '⟳ Guardando…' : '✓ Registrar movimiento'}
         </button>
@@ -231,7 +231,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
         <div className="vt-sl" style={{ margin:0 }}>Historial</div>
         <input type="text" placeholder="Filtrar por ingrediente…"
           value={filter} onChange={e => setFilter(e.target.value)}
-          style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'4px 8px', fontSize:'0.75rem', borderRadius:2, width:180, marginLeft:'auto' }} />
+          style={{ background:'var(--c-panel)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'4px 8px', fontSize:'0.75rem', borderRadius:2, width:180, marginLeft:'auto' }} />
       </div>
 
       <div className="vt-tbl-wrap">
@@ -254,33 +254,33 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
               const isIn = m.qty_delta > 0
               return (
                 <tr key={m.id}>
-                  <td style={{ fontSize:'0.72rem', color:'#888', whiteSpace:'nowrap' }}>
+                  <td style={{ fontSize:'0.72rem', color:'var(--c-gris)', whiteSpace:'nowrap' }}>
                     {d.toLocaleDateString('es-CR', { day:'2-digit', month:'short', year:'2-digit' })} {d.toLocaleTimeString('es-CR', { hour:'2-digit', minute:'2-digit' })}
                   </td>
                   <td style={{ fontWeight:500 }}>{ing?.name ?? (m.ingredient as {name?:string})?.name ?? '—'}</td>
-                  <td style={{ fontSize:'0.72rem', color:'#888' }}>
+                  <td style={{ fontSize:'0.72rem', color:'var(--c-gris)' }}>
                     {m.movement_type === 'purchase' ? '📦 Compra' :
                      m.movement_type === 'waste' ? '🗑 Merma' :
                      m.movement_type === 'count_adjustment' ? '📋 Ajuste' :
                      m.movement_type === 'sale_deduction' ? '🍽 Venta' : '↔ Transfer'}
                     {m.document_id && <span title="Generado desde factura escaneada" style={{ marginLeft: 6, fontSize: '0.58rem', fontWeight: 700, color: '#6a4a8a', background: '#efe6f8', padding: '1px 5px', borderRadius: 99 }}>📄 factura</span>}
                   </td>
-                  <td className="r" style={{ color: isIn ? '#4a9a6a' : '#c23b22', fontWeight:700 }}>
+                  <td className="r" style={{ color: isIn ? 'var(--c-musgo)' : 'var(--c-laca)', fontWeight:700 }}>
                     {isIn ? '+' : ''}{m.qty_delta.toLocaleString('es-CR')} {m.unit}
                   </td>
-                  <td className="r" style={{ fontSize:'0.75rem', color:'#666' }}>
+                  <td className="r" style={{ fontSize:'0.75rem', color:'var(--c-gris)' }}>
                     {m.unit_cost ? `₡ ${m.unit_cost.toLocaleString('es-CR')}` : '—'}
                   </td>
-                  <td style={{ fontSize:'0.72rem', color:'#666', maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  <td style={{ fontSize:'0.72rem', color:'var(--c-gris)', maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                     {m.notes || '—'}
                   </td>
-                  <td style={{ fontSize:'0.68rem', color:'#555' }}>{m.created_by || '—'}</td>
+                  <td style={{ fontSize:'0.68rem', color:'var(--c-gris)' }}>{m.created_by || '—'}</td>
                 </tr>
               )
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign:'center', padding:'2rem', color:'#555' }}>Sin movimientos registrados</td>
+                <td colSpan={7} style={{ textAlign:'center', padding:'2rem', color:'var(--c-gris)' }}>Sin movimientos registrados</td>
               </tr>
             )}
           </tbody>

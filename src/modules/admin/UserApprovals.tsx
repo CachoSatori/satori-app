@@ -48,7 +48,7 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
     finally { setSavingId(null) }
   }
 
-  if (loading) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--t-muted)' }}>Cargando usuarios…</div>
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--c-gris)' }}>Cargando usuarios…</div>
 
   const pending = profiles.filter(p => !p.is_active)
   const active  = profiles.filter(p => p.is_active)
@@ -59,8 +59,8 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
     return (
       <tr key={p.id} className="admin-row">
         <td className="admin-emp-name">
-          {p.full_name}{isMe && <span style={{ color: 'var(--t-muted)', fontWeight: 400 }}> (vos)</span>}
-          <div style={{ fontSize: '0.65rem', color: 'var(--t-muted)', marginTop: 1 }}>
+          {p.full_name}{isMe && <span style={{ color: 'var(--c-gris)', fontWeight: 400 }}> (vos)</span>}
+          <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)', marginTop: 1 }}>
             {p.email ?? '—'}{emp && <span> · 👤 {emp.full_name}</span>}
           </div>
         </td>
@@ -69,7 +69,7 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
             value={p.role}
             disabled={savingId === p.id || isMe}
             onChange={e => handleRole(p.id, e.target.value as UserRole)}
-            style={{ fontSize: '0.78rem', background: 'var(--t-paper)', border: '1px solid var(--t-border)', borderRadius: 2, padding: '0.3rem 0.45rem', color: 'var(--t-ink)' }}>
+            style={{ fontSize: '0.78rem', background: 'var(--c-fondo)', border: '1px solid var(--c-linea)', borderRadius: 2, padding: '0.3rem 0.45rem', color: 'var(--c-tinta)' }}>
             {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </select>
         </td>
@@ -99,9 +99,9 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
         <button className="btn-save-inline" onClick={() => setNuevo(true)}>+ Nuevo empleado</button>
       </div>
-      <div style={{ border: '1px solid var(--t-border)', borderRadius: 4, padding: '0.75rem 0.875rem',
-        marginBottom: '1.25rem', fontSize: '0.74rem', lineHeight: 1.6, color: 'var(--t-muted)' }}>
-        <strong style={{ color: 'var(--t-ink)' }}>¿Cómo dar de alta a alguien?</strong><br />
+      <div style={{ border: '1px solid var(--c-linea)', borderRadius: 4, padding: '0.75rem 0.875rem',
+        marginBottom: '1.25rem', fontSize: '0.74rem', lineHeight: 1.6, color: 'var(--c-gris)' }}>
+        <strong style={{ color: 'var(--c-tinta)' }}>¿Cómo dar de alta a alguien?</strong><br />
         1. Tocá <strong>+ Nuevo empleado</strong> y cargá nombre, correo (el suyo o un alias
         <code> satorisushibar+nombre@gmail.com</code>) y rol. Si ya está en Empleados, vinculalo.<br />
         2. Copiá la <strong>contraseña temporal</strong> y entregásela en persona: no se vuelve a mostrar.<br />
@@ -118,12 +118,12 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
         <span className="admin-section-title">Cuentas deshabilitadas {pending.length > 0 && `(${pending.length})`}</span>
       </div>
       {pending.length === 0 ? (
-        <p style={{ fontSize: '0.8rem', color: 'var(--t-muted)', marginBottom: '1.5rem' }}>
+        <p style={{ fontSize: '0.8rem', color: 'var(--c-gris)', marginBottom: '1.5rem' }}>
           No hay cuentas deshabilitadas.
         </p>
       ) : (
         <>
-          <p style={{ fontSize: '0.72rem', color: 'var(--t-muted)', marginBottom: '0.6rem', lineHeight: 1.5 }}>
+          <p style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginBottom: '0.6rem', lineHeight: 1.5 }}>
             Estas cuentas no pueden entrar. Para devolverle el acceso a alguien, revisá el rol y tocá <strong>Habilitar</strong>.
           </p>
           <table className="admin-table" style={{ marginBottom: '2rem' }}>

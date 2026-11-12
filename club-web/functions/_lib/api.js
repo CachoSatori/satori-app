@@ -155,7 +155,7 @@ export function prefijoRed(ip) {
 export async function manejar(request, env, path) {
   const ip = request.headers.get('CF-Connecting-IP') || 'sin-ip'
   const n = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d)
-  // Solo para el contador del servidor local; en Cloudflare los topes los fija cada binding (wrangler.toml).
+  // Solo para el contador del servidor local; en Cloudflare los topes los fija cada binding (worker/wrangler.toml).
   const crearMax = n(env.RL_CREAR_MAX, 5), crearVent = n(env.RL_CREAR_VENTANA_S, 60)
   const leerMax = n(env.RL_LECTURA_MAX, 60), leerVent = n(env.RL_LECTURA_VENTANA_S, 60)
   const partes = String(path || '').split('/').filter(Boolean)

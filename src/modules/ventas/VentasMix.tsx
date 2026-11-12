@@ -23,7 +23,7 @@ type ClassMap = Record<string, CMClas>
 interface Tots { totG: number; totBeb: number; totCom: number; totMerch: number; totLC: number; totUn: number }
 
 // ── Constants ─────────────────────────────────────────────────────
-const CMP_COLORS = ['#c8a96e','#4a9a6a','#c890e8','#8ab4d4','#d4a84b','#c23b22']
+const CMP_COLORS = ['var(--c-oro)','#4a9a6a','#c890e8','#8ab4d4','#d4a84b','#c23b22']
 const MAX_CMP    = 6
 const MSHORT     = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const CLAS_ORDER_COM = [
@@ -35,13 +35,13 @@ const TIPOS_BASE = ['bebida','comida','comensales','local club','invitados','cor
 
 type Section = { label: string; color: string; filterFn: (p: PMItem) => boolean; clasOrder?: string[] }
 const SECTIONS: Section[] = [
-  { label: 'BEBIDAS',               color: '#7ec8a0', filterFn: p => p.tipo === 'bebida' },
-  { label: 'COMIDAS',               color: '#c8a96e', filterFn: p => p.tipo === 'comida', clasOrder: CLAS_ORDER_COM },
-  { label: 'MERCHANDISING / OTROS', color: '#c890e8', filterFn: p => !TIPOS_BASE.includes(p.tipo) },
-  { label: 'PERSONAL',              color: '#888',    filterFn: p => p.tipo === 'personal' },
-  { label: 'LOCAL CLUB',            color: '#d4a84b', filterFn: p => p.tipo === 'local club' || p.tipo === 'invitados' || p.clas.toLowerCase().includes('local club') || p.clas.toLowerCase().includes('invitado') },
-  { label: 'CORTESÍAS',             color: '#555',    filterFn: p => p.tipo === 'cortesia' },
-  { label: 'COMENSALES / A PAX',    color: '#666',    filterFn: p => p.tipo === 'comensales' },
+  { label: 'Bebidas',               color: 'var(--c-musgo)', filterFn: p => p.tipo === 'bebida' },
+  { label: 'Comidas',               color: 'var(--c-oro-texto)', filterFn: p => p.tipo === 'comida', clasOrder: CLAS_ORDER_COM },
+  { label: 'Merchandising / otros', color: '#c890e8', filterFn: p => !TIPOS_BASE.includes(p.tipo) },
+  { label: 'Personal',              color: 'var(--c-gris)',    filterFn: p => p.tipo === 'personal' },
+  { label: 'Local Club',            color: '#d4a84b', filterFn: p => p.tipo === 'local club' || p.tipo === 'invitados' || p.clas.toLowerCase().includes('local club') || p.clas.toLowerCase().includes('invitado') },
+  { label: 'Cortesías',             color: 'var(--c-gris)',    filterFn: p => p.tipo === 'cortesia' },
+  { label: 'Comensales / a PAX',    color: 'var(--c-gris)',    filterFn: p => p.tipo === 'comensales' },
 ]
 
 // ── Qué cuenta como DELIVERY en el Mix ─────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ function labelPeriod(key: string): string {
 }
 
 function pctBarColor(pct: number, min: number, max: number): string {
-  if (!pct) return '#555'
+  if (!pct) return 'var(--c-panel)'
   const ratio = Math.max(0, Math.min(1, (pct - min) / (max - min || 1)))
   let r, g, b: number
   if (ratio < 0.5) {
@@ -157,14 +157,14 @@ function pctBarColor(pct: number, min: number, max: number): string {
 
 function tipColor(tipo: string): string {
   switch (tipo) {
-    case 'bebida':    return '#7ec8a0'
-    case 'comida':    return '#c8a96e'
+    case 'bebida':    return 'var(--c-musgo)'
+    case 'comida':    return 'var(--c-oro-texto)'
     case 'merchandising': case 'nofood': return '#c890e8'
     case 'local club': case 'invitados': return '#d4a84b'
-    case 'comensales': return '#666'
-    case 'cortesia':   return '#555'
-    case 'personal':   return '#999'
-    default:           return '#777'
+    case 'comensales': return 'var(--c-gris)'
+    case 'cortesia':   return 'var(--c-gris)'
+    case 'personal':   return 'var(--c-gris)'
+    default:           return 'var(--c-gris)'
   }
 }
 
@@ -297,11 +297,11 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Buscar producto…"
-              style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:180 }}
+              style={{ background:'var(--c-fondo)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:180 }}
             />
             <button
               onClick={() => handleExpandAll(!allExpanded, verCM)}
-              style={{ padding:'5px 12px', border:'1px solid #2a2a2a', borderRadius:2, fontSize:'0.72rem', cursor:'pointer', color:'#888', background:'transparent', marginLeft:'auto', whiteSpace:'nowrap' }}>
+              style={{ padding:'5px 12px', border:'1px solid var(--c-linea)', borderRadius:2, fontSize:'0.72rem', cursor:'pointer', color:'var(--c-gris)', background:'transparent', marginLeft:'auto', whiteSpace:'nowrap' }}>
               {allExpanded ? '▲ Colapsar todo' : '▼ Expandir todo'}
             </button>
           </div>
@@ -316,7 +316,7 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
               onToggleClas={toggleClas} onToggleSubcl={toggleSubcl}
             />
           ) : (
-            <div style={{ padding:'2rem', textAlign:'center', color:'#888', fontSize:'0.85rem' }}>
+            <div style={{ padding:'2rem', textAlign:'center', color:'var(--c-gris)', fontSize:'0.85rem' }}>
               Sin datos para este período.
             </div>
           )}
@@ -337,9 +337,9 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
           />
 
           {cmpPeriods.length < 2 ? (
-            <div style={{ padding:'2rem', textAlign:'center', color:'#555', fontSize:'0.85rem' }}>
-              Seleccioná al menos <strong style={{ color:'#888' }}>2 períodos</strong> para comparar.<br/>
-              <span style={{ fontSize:'0.72rem', color:'#444' }}>Hasta {MAX_CMP} períodos simultáneos.</span>
+            <div style={{ padding:'2rem', textAlign:'center', color:'var(--c-gris)', fontSize:'0.85rem' }}>
+              Seleccioná al menos <strong style={{ color:'var(--c-gris)' }}>2 períodos</strong> para comparar.<br/>
+              <span style={{ fontSize:'0.72rem', color:'var(--c-gris-claro)' }}>Hasta {MAX_CMP} períodos simultáneos.</span>
             </div>
           ) : (
             <>
@@ -351,11 +351,11 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
                 <input
                   type="text" value={search} onChange={e => setSearch(e.target.value)}
                   placeholder="Buscar producto…"
-                  style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:180 }}
+                  style={{ background:'var(--c-fondo)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:180 }}
                 />
                 <button
                   onClick={() => handleExpandAll(!allExpanded, masterCM)}
-                  style={{ padding:'5px 12px', border:'1px solid #2a2a2a', borderRadius:2, fontSize:'0.72rem', cursor:'pointer', color:'#888', background:'transparent', marginLeft:'auto', whiteSpace:'nowrap' }}>
+                  style={{ padding:'5px 12px', border:'1px solid var(--c-linea)', borderRadius:2, fontSize:'0.72rem', cursor:'pointer', color:'var(--c-gris)', background:'transparent', marginLeft:'auto', whiteSpace:'nowrap' }}>
                   {allExpanded ? '▲ Colapsar todo' : '▼ Expandir todo'}
                 </button>
               </div>
@@ -383,10 +383,10 @@ function PeriodSelector({ allYears, allMonths, selected, onSelect }: {
   selected: string; onSelect: (p: string) => void
 }) {
   return (
-    <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1rem' }}>
+    <div style={{ background:'var(--c-panel)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1rem' }}>
       {allYears.map(y => (
         <div key={y} style={{ display:'flex', gap:'0.3rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.35rem' }}>
-          <span style={{ fontSize:'0.65rem', color:'#555', minWidth:42, textTransform:'uppercase', letterSpacing:'0.1em' }}>{y}:</span>
+          <span style={{ fontSize:'0.65rem', color:'var(--c-gris)', minWidth:42 }}>{y}:</span>
           <button
             className={`vt-range-btn ${selected === `todo-${y}` ? 'active' : ''}`}
             onClick={() => onSelect(`todo-${y}`)}>
@@ -413,20 +413,20 @@ function PeriodSelector({ allYears, allMonths, selected, onSelect }: {
 function VerKPIs({ tots }: { tots: Tots }) {
   const { totG, totBeb, totCom, totMerch, totLC, totUn } = tots
   const kpis = [
-    { label:'Total Mix',     val:fi(totG),                                                                    color:'var(--vt-gold)' },
-    { label:'Bebidas',       val:fi(totBeb) + (totG ? ' · ' + (totBeb/totG*100).toFixed(1)+'%' : ''),        color:'#7ec8a0' },
-    { label:'Comidas',       val:fi(totCom) + (totG ? ' · ' + (totCom/totG*100).toFixed(1)+'%' : ''),        color:'#c8a96e' },
+    { label:'Total Mix',     val:fi(totG),                                                                    color:'var(--c-oro-texto)' },
+    { label:'Bebidas',       val:fi(totBeb) + (totG ? ' · ' + (totBeb/totG*100).toFixed(1)+'%' : ''),        color:'var(--c-musgo)' },
+    { label:'Comidas',       val:fi(totCom) + (totG ? ' · ' + (totCom/totG*100).toFixed(1)+'%' : ''),        color:'var(--c-oro-texto)' },
     { label:'Local Club',    val:fi(totLC)  + (totG ? ' · ' + (totLC/totG*100).toFixed(1)+'%' : ''),         color:'#d4a84b' },
     { label:'Merchandising', val:fi(totMerch) + (totG ? ' · ' + (totMerch/totG*100).toFixed(1)+'%' : ''),    color:'#c890e8' },
-    { label:'Unidades',      val:Math.round(totUn).toLocaleString('es-CR'),                                   color:'#aaa' },
-    { label:'Ticket / ítem', val:fi(totUn ? totG / totUn : 0),                                               color:'var(--vt-gold)' },
+    { label:'Unidades',      val:Math.round(totUn).toLocaleString('es-CR'),                                   color:'var(--c-tinta)' },
+    { label:'Ticket / ítem', val:fi(totUn ? totG / totUn : 0),                                               color:'var(--c-oro-texto)' },
   ]
   return (
     <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'0.5rem', marginBottom:'1rem' }}>
       {kpis.map(k => (
-        <div key={k.label} style={{ background:'var(--vt-ink)', padding:'0.625rem 0.75rem', borderRadius:2 }}>
-          <div style={{ fontSize:'0.6rem', letterSpacing:'0.12em', textTransform:'uppercase', color:'#555', marginBottom:4 }}>{k.label}</div>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'clamp(0.65rem,1.1vw,0.85rem)', fontWeight:800, color:k.color }}>{k.val}</div>
+        <div key={k.label} style={{ background:'var(--c-panel)', padding:'0.625rem 0.75rem', borderRadius:2 }}>
+          <div style={{ fontSize:'0.6rem', color:'var(--c-gris)', marginBottom:4 }}>{k.label}</div>
+          <div style={{ fontFamily:'var(--font-sans)', fontVariantNumeric:'tabular-nums', fontSize:'clamp(0.65rem,1.1vw,0.85rem)', fontWeight:800, color:k.color }}>{k.val}</div>
         </div>
       ))}
     </div>
@@ -441,15 +441,15 @@ function CmpSelector({ allYears, allMonths, cmpPeriods, onToggle, onClear }: {
   cmpPeriods: string[]; onToggle: (k: string) => void; onClear: () => void
 }) {
   return (
-    <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1rem' }}>
+    <div style={{ background:'var(--c-panel)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'1rem' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>
-        <span style={{ fontSize:'0.65rem', letterSpacing:'0.15em', textTransform:'uppercase', fontWeight:700, color:'#888' }}>
+        <span style={{ fontSize:'0.65rem', fontWeight:700, color:'var(--c-gris)' }}>
           PERÍODOS A COMPARAR{' '}
-          <span style={{ color:'#555', fontWeight:400 }}>(click · máx {MAX_CMP})</span>
+          <span style={{ color:'var(--c-gris)', fontWeight:400 }}>(click · máx {MAX_CMP})</span>
         </span>
         {cmpPeriods.length > 0 && (
           <button onClick={onClear}
-            style={{ padding:'0.2rem 0.5rem', border:'1px solid #3a2a2a', color:'#c23b22', background:'transparent', borderRadius:2, fontSize:'0.65rem', cursor:'pointer' }}>
+            style={{ padding:'0.2rem 0.5rem', border:'1px solid var(--c-linea)', color:'var(--c-laca)', background:'transparent', borderRadius:2, fontSize:'0.65rem', cursor:'pointer' }}>
             × Limpiar
           </button>
         )}
@@ -457,11 +457,11 @@ function CmpSelector({ allYears, allMonths, cmpPeriods, onToggle, onClear }: {
 
       {/* Selected chips */}
       {cmpPeriods.length > 0 && (
-        <div style={{ display:'flex', gap:'0.35rem', flexWrap:'wrap', marginBottom:'0.6rem', paddingBottom:'0.6rem', borderBottom:'1px solid #1a1a1a' }}>
+        <div style={{ display:'flex', gap:'0.35rem', flexWrap:'wrap', marginBottom:'0.6rem', paddingBottom:'0.6rem', borderBottom:'1px solid var(--c-linea)' }}>
           {cmpPeriods.map((p, i) => {
             const col = CMP_COLORS[i % CMP_COLORS.length]
             return (
-              <div key={p} style={{ display:'flex', alignItems:'center', gap:'0.35rem', padding:'0.25rem 0.5rem', border:`1px solid ${col}`, color:col, background:col+'18', borderRadius:2, fontSize:'0.7rem' }}>
+              <div key={p} style={{ display:'flex', alignItems:'center', gap:'0.35rem', padding:'0.25rem 0.5rem', border:`1px solid ${col}`, color:col, background:`color-mix(in srgb, ${col} 9%, transparent)`, borderRadius:2, fontSize:'0.7rem' }}>
                 <span style={{ fontWeight:700, minWidth:14 }}>{i+1}</span>
                 {labelPeriod(p)}
                 <span onClick={() => onToggle(p)} style={{ cursor:'pointer', opacity:0.7, fontSize:'0.88rem' }}>×</span>
@@ -474,7 +474,7 @@ function CmpSelector({ allYears, allMonths, cmpPeriods, onToggle, onClear }: {
       {/* Selector rows */}
       {/* Year row */}
       <div style={{ display:'flex', gap:'0.25rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.3rem' }}>
-        <span style={{ fontSize:'0.62rem', color:'#555', minWidth:42, textTransform:'uppercase', letterSpacing:'0.1em' }}>Año:</span>
+        <span style={{ fontSize:'0.62rem', color:'var(--c-gris)', minWidth:42 }}>Año:</span>
         {allYears.map(y => {
           const key = `todo-${y}`
           const selIdx = cmpPeriods.indexOf(key)
@@ -482,7 +482,7 @@ function CmpSelector({ allYears, allMonths, cmpPeriods, onToggle, onClear }: {
           const col = isSel ? CMP_COLORS[selIdx % CMP_COLORS.length] : ''
           return (
             <div key={key} onClick={() => onToggle(key)}
-              style={{ padding:'0.2rem 0.5rem', borderRadius:2, fontSize:'0.7rem', cursor:'pointer', border:`1px solid ${isSel ? col : '#2a2a2a'}`, color:isSel ? col : '#888', background:isSel ? col+'18' : 'transparent', fontWeight:isSel ? 700 : 400, transition:'all .12s', userSelect:'none' }}>
+              style={{ padding:'0.2rem 0.5rem', borderRadius:2, fontSize:'0.7rem', cursor:'pointer', border:`1px solid ${isSel ? col : 'var(--c-linea)'}`, color:isSel ? col : 'var(--c-gris)', background:isSel ? `color-mix(in srgb, ${col} 9%, transparent)` : 'transparent', fontWeight:isSel ? 700 : 400, transition:'all .12s', userSelect:'none' }}>
               Todo {y}{isSel ? ' ✓' : ''}
             </div>
           )
@@ -491,7 +491,7 @@ function CmpSelector({ allYears, allMonths, cmpPeriods, onToggle, onClear }: {
       {/* Month rows by year */}
       {allYears.map(y => (
         <div key={y} style={{ display:'flex', gap:'0.2rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.25rem' }}>
-          <span style={{ fontSize:'0.62rem', color:'#444', minWidth:42, textTransform:'uppercase', letterSpacing:'0.08em' }}>{y}:</span>
+          <span style={{ fontSize:'0.62rem', color:'var(--c-gris-claro)', minWidth:42 }}>{y}:</span>
           {allMonths.filter(m => m.startsWith(String(y))).map(key => {
             const mo = Number(key.split('-')[1])
             const selIdx = cmpPeriods.indexOf(key)
@@ -499,7 +499,7 @@ function CmpSelector({ allYears, allMonths, cmpPeriods, onToggle, onClear }: {
             const col = isSel ? CMP_COLORS[selIdx % CMP_COLORS.length] : ''
             return (
               <div key={key} onClick={() => onToggle(key)}
-                style={{ padding:'0.18rem 0.45rem', borderRadius:2, fontSize:'0.68rem', cursor:'pointer', border:`1px solid ${isSel ? col : '#2a2a2a'}`, color:isSel ? col : '#888', background:isSel ? col+'18' : 'transparent', fontWeight:isSel ? 700 : 400, transition:'all .12s', userSelect:'none' }}>
+                style={{ padding:'0.18rem 0.45rem', borderRadius:2, fontSize:'0.68rem', cursor:'pointer', border:`1px solid ${isSel ? col : 'var(--c-linea)'}`, color:isSel ? col : 'var(--c-gris)', background:isSel ? `color-mix(in srgb, ${col} 9%, transparent)` : 'transparent', fontWeight:isSel ? 700 : 400, transition:'all .12s', userSelect:'none' }}>
                 {MSHORT[mo-1]}{isSel ? ' ✓' : ''}
               </div>
             )
@@ -522,18 +522,18 @@ function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; PM:
     { label:'Ticket/ítem',  fn: t => t.totUn ? t.totG / t.totUn : 0 },
   ]
   return (
-    <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.75rem', marginBottom:'1rem', overflowX:'auto' }}>
+    <div style={{ background:'var(--c-panel)', borderRadius:2, padding:'0.75rem', marginBottom:'1rem', overflowX:'auto' }}>
       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.82rem', minWidth:360 }}>
         <thead>
-          <tr style={{ borderBottom:'1px solid #222' }}>
-            <th style={{ textAlign:'left', padding:'0.4rem 0.625rem', fontSize:'0.65rem', color:'#555', fontWeight:400, letterSpacing:'0.1em', textTransform:'uppercase', whiteSpace:'nowrap' }}>Métrica</th>
+          <tr style={{ borderBottom:'1px solid var(--c-linea)' }}>
+            <th style={{ textAlign:'left', padding:'0.4rem 0.625rem', fontSize:'0.65rem', color:'var(--c-gris)', fontWeight:400, whiteSpace:'nowrap' }}>Métrica</th>
             {cmpData.map((c, i) => (
               <th key={c.key} style={{ textAlign:'right', padding:'0.4rem 0.625rem', fontSize:'0.65rem', color:CMP_COLORS[i%CMP_COLORS.length], fontWeight:700, whiteSpace:'nowrap' }}>
                 ({i+1}) {c.label}
               </th>
             ))}
             {cmpData.length > 1 && (
-              <th style={{ textAlign:'right', padding:'0.4rem 0.625rem', fontSize:'0.65rem', color:'#555', fontWeight:400, whiteSpace:'nowrap' }}>vs ①</th>
+              <th style={{ textAlign:'right', padding:'0.4rem 0.625rem', fontSize:'0.65rem', color:'var(--c-gris)', fontWeight:400, whiteSpace:'nowrap' }}>vs ①</th>
             )}
           </tr>
         </thead>
@@ -542,8 +542,8 @@ function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; PM:
             const vals = cmpData.map(c => m.fn(c.tots))
             const base = vals[0]
             return (
-              <tr key={m.label} style={{ borderBottom:'1px solid #111' }}>
-                <td style={{ padding:'0.45rem 0.625rem', color:'#aaa', fontWeight:600, whiteSpace:'nowrap' }}>{m.label}</td>
+              <tr key={m.label} style={{ borderBottom:'1px solid var(--c-linea)' }}>
+                <td style={{ padding:'0.45rem 0.625rem', color:'var(--c-tinta)', fontWeight:600, whiteSpace:'nowrap' }}>{m.label}</td>
                 {vals.map((v, i) => (
                   <td key={i} style={{ padding:'0.45rem 0.625rem', textAlign:'right', color:CMP_COLORS[i%CMP_COLORS.length], fontWeight:700, whiteSpace:'nowrap' }}>
                     {fi(v)}
@@ -552,9 +552,9 @@ function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; PM:
                 {cmpData.length > 1 && (
                   <td style={{ padding:'0.45rem 0.625rem', textAlign:'right', whiteSpace:'nowrap' }}>
                     {vals.slice(1).map((v, i) => {
-                      if (!base) return <span key={i} style={{ color:'#444' }}>—</span>
+                      if (!base) return <span key={i} style={{ color:'var(--c-gris-claro)' }}>—</span>
                       const pct = (v - base) / Math.abs(base) * 100
-                      const col = pct > 0 ? '#7ec8a0' : pct < 0 ? '#c23b22' : '#888'
+                      const col = pct > 0 ? 'var(--c-musgo)' : pct < 0 ? 'var(--c-laca)' : 'var(--c-gris)'
                       return <span key={i} style={{ color:col, fontSize:'0.68rem', fontWeight:700, marginLeft: i > 0 ? '0.3rem' : 0 }}>
                         {pct >= 0 ? '▲ +' : '▼ '}{pct.toFixed(1)}%
                       </span>
@@ -607,10 +607,10 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
 
     // Section header
     rows.push(
-      <tr key={`sec-${sec.label}`} style={{ background:'#0a0a14', borderTop:`3px solid #1a1a2a` }}>
-        <td colSpan={8} style={{ padding:'0.45rem 0.625rem', fontSize:'0.7rem', letterSpacing:'0.2em', textTransform:'uppercase', color:sec.color, fontWeight:700 }}>
+      <tr key={`sec-${sec.label}`} style={{ background:'var(--c-fondo)', borderTop:`3px solid var(--c-linea)` }}>
+        <td colSpan={8} style={{ padding:'0.45rem 0.625rem', fontSize:'0.7rem', color:sec.color, fontWeight:700 }}>
           {sec.label}
-          <span style={{ color:'#444', fontWeight:400, marginLeft:'0.5rem', fontSize:'0.72rem' }}>
+          <span style={{ color:'var(--c-gris-claro)', fontWeight:400, marginLeft:'0.5rem', fontSize:'0.72rem' }}>
             {fi(secTotal)} · {tots.totG ? (secTotal/tots.totG*100).toFixed(1)+'%' : '—'}
           </span>
         </td>
@@ -644,17 +644,17 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
 
       rows.push(
         <tr key={`clas-${cId}`}
-          style={{ background:'#1c1c1c', borderTop:'2px solid #2a2a2a', cursor:'pointer' }}
+          style={{ background:'var(--c-panel)', borderTop:'2px solid var(--c-linea)', cursor:'pointer' }}
           onClick={() => onToggleClas(cId)}>
-          <td style={{ padding:'0.6rem 0.625rem', fontSize:'0.72rem', letterSpacing:'0.1em', textTransform:'uppercase', fontWeight:700, color:sec.color }}>
+          <td style={{ padding:'0.6rem 0.625rem', fontSize:'0.72rem', fontWeight:700, color:sec.color }}>
             <span style={{ display:'inline-block', width:12, fontSize:'0.6rem' }}>{open ? '▼' : '▶'}</span> {clas}
           </td>
-          <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:'#aaa', fontSize:'0.8rem' }}>{Math.round(cU).toLocaleString('es-CR')}</td>
+          <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:'var(--c-tinta)', fontSize:'0.8rem' }}>{Math.round(cU).toLocaleString('es-CR')}</td>
           <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:sec.color, fontWeight:700 }}>₡{Math.round(cM).toLocaleString('es-CR')}</td>
           <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:sec.color, fontWeight:700 }}>{pC.toFixed(2)}%</td>
-          <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:'#333' }}>—</td>
-          <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:'#7aaa7a', fontSize:'0.78rem' }}>{cSal>0?'₡'+Math.round(cSal).toLocaleString('es-CR'):'—'}</td>
-          <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:'#8ab4d4', fontSize:'0.78rem' }}>{cDel>0?'₡'+Math.round(cDel).toLocaleString('es-CR'):'—'}</td>
+          <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:'var(--c-gris-claro)' }}>—</td>
+          <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:'var(--c-musgo)', fontSize:'0.78rem' }}>{cSal>0?'₡'+Math.round(cSal).toLocaleString('es-CR'):'—'}</td>
+          <td style={{ padding:'0.6rem 0.5rem', textAlign:'right', color:'var(--c-azul)', fontSize:'0.78rem' }}>{cDel>0?'₡'+Math.round(cDel).toLocaleString('es-CR'):'—'}</td>
           <td/>
         </tr>
       )
@@ -670,24 +670,24 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
         const sId    = `${cId}_s_${slugify(subcl)}`
         const pS     = tots.totG ? sM/tots.totG*100 : 0
         const pSClas = cM ? sM/cM*100 : 0
-        const clColorS = pSClas > 40 ? '#7ec8a0' : pSClas > 15 ? '#c8a96e' : '#888'
+        const clColorS = pSClas > 40 ? 'var(--c-musgo)' : pSClas > 15 ? 'var(--c-oro-texto)' : 'var(--c-gris)'
         const sOpen  = openSubcl.has(sId)
 
         rows.push(
           <tr key={`sub-${sId}`}
-            style={{ background:'#141414', cursor:'pointer' }}
+            style={{ background:'var(--c-panel)', cursor:'pointer' }}
             onClick={e => { e.stopPropagation(); onToggleSubcl(sId) }}>
-            <td style={{ padding:'0.5rem 0.625rem 0.5rem 1.5rem', fontSize:'0.7rem', letterSpacing:'0.08em', textTransform:'uppercase', color:'#bbb' }}>
+            <td style={{ padding:'0.5rem 0.625rem 0.5rem 1.5rem', fontSize:'0.7rem', color:'var(--c-tinta)' }}>
               <span style={{ display:'inline-block', width:12, fontSize:'0.6rem' }}>{sOpen ? '▼' : '▶'}</span> {subcl}
             </td>
-            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'#666', fontSize:'0.8rem' }}>{Math.round(sU).toLocaleString('es-CR')}</td>
-            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'#aaa', fontSize:'0.8rem' }}>₡{Math.round(sM).toLocaleString('es-CR')}</td>
-            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'#888', fontSize:'0.8rem' }}>{pS.toFixed(2)}%</td>
+            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'var(--c-gris)', fontSize:'0.8rem' }}>{Math.round(sU).toLocaleString('es-CR')}</td>
+            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'var(--c-tinta)', fontSize:'0.8rem' }}>₡{Math.round(sM).toLocaleString('es-CR')}</td>
+            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'var(--c-gris)', fontSize:'0.8rem' }}>{pS.toFixed(2)}%</td>
             <td style={{ padding:'0.5rem 0.5rem', textAlign:'right' }}>
               <span style={{ fontSize:'0.78rem', fontWeight:600, color:clColorS }}>{pSClas.toFixed(1)}%</span>
             </td>
-            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'#7aaa7a', fontSize:'0.75rem' }}>{sSal>0?'₡'+Math.round(sSal).toLocaleString('es-CR'):'—'}</td>
-            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'#8ab4d4', fontSize:'0.75rem' }}>{sDel>0?'₡'+Math.round(sDel).toLocaleString('es-CR'):'—'}</td>
+            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'var(--c-musgo)', fontSize:'0.75rem' }}>{sSal>0?'₡'+Math.round(sSal).toLocaleString('es-CR'):'—'}</td>
+            <td style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:'var(--c-azul)', fontSize:'0.75rem' }}>{sDel>0?'₡'+Math.round(sDel).toLocaleString('es-CR'):'—'}</td>
             <td/>
           </tr>
         )
@@ -701,19 +701,19 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
           const pct = tots.totG ? pm/tots.totG*100 : 0
           const pctClas = sM ? pm/sM*100 : 0
           const pColor    = pctBarColor(pct, pctScale.min, pctScale.max)
-          const clColorP  = pctClas > 30 ? '#7ec8a0' : pctClas > 10 ? '#c8a96e' : '#888'
-          const bg = pi % 2 === 0 ? '#0d0d0d' : '#111'
+          const clColorP  = pctClas > 30 ? 'var(--c-musgo)' : pctClas > 10 ? 'var(--c-oro-texto)' : 'var(--c-gris)'
+          const bg = pi % 2 === 0 ? 'var(--c-fondo)' : 'var(--c-panel)'
           const tc = tipColor(p.tipo)
 
           rows.push(
-            <tr key={`prod-${sId}-${p.nombre}`} style={{ background:bg, borderBottom:'1px solid #161616' }}>
-              <td style={{ padding:'0.45rem 0.625rem 0.45rem 2.5rem', color:'var(--vt-paper)', fontSize:'0.78rem' }}>{p.nombre}</td>
-              <td style={{ padding:'0.45rem 0.5rem', textAlign:'right', color:'#888', fontSize:'0.78rem' }}>{Math.round(p.unidades).toLocaleString('es-CR')}</td>
-              <td style={{ padding:'0.45rem 0.5rem', textAlign:'right', color:'var(--vt-paper)', fontSize:'0.78rem' }}>{pm?'₡'+Math.round(pm).toLocaleString('es-CR'):'—'}</td>
+            <tr key={`prod-${sId}-${p.nombre}`} style={{ background:bg, borderBottom:'1px solid var(--c-linea)' }}>
+              <td style={{ padding:'0.45rem 0.625rem 0.45rem 2.5rem', color:'var(--c-tinta)', fontSize:'0.78rem' }}>{p.nombre}</td>
+              <td style={{ padding:'0.45rem 0.5rem', textAlign:'right', color:'var(--c-gris)', fontSize:'0.78rem' }}>{Math.round(p.unidades).toLocaleString('es-CR')}</td>
+              <td style={{ padding:'0.45rem 0.5rem', textAlign:'right', color:'var(--c-tinta)', fontSize:'0.78rem' }}>{pm?'₡'+Math.round(pm).toLocaleString('es-CR'):'—'}</td>
               <td style={{ padding:'0.45rem 0.5rem', textAlign:'right' }}>
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2 }}>
                   <span style={{ fontSize:'0.7rem', color:pColor, whiteSpace:'nowrap' }}>{pct.toFixed(2)}%</span>
-                  <div style={{ height:2, width:'100%', background:'#1a1a1a', borderRadius:1, overflow:'hidden' }}>
+                  <div style={{ height:2, width:'100%', background:'var(--c-panel)', borderRadius:1, overflow:'hidden' }}>
                     <div style={{ height:'100%', width:`${Math.min(pct*8,100).toFixed(0)}%`, background:pColor, borderRadius:1 }}/>
                   </div>
                 </div>
@@ -721,15 +721,15 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
               <td style={{ padding:'0.45rem 0.5rem', textAlign:'right' }}>
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2 }}>
                   <span style={{ fontSize:'0.7rem', fontWeight:600, color:clColorP, whiteSpace:'nowrap' }}>{pctClas.toFixed(1)}%</span>
-                  <div style={{ height:2, width:'100%', background:'#1a1a1a', borderRadius:1, overflow:'hidden' }}>
+                  <div style={{ height:2, width:'100%', background:'var(--c-panel)', borderRadius:1, overflow:'hidden' }}>
                     <div style={{ height:'100%', width:`${Math.min(pctClas*2,100).toFixed(0)}%`, background:clColorP, borderRadius:1 }}/>
                   </div>
                 </div>
               </td>
-              <td style={{ padding:'0.45rem 0.5rem', textAlign:'right', color:'#7aaa7a', fontSize:'0.75rem' }}>{p.salon>0?'₡'+Math.round(p.salon).toLocaleString('es-CR'):'—'}</td>
-              <td style={{ padding:'0.45rem 0.5rem', textAlign:'right', color:'#8ab4d4', fontSize:'0.75rem' }}>{p.delivery>0?'₡'+Math.round(p.delivery).toLocaleString('es-CR'):'—'}</td>
+              <td style={{ padding:'0.45rem 0.5rem', textAlign:'right', color:'var(--c-musgo)', fontSize:'0.75rem' }}>{p.salon>0?'₡'+Math.round(p.salon).toLocaleString('es-CR'):'—'}</td>
+              <td style={{ padding:'0.45rem 0.5rem', textAlign:'right', color:'var(--c-azul)', fontSize:'0.75rem' }}>{p.delivery>0?'₡'+Math.round(p.delivery).toLocaleString('es-CR'):'—'}</td>
               <td style={{ padding:'0.45rem 0.5rem', textAlign:'center' }}>
-                <span style={{ fontSize:'0.58rem', letterSpacing:'0.06em', textTransform:'uppercase', color:tc, padding:'1px 4px', border:`1px solid ${tc}44`, borderRadius:2, whiteSpace:'nowrap' }}>{p.tipo}</span>
+                <span style={{ fontSize:'0.58rem', color:tc, padding:'1px 4px', border:`1px solid color-mix(in srgb, ${tc} 27%, transparent)`, borderRadius:2, whiteSpace:'nowrap' }}>{p.tipo}</span>
               </td>
             </tr>
           )
@@ -744,12 +744,12 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
     <div style={{ overflowX:'auto', marginBottom:'1.25rem' }}>
       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.82rem', tableLayout:'fixed' }}>
         <thead>
-          <tr style={{ background:'var(--vt-ink)', color:'#aaa' }}>
+          <tr style={{ background:'var(--c-panel)', color:'var(--c-tinta)' }}>
             {[
               ['Clasificación / Producto','left','28%'],['Uds','right','7%'],['Monto','right',''],
               ['% Total','right','8%'],['% Secc','right','8%'],['Salón','right',''],['Delivery','right',''],['Tipo','center','7%'],
             ].map(([h,a,w]) => (
-              <th key={h} style={{ padding:'0.55rem 0.5rem', textAlign:a as 'left'|'right'|'center', fontSize:'0.62rem', letterSpacing:'0.12em', textTransform:'uppercase', fontWeight:500, whiteSpace:'nowrap', ...(w ? {width:w} : {}) }}>
+              <th key={h} style={{ padding:'0.55rem 0.5rem', textAlign:a as 'left'|'right'|'center', fontSize:'0.62rem', fontWeight:500, whiteSpace:'nowrap', ...(w ? {width:w} : {}) }}>
                 {h}
               </th>
             ))}
@@ -757,13 +757,13 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
         </thead>
         <tbody>{rows}</tbody>
         <tfoot>
-          <tr style={{ background:'var(--vt-ink)', borderTop:'2px solid #2a2a2a' }}>
-            <td style={{ padding:'0.625rem 0.625rem', fontSize:'0.72rem', letterSpacing:'0.1em', textTransform:'uppercase', fontWeight:700, color:'var(--vt-gold)' }}>
+          <tr style={{ background:'var(--c-panel)', borderTop:'2px solid var(--c-linea)' }}>
+            <td style={{ padding:'0.625rem 0.625rem', fontSize:'0.72rem', fontWeight:700, color:'var(--c-oro-texto)' }}>
               TOTAL · {nProds} productos
             </td>
-            <td style={{ padding:'0.625rem 0.5rem', textAlign:'right', color:'var(--vt-gold)', fontWeight:700 }}>{Math.round(gU).toLocaleString('es-CR')}</td>
-            <td style={{ padding:'0.625rem 0.5rem', textAlign:'right', color:'var(--vt-gold)', fontWeight:700 }}>₡{Math.round(gT).toLocaleString('es-CR')}</td>
-            <td style={{ padding:'0.625rem 0.5rem', textAlign:'right', color:'var(--vt-gold)', fontWeight:700 }}>100%</td>
+            <td style={{ padding:'0.625rem 0.5rem', textAlign:'right', color:'var(--c-oro-texto)', fontWeight:700 }}>{Math.round(gU).toLocaleString('es-CR')}</td>
+            <td style={{ padding:'0.625rem 0.5rem', textAlign:'right', color:'var(--c-oro-texto)', fontWeight:700 }}>₡{Math.round(gT).toLocaleString('es-CR')}</td>
+            <td style={{ padding:'0.625rem 0.5rem', textAlign:'right', color:'var(--c-oro-texto)', fontWeight:700 }}>100%</td>
             <td colSpan={4}/>
           </tr>
         </tfoot>
@@ -787,12 +787,12 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
 
   function varVsFirst(vals: number[]): ReactElement {
     const base = vals[0]
-    if (!base || N < 2) return <span style={{ color:'#333' }}>—</span>
+    if (!base || N < 2) return <span style={{ color:'var(--c-gris-claro)' }}>—</span>
     return (
       <>
         {vals.slice(1).map((v, i) => {
           const pct = (v - base) / Math.abs(base) * 100
-          const col = pct > 0 ? '#7ec8a0' : pct < 0 ? '#c23b22' : '#888'
+          const col = pct > 0 ? 'var(--c-musgo)' : pct < 0 ? 'var(--c-laca)' : 'var(--c-gris)'
           return <span key={i} style={{ color:col, fontSize:'0.68rem', fontWeight:700, marginLeft: i>0 ? '0.25rem' : 0 }}>
             {pct >= 0 ? '▲ +' : '▼ '}{pct.toFixed(1)}%
           </span>
@@ -827,8 +827,8 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
     })
 
     rows.push(
-      <tr key={`sec-${sec.label}`} style={{ background:'#0a0a14', borderTop:'3px solid #1a1a2a' }}>
-        <td colSpan={2 + N*3 + (N>1?1:0)} style={{ padding:'0.45rem 0.625rem', fontSize:'0.7rem', letterSpacing:'0.2em', textTransform:'uppercase', color:sec.color, fontWeight:700 }}>
+      <tr key={`sec-${sec.label}`} style={{ background:'var(--c-fondo)', borderTop:'3px solid var(--c-linea)' }}>
+        <td colSpan={2 + N*3 + (N>1?1:0)} style={{ padding:'0.45rem 0.625rem', fontSize:'0.7rem', color:sec.color, fontWeight:700 }}>
           {sec.label}
           <span style={{ fontWeight:400, fontSize:'0.68rem', marginLeft:'0.5rem' }}>
             {secTots.map((t, i) => (
@@ -867,9 +867,9 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
       const open = openClas.has(cId)
 
       rows.push(
-        <tr key={`clas-${cId}`} style={{ background:'#1c1c1c', borderTop:'2px solid #2a2a2a', cursor:'pointer' }}
+        <tr key={`clas-${cId}`} style={{ background:'var(--c-panel)', borderTop:'2px solid var(--c-linea)', cursor:'pointer' }}
           onClick={() => onToggleClas(cId)}>
-          <td style={{ padding:'0.6rem 0.625rem', fontSize:'0.72rem', letterSpacing:'0.1em', textTransform:'uppercase', fontWeight:700, color:sec.color }}>
+          <td style={{ padding:'0.6rem 0.625rem', fontSize:'0.72rem', fontWeight:700, color:sec.color }}>
             <span style={{ display:'inline-block', width:12, fontSize:'0.6rem' }}>{open ? '▼' : '▶'}</span> {clas}
           </td>
           <td/>
@@ -881,7 +881,7 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
                 {t ? '₡'+Math.round(t).toLocaleString('es-CR') : '—'}
               </td>,
               <td key={`p${i}`} style={{ padding:'0.6rem 0.4rem', textAlign:'right', color:sec.color, fontSize:'0.72rem' }}>{pctT.toFixed(1)}%</td>,
-              <td key={`s${i}`} style={{ padding:'0.6rem 0.4rem', textAlign:'right', color:'#333', fontSize:'0.72rem' }}>—</td>,
+              <td key={`s${i}`} style={{ padding:'0.6rem 0.4rem', textAlign:'right', color:'var(--c-gris-claro)', fontSize:'0.72rem' }}>—</td>,
             ]
           })}
           {N > 1 && <td style={{ padding:'0.6rem 0.5rem', textAlign:'right' }}>{varVsFirst(clasTots)}</td>}
@@ -897,9 +897,9 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
         const sOpen = openSubcl.has(sId)
 
         rows.push(
-          <tr key={`sub-${sId}`} style={{ background:'#141414', cursor:'pointer' }}
+          <tr key={`sub-${sId}`} style={{ background:'var(--c-panel)', cursor:'pointer' }}
             onClick={e => { e.stopPropagation(); onToggleSubcl(sId) }}>
-            <td style={{ padding:'0.5rem 0.625rem 0.5rem 1.5rem', fontSize:'0.7rem', letterSpacing:'0.08em', textTransform:'uppercase', color:'#bbb' }}>
+            <td style={{ padding:'0.5rem 0.625rem 0.5rem 1.5rem', fontSize:'0.7rem', color:'var(--c-tinta)' }}>
               <span style={{ display:'inline-block', width:12, fontSize:'0.6rem' }}>{sOpen ? '▼' : '▶'}</span> {subcl}
             </td>
             <td/>
@@ -907,12 +907,12 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
               const col = CMP_COLORS[i%CMP_COLORS.length]
               const pctT = cmpData[i].tots.totG ? t/cmpData[i].tots.totG*100 : 0
               const pctC = clasTots[i] ? t/clasTots[i]*100 : 0
-              const clColorS = pctC > 40 ? '#7ec8a0' : pctC > 15 ? '#c8a96e' : '#888'
+              const clColorS = pctC > 40 ? 'var(--c-musgo)' : pctC > 15 ? 'var(--c-oro-texto)' : 'var(--c-gris)'
               return [
                 <td key={`m${i}`} style={{ padding:'0.5rem 0.5rem', textAlign:'right', color:col, fontSize:'0.78rem', whiteSpace:'nowrap' }}>
                   {t ? '₡'+Math.round(t).toLocaleString('es-CR') : '—'}
                 </td>,
-                <td key={`p${i}`} style={{ padding:'0.5rem 0.4rem', textAlign:'right', color:'#888', fontSize:'0.7rem' }}>{pctT.toFixed(1)}%</td>,
+                <td key={`p${i}`} style={{ padding:'0.5rem 0.4rem', textAlign:'right', color:'var(--c-gris)', fontSize:'0.7rem' }}>{pctT.toFixed(1)}%</td>,
                 <td key={`s${i}`} style={{ padding:'0.5rem 0.4rem', textAlign:'right', fontSize:'0.7rem' }}>
                   <span style={{ color:clColorS, fontWeight:600 }}>{pctC.toFixed(1)}%</span>
                 </td>,
@@ -929,26 +929,26 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
           const prodTots = cmpData.map(c => { const pp=c.PM[p.nombre]; return pp ? getMonto(pp,canal) : 0 })
           if (prodTots.every(v => v === 0)) return
           const tc = tipColor(p.tipo)
-          const bg = pi % 2 === 0 ? '#0d0d0d' : '#111'
+          const bg = pi % 2 === 0 ? 'var(--c-fondo)' : 'var(--c-panel)'
 
           rows.push(
-            <tr key={`prod-${sId}-${p.nombre}`} style={{ background:bg, borderBottom:'1px solid #161616' }}>
-              <td style={{ padding:'0.45rem 0.625rem 0.45rem 2.5rem', color:'var(--vt-paper)', fontSize:'0.75rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:180 }}>
+            <tr key={`prod-${sId}-${p.nombre}`} style={{ background:bg, borderBottom:'1px solid var(--c-linea)' }}>
+              <td style={{ padding:'0.45rem 0.625rem 0.45rem 2.5rem', color:'var(--c-tinta)', fontSize:'0.75rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:180 }}>
                 {p.nombre}
               </td>
               <td style={{ padding:'0.45rem 0.4rem', textAlign:'center' }}>
-                <span style={{ fontSize:'0.58rem', letterSpacing:'0.06em', textTransform:'uppercase', color:tc, padding:'1px 3px', border:`1px solid ${tc}44`, borderRadius:2, whiteSpace:'nowrap' }}>{p.tipo}</span>
+                <span style={{ fontSize:'0.58rem', color:tc, padding:'1px 3px', border:`1px solid color-mix(in srgb, ${tc} 27%, transparent)`, borderRadius:2, whiteSpace:'nowrap' }}>{p.tipo}</span>
               </td>
               {prodTots.map((pm, i) => {
                 const col = CMP_COLORS[i%CMP_COLORS.length]
                 const pctT = cmpData[i].tots.totG ? pm/cmpData[i].tots.totG*100 : 0
                 const pctC = subTots[i] ? pm/subTots[i]*100 : 0
-                const clColorP = pctC > 30 ? '#7ec8a0' : pctC > 10 ? '#c8a96e' : '#888'
+                const clColorP = pctC > 30 ? 'var(--c-musgo)' : pctC > 10 ? 'var(--c-oro-texto)' : 'var(--c-gris)'
                 return [
-                  <td key={`m${i}`} style={{ padding:'0.45rem 0.5rem', textAlign:'right', color: pm>0 ? col : '#555', fontSize:'0.75rem', whiteSpace:'nowrap' }}>
+                  <td key={`m${i}`} style={{ padding:'0.45rem 0.5rem', textAlign:'right', color: pm>0 ? col : 'var(--c-gris)', fontSize:'0.75rem', whiteSpace:'nowrap' }}>
                     {pm > 0 ? '₡'+Math.round(pm).toLocaleString('es-CR') : '—'}
                   </td>,
-                  <td key={`p${i}`} style={{ padding:'0.45rem 0.4rem', textAlign:'right', color:'#666', fontSize:'0.68rem' }}>{pctT.toFixed(2)}%</td>,
+                  <td key={`p${i}`} style={{ padding:'0.45rem 0.4rem', textAlign:'right', color:'var(--c-gris)', fontSize:'0.68rem' }}>{pctT.toFixed(2)}%</td>,
                   <td key={`s${i}`} style={{ padding:'0.45rem 0.4rem', textAlign:'right', fontSize:'0.68rem' }}>
                     <span style={{ color:clColorP, fontWeight:600 }}>{pctC.toFixed(1)}%</span>
                   </td>,
@@ -968,25 +968,25 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
     <div style={{ overflowX:'auto', marginBottom:'1.25rem' }}>
       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.82rem' }}>
         <thead>
-          <tr style={{ background:'var(--vt-ink)', color:'#aaa' }}>
-            <th style={{ padding:'0.55rem 0.625rem', textAlign:'left', fontSize:'0.62rem', letterSpacing:'0.12em', textTransform:'uppercase', fontWeight:500, whiteSpace:'nowrap', minWidth:180 }}>Clas / Producto</th>
-            <th style={{ padding:'0.55rem 0.4rem', fontSize:'0.6rem', letterSpacing:'0.1em', textTransform:'uppercase', fontWeight:400, whiteSpace:'nowrap' }}>Tipo</th>
+          <tr style={{ background:'var(--c-panel)', color:'var(--c-tinta)' }}>
+            <th style={{ padding:'0.55rem 0.625rem', textAlign:'left', fontSize:'0.62rem', fontWeight:500, whiteSpace:'nowrap', minWidth:180 }}>Clas / Producto</th>
+            <th style={{ padding:'0.55rem 0.4rem', fontSize:'0.6rem', fontWeight:400, whiteSpace:'nowrap' }}>Tipo</th>
             {cmpData.map((c, i) => (
               [
-                <th key={`m${i}`} style={{ padding:'0.55rem 0.5rem', textAlign:'right', fontSize:'0.62rem', letterSpacing:'0.08em', textTransform:'uppercase', fontWeight:700, color:CMP_COLORS[i%CMP_COLORS.length], whiteSpace:'nowrap', minWidth:90 }}>
+                <th key={`m${i}`} style={{ padding:'0.55rem 0.5rem', textAlign:'right', fontSize:'0.62rem', fontWeight:700, color:CMP_COLORS[i%CMP_COLORS.length], whiteSpace:'nowrap', minWidth:90 }}>
                   ({i+1}) {c.label}
                 </th>,
-                <th key={`p${i}`} style={{ padding:'0.55rem 0.4rem', textAlign:'right', fontSize:'0.58rem', color:'#555', whiteSpace:'nowrap' }}>%Tot</th>,
-                <th key={`s${i}`} style={{ padding:'0.55rem 0.4rem', textAlign:'right', fontSize:'0.58rem', color:'#555', whiteSpace:'nowrap' }}>%Sec</th>,
+                <th key={`p${i}`} style={{ padding:'0.55rem 0.4rem', textAlign:'right', fontSize:'0.58rem', color:'var(--c-gris)', whiteSpace:'nowrap' }}>%Tot</th>,
+                <th key={`s${i}`} style={{ padding:'0.55rem 0.4rem', textAlign:'right', fontSize:'0.58rem', color:'var(--c-gris)', whiteSpace:'nowrap' }}>%Sec</th>,
               ]
             ))}
-            {N > 1 && <th style={{ padding:'0.55rem 0.5rem', textAlign:'right', fontSize:'0.58rem', letterSpacing:'0.1em', textTransform:'uppercase', color:'#555', whiteSpace:'nowrap' }}>vs ①</th>}
+            {N > 1 && <th style={{ padding:'0.55rem 0.5rem', textAlign:'right', fontSize:'0.58rem', color:'var(--c-gris)', whiteSpace:'nowrap' }}>vs ①</th>}
           </tr>
         </thead>
         <tbody>{rows}</tbody>
         <tfoot>
-          <tr style={{ background:'var(--vt-ink)', borderTop:'2px solid #2a2a2a' }}>
-            <td style={{ padding:'0.625rem 0.625rem', fontSize:'0.72rem', letterSpacing:'0.1em', textTransform:'uppercase', fontWeight:700, color:'var(--vt-gold)' }}>
+          <tr style={{ background:'var(--c-panel)', borderTop:'2px solid var(--c-linea)' }}>
+            <td style={{ padding:'0.625rem 0.625rem', fontSize:'0.72rem', fontWeight:700, color:'var(--c-oro-texto)' }}>
               TOTAL · {nProds} prods
             </td>
             <td/>
@@ -997,7 +997,7 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
               <td key={`p${i}`} style={{ padding:'0.625rem 0.4rem', textAlign:'right', color:CMP_COLORS[i%CMP_COLORS.length], fontWeight:700 }}>100%</td>,
               <td key={`s${i}`}/>,
             ])}
-            {N > 1 && <td style={{ padding:'0.625rem 0.5rem', textAlign:'right' }}>{(() => { const pct = gTs[0] ? (gTs[1]-gTs[0])/gTs[0]*100 : null; const col = pct!=null?(pct>=0?'#7ec8a0':'#c23b22'):'#555'; return <span style={{color:col,fontWeight:700,fontSize:'0.72rem'}}>{pct!=null?(pct>=0?'▲ +':'▼ ')+pct.toFixed(1)+'%':'—'}</span> })()}</td>}
+            {N > 1 && <td style={{ padding:'0.625rem 0.5rem', textAlign:'right' }}>{(() => { const pct = gTs[0] ? (gTs[1]-gTs[0])/gTs[0]*100 : null; const col = pct!=null?(pct>=0?'var(--c-musgo)':'var(--c-laca)'):'var(--c-gris)'; return <span style={{color:col,fontWeight:700,fontSize:'0.72rem'}}>{pct!=null?(pct>=0?'▲ +':'▼ ')+pct.toFixed(1)+'%':'—'}</span> })()}</td>}
           </tr>
         </tfoot>
       </table>
@@ -1021,24 +1021,24 @@ function NoVendidos({ PM, pm }: { PM: Record<string, PMItem>; pm: ProductMap }) 
     if (!byTipo[p.tipo]) byTipo[p.tipo] = []
     byTipo[p.tipo].push(p.nombre)
   }
-  const tipCol = (tipo: string) => ({ bebida:'#7ec8a0', comida:'#c8a96e', merchandising:'#c890e8', nofood:'#c890e8' }[tipo] ?? '#555')
+  const tipCol = (tipo: string) => ({ bebida:'var(--c-musgo)', comida:'var(--c-oro-texto)', merchandising:'#c890e8', nofood:'#c890e8' }[tipo] ?? 'var(--c-gris)')
   return (
     <div style={{ marginTop:'0.75rem', marginBottom:'1.5rem' }}>
       <div onClick={() => setOpen(o => !o)}
-        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', background:'#0d0d0d', borderTop:'3px solid #2a2a2a', cursor:'pointer', userSelect:'none' }}>
-        <span style={{ fontSize:'0.65rem', letterSpacing:'0.2em', textTransform:'uppercase', color:'#555', fontWeight:700 }}>
+        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', background:'var(--c-fondo)', borderTop:'3px solid var(--c-linea)', cursor:'pointer', userSelect:'none' }}>
+        <span style={{ fontSize:'0.65rem', color:'var(--c-gris)', fontWeight:700 }}>
           ⚠ PRODUCTOS SIN VENTAS EN ESTE PERÍODO
         </span>
         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-          <span style={{ fontSize:'0.68rem', color:'#666', background:'#1a1a1a', padding:'2px 8px', borderRadius:10, border:'1px solid #2a2a2a' }}>{noVendidos.length} productos</span>
-          <span style={{ fontSize:'0.72rem', color:'#555' }}>{open ? '▼ ocultar' : '▶ mostrar'}</span>
+          <span style={{ fontSize:'0.68rem', color:'var(--c-gris)', background:'var(--c-panel)', padding:'2px 8px', borderRadius:10, border:'1px solid var(--c-linea)' }}>{noVendidos.length} productos</span>
+          <span style={{ fontSize:'0.72rem', color:'var(--c-gris)' }}>{open ? '▼ ocultar' : '▶ mostrar'}</span>
         </div>
       </div>
       {open && (
-        <div style={{ padding:'0.625rem 0.75rem', background:'#080808', display:'flex', flexWrap:'wrap', gap:'0.3rem' }}>
+        <div style={{ padding:'0.625rem 0.75rem', background:'var(--c-fondo)', display:'flex', flexWrap:'wrap', gap:'0.3rem' }}>
           {Object.entries(byTipo).sort().map(([tipo, nombres]) =>
             nombres.map(n => (
-              <span key={n} style={{ fontSize:'0.68rem', color:tipCol(tipo), background:'#0a0a0a', padding:'2px 8px', border:`1px solid ${tipCol(tipo)}22`, borderRadius:2 }}>{n}</span>
+              <span key={n} style={{ fontSize:'0.68rem', color:tipCol(tipo), background:'var(--c-fondo)', padding:'2px 8px', border:`1px solid color-mix(in srgb, ${tipCol(tipo)} 13%, transparent)`, borderRadius:2 }}>{n}</span>
             ))
           )}
         </div>

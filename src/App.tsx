@@ -10,6 +10,8 @@ import LoginPage from './pages/auth/LoginPage'
 import CambiarPasswordInicial from './pages/auth/CambiarPasswordInicial'
 import { debeCambiarPassword } from './shared/api/altaEmpleado'
 import HomePage from './pages/HomePage'
+import AppShell from './shared/layout/AppShell'
+import { useMenuVisible } from './shared/layout/useMenuVisible'
 
 // ── Lazy-loaded modules — each chunk only loads when navigated ─
 // This reduces initial bundle from 1.26MB → ~250KB
@@ -52,7 +54,7 @@ function PendingApproval() {
           <button className="login-btn" style={{ maxWidth: 160 }} onClick={() => window.location.reload()}>
             Reintentar
           </button>
-          <button className="login-btn" style={{ maxWidth: 160, background: 'var(--gray-pale)' }} onClick={() => signOut()}>
+          <button className="login-btn secundario" style={{ maxWidth: 160 }} onClick={() => signOut()}>
             Cerrar sesión
           </button>
         </div>
@@ -101,8 +103,10 @@ function FloatingHomeBtn() {
   const location = useLocation()
   const navigate  = useNavigate()
   const { user }  = useAuth()
+  // Con el menú global (rediseño B3) «Inicio» ya está en el menú: el botón flotante sobra.
+  const conMenu   = useMenuVisible()
   // Don't show on home, login, or when not logged in
-  if (!user || location.pathname === '/' || location.pathname === '/login') return null
+  if (conMenu || !user || location.pathname === '/' || location.pathname === '/login') return null
   return (
     <button
       onClick={() => navigate('/')}
@@ -132,6 +136,17 @@ function FloatingHomeBtn() {
     >
       🏠
     </button>
+  )
+}
+
+// Con la barra inferior del menú (celular), el aviso de sin conexión se apoya encima de ella en vez
+// de taparla (B6, auditoría 204). Solo cambia la posición: el aviso es el mismo.
+function OfflineBannerSobreMenu() {
+  const conMenu = useMenuVisible()
+  return (
+    <div className={conMenu ? 'offline-sobre-barra' : undefined} style={{ display: 'contents' }}>
+      <OfflineBanner />
+    </div>
   )
 }
 
@@ -195,10 +210,12 @@ export default function App() {
           <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
             <StagingBanner />
             <ErrorBoundary>
-              <AppRoutes />
+              <AppShell>
+                <AppRoutes />
+              </AppShell>
             </ErrorBoundary>
             <FloatingHomeBtn />
-            <OfflineBanner />
+            <OfflineBannerSobreMenu />
           </BrowserRouter>
         </DeletionNoteProvider>
       </ManagerOverrideProvider>

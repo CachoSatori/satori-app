@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../shared/hooks/useAuth'
 import type { UserRole } from '../shared/types/database'
@@ -6,92 +6,12 @@ import { supabase } from '../shared/api/supabase'
 import { todayCR, fi } from '../shared/utils'
 import { monthRangeBounds } from '../shared/utils/dateRange'
 import { ROLE_LABELS } from '../shared/constants'
+import { modulosPara } from '../shared/layout/modulos'
+import { calcularPendientes, fraseEstado, TODAS_LAS_SENALES, type Pendiente, type Senal } from '../shared/layout/pendientes'
+import type { AlertaCierres } from '../modules/cash/diasSinCierre'
+import { alertaGuardada, leerAlertaInicio } from './alertaInicio'
 
-interface Module {
-  id:          string
-  path:        string
-  label:       string
-  kanji:       string
-  description: string
-  ready:       boolean
-  roles:       UserRole[]
-}
-
-const MODULES: Module[] = [
-  {
-    id: 'resumen', path: '/resumen', label: 'Resumen', kanji: '日',
-    description: 'Cuadre del día', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'semana', path: '/semana', label: 'Semana', kanji: '週',
-    description: 'Digest semanal', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'reporte-mensual', path: '/reporte-mensual', label: 'Reporte Mensual', kanji: '月',
-    description: 'Ventas · Propinas · Caja', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'mi-rendimiento', path: '/mi-rendimiento', label: 'Mi Rendimiento', kanji: '人',
-    description: 'Mis stats del turno', ready: true,
-    // manager: SOLO su propio rendimiento · owner: además «Ver como» a otro empleado (solo lectura).
-    roles: ['salonero', 'barman', 'barback', 'runner', 'cocina', 'manager', 'owner'],
-  },
-  // "Mis Propinas" ya vive como pestaña dentro de Mi Rendimiento → card redundante removida.
-  // La ruta /mis-propinas sigue redirigiendo a /mi-rendimiento?tab=propinas (App.tsx), sin romper links viejos.
-  {
-    id: 'cash', path: '/caja', label: 'Caja', kanji: '金',
-    description: 'Turnos y movimientos', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'contador'],
-  },
-  {
-    id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
-    description: 'Pool del turno', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'contador'],
-  },
-  {
-    id: 'dashboard', path: '/ventas', label: 'Ventas', kanji: '売',
-    description: 'KPIs y metas', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'inventario', path: '/inventario', label: 'Inventario', kanji: '庫',
-    description: 'Stock · Recetas · Costos', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'clientes', path: '/clientes', label: 'Clientes', kanji: '客',
-    description: 'CRM · Fidelización', ready: true,
-    roles: ['owner', 'manager', 'cajero'],
-  },
-  {
-    id: 'club', path: '/club', label: 'Club', kanji: '縁',
-    description: 'Referentes · cupones · canjes', ready: true,
-    roles: ['owner', 'manager', 'cajero'],
-  },
-  {
-    id: 'finanzas', path: '/finanzas', label: 'Finanzas', kanji: '財',
-    description: 'P&L · Presupuesto vs Real', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'sops', path: '/sops', label: 'SOPs', kanji: '書',
-    description: 'Procedimientos', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],
-  },
-  {
-    id: 'admin', path: '/admin', label: 'Admin', kanji: '管',
-    description: 'Empleados · Config', ready: true,
-    roles: ['owner'],
-  },
-  {
-    id: 'prueba', path: '/prueba', label: 'Prueba', kanji: '試',
-    description: '🧪 Simulador · solo lectura', ready: true,
-    roles: ['owner'],
-  },
-]
+// La lista de módulos vive en `shared/layout/modulos.ts`: es la misma fuente del menú global (B3).
 
 // ── Live status per module ─────────────────────────────────────
 interface HomeStatus {
@@ -120,6 +40,19 @@ interface HomeStatus {
   invTotal:         number
   invLowStock:      number
   invOutStock:      number
+  /**
+   * B5: lecturas que fallaron (rechazadas o con `error`). Sus valores quedan en 0, pero NO valen:
+   * las señales van como «sin comprobar» y los números como «—» con la píldora.
+   */
+  fallas:           Lectura[]
+}
+
+/** Las lecturas del Inicio que se pueden marcar «sin comprobar» (las de `pendientes.ts`). */
+type Lectura = Senal
+
+/** Una lectura falló si se rechazó o si la base devolvió `error` (supabase-js casi nunca rechaza). */
+function fallo(r: PromiseSettledResult<{ error?: unknown }>): boolean {
+  return r.status === 'rejected' || !!r.value?.error
 }
 
 async function fetchHomeStatus(): Promise<HomeStatus> {
@@ -161,6 +94,17 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     supabase.from('ingredients').select('current_stock,min_stock'),
   ])
 
+  const fallas = new Set<Lectura>()
+  if (fallo(tipRes))         fallas.add('propinas')
+  if (fallo(cashRes))        fallas.add('caja')
+  if (fallo(pendRes))        fallas.add('movimientos')
+  if (fallo(sopsRes))        fallas.add('procedimientos')
+  if (fallo(ingredientsRes)) fallas.add('inventario')
+  if (fallo(metaRes))        fallas.add('meta')
+  if (fallo(ventasRes))      fallas.add('venta')
+  if (fallo(tipDetailRes))   fallas.add('propinasDia')
+  if (fallo(cashSessionsRes) || fallo(cashMovsRes)) fallas.add('cajaDia')
+
   const tipSession  = tipRes.status  === 'fulfilled' ? (tipRes.value.data  as { shift_type: string; created_at: string } | null)   : null
   const cashSession = cashRes.status === 'fulfilled' ? (cashRes.value.data as { cajero_name: string; created_at: string } | null) : null
   const pendCount   = pendRes.status === 'fulfilled' ? (pendRes.value.count ?? 0) : 0
@@ -189,11 +133,12 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
       // Get current month ventas total. Límite superior EXCLUSIVO = 1° del mes siguiente
       // (no `${curMonth}-31`, que es fecha inválida y daba 400 en meses de 30 días/feb).
       const { start, endExclusive } = monthRangeBounds(curMonth)
-      const { data: dias } = await supabase
+      const { data: dias, error: diasError } = await supabase
         .from('ventas_dias')
         .select('data')
         .gte('session_date', start)
         .lt('session_date', endExclusive)
+      if (diasError) fallas.add('meta')
       if (dias) {
         const ventas = (dias as { data: { saloneros: Record<string, { total?: number; esCajero?: boolean }> } }[])
           .reduce((s, row) => {
@@ -226,7 +171,8 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     tipPool = (tipDetail.pool_efectivo_crc ?? 0) + (tipDetail.pool_efectivo_usd ?? 0) * rate + (tipDetail.pool_barra_crc ?? 0) + (tipDetail.pool_barra_electronico_crc ?? 0)
     // Load tip entries to count workers
     if (tipDetail.status === 'closed') {
-      const { data: entries } = await supabase.from('tip_entries').select('payout_crc').eq('session_id', tipDetail.id)
+      const { data: entries, error: entriesError } = await supabase.from('tip_entries').select('payout_crc').eq('session_id', tipDetail.id)
+      if (entriesError) fallas.add('propinasDia')
       tipWorkers = ((entries ?? []) as { payout_crc: number | null }[]).filter(e => (e.payout_crc ?? 0) > 0).length
     }
   }
@@ -278,32 +224,15 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     invTotal,
     invLowStock,
     invOutStock,
+    fallas:           [...fallas],
   }
 }
 
-// ── Status badge component ─────────────────────────────────────
-function StatusBadge({ color, text }: { color: 'open' | 'ok' | 'warn' | 'dim'; text: string }) {
-  const styles: Record<string, string> = {
-    open: 'var(--t-teal)',
-    ok:   '#27874f',
-    warn: '#c0392b',
-    dim:  '#888',
-  }
-  return (
-    <span style={{
-      display:      'inline-flex',
-      alignItems:   'center',
-      gap:          '0.2rem',
-      fontSize:     '0.6rem',
-      fontWeight:   700,
-      letterSpacing:'0.06em',
-      textTransform:'uppercase',
-      color:        styles[color],
-    }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: styles[color], display: 'inline-block' }} />
-      {text}
-    </span>
-  )
+/** Si `fetchHomeStatus` falla entero: ninguna señal vale, todas «sin comprobar». */
+const SIN_DATOS = {
+  cashOpen: false, cashOpenHours: 0, tipOpen: false, tipOpenHours: 0, pendingCount: 0,
+  invOutStock: 0, invLowStock: 0, sopsCount: 0, esLunes: false,
+  diasSinCierre: null, turnosViejos: null, sinComprobar: TODAS_LAS_SENALES,
 }
 
 // ── Aterrizaje por rol (operación por roles, 06-12) ───────────
@@ -321,6 +250,9 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [status, setStatus] = useState<HomeStatus | null>(null)
   const [clubAbiertas, setClubAbiertas] = useState(0)   // excepciones del puente abiertas (owner, manager)
+  const [clubFallo, setClubFallo] = useState(false)    // la lectura de excepciones del Club falló (208)
+  // B5: si `fetchHomeStatus` falla entero, se dice — no «Revisando el día…» para siempre.
+  const [statusFallo, setStatusFallo] = useState(false)
 
   const landing = profile ? ROLE_LANDING[profile.role] : undefined
   const landKey = profile ? `satori-landed-${profile.id}` : ''
@@ -334,85 +266,84 @@ export default function HomePage() {
 
   useEffect(() => {
     if (mustLand) return   // nos vamos ya — no dispares las consultas del Home
-    fetchHomeStatus().then(setStatus).catch(() => {})
+    let vivo = true
+    fetchHomeStatus()
+      .then(s => { if (vivo) setStatus(s) })
+      .catch(() => { if (vivo) setStatusFallo(true) })
+    return () => { vivo = false }
   }, [mustLand])
 
   const gestionaClub = profile?.role === 'owner' || profile?.role === 'manager'
   useEffect(() => {
     if (mustLand || !gestionaClub) return
-    import('../shared/api/club').then(m => m.getExcepcionesAbiertas(30)).then(setClubAbiertas).catch(() => {})
+    // Auditoría 208: si la lectura del Club falla, el Inicio dice «sin comprobar» (nunca «Todo en orden»).
+    import('../shared/api/club').then(m => m.getExcepcionesAbiertas(30))
+      .then(n => { setClubAbiertas(n); setClubFallo(false) })
+      .catch(() => setClubFallo(true))
   }, [mustLand, gestionaClub])
+
+  const role = profile?.role ?? ''
+  const isManager = ['owner', 'manager', 'contador'].includes(role)
+
+  // Días sin cierre (B4): la MISMA alerta que ve Caja, con las mismas lecturas y el mismo filtro de rol
+  // (owner y manager). Solo lectura. B5: se lee una vez por sesión (`alertaInicio.ts`, auditoría 197) y
+  // si alguna de sus lecturas falla queda «sin comprobar» (antes quedaba en cero y el Inicio podía decir
+  // «Todo en orden»).
+  const veAlerta = role === 'owner' || role === 'manager'
+  const usuario = profile?.id ?? ''
+  const [alerta, setAlerta] = useState<AlertaCierres | 'fallo' | null>(
+    () => (veAlerta ? alertaGuardada(usuario, todayCR()) : null))
+  useEffect(() => {
+    if (mustLand || !veAlerta) return
+    const hoy = todayCR()
+    if (alertaGuardada(usuario, hoy)) return   // ya leída en esta sesión: el estado inicial la trae
+    let vivo = true
+    leerAlertaInicio(usuario, hoy)
+      .then(a => { if (vivo) setAlerta(a) })
+      .catch(() => { if (vivo) setAlerta('fallo') })
+    return () => { vivo = false }
+  }, [mustLand, veAlerta, usuario])
+  // Mientras se lee la alerta, los otros pendientes ya se muestran (sin «Todo en orden» todavía).
+  const alertaCargando = veAlerta && !alerta
+
+  const pendientes = useMemo<Pendiente[] | null>(() => {
+    if (!isManager) return null
+    const visibles = new Set(modulosPara(role).map(m => m.id))
+    // Falló todo `fetchHomeStatus`: no hay señales; solo el aviso «sin comprobar».
+    const esLunes = new Date(todayCR() + 'T12:00:00').getDay() === 1
+    if (statusFallo) return calcularPendientes({ ...SIN_DATOS, esLunes }, visibles)
+    if (!status) return null
+    const alertaOk = alerta && alerta !== 'fallo' ? alerta : null
+    const sinComprobar = [...status.fallas]
+    if (alerta === 'fallo') sinComprobar.push('cierres')
+    if (gestionaClub && clubFallo) sinComprobar.push('club')
+    return calcularPendientes({
+      cashOpen:      status.cashOpen,
+      cashOpenHours: status.cashOpenHours,
+      tipOpen:       status.tipOpen,
+      tipOpenHours:  status.tipOpenHours,
+      pendingCount:  status.pendingCount,
+      invOutStock:   status.invOutStock,
+      invLowStock:   status.invLowStock,
+      sopsCount:     status.sopsCount,
+      esLunes,
+      diasSinCierre: alertaOk ? alertaOk.dias.length : null,
+      turnosViejos:  alertaOk ? alertaOk.turnos.length : null,
+      sinComprobar,
+      clubExcepciones: gestionaClub && !clubFallo ? clubAbiertas : null,
+    }, visibles)
+  }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas, clubFallo])
 
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol
 
-  const available = MODULES.filter(m => m.roles.includes(profile.role))
-  const isManager = ['owner', 'manager', 'contador'].includes(profile.role)
-
-  // Build status for each module
-  const getStatus = (id: string) => {
-    if (!status || !isManager) return null
-    switch (id) {
-      case 'tips':
-        if (status.tipPool > 0) {
-          if (status.tipStatus === 'closed') {
-            return <StatusBadge color="ok" text={`${fi(status.tipPool)} · ${status.tipWorkers} emps`} />
-          }
-          if (status.tipOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.tipOpenHours}h`} />
-          return <StatusBadge color="open" text={`● ${status.tipShift} · ${fi(status.tipPool)}`} />
-        }
-        if (status.tipOpen) {
-          if (status.tipOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.tipOpenHours}h`} />
-          return <StatusBadge color="open" text={`● ${status.tipShift} abierto`} />
-        }
-        return null
-      case 'cash':
-        if (status.cajaSaldo !== 0 || status.cajaIngresos > 0) {
-          const saldoColor = status.cajaStatus === 'closed' ? 'ok' : status.cashOpenHours >= 20 ? 'warn' : 'open'
-          const prefix = status.cajaStatus === 'closed' ? '' : '● '
-          return <StatusBadge color={saldoColor} text={`${prefix}Saldo ${status.cajaSaldo >= 0 ? '+' : ''}${fi(status.cajaSaldo)}`} />
-        }
-        if (status.cashOpen) {
-          if (status.cashOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.cashOpenHours}h`} />
-          return <StatusBadge color="open" text={`● ${status.cashCajero || 'Abierto'}`} />
-        }
-        if (status.pendingCount > 0) return <StatusBadge color="warn" text={`${status.pendingCount} pendiente${status.pendingCount > 1 ? 's' : ''}`} />
-        return null
-      case 'dashboard':
-        if (status.ventaNeta > 0) {
-          const metaTxt = status.metaPct !== null ? ` · Meta ${status.metaPct.toFixed(0)}%` : ''
-          const color = status.metaPct !== null ? (status.metaPct >= 100 ? 'ok' : status.metaPct >= 70 ? 'open' : 'warn') : 'ok'
-          return <StatusBadge color={color} text={`${fi(status.ventaNeta)}${metaTxt}`} />
-        }
-        if (status.ventasHoy) return <StatusBadge color="ok" text="Hoy cargado" />
-        return <StatusBadge color="dim" text="Sin datos hoy" />
-      case 'inventario':
-        if (status.invOutStock > 0) return <StatusBadge color="warn" text={`${status.invOutStock} sin stock`} />
-        if (status.invLowStock > 0) return <StatusBadge color="warn" text={`${status.invLowStock} stock bajo`} />
-        if (status.invTotal > 0)    return <StatusBadge color="ok" text="Stock OK" />
-        return <StatusBadge color="dim" text="Sin datos" />
-      case 'club':
-        if (clubAbiertas > 0) return <StatusBadge color="warn" text={`${clubAbiertas} excepcion${clubAbiertas > 1 ? 'es' : ''}`} />
-        return null
-      case 'sops':
-        if (status.sopsCount > 0) return <StatusBadge color="dim" text={`${status.sopsCount} procedimientos`} />
-        return <StatusBadge color="warn" text="Sin contenido" />
-      case 'resumen':
-        return <StatusBadge color="dim" text={todayCR()} />
-      case 'semana': {
-        const dayN = new Date(todayCR() + 'T12:00:00').getDay()
-        if (dayN === 1) return <StatusBadge color="open" text="Lunes — revisar" />
-        return <StatusBadge color="dim" text="esta semana" />
-      }
-      default:
-        return null
-    }
-  }
+  const available = modulosPara(profile.role)
 
   return (
     <div className="home-container">
       <header className="app-header">
         <div className="header-brand">
+          <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" className="header-daruma" width={22} height={24} />
           <span className="header-mark">祭</span>
           <span className="header-title">Satori · Santa Teresa, Costa Rica</span>
         </div>
@@ -424,24 +355,36 @@ export default function HomePage() {
       </header>
 
       <main className="home-main">
-        <div className="modules-grid">
-          {available.map(mod => {
-            const badge = getStatus(mod.id)
-            return (
-              <button
-                key={mod.id}
-                className={`module-card ${mod.ready ? 'ready' : ''}`}
-                disabled={!mod.ready}
-                onClick={() => mod.ready && navigate(mod.path)}
-              >
-                <span className="module-kanji">{mod.kanji}</span>
-                <span className="module-label">{mod.label}</span>
-                <span className="module-desc">{mod.description}</span>
-                {badge && <span className="module-status">{badge}</span>}
-                {!mod.ready && <span className="module-badge">Próximamente</span>}
-              </button>
-            )
-          })}
+        <div className="inicio">
+          {isManager && (
+            <ResumenDelDia
+              status={status}
+              statusFallo={statusFallo}
+              alertaCargando={alertaCargando}
+              pendientes={pendientes}
+              onIr={path => navigate(path)}
+            />
+          )}
+
+          <section className="inicio-seccion" aria-labelledby="inicio-modulos">
+            <h2 id="inicio-modulos" className="inicio-subtitulo">{isManager ? 'Módulos' : 'Tus módulos'}</h2>
+            <div className="modules-grid">
+              {available.map(mod => (
+                <button
+                  key={mod.id}
+                  type="button"
+                  className={`module-card ${mod.ready ? 'ready' : ''}`}
+                  disabled={!mod.ready}
+                  onClick={() => mod.ready && navigate(mod.path)}
+                >
+                  <span className="module-kanji">{mod.kanji}</span>
+                  <span className="module-label">{mod.label}</span>
+                  <span className="module-desc">{mod.description}</span>
+                  {!mod.ready && <span className="module-badge">Próximamente</span>}
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       </main>
 
@@ -449,5 +392,94 @@ export default function HomePage() {
         <span>Satori App v2.0 · Propinas · Caja · Ventas</span>
       </footer>
     </div>
+  )
+}
+
+// ── Frase, 3 números del día y «Para hacer hoy» (owner, manager y contador) ──
+function ResumenDelDia({ status, statusFallo, alertaCargando, pendientes, onIr }: {
+  status:         HomeStatus | null
+  statusFallo:    boolean
+  /** La alerta de días sin cierre todavía no llegó: no se puede decir «Todo en orden». */
+  alertaCargando: boolean
+  pendientes:     Pendiente[] | null
+  onIr:        (path: string) => void
+}) {
+  const cargando = !pendientes
+  const falta = (l: Lectura) => statusFallo || !!status?.fallas.includes(l)
+  // Valor de una cifra: «…» cargando, «—» si no hay dato o si no se pudo comprobar.
+  const cifra = (l: Lectura, valor: (s: HomeStatus) => string) =>
+    falta(l) ? '—' : status ? valor(status) : '…'
+  const sub = (l: Lectura, texto: string) =>
+    falta(l) ? <span className="pildora pildora-pendiente">sin comprobar</span> : texto
+  const frase = statusFallo ? 'No se pudo cargar el día.'
+    : cargando || (alertaCargando && pendientes.length === 0) ? 'Revisando el día…' : fraseEstado(pendientes)
+  const tipSub = !status ? '' : status.tipStatus === 'closed'
+    ? `Cerrado · ${status.tipWorkers} ${status.tipWorkers === 1 ? 'persona' : 'personas'}`
+    : status.tipOpen ? `Abierto · ${status.tipShift}` : 'Sin turno hoy'
+  const cajaSub = !status ? '' : status.cajaStatus === 'open' ? 'Turno abierto'
+    : status.cajaStatus === 'closed' ? 'Turno cerrado' : 'Sin turno hoy'
+  const ventaSub = !status ? '' : [
+    status.ventaPax > 0 ? `${status.ventaPax} PAX` : (status.ventasHoy ? '' : 'Sin datos hoy'),
+    status.metaPct !== null ? `meta del mes ${status.metaPct.toFixed(0)} %`
+      : status.fallas.includes('meta') ? 'meta sin comprobar' : '',
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <>
+      <p className="inicio-frase" aria-live="polite">
+        {frase}
+      </p>
+
+      <dl className="inicio-cifras">
+        <div className="inicio-cifra">
+          <dt>Venta de hoy</dt>
+          <dd className="inicio-cifra-valor">{cifra('venta', s => s.ventaNeta > 0 ? fi(s.ventaNeta) : '—')}</dd>
+          <dd className="inicio-cifra-sub">{sub('venta', ventaSub)}</dd>
+        </div>
+        <div className="inicio-cifra">
+          <dt>Propinas del día</dt>
+          <dd className="inicio-cifra-valor">{cifra('propinasDia', s => s.tipPool > 0 ? fi(s.tipPool) : '—')}</dd>
+          <dd className="inicio-cifra-sub">{sub('propinasDia', tipSub)}</dd>
+        </div>
+        <div className="inicio-cifra">
+          <dt>Caja de hoy</dt>
+          <dd className="inicio-cifra-valor">
+            {cifra('cajaDia', s => s.cajaIngresos > 0 || s.cajaSaldo !== 0
+              ? `${s.cajaSaldo > 0 ? '+' : ''}${fi(s.cajaSaldo)}` : '—')}
+          </dd>
+          <dd className="inicio-cifra-sub">{sub('cajaDia', cajaSub)}</dd>
+        </div>
+      </dl>
+
+      <section className="inicio-seccion" aria-labelledby="inicio-hoy">
+        <h2 id="inicio-hoy" className="inicio-subtitulo">Para hacer hoy</h2>
+        {cargando || (alertaCargando && pendientes.length === 0) ? (
+          <p className="inicio-vacio">Cargando…</p>
+        ) : pendientes.length === 0 && !statusFallo ? (
+          <div className="inicio-en-orden">
+            <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" width={44} height={48} />
+            <div>
+              <p className="inicio-en-orden-titulo">Todo en orden</p>
+              <p className="inicio-vacio">No hay nada pendiente en tus módulos.</p>
+            </div>
+          </div>
+        ) : (
+          <ul className="inicio-pendientes">
+            {pendientes.map(p => (
+              <li key={p.id}>
+                <button type="button" className="inicio-pendiente" onClick={() => onIr(p.path)}>
+                  <span className="inicio-pendiente-texto">{p.texto}</span>
+                  <span className={`pildora pildora-${p.tono}`}>{p.estado}</span>
+                  <span className="inicio-pendiente-ir" aria-hidden="true">›</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {!cargando && alertaCargando && pendientes.length > 0 && (
+          <p className="inicio-vacio">Revisando los días sin cierre…</p>
+        )}
+      </section>
+    </>
   )
 }

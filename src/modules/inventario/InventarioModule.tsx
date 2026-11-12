@@ -67,18 +67,18 @@ export default function InventarioModule() {
       {/* Header */}
       <div className="vt-module-header">
         <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-          <span style={{ fontFamily:'var(--font-serif)', fontSize:'1.5rem', color:'var(--vt-gold)' }}>庫</span>
+          <span style={{ fontFamily:'var(--font-serif)', fontSize:'1.5rem', color:'var(--c-oro-texto)' }}>庫</span>
           <div>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.9rem', fontWeight:800, color:'var(--vt-gold)', letterSpacing:'0.1em' }}>
-              INVENTARIO
+            <div style={{ fontFamily:'var(--font-serif)', fontSize:'1.15rem', fontWeight:600, color:'var(--c-oro-texto)' }}>
+              Inventario
             </div>
-            <div style={{ fontSize:'0.6rem', letterSpacing:'0.3em', color:'#444', textTransform:'uppercase' }}>
+            <div style={{ fontSize:'0.6rem', color:'var(--c-gris-claro)' }}>
               Satori · Ingredientes &amp; Recetas
             </div>
           </div>
           {role && <span className="role-badge">{role}</span>}
         </div>
-        <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888' }}
+        <button className="cash-back-btn" style={{ borderColor:'var(--c-linea)', color:'var(--c-gris)' }}
           onClick={() => navigate('/')}>← Inicio</button>
       </div>
 
@@ -87,7 +87,7 @@ export default function InventarioModule() {
         {visibleTabs.map(t => (
           <div key={t.id}
             className={`vt-nav-tab ${tab === t.id ? 'active' : ''}`}
-            style={tab === t.id ? { borderBottomColor:'var(--vt-gold)', color:'var(--vt-gold)' } : {}}
+            style={tab === t.id ? { borderBottomColor:'var(--c-oro)', color:'var(--c-oro-texto)' } : {}}
             onClick={() => setTab(t.id)}>
             {t.label}
           </div>

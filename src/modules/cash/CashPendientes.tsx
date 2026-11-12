@@ -241,8 +241,8 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
       <div className="cd-pend-summary" style={{ marginBottom: '1.25rem' }}>
         <div>
           <div className="cd-saldo-label">Total pendiente</div>
-          <div className="cd-saldo-val" style={{ color: '#c8a030' }}>{fi(totalCRC)}</div>
-          {totalUSD > 0 && <div style={{ fontSize: '0.85rem', color: '#7ab4d4' }}>{fd(totalUSD)}</div>}
+          <div className="cd-saldo-val" style={{ color: 'var(--c-oro-texto)' }}>{fi(totalCRC)}</div>
+          {totalUSD > 0 && <div style={{ fontSize: '0.85rem', color: 'var(--c-azul)' }}>{fd(totalUSD)}</div>}
         </div>
         <div className="cd-saldo-label" style={{ alignSelf: 'center' }}>
           {totalCount} factura{totalCount !== 1 ? 's' : ''} · {provCount} proveedor{provCount !== 1 ? 'es' : ''}
@@ -260,30 +260,30 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
         return (
           <div key={g.key} className="cd-prov-card" style={{ marginBottom: '1.25rem', padding: 0, overflow: 'hidden' }}>
             {/* Header proveedor */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.9rem 1.1rem', borderBottom: isCollapsed ? 'none' : '1px solid var(--t-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.9rem 1.1rem', borderBottom: isCollapsed ? 'none' : '1px solid var(--c-linea)' }}>
               <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
                 {g.esPropinas
                   ? <span style={{ fontSize: '1rem', lineHeight: 1 }}>🎁</span>
-                  : <span style={{ width: 9, height: 9, borderRadius: 99, background: '#c8a030', display: 'inline-block' }} />}
+                  : <span style={{ width: 9, height: 9, borderRadius: 99, background: 'var(--c-oro-texto)', display: 'inline-block' }} />}
                 <div>
-                  <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--t-ink)' }}>{g.name}</div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--t-muted)' }}>
+                  <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--c-tinta)' }}>{g.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>
                     {g.esPropinas
                       ? `Propinas · ${g.rows.length} turno${g.rows.length !== 1 ? 's' : ''} pendiente${g.rows.length !== 1 ? 's' : ''}`
                       : `Proveedor · ${g.rows.length} pago${g.rows.length !== 1 ? 's' : ''} pendiente${g.rows.length !== 1 ? 's' : ''}`}
                   </div>
                   {saldoDisp > 0 && (
-                    <div style={{ fontSize: '0.72rem', color: 'var(--t-teal)', fontWeight: 600, marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--c-teal)', fontWeight: 600, marginTop: 2 }}>
                       💳 crédito disponible {fi(saldoDisp)}
                     </div>
                   )}
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontWeight: 800, fontSize: '1.6rem', color: '#c8a030' }}>{fi(g.totalCRC)}</div>
-                {g.totalUSD > 0 && <div style={{ fontSize: '0.8rem', color: '#7ab4d4' }}>{fd(g.totalUSD)}</div>}
+                <div style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontWeight: 800, fontSize: '1.6rem', color: 'var(--c-oro-texto)' }}>{fi(g.totalCRC)}</div>
+                {g.totalUSD > 0 && <div style={{ fontSize: '0.8rem', color: 'var(--c-azul)' }}>{fd(g.totalUSD)}</div>}
                 <button onClick={() => toggleCollapse(g.key)}
-                  style={{ background: 'none', border: 'none', color: 'var(--t-muted)', cursor: 'pointer', fontSize: '0.72rem' }}>
+                  style={{ background: 'none', border: 'none', color: 'var(--c-gris)', cursor: 'pointer', fontSize: '0.72rem' }}>
                   {isCollapsed ? '▶ ver detalle' : '▼ ocultar'}
                 </button>
               </div>
@@ -308,37 +308,37 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                     </thead>
                     <tbody>
                       {g.rows.map(r => (
-                        <tr key={r.id} style={{ background: selected.has(r.id) ? 'rgba(200,169,110,.1)' : undefined }}>
+                        <tr key={r.id} style={{ background: selected.has(r.id) ? 'var(--c-oro-fondo)' : undefined }}>
                           <td style={{ textAlign: 'center' }}>
                             <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} />
                           </td>
                           <td style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{r.fecha || '—'}</td>
-                          <td style={{ color: 'var(--t-muted)' }}>{r.turno || '—'}</td>
-                          <td style={{ textAlign: 'right', fontFamily: "'DM Mono', monospace" }}>
+                          <td style={{ color: 'var(--c-gris)' }}>{r.turno || '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' }}>
                             {r.aplicado > 0 ? (
                               <>
-                                <span style={{ textDecoration: 'line-through', color: 'var(--t-muted)', fontSize: '0.7rem' }}>{fi(r.crc)}</span>{' '}
+                                <span style={{ textDecoration: 'line-through', color: 'var(--c-gris)', fontSize: '0.7rem' }}>{fi(r.crc)}</span>{' '}
                                 <strong>{fi(r.residual)}</strong>
-                                <div style={{ fontSize: '0.6rem', color: 'var(--t-teal)' }}>crédito {fi(r.aplicado)}</div>
+                                <div style={{ fontSize: '0.6rem', color: 'var(--c-teal)' }}>crédito {fi(r.aplicado)}</div>
                               </>
                             ) : (r.crc ? fi(r.crc) : '—')}
                           </td>
-                          <td style={{ textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#7ab4d4' }}>{r.usd ? fd(r.usd) : '—'}</td>
-                          <td style={{ fontSize: '0.78rem', color: '#5a5040' }}>{r.ref || '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', color: 'var(--c-azul)' }}>{r.usd ? fd(r.usd) : '—'}</td>
+                          <td style={{ fontSize: '0.78rem', color: 'var(--c-tinta)' }}>{r.ref || '—'}</td>
                           <td style={{ textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                               <button className="tips-btn-teal" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.7rem' }}
                                 onClick={() => pagar([r.id], snap([r]))}>✓ Pagado</button>
-                              <button className="tips-btn-ghost" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem', color: '#c0392b', borderColor: '#f0b0b0' }}
+                              <button className="tips-btn-ghost" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem', color: 'var(--c-laca)', borderColor: 'var(--c-laca-borde)' }}
                                 onClick={() => rechazar([r.id])} title="Rechazar (requiere autorización de gerencia)">✕ Rechazar</button>
                             </div>
                           </td>
                         </tr>
                       ))}
-                      <tr style={{ background: 'var(--t-border)', fontWeight: 700 }}>
+                      <tr style={{ background: 'var(--c-linea)', fontWeight: 700 }}>
                         <td colSpan={3} style={{ padding: '0.6rem 0.75rem' }}>TOTAL</td>
-                        <td style={{ textAlign: 'right', fontFamily: "'DM Mono', monospace" }}>{fi(g.totalCRC)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#7ab4d4' }}>{g.totalUSD ? fd(g.totalUSD) : '—'}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' }}>{fi(g.totalCRC)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', color: 'var(--c-azul)' }}>{g.totalUSD ? fd(g.totalUSD) : '—'}</td>
                         <td colSpan={2} />
                       </tr>
                     </tbody>
@@ -346,7 +346,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                 </div>
 
                 {/* Acciones del grupo */}
-                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', padding: '0.9rem 1.1rem', borderTop: '1px solid var(--t-border)' }}>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', padding: '0.9rem 1.1rem', borderTop: '1px solid var(--c-linea)' }}>
                   {selInGroup.length > 0 && (
                     <button className="cd-btn-primary" disabled={saving}
                       onClick={() => pagar(selInGroup.map(r => r.id), snap(selInGroup))}>
@@ -355,13 +355,13 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                   )}
                   {selInGroup.length > 0 && (
                     <button className="tips-btn-ghost" disabled={saving}
-                      style={{ color: '#c0392b', borderColor: '#f0b0b0' }}
+                      style={{ color: 'var(--c-laca)', borderColor: 'var(--c-laca-borde)' }}
                       onClick={() => rechazar(selInGroup.map(r => r.id))}>
                       ✕ Rechazar seleccionados ({selInGroup.length})
                     </button>
                   )}
                   <button className="cd-btn-primary" disabled={saving}
-                    style={{ background: '#0d0d0d' }}
+                    style={{ background: 'var(--c-tinta)' }}
                     onClick={() => pagar(g.rows.map(r => r.id), snap(g.rows))}>
                     ✓ Marcar todos pagados
                   </button>
@@ -409,19 +409,19 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
         <div className="cd-modal-overlay" onClick={() => setPagoResultado(null)}>
           <div className="cd-modal" onClick={e => e.stopPropagation()}>
             <div className="cd-modal-title">Comprobante de pago · {pagoResultado.data.proveedor}</div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--t-muted)', marginBottom: '0.6rem' }}>Pago registrado ✓</div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--c-gris)', marginBottom: '0.6rem' }}>Pago registrado ✓</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: 260, overflowY: 'auto' }}>
               {pagoResultado.data.lineas.map((l, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
                   <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {l.fecha || '—'}{l.nota ? <> · <span style={{ color: 'var(--t-muted)' }}>{l.nota}</span></> : null}
+                    {l.fecha || '—'}{l.nota ? <> · <span style={{ color: 'var(--c-gris)' }}>{l.nota}</span></> : null}
                   </span>
                   <strong style={{ whiteSpace: 'nowrap' }}>{l.monto}</strong>
                 </div>
               ))}
             </div>
             <div style={{ margin: '0.75rem 0', fontSize: '0.85rem' }}>
-              Total pagado: <strong style={{ color: 'var(--t-teal)' }}>{pagoResultado.data.totalTexto}</strong>
+              Total pagado: <strong style={{ color: 'var(--c-teal)' }}>{pagoResultado.data.totalTexto}</strong>
             </div>
             <div className="cd-modal-actions">
               <button className="tips-btn-ghost" onClick={() => descargarComprobantePNG(pagoResultado.data)}>📷 Descargar comprobante</button>

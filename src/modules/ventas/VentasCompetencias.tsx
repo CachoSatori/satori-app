@@ -104,11 +104,11 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
                   <div className="vt-comp-head">
                     <div>
                       <div className="vt-comp-name">{c.nombre}</div>
-                      <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.2rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginTop: '0.2rem' }}>
                         {c.inicio} → {c.fin} ·
                         <span style={{
                           marginLeft: '0.4rem',
-                          color: status === 'active' ? 'var(--vt-green)' : status === 'upcoming' ? 'var(--vt-gold)' : '#888'
+                          color: status === 'active' ? 'var(--vt-green)' : status === 'upcoming' ? 'var(--c-oro-texto)' : 'var(--c-gris)'
                         }}>
                           {status === 'active' ? '● En curso' : status === 'upcoming' ? '○ Próxima' : '✓ Finalizada'}
                         </span>
@@ -124,8 +124,8 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
                   </div>
 
                   <div style={{ marginBottom: '0.5rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: '#888' }}>Premio: </span>
-                    <span style={{ fontSize: '0.82rem', color: 'var(--vt-gold)' }}>{c.premio}</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>Premio: </span>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--c-oro-texto)' }}>{c.premio}</span>
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
@@ -140,7 +140,7 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
                   <div className="vt-progress-track">
                     <div className="vt-progress-fill" style={{ width: `${elapsed/total*100}%`, background: 'var(--vt-gold)' }} />
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '0.25rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)', marginTop: '0.25rem' }}>
                     {elapsed} / {total} días
                   </div>
 
@@ -150,10 +150,10 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
                       {ranking.map((r, i) => (
                         <div key={r.sal} className="vt-comp-rank-row">
                           <span className="vt-comp-rank-num" style={{
-                            color: i === 0 ? '#f4d03f' : i === 1 ? '#aaa' : i === 2 ? '#cd7f32' : '#555',
+                            color: i === 0 ? '#f4d03f' : i === 1 ? 'var(--c-gris-claro)' : i === 2 ? '#cd7f32' : 'var(--c-gris)',
                           }}>{i + 1}</span>
                           <span style={{ flex: 1, fontWeight: i < 3 ? 700 : 400 }}>{r.sal}</span>
-                          <span style={{ color: 'var(--vt-gold)', fontWeight: 700 }}>{r.pts} pts</span>
+                          <span style={{ color: 'var(--c-oro-texto)', fontWeight: 700 }}>{r.pts} pts</span>
                         </div>
                       ))}
                     </div>
@@ -218,7 +218,7 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
                   prods[i] = { ...prods[i], pts: Number(e.target.value) || 1 }
                   setForm(prev => ({ ...prev, prods }))
                 }} />
-              <span style={{ fontSize: '0.75rem', color: '#888' }}>pts</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--c-gris)' }}>pts</span>
               <button className="cd-btn-remove"
                 onClick={() => setForm(p => ({ ...p, prods: p.prods.filter((_, j) => j !== i) }))}>×</button>
             </div>

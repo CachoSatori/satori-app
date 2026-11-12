@@ -137,7 +137,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
     <div>
       {/* Month picker */}
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.72rem', color: '#5a5040', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Mes:</span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)', letterSpacing: '0.1em', fontWeight: 700 }}>Mes:</span>
         {months.slice(0, 12).map(mo => {
           const [my, mm] = mo.split('-')
           return (
@@ -151,14 +151,14 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
       </div>
 
       {loading && (
-        <div style={{ padding: '1rem', color: '#888', fontSize: '0.82rem' }}>
+        <div style={{ padding: '1rem', color: 'var(--c-gris)', fontSize: '0.82rem' }}>
           ⟳ Cargando datos del mes…
         </div>
       )}
 
       {/* Summary header */}
-      <div style={{ background: 'var(--t-ink)', borderRadius: 2, padding: '1rem 1.25rem', marginBottom: '1rem', color: 'var(--t-paper)' }}>
-        <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1rem', fontWeight: 700, color: 'var(--t-gold)', marginBottom: '0.75rem' }}>
+      <div style={{ background: 'var(--c-panel)', borderRadius: 2, padding: '1rem 1.25rem', marginBottom: '1rem', color: 'var(--c-tinta)' }}>
+        <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1rem', fontWeight: 700, color: 'var(--c-oro-texto)', marginBottom: '0.75rem' }}>
           {MONTH_NAMES[m] ?? m} {y}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
@@ -168,9 +168,9 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
             { label: 'Total mes', val: formatCRC(q1Total + q2Total), sub: `${q1Sessions.length + q2Sessions.length} turnos` },
           ].map(k => (
             <div key={k.label}>
-              <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555' }}>{k.label}</div>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1rem', fontWeight: 800, color: 'var(--t-gold)', lineHeight: 1.2 }}>{k.val}</div>
-              <div style={{ fontSize: '0.65rem', color: '#555' }}>{k.sub}</div>
+              <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', color: 'var(--c-gris)' }}>{k.label}</div>
+              <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1rem', fontWeight: 800, color: 'var(--c-oro-texto)', lineHeight: 1.2 }}>{k.val}</div>
+              <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)' }}>{k.sub}</div>
             </div>
           ))}
         </div>
@@ -187,19 +187,19 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
               <thead>
                 <tr>
                   <th style={{ textAlign: 'left' }}>Empleado</th>
-                  <th style={{ textAlign: 'center', background: 'rgba(42,122,106,0.15)' }} colSpan={3}>Q1 — días 1-15</th>
-                  <th style={{ textAlign: 'center', background: 'rgba(200,169,110,0.15)' }} colSpan={3}>Q2 — días 16-fin</th>
+                  <th style={{ textAlign: 'center', background: 'var(--c-teal-fondo)' }} colSpan={3}>Q1 — días 1-15</th>
+                  <th style={{ textAlign: 'center', background: 'var(--c-oro-fondo)' }} colSpan={3}>Q2 — días 16-fin</th>
                   <th style={{ textAlign: 'right' }}>Total mes</th>
                   <th style={{ textAlign: 'right' }}>Prom/día</th>
                 </tr>
                 <tr style={{ fontSize: '0.68rem' }}>
                   <th></th>
-                  <th style={{ textAlign: 'right', background: 'rgba(42,122,106,0.08)' }}>Días</th>
-                  <th style={{ textAlign: 'right', background: 'rgba(42,122,106,0.08)' }}>Horas</th>
-                  <th style={{ textAlign: 'right', background: 'rgba(42,122,106,0.08)', borderRight: '1px solid var(--t-border)' }}>Cobrado</th>
-                  <th style={{ textAlign: 'right', background: 'rgba(200,169,110,0.08)' }}>Días</th>
-                  <th style={{ textAlign: 'right', background: 'rgba(200,169,110,0.08)' }}>Horas</th>
-                  <th style={{ textAlign: 'right', background: 'rgba(200,169,110,0.08)', borderRight: '1px solid var(--t-border)' }}>Cobrado</th>
+                  <th style={{ textAlign: 'right', background: 'var(--c-teal-fondo)' }}>Días</th>
+                  <th style={{ textAlign: 'right', background: 'var(--c-teal-fondo)' }}>Horas</th>
+                  <th style={{ textAlign: 'right', background: 'var(--c-teal-fondo)', borderRight: '1px solid var(--t-border)' }}>Cobrado</th>
+                  <th style={{ textAlign: 'right', background: 'var(--c-oro-fondo)' }}>Días</th>
+                  <th style={{ textAlign: 'right', background: 'var(--c-oro-fondo)' }}>Horas</th>
+                  <th style={{ textAlign: 'right', background: 'var(--c-oro-fondo)', borderRight: '1px solid var(--t-border)' }}>Cobrado</th>
                   <th style={{ textAlign: 'right' }}></th>
                   <th style={{ textAlign: 'right' }}></th>
                 </tr>
@@ -209,32 +209,32 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
                   <tr key={e.id} className="admin-row">
                     <td>
                       <div className="admin-emp-name">{e.name}</div>
-                      <div style={{ fontSize: '0.65rem', color: '#888' }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)' }}>
                         {e.q1Days + e.q2Days} días · {(e.q1Hours + e.q2Hours).toFixed(1)}h
                       </div>
                     </td>
-                    <td style={{ textAlign: 'right', background: 'rgba(42,122,106,0.04)', color: '#5a5040' }}>{e.q1Days || '—'}</td>
-                    <td style={{ textAlign: 'right', background: 'rgba(42,122,106,0.04)', color: '#5a5040' }}>{e.q1Hours > 0 ? e.q1Hours.toFixed(1)+'h' : '—'}</td>
-                    <td style={{ textAlign: 'right', background: 'rgba(42,122,106,0.04)', fontWeight: 700, color: 'var(--t-teal)', borderRight: '1px solid var(--t-border)' }}>
+                    <td style={{ textAlign: 'right', background: 'var(--c-fondo)', color: 'var(--c-gris)' }}>{e.q1Days || '—'}</td>
+                    <td style={{ textAlign: 'right', background: 'var(--c-fondo)', color: 'var(--c-gris)' }}>{e.q1Hours > 0 ? e.q1Hours.toFixed(1)+'h' : '—'}</td>
+                    <td style={{ textAlign: 'right', background: 'var(--c-fondo)', fontWeight: 700, color: 'var(--t-teal)', borderRight: '1px solid var(--t-border)' }}>
                       {e.q1Earn > 0 ? formatCRC(e.q1Earn) : '—'}
                     </td>
-                    <td style={{ textAlign: 'right', background: 'rgba(200,169,110,0.04)', color: '#5a5040' }}>{e.q2Days || '—'}</td>
-                    <td style={{ textAlign: 'right', background: 'rgba(200,169,110,0.04)', color: '#5a5040' }}>{e.q2Hours > 0 ? e.q2Hours.toFixed(1)+'h' : '—'}</td>
-                    <td style={{ textAlign: 'right', background: 'rgba(200,169,110,0.04)', fontWeight: 700, color: 'var(--t-gold)', borderRight: '1px solid var(--t-border)' }}>
+                    <td style={{ textAlign: 'right', background: 'var(--c-fondo)', color: 'var(--c-gris)' }}>{e.q2Days || '—'}</td>
+                    <td style={{ textAlign: 'right', background: 'var(--c-fondo)', color: 'var(--c-gris)' }}>{e.q2Hours > 0 ? e.q2Hours.toFixed(1)+'h' : '—'}</td>
+                    <td style={{ textAlign: 'right', background: 'var(--c-fondo)', fontWeight: 700, color: 'var(--c-oro-texto)', borderRight: '1px solid var(--t-border)' }}>
                       {e.q2Earn > 0 ? formatCRC(e.q2Earn) : '—'}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '0.9rem', color: 'var(--t-ink)' }}>{formatCRC(e.total)}</td>
-                    <td style={{ textAlign: 'right', color: '#5a5040', fontSize: '0.78rem' }}>{formatCRC(e.promDia)}/día</td>
+                    <td style={{ textAlign: 'right', color: 'var(--c-gris)', fontSize: '0.78rem' }}>{formatCRC(e.promDia)}/día</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ background: 'var(--t-ink)', color: 'var(--t-gold)', fontWeight: 700 }}>
+                <tr style={{ background: 'var(--c-panel)', color: 'var(--c-tinta)', borderTop: '2px solid var(--c-tinta)', fontWeight: 700 }}>
                   <td style={{ padding: '0.6rem 0.75rem' }}>TOTAL</td>
                   <td colSpan={2} style={{ padding: '0.6rem 0.5rem' }}></td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid #333' }}>{formatCRC(empData.reduce((s,e) => s + e.q1Earn, 0))}</td>
+                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid var(--c-linea)' }}>{formatCRC(empData.reduce((s,e) => s + e.q1Earn, 0))}</td>
                   <td colSpan={2} style={{ padding: '0.6rem 0.5rem' }}></td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid #333' }}>{formatCRC(empData.reduce((s,e) => s + e.q2Earn, 0))}</td>
+                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid var(--c-linea)' }}>{formatCRC(empData.reduce((s,e) => s + e.q2Earn, 0))}</td>
                   <td style={{ textAlign: 'right', padding: '0.6rem 0.75rem', fontSize: '1rem' }}>{formatCRC(grandTotal)}</td>
                   <td></td>
                 </tr>
@@ -271,7 +271,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
             >
               🖨 Imprimir / PDF
             </button>
-            <span style={{ fontSize: '0.72rem', color: '#888' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>
               💡 Ctrl+P para guardar como PDF para nómina
             </span>
           </div>

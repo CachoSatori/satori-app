@@ -101,42 +101,42 @@ export default function InvConsumo({ ingredients, onRefresh, profile }: Props) {
 
   return (
     <div className="vt-section">
-      {error && <div style={{ color:'#c23b22', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
+      {error && <div style={{ color:'var(--c-laca)', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
 
       {/* Controles */}
       <div style={{ display:'flex', gap:'0.6rem', flexWrap:'wrap', alignItems:'center', marginBottom:'1rem' }}>
         <div className="vt-sl" style={{ margin:0 }}>🍽 Consumo por ventas</div>
         <input type="date" value={date} max={todayCR()}
           onChange={e => { setDate(e.target.value); setResult(null); setMsg(null) }}
-          style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'5px 10px', fontSize:'0.82rem', borderRadius:2 }} />
+          style={{ background:'var(--c-panel)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'5px 10px', fontSize:'0.82rem', borderRadius:2 }} />
         <button onClick={calcular} disabled={loading}
-          style={{ fontSize:'0.8rem', padding:'5px 14px', borderRadius:2, border:'1px solid var(--vt-gold)', background:'transparent', color:'var(--vt-gold)', cursor: loading ? 'default' : 'pointer', fontWeight:700 }}>
+          style={{ fontSize:'0.8rem', padding:'5px 14px', borderRadius:2, border:'1px solid var(--c-oro)', background:'transparent', color:'var(--c-oro-texto)', cursor: loading ? 'default' : 'pointer', fontWeight:700 }}>
           {loading ? '⟳ Calculando…' : 'Calcular consumo'}
         </button>
         {result && result.lines.length > 0 && (
           <button onClick={procesar} disabled={processing}
-            style={{ fontSize:'0.8rem', padding:'5px 14px', borderRadius:2, border:'none', background: processing ? '#1a1a1a' : 'var(--vt-green)', color: processing ? '#666' : '#0a0a0a', cursor: processing ? 'default' : 'pointer', fontWeight:800 }}>
+            style={{ fontSize:'0.8rem', padding:'5px 14px', borderRadius:2, border:'none', background: processing ? 'var(--c-panel)' : 'var(--c-tinta)', color: processing ? 'var(--c-gris)' : 'var(--c-fondo)', cursor: processing ? 'default' : 'pointer', fontWeight:800 }}>
             {processing ? '⟳ Registrando…' : `⬇ Procesar y bajar stock (${result.lines.length})`}
           </button>
         )}
       </div>
 
       {alreadyDone && (
-        <div style={{ fontSize:'0.78rem', color:'#c8a030', background:'rgba(200,160,48,.08)', border:'1px solid rgba(200,160,48,.3)', borderRadius:2, padding:'0.5rem 0.75rem', marginBottom:'0.75rem' }}>
+        <div style={{ fontSize:'0.78rem', color:'var(--c-oro-texto)', background:'var(--c-oro-fondo)', border:'1px solid var(--c-oro)', borderRadius:2, padding:'0.5rem 0.75rem', marginBottom:'0.75rem' }}>
           ⚠ Esta fecha ya tiene consumo registrado. Procesar de nuevo descontará el stock por duplicado.
         </div>
       )}
-      {msg && <div style={{ fontSize:'0.82rem', color:'var(--vt-green)', fontWeight:600, marginBottom:'0.75rem' }}>{msg}</div>}
+      {msg && <div style={{ fontSize:'0.82rem', color:'var(--c-musgo)', fontWeight:600, marginBottom:'0.75rem' }}>{msg}</div>}
 
       {/* Resumen */}
       {result && (
         <>
-          <div style={{ display:'flex', gap:'1.5rem', flexWrap:'wrap', fontSize:'0.8rem', color:'#5a5040', marginBottom:'0.75rem' }}>
-            <span><strong style={{ color:'var(--vt-ink,#0d0d0d)' }}>{result.productsMatched}</strong> productos con receta</span>
-            <span><strong style={{ color:'var(--vt-ink,#0d0d0d)' }}>{n3(result.unitsConsidered)}</strong> unidades consideradas</span>
-            <span><strong style={{ color:'var(--vt-ink,#0d0d0d)' }}>{result.lines.length}</strong> ingredientes afectados</span>
-            {totalShort > 0 && <span style={{ color:'#c23b22' }}>⚠ {totalShort} quedarían en negativo</span>}
-            {mismatch > 0 && <span style={{ color:'#c8a030' }}>⚠ {mismatch} con unidad distinta</span>}
+          <div style={{ display:'flex', gap:'1.5rem', flexWrap:'wrap', fontSize:'0.8rem', color:'var(--c-gris)', marginBottom:'0.75rem' }}>
+            <span><strong style={{ color:'var(--c-tinta)' }}>{result.productsMatched}</strong> productos con receta</span>
+            <span><strong style={{ color:'var(--c-tinta)' }}>{n3(result.unitsConsidered)}</strong> unidades consideradas</span>
+            <span><strong style={{ color:'var(--c-tinta)' }}>{result.lines.length}</strong> ingredientes afectados</span>
+            {totalShort > 0 && <span style={{ color:'var(--c-laca)' }}>⚠ {totalShort} quedarían en negativo</span>}
+            {mismatch > 0 && <span style={{ color:'var(--c-oro-texto)' }}>⚠ {mismatch} con unidad distinta</span>}
           </div>
 
           {result.lines.length > 0 && (
@@ -155,11 +155,11 @@ export default function InvConsumo({ ingredients, onRefresh, profile }: Props) {
                     <tr key={l.ingredientId}>
                       <td style={{ fontSize:'0.82rem' }}>
                         {l.name}
-                        {l.unitMismatch && <span title="Unidad de receta distinta a la del ingrediente" style={{ color:'#c8a030', marginLeft:5, fontSize:'0.7rem' }}>⚠ unidad</span>}
+                        {l.unitMismatch && <span title="Unidad de receta distinta a la del ingrediente" style={{ color:'var(--c-oro-texto)', marginLeft:5, fontSize:'0.7rem' }}>⚠ unidad</span>}
                       </td>
-                      <td className="r" style={{ color:'#c23b22', fontWeight:700 }}>−{n3(l.deduct)} {l.unit}</td>
-                      <td className="r" style={{ color:'#888' }}>{n3(l.current)} {l.unit}</td>
-                      <td className="r" style={{ color: l.after < 0 ? '#c23b22' : l.after === 0 ? '#c8a030' : '#4a9a6a', fontWeight:600 }}>
+                      <td className="r" style={{ color:'var(--c-laca)', fontWeight:700 }}>−{n3(l.deduct)} {l.unit}</td>
+                      <td className="r" style={{ color:'var(--c-gris)' }}>{n3(l.current)} {l.unit}</td>
+                      <td className="r" style={{ color: l.after < 0 ? 'var(--c-laca)' : l.after === 0 ? 'var(--c-oro-texto)' : 'var(--c-musgo)', fontWeight:600 }}>
                         {n3(l.after)} {l.unit}
                       </td>
                     </tr>
@@ -175,12 +175,12 @@ export default function InvConsumo({ ingredients, onRefresh, profile }: Props) {
               <div className="vt-sl" style={{ fontSize:'0.7rem' }}>Vendidos sin receta (no descuentan)</div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:'0.4rem' }}>
                 {result.noRecipe.map(p => (
-                  <span key={p.nombre} style={{ fontSize:'0.72rem', color:'#888', background:'var(--vt-ink)', border:'1px solid #222', borderRadius:2, padding:'2px 8px' }}>
-                    {p.nombre} <span style={{ color:'#555' }}>×{n3(p.units)}</span>
+                  <span key={p.nombre} style={{ fontSize:'0.72rem', color:'var(--c-gris)', background:'var(--c-panel)', border:'1px solid var(--c-linea)', borderRadius:2, padding:'2px 8px' }}>
+                    {p.nombre} <span style={{ color:'var(--c-gris)' }}>×{n3(p.units)}</span>
                   </span>
                 ))}
               </div>
-              <div style={{ fontSize:'0.68rem', color:'#555', marginTop:'0.4rem' }}>
+              <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginTop:'0.4rem' }}>
                 Cargá recetas para estos productos en la pestaña Recetas para incluirlos en el consumo.
               </div>
             </div>
@@ -189,7 +189,7 @@ export default function InvConsumo({ ingredients, onRefresh, profile }: Props) {
       )}
 
       {!result && !loading && (
-        <div style={{ fontSize:'0.8rem', color:'#666', padding:'1.5rem 0' }}>
+        <div style={{ fontSize:'0.8rem', color:'var(--c-gris)', padding:'1.5rem 0' }}>
           Elegí una fecha con ventas cargadas y "Calcular consumo" para ver el gasto de ingredientes según las recetas.
         </div>
       )}

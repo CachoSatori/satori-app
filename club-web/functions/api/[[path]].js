@@ -1,13 +1,14 @@
 // Pages Function: /api/* → functions/_lib/api.js
 //
-// (10-nov) Dos planes, y /api/salud dice cuál contestó (encabezado «x-club-api»):
-// · A — sin binding CLUB_API: el router corre acá, en Pages, con los topes RL_CREAR y RL_LEER de wrangler.toml.
-//   Marca «x-club-api: pages».
-// · B (activo desde el merge, decisión del dueño 10-nov) — con el service binding CLUB_API (wrangler.toml → [[services]]):
-//   /api lo atiende el Worker satori-club-api, que sí tiene los topes. Sin zona del dominio en Cloudflare (el DNS queda en SiteGround) no hay Workers Routes: el único camino
+// (10-nov) /api/salud dice quién contestó (encabezado «x-club-api»):
+// · Con el service binding CLUB_API (se carga en el PANEL de Pages → Settings → Bindings; decisión del dueño, 10-nov):
+//   /api lo atiende el Worker satori-club-api, que tiene los topes. Sin zona del dominio en Cloudflare (el DNS queda en SiteGround) no hay Workers Routes: el único camino
 //   al Worker es este binding. La IP real del cliente la ve ESTA función (Pages es el borde del pedido); se le pasa al
 //   Worker en «x-club-ip», sin depender de qué hace Cloudflare con CF-Connecting-IP en un service binding. El Worker
 //   marca «x-club-api: worker».
+// · Sin el binding: el router corre acá, en Pages, y marca «x-club-api: pages». (12-nov) Pages NO puede tener los topes
+//   RL_CREAR y RL_LEER (no admite esos bindings en su configuración; el deploy de cf1a61d falló por eso), así que crear y
+//   leer responden 503: falla cerrada. No es un plan A: es la señal de que falta el binding en el panel.
 import { manejar } from '../_lib/api.js'
 import { HOST_INTERNO, ENCABEZADO_IP } from '../../worker/interno.js'
 

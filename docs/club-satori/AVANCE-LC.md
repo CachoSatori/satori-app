@@ -20,9 +20,16 @@
 |---|---|---|---|---|---|
 | B1 | Edge `club-pase`: JWT «Save to Google Wallet», clase y objeto | 1,5 | **hecha** (rama `claude/club-wallet`, sin desplegar) | `adfa208` | 20 pruebas nuevas (vitest 1.511) · build OK · eslint y tsc limpios · humo con datos reales de staging (solo lectura) |
 | B2 | Botón en el portal y en la autoalta | 0,5 | **hecha** (apagada por flag `VITE_WALLET_GOOGLE`) | `5bede8d` | API club-web 15/15 · build y tsc limpios |
-| B3 | Sincronización por eventos, mensajes de canje, baja | 1,5 | **en curso** (núcleo + rutas del Edge) | `f3f53d9` + `2654b7e` | 10 pruebas nuevas (wallet 29) |
-| B4 | Apple apagado | 1,5 | pendiente | — | — |
+| B3 | Sincronización por eventos, mensajes de canje, baja | 1,5 | **casi hecha**: núcleo, rutas del Edge, baja (EXPIRED) y **Grok 75** (un miembro con error no traba el cursor). Falta: la tabla de reintentos (propuesta, fuera de la 075) y el programador (**cron apagado**) | `f3f53d9` + `2654b7e` + `7bc5532` | wallet 43 (8 del Grok 75) · propuesta SQL 7/7 en staging (descartada) |
+| B4 | Apple apagado | 1,5 | **núcleo hecho** (apagado): pass.json, firma PKCS#7 y .pkpass con WebCrypto. Falta: web service de actualización y cableado (dependen del certificado de Apple) | `f130c37` + `9088aba` | 9 pruebas (openssl cms y zipfile verifican) |
 | B5 | Integración real, código de barras según el rol, prueba en teléfono | 1,5 | pendiente | — | — |
+
+**12-nov (decisiones del dueño) · Google Wallet al piloto, sin sincronización automática.** Rama
+`claude/wallet-google-main` (PR a `main`, borrador): el pase en `main` sin el Edge (regla 2), textos en «usted», pase
+vencido sin roles vigentes, línea «Créditos al …» con la hora de Costa Rica, «Actualizar mi pase» en el portal y link de
+«Guardar» corto (la clase y el objeto se crean por la API; el JWT lleva solo los IDs). El Issuer ID sale de `SPEC.md`. El
+Edge vive en `claude/club-pase-edge` y se despliega a mano (`WALLET-GOOGLE-ACTIVACION.md` §2). B3 (programador y
+reintentos) queda para después del piloto.
 
 ## Bitácora
 - 07-nov · Plan aprobado (6c1a5fb) con ajustes. Arranca A1.
@@ -804,3 +811,25 @@ los bloques 60–68.
 - Qué mirar: el plan de la consulta del precio habitual (la moda de los 30 días anteriores por artículo), con
   `explain analyze` sobre staging. **Sin analizar todavía; no se tocó.**
 
+## 09-nov · noche B (02:30, desatendida) · pase de Wallet: Grok 75 y B4 · rama `claude/club-wallet`, nada en prod
+Detalle: [`NOCHE-2026-11-09-B.md`](NOCHE-2026-11-09-B.md).
+- **Grok 75** (`7bc5532`): un miembro con error en la sincronización del pase se saltea y se anota para reintentar
+  (id, evento, mensaje corto; nunca teléfonos ni datos del pase). El cursor avanza por encima de lo procesado. La
+  pasada siguiente reintenta a los anotados (tope 10) y los da por resueltos si salen bien. Los mensajes de canje que
+  fallan ya no frenan el cursor. **Sin la tabla de reintentos** (propuesta en `propuestas/club_pase_reintentos.sql`,
+  porque esta noche la 075 no se tocaba): modo conservador, el cursor frena antes del primer evento del fallido.
+- **B4** (`f130c37`, `9088aba`): el pase de Apple, apagado. Arma `pass.json` con el mismo contrato y textos que Google,
+  la firma PKCS#7 y el `.pkpass`, solo con WebCrypto. La firma la verifica `openssl cms` con un certificado falso.
+- Grok 76 no se tocó. El cron de `/sync` sigue apagado. El diseño v4 sigue sin cambios.
+- Pruebas: vitest 1.568 (wallet 52), `dominioRepo` OK, tsc -b, build y lint OK.
+
+### Autorrevisión adversarial (noche B)
+- **Anónimo:** no hay rutas nuevas. `/club-pase/apple` sigue en 404 y `/sync` exige su clave. Las funciones de
+  reintentos (propuesta) son solo de service_role, y la tabla no se lee desde la app.
+- **Socio:** no puede forzar reintentos ni mover el cursor; lo anotado no lleva sus datos.
+- **Anfitrión:** su pase de Apple dice lo mismo que el de Google (₡ disponibles, referidos). El token del web service
+  sale de un HMAC con un secreto del Edge: el pase no expone el token del portal.
+- **Invitado:** sin cambios.
+- **Cajero / manager:** sin cambios en la app.
+- **Riesgo que queda:** un miembro que falla siempre se reintenta hasta 10 veces y después queda anotado, sin
+  reintentos automáticos. Hace falta que el dueño vea esa lista (pantalla o consulta) cuando se encienda el pase.

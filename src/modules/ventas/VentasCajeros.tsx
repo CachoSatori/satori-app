@@ -13,15 +13,17 @@ interface Props {
   dias: DiasMap
 }
 
+// Desde «hoy» de Costa Rica (no la fecha UTC, que después de las 18:00 ya es mañana).
 function nDaysAgo(n: number): string {
-  const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0,10)
+  const [y, m, d] = todayCR().split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10)
 }
 
 
 const PRESETS = [
   { label: '7 días',  from: () => nDaysAgo(7) },
   { label: '15 días', from: () => nDaysAgo(14) },
-  { label: 'Mes',     from: () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` } },
+  { label: 'Mes',     from: () => `${todayCR().slice(0, 7)}-01` },
   { label: 'Todo',    from: () => '2020-01-01' },
 ]
 

@@ -23,14 +23,16 @@ import {
 } from './saloneroLentes'
 import { getLentesDesdePos, type LentesConNombres } from './saloneroLentesDatos'
 import { fi } from './ventasUtils'
+import { todayCR } from '../../shared/utils'
 import './ventasEnVivo.css'
 
-const hoyISO = (): string => new Date().toISOString().slice(0, 10)
+// «Hoy» en hora de Costa Rica (no la fecha UTC, que después de las 18:00 ya es mañana).
+const hoyISO = (): string => todayCR()
 
-/** `2026-09-05` → `2026-08-29` (una semana atrás), el rango que abre por defecto. */
-function haceUnaSemana(hoy: Date): string {
-  const d = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate() - 6))
-  return d.toISOString().slice(0, 10)
+/** `2026-09-05` → `2026-08-30` (los últimos 7 días, con hoy), el rango que abre por defecto. */
+function haceUnaSemana(hoy: string): string {
+  const [y, m, d] = hoy.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d - 6)).toISOString().slice(0, 10)
 }
 
 const ROL_ETIQUETA: Record<RolCodigo, string> = {
@@ -212,7 +214,7 @@ export function BloquesLentes({ lentes, nombres }: Props) {
 // ── La pantalla ────────────────────────────────────────────────────────────────────────────
 
 export default function VentasSaloneroLineas() {
-  const [desde, setDesde] = useState(() => haceUnaSemana(new Date()))
+  const [desde, setDesde] = useState(() => haceUnaSemana(hoyISO()))
   const [hasta, setHasta] = useState(hoyISO)
 
   /**

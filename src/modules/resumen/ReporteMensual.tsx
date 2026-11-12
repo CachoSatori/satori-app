@@ -247,38 +247,38 @@ export default function ReporteMensual() {
   const prevYM = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
 
   return (
-    <div className="rm-page" style={{ minHeight: '100vh', background: 'var(--t-paper, #f5f0e8)', color: 'var(--t-ink, #0d0d0d)', fontFamily: 'var(--font-sans)' }}>
+    <div className="rm-page" style={{ minHeight: '100vh', background: 'var(--c-fondo)', color: 'var(--c-tinta)', fontFamily: 'var(--font-sans)' }}>
       {/* Header / controls — hidden on print */}
-      <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0d0d0d', borderBottom: '1px solid #1a1a1a', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+      <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--c-panel)', borderBottom: '1px solid var(--c-linea)', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.2rem', color: '#c8a96e', fontWeight: 700 }}>里</span>
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.2rem', color: 'var(--c-oro-texto)', fontWeight: 700 }}>里</span>
           <div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>Reporte mensual</div>
-            <div style={{ fontSize: '0.68rem', color: '#888', letterSpacing: '0.06em' }}>Ventas · Propinas · Caja</div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--c-gris)', letterSpacing: '0.06em' }}>Ventas · Propinas · Caja</div>
           </div>
         </div>
 
         <select
           value={ym}
           onChange={e => setYm(e.target.value)}
-          style={{ background: '#111', border: '1px solid #2a2a2a', color: '#c8a96e', padding: '6px 12px', borderRadius: 2, fontSize: '0.85rem', fontWeight: 600 }}>
+          style={{ background: 'var(--c-panel)', border: '1px solid var(--c-linea)', color: 'var(--c-oro-texto)', padding: '6px 12px', borderRadius: 2, fontSize: '0.85rem', fontWeight: 600 }}>
           {availableMonths.map(mo => (
             <option key={mo} value={mo}>{fmtMonthLabel(mo)}</option>
           ))}
         </select>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {copied && <span style={{ fontSize: '0.72rem', color: '#2a7a6a' }}>✓ Copiado</span>}
+          {copied && <span style={{ fontSize: '0.72rem', color: 'var(--c-teal)' }}>✓ Copiado</span>}
           <button onClick={() => shareReport(shareText, setCopied)} disabled={!shareText}
-            style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid #2a4a6b', background: 'transparent', color: '#8ab0d8', borderRadius: 2, cursor: 'pointer' }}>
+            style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid var(--c-azul)', background: 'transparent', color: 'var(--c-azul)', borderRadius: 2, cursor: 'pointer' }}>
             ↗ Compartir
           </button>
           <button onClick={() => window.print()}
-            style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid #2a7a6a', background: 'transparent', color: '#2a7a6a', borderRadius: 2, cursor: 'pointer' }}>
+            style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid var(--c-teal)', background: 'transparent', color: 'var(--c-teal)', borderRadius: 2, cursor: 'pointer' }}>
             🖨 Imprimir
           </button>
           <button onClick={() => navigate('/')}
-            style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid #333', background: 'transparent', color: '#888', borderRadius: 2, cursor: 'pointer' }}>
+            style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid var(--c-linea)', background: 'transparent', color: 'var(--c-gris)', borderRadius: 2, cursor: 'pointer' }}>
             ← Inicio
           </button>
         </div>
@@ -287,16 +287,16 @@ export default function ReporteMensual() {
       {/* Report body */}
       <div className="rm-body" style={{ maxWidth: 880, margin: '0 auto', padding: '1.5rem 1.25rem 4rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#a07830' }}>{fmtMonthLabel(ym)}</div>
-          <div style={{ fontSize: '0.72rem', color: '#5a5040' }}>Satori Sushi Bar · Santa Teresa, CR</div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--c-oro-texto)' }}>{fmtMonthLabel(ym)}</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>Satori Sushi Bar · Santa Teresa, CR</div>
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#888' }}>Cargando datos del mes…</div>
+          <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--c-gris)' }}>Cargando datos del mes…</div>
         ) : (
           <>
             {/* ── VENTAS ── */}
-            <Section title="📈 Ventas" color="#2a4a6b">
+            <Section title="📈 Ventas" color="var(--c-azul)">
               {ventas && (
                 <>
                   <KpiGrid items={[
@@ -306,16 +306,16 @@ export default function ReporteMensual() {
                     { label: 'Días trabajados', val: `${ventas.days} de ${daysInMonth(ym)}` },
                   ]} />
                   <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.82rem' }}>
-                    {ventas.maxDay && <span>Mejor día: <strong style={{ color: '#2a7a6a' }}>{fmtDate(ventas.maxDay.fecha)}</strong> · {fi(ventas.maxDay.ventaNeta)}</span>}
-                    {ventas.minDay && <span>Peor día: <strong style={{ color: '#c23b22' }}>{fmtDate(ventas.minDay.fecha)}</strong> · {fi(ventas.minDay.ventaNeta)}</span>}
+                    {ventas.maxDay && <span>Mejor día: <strong style={{ color: 'var(--c-teal)' }}>{fmtDate(ventas.maxDay.fecha)}</strong> · {fi(ventas.maxDay.ventaNeta)}</span>}
+                    {ventas.minDay && <span>Peor día: <strong style={{ color: 'var(--c-laca)' }}>{fmtDate(ventas.minDay.fecha)}</strong> · {fi(ventas.minDay.ventaNeta)}</span>}
                   </div>
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#5a5040' }}>
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: 'var(--c-gris)' }}>
                     vs {fmtMonthLabel(prevYM)}:{' '}
                     {ventas.varPct !== null ? (
-                      <strong style={{ color: ventas.varPct >= 0 ? '#2a7a6a' : '#c23b22' }}>
+                      <strong style={{ color: ventas.varPct >= 0 ? 'var(--c-teal)' : 'var(--c-laca)' }}>
                         {ventas.varPct >= 0 ? '▲ +' : '▼ '}{ventas.varPct.toFixed(1)}%
                       </strong>
-                    ) : <span style={{ color: '#777' }}>— sin datos previos</span>}
+                    ) : <span style={{ color: 'var(--c-gris)' }}>— sin datos previos</span>}
                     {' '}({fi(ventas.prevVN)})
                   </div>
                 </>
@@ -323,7 +323,7 @@ export default function ReporteMensual() {
             </Section>
 
             {/* ── PROPINAS ── */}
-            <Section title="💰 Propinas" color="#2a7a6a">
+            <Section title="💰 Propinas" color="var(--c-teal)">
               {propinas && (
                 <>
                   <KpiGrid items={[
@@ -334,11 +334,11 @@ export default function ReporteMensual() {
                   ]} />
                   {propinas.top.length > 0 && (
                     <div style={{ marginTop: '0.75rem' }}>
-                      <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#777', marginBottom: '0.4rem' }}>Top earners</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)', marginBottom: '0.4rem' }}>Top earners</div>
                       {propinas.top.map((t, i) => (
-                        <div key={t.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--t-border,#d4cfc4)', fontSize: '0.85rem' }}>
-                          <span><span style={{ color: '#777', marginRight: '0.5rem' }}>{i + 1}</span>{t.name}</span>
-                          <strong style={{ color: '#a07830' }}>{fi(t.payout)}</strong>
+                        <div key={t.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--c-linea)', fontSize: '0.85rem' }}>
+                          <span><span style={{ color: 'var(--c-gris)', marginRight: '0.5rem' }}>{i + 1}</span>{t.name}</span>
+                          <strong style={{ color: 'var(--c-oro-texto)' }}>{fi(t.payout)}</strong>
                         </div>
                       ))}
                     </div>
@@ -348,7 +348,7 @@ export default function ReporteMensual() {
             </Section>
 
             {/* ── CAJA ── */}
-            <Section title="金 Caja" color="#a07830">
+            <Section title="金 Caja" color="var(--c-oro-texto)">
               {caja && (
                 <>
                   <KpiGrid items={[
@@ -358,11 +358,11 @@ export default function ReporteMensual() {
                   ]} />
                   {caja.topEgresos.length > 0 && (
                     <div style={{ marginTop: '0.75rem' }}>
-                      <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#777', marginBottom: '0.4rem' }}>Top egresos por categoría</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)', marginBottom: '0.4rem' }}>Top egresos por categoría</div>
                       {caja.topEgresos.map(e => (
-                        <div key={e.subcat} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--t-border,#d4cfc4)', fontSize: '0.85rem' }}>
+                        <div key={e.subcat} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--c-linea)', fontSize: '0.85rem' }}>
                           <span>{e.subcat}</span>
-                          <strong style={{ color: '#c23b22' }}>{fi(e.amt)}</strong>
+                          <strong style={{ color: 'var(--c-laca)' }}>{fi(e.amt)}</strong>
                         </div>
                       ))}
                     </div>
@@ -371,7 +371,7 @@ export default function ReporteMensual() {
               )}
             </Section>
 
-            <div style={{ textAlign: 'center', fontSize: '0.68rem', color: '#666', marginTop: '2rem' }}>
+            <div style={{ textAlign: 'center', fontSize: '0.68rem', color: 'var(--c-gris)', marginTop: '2rem' }}>
               Satori App · {fmtMonthLabel(ym)} · Generado el {fmtDate(now)}
             </div>
           </>
@@ -393,7 +393,7 @@ export default function ReporteMensual() {
 // ── Small presentational helpers ────────────────────────────────
 function Section({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
   return (
-    <div className="rm-section" style={{ marginBottom: '1.5rem', background: 'var(--t-paper)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1.1rem 1.25rem' }}>
+    <div className="rm-section" style={{ marginBottom: '1.5rem', background: 'var(--c-fondo)', border: '1px solid var(--c-linea)', borderRadius: 4, padding: '1.1rem 1.25rem' }}>
       <div style={{ fontSize: '1rem', fontWeight: 700, color, borderBottom: `2px solid ${color}`, paddingBottom: '0.5rem', marginBottom: '0.875rem' }}>
         {title}
       </div>
@@ -406,9 +406,9 @@ function KpiGrid({ items }: { items: Array<{ label: string; val: string; bold?: 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem' }}>
       {items.map(k => (
-        <div key={k.label} style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 3, padding: '0.6rem 0.75rem' }}>
-          <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5a5040', marginBottom: '0.25rem' }}>{k.label}</div>
-          <div style={{ fontSize: k.bold ? '1.05rem' : '0.92rem', fontWeight: k.bold ? 700 : 500, color: k.bold ? 'var(--t-ink,#0d0d0d)' : '#5a5040', fontFamily: 'DM Mono, monospace' }}>{k.val}</div>
+        <div key={k.label} style={{ background: 'var(--c-panel)', border: '1px solid var(--c-linea)', borderRadius: 3, padding: '0.6rem 0.75rem' }}>
+          <div style={{ fontSize: '0.62rem', color: 'var(--c-gris)', marginBottom: '0.25rem' }}>{k.label}</div>
+          <div style={{ fontSize: k.bold ? '1.05rem' : '0.92rem', fontWeight: k.bold ? 700 : 500, color: k.bold ? 'var(--c-tinta)' : 'var(--c-gris)', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' }}>{k.val}</div>
         </div>
       ))}
     </div>

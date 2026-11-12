@@ -124,13 +124,13 @@ export default function ExchangeRateWidget() {
               {fetching ? '⟳ Consultando…' : '↓ BCCR'}
             </button>
             {msg && (
-              <span style={{ fontSize: '0.82rem', color: msg.startsWith('✓') ? 'var(--t-teal)' : 'var(--t-red)' }}>
+              <span style={{ fontSize: '0.82rem', color: msg.startsWith('✓') ? 'var(--c-teal)' : 'var(--c-laca)' }}>
                 {msg}
               </span>
             )}
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.4rem' }}>
-            Referencia BCCR: <a href="https://gee.bccr.fi.cr/" target="_blank" rel="noreferrer" style={{ color: 'var(--t-teal)' }}>gee.bccr.fi.cr</a>
+          <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginTop: '0.4rem' }}>
+            Referencia BCCR: <a href="https://gee.bccr.fi.cr/" target="_blank" rel="noreferrer" style={{ color: 'var(--c-teal)' }}>gee.bccr.fi.cr</a>
           </div>
         </div>
       </div>
@@ -140,20 +140,20 @@ export default function ExchangeRateWidget() {
           <div className="tips-field-label" style={{ marginBottom: '0.5rem' }}>Historial reciente</div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--t-border)' }}>
-                <th style={{ textAlign: 'left', padding: '0.3rem 0', color: 'var(--t-teal)', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Fecha</th>
-                <th style={{ textAlign: 'right', padding: '0.3rem 0', color: 'var(--t-teal)', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>₡ / USD</th>
-                <th style={{ textAlign: 'right', padding: '0.3rem 0', color: 'var(--t-teal)', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Fuente</th>
+              <tr style={{ borderBottom: '1px solid var(--c-linea)' }}>
+                <th style={{ textAlign: 'left', padding: '0.3rem 0', color: 'var(--c-teal)', fontSize: '0.68rem' }}>Fecha</th>
+                <th style={{ textAlign: 'right', padding: '0.3rem 0', color: 'var(--c-teal)', fontSize: '0.68rem' }}>₡ / USD</th>
+                <th style={{ textAlign: 'right', padding: '0.3rem 0', color: 'var(--c-teal)', fontSize: '0.68rem' }}>Fuente</th>
               </tr>
             </thead>
             <tbody>
               {history.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--t-border)' }}>
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--c-linea)' }}>
                   <td style={{ padding: '0.4rem 0' }}>{r.rate_date}</td>
                   <td style={{ textAlign: 'right', padding: '0.4rem 0', fontWeight: 600 }}>
                     ₡ {Number(r.usd_to_crc).toLocaleString('es-CR')}
                   </td>
-                  <td style={{ textAlign: 'right', padding: '0.4rem 0', color: '#888', fontSize: '0.72rem' }}>
+                  <td style={{ textAlign: 'right', padding: '0.4rem 0', color: 'var(--c-gris)', fontSize: '0.72rem' }}>
                     {r.source}
                   </td>
                 </tr>

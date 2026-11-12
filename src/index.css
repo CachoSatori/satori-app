@@ -4199,7 +4199,7 @@ html, body, #root {
 }
 .xr-subtitle {
   font-size: 0.72rem;
-  color: #888;
+  color: var(--c-gris);
   letter-spacing: 0.04em;
 }
 .xr-current {
@@ -4207,26 +4207,26 @@ html, body, #root {
   flex-direction: column;
   align-items: flex-end;
   gap: 0.1rem;
-  background: var(--t-ink);
+  background: var(--c-panel);
   padding: 0.625rem 0.875rem;
   border-radius: 2px;
-  border-left: 3px solid var(--t-gold);
+  border-left: 3px solid var(--c-oro);
 }
 .xr-current-label {
   font-size: 0.72rem;
   letter-spacing: 0.02em;
-  color: #555;
+  color: var(--c-gris);
 }
 .xr-current-val {
-  font-family: var(--font-mono);
+  font-family: var(--font-serif);
   font-size: 1.3rem;
   font-weight: 800;
-  color: var(--t-gold);
+  color: var(--c-oro-texto);
   line-height: 1;
 }
 .xr-current-unit {
   font-size: 0.65rem;
-  color: #666;
+  color: var(--c-gris);
 }
 .xr-form {
   margin-bottom: 1.5rem;
@@ -4237,7 +4237,7 @@ html, body, #root {
 }
 .xr-history {
   padding: 1rem;
-  background: #fff;
+  background: var(--c-fondo);
   border: 1px solid var(--t-border);
   border-radius: 2px;
 }
@@ -4289,35 +4289,37 @@ html, body, #root {
   line-height: 1.5;
 }
 
-/* ── Resumen Diario module ───────────────────────────────────── */
+/* ── Resumen Diario module (estilo carta, B7) ─────────────────── */
 .resumen-module {
   min-height: 100vh;
-  background: var(--t-ink);
-  font-family: var(--font-mono);
+  background: var(--c-fondo);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 .resumen-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 1.75rem;
-  height: 52px;
-  background: var(--t-ink);
-  border-bottom: 1px solid var(--c-gris-oscuro);
+  min-height: 52px;
+  background: var(--c-fondo);
+  border-bottom: 1px solid var(--c-oro);
+  color: var(--c-tinta);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 .resumen-body {
-  background: var(--t-paper);
+  background: var(--c-fondo);
   min-height: calc(100vh - 52px);
   padding: 1.75rem;
-  color: var(--t-ink);
+  color: var(--c-tinta);
 }
 .resumen-date-label {
   font-family: var(--font-serif);
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--t-ink);
+  color: var(--c-tinta);
   margin-bottom: 1.5rem;
   text-transform: capitalize;
 }
@@ -4328,50 +4330,51 @@ html, body, #root {
   margin-bottom: 1.5rem;
 }
 .resumen-card {
-  background: var(--t-ink);
+  background: var(--c-fondo);
+  border: 1px solid var(--c-linea);
+  border-top: 2px solid var(--c-oro);
   border-radius: 3px;
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s;
 }
-.resumen-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+.resumen-card:hover { border-color: var(--c-oro); }
 .resumen-card.empty { opacity: 0.7; }
 .resumen-card-header {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--c-gris-oscuro);
+  border-bottom: 1px solid var(--c-linea);
 }
 .resumen-card-kanji {
   font-family: var(--font-serif);
   font-size: 1.6rem;
-  color: var(--t-gold);
+  color: var(--c-oro-texto);
   flex-shrink: 0;
 }
 .resumen-card-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--t-gold);
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--c-tinta);
 }
 .resumen-card-sub {
   font-size: 0.72rem;
-  color: #555;
-  letter-spacing: 0.02em;
+  color: var(--c-gris);
   margin-top: 0.1rem;
 }
 .resumen-status {
   margin-left: auto;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   padding: 0.2rem 0.6rem;
   border-radius: 99px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-weight: 600;
   flex-shrink: 0;
 }
-.resumen-status.ok      { background: rgba(78,164,126,0.15); color: #7ec8a0; }
-.resumen-status.open    { background: rgba(180, 142, 80,0.15); color: var(--t-gold); }
-.resumen-status.pending { background: rgba(255,255,255,0.06); color: #555; }
+.resumen-status.ok      { background: var(--c-musgo-fondo); color: var(--c-musgo); }
+.resumen-status.open    { background: var(--c-oro-fondo); color: var(--c-oro-texto); }
+.resumen-status.pending { background: var(--c-panel); color: var(--c-gris); }
 .resumen-card-body { padding: 1rem 1.25rem; }
 .resumen-kpi-row {
   display: grid;
@@ -4381,17 +4384,16 @@ html, body, #root {
 .resumen-kpi { display: flex; flex-direction: column; gap: 0.2rem; }
 .resumen-kpi-label {
   font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  color: #555;
+  color: var(--c-gris);
 }
 .resumen-kpi-val {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: var(--t-paper);
-  line-height: 1;
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--c-tinta);
+  line-height: 1.1;
 }
-.resumen-kpi-val.gold { color: var(--t-gold); }
+.resumen-kpi-val.gold { color: var(--c-oro-texto); }
 .resumen-split-bar { margin-top: 0.75rem; }
 .resumen-empty-hint {
   padding: 1rem 1.25rem;
@@ -4401,35 +4403,34 @@ html, body, #root {
 }
 /* Reconciliation block */
 .resumen-reconcile {
-  background: var(--t-ink);
+  background: var(--c-panel);
   border-radius: 3px;
   padding: 1.25rem;
   max-width: 420px;
-  color: var(--t-paper);
+  color: var(--c-tinta);
 }
 .resumen-reconcile-title {
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  color: var(--t-gold);
+  font-size: 0.78rem;
+  color: var(--c-oro-texto);
   margin-bottom: 0.875rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 .resumen-reconcile-row {
   display: flex;
   justify-content: space-between;
   padding: 0.4rem 0;
-  border-bottom: 1px solid var(--c-gris-oscuro);
+  border-bottom: 1px solid var(--c-linea);
   font-size: 0.82rem;
 }
-.resumen-reconcile-row span { color: #888; }
+.resumen-reconcile-row span { color: var(--c-gris); }
 .resumen-reconcile-row.resumen-reconcile-total {
   border-bottom: none;
-  border-top: 1px solid #333;
+  border-top: 1px solid var(--c-oro);
   margin-top: 0.25rem;
   padding-top: 0.5rem;
   font-weight: 700;
 }
-.resumen-reconcile-total span { color: #aaa; }
+.resumen-reconcile-total span { color: var(--c-tinta); }
 
 /* Responsive */
 @media (max-width: 600px) {
@@ -5093,17 +5094,17 @@ html, body, #root {
 }
 .mr-period-lbl {
   font-size: 0.72rem; letter-spacing: 0.02em;
-  color: #6a6250; font-weight: 700;
+  color: var(--c-gris); font-weight: 700;
 }
 .mr-select {
-  background: #fff; border: 1px solid var(--t-border, var(--c-linea)); color: var(--t-ink, var(--c-tinta));
+  background: var(--c-fondo); border: 1px solid var(--t-border, var(--c-linea)); color: var(--t-ink, var(--c-tinta));
   padding: 5px 10px; border-radius: 2px; font-size: 0.82rem; font-family: var(--font-sans);
 }
 .mr-select:focus { outline: none; border-color: var(--t-gold, var(--c-oro)); }
 
 /* Delta helper */
 .mr-delta { font-size: 0.64rem; margin-top: 0.25rem; font-weight: 600; }
-.mr-delta.up   { color: #27874f; }
+.mr-delta.up   { color: var(--c-musgo); }
 .mr-delta.down { color: var(--c-error); }
 .mr-kpi-sub { font-size: 0.62rem; color: var(--c-gris); margin-top: 0.25rem; }
 
@@ -5119,23 +5120,23 @@ html, body, #root {
   gap: 0.5rem; margin-bottom: 1.25rem;
 }
 .mr-dow-card {
-  background: #fff; border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
+  background: var(--c-fondo); border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
   border-top: 3px solid var(--t-border, var(--c-linea));
   padding: 0.6rem 0.4rem; text-align: center; min-width: 0;
 }
-.mr-dow-card.best { border-top-color: #27874f; box-shadow: 0 0 0 1px rgba(39,135,79,0.18); }
+.mr-dow-card.best { border-top-color: var(--c-musgo); box-shadow: 0 0 0 1px rgba(39,135,79,0.18); }
 .mr-dow-card.empty { opacity: 0.45; }
 .mr-dow-day {
   font-size: 0.72rem; letter-spacing: 0.02em;
-  color: #6a6250; font-weight: 700;
+  color: var(--c-gris); font-weight: 700;
 }
 .mr-dow-val {
-  font-family: var(--font-mono); font-size: 0.92rem; font-weight: 800;
+  font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 0.92rem; font-weight: 800;
   color: var(--t-ink, var(--c-tinta)); margin-top: 0.25rem; line-height: 1;
 }
 .mr-dow-sub { font-size: 0.58rem; color: var(--c-gris); margin-top: 0.2rem; line-height: 1.35; }
 .mr-dow-badge {
-  display: block; font-size: 0.72rem; color: #27874f; font-weight: 800;
+  display: block; font-size: 0.72rem; color: var(--c-musgo); font-weight: 800;
  letter-spacing: 0.02em; margin-top: 0.2rem;
 }
 
@@ -5147,68 +5148,68 @@ html, body, #root {
   border-radius: 3px; display: flex; align-items: flex-end; overflow: hidden;
 }
 .mr-bar-fill { width: 100%; background: var(--t-gold, var(--c-oro)); border-radius: 3px 3px 0 0; transition: height 0.3s; }
-.mr-bar-fill.best { background: #27874f; }
-.mr-bar-lbl { font-size: 0.6rem; color: #6a6250; font-weight: 700; }
+.mr-bar-fill.best { background: var(--c-musgo); }
+.mr-bar-lbl { font-size: 0.6rem; color: var(--c-gris); font-weight: 700; }
 
 /* Tabla clara (yo vs resto / detalle) */
 .mr-tbl-wrap { overflow-x: auto; margin-bottom: 1.25rem; }
 .mr-tbl {
-  width: 100%; border-collapse: collapse; font-size: 0.82rem; background: #fff;
+  width: 100%; border-collapse: collapse; font-size: 0.82rem; background: var(--c-fondo);
   border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
 }
 .mr-tbl thead th {
   padding: 0.5rem 0.7rem; text-align: left; font-size: 0.72rem; letter-spacing: 0.02em;
- color: #6a6250; font-weight: 700;
+ color: var(--c-gris); font-weight: 700;
   background: var(--t-panel, var(--c-panel)); border-bottom: 1px solid var(--t-border, var(--c-linea));
   white-space: nowrap;
 }
 .mr-tbl th.r, .mr-tbl td.r { text-align: right; }
-.mr-tbl td.r { font-family: var(--font-mono); }
-.mr-tbl td { padding: 0.5rem 0.7rem; color: var(--t-ink, var(--c-tinta)); border-bottom: 1px solid #eee5d8; }
+.mr-tbl td.r { font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+.mr-tbl td { padding: 0.5rem 0.7rem; color: var(--t-ink, var(--c-tinta)); border-bottom: 1px solid var(--c-linea); }
 .mr-tbl tbody tr:last-child td { border-bottom: none; }
-.mr-tbl tbody tr.best { background: #f0fbf4; }
+.mr-tbl tbody tr.best { background: var(--c-musgo-fondo); }
 .mr-tbl .muted { color: var(--c-gris); }
 
 /* Bloques de productos (General / Comidas / Bebidas) */
 .mr-prod-block {
-  background: #fff; border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
+  background: var(--c-fondo); border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
   margin-bottom: 1rem; overflow: hidden;
 }
 .mr-prod-hd {
   padding: 0.5rem 0.85rem; background: var(--t-panel, var(--c-panel));
   border-bottom: 1px solid var(--t-border, var(--c-linea));
   font-size: 0.72rem; letter-spacing: 0.02em;
-  color: #4a4030; font-weight: 700;
+  color: var(--c-gris); font-weight: 700;
 }
 .mr-prod-row {
   display: flex; align-items: center; gap: 0.55rem; padding: 0.45rem 0.85rem;
-  border-bottom: 1px solid #f2ecdf;
+  border-bottom: 1px solid var(--c-linea);
 }
 .mr-prod-row:last-child { border-bottom: none; }
-.mr-prod-rank { width: 16px; text-align: right; color: #a89a80; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+.mr-prod-rank { width: 16px; text-align: right; color: var(--c-gris); font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
 .mr-prod-name {
   flex: 1; font-size: 0.82rem; color: var(--t-ink, var(--c-tinta)); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .mr-prod-bar { width: 54px; height: 5px; background: var(--t-panel, var(--c-panel)); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
 .mr-prod-bar-fill { height: 100%; border-radius: 3px; background: var(--t-gold, var(--c-oro)); }
-.mr-prod-val { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 700; color: var(--t-ink, var(--c-tinta)); flex-shrink: 0; min-width: 62px; text-align: right; }
+.mr-prod-val { font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 0.8rem; font-weight: 700; color: var(--t-ink, var(--c-tinta)); flex-shrink: 0; min-width: 62px; text-align: right; }
 
 /* ICP + benchmark del equipo */
 .mr-icp { display: grid; grid-template-columns: 1fr 1fr; gap: 0.625rem; margin-bottom: 1.25rem; }
 .mr-icp-card {
-  background: #fff; border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
+  background: var(--c-fondo); border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
   border-left: 3px solid var(--t-teal, var(--c-teal)); padding: 0.875rem 1rem; min-width: 0;
 }
-.mr-icp-card.team { border-left-color: #6a6250; }
-.mr-icp-label { font-size: 0.72rem; letter-spacing: 0.02em; color: #6a6250; margin-bottom: 0.3rem; }
-.mr-icp-val { font-family: var(--font-mono); font-size: 1.3rem; font-weight: 800; color: var(--t-teal, var(--c-teal)); line-height: 1; }
+.mr-icp-card.team { border-left-color: var(--c-gris); }
+.mr-icp-label { font-size: 0.72rem; letter-spacing: 0.02em; color: var(--c-gris); margin-bottom: 0.3rem; }
+.mr-icp-val { font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 1.3rem; font-weight: 800; color: var(--t-teal, var(--c-teal)); line-height: 1; }
 .mr-icp-card.team .mr-icp-val { color: var(--t-ink, var(--c-tinta)); }
 .mr-icp-sub { font-size: 0.62rem; margin-top: 0.3rem; color: var(--c-gris); }
 
 /* Estado vacío claro */
 .mr-empty {
-  padding: 2.5rem 1.5rem; text-align: center; color: var(--c-gris); background: #fff;
+  padding: 2.5rem 1.5rem; text-align: center; color: var(--c-gris); background: var(--c-fondo);
   border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px; margin: 0.5rem 0 1rem;
 }
 .mr-empty-icon { font-size: 2rem; margin-bottom: 0.5rem; }
@@ -5217,7 +5218,7 @@ html, body, #root {
 
 /* Card genérica clara (semana / competencias) */
 .mr-card {
-  background: #fff; border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
+  background: var(--c-fondo); border: 1px solid var(--t-border, var(--c-linea)); border-radius: 3px;
   padding: 0.875rem 1rem; margin-bottom: 0.75rem;
 }
 .mr-card.accent { border-left: 3px solid var(--t-gold, var(--c-oro)); }

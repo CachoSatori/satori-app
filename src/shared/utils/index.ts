@@ -21,7 +21,9 @@ export function dateCR(d: Date | string | number | null | undefined): string {
 // ── Currency formatters ────────────────────────────────────────
 export function fi(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return '—'
-  return '₡ ' + Math.round(n).toLocaleString('es-CR')
+  // Estándar de los reportes: «₡1.460.000» (₡ pegado, punto de miles, sin decimales).
+  const r = Math.round(n)
+  return '₡' + (r < 0 ? '-' : '') + String(Math.abs(r)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 }
 
 export function fd(n: number | null | undefined): string {

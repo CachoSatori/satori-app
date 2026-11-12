@@ -1,15 +1,34 @@
-# Continuación — backlog priorizado (al día: 2026-11-07)
+# Continuación — backlog priorizado (al día: 2026-11-11)
 
-> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-06.md](docs/handoffs/HANDOFF-2026-11-06.md)** (06/11). Lo de abajo es el backlog detallado.
+> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md)** (11/11). El handoff
+> anterior es el del [06/11](docs/handoffs/HANDOFF-2026-11-06.md). Lo de abajo es el backlog detallado.
 
-> **Foto al 07/11:** `main` = **`6bcfafb`** + el merge de Prom/PAX (PROD; merges del 06/11: #44 turno como antes,
-> #42/#46 SEC-02, #43 alerta de días sin cierre, #48 handoff, #51 `.sql` de la 074, #52 `.sql` de la 076/077, #49 SoP,
-> #53–#57 docs de SoP, mig 079, guías del área 6 y limpieza de datos reales; 07/11: **Prom/PAX explicado**) ·
-> `staging` = **`fb29872`** (rama de producción de Cloudflare: `satori-staging.pages.dev`). **`FUENTE_VENTAS = 'pos'` en
-> prod desde el 30/10.** Migraciones en prod hasta la **080** (ledger **55**: 076/077/079 de SoP y 080 de Prom/PAX).
-> Staging tiene además 055–061, la **070** y la **075** (Club Satori F1a, reservada; ⚠️ queda por debajo de la 080, hay que
-> renumerarla antes de prod). **Próximo número libre: `081`.** Edge Functions: `alta-empleado` v1 y `monthly-report` v10
-> en prod (`verify_jwt` on, desplegadas a mano). Estado completo y reglas → [ESTADO.md](ESTADO.md).
+> **Foto al 11/11:** `main` = **`66b3b85`** (PROD; merges de docs #96 y #108 sobre `c41e18b`). **Ledger de prod: 65 · 095.**
+> Agente del PoS en prod: **`5da233a`** (desde el 10/11 23:37:18 -06:00). Staging: ledger **91 · 151**. **El Club Satori
+> todavía no está en prod:** pase el **jue 12/11** (#59 @ `66c950d`, paquete #93 @ `d6c117b`). **Próximo número libre:**
+> caja **096**; Club y lo que quede atrás, bloque de pase **152+**. Estado completo y reglas → [ESTADO.md](ESTADO.md).
+
+## ▶️ Lo próximo (en este orden)
+1. **Cerrar el #109** (agente nuevo): lecturas 5.2/5.4, logs del Edge y el cierre de caja del 11/11; después, el OK del
+   dueño para mergear.
+2. **Pase del Club, jue 12/11 por la mañana:** merge del #59 → Branching aplica la 150 y la 151 (65 · 095 → 67 · 151);
+   configuración del local; sha256 de la `CLUB_WEB_KEY`; carga única firmada con `aplicar-firmado`.
+3. **Prueba interna con el personal, jue 12/11 por la tarde**, con Santa Teresa encendido sin anunciarlo.
+4. **Apertura a clientes: vie 13 o lun 16**, después de revisar las excepciones de la prueba.
+5. **Google Wallet:** semana del 23/11 (#99).
+6. **Bloque 152+:** la 087, la 088 y la MAINTAIN de `authenticated` en las tablas de caja. Después del Club.
+
+## ✅ Hecho 10–11/11 (detalle en el [handoff del 11/11](docs/handoffs/HANDOFF-2026-11-11.md) y en el §9 de cada PASE)
+- **Pases a prod del 10/11**, todos cerrados sin vuelta atrás: **085** (#80), **089** (#90), **090** (#97), **091** (#103)
+  y la tanda **092–095** (#107, un solo merge). Ledger de prod 57 → 65.
+- **Agente nuevo del PoS en prod** (`4d3513a` → `5da233a`), al segundo intento. Cierre abierto en el #109.
+- **Cloudflare del Club (11/11):** Worker `satori-club-api` desplegado a mano, con sus variables y secretos cargados.
+- **Carga única del Club (G-56):** firmada por el dueño el 11/11; ensayo en staging OK. Se aplica el jueves.
+- **Staging:** de la 091 a la 095 aplicadas el 10/11; la sesión del Club renumeró la 075 a 150 y aplicó la 151.
+
+---
+
+> **De la foto anterior (07/11), como historia** (la foto completa está en `git show 66b3b85:PROMPT-CONTINUACION.md`):
 >
 > ✅ **Prom/PAX explicado en prod (07/11)** ([SPEC](docs/SPEC-prompax-explicado.md) v2.3, RPC = mig 080). Próximo: los
 > huecos de permisos de Caja y Propinas (handoff de SoP, §4.1).
@@ -64,7 +83,26 @@
 6. **🔐 Mig 079 · SoP solo para usuarios activos:** `sops_read` (010) y `sops_storage_read` (077) pasan a exigir `public.get_my_role() is not null`. **Aplicada y probada en staging el 06/11**; en prod la aplica Branching al mergear su PR (OK de Ismael, fuera de 19–22 h). Detalle en [ESTADO.md](ESTADO.md) § Migraciones.
 
 **También abierto, sin orden:**
-- **Club Satori** F1–F3: la 075 está reservada y solo en staging. Spec en [docs/club-satori/](docs/club-satori/).
+- **Club Satori** F1–F3: la 075 y la 081 están solo en staging; PR único «Club Satori» (borrador, ⛔ no mergear hasta el piloto). Spec en [docs/club-satori/](docs/club-satori/).
+  - **🔑 Pendiente de Ismael (07-nov):** cargar el secreto `CLUB_WEB_KEY` en Cloudflare Pages (`satori-club` → Settings → Variables and Secrets → Secret) y su **sha256** en Supabase con `select public.club_web_clave_cargar('<sha256>');`. Pasos en `club-web/README.md`. Sin eso, las 4 funciones públicas del Club fallan cerradas (CLUB-AUD-06).
+  - **Confirmar en el PoS:** las facturas 112306 y 112308 (mesa 19, 31-oct, sin pedido) también entran en el cruce del pedido 33. ¿Son de esa mesa?
+  - **⚠️ Regla (Ismael, 07-nov):** ninguna sesión corre `club_vencer` fuera de una transacción con ROLLBACK. En la app: simular → confirmar con el total.
+  - **🟡 Ítem 11, en curso (07-nov, firma de Ismael para staging; prod aparte y con firma):** mig **081** (aditiva: `mesa_factura`, `consecutivo_fe`, `clave_fe` y `pedido_abierto_en` en `pos_ndf_tickets`; `pedido_abierto_en` en `pos_ndf_open`) y Edge `ingest-ndf` v11 **en staging**. El agente nuevo está en la rama `claude/puente-item11` (subida el 07-nov; sale de `feat/pos-desglose` @ `14bd278`, la que corre en `C:\satori\satori-app`). **Falta:** actualizar el agente de staging (`C:\satori\satori-app`, tarea «Satori PoS Bridge», de día y nunca de 17 a 23 h) y el backfill desde el 1-sep, según `docs/puente/PLAN-agente-item11.md`; después, `scripts/sql/club_verificar_backfill.sql` (mesa 19 del 31-oct con datos reales). **Pase a prod (con firma, no hecho):** 081 → Edge v11 → agente de prod (`C:\satori\satori-app-prod`). Los archivos de `supabase/functions` no van en PRs a `main` hasta que exista `config.toml`. El cruce del Club ya usa estos campos: la factura del pedido + las sin pedido de la misma mesa, desde la apertura hasta 30 min después de la principal.
+  - **🔴 Requisito ANTES de la salida general del Club (15-ene) — ítem 11 + puente del PoS** (decisiones de Ismael, 06 y 07-nov). **El piloto arranca con el PEDIDO sin esperar este ítem:** la caja elige el pedido abierto («Pedido 14 · Mesa 20 · ₡48.500 · salonero»), se guardan el pedido y la hora del escaneo, y el cruce es la **primera factura cerrada con ese `numero_pedido` después del escaneo, con tope de 18 h** (no se usa el día de la factura, así se esquiva la medianoche). Plan B: elegir la factura de la lista de las últimas 2 h. Lo que no cruza va a Excepciones como `SIN_CRUCE` y el manager elige la factura. Para que todo sea exacto, `ingest-ndf` tiene que traer:
+    - **🆕 el campo que une las facturas SIN pedido con su pedido.** Paso 0 del 07-nov: en prod, desde el 1-sep, 117 facturas cerradas de salón llegan sin pedido (~5 % de la plata de salón); la mesa la tienen en la factura (`NumeroMesa`), que el puente trae desde la 081, y ningún pedido tiene dos facturas cerradas. Las cuentas divididas y las refacturas se cobran en facturas que `FAC_Pedidos.NumeroFactura` no ata a su pedido; el pedido original queda en una factura anulada en ₡0. Ejemplo del 31-oct: las facturas internas 112310 y 112311 salen sin pedido y un minuto después se anula la 112312 (pedido 30). Hay que buscar en la PC del PoS qué columna (¿`Facturas.NumeroPedido`?, ¿otra tabla?) ata esas facturas al pedido 30.
+    - **🆕 la fecha de apertura del pedido** (`Periodo`/`Mes`/`Dia` de `FAC_Pedidos`) en las facturas y en las mesas abiertas. Hoy no se guarda y `pos_ndf_open.clave` no lleva el día: con el día de la factura hay 29 choques en 22 meses (pedidos cobrados después de medianoche o al día siguiente).
+    - **el consecutivo fiscal: la factura electrónica (20 dígitos) y la clave de 50 dígitos** de cada factura cerrada. Formato confirmado con un ticket real: `002 00001 04 0000016012` = sucursal (3), terminal (5), tipo (2; `04` tiquete, `01` factura) y número (10). El ticket no muestra el número interno.
+    - **la clave completa del pedido** en las mesas abiertas (`Periodo`/`Mes`/`Dia`/`NumeroPedido`; el `NumeroPedido` solo se repite: es un contador) y **la lista de todos los pedidos** de cada factura (hoy se guarda solo el menor).
+    - `NombreCliente` («CREDITOS NUEVO»), `MotivoRegalia`, el descuento por línea (`Descuento` / `TipoDescuento`) y la hora real de cobro: con eso las excepciones de créditos dejan de ser «probables» y la promo 10 % se detecta sin artículo marcador.
+    - **Qué mirar en la PC del PoS (base de Nube de Fuego):**
+      1. en `FAC_Facturas`, el nombre de las columnas del consecutivo y de la clave de 50 dígitos, y si el tipo (01 / 04) está en una columna propia;
+      2. si tiquetes y facturas comparten la tabla y cómo se numera cada uno (serie por tipo);
+      3. en `FAC_Pedidos`, si `NumeroPedido` se reinicia por día, por turno o por caja (en staging, el pedido «14» aparece dos veces el 11-oct, en mesas distintas);
+      4. qué pasa con los pedidos al **dividir una cuenta**, al **unir mesas** y al **cambiar de mesa** (si se crean pedidos nuevos y cuál mesa queda);
+      5. qué marca la hora de cobro de cada factura (`FechaRegistra` contra `FechaCierra`: hoy `fecha_cierra` llega agrupada por cierre);
+      6. dónde quedan `NombreCliente`, `MotivoRegalia` y `Descuento` / `TipoDescuento` en `FAC_PedidosDet`;
+      7. si hay forma de leer las mesas abiertas con su hora de apertura.
+    - Lleva firma: toca el agente de la PC del PoS y la Edge `ingest-ndf`.
 - **🧹🖊️ Respaldos `*_pre_migracion_2026_07` de staging:** decidir si se borran. Ya están cerrados a `anon` y `authenticated`.
 - **Usuarios para RODRI, FRANCO y MAXI BARRA:** ahora se crean desde Admin → «+ Nuevo empleado», con vínculo al empleado.
 - El resto del backlog sigue abajo, sin cambios.

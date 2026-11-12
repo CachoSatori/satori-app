@@ -36,10 +36,25 @@
 - si un QR se publica en redes, se puede regenerar (el pase de Wallet se actualiza solo).
 - El crédito solo se genera con un cupón usado en una mesa real con factura, así que no hay crédito sin consumo.
 
-### 2.2 Canje de créditos del referente
-- El cajero escanea el **QR del pase del referente** (o lo busca, como plan B) → ve el saldo → canjea **1, 1,5 o 2 créditos** (de a 0,5, **máximo 2 por visita**) con el número de factura.
-- La mesa se cierra en el PoS como hoy («CRÉDITOS NUEVO» / forma de pago «Créditos»).
-- El puente controla que el monto coincida.
+### 2.2 Canje de créditos del referente (R-01, revisado el 07-nov; auditoría ronda 3)
+- **El QR público del referente (`/r/`) NO sirve para canjear.** Es público por diseño: está en la recepción, se comparte y
+  se imprime. Escaneado en caja muestra el saldo y nada más. Lo mismo con «buscar» (plan B).
+- **Canje = código de canje privado, de un solo uso.** El referente toca «Canjear» en su portal (`/p/{token}`) o en su pase
+  de Wallet (F1e) y recibe un código de **6 caracteres** (QR `/k/{código}`) que **vence a los 10 minutos**. Generar
+  otro invalida el anterior; tope de 5 por hora. La caja lo escanea (o escribe los 6 caracteres) → ve el saldo → canjea
+  **1, 1,5 o 2 créditos** (de a 0,5, **máximo 2 por visita y por día**) con el pedido o la factura.
+- En la base se guarda **solo el hash** del código. El canje lo consume en la misma transacción que el movimiento
+  (orden de locks: operación → código → miembro). Mismo `p_op` = mismo canje; otro `p_op` con el mismo código = rechazado.
+- **Tope de intentos fallidos:** 5 en 15 minutos por usuario de caja y por referente. Después, «Demasiados códigos
+  equivocados: esperá 15 minutos».
+- **Sin celular:** «Canje sin celular», solo owner o manager, con nota obligatoria. Queda la excepción `CANJE_SIN_CODIGO`,
+  siempre visible, que no resuelve quien lo aprobó.
+- **Aviso al referente en cada canje:** queda el evento en `club_alertas` para que lo dispare el pase de Wallet; mientras
+  tanto, la confirmación del canje en caja ofrece «Avisarle por WhatsApp» (link wa.me con el canje y el saldo).
+- El token del portal pasa a ser una **credencial de plata**: «Regenerar QR» cambia el código público y el token, y cada vez
+  que alguien copia el link del portal queda en la auditoría.
+- La mesa se cierra en el PoS como hoy («CRÉDITOS NUEVO» / forma de pago «Créditos»). El puente controla que el monto
+  coincida (`CANJE_MONTO_DISTINTO`). Regla fija: una factura pagada con créditos no lleva ningún descuento.
 
 ### 2.3 Socio del Local Club
 - **Recomendado: escanear el QR del pase del socio.** Es más rápido que buscar, no se equivoca de persona, no hay que decir nombres ni teléfonos en voz alta en la caja, y registra la visita en el momento (base para premios por frecuencia en F3).
@@ -95,6 +110,8 @@ Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, co
 
 ## 5.1 Vencimiento
 - **12 meses sin actividad** (cualquier tarjeta o canje reinicia el plazo), con avisos a los 30 y a los 7 días. Configurable por local.
+  **También la restitución** (la hace el owner) cuenta como actividad y reinicia el plazo: decisión de Ismael, 08-nov
+  (es lo que hace `club_vencer`). Se cuenta desde la **última actividad**, no desde que se gana cada crédito.
 - **Por qué 12 y no 6 meses:**
   - hoy hay solo 7,5 créditos (₡135.000) con actividad de hace 6 a 12 meses, así que bajar a 6 recupera muy poco;
   - y castiga al referente estacional, que manda gente en alta y viene a consumir en baja.
@@ -103,7 +120,25 @@ Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, co
 ## 6. Seguridad
 - **Las tablas del club solo se leen con usuario de staff.** El portal del referente usa una función SECURITY DEFINER por token (como la mig 067). Las guardas NULL-seguras son obligatorias: aprendizaje de SEC-01b.
 - **La página pública del cupón no toca tablas directo:** una función SECURITY DEFINER recibe el código del referente y crea el cupón, con límite por referente y por IP y validación de cada campo. Es lo opuesto al `WITH CHECK (true)` del CRM viejo.
-- Movimientos de solo inserción por RLS: sin UPDATE ni DELETE para nadie salvo service_role.
+- **Movimientos de solo inserción, también para el dueño de la tabla:** un trigger rechaza UPDATE, DELETE y TRUNCATE en
+  `club_movimientos` a todos. La única excepción es el rol `postgres` cuando declara en la transacción
+  `club.libro_mantenimiento`: `'migracion'` solo borra filas `origen = 'migracion'` (el migrador, al volver a migrar);
+  `'pruebas'` es para las pruebas de staging, que terminan en ROLLBACK, y para borrar datos sintéticos. Para corregir un
+  saldo: un ajuste o una restitución (solo owner).
+- **Códigos que el staff no lee (CLUB-AUD-30):** ni el código del QR público (`club_miembros.codigo`) ni los de los cupones
+  (`club_cupones.codigo`). La caja resuelve por función; owner y manager ven el código del referente por función. El
+  contador no ve cupones.
+- **Auditoría (CLUB-AUD-25):** `club_auditoria`, de solo inserción. Guarda altas, ediciones (antes y después), bajas,
+  reactivaciones, regeneración del código, quién copió el link del portal, cambios de contacto (qué cambió, sin los
+  valores) y negocios. Las resoluciones de excepciones son historial: cada una es una fila nueva. **Segregación:** quien
+  registró el movimiento no resuelve su excepción (la resuelve el owner); `TARJETA_MANUAL` y `CANJE_SIN_CODIGO` no las
+  resuelve quien las cargó o aprobó.
+- **Puente (CLUB-AUD-27 y 31):** el modo pedido exige el puente al día (último ciclo hace menos de 5 minutos y sin error);
+  si no, «Puente sin datos: elegí la factura» (plan B). La clave del pedido abierto lleva la fecha
+  (`pedido:<AAAA-MM-DD>:<n>`) y un número repetido no se adivina.
+- **Tarjeta física (CLUB-AUD-26):** flag por entorno, `club_config.tarjeta_manual_activa`. En prod está apagada: el piloto
+  oficial es solo con pases de Wallet. En staging está prendida para el piloto interno en paralelo, con tope diario por
+  miembro (30 personas por defecto) y la excepción `TARJETA_MANUAL` siempre visible.
 - Canje con validaciones del lado de la base: saldo suficiente, máximo por visita e idempotencia.
 - Teléfonos y correos: visibles solo para gerencia. Nunca en reportes ni exports del bot.
 

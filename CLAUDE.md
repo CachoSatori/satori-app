@@ -15,3 +15,7 @@ Estado vivo, reglas operativas y punteros: [ESTADO.md](ESTADO.md). Backlog: [PRO
 
 Nunca al repo: nombres de personas, clientes o proveedores, teléfonos, correos, cédulas, contraseñas, llaves o
 montos reales. Los ejemplos usan datos ficticios.
+
+**Única excepción (decisión del dueño, 09-nov):** el correo público del negocio, `satorisushibar@gmail.com`, que es el
+contacto del aviso de privacidad del Club (Ley 8968). Puede aparecer **solo** en el texto del aviso
+(`club-web/src/i18n.ts`) y en sus pruebas (`club-web/src/aviso.test.ts`). Ningún otro correo, y este en ningún otro lugar.

@@ -15,6 +15,7 @@
 | 6.5 | [Mi Rendimiento](6.5%20Mi%20Rendimiento.md) (incluye Mis Propinas) | `/mi-rendimiento` | Sí |
 | 6.6 | [Admin](6.6%20Admin.md) | `/admin` | No |
 | 6.7 | [SoP](6.7%20SoP.md) | `/sops` | Sí |
+| 6.13 | [Club Satori](6.13%20Club%20Satori.md) (**solo staging**, PR #59; incluye multilocal, descuentos y las páginas públicas) | `/club` | Sí |
 
 Todavía **sin guía**: Inventario, Clientes, Finanzas, Bandeja y Prueba (ver abajo). Los códigos 6.8 en adelante
 quedan para ellos.
@@ -52,6 +53,7 @@ quedan para ellos.
 | KDS | `/kds` | owner, manager, cocina, barman | Pantalla de cocina y barra |
 | Salarios | `/salarios` | owner, manager | Nómina y BioTime. Bloqueos humanos pendientes |
 | Admin › «🍣 PoS» | `/admin` (pestaña) | owner | Catálogo y productos del PoS propio |
+| Club Satori | `/club` | owner, manager, cajero (el cajero solo «Escanear»; «Locales» solo owner) | Guía 6.13 escrita contra la rama del PR #59; pasa con el pase del Club |
 
 ## Permisos
 

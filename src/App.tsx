@@ -24,6 +24,7 @@ const SOPsModule       = lazy(() => import('./modules/sops/SOPsModule'))
 const InventarioModule  = lazy(() => import('./modules/inventario/InventarioModule'))
 const MiRendimientoWrap = lazy(() => import('./modules/ventas/MiRendimientoWrap'))
 const ClientesModule    = lazy(() => import('./modules/crm/ClientesModule'))
+const ClubModule        = lazy(() => import('./modules/club/ClubModule'))
 const FinanzasModule    = lazy(() => import('./modules/finanzas/FinanzasModule'))
 const InboxModule       = lazy(() => import('./modules/inbox/InboxModule'))
 const PruebaModule      = lazy(() => import('./modules/prueba/PruebaModule'))
@@ -154,6 +155,7 @@ function AppRoutes() {
         <Route path="/mis-propinas"  element={<Navigate to="/mi-rendimiento?tab=propinas" replace />} />
         <Route path="/inventario"    element={<PrivateRoute roles={['owner','manager','contador']}><InventarioModule /></PrivateRoute>} />
         <Route path="/clientes"      element={<PrivateRoute roles={['owner','manager','cajero']}><ClientesModule /></PrivateRoute>} />
+        <Route path="/club"          element={<PrivateRoute roles={['owner','manager','cajero']}><ClubModule /></PrivateRoute>} />
         <Route path="/finanzas"      element={<PrivateRoute roles={['owner','manager','contador']}><FinanzasModule /></PrivateRoute>} />
         <Route path="/inbox"         element={<PrivateRoute roles={['owner','manager','contador','cajero']}><InboxModule /></PrivateRoute>} />
         <Route path="/inbox/share"   element={<Navigate to="/inbox" replace />} />

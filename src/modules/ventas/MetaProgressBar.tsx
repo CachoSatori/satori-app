@@ -45,7 +45,7 @@ export default function MetaProgressBar({ ym, p }: { ym: string; p: MetaProgress
         </span>
       </div>
 
-      <div className="vt-meta-bar-bottom" style={{ marginTop: '0.3rem', flexWrap: 'wrap', gap: '0.5rem 1.25rem', color: '#b8ad97' }}>
+      <div className="vt-meta-bar-bottom" style={{ marginTop: '0.3rem', flexWrap: 'wrap', gap: '0.5rem 1.25rem', color: 'var(--c-gris)' }}>
         <span>Meta diaria implícita: <strong>{fi(p.metaDia)}</strong></span>
         <span>Promedio actual/día: <strong style={{ color: col }}>{fi(promDia)}</strong></span>
         {remaining > 0 && <span>⚡ Esfuerzo req. ({remaining}d): <strong>{fi(p.effort)}</strong>/día</span>}

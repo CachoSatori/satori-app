@@ -6,6 +6,7 @@ import type { Ingredient } from '../../shared/types/inventario'
 import { INGREDIENT_CATEGORIES, INGREDIENT_UNITS } from '../../shared/types/inventario'
 import { upsertIngredient, deleteIngredient } from '../../shared/api/inventario'
 import { getIngredientPrices, type IngredientPrice } from '../../shared/api/inventoryIngest'
+import { fi } from '../../shared/utils'
 
 interface Props {
   ingredients: Ingredient[]
@@ -16,10 +17,6 @@ interface Props {
 const EMPTY: Partial<Ingredient> = {
   name: '', unit: 'unidad', current_stock: 0, min_stock: 0,
   cost_per_unit: 0, supplier: '', category: '', notes: '',
-}
-
-function fi(n: number): string {
-  return '₡ ' + Math.round(n).toLocaleString('es-CR')
 }
 
 export default function InvIngredientes({ ingredients, onRefresh, profile }: Props) {
@@ -154,25 +151,25 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
         <input
           type="text" placeholder="Buscar ingrediente o proveedor…"
           value={search} onChange={e => setSearch(e.target.value)}
-          style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:220 }} />
+          style={{ background:'var(--c-panel)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:220 }} />
         <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
-          style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2 }}>
+          style={{ background:'var(--c-panel)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2 }}>
           <option value="">Todas las categorías</option>
           {categories.map(c => <option key={c}>{c}</option>)}
         </select>
         {isOwnerMgr && (
           <div style={{ marginLeft:'auto', display:'flex', gap:'0.4rem', alignItems:'center', flexWrap:'wrap' }}>
-            <button className="vt-range-btn" style={{ borderColor:'#3a3a3a', color:'#c8a96e' }}
+            <button className="vt-range-btn" style={{ borderColor:'var(--c-linea)', color:'var(--c-oro-texto)' }}
               onClick={exportCsv} title="Descargar ingredientes / plantilla CSV">
               ⬇ Export
             </button>
-            <label className="vt-range-btn" style={{ borderColor:'#2a4a3a', color:'#7ec8a0', cursor:'pointer', margin:0 }}>
+            <label className="vt-range-btn" style={{ borderColor:'var(--c-musgo-borde)', color:'var(--c-musgo)', cursor:'pointer', margin:0 }}>
               {importing ? '⟳ Importando…' : '📄 Importar CSV'}
               <input type="file" accept=".csv,text/csv" style={{ display:'none' }} disabled={importing}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleImportCsv(f); e.target.value = '' }} />
             </label>
             <button className="vt-range-btn"
-              style={{ borderColor:'var(--vt-green)', color:'var(--vt-green)' }}
+              style={{ borderColor:'var(--c-musgo)', color:'var(--c-musgo)' }}
               onClick={startNew}>
               + Nuevo
             </button>
@@ -181,18 +178,18 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
       </div>
 
       {importMsg && (
-        <div style={{ fontSize:'0.8rem', fontWeight:600, marginBottom:'0.75rem', color: importMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+        <div style={{ fontSize:'0.8rem', fontWeight:600, marginBottom:'0.75rem', color: importMsg.startsWith('✓') ? 'var(--c-musgo)' : 'var(--c-laca)' }}>
           {importMsg}
         </div>
       )}
 
       {/* Inline form */}
       {(editId !== undefined) && (
-        <div style={{ background:'var(--vt-ink)', border:'1px solid #2a2a2a', borderRadius:2, padding:'1rem', marginBottom:'1rem' }}>
-          <div style={{ fontSize:'0.75rem', letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--vt-gold)', marginBottom:'0.75rem', fontWeight:700 }}>
+        <div style={{ background:'var(--c-panel)', border:'1px solid var(--c-linea)', borderRadius:2, padding:'1rem', marginBottom:'1rem' }}>
+          <div style={{ fontSize:'0.75rem', color:'var(--c-oro-texto)', marginBottom:'0.75rem', fontWeight:700 }}>
             {editId === null ? '+ Nuevo ingrediente' : 'Editar ingrediente'}
           </div>
-          {error && <div style={{ color:'#c23b22', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
+          {error && <div style={{ color:'var(--c-laca)', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'0.5rem', marginBottom:'0.75rem' }}>
             {[
               { label:'Nombre *',        key:'name',          type:'text',   placeholder:'ej: Atún fresco' },
@@ -205,7 +202,7 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
               { label:'Notas',           key:'notes',         type:'text',   placeholder:'opcional' },
             ].map(f => (
               <div key={f.key}>
-                <div style={{ fontSize:'0.65rem', color:'#555', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.08em' }}>{f.label}</div>
+                <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>{f.label}</div>
                 {f.type === 'select' ? (
                   <select className="cd-tbl-select"
                     value={(form as Record<string,unknown>)[f.key] as string ?? ''}
@@ -226,19 +223,19 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
             ))}
           </div>
           {editId && prices.length > 0 && (
-            <div style={{ marginTop:'0.5rem', marginBottom:'0.75rem', padding:'0.5rem 0.75rem', background:'#0d0d0d', borderRadius:4 }}>
-              <div style={{ fontSize:'0.62rem', letterSpacing:'0.1em', textTransform:'uppercase', color:'#777', marginBottom:'0.35rem' }}>Historial de precios (unidad base)</div>
+            <div style={{ marginTop:'0.5rem', marginBottom:'0.75rem', padding:'0.5rem 0.75rem', background:'var(--c-panel)', borderRadius:4 }}>
+              <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:'0.35rem' }}>Historial de precios (unidad base)</div>
               {prices.slice(0, 6).map(p => (
-                <div key={p.id} style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem', color:'#bbb', padding:'1px 0' }}>
+                <div key={p.id} style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem', color:'var(--c-tinta)', padding:'1px 0' }}>
                   <span>{p.fecha ?? '—'}</span>
-                  <span style={{ fontFamily:"'DM Mono', monospace", fontWeight:700, color:'var(--t-gold,#c8a96e)' }}>₡ {Number(p.precio_unitario).toLocaleString('es-CR')}</span>
+                  <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight:700, color:'var(--c-oro-texto)' }}>₡ {Number(p.precio_unitario).toLocaleString('es-CR')}</span>
                 </div>
               ))}
             </div>
           )}
           <div style={{ display:'flex', gap:'0.5rem' }}>
             <button className="vt-range-btn"
-              style={{ borderColor:'var(--vt-green)', color:'var(--vt-green)' }}
+              style={{ borderColor:'var(--c-musgo)', color:'var(--c-musgo)' }}
               disabled={saving} onClick={handleSave}>
               {saving ? '⟳ Guardando…' : '✓ Guardar'}
             </button>
@@ -266,33 +263,33 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
             {filtered.map(ing => {
               const isLow   = ing.min_stock > 0 && ing.current_stock <= ing.min_stock
               const isEmpty = ing.current_stock <= 0
-              const rowColor = isEmpty ? '#c23b22' : isLow ? '#e8a838' : 'var(--vt-paper)'
+              const rowColor = isEmpty ? 'var(--c-laca)' : isLow ? 'var(--c-oro-texto)' : 'var(--c-tinta)'
               return (
                 <tr key={ing.id}>
                   <td style={{ fontWeight:600, color:rowColor }}>
                     {isEmpty ? '🔴 ' : isLow ? '🟡 ' : ''}{ing.name}
                   </td>
-                  <td style={{ fontSize:'0.75rem', color:'#888' }}>{ing.category || '—'}</td>
+                  <td style={{ fontSize:'0.75rem', color:'var(--c-gris)' }}>{ing.category || '—'}</td>
                   <td className="r" style={{ color:rowColor, fontWeight:700 }}>
                     {ing.current_stock.toLocaleString('es-CR')} {ing.unit}
                   </td>
-                  <td className="r" style={{ color:'#555', fontSize:'0.78rem' }}>
+                  <td className="r" style={{ color:'var(--c-gris)', fontSize:'0.78rem' }}>
                     {ing.min_stock > 0 ? `${ing.min_stock.toLocaleString('es-CR')} ${ing.unit}` : '—'}
                   </td>
                   <td className="r" style={{ fontSize:'0.78rem' }}>{ing.cost_per_unit > 0 ? fi(ing.cost_per_unit) : '—'}</td>
-                  <td className="r" style={{ fontSize:'0.78rem', color:'#888' }}>
+                  <td className="r" style={{ fontSize:'0.78rem', color:'var(--c-gris)' }}>
                     {ing.cost_per_unit > 0 ? fi(ing.current_stock * ing.cost_per_unit) : '—'}
                   </td>
-                  <td style={{ fontSize:'0.75rem', color:'#666' }}>{ing.supplier || '—'}</td>
+                  <td style={{ fontSize:'0.75rem', color:'var(--c-gris)' }}>{ing.supplier || '—'}</td>
                   {isOwnerMgr && (
                     <td style={{ whiteSpace:'nowrap' }}>
                       <button onClick={() => startEdit(ing)}
-                        style={{ background:'none', border:'1px solid #2a2a2a', color:'#888', borderRadius:2, padding:'2px 8px', fontSize:'0.68rem', cursor:'pointer', marginRight:4 }}>
+                        style={{ background:'none', border:'1px solid var(--c-linea)', color:'var(--c-gris)', borderRadius:2, padding:'2px 8px', fontSize:'0.68rem', cursor:'pointer', marginRight:4 }}>
                         Editar
                       </button>
                       <button onClick={() => handleDelete(ing.id, ing.name)}
                         disabled={deleting === ing.id}
-                        style={{ background:'none', border:'1px solid #3a1a1a', color:'#c23b22', borderRadius:2, padding:'2px 8px', fontSize:'0.68rem', cursor:'pointer' }}>
+                        style={{ background:'none', border:'1px solid var(--c-laca)', color:'var(--c-laca)', borderRadius:2, padding:'2px 8px', fontSize:'0.68rem', cursor:'pointer' }}>
                         {deleting === ing.id ? '…' : '✕'}
                       </button>
                     </td>
@@ -302,7 +299,7 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ textAlign:'center', padding:'2rem', color:'#555', fontSize:'0.85rem' }}>
+                <td colSpan={8} style={{ textAlign:'center', padding:'2rem', color:'var(--c-gris)', fontSize:'0.85rem' }}>
                   {ingredients.length === 0 ? 'Sin ingredientes. Agregá el primero arriba.' : 'Sin resultados para ese filtro.'}
                 </td>
               </tr>

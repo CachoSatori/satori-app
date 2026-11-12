@@ -676,7 +676,7 @@ export default function CashTurno({
                 min={today} max={today}
                 onChange={e => setApFecha(e.target.value)}
                 onClick={e => { try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch { /* noop */ } }} />
-              <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 3 }}>🔒 Fija en hoy — la Caja Diaria no se abre en otra fecha.</div>
+              <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 3 }}>🔒 Fija en hoy — la Caja Diaria no se abre en otra fecha.</div>
             </div>
           </div>
 
@@ -688,8 +688,8 @@ export default function CashTurno({
             <>
 
               {carrySugerido != null && carryFrom && (
-                <div style={{ padding: '0.625rem 0.875rem', background: 'rgba(42,122,106,.1)', border: '1px solid var(--t-teal,#2a7a6a)', borderRadius: 4, marginBottom: '0.75rem', fontSize: '0.82rem' }}>
-                  El cierre del <strong>{carryFrom}</strong> asignó a Caja Proveedores: <strong style={{ fontFamily: "'DM Mono', monospace" }}>₡{carrySugerido.toLocaleString('es-CR')}</strong>. Confirmá que es el efectivo con el que arrancás (si es otro monto, te va a pedir confirmar).
+                <div style={{ padding: '0.625rem 0.875rem', background: 'var(--c-teal-fondo)', border: '1px solid var(--c-teal)', borderRadius: 4, marginBottom: '0.75rem', fontSize: '0.82rem' }}>
+                  El cierre del <strong>{carryFrom}</strong> asignó a Caja Proveedores: <strong style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' }}>₡{carrySugerido.toLocaleString('es-CR')}</strong>. Confirmá que es el efectivo con el que arrancás (si es otro monto, te va a pedir confirmar).
                 </div>
               )}
 
@@ -703,7 +703,7 @@ export default function CashTurno({
                       placeholder="0" onChange={e => setApProvCRC(e.target.value === '' ? '' : Number(e.target.value))} />
                   </div>
                   {carryFrom && (
-                    <div style={{ fontSize: '0.66rem', color: 'var(--t-teal)', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.66rem', color: 'var(--c-teal)', marginTop: 2 }}>
                       ↻ asignado en el cierre del {carryFrom}{carrySugerido != null ? `: ₡${carrySugerido.toLocaleString('es-CR')}` : ''}
                     </div>
                   )}
@@ -716,7 +716,7 @@ export default function CashTurno({
                       placeholder="0" onChange={e => setApUSD(e.target.value === '' ? '' : Number(e.target.value))} />
                   </div>
                   {Number(apUSD) > 0 && (
-                    <div style={{ fontSize:'0.68rem', color:'#888', marginTop:2 }}>
+                    <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginTop:2 }}>
                       ≈ ₡{(Number(apUSD) * tc).toLocaleString('es-CR')} al TC {tc}
                     </div>
                   )}
@@ -754,7 +754,7 @@ export default function CashTurno({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           {canManage && (
             <button onClick={descartarTurno} title="Descartar turno (error de fecha) y empezar de 0"
-              style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 4, padding: '4px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>
+              style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 4, padding: '4px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>
               ↩ Descartar turno
             </button>
           )}
@@ -772,12 +772,12 @@ export default function CashTurno({
         </div>
         <div className="cd-top-card gold">
           <div className="cd-tc-label">Gastado efectivo</div>
-          <div className="cd-tc-val" style={{ color: gastadoEfTotal > 0 ? '#a07030' : '#aaa' }}>{fi(gastadoEfTotal)}</div>
+          <div className="cd-tc-val" style={{ color: gastadoEfTotal > 0 ? 'var(--c-oro-texto)' : 'var(--c-gris-claro)' }}>{fi(gastadoEfTotal)}</div>
           <div className="cd-tc-sub">proveedores + otros egresos</div>
         </div>
         <div className="cd-top-card red">
           <div className="cd-tc-label">Disponible</div>
-          <div className="cd-tc-val" style={{ color: cajaDeberia < 0 ? '#c0392b' : cajaDeberia < 10000 ? '#a07030' : '#444' }}>
+          <div className="cd-tc-val" style={{ color: cajaDeberia < 0 ? 'var(--c-laca)' : cajaDeberia < 10000 ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>
             {fi(cajaDeberia)}
           </div>
           <div className="cd-tc-sub">{cajaDeberia < 0 ? '⚠ déficit en caja' : 'restante en caja'}</div>
@@ -825,17 +825,17 @@ export default function CashTurno({
         {displayIngresos.length > 0 && (
           <div className="cd-section-body">
             {displayIngresos.map(i => (
-              <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+              <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.5rem', borderBottom: '1px solid var(--c-linea)' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>
                     {Number(i.crc) > 0 && fi(Number(i.crc))}
-                    {Number(i.usd) > 0 && <span style={{ color: '#1a4a7a' }}>{Number(i.crc) > 0 ? ' · ' : ''}${Number(i.usd)}</span>}
+                    {Number(i.usd) > 0 && <span style={{ color: 'var(--c-azul)' }}>{Number(i.crc) > 0 ? ' · ' : ''}${Number(i.usd)}</span>}
                   </div>
-                  <div style={{ fontSize: '0.66rem', color: '#5a5040' }}>{i.nota || 'Ingreso adicional'}</div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--c-tinta)' }}>{i.nota || 'Ingreso adicional'}</div>
                 </div>
                 {canManage && (
                   <button onClick={() => removeIngreso(i.id)} title="Quitar"
-                    style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                    style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
                 )}
               </div>
             ))}
@@ -860,22 +860,22 @@ export default function CashTurno({
         <div className="cd-section-body">
           {displayPagos.length === 0 && <div className="cd-empty-row">ℹ Sin pagos registrados</div>}
           {displayPagos.map(p => (
-            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--c-linea)' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.supplier_name || 'Proveedor'}</div>
-                <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>
+                <div style={{ fontSize: '0.68rem', color: 'var(--c-tinta)' }}>
                   {p.method === 'Efectivo' ? '💵 Efectivo' : p.method === 'Transferencia' ? '🏦 Transferencia' : p.method === 'SINPE' ? '📲 SINPE' : `₿ ${p.method}`}
                   {p.reference ? ` · ${p.reference}` : ''}
                   {` · ${new Date(p.at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`}
-                  {p.method === 'Transferencia' && <span style={{ color: '#a07030' }}> · pendiente · no descuenta efectivo</span>}
-                  {p.method !== 'Efectivo' && p.method !== 'Transferencia' && <span style={{ color: '#2a7a6a' }}> · banco</span>}
-                  {p.readonly && <span style={{ color: '#a07030' }}> · desde Bandeja (se gestiona en Pendientes)</span>}
-                  {!p.persistedId && <span style={{ color: '#c0392b' }}> · sin guardar</span>}
-                  {p.pending && <span style={{ color: '#a07830', fontWeight: 700 }}> · ⏳ por sincronizar</span>}
+                  {p.method === 'Transferencia' && <span style={{ color: 'var(--c-oro-texto)' }}> · pendiente · no descuenta efectivo</span>}
+                  {p.method !== 'Efectivo' && p.method !== 'Transferencia' && <span style={{ color: 'var(--c-teal)' }}> · banco</span>}
+                  {p.readonly && <span style={{ color: 'var(--c-oro-texto)' }}> · desde Bandeja (se gestiona en Pendientes)</span>}
+                  {!p.persistedId && <span style={{ color: 'var(--c-laca)' }}> · sin guardar</span>}
+                  {p.pending && <span style={{ color: 'var(--c-oro-texto)', fontWeight: 700 }}> · ⏳ por sincronizar</span>}
                   {/* T3-B: pago de mercadería guardado SIN factura enlazada (documents) NI fotos adjuntas
                       → nota para control del manager. Mismo color que "falta factura" (FacturaVerify). */}
                   {docsLoaded && p.persistedId && p.attachments.length === 0 && !linkedDocMovs.has(p.persistedId) && (
-                    <span style={{ color: '#c8a030', fontWeight: 700 }}> · ⚠ sin foto</span>
+                    <span style={{ color: 'var(--c-oro-texto)', fontWeight: 700 }}> · ⚠ sin foto</span>
                   )}
                 </div>
               </div>
@@ -885,9 +885,9 @@ export default function CashTurno({
                 {canManage && !p.readonly && (
                   <>
                     <button onClick={() => openEditPago(p)} title="Editar"
-                      style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '2px 7px', fontSize: '0.72rem', cursor: 'pointer' }}>✏</button>
+                      style={{ background: 'none', border: '1px solid var(--c-linea)', color: 'var(--c-tinta)', borderRadius: 3, padding: '2px 7px', fontSize: '0.72rem', cursor: 'pointer' }}>✏</button>
                     <button onClick={() => removePago(p.id)} title="Eliminar"
-                      style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                      style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
                   </>
                 )}
               </div>
@@ -926,20 +926,20 @@ export default function CashTurno({
         <div className="cd-section-body">
           {otrosEgresosList.length === 0 && <div className="cd-empty-row">ℹ Sin otros egresos registrados</div>}
           {otrosEgresosList.map(m => (
-            <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+            <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--c-linea)' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{m.subcategory || m.description}</div>
-                <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>
+                <div style={{ fontSize: '0.68rem', color: 'var(--c-tinta)' }}>
                   {m.method === 'Efectivo' ? '💵 Efectivo' : '🏦 Transferencia'}
                   {m.description && m.description !== m.subcategory ? ` · ${m.description}` : ''}
-                  {m.status === 'pendiente' && <span style={{ color: '#a07030' }}> · pendiente</span>}
+                  {m.status === 'pendiente' && <span style={{ color: 'var(--c-oro-texto)' }}> · pendiente</span>}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
-                <span style={{ fontWeight: 700, color: '#c0392b' }}>{fi(m.amount_crc)}</span>
+                <span style={{ fontWeight: 700, color: 'var(--c-laca)' }}>{fi(m.amount_crc)}</span>
                 {canManage && (
                   <button onClick={() => removeEgreso(m.id)} title="Eliminar"
-                    style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                    style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
                 )}
               </div>
             </div>
@@ -953,7 +953,7 @@ export default function CashTurno({
         <div className="cd-section">
           <button type="button" className="cd-section-head" aria-expanded={propinasOpen}
             onClick={() => setPropinasOpen(o => !o)}
-            style={{ width: '100%', font: 'inherit', textAlign: 'left', cursor: 'pointer', border: 'none', borderBottom: propinasOpen ? '1px solid var(--t-border, #d4cfc4)' : 'none' }}>
+            style={{ width: '100%', font: 'inherit', textAlign: 'left', cursor: 'pointer', border: 'none', borderBottom: propinasOpen ? '1px solid var(--c-linea)' : 'none' }}>
             <div className="cd-section-icon">🎁</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="cd-section-title">
@@ -961,24 +961,24 @@ export default function CashTurno({
               </div>
               <div className="cd-section-sub">Cerradas en Propinas — pagá ahora o dejá pendiente (como un proveedor)</div>
             </div>
-            <span style={{ color: '#8a8070', fontSize: '0.8rem' }}>{propinasOpen ? '▼' : '▶'}</span>
+            <span style={{ color: 'var(--c-gris)', fontSize: '0.8rem' }}>{propinasOpen ? '▼' : '▶'}</span>
           </button>
           {propinasOpen && (
           <div className="cd-section-body">
             {propinasPorPagar.map(p => (
-              <div key={p.session_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+              <div key={p.session_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--c-linea)' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>Propinas {shiftLabel(p.shift_type)} · {formatDate(p.session_date)}</div>
-                  <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>{fi(p.total_electronico_crc)} electrónico a entregar</div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--c-tinta)' }}>{fi(p.total_electronico_crc)} electrónico a entregar</div>
                 </div>
                 {canManage && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
-                    <span style={{ fontWeight: 700, color: '#c0392b', marginRight: '0.25rem' }}>{fi(p.total_electronico_crc)}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--c-laca)', marginRight: '0.25rem' }}>{fi(p.total_electronico_crc)}</span>
                     <button onClick={() => pagarPropina(p, 'aprobado')} disabled={payingProp === p.session_id} title="Registrar el pago ahora"
-                      style={{ background: 'var(--t-ink,#0d0d0d)', border: 'none', color: 'var(--t-gold,#c8a96e)', borderRadius: 3, padding: '4px 10px', fontSize: '0.72rem', cursor: payingProp === p.session_id ? 'wait' : 'pointer', opacity: payingProp === p.session_id ? 0.5 : 1 }}>
+                      style={{ background: 'var(--c-tinta)', border: 'none', color: 'var(--c-fondo)', borderRadius: 3, padding: '4px 10px', fontSize: '0.72rem', cursor: payingProp === p.session_id ? 'wait' : 'pointer', opacity: payingProp === p.session_id ? 0.5 : 1 }}>
                       {payingProp === p.session_id ? 'Guardando…' : 'Pagar ahora'}</button>
                     <button onClick={() => pagarPropina(p, 'pendiente')} disabled={payingProp === p.session_id} title="Dejar pendiente (se paga después, como un proveedor)"
-                      style={{ background: 'none', border: '1px solid #a07030', color: '#a07030', borderRadius: 3, padding: '4px 8px', fontSize: '0.72rem', cursor: payingProp === p.session_id ? 'wait' : 'pointer', opacity: payingProp === p.session_id ? 0.5 : 1 }}>Dejar pendiente</button>
+                      style={{ background: 'none', border: '1px solid var(--c-oro-texto)', color: 'var(--c-oro-texto)', borderRadius: 3, padding: '4px 8px', fontSize: '0.72rem', cursor: payingProp === p.session_id ? 'wait' : 'pointer', opacity: payingProp === p.session_id ? 0.5 : 1 }}>Dejar pendiente</button>
                   </div>
                 )}
               </div>
@@ -990,12 +990,12 @@ export default function CashTurno({
 
       {/* Cierre de la Caja Diaria de proveedores (paso propio, EOD) */}
       {canClose && view !== 'cierre' && (
-        <div className="cd-section" style={{ borderColor: '#2a4a7a', borderWidth: 2 }}>
-          <div className="cd-section-head" style={{ background: '#e0edf8', borderBottomColor: '#8ab0d0' }}>
-            <div className="cd-section-icon" style={{ background: '#b0cce8' }}>🔒</div>
+        <div className="cd-section" style={{ borderColor: 'var(--c-azul)', borderWidth: 2 }}>
+          <div className="cd-section-head" style={{ background: 'var(--c-panel)', borderBottomColor: 'var(--c-linea)' }}>
+            <div className="cd-section-icon" style={{ background: 'var(--c-linea)' }}>🔒</div>
             <div>
-              <div className="cd-section-title" style={{ color: '#1a4a7a' }}>Cerrar Caja Diaria de proveedores</div>
-              <div className="cd-section-sub" style={{ color: '#3a6a9a' }}>Una vez al final del día (obligatorio aunque esté en cero) · solo el encargado</div>
+              <div className="cd-section-title" style={{ color: 'var(--c-azul)' }}>Cerrar Caja Diaria de proveedores</div>
+              <div className="cd-section-sub" style={{ color: 'var(--c-azul)' }}>Una vez al final del día (obligatorio aunque esté en cero) · solo el encargado</div>
             </div>
             <span className="cd-badge-manager">Manager</span>
           </div>
@@ -1029,20 +1029,20 @@ export default function CashTurno({
               {provGastadoEf > 0 && (
                 <div className="cd-verif-row">
                   <span>− Pagos a proveedores (efectivo)</span>
-                  <strong style={{ color: '#c0392b' }}>− {fi(provGastadoEf)}</strong>
+                  <strong style={{ color: 'var(--c-laca)' }}>− {fi(provGastadoEf)}</strong>
                 </div>
               )}
               {otrosEgresosEf > 0 && (
                 <div className="cd-verif-row">
                   <span>− Otros egresos efectivo</span>
-                  <strong style={{ color: '#c0392b' }}>− {fi(otrosEgresosEf)}</strong>
+                  <strong style={{ color: 'var(--c-laca)' }}>− {fi(otrosEgresosEf)}</strong>
                 </div>
               )}
               <div className="cd-verif-row">
                 <span>Debería quedar en la Caja Diaria</span>
                 <strong>{fi(cajaDeberia)}</strong>
               </div>
-              <div style={{ fontSize: '0.68rem', color: '#888', marginTop: 4 }}>
+              <div style={{ fontSize: '0.68rem', color: 'var(--c-gris)', marginTop: 4 }}>
                 ℹ La registradora la maneja el PoS — acá solo se cuenta la caja de proveedores.
               </div>
             </div>
@@ -1096,7 +1096,7 @@ export default function CashTurno({
               {ingresosTotal > 0 && (
                 <div className="cd-resumen-row">
                   <span>Ingresos adicionales</span>
-                  <strong style={{ color: '#c8a96e' }}>+ {fi(ingresosTotal)}</strong>
+                  <strong style={{ color: 'var(--c-oro-texto)' }}>+ {fi(ingresosTotal)}</strong>
                 </div>
               )}
               <div className="cd-resumen-row total">
@@ -1121,7 +1121,7 @@ export default function CashTurno({
               {provGastadoEf > 0 && (
                 <div className="cd-resumen-row">
                   <span>− Pagos a proveedores (efectivo)</span>
-                  <strong style={{ color: '#c0392b' }}>− {fi(provGastadoEf)}</strong>
+                  <strong style={{ color: 'var(--c-laca)' }}>− {fi(provGastadoEf)}</strong>
                 </div>
               )}
               {/* Otros egresos en EFECTIVO de la Caja Diaria — propinas pagadas desde la caja,
@@ -1139,12 +1139,12 @@ export default function CashTurno({
               {otrosEgresosEf > 0 && (
                 <div className="cd-resumen-row">
                   <span>− Otros egresos (efectivo)</span>
-                  <strong style={{ color: '#c0392b' }}>− {fi(otrosEgresosEf)}</strong>
+                  <strong style={{ color: 'var(--c-laca)' }}>− {fi(otrosEgresosEf)}</strong>
                 </div>
               )}
               <div className="cd-resumen-row">
                 <span>Efectivo que debería quedar (Caja Diaria)</span>
-                <strong style={{ color: '#27874f' }}>{fi(cajaDeberia)}</strong>
+                <strong style={{ color: 'var(--c-musgo)' }}>{fi(cajaDeberia)}</strong>
               </div>
             </div>
 
@@ -1221,12 +1221,12 @@ export default function CashTurno({
             <div style={{ marginTop: '0.5rem' }}>
               {!addSupOpen ? (
                 <button type="button" onClick={() => { setAddSupOpen(true); setNewSupName(supSearch) }}
-                  style={{ background: 'none', border: '1px dashed var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '5px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>
+                  style={{ background: 'none', border: '1px dashed var(--c-linea)', color: 'var(--c-tinta)', borderRadius: 3, padding: '5px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>
                   + Proveedor nuevo
                 </button>
               ) : (
-                <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '0.625rem' }}>
-                  <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: 6, fontWeight: 700 }}>Nuevo proveedor</div>
+                <div style={{ border: '1px solid var(--c-linea)', borderRadius: 4, padding: '0.625rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--c-tinta)', marginBottom: 6, fontWeight: 700 }}>Nuevo proveedor</div>
                   <input type="text" className="tips-input-dark" style={{ width: '100%', marginBottom: 6 }} placeholder="Nombre del proveedor"
                     value={newSupName} onChange={e => setNewSupName(e.target.value)} />
                   <div style={{ display: 'flex', gap: '0.5rem', marginBottom: 6 }}>
@@ -1239,9 +1239,9 @@ export default function CashTurno({
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                     <button type="button" onClick={() => setAddSupOpen(false)}
-                      style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '5px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>Cancelar</button>
+                      style={{ background: 'none', border: '1px solid var(--c-linea)', color: 'var(--c-tinta)', borderRadius: 3, padding: '5px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>Cancelar</button>
                     <button type="button" onClick={crearProveedor} disabled={addSupSaving || !newSupName.trim()}
-                      style={{ background: 'var(--t-ink,#0d0d0d)', border: 'none', color: 'var(--t-gold,#c8a96e)', borderRadius: 3, padding: '5px 12px', fontSize: '0.74rem', cursor: 'pointer', opacity: addSupSaving || !newSupName.trim() ? 0.5 : 1 }}>
+                      style={{ background: 'var(--c-tinta)', border: 'none', color: 'var(--c-fondo)', borderRadius: 3, padding: '5px 12px', fontSize: '0.74rem', cursor: 'pointer', opacity: addSupSaving || !newSupName.trim() ? 0.5 : 1 }}>
                       {addSupSaving ? 'Creando…' : 'Crear y usar'}
                     </button>
                   </div>
@@ -1277,7 +1277,7 @@ export default function CashTurno({
                 ))}
               </div>
               {draftMethod === 'Transferencia' && <div className="cd-method-info pend">→ Transferencia — queda como pendiente hasta confirmar · sale del Banco</div>}
-              <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 4 }}>
+              <div style={{ fontSize: '0.68rem', color: 'var(--c-tinta)', marginTop: 4 }}>
                 Caja origen: <strong>{draftMethod === 'Efectivo' ? 'Caja Proveedores' : 'Banco'}</strong>
               </div>
             </div>
@@ -1293,8 +1293,8 @@ export default function CashTurno({
             <div className="tips-field" style={{ marginTop: '0.75rem' }}>
               <div className="tips-field-label">Fotos de la factura</div>
               <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                border: '2px dashed var(--t-border,#d4cfc4)', borderRadius: 6, padding: '0.8rem',
-                cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, color: '#5a5040' }}>
+                border: '2px dashed var(--c-linea)', borderRadius: 6, padding: '0.8rem',
+                cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, color: 'var(--c-tinta)' }}>
                 📷 Sacar foto / agregar imagen
                 <input type="file" accept="image/*" capture="environment" multiple
                   style={{ display: 'none' }}
@@ -1309,22 +1309,22 @@ export default function CashTurno({
                   {draftFotosPrev.length > 0 && <FacturaThumbs paths={draftFotosPrev} size={52} />}
                   {draftFotosPrev.length > 0 && (
                     <button type="button" onClick={() => setDraftFotosPrev([])} title="Quitar las fotos ya guardadas de este pago"
-                      style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 7px', fontSize: '0.68rem', cursor: 'pointer' }}>
+                      style={{ background: 'none', border: '1px solid var(--c-laca-borde)', color: 'var(--c-laca)', borderRadius: 3, padding: '2px 7px', fontSize: '0.68rem', cursor: 'pointer' }}>
                       quitar guardadas
                     </button>
                   )}
                   {draftFotos.map((f, i) => (
                     <span key={i} style={{ position: 'relative', display: 'inline-block' }}>
                       <img src={fotoPreviews[i]} alt={f.name}
-                        style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--t-border,#d4cfc4)' }} />
+                        style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--c-linea)' }} />
                       <button type="button" onClick={() => setDraftFotos(prev => prev.filter((_, j) => j !== i))}
                         style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%',
-                          background: '#c0392b', color: '#fff', border: 'none', fontSize: '0.62rem', lineHeight: 1, cursor: 'pointer' }}>✕</button>
+                          background: 'var(--c-laca)', color: 'var(--c-fondo)', border: 'none', fontSize: '0.62rem', lineHeight: 1, cursor: 'pointer' }}>✕</button>
                     </span>
                   ))}
                 </div>
               )}
-              <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 4 }}>
+              <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 4 }}>
                 Se suben al confirmar el pago (necesitan conexión). Después se ven como miniatura en la lista — tap para verla completa.
               </div>
             </div>

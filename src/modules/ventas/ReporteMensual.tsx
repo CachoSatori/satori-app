@@ -78,7 +78,7 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
 
   // Badge de variación reutilizado por ambas comparaciones: verde ▲ +x% / rojo ▼ x% / gris — si no hay dato
   const varBadge = (v: string | null) => (
-    <strong style={{ color: v !== null ? (Number(v) >= 0 ? '#2a6a42' : '#c0392b') : '#888' }}>
+    <strong style={{ color: v !== null ? (Number(v) >= 0 ? 'var(--c-musgo)' : 'var(--c-laca)') : 'var(--c-gris)' }}>
       {v !== null ? (Number(v) >= 0 ? '▲ +' : '▼ ') + v + '%' : '—'}
     </strong>
   )
@@ -96,7 +96,7 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
           <div className="rpt-toolbar no-print">
             <div>
               <strong>Reporte {fmtMonthLabel(ym)}</strong>
-              <span style={{ fontSize: '0.78rem', color: '#888', marginLeft: '0.75rem' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--c-gris)', marginLeft: '0.75rem' }}>
                 Usá Ctrl+P (o Cmd+P) para guardar como PDF
               </span>
             </div>
@@ -158,13 +158,13 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
             {prog && (
               <>
                 <div className="rpt-section-title">Proyección de Meta</div>
-                <div style={{ marginBottom: '0.85rem', fontSize: '0.82rem', color: '#444' }}>
-                  <div style={{ fontWeight: 600, color: '#1a1a1a' }}>{prog.pct.toFixed(1)}% completado</div>
-                  <div>{fi(prog.ventasMes)} <span style={{ color: '#888' }}>de {fi(prog.meta)}</span></div>
-                  <div style={{ marginTop: '0.35rem', fontWeight: 600, color: prog.onTrack ? '#2a6a42' : '#c0392b' }}>
+                <div style={{ marginBottom: '0.85rem', fontSize: '0.82rem', color: 'var(--c-gris-claro)' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--c-tinta)' }}>{prog.pct.toFixed(1)}% completado</div>
+                  <div>{fi(prog.ventasMes)} <span style={{ color: 'var(--c-gris)' }}>de {fi(prog.meta)}</span></div>
+                  <div style={{ marginTop: '0.35rem', fontWeight: 600, color: prog.onTrack ? 'var(--c-musgo)' : 'var(--c-laca)' }}>
                     {prog.onTrack ? '✓ En camino' : '⚠ Por debajo'} · Proyección: {fi(prog.projection)} ({(prog.meta > 0 ? prog.projection / prog.meta * 100 : 0).toFixed(0)}%)
                   </div>
-                  <div style={{ color: '#666' }}>Meta diaria implícita: <strong style={{ color: '#333' }}>{fi(prog.metaDia)}</strong></div>
+                  <div style={{ color: 'var(--c-gris)' }}>Meta diaria implícita: <strong style={{ color: 'var(--c-gris-claro)' }}>{fi(prog.metaDia)}</strong></div>
                 </div>
               </>
             )}
@@ -216,7 +216,7 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
                         <tr key={d}>
                           <td>{dowLabel(d)}</td>
                           <td className="rpt-td-val">{fi(Math.round(v.sum / v.cnt))}</td>
-                          <td style={{ textAlign: 'right', color: '#888', fontSize: '0.75rem' }}>{v.cnt}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--c-gris)', fontSize: '0.75rem' }}>{v.cnt}</td>
                         </tr>
                       ) : null
                     })}
@@ -245,7 +245,7 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
                   <tbody>
                     {salAggs.map(({ name, agg }, i) => (
                       <tr key={name}>
-                        <td style={{ color: '#888' }}>{i + 1}</td>
+                        <td style={{ color: 'var(--c-gris)' }}>{i + 1}</td>
                         <td style={{ fontWeight: 600 }}>{name}</td>
                         <td className="rpt-td-val">{agg.days}</td>
                         <td className="rpt-td-val">{fi(agg.total)}</td>
@@ -277,7 +277,7 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
                     <tbody>
                       {prods10.map((p, i) => (
                         <tr key={p.nombre}>
-                          <td style={{ color: '#888' }}>{i + 1}</td>
+                          <td style={{ color: 'var(--c-gris)' }}>{i + 1}</td>
                           <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</td>
                           <td className="rpt-td-val">{p.q}</td>
                           <td className="rpt-td-val">{fi(p.m)}</td>

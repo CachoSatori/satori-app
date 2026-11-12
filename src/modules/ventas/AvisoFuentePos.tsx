@@ -16,7 +16,7 @@ export default function AvisoFuentePos({ estado, ultimoDiaXls }: {
       data-estado-pos={estado}
       style={{
         margin: '0.75rem 1rem', padding: '0.55rem 0.8rem', borderRadius: 4,
-        background: '#fff4e0', color: '#7a4b00', border: '1px solid #f0c27a',
+        background: 'var(--c-oro-fondo)', color: 'var(--c-oro-texto)', border: '1px solid var(--c-oro)',
         fontSize: '0.8rem', fontWeight: 600,
       }}
     >

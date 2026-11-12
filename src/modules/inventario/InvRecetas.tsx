@@ -11,14 +11,11 @@ import {
 } from '../../shared/api/inventario'
 import { getProductMap, updateProductInfo } from '../../shared/api/ventas'
 import type { ProductMap } from '../../shared/types/ventas'
+import { fi } from '../../shared/utils'
 
 interface Props {
   ingredients: Ingredient[]
   onRefresh:   () => void
-}
-
-function fi(n: number): string {
-  return '₡ ' + Math.round(n).toLocaleString('es-CR')
 }
 
 export default function InvRecetas({ ingredients }: Props) {
@@ -183,22 +180,22 @@ export default function InvRecetas({ ingredients }: Props) {
 
   return (
     <div className="vt-section">
-      {error && <div style={{ color:'#c23b22', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
+      {error && <div style={{ color:'var(--c-laca)', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
 
       {/* Barra de sincronización de costos teóricos → product_map */}
-      <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap', marginBottom:'0.75rem', padding:'0.6rem 0.75rem', background:'rgba(74,154,106,0.06)', border:'1px solid rgba(74,154,106,0.25)', borderRadius:2 }}>
-        <span style={{ fontSize:'0.72rem', color:'#4a9a6a', fontWeight:700, letterSpacing:'0.04em' }}>⇄ Food cost teórico</span>
-        <span style={{ fontSize:'0.68rem', color:'#888' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap', marginBottom:'0.75rem', padding:'0.6rem 0.75rem', background:'var(--c-musgo-fondo)', border:'1px solid var(--c-musgo-borde)', borderRadius:2 }}>
+        <span style={{ fontSize:'0.72rem', color:'var(--c-musgo)', fontWeight:700, letterSpacing:'0.04em' }}>⇄ Food cost teórico</span>
+        <span style={{ fontSize:'0.68rem', color:'var(--c-gris)' }}>
           Calcula el costo desde la receta y lo escribe en el producto (lo usa MenuEng y el análisis de margen)
         </span>
         <button
           onClick={syncAll}
           disabled={syncing || recipes.length === 0}
-          style={{ marginLeft:'auto', fontSize:'0.78rem', padding:'5px 12px', borderRadius:2, background: syncing ? '#1a1a1a' : 'var(--vt-green)', color: syncing ? '#666' : '#0a0a0a', fontWeight:800, border:'none', cursor: syncing ? 'default' : 'pointer' }}>
+          style={{ marginLeft:'auto', fontSize:'0.78rem', padding:'5px 12px', borderRadius:2, background: syncing ? 'var(--c-panel)' : 'var(--c-tinta)', color: syncing ? 'var(--c-gris)' : 'var(--c-fondo)', fontWeight:800, border:'none', cursor: syncing ? 'default' : 'pointer' }}>
           {syncing ? '⟳ Sincronizando…' : `⇄ Sincronizar todos (${recipes.length})`}
         </button>
         {syncMsg && (
-          <span style={{ width:'100%', fontSize:'0.78rem', fontWeight:600, color: syncMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)' }}>{syncMsg}</span>
+          <span style={{ width:'100%', fontSize:'0.78rem', fontWeight:600, color: syncMsg.startsWith('✓') ? 'var(--c-musgo)' : 'var(--c-laca)' }}>{syncMsg}</span>
         )}
       </div>
 
@@ -209,7 +206,7 @@ export default function InvRecetas({ ingredients }: Props) {
           <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginBottom:'0.75rem' }}>
             <div className="vt-sl" style={{ margin:0 }}>Recetas ({recipes.length})</div>
             <input type="text" placeholder="Buscar…" value={search} onChange={e => setSearch(e.target.value)}
-              style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'4px 8px', fontSize:'0.75rem', borderRadius:2, width:140, marginLeft:'auto' }} />
+              style={{ background:'var(--c-panel)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'4px 8px', fontSize:'0.75rem', borderRadius:2, width:140, marginLeft:'auto' }} />
           </div>
 
           <div style={{ display:'flex', flexDirection:'column', gap:'0.35rem' }}>
@@ -222,9 +219,9 @@ export default function InvRecetas({ ingredients }: Props) {
               const drift    = unitCost > 0 && pmCost > 0 && Math.abs(unitCost - pmCost) > 1
               const isOpen   = expanded === recipe.id
               return (
-                <div key={recipe.id} style={{ border:'1px solid #2a2a2a', borderRadius:2, overflow:'hidden' }}>
+                <div key={recipe.id} style={{ border:'1px solid var(--c-linea)', borderRadius:2, overflow:'hidden' }}>
                   {/* Header */}
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.5rem 0.75rem', background:'var(--vt-ink)', cursor:'pointer' }}
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.5rem 0.75rem', background:'var(--c-panel)', cursor:'pointer' }}
                     onClick={() => expandRecipe(recipe)}>
                     <div>
                       <span style={{ fontWeight:600, fontSize:'0.82rem' }}>{recipe.product_name}</span>
@@ -232,12 +229,12 @@ export default function InvRecetas({ ingredients }: Props) {
                     </div>
                     <div style={{ display:'flex', gap:'0.6rem', alignItems:'center' }} onClick={e => e.stopPropagation()}>
                       {cost > 0 && (
-                        <span style={{ fontSize:'0.72rem', color:'#4a9a6a', fontWeight:700 }} title="Costo teórico por unidad (receta ÷ rendimiento)">
+                        <span style={{ fontSize:'0.72rem', color:'var(--c-musgo)', fontWeight:700 }} title="Costo teórico por unidad (receta ÷ rendimiento)">
                           receta: {fi(unitCost)}
                         </span>
                       )}
                       {pmCost > 0 && (
-                        <span style={{ fontSize:'0.7rem', color: drift ? '#c8a030' : '#666', fontWeight:600 }} title="Costo actual en el producto (product_map)">
+                        <span style={{ fontSize:'0.7rem', color: drift ? 'var(--c-oro-texto)' : 'var(--c-gris)', fontWeight:600 }} title="Costo actual en el producto (product_map)">
                           pm: {fi(pmCost)}{drift ? ' ⚠' : ''}
                         </span>
                       )}
@@ -246,28 +243,28 @@ export default function InvRecetas({ ingredients }: Props) {
                           onClick={() => syncOne(recipe)}
                           disabled={syncing}
                           title="Escribir este costo en el producto"
-                          style={{ fontSize:'0.66rem', padding:'2px 7px', borderRadius:2, border:'1px solid var(--vt-green)', background: drift || pmCost === 0 ? 'rgba(74,154,106,0.15)' : 'transparent', color:'var(--vt-green)', cursor: syncing ? 'default' : 'pointer', fontWeight:700 }}>
+                          style={{ fontSize:'0.66rem', padding:'2px 7px', borderRadius:2, border:'1px solid var(--c-musgo)', background: drift || pmCost === 0 ? 'var(--c-musgo-fondo)' : 'transparent', color:'var(--c-musgo)', cursor: syncing ? 'default' : 'pointer', fontWeight:700 }}>
                           ⇄
                         </button>
                       )}
-                      <span style={{ color:'#555', fontSize:'0.78rem', cursor:'pointer' }} onClick={() => expandRecipe(recipe)}>{isOpen ? '▲' : '▶'} {ris.length} ing.</span>
+                      <span style={{ color:'var(--c-gris)', fontSize:'0.78rem', cursor:'pointer' }} onClick={() => expandRecipe(recipe)}>{isOpen ? '▲' : '▶'} {ris.length} ing.</span>
                     </div>
                   </div>
 
                   {/* Expanded: ingredient list + add form */}
                   {isOpen && (
-                    <div style={{ padding:'0.75rem', background:'#0d0d0d' }}>
+                    <div style={{ padding:'0.75rem', background:'var(--c-panel)' }}>
                       {ris.map(ri => {
                         const ing = ingredients.find(i => i.id === ri.ingredient_id)
                         const riCost = ing ? ri.quantity * (1 + ri.waste_factor) * ing.cost_per_unit : 0
                         return (
-                          <div key={ri.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.3rem 0', borderBottom:'1px solid #1a1a1a', fontSize:'0.78rem' }}>
-                            <span style={{ color:'#aaa', flex:1 }}>{ing?.name ?? ri.ingredient_id}</span>
-                            <span style={{ color:'#666', marginRight:'0.5rem' }}>{ri.quantity} {ri.unit}</span>
-                            {ri.waste_factor > 0 && <span style={{ color:'#555', fontSize:'0.68rem', marginRight:'0.5rem' }}>+{(ri.waste_factor*100).toFixed(0)}% merma</span>}
-                            {riCost > 0 && <span style={{ color:'#4a9a6a', fontWeight:600, marginRight:'0.5rem' }}>{fi(riCost)}</span>}
+                          <div key={ri.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.3rem 0', borderBottom:'1px solid var(--c-linea)', fontSize:'0.78rem' }}>
+                            <span style={{ color:'var(--c-tinta)', flex:1 }}>{ing?.name ?? ri.ingredient_id}</span>
+                            <span style={{ color:'var(--c-gris)', marginRight:'0.5rem' }}>{ri.quantity} {ri.unit}</span>
+                            {ri.waste_factor > 0 && <span style={{ color:'var(--c-gris)', fontSize:'0.68rem', marginRight:'0.5rem' }}>+{(ri.waste_factor*100).toFixed(0)}% merma</span>}
+                            {riCost > 0 && <span style={{ color:'var(--c-musgo)', fontWeight:600, marginRight:'0.5rem' }}>{fi(riCost)}</span>}
                             <button onClick={() => removeRI(recipe.id, ri.id)}
-                              style={{ background:'none', border:'none', color:'#c23b22', cursor:'pointer', fontSize:'0.82rem', padding:'0 4px' }}>✕</button>
+                              style={{ background:'none', border:'none', color:'var(--c-laca)', cursor:'pointer', fontSize:'0.82rem', padding:'0 4px' }}>✕</button>
                           </div>
                         )
                       })}
@@ -286,7 +283,7 @@ export default function InvRecetas({ ingredients }: Props) {
                         <input className="cd-tbl-input" type="number" min="0" max="50" step="1" placeholder="Merma%"
                           value={newWaste} onChange={e => setNewWaste(e.target.value)} style={{ flex:'0 1 70px', width:70 }} />
                         <button className="vt-range-btn"
-                          style={{ borderColor:'var(--vt-green)', color:'var(--vt-green)', flex:'0 0 auto' }}
+                          style={{ borderColor:'var(--c-musgo)', color:'var(--c-musgo)', flex:'0 0 auto' }}
                           disabled={saving} onClick={() => addIngredientToRecipe(recipe.id)}>
                           + Agregar
                         </button>
@@ -297,7 +294,7 @@ export default function InvRecetas({ ingredients }: Props) {
               )
             })}
             {filteredRecipes.length === 0 && (
-              <div style={{ color:'#555', fontSize:'0.82rem', padding:'1rem', textAlign:'center' }}>
+              <div style={{ color:'var(--c-gris)', fontSize:'0.82rem', padding:'1rem', textAlign:'center' }}>
                 {recipes.length === 0 ? 'Sin recetas todavía.' : 'Sin resultados.'}
               </div>
             )}
@@ -310,20 +307,20 @@ export default function InvRecetas({ ingredients }: Props) {
             <div className="vt-sl" style={{ margin:0 }}>Agregar receta a producto</div>
           </div>
           <input type="text" placeholder="Buscar producto…" value={prodSearch} onChange={e => setProdSearch(e.target.value)}
-            style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:'100%', marginBottom:'0.5rem', boxSizing:'border-box' }} />
+            style={{ background:'var(--c-panel)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:'100%', marginBottom:'0.5rem', boxSizing:'border-box' }} />
           <div style={{ display:'flex', flexDirection:'column', gap:3, maxHeight:480, overflowY:'auto' }}>
             {productsNoRecipe.map(n => {
               const info = pm[n]
               return (
-                <div key={n} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.4rem 0.625rem', background:'var(--vt-ink)', borderRadius:2, cursor:'pointer', border:'1px solid transparent' }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor='#2a2a2a')}
+                <div key={n} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.4rem 0.625rem', background:'var(--c-panel)', borderRadius:2, cursor:'pointer', border:'1px solid transparent' }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor='var(--c-linea)')}
                   onMouseLeave={e => (e.currentTarget.style.borderColor='transparent')}>
                   <span style={{ fontSize:'0.8rem', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                     {n}
                     {info && <span className={`vt-prod-tipo ${info.tipo}`} style={{ fontSize:'0.58rem', marginLeft:5 }}>{info.tipo}</span>}
                   </span>
                   <button className="vt-range-btn"
-                    style={{ fontSize:'0.65rem', borderColor:'#3a3a3a', color:'#888', flexShrink:0 }}
+                    style={{ fontSize:'0.65rem', borderColor:'var(--c-linea)', color:'var(--c-gris)', flexShrink:0 }}
                     disabled={saving} onClick={() => addProductRecipe(n)}>
                     + Receta
                   </button>
@@ -331,7 +328,7 @@ export default function InvRecetas({ ingredients }: Props) {
               )
             })}
             {productsNoRecipe.length === 0 && (
-              <div style={{ color:'#555', fontSize:'0.82rem', padding:'1rem', textAlign:'center' }}>
+              <div style={{ color:'var(--c-gris)', fontSize:'0.82rem', padding:'1rem', textAlign:'center' }}>
                 {Object.keys(pm).length === 0 ? 'Cargá el product map primero.' : '✓ Todos los productos tienen receta o no hay resultados.'}
               </div>
             )}

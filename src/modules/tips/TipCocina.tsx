@@ -127,7 +127,7 @@ export default function TipCocina({ employees }: Props) {
 
   const totalPool = weeks.reduce((s, w) => s + w.pool, 0)
 
-  if (loading) return <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Cargando…</div>
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--c-gris)' }}>Cargando…</div>
 
   if (cocinaRows.length === 0) {
     return (
@@ -141,14 +141,14 @@ export default function TipCocina({ employees }: Props) {
     <div style={{ padding: '0.5rem 0' }}>
       {/* Header + selector de mes */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
-        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#a07830' }}>🍳 Pool semanal de cocina</div>
+        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--c-oro-texto)' }}>🍳 Pool semanal de cocina</div>
         <select value={month} onChange={e => setMonth(e.target.value)}
-          style={{ background: '#111', border: '1px solid #2a2a2a', color: 'var(--t-gold)', padding: '5px 10px', borderRadius: 2, fontSize: '0.78rem', marginLeft: 'auto' }}>
+          style={{ background: 'var(--c-fondo)', border: '1px solid var(--c-linea)', color: 'var(--c-oro-texto)', padding: '5px 10px', borderRadius: 2, fontSize: '0.78rem', marginLeft: 'auto' }}>
           {availableMonths.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}
         </select>
       </div>
 
-      <div style={{ fontSize: '0.68rem', color: '#666', marginBottom: '0.75rem' }}>
+      <div style={{ fontSize: '0.68rem', color: 'var(--c-gris)', marginBottom: '0.75rem' }}>
         Selena entra al pool pero no recibe — su parte se reparte entre el resto de cocina.
       </div>
 
@@ -156,33 +156,33 @@ export default function TipCocina({ employees }: Props) {
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
-              <th style={{ textAlign: 'left', padding: '0.45rem 0.5rem', color: '#888', fontWeight: 500, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Semana</th>
-              <th style={{ textAlign: 'left', padding: '0.45rem 0.5rem', color: '#888', fontWeight: 500, fontSize: '0.68rem' }}>Período</th>
-              <th style={{ textAlign: 'right', padding: '0.45rem 0.5rem', color: '#888', fontWeight: 500, fontSize: '0.68rem' }}>Pool</th>
-              <th style={{ textAlign: 'center', padding: '0.45rem 0.5rem', color: '#888', fontWeight: 500, fontSize: '0.68rem' }}>Participantes</th>
-              <th style={{ textAlign: 'right', padding: '0.45rem 0.5rem', color: '#888', fontWeight: 500, fontSize: '0.68rem' }}>Por persona</th>
+            <tr style={{ borderBottom: '1px solid var(--c-linea)' }}>
+              <th style={{ textAlign: 'left', padding: '0.45rem 0.5rem', color: 'var(--c-gris)', fontWeight: 500, fontSize: '0.68rem', letterSpacing: '0.08em' }}>Semana</th>
+              <th style={{ textAlign: 'left', padding: '0.45rem 0.5rem', color: 'var(--c-gris)', fontWeight: 500, fontSize: '0.68rem' }}>Período</th>
+              <th style={{ textAlign: 'right', padding: '0.45rem 0.5rem', color: 'var(--c-gris)', fontWeight: 500, fontSize: '0.68rem' }}>Pool</th>
+              <th style={{ textAlign: 'center', padding: '0.45rem 0.5rem', color: 'var(--c-gris)', fontWeight: 500, fontSize: '0.68rem' }}>Participantes</th>
+              <th style={{ textAlign: 'right', padding: '0.45rem 0.5rem', color: 'var(--c-gris)', fontWeight: 500, fontSize: '0.68rem' }}>Por persona</th>
             </tr>
           </thead>
           <tbody>
             {weeks.map((w, i) => (
-              <tr key={w.key} style={{ borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+              <tr key={w.key} style={{ borderBottom: '1px solid var(--c-linea)' }}>
                 <td style={{ padding: '0.45rem 0.5rem', fontWeight: 600 }}>Sem. {i + 1}</td>
-                <td style={{ padding: '0.45rem 0.5rem', color: '#5a5040' }}>{fmtShort(w.start)} – {fmtShort(w.end)}</td>
+                <td style={{ padding: '0.45rem 0.5rem', color: 'var(--c-gris)' }}>{fmtShort(w.start)} – {fmtShort(w.end)}</td>
                 <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: 'var(--t-teal)', fontWeight: 600 }}>{fi(w.pool)}</td>
-                <td style={{ padding: '0.45rem 0.5rem', textAlign: 'center', color: '#5a5040' }} title={w.receptores.map(r => r.name).join(', ')}>
+                <td style={{ padding: '0.45rem 0.5rem', textAlign: 'center', color: 'var(--c-gris)' }} title={w.receptores.map(r => r.name).join(', ')}>
                   {w.receptores.length || '—'}
                 </td>
-                <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: '#a07830', fontWeight: 700 }}>
+                <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: 'var(--c-oro-texto)', fontWeight: 700 }}>
                   {w.perPerson > 0 ? fi(w.perPerson) : '—'}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr style={{ borderTop: '2px solid #2a2a2a', fontWeight: 700 }}>
+            <tr style={{ borderTop: '2px solid var(--c-tinta)', fontWeight: 700 }}>
               <td style={{ padding: '0.5rem' }}>TOTAL</td>
-              <td style={{ padding: '0.5rem', color: '#888', fontSize: '0.72rem' }}>{weeks.length} semana{weeks.length !== 1 ? 's' : ''}</td>
+              <td style={{ padding: '0.5rem', color: 'var(--c-gris)', fontSize: '0.72rem' }}>{weeks.length} semana{weeks.length !== 1 ? 's' : ''}</td>
               <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--t-teal)' }}>{fi(totalPool)}</td>
               <td></td><td></td>
             </tr>
@@ -193,23 +193,23 @@ export default function TipCocina({ employees }: Props) {
       {/* Tabla por empleado */}
       {byEmp.length > 0 && (
         <div style={{ marginTop: '1.5rem' }}>
-          <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>
             Por empleado · {month === 'all' ? 'todo el período' : fmtMonth(month)}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
-                <th style={{ textAlign: 'left', padding: '0.45rem 0.5rem', color: '#888', fontWeight: 500, fontSize: '0.68rem' }}>Empleado</th>
-                <th style={{ textAlign: 'center', padding: '0.45rem 0.5rem', color: '#888', fontWeight: 500, fontSize: '0.68rem' }}>Semanas</th>
-                <th style={{ textAlign: 'right', padding: '0.45rem 0.5rem', color: '#888', fontWeight: 500, fontSize: '0.68rem' }}>Total recibido</th>
+              <tr style={{ borderBottom: '1px solid var(--c-linea)' }}>
+                <th style={{ textAlign: 'left', padding: '0.45rem 0.5rem', color: 'var(--c-gris)', fontWeight: 500, fontSize: '0.68rem' }}>Empleado</th>
+                <th style={{ textAlign: 'center', padding: '0.45rem 0.5rem', color: 'var(--c-gris)', fontWeight: 500, fontSize: '0.68rem' }}>Semanas</th>
+                <th style={{ textAlign: 'right', padding: '0.45rem 0.5rem', color: 'var(--c-gris)', fontWeight: 500, fontSize: '0.68rem' }}>Total recibido</th>
               </tr>
             </thead>
             <tbody>
               {byEmp.map(e => (
-                <tr key={e.name} style={{ borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+                <tr key={e.name} style={{ borderBottom: '1px solid var(--c-linea)' }}>
                   <td style={{ padding: '0.45rem 0.5rem', fontWeight: 600 }}>{e.name}</td>
-                  <td style={{ padding: '0.45rem 0.5rem', textAlign: 'center', color: '#5a5040' }}>{e.weeks}</td>
-                  <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: '#a07830', fontWeight: 700 }}>{fi(e.total)}</td>
+                  <td style={{ padding: '0.45rem 0.5rem', textAlign: 'center', color: 'var(--c-gris)' }}>{e.weeks}</td>
+                  <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: 'var(--c-oro-texto)', fontWeight: 700 }}>{fi(e.total)}</td>
                 </tr>
               ))}
             </tbody>

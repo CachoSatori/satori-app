@@ -3,6 +3,7 @@
  */
 import { useState, useMemo } from 'react'
 import type { Ingredient, InventoryMovement } from '../../shared/types/inventario'
+import { fi } from '../../shared/utils'
 
 interface Props {
   ingredients: Ingredient[]
@@ -10,15 +11,11 @@ interface Props {
   onRefresh:   () => void
 }
 
-function fi(n: number): string {
-  return '₡ ' + Math.round(n).toLocaleString('es-CR')
-}
-
 function stockColor(ing: Ingredient): string {
-  if (ing.current_stock <= 0) return '#c23b22'
-  if (ing.min_stock > 0 && ing.current_stock <= ing.min_stock) return '#e8a838'
-  if (ing.min_stock > 0 && ing.current_stock <= ing.min_stock * 1.5) return '#c8a96e'
-  return '#4a9a6a'
+  if (ing.current_stock <= 0) return 'var(--c-laca)'
+  if (ing.min_stock > 0 && ing.current_stock <= ing.min_stock) return 'var(--c-oro-texto)'
+  if (ing.min_stock > 0 && ing.current_stock <= ing.min_stock * 1.5) return 'var(--c-oro)'
+  return 'var(--c-musgo)'
 }
 
 function stockLabel(ing: Ingredient): string {
@@ -93,16 +90,16 @@ export default function InvDashboard({ ingredients, movements }: Props) {
           <div className="vt-kpi-val">{fi(totalValue)}</div>
           <div className="vt-kpi-sub">{withStock.length} ingredientes con stock</div>
         </div>
-        <div className="vt-kpi" style={{ borderLeftColor: outOfStock.length > 0 ? '#c23b22' : '#4a9a6a' }}>
+        <div className="vt-kpi" style={{ borderLeftColor: outOfStock.length > 0 ? 'var(--c-laca)' : 'var(--c-musgo)' }}>
           <div className="vt-kpi-label">Sin stock</div>
-          <div className="vt-kpi-val" style={{ color: outOfStock.length > 0 ? '#c23b22' : '#4a9a6a' }}>
+          <div className="vt-kpi-val" style={{ color: outOfStock.length > 0 ? 'var(--c-laca)' : 'var(--c-musgo)' }}>
             {outOfStock.length}
           </div>
           <div className="vt-kpi-sub">de {ingredients.length} ingredientes</div>
         </div>
-        <div className="vt-kpi" style={{ borderLeftColor: lowStock.length > 0 ? '#e8a838' : '#4a9a6a' }}>
+        <div className="vt-kpi" style={{ borderLeftColor: lowStock.length > 0 ? 'var(--c-oro)' : 'var(--c-musgo)' }}>
           <div className="vt-kpi-label">Stock crítico / mínimo</div>
-          <div className="vt-kpi-val" style={{ color: lowStock.length > 0 ? '#e8a838' : '#4a9a6a' }}>
+          <div className="vt-kpi-val" style={{ color: lowStock.length > 0 ? 'var(--c-oro-texto)' : 'var(--c-musgo)' }}>
             {lowStock.length}
           </div>
           <div className="vt-kpi-sub">por debajo del mínimo</div>
@@ -123,15 +120,15 @@ export default function InvDashboard({ ingredients, movements }: Props) {
           <div className="vt-sl">⚠ Alertas de stock</div>
           <div style={{ display:'flex', flexDirection:'column', gap:'0.35rem', marginBottom:'1.5rem' }}>
             {outOfStock.map(i => (
-              <div key={i.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(194,59,34,.1)', border:'1px solid rgba(194,59,34,.3)', borderRadius:2, padding:'0.5rem 0.875rem', fontSize:'0.82rem' }}>
-                <span style={{ color:'#f0ece4', fontWeight:600 }}>🔴 {i.name}</span>
-                <span style={{ color:'#c23b22', fontWeight:700 }}>SIN STOCK · min: {i.min_stock} {i.unit}</span>
+              <div key={i.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--c-laca-fondo)', border:'1px solid var(--c-laca-borde)', borderRadius:2, padding:'0.5rem 0.875rem', fontSize:'0.82rem' }}>
+                <span style={{ color:'var(--c-tinta)', fontWeight:600 }}>🔴 {i.name}</span>
+                <span style={{ color:'var(--c-laca)', fontWeight:700 }}>SIN STOCK · min: {i.min_stock} {i.unit}</span>
               </div>
             ))}
             {lowStock.filter(i => i.current_stock > 0).map(i => (
-              <div key={i.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(232,168,56,.08)', border:'1px solid rgba(232,168,56,.3)', borderRadius:2, padding:'0.5rem 0.875rem', fontSize:'0.82rem' }}>
-                <span style={{ color:'#f0ece4', fontWeight:600 }}>🟡 {i.name}</span>
-                <span style={{ color:'#e8a838' }}>{i.current_stock.toLocaleString('es-CR')} {i.unit} · min: {i.min_stock} {i.unit}</span>
+              <div key={i.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--c-oro-fondo)', border:'1px solid var(--c-oro)', borderRadius:2, padding:'0.5rem 0.875rem', fontSize:'0.82rem' }}>
+                <span style={{ color:'var(--c-tinta)', fontWeight:600 }}>🟡 {i.name}</span>
+                <span style={{ color:'var(--c-oro-texto)' }}>{i.current_stock.toLocaleString('es-CR')} {i.unit} · min: {i.min_stock} {i.unit}</span>
               </div>
             ))}
           </div>
@@ -142,18 +139,18 @@ export default function InvDashboard({ ingredients, movements }: Props) {
       {reorderBySupplier.length > 0 && (
         <>
           <div className="vt-sl">🛒 Orden de compra sugerida</div>
-          <div style={{ fontSize:'0.68rem', color:'#5a5040', marginBottom:'0.75rem' }}>
+          <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginBottom:'0.75rem' }}>
             Ingredientes en o bajo el mínimo, agrupados por proveedor. Cantidad sugerida = llevar a 2× el mínimo.
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem', marginBottom:'1.5rem' }}>
             {reorderBySupplier.map(([supplier, { items, total }]) => (
-              <div key={supplier} style={{ border:'1px solid var(--vt-border,#d4cfc4)', borderRadius:2, overflow:'hidden' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.45rem 0.75rem', background:'var(--vt-ink)', borderBottom:'1px solid #222' }}>
-                  <span style={{ fontSize:'0.78rem', fontWeight:700, color:'var(--vt-gold)', letterSpacing:'0.06em' }}>{supplier}</span>
+              <div key={supplier} style={{ border:'1px solid var(--c-linea)', borderRadius:2, overflow:'hidden' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.45rem 0.75rem', background:'var(--c-panel)', borderBottom:'1px solid var(--c-linea)' }}>
+                  <span style={{ fontSize:'0.78rem', fontWeight:700, color:'var(--c-oro-texto)', letterSpacing:'0.06em' }}>{supplier}</span>
                   <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-                    <span style={{ fontSize:'0.72rem', color:'#bbb' }}>{total > 0 ? `~${fi(total)}` : `${items.length} ítems`}</span>
+                    <span style={{ fontSize:'0.72rem', color:'var(--c-tinta)' }}>{total > 0 ? `~${fi(total)}` : `${items.length} ítems`}</span>
                     <button onClick={() => copyOrder(supplier, items)}
-                      style={{ fontSize:'0.66rem', padding:'2px 9px', borderRadius:2, border:'1px solid #3a3a3a', background:'transparent', color:'#bbb', cursor:'pointer' }}>
+                      style={{ fontSize:'0.66rem', padding:'2px 9px', borderRadius:2, border:'1px solid var(--c-linea)', background:'transparent', color:'var(--c-tinta)', cursor:'pointer' }}>
                       {copied === supplier ? '✓ Copiado' : '⎘ Copiar pedido'}
                     </button>
                   </div>
@@ -166,13 +163,13 @@ export default function InvDashboard({ ingredients, movements }: Props) {
                           <td style={{ fontSize:'0.82rem', fontWeight:500 }}>
                             {ing.current_stock <= 0 ? '🔴 ' : '🟡 '}{ing.name}
                           </td>
-                          <td className="r" style={{ fontSize:'0.75rem', color:'#5a5040' }}>
+                          <td className="r" style={{ fontSize:'0.75rem', color:'var(--c-gris)' }}>
                             actual {ing.current_stock.toLocaleString('es-CR')} / min {ing.min_stock.toLocaleString('es-CR')} {ing.unit}
                           </td>
-                          <td className="r" style={{ fontSize:'0.82rem', fontWeight:700, color:'var(--vt-green)' }}>
+                          <td className="r" style={{ fontSize:'0.82rem', fontWeight:700, color:'var(--c-musgo)' }}>
                             +{qty.toLocaleString('es-CR')} {ing.unit}
                           </td>
-                          <td className="r" style={{ fontSize:'0.75rem', color:'#5a5040' }}>
+                          <td className="r" style={{ fontSize:'0.75rem', color:'var(--c-gris)' }}>
                             {cost > 0 ? fi(cost) : '—'}
                           </td>
                         </tr>
@@ -192,9 +189,9 @@ export default function InvDashboard({ ingredients, movements }: Props) {
         const catValue = items.reduce((s, i) => s + i.current_stock * i.cost_per_unit, 0)
         return (
           <div key={cat} style={{ marginBottom:'1rem' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.45rem 0.75rem', background:'var(--vt-ink)', borderRadius:'2px 2px 0 0', borderBottom:'1px solid #222' }}>
-              <span style={{ fontSize:'0.75rem', fontWeight:700, color:'var(--vt-gold)', letterSpacing:'0.1em', textTransform:'uppercase' }}>{cat}</span>
-              <span style={{ fontSize:'0.72rem', color:'#666' }}>{items.length} items · {fi(catValue)}</span>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.45rem 0.75rem', background:'var(--c-panel)', borderRadius:'2px 2px 0 0', borderBottom:'1px solid var(--c-linea)' }}>
+              <span style={{ fontSize:'0.75rem', fontWeight:700, color:'var(--c-oro-texto)' }}>{cat}</span>
+              <span style={{ fontSize:'0.72rem', color:'var(--c-gris)' }}>{items.length} items · {fi(catValue)}</span>
             </div>
             <div className="vt-tbl-wrap" style={{ marginTop:0 }}>
               <table className="vt-tbl">
@@ -209,7 +206,7 @@ export default function InvDashboard({ ingredients, movements }: Props) {
                         <td style={{ fontSize:'0.82rem', fontWeight:500, minWidth:160 }}>{ing.name}</td>
                         <td>
                           <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', minWidth:160 }}>
-                            <div style={{ flex:1, height:4, background:'#1a1a1a', borderRadius:2, overflow:'hidden' }}>
+                            <div style={{ flex:1, height:4, background:'var(--c-panel)', borderRadius:2, overflow:'hidden' }}>
                               <div style={{ height:'100%', width:`${pct}%`, background:col, borderRadius:2, transition:'width .3s' }}/>
                             </div>
                             <span style={{ fontSize:'0.78rem', color:col, fontWeight:700, whiteSpace:'nowrap' }}>
@@ -218,7 +215,7 @@ export default function InvDashboard({ ingredients, movements }: Props) {
                           </div>
                         </td>
                         <td style={{ fontSize:'0.68rem', color:col, whiteSpace:'nowrap' }}>{label}</td>
-                        <td className="r" style={{ fontSize:'0.75rem', color:'#666' }}>
+                        <td className="r" style={{ fontSize:'0.75rem', color:'var(--c-gris)' }}>
                           {ing.cost_per_unit > 0 ? fi(val) : '—'}
                         </td>
                       </tr>
@@ -252,20 +249,20 @@ export default function InvDashboard({ ingredients, movements }: Props) {
                   const isIn = m.qty_delta > 0
                   return (
                     <tr key={m.id}>
-                      <td style={{ fontSize:'0.75rem', color:'#888', whiteSpace:'nowrap' }}>
+                      <td style={{ fontSize:'0.75rem', color:'var(--c-gris)', whiteSpace:'nowrap' }}>
                         {d.toLocaleDateString('es-CR', { day:'2-digit', month:'short' })} {d.toLocaleTimeString('es-CR', { hour:'2-digit', minute:'2-digit' })}
                       </td>
                       <td style={{ fontSize:'0.82rem' }}>{(m.ingredient as { name?: string })?.name ?? '—'}</td>
-                      <td style={{ fontSize:'0.72rem', color:'#888' }}>
+                      <td style={{ fontSize:'0.72rem', color:'var(--c-gris)' }}>
                         {m.movement_type === 'purchase' ? '📦 Compra' :
                          m.movement_type === 'waste' ? '🗑 Merma' :
                          m.movement_type === 'count_adjustment' ? '📋 Ajuste' :
                          m.movement_type === 'sale_deduction' ? '🍽 Venta' : '↔ Transfer'}
                       </td>
-                      <td className="r" style={{ color: isIn ? '#4a9a6a' : '#c23b22', fontWeight:700 }}>
+                      <td className="r" style={{ color: isIn ? 'var(--c-musgo)' : 'var(--c-laca)', fontWeight:700 }}>
                         {isIn ? '+' : ''}{m.qty_delta.toLocaleString('es-CR')} {m.unit}
                       </td>
-                      <td style={{ fontSize:'0.72rem', color:'#666', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <td style={{ fontSize:'0.72rem', color:'var(--c-gris)', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {m.notes || '—'}
                       </td>
                     </tr>

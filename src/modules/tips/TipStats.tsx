@@ -216,7 +216,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
     <div>
       {/* Filtro por empleado */}
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.72rem', color: '#5a5040', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Empleado:</span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)', letterSpacing: '0.1em', fontWeight: 700 }}>Empleado:</span>
         <select className="tips-input-dark" value={selEmp} onChange={e => setSelEmp(e.target.value)}
           style={{ minWidth: 200 }}>
           <option value="">— Todos (vista general) —</option>
@@ -231,13 +231,13 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.625rem', marginBottom: '1rem' }}>
             {[
-              { label: 'Total (12m)', val: formatCRC(empTotals.earn),  color: 'var(--t-gold)' },
+              { label: 'Total (12m)', val: formatCRC(empTotals.earn),  color: 'var(--c-oro-texto)' },
               { label: 'Turnos',      val: String(empTotals.shifts),    color: '' },
               { label: 'Horas',       val: empTotals.hours.toFixed(1) + 'h', color: 'var(--t-teal)' },
             ].map(k => (
-              <div key={k.label} style={{ background: 'var(--t-ink)', padding: '0.875rem 1rem', borderRadius: 2, borderLeft: '3px solid var(--t-gold)' }}>
-                <div style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#555', marginBottom: '0.4rem' }}>{k.label}</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--t-paper)' }}>{k.val}</div>
+              <div key={k.label} style={{ background: 'var(--c-panel)', padding: '0.875rem 1rem', borderRadius: 2, borderLeft: '3px solid var(--c-oro)' }}>
+                <div style={{ fontSize: '0.62rem', letterSpacing: '0.15em', color: 'var(--c-gris)', marginBottom: '0.4rem' }}>{k.label}</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--c-tinta)' }}>{k.val}</div>
               </div>
             ))}
           </div>
@@ -252,7 +252,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
                   <th style={{ textAlign: 'right' }}>Turnos</th>
                   <th style={{ textAlign: 'right' }}>Horas</th>
                   <th style={{ textAlign: 'right', color: 'var(--t-teal)' }}>Q1 (1-15)</th>
-                  <th style={{ textAlign: 'right', color: 'var(--t-gold)' }}>Q2 (16-fin)</th>
+                  <th style={{ textAlign: 'right', color: 'var(--c-oro-texto)' }}>Q2 (16-fin)</th>
                   <th style={{ textAlign: 'right' }}>Total</th>
                 </tr>
               </thead>
@@ -263,10 +263,10 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
                   return (
                     <tr key={ym} className="admin-row">
                       <td style={{ fontWeight: 600 }}>{MONTH_NAMES[mm] ?? mm} {y}</td>
-                      <td style={{ textAlign: 'right', color: '#5a5040' }}>{d.q1Days + d.q2Days}</td>
-                      <td style={{ textAlign: 'right', color: '#5a5040', fontSize: '0.74rem' }}>{(d.q1Hours + d.q2Hours).toFixed(0)}h</td>
+                      <td style={{ textAlign: 'right', color: 'var(--c-gris)' }}>{d.q1Days + d.q2Days}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--c-gris)', fontSize: '0.74rem' }}>{(d.q1Hours + d.q2Hours).toFixed(0)}h</td>
                       <td style={{ textAlign: 'right', color: 'var(--t-teal)', fontSize: '0.76rem' }}>{d.q1Earn > 0 ? formatCRC(d.q1Earn) : '—'}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--t-gold)', fontSize: '0.76rem' }}>{d.q2Earn > 0 ? formatCRC(d.q2Earn) : '—'}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--c-oro-texto)', fontSize: '0.76rem' }}>{d.q2Earn > 0 ? formatCRC(d.q2Earn) : '—'}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCRC(total)}</td>
                     </tr>
                   )
@@ -280,7 +280,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
       {!selEmp && (<>
       {/* Month picker */}
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.72rem', color: '#5a5040', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Mes:</span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)', letterSpacing: '0.1em', fontWeight: 700 }}>Mes:</span>
         {months.slice(0, 12).map(mo => {
           const [, mm] = mo.split('-')
           return (
@@ -306,18 +306,18 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
           {/* KPI cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.625rem', marginBottom: '1.25rem' }}>
             {[
-              { label: 'Pool total',      val: formatCRC(totalPool),   color: 'var(--t-gold)' },
+              { label: 'Pool total',      val: formatCRC(totalPool),   color: 'var(--c-oro-texto)' },
               { label: 'Turnos',          val: String(monthSessions.length), color: '' },
               { label: 'Promedio general', val: formatCRC(avgPerShift), color: '' },
-              { label: `Prom. AM (${amSessions.length}t)`, val: formatCRC(avgAM), color: '#c8a030' },
+              { label: `Prom. AM (${amSessions.length}t)`, val: formatCRC(avgAM), color: 'var(--c-oro-texto)' },
               { label: `Prom. PM (${pmSessions.length}t)`, val: formatCRC(avgPM), color: 'var(--t-teal)' },
-              { label: 'AM — pool total', val: formatCRC(amPool), color: '#c8a030' },
+              { label: 'AM — pool total', val: formatCRC(amPool), color: 'var(--c-oro-texto)' },
               { label: 'PM — pool total', val: formatCRC(pmPool), color: 'var(--t-teal)' },
-              { label: 'Datáfono generado', val: formatCRC(totalGenerated), color: '#a07830' },
+              { label: 'Datáfono generado', val: formatCRC(totalGenerated), color: 'var(--c-oro-texto)' },
             ].map(k => (
-              <div key={k.label} style={{ background: 'var(--t-ink)', padding: '0.875rem 1rem', borderRadius: 2, borderLeft: '3px solid var(--t-gold)' }}>
-                <div style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#555', marginBottom: '0.4rem' }}>{k.label}</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--t-gold)' }}>{k.val}</div>
+              <div key={k.label} style={{ background: 'var(--c-panel)', padding: '0.875rem 1rem', borderRadius: 2, borderLeft: '3px solid var(--c-oro)' }}>
+                <div style={{ fontSize: '0.62rem', letterSpacing: '0.15em', color: 'var(--c-gris)', marginBottom: '0.4rem' }}>{k.label}</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--c-oro-texto)' }}>{k.val}</div>
               </div>
             ))}
           </div>
@@ -325,15 +325,15 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
           {/* AM vs PM bar */}
           {amPool > 0 && pmPool > 0 && (
             <div style={{ marginBottom: '1.25rem', background: 'var(--t-panel)', border: '1px solid var(--t-border)', borderRadius: 2, padding: '0.875rem 1rem' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a5040', marginBottom: '0.5rem' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--c-gris)', marginBottom: '0.5rem' }}>
                 Distribución AM vs PM
               </div>
               <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', marginBottom: '0.4rem' }}>
-                <div style={{ width: `${amPool / totalPool * 100}%`, background: '#c8a030' }} />
+                <div style={{ width: `${amPool / totalPool * 100}%`, background: 'var(--c-oro)' }} />
                 <div style={{ flex: 1, background: 'var(--t-teal)' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
-                <span style={{ color: '#c8a030' }}>AM {(amPool / totalPool * 100).toFixed(1)}% · {formatCRC(amPool)}</span>
+                <span style={{ color: 'var(--c-oro-texto)' }}>AM {(amPool / totalPool * 100).toFixed(1)}% · {formatCRC(amPool)}</span>
                 <span style={{ color: 'var(--t-teal)' }}>PM {(pmPool / totalPool * 100).toFixed(1)}% · {formatCRC(pmPool)}</span>
               </div>
             </div>
@@ -342,12 +342,12 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
           {/* Distribución por puesto — % del take-home total que se lleva cada ROL (incluye cocina) */}
           {byRole.total > 0 && (
             <div style={{ marginBottom: '1.25rem', background: 'var(--t-panel)', border: '1px solid var(--t-border)', borderRadius: 2, padding: '0.875rem 1rem' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a5040', marginBottom: '0.625rem' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--c-gris)', marginBottom: '0.625rem' }}>
                 Distribución por puesto
               </div>
               {byRole.rows.map(r => (
                 <div key={r.role} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                  <span style={{ width: 84, fontSize: '0.72rem', color: '#5a5040', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ width: 84, fontSize: '0.72rem', color: 'var(--c-gris)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {ROLE_LABELS[r.role] ?? r.role}
                   </span>
                   <div style={{ flex: 1, height: 8, background: 'var(--t-border)', borderRadius: 4, overflow: 'hidden' }}>
@@ -356,7 +356,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, color: roleColor(r.role), minWidth: 42, textAlign: 'right' }}>
                     {r.pct.toFixed(1)}%
                   </span>
-                  <span style={{ fontSize: '0.72rem', color: '#5a5040', minWidth: 80, textAlign: 'right' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--c-gris)', minWidth: 80, textAlign: 'right' }}>
                     {formatCRC(r.total)}
                   </span>
                 </div>
@@ -367,7 +367,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
             {/* Day of week */}
             <div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a5040', marginBottom: '0.625rem' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--c-gris)', marginBottom: '0.625rem' }}>
                 Pool promedio por día
               </div>
               {[1,2,3,4,5,6,0].map(d => {
@@ -377,7 +377,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
                 const maxAvg = Math.max(...Object.values(dowData).map(x => x.sum / x.cnt))
                 return (
                   <div key={d} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                    <span style={{ width: 28, fontSize: '0.72rem', color: '#888' }}>{DOW_LABELS[d]}</span>
+                    <span style={{ width: 28, fontSize: '0.72rem', color: 'var(--c-gris)' }}>{DOW_LABELS[d]}</span>
                     <div style={{ flex: 1, height: 6, background: 'var(--t-border)', borderRadius: 3, overflow: 'hidden' }}>
                       <div style={{ width: `${avg / maxAvg * 100}%`, height: '100%', background: 'var(--t-teal)', borderRadius: 3 }} />
                     </div>
@@ -391,7 +391,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
 
             {/* Weekly trend */}
             <div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a5040', marginBottom: '0.625rem' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--c-gris)', marginBottom: '0.625rem' }}>
                 Tendencia semanal
               </div>
               {weeklyData.map(w => {
@@ -399,11 +399,11 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
                 const label = w.week === 1 ? '1-7' : w.week === 2 ? '8-14' : w.week === 3 ? '15-21' : w.week === 4 ? '22-28' : '29-fin'
                 return (
                   <div key={w.week} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                    <span style={{ width: 36, fontSize: '0.68rem', color: '#888' }}>Sem {label}</span>
+                    <span style={{ width: 36, fontSize: '0.68rem', color: 'var(--c-gris)' }}>Sem {label}</span>
                     <div style={{ flex: 1, height: 6, background: 'var(--t-border)', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ width: `${w.pool / maxW * 100}%`, height: '100%', background: 'var(--t-gold)', borderRadius: 3 }} />
+                      <div style={{ width: `${w.pool / maxW * 100}%`, height: '100%', background: 'var(--c-oro)', borderRadius: 3 }} />
                     </div>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--t-gold)', fontWeight: 600, minWidth: 80, textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--c-oro-texto)', fontWeight: 600, minWidth: 80, textAlign: 'right' }}>
                       {formatCRC(w.pool)}
                     </span>
                   </div>
@@ -415,7 +415,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
           {/* Top earners with AM/PM split */}
           {earners.length > 0 && (
             <>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a5040', marginBottom: '0.625rem' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--c-gris)', marginBottom: '0.625rem' }}>
                 Empleados del mes — detalle AM/PM
               </div>
               <table className="admin-table" style={{ width: '100%', fontSize: '0.78rem' }}>
@@ -424,9 +424,9 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
                     <th style={{ textAlign: 'left' }}>#</th>
                     <th style={{ textAlign: 'left' }}>Empleado</th>
                     <th style={{ textAlign: 'right' }}>Turnos</th>
-                    <th style={{ textAlign: 'right', color: '#c8a030' }}>AM</th>
+                    <th style={{ textAlign: 'right', color: 'var(--c-oro-texto)' }}>AM</th>
                     <th style={{ textAlign: 'right', color: 'var(--t-teal)' }}>PM</th>
-                    <th style={{ textAlign: 'right', color: '#a07830' }} title="Lo que ingresó por su datáfono">Generó</th>
+                    <th style={{ textAlign: 'right', color: 'var(--c-oro-texto)' }} title="Lo que ingresó por su datáfono">Generó</th>
                     <th style={{ textAlign: 'right' }} title="Lo que recibió del pool">Recibió</th>
                     <th style={{ textAlign: 'right' }}>Prom/turno</th>
                   </tr>
@@ -434,24 +434,24 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
                 <tbody>
                   {earners.map((e, i) => (
                     <tr key={e.name} className="admin-row">
-                      <td style={{ fontWeight: 700, color: i === 0 ? '#c8a96e' : '#888' }}>
+                      <td style={{ fontWeight: 700, color: i === 0 ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>
                         {i === 0 ? '🏆' : i + 1}
                       </td>
                       <td className="admin-emp-name">{e.name}</td>
-                      <td style={{ textAlign: 'right', color: '#5a5040' }}>{e.shifts}</td>
-                      <td style={{ textAlign: 'right', color: '#c8a030', fontSize: '0.72rem' }}>
+                      <td style={{ textAlign: 'right', color: 'var(--c-gris)' }}>{e.shifts}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--c-oro-texto)', fontSize: '0.72rem' }}>
                         {e.amShifts > 0 ? `${formatCRC(e.amTotal)} (${e.amShifts}t)` : '—'}
                       </td>
                       <td style={{ textAlign: 'right', color: 'var(--t-teal)', fontSize: '0.72rem' }}>
                         {e.pmShifts > 0 ? `${formatCRC(e.pmTotal)} (${e.pmShifts}t)` : '—'}
                       </td>
-                      <td style={{ textAlign: 'right', color: '#a07830', fontSize: '0.72rem' }}>
+                      <td style={{ textAlign: 'right', color: 'var(--c-oro-texto)', fontSize: '0.72rem' }}>
                         {e.generated > 0 ? formatCRC(e.generated) : '—'}
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--t-teal)' }}>
                         {formatCRC(e.total)}
                       </td>
-                      <td style={{ textAlign: 'right', color: '#5a5040' }}>
+                      <td style={{ textAlign: 'right', color: 'var(--c-gris)' }}>
                         {formatCRC(e.shifts > 0 ? e.total / e.shifts : 0)}
                       </td>
                     </tr>

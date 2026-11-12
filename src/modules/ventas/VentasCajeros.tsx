@@ -188,47 +188,47 @@ export default function VentasCajeros({ dias: diasEntrada }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
         {cajAggs.filter(c => c.total > 0).map(c => (
           <div key={c.nombre} style={{ background: 'var(--vt-paper)', border: '1px solid var(--vt-border)', borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{ background: 'var(--vt-ink)', padding: '0.75rem 1rem', borderBottom: '2px solid var(--vt-gold)' }}>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: 'var(--vt-gold)', fontSize: '0.95rem' }}>
+            <div style={{ background: 'var(--c-panel)', padding: '0.75rem 1rem', borderBottom: '2px solid var(--vt-gold)' }}>
+              <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, color: 'var(--c-oro-texto)', fontSize: '0.95rem' }}>
                 {c.nombre}
               </div>
-              <div style={{ fontSize: '0.62rem', color: '#555', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '0.15rem' }}>
+              <div style={{ fontSize: '0.62rem', color: 'var(--c-gris)', marginTop: '0.15rem' }}>
                 {c.days} días · {c.ordenes} órdenes
               </div>
             </div>
             <div style={{ padding: '0.875rem 1rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 {[
-                  { label: 'Total', val: fi(c.total), color: 'var(--vt-gold-dark,#a07830)' },
-                  { label: 'Delivery', val: fi(c.delivery), color: 'var(--vt-delivery,#2a6080)' },
+                  { label: 'Total', val: fi(c.total), color: 'var(--c-oro-texto)' },
+                  { label: 'Delivery', val: fi(c.delivery), color: 'var(--c-azul-delivery)' },
                   { label: 'Órdenes', val: String(c.ordenes), color: 'var(--vt-ink)' },
                 ].map(kpi => (
                   <div key={kpi.label} style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#888', marginBottom: '0.2rem' }}>{kpi.label}</div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '0.82rem', fontWeight: 700, color: kpi.color }}>{kpi.val}</div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)', marginBottom: '0.2rem' }}>{kpi.label}</div>
+                    <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '0.82rem', fontWeight: 700, color: kpi.color }}>{kpi.val}</div>
                   </div>
                 ))}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '0.4rem 0', borderTop: '1px solid var(--vt-border)' }}>
-                <span style={{ color: '#888' }}>Ticket promedio</span>
+                <span style={{ color: 'var(--c-gris)' }}>Ticket promedio</span>
                 <strong>{fi(c.ticketProm)}</strong>
               </div>
               {/* Delivery % bar. La venta de salón de la caja se fue a «Salón sin mesero», así que
                   esto normalmente es 100% delivery; el resto es barra / llevar / otro. */}
               {c.total > 0 && (
                 <div style={{ marginTop: '0.5rem' }}>
-                  <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '0.2rem' }}>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)', marginBottom: '0.2rem' }}>
                     Delivery {(c.delivery/c.total*100).toFixed(1)}%
                     {c.salon !== 0 && ` · Otros canales ${(c.salon/c.total*100).toFixed(1)}%`}
                   </div>
                   <div className="vt-progress-track">
-                    <div className="vt-progress-fill" style={{ width: `${c.delivery/c.total*100}%`, background: 'var(--vt-delivery,#2a6080)' }} />
+                    <div className="vt-progress-fill" style={{ width: `${c.delivery/c.total*100}%`, background: 'var(--c-azul-delivery)' }} />
                   </div>
                 </div>
               )}
               {/* Top 3 products */}
               {Object.entries(c.prods).sort((a,b) => b[1].m - a[1].m).slice(0,3).map(([name, v]) => (
-                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.2rem 0', color: '#555' }}>
+                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.2rem 0', color: 'var(--c-gris)' }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{name}</span>
                   <span style={{ fontWeight: 600, flexShrink: 0 }}>{fi(v.m)}</span>
                 </div>
@@ -245,17 +245,17 @@ export default function VentasCajeros({ dias: diasEntrada }: Props) {
         <div style={{ background: 'var(--vt-paper)', border: '1px dashed var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.85rem' }}>
+              <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '0.85rem' }}>
                 {CLAVE_CAJERO_SALON}
               </div>
-              <div style={{ fontSize: '0.62rem', color: '#888', marginTop: '0.15rem' }}>
+              <div style={{ fontSize: '0.62rem', color: 'var(--c-gris)', marginTop: '0.15rem' }}>
                 Venta de salón timbrada por la caja, sin mesero en la factura · quién comandó
                 se lee en la lente por línea · <strong>no suma al Total Cajeros</strong>
               </div>
             </div>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.9rem' }}>
+            <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '0.9rem' }}>
               {fi(cajeroSalonAgg.total)}
-              <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 400 }}> · {cajeroSalonAgg.ordenes} órdenes</span>
+              <span style={{ fontSize: '0.62rem', color: 'var(--c-gris)', fontWeight: 400 }}> · {cajeroSalonAgg.ordenes} órdenes</span>
             </div>
           </div>
         </div>
@@ -266,16 +266,16 @@ export default function VentasCajeros({ dias: diasEntrada }: Props) {
         <div style={{ background: 'var(--vt-paper)', border: '1px dashed var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.85rem' }}>
+              <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '0.85rem' }}>
                 {CLAVE_SISTEMA_OTROS}
               </div>
-              <div style={{ fontSize: '0.62rem', color: '#888', marginTop: '0.15rem' }}>
+              <div style={{ fontSize: '0.62rem', color: 'var(--c-gris)', marginTop: '0.15rem' }}>
                 Facturas del PoS sin cajero ni mesero · <strong>no suma al Total Cajeros</strong>
               </div>
             </div>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.9rem' }}>
+            <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '0.9rem' }}>
               {fi(otrosAgg.total)}
-              <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 400 }}> · {otrosAgg.ordenes} órdenes</span>
+              <span style={{ fontSize: '0.62rem', color: 'var(--c-gris)', fontWeight: 400 }}> · {otrosAgg.ordenes} órdenes</span>
             </div>
           </div>
         </div>
@@ -285,7 +285,7 @@ export default function VentasCajeros({ dias: diasEntrada }: Props) {
       <div className="vt-sl">Atribución por línea</div>
       <div style={{ background: 'var(--vt-paper)', border: '1px solid var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: '0.72rem', color: '#555', maxWidth: '48rem' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', maxWidth: '48rem' }}>
             Las tarjetas de arriba van por <strong>factura</strong>: la caja timbró, y la factura no
             dice quién comandó. La lente por <strong>línea</strong> sí lo sabe
             (<code>UsuarioRegistra</code>): con ella lo que timbró la caja en el salón se lee
@@ -297,12 +297,12 @@ export default function VentasCajeros({ dias: diasEntrada }: Props) {
           </button>
         </div>
         {lenteError && (
-          <div style={{ fontSize: '0.72rem', color: 'var(--vt-red,#a03030)', marginTop: '0.5rem' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--c-laca)', marginTop: '0.5rem' }}>
             <strong>No se pudo leer:</strong> {lenteError}
           </div>
         )}
         {lente && !lenteVigente && (
-          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.5rem' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)', marginTop: '0.5rem' }}>
             <strong>Moviste el rango.</strong> Lo de abajo es de {lente.desde} → {lente.hasta}.
             Tocá <strong>Volver a leer</strong> para el rango nuevo.
           </div>

@@ -147,8 +147,8 @@ export default function CashModule() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span className="tips-kanji" style={{ fontSize: '1.6rem' }}>金</span>
           <div>
-            <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--t-ink)' }}>Caja</div>
-            <div style={{ fontSize: '0.72rem', letterSpacing: '0.15em', color: '#888', textTransform: 'uppercase' }}>
+            <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--c-tinta)' }}>Caja</div>
+            <div style={{ fontSize: '0.72rem', letterSpacing: '0.15em', color: 'var(--c-gris)' }}>
               Satori · Santa Teresa
             </div>
           </div>

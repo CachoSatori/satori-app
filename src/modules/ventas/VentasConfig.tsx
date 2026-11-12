@@ -340,21 +340,21 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
 
       {/* ── Save bar ─────────────────────────────────────────── */}
       {(pendingCount > 0 || saveMsg) && (
-        <div style={{ position:'sticky', top:52, zIndex:90, background:'rgba(10,10,10,0.97)', border:'1px solid #2a2a2a', borderRadius:2, padding:'0.625rem 1rem', marginBottom:'0.75rem', display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>
+        <div style={{ position:'sticky', top:52, zIndex:90, background:'var(--c-fondo)', border:'1px solid var(--c-linea)', borderRadius:2, padding:'0.625rem 1rem', marginBottom:'0.75rem', display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>
           {saveMsg ? (
             <span style={{ color: saveMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)', fontSize:'0.82rem', fontWeight:600 }}>{saveMsg}</span>
           ) : (
             <>
-              <span style={{ fontSize:'0.82rem', color:'#c8a96e', fontWeight:700 }}>
+              <span style={{ fontSize:'0.82rem', color:'var(--c-oro-texto)', fontWeight:700 }}>
                 ⚠ {pendingCount} cambio{pendingCount > 1 ? 's' : ''} pendiente{pendingCount > 1 ? 's' : ''} sin guardar
               </span>
               <button
-                style={{ padding:'0.35rem 1rem', borderRadius:2, background:'var(--vt-green)', color:'#0a0a0a', fontWeight:800, fontSize:'0.82rem', border:'none', cursor:'pointer' }}
+                style={{ padding:'0.35rem 1rem', borderRadius:2, background:'var(--c-tinta)', color:'var(--c-fondo)', fontWeight:800, fontSize:'0.82rem', border:'none', cursor:'pointer' }}
                 disabled={saving} onClick={handleSaveAll}>
                 {saving ? '⟳ Guardando…' : `💾 Guardar ${pendingCount} cambio${pendingCount > 1 ? 's' : ''}`}
               </button>
               <button
-                style={{ padding:'0.35rem 0.75rem', borderRadius:2, background:'transparent', color:'#888', fontSize:'0.78rem', border:'1px solid #333', cursor:'pointer' }}
+                style={{ padding:'0.35rem 0.75rem', borderRadius:2, background:'transparent', color:'var(--c-gris)', fontSize:'0.78rem', border:'1px solid var(--c-linea)', cursor:'pointer' }}
                 onClick={discardAll}>
                 Descartar todo
               </button>
@@ -365,17 +365,17 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
 
       {/* ── Bulk edit panel (shown when items selected) ──────── */}
       {selected.size > 0 && (
-        <div style={{ background:'rgba(200,169,110,0.08)', border:'1px solid rgba(200,169,110,.3)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'0.75rem' }}>
+        <div style={{ background:'var(--c-oro-fondo)', border:'1px solid var(--c-oro)', borderRadius:2, padding:'0.75rem 1rem', marginBottom:'0.75rem' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.6rem' }}>
-            <span style={{ fontSize:'0.75rem', fontWeight:700, color:'#c8a96e', letterSpacing:'0.1em', textTransform:'uppercase' }}>
+            <span style={{ fontSize:'0.75rem', fontWeight:700, color:'var(--c-oro-texto)'}}>
               ✏ Edición masiva — {selected.size} producto{selected.size > 1 ? 's' : ''} seleccionado{selected.size > 1 ? 's' : ''}
             </span>
-            <button onClick={deselectAll} style={{ background:'none', border:'none', color:'#888', cursor:'pointer', fontSize:'0.75rem' }}>✕ Deseleccionar todo</button>
+            <button onClick={deselectAll} style={{ background:'none', border:'none', color:'var(--c-gris)', cursor:'pointer', fontSize:'0.75rem' }}>✕ Deseleccionar todo</button>
           </div>
           <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'flex-end' }}>
             {/* Tipo */}
             <div>
-              <div style={{ fontSize:'0.62rem', color:'#777', marginBottom:2, textTransform:'uppercase', letterSpacing:'0.08em' }}>Tipo</div>
+              <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:2 }}>Tipo</div>
               <select className="cd-tbl-select" value={bulkTipo}
                 onChange={e => { setBulkTipo(e.target.value); setBulkClas(''); setBulkSubcl('') }}>
                 <option value="">— no cambiar —</option>
@@ -384,7 +384,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
             </div>
             {/* Clasificacion */}
             <div>
-              <div style={{ fontSize:'0.62rem', color:'#777', marginBottom:2, textTransform:'uppercase', letterSpacing:'0.08em' }}>Clasificación</div>
+              <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:2 }}>Clasificación</div>
               <select className="cd-tbl-select" value={bulkClas}
                 onChange={e => { setBulkClas(e.target.value); setBulkSubcl('') }}
                 disabled={!bulkTipo}>
@@ -394,7 +394,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
             </div>
             {/* Subclasificacion */}
             <div>
-              <div style={{ fontSize:'0.62rem', color:'#777', marginBottom:2, textTransform:'uppercase', letterSpacing:'0.08em' }}>Subclasificación</div>
+              <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:2 }}>Subclasificación</div>
               <select className="cd-tbl-select" value={bulkSubcl}
                 onChange={e => setBulkSubcl(e.target.value)}
                 disabled={!bulkTipo || !bulkClas}>
@@ -404,13 +404,13 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
             </div>
             {/* Multiplicador */}
             <div>
-              <div style={{ fontSize:'0.62rem', color:'#777', marginBottom:2, textTransform:'uppercase', letterSpacing:'0.08em' }}>Mult. ×</div>
+              <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:2 }}>Mult. ×</div>
               <input className="cd-tbl-input" type="number" min={1} max={20} step={1}
                 placeholder="—" value={bulkMult} onChange={e => setBulkMult(e.target.value)}
                 style={{ width:60 }} />
             </div>
             <button
-              style={{ padding:'0.45rem 1rem', borderRadius:2, background:'#c8a96e', color:'#0a0a0a', fontWeight:800, fontSize:'0.78rem', border:'none', cursor:'pointer', flexShrink:0 }}
+              style={{ padding:'0.45rem 1rem', borderRadius:2, background:'var(--c-tinta)', color:'var(--c-fondo)', fontWeight:800, fontSize:'0.78rem', border:'none', cursor:'pointer', flexShrink:0 }}
               onClick={applyBulk}
               disabled={!bulkTipo && !bulkClas && !bulkSubcl && !bulkMult}>
               Aplicar a {selected.size}
@@ -423,19 +423,19 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
       <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.75rem' }}>
         <input type="text" placeholder="Buscar producto…" value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:200 }} />
-        <label style={{ display:'flex', alignItems:'center', gap:'0.35rem', fontSize:'0.75rem', color:'#888', cursor:'pointer' }}>
+          style={{ background:'var(--c-fondo)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'5px 10px', fontSize:'0.8rem', borderRadius:2, width:200 }} />
+        <label style={{ display:'flex', alignItems:'center', gap:'0.35rem', fontSize:'0.75rem', color:'var(--c-gris)', cursor:'pointer' }}>
           <input type="checkbox" checked={showPending} onChange={e => setShowPending(e.target.checked)} />
           Solo con cambios
         </label>
         {pendingCount > 0 && (
-          <span style={{ fontSize:'0.72rem', color:'#c8a96e' }}>{pendingCount} pendiente{pendingCount>1?'s':''}</span>
+          <span style={{ fontSize:'0.72rem', color:'var(--c-oro-texto)' }}>{pendingCount} pendiente{pendingCount>1?'s':''}</span>
         )}
         {/* Reload button — forces fresh fetch from Supabase */}
         <button
           onClick={onRefresh}
           title="Recargar clasificaciones desde la base de datos"
-          style={{ marginLeft:'auto', padding:'5px 12px', borderRadius:2, background:'transparent', border:'1px solid #2a2a2a', color:'#888', fontSize:'0.78rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem' }}>
+          style={{ marginLeft:'auto', padding:'5px 12px', borderRadius:2, background:'transparent', border:'1px solid var(--c-linea)', color:'var(--c-gris)', fontSize:'0.78rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem' }}>
           ↺ Recargar
         </button>
       </div>
@@ -451,25 +451,25 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
       </div>
 
       {/* ── Costos de productos: filtro por clasificación + import CSV ─ */}
-      <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.75rem', padding:'0.6rem 0.75rem', background:'rgba(126,200,160,0.05)', border:'1px solid rgba(126,200,160,0.2)', borderRadius:2 }}>
-        <span style={{ fontSize:'0.72rem', fontWeight:700, color:'#7ec8a0', letterSpacing:'0.06em', textTransform:'uppercase' }}>₡ Costos</span>
+      <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.75rem', padding:'0.6rem 0.75rem', background:'var(--c-musgo-fondo)', border:'1px solid var(--c-musgo-borde)', borderRadius:2 }}>
+        <span style={{ fontSize:'0.72rem', fontWeight:700, color:'var(--c-musgo)'}}>₡ Costos</span>
         {clasOptions.length > 0 && (
           <select value={clasFilter} onChange={e => setClasFilter(e.target.value)}
-            style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'4px 8px', fontSize:'0.78rem', borderRadius:2 }}>
+            style={{ background:'var(--c-fondo)', color:'var(--c-tinta)', border:'1px solid var(--c-linea)', padding:'4px 8px', fontSize:'0.78rem', borderRadius:2 }}>
             <option value="">Toda clasificación</option>
             {clasOptions.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
         <button onClick={exportCostsTemplate}
-          style={{ fontSize:'0.78rem', color:'#c8a96e', cursor:'pointer', padding:'4px 10px', border:'1px solid rgba(200,169,110,0.4)', borderRadius:2, background:'transparent' }}>
+          style={{ fontSize:'0.78rem', color:'var(--c-oro-texto)', cursor:'pointer', padding:'4px 10px', border:'1px solid var(--c-oro)', borderRadius:2, background:'transparent' }}>
           ⬇ Exportar plantilla CSV
         </button>
-        <label style={{ fontSize:'0.78rem', color:'#7ec8a0', cursor:'pointer', padding:'4px 10px', border:'1px solid rgba(126,200,160,0.4)', borderRadius:2 }}>
+        <label style={{ fontSize:'0.78rem', color:'var(--c-musgo)', cursor:'pointer', padding:'4px 10px', border:'1px solid var(--c-musgo-borde)', borderRadius:2 }}>
           📄 Importar costos CSV
           <input type="file" accept=".csv,text/csv" style={{ display:'none' }}
             onChange={e => { const f = e.target.files?.[0]; if (f) handleCostCsv(f); e.target.value = '' }} />
         </label>
-        <span style={{ fontSize:'0.68rem', color:'#666' }}>exportá → llená costo_unitario → importá</span>
+        <span style={{ fontSize:'0.68rem', color:'var(--c-gris)' }}>exportá → llená costo_unitario → importá</span>
         {importMsg && (
           <span style={{ fontSize:'0.78rem', fontWeight:600, color: importMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)', marginLeft:'auto' }}>
             {importMsg}
@@ -504,7 +504,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
               const isSel = selected.has(nombre)
               return (
                 <tr key={nombre}
-                  style={{ background: isSel ? 'rgba(200,169,110,.06)' : dirty ? 'rgba(200,169,110,.03)' : undefined }}>
+                  style={{ background: isSel ? 'var(--c-oro-fondo)' : dirty ? 'var(--c-panel)' : undefined }}>
                   {/* Checkbox */}
                   <td>
                     <input type="checkbox" checked={isSel}
@@ -512,7 +512,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
                   </td>
                   {/* Nombre */}
                   <td style={{ fontSize:'0.78rem', fontWeight: dirty ? 600 : 400 }}>
-                    {dirty && <span style={{ color:'#c8a96e', marginRight:4, fontSize:'0.65rem' }}>●</span>}
+                    {dirty && <span style={{ color:'var(--c-oro-texto)', marginRight:4, fontSize:'0.65rem' }}>●</span>}
                     {nombre}
                   </td>
                   {/* Tipo */}
@@ -534,21 +534,21 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
                   <td className="r">
                     <input type="number" className="cd-tbl-input r"
                       value={info.multiplicador} min={1} max={20} step={1}
-                      style={{ width:44, color: info.multiplicador > 1 ? 'var(--vt-gold-dark,#a07830)' : undefined, fontWeight: info.multiplicador > 1 ? 700 : undefined }}
+                      style={{ width:44, color: info.multiplicador > 1 ? 'var(--c-oro-texto)' : undefined, fontWeight: info.multiplicador > 1 ? 700 : undefined }}
                       onChange={e => setField(nombre, 'multiplicador', Number(e.target.value))} />
                   </td>
                   {/* Costo */}
                   <td className="r">
                     <input type="number" className="cd-tbl-input r"
                       value={info.costo_unitario} min={0} step={100}
-                      style={{ width:72, color: info.costo_unitario > 0 ? '#7ec8a0' : undefined }}
+                      style={{ width:72, color: info.costo_unitario > 0 ? 'var(--c-musgo)' : undefined }}
                       onChange={e => setField(nombre, 'costo_unitario', Number(e.target.value))} />
                   </td>
                   {/* Discard */}
                   <td>
                     {dirty && (
                       <button onClick={() => discardOne(nombre)}
-                        style={{ background:'none', border:'none', color:'#555', cursor:'pointer', fontSize:'0.75rem', padding:'0 4px' }}
+                        style={{ background:'none', border:'none', color:'var(--c-gris)', cursor:'pointer', fontSize:'0.75rem', padding:'0 4px' }}
                         title="Descartar cambio">
                         ↩
                       </button>
@@ -559,7 +559,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ textAlign:'center', padding:'2rem', color:'#555', fontSize:'0.85rem' }}>
+                <td colSpan={8} style={{ textAlign:'center', padding:'2rem', color:'var(--c-gris)', fontSize:'0.85rem' }}>
                   Sin productos para este filtro
                 </td>
               </tr>
@@ -572,14 +572,14 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
       {filtered.length > PAGE_SIZE && (
         <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'0.75rem', marginTop:'0.75rem' }}>
           <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={safePage === 0}
-            style={{ padding:'4px 12px', borderRadius:2, background:'transparent', border:'1px solid #2a2a2a', color: safePage === 0 ? '#444' : '#aaa', fontSize:'0.78rem', cursor: safePage === 0 ? 'default' : 'pointer' }}>
+            style={{ padding:'4px 12px', borderRadius:2, background:'transparent', border:'1px solid var(--c-linea)', color: safePage === 0 ? 'var(--c-gris-claro)' : 'var(--c-tinta)', fontSize:'0.78rem', cursor: safePage === 0 ? 'default' : 'pointer' }}>
             ← Anterior
           </button>
-          <span style={{ fontSize:'0.75rem', color:'#888' }}>
+          <span style={{ fontSize:'0.75rem', color:'var(--c-gris)' }}>
             Página {safePage + 1} de {pageCount} · {filtered.length} productos
           </span>
           <button onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} disabled={safePage >= pageCount - 1}
-            style={{ padding:'4px 12px', borderRadius:2, background:'transparent', border:'1px solid #2a2a2a', color: safePage >= pageCount - 1 ? '#444' : '#aaa', fontSize:'0.78rem', cursor: safePage >= pageCount - 1 ? 'default' : 'pointer' }}>
+            style={{ padding:'4px 12px', borderRadius:2, background:'transparent', border:'1px solid var(--c-linea)', color: safePage >= pageCount - 1 ? 'var(--c-gris-claro)' : 'var(--c-tinta)', fontSize:'0.78rem', cursor: safePage >= pageCount - 1 ? 'default' : 'pointer' }}>
             Siguiente →
           </button>
         </div>
@@ -589,7 +589,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
       {pendingCount > 0 && (
         <div style={{ position:'sticky', bottom:'1.25rem', display:'flex', justifyContent:'center', marginTop:'1rem' }}>
           <button
-            style={{ padding:'0.625rem 2rem', borderRadius:24, background:'var(--vt-green)', color:'#0a0a0a', fontWeight:800, fontSize:'0.88rem', border:'none', cursor:'pointer', boxShadow:'0 4px 16px rgba(0,0,0,0.5)' }}
+            style={{ padding:'0.625rem 2rem', borderRadius:24, background:'var(--c-tinta)', color:'var(--c-fondo)', fontWeight:800, fontSize:'0.88rem', border:'none', cursor:'pointer', boxShadow:'0 4px 16px rgba(0,0,0,0.5)' }}
             disabled={saving} onClick={handleSaveAll}>
             {saving ? '⟳ Guardando…' : `💾 Guardar ${pendingCount} cambio${pendingCount > 1 ? 's' : ''}`}
           </button>

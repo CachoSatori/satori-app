@@ -160,16 +160,16 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
       {sinAsignar.total !== 0 && (
         <div style={{ background:'var(--vt-paper)', border:'1px dashed var(--vt-border)', borderRadius:3, padding:'0.75rem 1rem', marginBottom:'1rem', display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'1rem', flexWrap:'wrap' }}>
           <div>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:'0.85rem' }}>{CLAVE_SALON_SIN_MESERO}</div>
-            <div style={{ fontSize:'0.62rem', color:'#888', marginTop:'0.15rem' }}>
+            <div style={{ fontFamily:'var(--font-sans)', fontVariantNumeric:'tabular-nums', fontWeight:700, fontSize:'0.85rem' }}>{CLAVE_SALON_SIN_MESERO}</div>
+            <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginTop:'0.15rem' }}>
               Venta de salón que la factura no le acredita a nadie · el nombre de quien comandó
               se busca en la lente por línea (Saloneros por línea) · no compite en el
               ranking · <strong>no suma al Total Cajeros</strong>
             </div>
           </div>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:'0.9rem' }}>
+          <div style={{ fontFamily:'var(--font-sans)', fontVariantNumeric:'tabular-nums', fontWeight:700, fontSize:'0.9rem' }}>
             {fi(sinAsignar.total)}
-            <span style={{ fontSize:'0.62rem', color:'#888', fontWeight:400 }}> · {sinAsignar.ordenes} órdenes</span>
+            <span style={{ fontSize:'0.62rem', color:'var(--c-gris)', fontWeight:400 }}> · {sinAsignar.ordenes} órdenes</span>
           </div>
         </div>
       )}
@@ -192,12 +192,12 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                   { id:'promPlato',label:'Prom/plato' },
                 ].map(col => (
                   <th key={col.id} className="r"
-                    style={{ cursor:'pointer', color: sortCol===col.id ? 'var(--vt-gold)' : undefined, whiteSpace:'nowrap' }}
+                    style={{ cursor:'pointer', color: sortCol===col.id ? 'var(--c-oro-texto)' : undefined, whiteSpace:'nowrap' }}
                     onClick={() => toggleSort(col.id)}>
                     {col.label}{sortCol===col.id ? ' ▼' : ''}
                   </th>
                 ))}
-                <th className="r" style={{ color:'#555', fontSize:'0.65rem', whiteSpace:'nowrap' }}>vs Gral</th>
+                <th className="r" style={{ color:'var(--c-gris)', fontSize:'0.65rem', whiteSpace:'nowrap' }}>vs Gral</th>
               </tr>
             </thead>
             <tbody>
@@ -209,12 +209,12 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                 const pctTot = gen.total > 0 ? s.total / gen.total * 100 : 0
                 return (
                   <tr key={s.nombre}>
-                    <td style={{ textAlign:'center', fontWeight:700, color: i===0?'var(--vt-gold)':i===1?'#aaa':i===2?'#c8a030':'#555' }}>
+                    <td style={{ textAlign:'center', fontWeight:700, color: i===0?'var(--c-oro-texto)':i===1?'var(--c-gris-claro)':i===2?'#c8a030':'var(--c-gris)' }}>
                       {i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
                     </td>
                     <td>
                       <div style={{ fontWeight:600 }}>{s.nombre}</div>
-                      <div style={{ fontSize:'0.65rem', color:'#555' }}>{s.days} días · {pctTot.toFixed(1)}%</div>
+                      <div style={{ fontSize:'0.65rem', color:'var(--c-gris)' }}>{s.days} días · {pctTot.toFixed(1)}%</div>
                     </td>
                     <td className="r vt-bold">{fi(s.total)}</td>
                     <td className="r">{s.pax}</td>
@@ -232,7 +232,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
             </tbody>
             <tfoot>
               {sinAsignar.total !== 0 && (
-                <tr style={{ color:'#777', fontStyle:'italic' }}>
+                <tr style={{ color:'var(--c-gris)', fontStyle:'italic' }}>
                   <td style={{ textAlign:'center' }}>—</td>
                   <td>
                     <div style={{ fontWeight:600 }}>{CLAVE_SALON_SIN_MESERO}</div>
@@ -290,7 +290,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                   <div className="vt-vs-gen" style={{ color: vsGen >= 0 ? 'var(--vt-green)' : 'var(--vt-red)' }}>
                     {vsGen >= 0 ? '▲' : '▼'} {fi(Math.abs(vsGen))} vs gral
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#888' }}>{isOpen ? '▲' : '▼'}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--c-gris)' }}>{isOpen ? '▲' : '▼'}</div>
                 </div>
               </div>
 
@@ -323,7 +323,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
               {/* Expanded: top 5 */}
               {isOpen && (
                 <div className="vt-sal-detail">
-                  <div style={{ fontSize: '0.7rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#888', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--c-gris)', marginBottom: '0.5rem' }}>
                     Top 5 productos
                   </div>
                   {top5.map(p => (

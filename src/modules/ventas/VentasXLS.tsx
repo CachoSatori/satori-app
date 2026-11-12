@@ -179,7 +179,7 @@ export default function VentasXLS({ dias, onRefresh }: Props) {
             <div key={i} className={`vt-queue-item ${q.status}`}>
               <div>
                 <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{q.name}</div>
-                {q.date && <div style={{ fontSize: '0.72rem', color: '#888' }}>{fmtDate(q.date)}</div>}
+                {q.date && <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>{fmtDate(q.date)}</div>}
                 {q.status === 'error' && q.error && (
                   <div style={{ fontSize: '0.72rem', color: 'var(--vt-red)', marginTop: '0.2rem' }}>
                     {q.error}
@@ -187,9 +187,9 @@ export default function VentasXLS({ dias, onRefresh }: Props) {
                 )}
               </div>
               <div style={{ flexShrink: 0 }}>
-                {q.status === 'pending'    && <span style={{ color: '#888', fontSize: '0.78rem' }}>En espera…</span>}
+                {q.status === 'pending'    && <span style={{ color: 'var(--c-gris)', fontSize: '0.78rem' }}>En espera…</span>}
                 {q.status === 'processing' && (
-                  <span style={{ color: 'var(--vt-gold)', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <span style={{ color: 'var(--c-oro-texto)', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     <span className="vt-spin">⟳</span> Procesando…
                   </span>
                 )}
@@ -219,7 +219,7 @@ export default function VentasXLS({ dias, onRefresh }: Props) {
             <div key={date} className="vt-file-row">
               <div>
                 <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{fmtDate(date)}</div>
-                <div style={{ fontSize: '0.72rem', color: '#888' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--c-gris)' }}>
                   {dia.fileName} · {nSals} empleado{nSals !== 1 ? 's' : ''}
                 </div>
               </div>
@@ -228,7 +228,7 @@ export default function VentasXLS({ dias, onRefresh }: Props) {
           )
         })}
         {sortedDates.length === 0 && (
-          <div style={{ color: '#888', padding: '1rem', textAlign: 'center', fontSize: '0.85rem' }}>
+          <div style={{ color: 'var(--c-gris)', padding: '1rem', textAlign: 'center', fontSize: '0.85rem' }}>
             Sin archivos cargados — arrastrá un XLS para empezar
           </div>
         )}
@@ -240,7 +240,7 @@ export default function VentasXLS({ dias, onRefresh }: Props) {
           onClick={() => { setPendingModal(null); pendingModal.resolve('') }}>
           <div className="cd-modal" onClick={e => e.stopPropagation()}>
             <div className="cd-modal-title">¿Qué fecha es este archivo?</div>
-            <p style={{ fontSize: '0.85rem', marginBottom: '1rem', color: '#888' }}>
+            <p style={{ fontSize: '0.85rem', marginBottom: '1rem', color: 'var(--c-gris)' }}>
               No se pudo detectar la fecha de <strong>{pendingModal.name}</strong>.<br />
               Ingresala manualmente para continuar.
             </p>

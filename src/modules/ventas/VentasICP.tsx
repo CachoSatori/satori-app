@@ -57,7 +57,7 @@ interface Props {
 // ── ICP color thresholds ───────────────────────────────────────
 function icpColor(icp: number): string {
   if (icp >= 13) return 'var(--vt-green)'
-  if (icp >= 10) return 'var(--vt-gold-dark, #a07830)'
+  if (icp >= 10) return 'var(--c-oro-texto)'
   return 'var(--vt-red)'
 }
 function icpLabel(icp: number): string {
@@ -221,7 +221,7 @@ export default function VentasICP({ dias, pm }: Props) {
           <div className="vt-kpi-sub" style={{ color: icpColor(restICP) }}>
             {icpLabel(restICP)}
           </div>
-          <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: '#aaa' }}>
+          <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: 'var(--c-tinta)' }}>
             {fi(restPropina)} propina electrónica / {fi(restVentas)} vendido por saloneros
           </div>
         </div>
@@ -241,7 +241,7 @@ export default function VentasICP({ dias, pm }: Props) {
                     {d.icp > 0 ? d.icp.toFixed(1) + '%' : '—'}
                   </div>
                   <div style={{ width: '100%', height: `${h}%`, minHeight: 2, background: icpColor(d.icp), borderRadius: 2, transition: 'height 0.3s' }} />
-                  <div style={{ fontSize: '0.6rem', color: '#555' }}>{MNAMES[mm] ?? mm}</div>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--c-gris)' }}>{MNAMES[mm] ?? mm}</div>
                 </div>
               )
             })}
@@ -276,12 +276,12 @@ export default function VentasICP({ dias, pm }: Props) {
                 <td style={{ fontWeight: 600 }}>
                   {d.name}
                   {!d.matched && (
-                    <span style={{ fontSize: '0.62rem', color: '#888', marginLeft: '0.4rem' }}
+                    <span style={{ fontSize: '0.62rem', color: 'var(--c-gris)', marginLeft: '0.4rem' }}
                       title="No se encontró este salonero en los registros de propinas">⚠</span>
                   )}
                 </td>
                 <td className="r">{fi(d.ventas)}</td>
-                <td className="r" style={{ fontWeight: 600, color: d.propina > 0 ? 'var(--vt-green)' : '#888' }}>
+                <td className="r" style={{ fontWeight: 600, color: d.propina > 0 ? 'var(--vt-green)' : 'var(--c-gris)' }}>
                   {d.propina > 0 ? fi(d.propina) : '—'}
                 </td>
                 <td className="r">
@@ -290,10 +290,10 @@ export default function VentasICP({ dias, pm }: Props) {
                       title="Barra no tiene mesas propias: el ICP no aplica">no aplica a barra</span>
                   ) : (
                   <span style={{
-                    fontFamily: "'DM Mono',monospace",
+                    fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums',
                     fontSize: '1rem',
                     fontWeight: 800,
-                    color: d.icp > 0 ? icpColor(d.icp) : '#555',
+                    color: d.icp > 0 ? icpColor(d.icp) : 'var(--c-gris)',
                   }}>
                     {d.icp > 0 ? d.icp.toFixed(1) + '%' : '—'}
                   </span>
@@ -306,7 +306,7 @@ export default function VentasICP({ dias, pm }: Props) {
                       fontWeight: 700,
                       padding: '0.15rem 0.5rem',
                       borderRadius: 99,
-                      background: `${icpColor(d.icp)}22`,
+                      background: `color-mix(in srgb, ${icpColor(d.icp)} 13%, transparent)`,
                       color: icpColor(d.icp),
                     }}>
                       {icpLabel(d.icp)}
@@ -316,10 +316,10 @@ export default function VentasICP({ dias, pm }: Props) {
                 <td className="r vt-muted">{d.shifts > 0 ? d.shifts : '—'}</td>
                 <td className="r vt-muted">{d.hours > 0 ? d.hours.toFixed(0) + 'h' : '—'}</td>
                 <td className="r vt-muted">{d.payout > 0 ? fi(d.payout) : '—'}</td>
-                <td className="r" style={{ fontSize:'0.8rem', color: d.propTurno > 0 ? '#7ec8a0' : '#555' }}>
+                <td className="r" style={{ fontSize:'0.8rem', color: d.propTurno > 0 ? 'var(--c-musgo)' : 'var(--c-gris)' }}>
                   {d.propTurno > 0 ? fi(d.propTurno) : '—'}
                 </td>
-                <td className="r" style={{ fontSize:'0.8rem', color: d.propHora > 0 ? '#c8a96e' : '#555' }}>
+                <td className="r" style={{ fontSize:'0.8rem', color: d.propHora > 0 ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>
                   {d.propHora > 0 ? fi(d.propHora) : '—'}
                 </td>
                 <td className="r">{fi(d.promPax)}</td>
@@ -368,8 +368,8 @@ export default function VentasICP({ dias, pm }: Props) {
               if (!hasData) return null
               const MNAMES: Record<string, string> = { '01':'E','02':'F','03':'M','04':'A','05':'M','06':'J','07':'J','08':'A','09':'S','10':'O','11':'N','12':'D' }
               return (
-                <div key={d.name} style={{ background: 'var(--vt-ink)', borderRadius: 2, padding: '0.75rem 0.875rem' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--vt-paper)', marginBottom: '0.5rem' }}>
+                <div key={d.name} style={{ background: 'var(--c-panel)', borderRadius: 2, padding: '0.75rem 0.875rem' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--c-tinta)', marginBottom: '0.5rem' }}>
                     {d.name}
                   </div>
                   <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'flex-end', height: 32 }}>
@@ -379,7 +379,7 @@ export default function VentasICP({ dias, pm }: Props) {
                       return (
                         <div key={s.ym} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                           <div style={{ width: '100%', height: `${h}%`, minHeight: s.icp > 0 ? 2 : 0, background: icpColor(s.icp), borderRadius: 1, transition: 'height 0.3s' }} />
-                          <div style={{ fontSize: '0.5rem', color: '#444' }}>{MNAMES[mm] ?? mm}</div>
+                          <div style={{ fontSize: '0.5rem', color: 'var(--c-gris-claro)' }}>{MNAMES[mm] ?? mm}</div>
                         </div>
                       )
                     })}
@@ -396,7 +396,7 @@ export default function VentasICP({ dias, pm }: Props) {
 
       {/* Info note about matching */}
       {icpData.some(d => !d.matched) && (
-        <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', color: '#888', display: 'flex', gap: '0.4rem' }}>
+        <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', color: 'var(--c-gris)', display: 'flex', gap: '0.4rem' }}>
           <span>⚠</span>
           <span>
             Algunos saloneros no matchearon con el sistema de propinas.

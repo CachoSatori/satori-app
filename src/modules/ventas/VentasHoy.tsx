@@ -176,7 +176,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   function delta(cur: number, prev: number | undefined, isInt = false): React.ReactNode {
     if (!prev || prev === 0) return null
     const pct = (cur - prev) / prev * 100
-    const col = pct > 0 ? 'var(--vt-green)' : pct < 0 ? 'var(--vt-red)' : '#666'
+    const col = pct > 0 ? 'var(--vt-green)' : pct < 0 ? 'var(--vt-red)' : 'var(--c-gris)'
     const abs = isInt ? Math.round(cur - prev).toLocaleString('es-CR') : fi(Math.abs(cur - prev))
     return (
       <div style={{ fontSize:'0.68rem', color:col, marginTop:2 }}>
@@ -259,7 +259,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             return (
               <button
                 onClick={() => shareText(text, setCopied)}
-                style={{ padding:'4px 10px', borderRadius:2, border:'1px solid #2a4a2a', background: copied ? 'rgba(74,154,106,.2)' : 'transparent', color: copied ? 'var(--vt-green)' : '#7aaa7a', fontSize:'0.72rem', cursor:'pointer', whiteSpace:'nowrap' }}>
+                style={{ padding:'4px 10px', borderRadius:2, border:'1px solid var(--c-linea)', background: copied ? 'var(--c-musgo-fondo)' : 'transparent', color: copied ? 'var(--vt-green)' : 'var(--c-musgo)', fontSize:'0.72rem', cursor:'pointer', whiteSpace:'nowrap' }}>
                 {copied ? '✓ Copiado' : '📤'}
               </button>
             )
@@ -364,14 +364,14 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         const diffVt  = (gen.total + gen.cajTotal) - sameWeekdayAvg.total
         const colPP   = diffPP >= 0 ? 'var(--vt-green)' : 'var(--vt-red)'
         return (
-          <div style={{ background:'rgba(200,169,110,.06)', border:'1px solid rgba(200,169,110,.15)', borderRadius:2, padding:'0.5rem 0.875rem', marginBottom:'0.75rem', display:'flex', alignItems:'center', gap:'1rem', flexWrap:'wrap', fontSize:'0.75rem' }}>
-            <span style={{ color:'#555', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.08em', fontSize:'0.62rem' }}>
+          <div style={{ background:'var(--c-oro-fondo)', border:'1px solid var(--c-linea)', borderRadius:2, padding:'0.5rem 0.875rem', marginBottom:'0.75rem', display:'flex', alignItems:'center', gap:'1rem', flexWrap:'wrap', fontSize:'0.75rem' }}>
+            <span style={{ color:'var(--c-gris)', fontWeight:600, fontSize:'0.62rem' }}>
               📅 Contexto {DAYS[sameWeekdayAvg.dow]}
             </span>
-            <span style={{ color:'#888' }}>
+            <span style={{ color:'var(--c-gris)' }}>
               Promedio {sameWeekdayAvg.n} {DAYS[sameWeekdayAvg.dow]} anteriores:
-              <strong style={{ color:'#c8a96e', marginLeft:'0.3rem' }}>{fi(sameWeekdayAvg.promPax)}/PAX</strong>
-              <strong style={{ color:'#888', marginLeft:'0.5rem' }}>{fi(sameWeekdayAvg.total)} ventas</strong>
+              <strong style={{ color:'var(--c-oro-texto)', marginLeft:'0.3rem' }}>{fi(sameWeekdayAvg.promPax)}/PAX</strong>
+              <strong style={{ color:'var(--c-gris)', marginLeft:'0.5rem' }}>{fi(sameWeekdayAvg.total)} ventas</strong>
             </span>
             <span style={{ color:colPP, fontWeight:700 }}>
               {diffPP >= 0 ? '▲ +' : '▼ '}{Math.abs(pctPP).toFixed(1)}% Prom/PAX
@@ -384,7 +384,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
       {/* Saloneros KPIs */}
       <div className="vt-sl">
         Saloneros
-        {prevDate && <span style={{ fontSize:'0.65rem', color:'#555', marginLeft:'0.5rem', fontWeight:400 }}>vs {prevDate}</span>}
+        {prevDate && <span style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginLeft:'0.5rem', fontWeight:400 }}>vs {prevDate}</span>}
       </div>
       <div className="vt-kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))' }}>
         <div className="vt-kpi red">
@@ -458,7 +458,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               <th className="r">Ticket/ítem</th>
               <th className="r">Beb/PAX</th>
               <th className="r">Ratio C/B</th>
-              <th className="r" style={{ color:'#555', fontSize:'0.65rem' }}>vs General</th>
+              <th className="r" style={{ color:'var(--c-gris)', fontSize:'0.65rem' }}>vs General</th>
             </tr>
           </thead>
           <tbody>
@@ -476,7 +476,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
                   <td className="r" style={{ color: metaColor(s.promPax, metaPP) }}>
                     {fi(s.promPax)}
                   </td>
-                  <td className="r" style={{ fontSize:'0.8rem', color: s.promTicket >= (gen.promTicket ?? 0) ? 'var(--vt-green)' : '#888' }}>
+                  <td className="r" style={{ fontSize:'0.8rem', color: s.promTicket >= (gen.promTicket ?? 0) ? 'var(--vt-green)' : 'var(--c-gris)' }}>
                     {fi(s.promTicket)}
                   </td>
                   <td className="r" style={{ color: metaColor(s.bebPax, metaBP) }}>
@@ -547,7 +547,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           </div>
         ))}
         {prodsToShow.length === 0 && (
-          <div style={{ color: '#888', padding: '1rem', textAlign: 'center', fontSize: '0.85rem' }}>
+          <div style={{ color: 'var(--c-gris)', padding: '1rem', textAlign: 'center', fontSize: '0.85rem' }}>
             Sin datos de productos
           </div>
         )}
@@ -560,17 +560,17 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:'0.75rem' }}>
             {gen.cortTotal > 0 && (
               <SpecialCard
-                icon="🎁" title="Regalías / Cortesías" color="#e8a838"
+                icon="🎁" title="Regalías / Cortesías" color="var(--c-oro-texto)"
                 total={gen.cortTotal} prods={cortProds} />
             )}
             {gen.persTotal > 0 && (
               <SpecialCard
-                icon="👨‍🍳" title="Comida Personal" color="#7b9fc7"
+                icon="👨‍🍳" title="Comida Personal" color="var(--c-azul)"
                 total={gen.persTotal} prods={persProds} />
             )}
             {descProds.length > 0 && (
               <SpecialCard
-                icon="❓" title="Desconocidos" color="#888"
+                icon="❓" title="Desconocidos" color="var(--c-gris)"
                 total={descProds.reduce((s,p)=>s+p.m,0)} prods={descProds} />
             )}
           </div>
@@ -585,17 +585,17 @@ function SpecialCard({ icon, title, color, total, prods }: {
   total: number; prods: Array<{ nombre: string; q: number; m: number }>
 }) {
   return (
-    <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.875rem', borderLeft:`3px solid ${color}` }}>
+    <div style={{ background:'var(--c-panel)', borderRadius:2, padding:'0.875rem', borderLeft:`3px solid ${color}` }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem' }}>
         <div style={{ fontSize:'0.82rem', fontWeight:700, color }}>{icon} {title}</div>
-        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1rem', fontWeight:800, color }}>
+        <div style={{ fontFamily:'var(--font-serif)', fontVariantNumeric:'tabular-nums', fontSize:'1rem', fontWeight:800, color }}>
           {new Intl.NumberFormat('es-CR',{style:'currency',currency:'CRC',minimumFractionDigits:0}).format(total)}
         </div>
       </div>
       {prods.map(p => (
-        <div key={p.nombre} style={{ display:'flex', gap:'0.5rem', alignItems:'baseline', padding:'0.25rem 0', borderBottom:'1px solid #1a1a1a' }}>
-          <span style={{ flex:1, fontSize:'0.78rem', color:'#aaa', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.nombre}</span>
-          <span style={{ fontSize:'0.72rem', color:'#555', whiteSpace:'nowrap' }}>{p.q} uds</span>
+        <div key={p.nombre} style={{ display:'flex', gap:'0.5rem', alignItems:'baseline', padding:'0.25rem 0', borderBottom:'1px solid var(--c-linea)' }}>
+          <span style={{ flex:1, fontSize:'0.78rem', color:'var(--c-tinta)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.nombre}</span>
+          <span style={{ fontSize:'0.72rem', color:'var(--c-gris)', whiteSpace:'nowrap' }}>{p.q} uds</span>
           <span style={{ fontSize:'0.78rem', color, fontWeight:600, whiteSpace:'nowrap' }}>
             {new Intl.NumberFormat('es-CR',{style:'currency',currency:'CRC',minimumFractionDigits:0}).format(p.m)}
           </span>

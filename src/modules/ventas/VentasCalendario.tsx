@@ -92,26 +92,26 @@ export default function VentasCalendario({ dias, hist }: Props) {
           const data = dowAvgs[d]
           const rank = data ? sortedNegas.findIndex(v => v.dow === d) : -1
           const n    = sortedNegas.length
-          let bg = 'var(--vt-ink)', valColor = 'var(--vt-gold)'
-          if (rank === 0)      { bg = 'rgba(46,125,50,.18)'; valColor = 'var(--vt-green)' }
-          else if (rank===n-1) { bg = 'rgba(194,59,34,.14)'; valColor = 'var(--vt-red)' }
+          let bg = 'var(--c-panel)', valColor = 'var(--c-oro-texto)'
+          if (rank === 0)      { bg = 'var(--c-musgo-fondo)'; valColor = 'var(--vt-green)' }
+          else if (rank===n-1) { bg = 'var(--c-laca-fondo)'; valColor = 'var(--vt-red)' }
           return (
             <div key={d} style={{ background:bg, padding:'0.625rem 0.4rem', borderRadius:2, textAlign:'center' }}>
-              <div style={{ fontSize:'0.62rem', letterSpacing:'0.1em', textTransform:'uppercase', color:'#888', marginBottom:4 }}>
+              <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:4 }}>
                 {DAYS_SHORT[d]}
               </div>
               {data ? (
                 <>
-                  <div style={{ fontSize:'0.6rem', color:'#555', marginBottom:2 }}>{data.cnt}×</div>
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'clamp(0.7rem,1.2vw,0.88rem)', fontWeight:800, color:valColor }}>
+                  <div style={{ fontSize:'0.6rem', color:'var(--c-gris)', marginBottom:2 }}>{data.cnt}×</div>
+                  <div style={{ fontFamily:'var(--font-sans)', fontVariantNumeric:'tabular-nums', fontSize:'clamp(0.7rem,1.2vw,0.88rem)', fontWeight:800, color:valColor }}>
                     {fi(data.neta)}
                   </div>
-                  <div style={{ fontSize:'0.62rem', color:'#888', marginTop:3 }}>
+                  <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginTop:3 }}>
                     {fi(data.promPax)}/PAX
                   </div>
                 </>
               ) : (
-                <div style={{ fontSize:'0.72rem', color:'#333', marginTop:6 }}>—</div>
+                <div style={{ fontSize:'0.72rem', color:'var(--c-gris-claro)', marginTop:6 }}>—</div>
               )}
             </div>
           )
@@ -136,16 +136,16 @@ export default function VentasCalendario({ dias, hist }: Props) {
             <div key={mk}>
               {/* Month header */}
               <div
-                style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.625rem 0.875rem', background:'var(--vt-ink)', borderRadius:2, cursor:'pointer', borderLeft:'3px solid var(--vt-border)' }}
+                style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.625rem 0.875rem', background:'var(--c-panel)', borderRadius:2, cursor:'pointer', borderLeft:'3px solid var(--vt-border)' }}
                 onClick={() => toggleMonth(mk)}>
                 <div style={{ display:'flex', gap:'0.75rem', alignItems:'baseline' }}>
-                  <span style={{ fontSize:'0.88rem', fontWeight:700, color:'var(--vt-paper)' }}>{monthLabel}</span>
-                  <span style={{ fontSize:'0.72rem', color:'#888' }}>{days.length} días</span>
+                  <span style={{ fontSize:'0.88rem', fontWeight:700, color:'var(--c-tinta)' }}>{monthLabel}</span>
+                  <span style={{ fontSize:'0.72rem', color:'var(--c-gris)' }}>{days.length} días</span>
                 </div>
                 <div style={{ display:'flex', gap:'1rem', alignItems:'center' }}>
-                  <span style={{ fontSize:'0.88rem', fontWeight:700, color:'var(--vt-gold)' }}>{fi(monthTotal)}</span>
-                  {monthPAX > 0 && <span style={{ fontSize:'0.72rem', color:'#888' }}>{monthPAX.toLocaleString('es-CR')} PAX</span>}
-                  <span style={{ color:'#555', fontSize:'0.78rem' }}>{isOpen ? '▼' : '▶'}</span>
+                  <span style={{ fontSize:'0.88rem', fontWeight:700, color:'var(--c-oro-texto)' }}>{fi(monthTotal)}</span>
+                  {monthPAX > 0 && <span style={{ fontSize:'0.72rem', color:'var(--c-gris)' }}>{monthPAX.toLocaleString('es-CR')} PAX</span>}
+                  <span style={{ color:'var(--c-gris)', fontSize:'0.78rem' }}>{isOpen ? '▼' : '▶'}</span>
                 </div>
               </div>
 
@@ -171,20 +171,20 @@ export default function VentasCalendario({ dias, hist }: Props) {
                         const ppax    = d.pax > 0 ? d.ventaNeta / d.pax : 0
                         let color = 'inherit'
                         let badge = ''
-                        let rowBg = i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,.02)'
-                        if (isBest)  { color = 'var(--vt-green)'; badge = '★ '; rowBg = 'rgba(46,125,50,.1)' }
-                        if (isWorst) { color = 'var(--vt-red)';   badge = '▼ '; rowBg = 'rgba(194,59,34,.1)' }
+                        let rowBg = i % 2 === 0 ? 'transparent' : 'var(--c-panel)'
+                        if (isBest)  { color = 'var(--vt-green)'; badge = '★ '; rowBg = 'var(--c-musgo-fondo)' }
+                        if (isWorst) { color = 'var(--vt-red)';   badge = '▼ '; rowBg = 'var(--c-laca-fondo)' }
                         return (
                           <tr key={d.fecha} style={{ background:rowBg }}>
                             <td style={{ color, fontWeight: isBest||isWorst ? 700 : 400 }}>
                               {badge}{dd}/{mo}/{yr}
                             </td>
-                            <td style={{ color:'#666', fontSize:'0.8rem' }}>{DAYS_SHORT[dow]}</td>
-                            <td className="r vt-bold" style={{ color: isBest ? 'var(--vt-green)' : isWorst ? 'var(--vt-red)' : 'var(--vt-gold)' }}>
+                            <td style={{ color:'var(--c-gris)', fontSize:'0.8rem' }}>{DAYS_SHORT[dow]}</td>
+                            <td className="r vt-bold" style={{ color: isBest ? 'var(--vt-green)' : isWorst ? 'var(--vt-red)' : 'var(--c-oro-texto)' }}>
                               {fi(d.ventaNeta)}
                             </td>
-                            <td className="r" style={{ color:'#888' }}>{d.pax > 0 ? d.pax.toLocaleString('es-CR') : '—'}</td>
-                            <td className="r" style={{ color:'#888' }}>{ppax > 0 ? fi(ppax) : '—'}</td>
+                            <td className="r" style={{ color:'var(--c-gris)' }}>{d.pax > 0 ? d.pax.toLocaleString('es-CR') : '—'}</td>
+                            <td className="r" style={{ color:'var(--c-gris)' }}>{ppax > 0 ? fi(ppax) : '—'}</td>
                           </tr>
                         )
                       })}

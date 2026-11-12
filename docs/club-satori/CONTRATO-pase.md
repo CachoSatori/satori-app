@@ -150,7 +150,9 @@ marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
 - **(12-nov) Piloto sin sincronización automática** (decisión del dueño): ni programador de `/club-pase/sync` ni la
   migración de reintentos (`propuestas/club_pase_reintentos.sql`); quedan para después del piloto. El pase muestra la
   fecha y la hora de Costa Rica de sus datos («Créditos al 12-nov 13:20» o «Actualizado · 12-nov 13:20») y el portal
-  tiene «Actualizar mi pase». Sin ningún rol vigente, el pase queda `EXPIRED`.
+  tiene «Actualizar mi pase». Sin ningún rol vigente, el objeto se arma `EXPIRED`. **Hallazgo (12-nov, staging):** hoy
+  nada lo vuelve a escribir después de una baja (`club_pase_por_token` no encuentra a la persona y `/sync` está apagado):
+  el pase no se vence. Las opciones están en `AVANCE-LC.md` (12-nov); elige el dueño.
 
 ## 6. Apple (apagado)
 Mismo contrato. Flag `club_config.wallet_apple_activo = false` (lo agrega A). B deja listo el `.pkpass` y el web

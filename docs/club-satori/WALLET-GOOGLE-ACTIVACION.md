@@ -111,7 +111,13 @@ Docker: se despliega con `--use-api`. Los secretos de §1 ya cargados **en stagi
    ```
    → `{"resultado":"actualizado"}` y el pase del teléfono cambia (la hora de «Créditos al …» también). Para alguien que
    nunca pidió el pase (el objeto no existe en Google), la respuesta es `{"resultado":"sin_pase"}`.
-8. **Baja:** dar de baja a la persona de prueba en staging y repetir el paso 7: el pase queda vencido.
+8. **Baja — HOY NO VENCE EL PASE (hallazgo de la prueba en staging, 12-nov).** Al dar de baja a la persona de prueba y
+   repetir el paso 7, la respuesta es **`404` `{"error":"portal_invalido"}`** y el pase del teléfono **sigue vigente**:
+   `club_pase_por_token` solo encuentra miembros activos con un rol vigente, así que `/actualizar` nunca llega a la
+   baja, y en el piloto no hay `/sync`. La caja igual rechaza el QR de alguien de baja. Pasa lo mismo con cualquier camino
+   de baja: desde la app (Club → Miembros → estado «baja»), desde el portal («Darme de baja del Local Club», si era su único
+   rol) y con la purga de autoaltas sin validar. **La solución la elige el dueño** (opciones en `AVANCE-LC.md`, 12-nov).
+   Cuando esté, esta prueba pasa a ser: dar de baja → el pase queda **vencido** en el teléfono.
 9. Borrar las variables y el archivo: `unset ANON CWK TOK; rm -f /tmp/pase.json`. Sacar las capturas para el pedido de
    publicación (§3) y anotar el resultado (SHA del paso 1, hora, qué se vio) en `AVANCE-LC.md`.
 
@@ -131,8 +137,15 @@ club-pase --project-ref <ref>`. El portal y la caja siguen funcionando sin el pa
 6. **Pedir el acceso de publicación** con la prueba hecha: Google suele pedir capturas del pase y del flujo «Agregar a
    Google Wallet». Las imágenes del pase tienen que estar publicadas en el dominio del Club (llegan con el PR de `main`).
    Hasta la aprobación, solo las cuentas de prueba pueden guardar el pase.
-7. **Con la aprobación:** Cloudflare Pages `satori-club` → Variables → `VITE_WALLET_GOOGLE` = `1` (texto, se usa en el
-   build) y volver a desplegar. Recién ahí aparecen «Agregar a Google Wallet» y «Actualizar mi pase» en el portal.
+7. **Encender** (Cloudflare Pages `satori-club` → Variables → `VITE_WALLET_GOOGLE` = `1`, texto que se usa en el build, y
+   volver a desplegar). Recién ahí aparecen «Agregar a Google Wallet» y «Actualizar mi pase» en el portal. **Condiciones,
+   todas:**
+   - [x] la prueba en staging: el pase se guarda y se ve bien (12-nov, clase `club-satori-stg`);
+   - [ ] **la baja vence el pase (probado en staging)** — hoy NO (§2, paso 8);
+   - [ ] el PR de `main` mergeado (las imágenes del pase publicadas en el dominio del Club);
+   - [ ] el Edge de prod desplegado con sus secretos, `WALLET_ENTORNO` = `prod`, y el portón probado (§2, pasos 2 a 4 con el ref de prod);
+   - [ ] la aprobación de publicación de Google.
+
    **Apagar:** `VITE_WALLET_GOOGLE` vacío y volver a desplegar.
 
 ## 4. La clase y el objeto (para el pedido de publicación)
@@ -159,9 +172,10 @@ Maqueta: `docs/club-satori/img/pase-propuesta.png` (v4, aprobada el 08-nov).
 ## 5. Riesgos del piloto
 - **Datos del pase:** el pase muestra datos de la última vez que se pidió o se actualizó (la línea con la fecha lo dice).
   Manda lo que diga el portal o la caja.
-- **Baja:** sin sincronización, el pase de alguien dado de baja sigue «vigente» en su teléfono hasta que se actualice. La caja
-  igual rechaza el QR de una persona de baja: no se pierde plata.
+- **Baja:** **hoy el pase de alguien dado de baja no se vence nunca** (ni con «Actualizar mi pase», que responde
+  `portal_invalido`; §2, paso 8). La caja igual rechaza su QR: no se pierde plata, pero la persona ve un pase que parece
+  vigente. Es condición para encender (§3, paso 7).
 - **Pase compartido:** quien tenga una captura del QR de socio puede intentar usar el beneficio (igual que con el portal).
   El enlace «Canjear» del pase genera códigos de canje de ese anfitrión: si se filtra, se corta con «Regenerar» o
   «Revocar» el botón «Canjear» en la ficha del miembro.
-- **Vencimiento:** el pase no tiene fecha propia; solo se vence con la baja (al actualizar).
+- **Vencimiento:** el pase no tiene fecha propia. Se vence solo si se lo vuelve a escribir con la persona de baja o sin roles, y hoy eso no pasa (ver «Baja»).

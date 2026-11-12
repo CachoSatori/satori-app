@@ -96,3 +96,9 @@
   - `src/modules/inbox/InboxModule.tsx` 212 y `src/modules/crm/ClientesModule.tsx` 506: `fontFamily` → `var(--font-sans)` + `tabular-nums`. **No** cambiar cómo se formatea el monto (si el formato no es el de `fi()`, anotarlo en el reporte, no arreglarlo).
 - No tocar `src/modules/salarios/**` (no está en `main`) ni `src/index.css` (es de B9).
 - **Aceptación:** diff solo de estilo; gates; `git grep -niE "monospace|DM Mono" -- src/modules ':!src/modules/salarios'` vacío salvo comentarios; guías 6.4 / Bandeja / Clientes solo si cambia algo que el encargado nombra (si no, decirlo en el PR).
+
+---
+### Tanda 4 · pedida por Ismael el 12-nov («hacer todo»)
+
+## A13 · Montos de la Bandeja con `fi()` y Salarios sin Google Fonts · `hecha` (#142, mergeada a staging el 12-nov 11:19, `5cc6402`; pase a main en PR #143, solo la Bandeja)
+- Hecha por la revisión (las líneas están pausadas). Bandeja: total de cada factura con `fi()`/`fd()`. Salarios (solo `staging`): fuentes de la app en vez del `@import` de Google, `tabular-nums` en vez de monoespaciada.

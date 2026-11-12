@@ -18,3 +18,4 @@
 | 2026-11-11 15:51 | Merge de A5 (#116) a `staging` | Aprobado por Ismael en el chat («a5 ya habíamos dicho que sí»). Gates corridos de nuevo por la revisión; mergeado (`f80b117`). |
 | 2026-11-11 15:55 | Auditoría 197 (cuándo lee el Inicio la alerta de días sin cierre) | **Una vez por sesión:** se lee la primera vez que se entra al Inicio y se reusa hasta cerrar la app o recargar; los otros pendientes se pintan sin esperarla. Cambia solo *cuándo* se consulta (no qué ni cómo); excepción autorizada para B5. |
 | 2026-11-11 22:05 | Merge de A6 (#120) a `staging` | Aprobado por Ismael («a6 ok») tras ver la vista previa. Colones «₡1.460.000» en toda la app; selector de Admin legible. |
+| 2026-11-11 22:50 | Paralelo | Con la autorización de Ismael de adelantar al máximo («sigamos avanzando»): A10 pasa a la línea B como B7 con sus archivos habilitados solo para esa tarea; A8 no espera a A7 (archivos distintos). |

@@ -52,7 +52,7 @@
   - Ajustar los tests que fijan el formato viejo; no cambiar ningún otro valor esperado.
 - **Aceptación:** diff de `fi()` solo de formato; tests verdes; guía 6.6 si cambia algo visible en Admin.
 
-## A7 · Ventas con estilo carta · `en revisión #121` · validación visual (se valida junto con B6; los estilos en línea no dependen del CSS de B6)
+## A7 · Ventas con estilo carta · `en revisión #121` (revisada 11-nov 22:50: pasa; espera validación visual de Ismael junto con B6) · validación visual
 - **Auditoría 201/202/203:**
   - sub-pestaña activa en `var(--c-oro-texto)` en vez de `ENTRADA_COLOR` (`VentasModule.tsx`); sacar los oros viejos `#c8a050`/`#c8a96e`;
   - `aria-controls` en cada pestaña y `role="tabpanel"` en el contenido; flechas izquierda/derecha para moverse;
@@ -63,7 +63,7 @@
 - No tocar `ventasTabs.ts`, roles, cálculos ni consultas (A5 ya está).
 - **Aceptación:** diff solo de estilo y ARIA; tests de Ventas verdes; capturas o link de vista previa; guía 6.4 si cambia algo que el encargado nombra.
 
-## A8 · Caja con estilo carta · `pendiente` (después de A7) · **FIRMA** · validación visual
+## A8 · Caja con estilo carta · `lista` (no depende de A7: archivos distintos) · **FIRMA** · validación visual
 - Estilos en línea de `src/modules/cash/**` como en A7. `CashCierre.tsx` tiene 13 `monospace`.
 - **Prohibido:** `cashUtils.ts`, `cierrePozo`, `diasSinCierre.ts`, cualquier función, condición, cálculo o consulta. Solo `style`, `className` y textos.
 - Lleva firma porque toca archivos de cierre: la descripción del PR dice qué va a ver el encargado, pantalla por pantalla.
@@ -73,7 +73,7 @@
 - Estilos en línea de `src/modules/tips/**` como en A7 (24 mayúsculas, paneles oscuros en `TipQuincenal`, `TipStats`). **Nunca** `tipCalculations.ts`.
 - **Aceptación:** diff solo de estilo; tests de `tips` verdes; guía 6.3.
 
-## A10 · Resumen, Admin e Inventario con estilo carta · `pendiente` (después de A9) · validación visual
+## A10 · Resumen, Admin e Inventario con estilo carta · **movida a la línea B como B7** (11-nov 22:50, para trabajar en paralelo)
 - Estilos en línea de `src/modules/resumen/**`, `src/modules/admin/**`, `src/modules/inventario/**` y `MiRendimiento.tsx` (11 `monospace`) como en A7.
 - **Aceptación:** diff solo de estilo; tests verdes; guías 6.6 y la de Resumen si cambia algo visible.
 

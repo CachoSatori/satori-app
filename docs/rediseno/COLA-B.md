@@ -60,7 +60,7 @@
 - Tests: segunda visita al Inicio no vuelve a llamar las tres funciones de la alerta; una lectura fallida sí se reintenta.
 - **Aceptación:** tests verdes; guía 6.1; link de vista previa.
 
-## B6 · Cáscara y clases de módulo con estilo carta · `en revisión #122` (reporte `2026-11-11-2239-B-B6.md`) · validación visual
+## B6 · Cáscara y clases de módulo con estilo carta · `en revisión #122` (revisada 11-nov 22:50: pasa; espera validación visual de Ismael junto con A7) · validación visual
 - **Mayúsculas:** sacar `text-transform: uppercase` del menú (`AppShell.css`), del Inicio y de las clases de módulo de `index.css` (`.vt-nav-tab`, `.shell-grupo-titulo`, `.login-btn` y las 93 de `index.css`), con letra de 44 px de alto donde sea pestaña o botón (auditoría 201).
 - **Barras y paneles oscuros:** `.vt-module`, `.vt-module-header`, `.vt-nav-tabs`, `.module-header` y las clases de Caja, Propinas e Inventario pasan a fondo blanco con filete de oro, texto en tinta; pestaña activa en `--c-oro-texto`.
 - **Botones secundarios** (`--gray-pale`, auditoría 204): borde `var(--c-linea)`, fondo transparente, texto tinta (`App.tsx`, `src/pages/auth/CambiarPasswordInicial.tsx`, `src/shared/ErrorBoundary.tsx`).
@@ -70,3 +70,10 @@
 - No tocar componentes de `src/modules/` (eso es de la línea A).
 - **Aceptación:** build y tests verdes; capturas 390 y 1280 de login, Inicio, Ventas, Caja y Propinas; guía 6.1 e `INVENTARIO.md` si cambia algo.
 
+
+## B7 · Resumen, Admin e Inventario con estilo carta (ex A10) · `lista` · validación visual
+- **Archivos habilitados solo para esta tarea:** `src/modules/resumen/**`, `src/modules/admin/**`, `src/modules/inventario/**`, `src/modules/ventas/MiRendimiento.tsx`, guías 6.5, 6.6 y la de Resumen. (La línea A no los toca mientras B7 esté abierta.)
+- Estilos en línea como en A7: colores fijos → `var(--c-*)`; `monospace`/`'DM Mono'` → `var(--font-sans)` + `tabular-nums`; sin `textTransform: 'uppercase'`; fondos oscuros → blanco o panel; números grandes en `var(--font-serif)`; oro de texto `--c-oro-texto`.
+- Cambiar las copias locales de `fi` con el formato viejo en `inventario/*` por el `fi()` compartido.
+- **Nunca** un cálculo, una condición, un `onClick` ni una consulta. Diff solo de estilo y texto.
+- **Aceptación:** tests verdes; gates del PROTOCOLO; guías si cambia algo visible; link de vista previa.

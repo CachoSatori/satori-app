@@ -34,3 +34,4 @@
 | 2026-11-12 06:44 | **#131 (Daruma) mergeado a `main`** | Merge `37cd66e` (head `63981ea`), hecho por la revisión de la mañana con la firma de la fila anterior. Deploy a GitHub Pages ✅. Respaldo previo: rama `respaldo/pre-daruma` = `9efde77`. |
 | 2026-11-12 06:40 | **Tanda 3** | Ismael: «hagamos tanda 3» y eligió **todo**: Daruma en Semana y Reporte mensual; 202 (foco en «Más») y 205 (monospace restante); 206 (kanji sin Google); un solo Daruma en el Inicio en computadora. Solo pantalla. |
 | 2026-11-12 07:15 | Revisión de A11 (#135) y B9 (#134) | Ismael, por chat: «ya se terminaron las 2 tareas, revisa». Gates corridos de nuevo por la revisión; mergeadas a `staging` (`b3b3134`, `2e1f73c`). Validación visual en las vistas previas pendiente. |
+| 2026-11-12 07:35 | Validación visual de A11 (#135) y B9 (#134) | Ismael: «b9 ok», «a11 ok» en las vistas previas. Pide adelantar A12 y B10 (las líneas se disparan ya). |

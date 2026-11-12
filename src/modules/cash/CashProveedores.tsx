@@ -155,14 +155,14 @@ export default function CashProveedores({ suppliers, movements, credits, applica
       <div className="cd-prov-grid">
         {visibleStatus.map(({ s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, pendingCRC, totalPaid, saldoDisponible }) => (
           <div key={s.id} className="cd-prov-card" style={{
-            borderTop: (isOverdue || isDueSoon) ? '2px solid #c8a030' : undefined,
+            borderTop: (isOverdue || isDueSoon) ? '2px solid var(--c-oro-texto)' : undefined,
           }}>
             <div className="cd-prov-head">
               <div className="cd-prov-name">{s.name}</div>
               <div style={{ display: 'flex', gap: '0.4rem' }}>
                 <button className="tips-btn-ghost" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
                   onClick={() => openEdit(s)}>✏</button>
-                <button className="tips-btn-ghost" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', color: '#c0392b', borderColor: '#f0b0b0' }}
+                <button className="tips-btn-ghost" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', color: 'var(--c-laca)', borderColor: 'var(--c-laca-borde)' }}
                   onClick={() => handleDelete(s.id)}>×</button>
               </div>
             </div>
@@ -174,11 +174,11 @@ export default function CashProveedores({ suppliers, movements, credits, applica
               {s.cuenta_iban && (
                 <div className="cd-prov-stat">
                   <span>IBAN</span>
-                  <span style={{ fontSize: '0.72rem', fontFamily: 'monospace' }}>{s.cuenta_iban}</span>
+                  <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' }}>{s.cuenta_iban}</span>
                 </div>
               )}
               {/* Payment schedule */}
-              <div style={{ marginTop: '0.75rem', paddingTop: '0.625rem', borderTop: '1px solid var(--t-border)' }}>
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.625rem', borderTop: '1px solid var(--c-linea)' }}>
                 <div className="cd-prov-stat">
                   <span>Último pago</span>
                   <span style={{ fontSize: '0.78rem' }}>{lastPay ?? 'Sin registros'}</span>
@@ -188,7 +188,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                     <span>Próximo pago</span>
                     <span style={{
                       fontSize: '0.78rem', fontWeight: 600,
-                      color: (isOverdue || isDueSoon) ? '#a07030' : 'var(--t-teal)',
+                      color: (isOverdue || isDueSoon) ? 'var(--c-oro-texto)' : 'var(--c-teal)',
                     }}>
                       {nextDue}
                       {isOverdue && ` (hace ${Math.abs(daysUntil!)}d)`}
@@ -200,7 +200,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                 {totalPaid > 0 && (
                   <div className="cd-prov-stat">
                     <span>Total pagado</span>
-                    <span style={{ fontWeight: 600, color: 'var(--t-teal)', fontSize: '0.82rem' }}>{fi(totalPaid)}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--c-teal)', fontSize: '0.82rem' }}>{fi(totalPaid)}</span>
                   </div>
                 )}
                 {pendingCRC > 0 && (
@@ -210,9 +210,9 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                   </div>
                 )}
                 {saldoDisponible > 0 && (
-                  <div className="cd-prov-deuda" style={{ borderColor: 'var(--t-teal)' }}>
-                    <div className="cd-prov-deuda-label" style={{ color: 'var(--t-teal)' }}>💳 Saldo a favor disponible</div>
-                    <div className="cd-prov-deuda-val" style={{ color: 'var(--t-teal)' }}>{fi(saldoDisponible)}</div>
+                  <div className="cd-prov-deuda" style={{ borderColor: 'var(--c-teal)' }}>
+                    <div className="cd-prov-deuda-label" style={{ color: 'var(--c-teal)' }}>💳 Saldo a favor disponible</div>
+                    <div className="cd-prov-deuda-val" style={{ color: 'var(--c-teal)' }}>{fi(saldoDisponible)}</div>
                   </div>
                 )}
 
@@ -222,10 +222,10 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                     .sort((a, b) => (b.fecha_origen ?? b.created_at.slice(0, 10)).localeCompare(a.fecha_origen ?? a.created_at.slice(0, 10)))
                   if (!misCreds.length) return null
                   return (
-                    <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--t-border)' }}>
+                    <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--c-linea)' }}>
                       <button
                         onClick={() => toggleCred(s.id)}
-                        style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t-teal)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                        style={{ fontSize: '0.68rem', letterSpacing: '0.08em', color: 'var(--c-teal)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
                       >
                         {expandedCred === s.id ? '▼' : '▶'} Saldo a favor ({misCreds.length})
                       </button>
@@ -235,22 +235,22 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                             const saldo = saldoCredito(c, applications)
                             const apps  = applications.filter(a => a.credit_id === c.id && !a.reversed)
                             return (
-                              <div key={c.id} style={{ padding: '0.3rem 0', borderBottom: '1px solid rgba(0,0,0,0.05)', fontSize: '0.72rem' }}>
+                              <div key={c.id} style={{ padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)', fontSize: '0.72rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
-                                  <span style={{ color: '#888' }}>
+                                  <span style={{ color: 'var(--c-gris)' }}>
                                     {c.fecha_origen ?? c.created_at.slice(0, 10)} · {c.origin === 'nota_credito' ? 'Nota de crédito' : 'Sobrepago'}
                                   </span>
-                                  <span style={{ fontWeight: 600, color: saldo > 0 ? 'var(--t-teal)' : '#888' }} title="saldo / monto original">
+                                  <span style={{ fontWeight: 600, color: saldo > 0 ? 'var(--c-teal)' : 'var(--c-gris)' }} title="saldo / monto original">
                                     {fi(saldo)} / {fi(c.amount_crc)}
                                   </span>
                                 </div>
                                 {(c.referencia || c.motivo) && (
-                                  <div style={{ fontSize: '0.62rem', color: '#888' }}>
+                                  <div style={{ fontSize: '0.62rem', color: 'var(--c-gris)' }}>
                                     {c.referencia ? `ref: ${c.referencia}` : ''}{c.referencia && c.motivo ? ' · ' : ''}{c.motivo ?? ''}
                                   </div>
                                 )}
                                 {apps.map(a => (
-                                  <div key={a.id} style={{ fontSize: '0.62rem', color: '#a07030', marginLeft: '0.5rem' }}>
+                                  <div key={a.id} style={{ fontSize: '0.62rem', color: 'var(--c-oro-texto)', marginLeft: '0.5rem' }}>
                                     → aplicado {fi(a.amount_applied)} · {a.applied_at.slice(0, 10)}
                                   </div>
                                 ))}
@@ -271,24 +271,24 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                     .slice(0, 8)
                   if (!provPayments.length) return null
                   return (
-                    <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--t-border)' }}>
+                    <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--c-linea)' }}>
                       <button
                         onClick={() => toggleProv(s.id)}
-                        style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t-teal)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                        style={{ fontSize: '0.68rem', letterSpacing: '0.08em', color: 'var(--c-teal)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
                       >
                         {expandedProv === s.id ? '▼' : '▶'} Historial pagos ({provPayments.length})
                       </button>
                       {expandedProv === s.id && (
                         <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                           {provPayments.map(pmt => (
-                            <div key={pmt.id} style={{ padding: '0.25rem 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                            <div key={pmt.id} style={{ padding: '0.25rem 0', borderBottom: '1px solid var(--c-linea)' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
                                 <div>
-                                  <span style={{ color: '#888' }}>{pmt.created_at?.slice(0, 10)}</span>
-                                  {pmt.method !== 'Efectivo' && <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? '#c8a030' : '#888' }}>· {pmt.method}</span>}
-                                  <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? '#c8a030' : '#888' }}>· {pmt.status === 'pendiente' ? 'Pendiente' : 'Pagado'}</span>
+                                  <span style={{ color: 'var(--c-gris)' }}>{pmt.created_at?.slice(0, 10)}</span>
+                                  {pmt.method !== 'Efectivo' && <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>· {pmt.method}</span>}
+                                  <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>· {pmt.status === 'pendiente' ? 'Pendiente' : 'Pagado'}</span>
                                 </div>
-                                <span style={{ fontWeight: 600, color: pmt.status === 'pendiente' ? '#c8a030' : 'var(--t-teal)' }}>
+                                <span style={{ fontWeight: 600, color: pmt.status === 'pendiente' ? 'var(--c-oro-texto)' : 'var(--c-teal)' }}>
                                   {fi(pmt.amount_crc)}
                                 </span>
                               </div>
@@ -296,11 +296,11 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                               {s.notificar_pago === 'email' && pmt.status === 'aprobado' && (
                                 <div style={{ marginTop: 3, fontSize: '0.62rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                                   {pmt.proveedor_notificado_at
-                                    ? <span style={{ color: 'var(--t-teal)' }}>📧 Comprobante enviado · {pmt.proveedor_notificado_at.slice(0, 10)}</span>
-                                    : <span style={{ color: '#c8a030' }}>📧 No enviado</span>}
+                                    ? <span style={{ color: 'var(--c-teal)' }}>📧 Comprobante enviado · {pmt.proveedor_notificado_at.slice(0, 10)}</span>
+                                    : <span style={{ color: 'var(--c-oro-texto)' }}>📧 No enviado</span>}
                                   <button
                                     onClick={async () => { await sendPagoProveedorEmail(pmt.id); onRefresh() }}
-                                    style={{ background: 'none', border: 'none', color: 'var(--t-teal)', cursor: 'pointer', fontSize: '0.62rem', padding: 0, textDecoration: 'underline' }}>
+                                    style={{ background: 'none', border: 'none', color: 'var(--c-teal)', cursor: 'pointer', fontSize: '0.62rem', padding: 0, textDecoration: 'underline' }}>
                                     {pmt.proveedor_notificado_at ? 'Reenviar' : 'Enviar comprobante'}
                                   </button>
                                 </div>
@@ -357,7 +357,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                 <select className="tips-input-dark" value={form.ciclo_pago} onChange={e => up('ciclo_pago', e.target.value)}>
                   {['Diario','Semanal','Quincenal','Mensual','Puntual'].map(c => <option key={c}>{c}</option>)}
                 </select>
-                <div style={{ fontSize: '0.68rem', color: 'var(--t-muted)', marginTop: 4 }}>
+                <div style={{ fontSize: '0.68rem', color: 'var(--c-gris)', marginTop: 4 }}>
                   <strong>Puntual</strong> = compra ocasional, sin recompra fija → no aparece en la agenda de ciclo.
                 </div>
               </div>
@@ -393,7 +393,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                   <option value="email" disabled={!form.email.trim()}>Email</option>
                 </select>
                 {!form.email.trim() && (
-                  <div style={{ fontSize: '0.68rem', color: 'var(--t-muted)', marginTop: 4 }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--c-gris)', marginTop: 4 }}>
                     Cargá un email arriba para poder enviar el comprobante.
                   </div>
                 )}
@@ -447,12 +447,12 @@ function PagoFoto({ movement, doc, createdBy, onAdded, onRefresh }: {
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: '0.66rem' }}>
-      <span style={{ color: '#c8a030', fontWeight: 700 }}>⚠ falta factura</span>
-      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--t-teal)', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', textDecoration: 'underline' }}>
+      <span style={{ color: 'var(--c-oro-texto)', fontWeight: 700 }}>⚠ falta factura</span>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--c-teal)', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', textDecoration: 'underline' }}>
         {busy ? '⏳ subiendo…' : '➕ Agregar foto'}
         <input type="file" accept="image/*" capture="environment" hidden onChange={onPick} disabled={busy} />
       </label>
-      {err && <span style={{ color: '#c0392b' }}>{err}</span>}
+      {err && <span style={{ color: 'var(--c-laca)' }}>{err}</span>}
     </span>
   )
 }

@@ -60,7 +60,7 @@
 - Tests: segunda visita al Inicio no vuelve a llamar las tres funciones de la alerta; una lectura fallida sí se reintenta.
 - **Aceptación:** tests verdes; guía 6.1; link de vista previa.
 
-## B6 · Cáscara y clases de módulo con estilo carta · `lista` · validación visual
+## B6 · Cáscara y clases de módulo con estilo carta · `en revisión #122` (reporte `2026-11-11-2239-B-B6.md`) · validación visual
 - **Mayúsculas:** sacar `text-transform: uppercase` del menú (`AppShell.css`), del Inicio y de las clases de módulo de `index.css` (`.vt-nav-tab`, `.shell-grupo-titulo`, `.login-btn` y las 93 de `index.css`), con letra de 44 px de alto donde sea pestaña o botón (auditoría 201).
 - **Barras y paneles oscuros:** `.vt-module`, `.vt-module-header`, `.vt-nav-tabs`, `.module-header` y las clases de Caja, Propinas e Inventario pasan a fondo blanco con filete de oro, texto en tinta; pestaña activa en `--c-oro-texto`.
 - **Botones secundarios** (`--gray-pale`, auditoría 204): borde `var(--c-linea)`, fondo transparente, texto tinta (`App.tsx`, `src/pages/auth/CambiarPasswordInicial.tsx`, `src/shared/ErrorBoundary.tsx`).

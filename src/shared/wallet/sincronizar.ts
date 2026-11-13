@@ -95,10 +95,13 @@ export async function guardarEnGoogle(fetchFn: Fetch, token: string, issuer: str
  * Solo acepta objetos vencidos: con un activo lanza error (nunca le saca el QR a un socio activo).
  */
 export type ResultadoVencer = 'vencido' | 'ya_vencido' | 'sin_pase' | 'ajeno' | 'con_codigo' | { http: number }
+/** (13-nov, staging) Google devuelve el estado en minúscula («expired») aunque se escriba «EXPIRED»: se compara sin
+ *  distinguir mayúsculas. */
+export const estadoNormal = (v: unknown) => (typeof v === 'string' ? v.trim().toUpperCase() : '')
 const tieneCodigo = (o: Record<string, unknown>) => (o.barcode !== undefined && o.barcode !== null) ||
                                                    (o.rotatingBarcode !== undefined && o.rotatingBarcode !== null)
 export async function vencerEnGoogle(fetchFn: Fetch, token: string, objeto: Record<string, unknown>): Promise<ResultadoVencer> {
-  if (objeto.state !== 'EXPIRED' || tieneCodigo(objeto) || typeof objeto.id !== 'string') throw new Error('vencerEnGoogle: el objeto no está vencido')
+  if (estadoNormal(objeto.state) !== 'EXPIRED' || tieneCodigo(objeto) || typeof objeto.id !== 'string') throw new Error('vencerEnGoogle: el objeto no está vencido')
   const url = `${API_WALLET}/genericObject/${encodeURIComponent(objeto.id)}`
   const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   const g = await fetchFn(url, { method: 'GET', headers: h })
@@ -106,7 +109,7 @@ export async function vencerEnGoogle(fetchFn: Fetch, token: string, objeto: Reco
   if (g.status !== 200) return { http: g.status }
   const actual = await g.json().catch(() => null) as Record<string, unknown> | null
   if (!actual || typeof actual !== 'object' || actual.id !== objeto.id || actual.classId !== objeto.classId) return 'ajeno'
-  if (actual.state === 'EXPIRED' && !tieneCodigo(actual)) return 'ya_vencido'
+  if (estadoNormal(actual.state) === 'EXPIRED' && !tieneCodigo(actual)) return 'ya_vencido'
   const cuerpo: Record<string, unknown> = { ...actual, ...objeto, state: 'EXPIRED' }
   delete cuerpo.barcode
   delete cuerpo.rotatingBarcode

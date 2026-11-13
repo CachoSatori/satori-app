@@ -9,6 +9,7 @@ const A = '00000000-0000-4000-8000-0000000000aa'   // dado de baja (estado baja)
 const B = '00000000-0000-4000-8000-0000000000bb'   // activo: un canje, no es baja
 const C = '00000000-0000-4000-8000-0000000000cc'   // activo pero sin ningún rol vigente (el socio se dio de baja en el portal)
 const D = '00000000-0000-4000-8000-0000000000dd'   // dado de baja
+const P = '00000000-0000-4000-8000-0000000000ee'   // (13-nov) autoalta purgada: en baja, sin roles y SIN fila en club_pases
 
 const base = (id: string, over: Partial<PaseDatos> = {}): PaseDatos => ({
   contrato: 1, miembro_id: id, version: 9, actualizado_en: '2026-11-12T19:20:00Z', nombre_pila: 'Cami', estado: 'activo',
@@ -24,6 +25,7 @@ const DATOS: Record<string, PaseDatos> = {
   [C]: base(C, { pestanas: [], anfitrion: null, codigo_barras: null,
                  socio: { estado: 'baja', desde: '2026-11-01', qr_url: 'https://club.ejemplo.test/s/ABCD2345K', beneficio: null, visitas_mes: 0, cortesias: [] } }),
   [D]: base(D, { estado: 'baja' }),
+  [P]: base(P, { estado: 'baja', nombre_pila: 'Purgado', pestanas: [], anfitrion: null, codigo_barras: null, socio: null }),
 }
 
 let sa: CuentaServicio
@@ -36,7 +38,7 @@ beforeAll(async () => {
 /** (13-nov) Google simulado con un «almacén» de objetos: GET devuelve el objeto, PUT lo REEMPLAZA (lo que no va se
  *  borra) y PATCH lo MEZCLA (lo que no va queda: así quedaba el QR). Cada pase guardado arranca ACTIVE y con QR. */
 const qr = (m: string) => ({ type: 'QR_CODE', value: `https://club.ejemplo.test/r/${m.slice(-4)}`, alternateText: m.slice(-4) })
-function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id: string | null }>;
+function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id: string | null; motivo?: string }>;
                         google?: (miembro: string) => number; token?: number; datosError?: string; sinPase?: string[]
                         /** (13-nov) miembros con pase de Google emitido en la base (por defecto A, B, C y D). */
                         emitidos?: string[]; emitidosError?: boolean }) {
@@ -80,7 +82,7 @@ function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id
     return { status: 200, json: async () => structuredClone(nuevo) }
   }
   const deps = (entorno: 'prod' | 'stg' = 'prod'): Parameters<typeof vencerBajas>[0] => {
-    for (const m of [A, B, C, D]) if (!(o.sinPase ?? []).includes(m) && !almacen.has(`${ISSUER}.club${entorno === 'stg' ? '-stg' : ''}-${m}`)) guardar(entorno, m)
+    for (const m of [A, B, C, D, P]) if (!(o.sinPase ?? []).includes(m) && !almacen.has(`${ISSUER}.club${entorno === 'stg' ? '-stg' : ''}-${m}`)) guardar(entorno, m)
     return { rpc, fetch: fetchFn, sa, issuer: ISSUER, entorno }
   }
   const cursorGuardado = () => rpcs.filter(r => r.fn === 'club_pase_cursor_guardar').map(r => r.args.p_id)
@@ -377,5 +379,50 @@ describe('timeout por pedido a Google (13-nov)', () => {
       expect(r).toMatchObject({ vencidos: 0, cursor_despues: 10 })
       expect(r.errores.join()).toMatch(/timeout de Google/)
     } finally { vi.useRealTimers() }
+  })
+})
+
+// (13-nov, verificación independiente) La purga de autoaltas borra la fila de `club_pases` y deja al miembro en baja: sin
+// registro, /vencer lo contaba `sin_pase` y su QR quedaba vigente. Ahora un evento `datos` lo hace mirar igual.
+describe('purga de autoaltas y trabado_en (13-nov)', () => {
+  const purga = [{ id: 11, miembro_id: P, motivo: 'rol' }, { id: 12, miembro_id: P, motivo: 'datos' }]
+  it('purgado CON pase en Google (sin registro) → se vence por su id, sin QR', async () => {
+    const e = escenario({ eventos: purga })
+    const r = await vencerBajas(e.deps())
+    expect(r).toMatchObject({ con_pase: 0, revisados_sin_registro: 1, vencidos: 1, sin_pase: 0, cursor_despues: 12, trabado_en: null })
+    expect(e.patch.map(x => [x.metodo, x.id])).toEqual([['PUT', `${ISSUER}.club-${P}`]])
+    expect(e.almacen.get(`${ISSUER}.club-${P}`)).toMatchObject({ state: 'EXPIRED' })
+    expect(e.almacen.get(`${ISSUER}.club-${P}`)!.barcode).toBeUndefined()
+  })
+  it('en staging, el id del ambiente («club-stg-»)', async () => {
+    const e = escenario({ eventos: purga })
+    await vencerBajas(e.deps('stg'))
+    expect(e.patch.map(x => x.id)).toEqual([`${ISSUER}.club-stg-${P}`])
+  })
+  it('purgado SIN pase en Google → GET 404 → sin_pase, sin escribir', async () => {
+    const e = escenario({ eventos: purga, sinPase: [P] })
+    const r = await vencerBajas(e.deps())
+    expect(r).toMatchObject({ revisados_sin_registro: 1, vencidos: 0, sin_pase: 1, cursor_despues: 12 })
+    expect(e.patch).toEqual([])
+  })
+  it('sin registro, con evento `datos` pero ACTIVO → solo la base, nunca Google; sin `datos` → ni la base', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: B, motivo: 'datos' }, { id: 12, miembro_id: D, motivo: 'rol' }], emitidos: [] })
+    const llamadas: string[] = []
+    const d = e.deps()
+    const r = await vencerBajas({ ...d, fetch: async (u, i) => { llamadas.push(u); return d.fetch(u, i) } })
+    expect(e.rpcs.filter(x => x.fn === 'club_pase_datos').map(x => x.args.p_miembro)).toEqual([B])
+    expect(llamadas).toEqual([])
+    expect(r).toMatchObject({ revisados_sin_registro: 1, sin_pase: 2, vencidos: 0, cursor_despues: 12 })
+  })
+  it('trabado_en: error transitorio → id del evento desde el que reintenta; corte por tiempo → null', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }, { id: 13, miembro_id: A }], google: m => (m === D ? 503 : 200) })
+    expect(await vencerBajas(e.deps())).toMatchObject({ cursor_despues: 11, trabado_en: 12 })
+    const f = escenario({ eventos: [{ id: 11, miembro_id: A }], emitidosError: true })
+    expect(await vencerBajas(f.deps())).toMatchObject({ cursor_despues: 10, trabado_en: 11 })
+    let t = 0
+    const g = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }] })
+    const dg = g.deps()
+    const rpc: Rpc = async (fn, args) => { const x = await dg.rpc(fn, args); if (fn === 'club_pase_datos') t += TOPE_MS_VENCER; return x }
+    expect(await vencerBajas({ ...dg, rpc, reloj: () => t })).toMatchObject({ cortado_por_tiempo: true, cursor_despues: 11, trabado_en: null })
   })
 })

@@ -6,7 +6,7 @@ import {
   type DocExtract,
 } from '../../shared/api/documents'
 import {
-  fechaCortaCR, revisarDocumentos, politicaPantalla, mensajeBloqueo, MSG_PARECIDA, MSG_VARIOS_DOCS,
+  fechaCortaCR, revisarDocumentos, politicaPantalla, mensajeBloqueo, mensajePostPago, MSG_PARECIDA, MSG_VARIOS_DOCS,
 } from '../../shared/utils/facturaDuplicada'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import { classifyMovement } from '../../shared/utils/classifyMovement'
@@ -39,7 +39,9 @@ interface Props {
   tc:          number                 // tipo de cambio vigente
   onCreated:   (m: CashMovement) => void
   onClose:     () => void
-  onError:     (msg: string) => void
+  /** (13-nov, prueba física caso B) Ya NO se usa: el aviso del módulo se pintaba DETRÁS del modal (overlay fijo).
+   *  Todos los avisos del asistente se muestran ahora DENTRO del modal (estado `aviso`). Se deja opcional por compat. */
+  onError?:    (msg: string) => void
 }
 
 // Match de proveedor por nombre (trim + acentos/case vía norm) contra los activos — para enlazar
@@ -60,7 +62,16 @@ const claseLabel: Record<Clase, string> = { mercaderia: 'Mercadería', operativa
 const INGRESO_CATEGORIAS = ['Aceite/reciclaje', 'Reintegro', 'Devolución de proveedor', 'Otro'] as const
 const INGRESO_UMBRAL_CRC = 100_000
 
-export default function AgregarAsistente({ openSession, suppliers, role, createdBy, tc, onCreated, onClose, onError }: Props) {
+export default function AgregarAsistente({ openSession, suppliers, role, createdBy, tc, onCreated, onClose }: Props) {
+  // (13-nov, prueba física caso B) Aviso DENTRO del modal, arriba (bajo el título): bloqueo por foto/clave FE repetida,
+  // «no se pudo verificar», lectura caída, error al registrar y el aviso post-pago. Antes iba a onError → el banner de
+  // CashModule, que queda DETRÁS del overlay fijo del modal (index.css .cd-modal-overlay z-index 1000): la cajera no
+  // veía nada. Se borra al cargar otra foto o al cerrar (el modal se desmonta).
+  const [aviso, setAviso] = useState<string | null>(null)
+  const avisoRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (aviso) avisoRef.current?.scrollIntoView?.({ block: 'nearest' })   // si el form estaba scrolleado, que se vea
+  }, [aviso])
   // ── 1. Captura manual ──────────────────────────────────────
   const [descripcion, setDescripcion] = useState('')
   const [supplierName, setSupplierName] = useState('')
@@ -108,7 +119,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   // o carga manual — y el formulario completo recién se revela después. 'form' se alcanza por:
   // (a) foto sacada y leída (onPhoto lo setea al terminar) o (b) tap en "Carga manual".
   // Cancelar la cámara NO dispara el change del input → la vista queda en 'opciones' sola.
-  const [vista, setVista] = useState<'opciones' | 'form'>('opciones')
+  // 'listo' (13-nov, caso B): el pago YA se registró pero hubo un aviso post-pago → queda a la vista hasta «Cerrar».
+  const [vista, setVista] = useState<'opciones' | 'form' | 'listo'>('opciones')
 
   // ← Volver desde el form: limpia el borrador SIN crear nada y regresa a las dos opciones.
   // (createdSuppliers no se limpia: los proveedores creados ya existen en la base.)
@@ -117,7 +129,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     setPickedSupplierId(null); setClasePicked(null)
     setIngresoCategoria(''); setIngresoMotivo('')
     setPago(formas[0]); setAccountId('')
-    setPhoto(null); setParecida(null); setEsOtra(false)
+    setPhoto(null); setParecida(null); setEsOtra(false); setAviso(null)
     setVista('opciones')
   }
 
@@ -138,16 +150,17 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   // Misma foto o misma clave FE → BLOQUEA (decisión del dueño, sin excepción de rol): no se precarga ni se enlaza nada.
   const onPhoto = async (file: File) => {
     setPhotoBusy(true)
+    setAviso(null)   // otra foto → el aviso anterior se va
     try {
       const { blob, filename } = await normalizeInvoiceImage(file)
       const shaFoto = await sha256File(blob)
       const dupFoto = await findDuplicate(shaFoto, null)
-      if (dupFoto) { onError(mensajeBloqueo('foto', dupFoto, 'caja')); return }
+      if (dupFoto) { setAviso(mensajeBloqueo('foto', dupFoto, 'caja')); return }
       const { path, sha } = await uploadImage(blob, filename)
       const { documentos, fallo } = await extractImageDetalle(path)
       // Clave FE repetida: la del primero bloquea todo; la de otro documento de la foto, solo lo saca de la Bandeja.
       const pol = politicaPantalla(await revisarDocumentos(documentos, { porClave: findDuplicateClave, parecida: findFacturaParecida }))
-      if (pol.bloqueo) { onError(mensajeBloqueo('clave', pol.bloqueo, 'caja')); return }
+      if (pol.bloqueo) { setAviso(mensajeBloqueo('clave', pol.bloqueo, 'caja')); return }
       const ex = pol.primero
       const extras = pol.extras
       if (ex) {
@@ -168,7 +181,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       // sigue en las dos opciones y puede sacar otra foto o ir a manual.
       setVista('form')
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'No se pudo leer la factura — probá otra foto o cargá a mano.')
+      setAviso(e instanceof Error ? e.message : 'No se pudo leer la factura — probá otra foto o cargá a mano.')
     } finally {
       setPhotoBusy(false)
     }
@@ -226,14 +239,15 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       setPickedSupplierId(s.id)
       setSupplierName(s.name)
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'No se pudo crear el proveedor — reintentá.')
+      setAviso(e instanceof Error ? e.message : 'No se pudo crear el proveedor — reintentá.')
     } finally { setCreatingSup(false) }
   }
 
   const confirmar = async () => {
     if (!montoOk || saving) return
+    setAviso(null)
     if (parecida && !esOtra) return   // (13-nov) aviso de factura parecida: hay que confirmar «Es otra»
-    if (montoNegativo) { onError('El monto no puede ser negativo.'); return }   // Ítem 2
+    if (montoNegativo) { setAviso('El monto no puede ser negativo.'); return }   // Ítem 2
     // Ingreso adicional: sin categoría o sin motivo NO se crea (se elimina el default mudo).
     if (clase === 'ingreso' && !ingresoCompleto) return
     setSaving(true)
@@ -301,7 +315,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         })
       }
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'No se pudo registrar el movimiento — reintentá.')
+      setAviso(e instanceof Error ? e.message : 'No se pudo registrar el movimiento — reintentá.')
       setSaving(false)
       return
     }
@@ -310,17 +324,29 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     // a la cola de la Bandeja). Best-effort: el movimiento ya está; si el enlace falla, la factura se puede
     // adjuntar después en Revisión (vía F4.3b) → NO se reintenta el movimiento (evita duplicar plata).
     if (photo) {
+      let enlaceFallo = false
       try {
         await createDocumentRow(photo.path, photo.sha, photo.extracted, createdBy, mov.id, 'procesado')
       } catch {
-        onError('El pago se registró, pero la factura no se enlazó — adjuntala en Revisión de inventario.')
+        enlaceFallo = true
       }
       // (13-nov) Los demás documentos de la foto → tarjetas «nuevo» en la Bandeja (sin enlazar; se confirman ahí).
       let fallaron = 0
       for (const ex of photo.extras) {
         try { await createDocumentRow(photo.path, photo.sha, ex, createdBy) } catch { fallaron++ }
       }
-      if (fallaron > 0) onError(`El pago se registró, pero ${fallaron} documento(s) de la foto no pasaron a la Bandeja — subí la foto a la Bandeja.`)
+      // (13-nov, verificación) UN solo aviso combinado (no se pisan). Si el enlace falló, nunca «subí la foto a la
+      // Bandeja»: entraría como «nuevo» y el pago ya hecho se podría pagar dos veces.
+      const avisoPost = mensajePostPago(enlaceFallo, fallaron)
+      if (avisoPost) {
+        // (13-nov, caso B) El pago ya está: se avisa al padre (lista) y el modal queda en «listo» con el aviso hasta
+        // «Cerrar». Sin formulario → no se puede volver a confirmar (no se duplica el pago).
+        onCreated(mov)
+        setAviso(avisoPost)
+        setSaving(false)
+        setVista('listo')
+        return
+      }
     }
     onCreated(mov)
     onClose()
@@ -344,11 +370,26 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="cd-modal-title">➕ Agregar factura / movimiento</div>
 
+        {/* (13-nov, caso B) Aviso dentro del modal, arriba: se ve sin scroll en el celular. */}
+        {aviso && (
+          <div ref={avisoRef} className="tips-error" role="alert" data-testid="aviso-asistente" style={{ margin: '0.6rem 0 0.4rem' }}>
+            <span>⚠ {aviso}</span>
+          </div>
+        )}
+
         {/* Input de cámara SIEMPRE montado: lo disparan la opción grande de la pantalla inicial
             Y el botón "Cambiar foto" del form. Cancelar la cámara no emite change → no pasa nada. */}
         <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPickPhoto} aria-label="Foto de la factura" />
 
-        {vista === 'opciones' ? (
+        {vista === 'listo' ? (
+          /* ── Pago registrado con aviso post-pago: solo el aviso (arriba) y «Cerrar». ── */
+          <>
+            <div className="cd-method-info ok" style={{ marginTop: '0.4rem' }}>✓ El movimiento quedó registrado.</div>
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="cd-btn-green" onClick={onClose}>Cerrar</button>
+            </div>
+          </>
+        ) : vista === 'opciones' ? (
           /* ── Pantalla inicial (flujo guiado): foto protagonista, manual secundario ── */
           <>
             <p style={{ fontSize: '0.78rem', color: 'var(--c-gris)', margin: '0.4rem 0 1rem' }}>

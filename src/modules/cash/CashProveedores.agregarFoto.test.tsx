@@ -39,6 +39,7 @@ beforeEach(() => {
   for (const f of Object.values(m)) f.mockClear()
   m.leer.mockResolvedValue({ documentos: [{ tipo: 'factura', numero_documento: '1', total: 10, items: [] }], fallo: false })
   m.dupFoto.mockResolvedValue(null); m.dupClave.mockResolvedValue(null); m.parecida.mockResolvedValue(null)
+  m.crear.mockReset(); m.crear.mockImplementation(async () => ({ id: 'doc-nuevo' }))
 })
 
 describe('Caja/Proveedores — «➕ Agregar foto» (13-nov)', () => {
@@ -82,5 +83,25 @@ describe('Caja/Proveedores — «➕ Agregar foto» (13-nov)', () => {
     await waitFor(() => expect(m.crear).toHaveBeenCalledTimes(2))
     expect(m.crear.mock.calls[0][4]).toBe('mov-9')
     expect(m.crear.mock.calls[1]).toHaveLength(4)
+  })
+
+  // (13-nov, verificación) La principal ya quedó enlazada: un extra que falla no corta el flujo.
+  it('extras que fallan → igual llama a onAdded y avisa «cargá cada uno con su propia foto»', async () => {
+    m.leer.mockResolvedValue({ documentos: [{ tipo: 'factura', numero_documento: '1', items: [] }, { tipo: 'factura', numero_documento: '2', items: [] }], fallo: false })
+    m.crear.mockImplementation(async (...a: unknown[]) => { if (a[4] === 'mov-9') return { id: 'doc-nuevo' }; throw new Error('red') })
+    const { rerender } = subir()
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith({ id: 'doc-nuevo' }))
+    rerender(<PagoFoto movement={mov} doc={{ id: 'doc-nuevo' } as never} createdBy="u1" onAdded={onAdded} onRefresh={vi.fn()} />)
+    expect(document.body.textContent).toMatch(/El pago se registró, pero 1 documento\(s\) más de la foto no pasaron a la Bandeja: cargá cada uno con su propia foto\./)
+    expect(document.body.textContent).not.toMatch(/quedó en la Bandeja/)
+  })
+
+  it('no se pudo verificar si la foto ya está cargada → aviso de conexión; no sube ni enlaza', async () => {
+    m.dupFoto.mockRejectedValue(new Error('No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'))
+    subir()
+    await screen.findByText('No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.')
+    expect(m.upload).not.toHaveBeenCalled()
+    expect(m.crear).not.toHaveBeenCalled()
+    expect(onAdded).not.toHaveBeenCalled()
   })
 })

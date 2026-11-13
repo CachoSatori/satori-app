@@ -20,7 +20,10 @@ export interface FilaDoc {
 export const tablaDocs: FilaDoc[] = []
 let seq = 0
 
-export function vaciarDocs() { tablaDocs.length = 0; seq = 0 }
+/** (13-nov) Simula que la base no responde a las CONSULTAS (lecturas): devuelven `error`, como sin red. */
+export const fallas = { lecturas: false }
+
+export function vaciarDocs() { tablaDocs.length = 0; seq = 0; fallas.lecturas = false }
 
 /** Lo que pasa en prod al borrar un movimiento con factura: el documento queda «procesado» y sin vínculo. */
 export function borrarMovimiento(movId: string) {
@@ -55,6 +58,7 @@ function consulta() {
       tablaDocs.push(fila)
       return { data: unica ? { ...fila } : [{ ...fila }], error: null }
     }
+    if (fallas.lecturas && !actualizar) return { data: null, error: { message: 'Failed to fetch' } }
     let filas = tablaDocs.filter(d => filtros.every(f => f(d)))
     if (actualizar) { for (const d of filas) Object.assign(d, actualizar); return { data: null, error: null } }
     if (orden) {

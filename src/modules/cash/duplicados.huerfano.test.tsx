@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { CashMovement, CashSession, Supplier } from '../../shared/types/database'
-import { tablaDocs, vaciarDocs, borrarMovimiento } from '../../shared/api/documentosEnMemoria.testutil'
+import { tablaDocs, vaciarDocs, borrarMovimiento, fallas } from '../../shared/api/documentosEnMemoria.testutil'
 
 const CLAVE = '50612112600310100000000100001010000099001100000001'
 const FACTURA = {
@@ -19,6 +19,7 @@ const m = vi.hoisted(() => {
   let n = 0
   return {
     crearMov: vi.fn(async (x: Record<string, unknown>) => ({ ...x, id: `mov-${++n}`, _pending: false })),
+    subir: vi.fn(async () => ({ path: 'docs/99001.jpg', sha: 'sha-99001' })),
     reiniciar: () => { n = 0 },
   }
 })
@@ -28,7 +29,7 @@ vi.mock('../../shared/api/documents', async (orig) => {
   return {
     ...actual,                                    // findDuplicate / findDuplicateClave / findFacturaParecida / createDocumentRow REALES
     sha256File: async () => 'sha-99001',          // siempre la misma foto
-    uploadImage: async () => ({ path: 'docs/99001.jpg', sha: 'sha-99001' }),
+    uploadImage: m.subir,
     extractImageDetalle: async () => ({ documentos: [FACTURA], fallo: false }),
     extractImage: async () => [FACTURA],
     signedUrl: async () => null,
@@ -59,7 +60,7 @@ const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession
 const subirFoto = () => fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement,
   { target: { files: [new File(['d'], 'f.jpg', { type: 'image/jpeg' })] } })
 
-beforeEach(() => { cleanup(); vaciarDocs(); m.reiniciar(); m.crearMov.mockClear() })
+beforeEach(() => { cleanup(); vaciarDocs(); m.reiniciar(); m.crearMov.mockClear(); m.subir.mockClear() })
 
 // ── Asistente «Agregar» ────────────────────────────────────────────────────────
 async function cargarEnAsistente() {
@@ -69,20 +70,26 @@ async function cargarEnAsistente() {
   subirFoto()
   return onError
 }
+// (13-nov, caso B) El aviso del asistente se ve DENTRO del modal.
+async function avisoEnModal(texto: string | RegExp) {
+  const el = await screen.findByText(typeof texto === 'string' ? `⚠ ${texto}` : texto)
+  expect(el.closest('[role="alert"]')).not.toBeNull()
+  expect(el.closest('.cd-modal')).not.toBeNull()
+}
 const confirmar = () => screen.findByRole('button', { name: /Confirmar y registrar/ }) as Promise<HTMLButtonElement>
 
 describe('huérfanos: borrar el movimiento → recargar la misma foto → se permite (13-nov)', () => {
   it('asistente «Agregar»: con el movimiento vivo bloquea; borrado, la misma foto vuelve a entrar sin avisos', async () => {
     // 1) Primera carga: queda el documento «procesado» enlazado a mov-1.
-    let onError = await cargarEnAsistente()
+    await cargarEnAsistente()
     fireEvent.click(await confirmar())
     await waitFor(() => expect(tablaDocs).toHaveLength(1))
     expect(tablaDocs[0]).toMatchObject({ estado: 'procesado', linked_movement_id: 'mov-1', sha256: 'sha-99001' })
     cleanup()
 
     // 2) Control: con el movimiento vivo, la misma foto BLOQUEA.
-    onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/Esta foto ya fue cargada/)))
+    await cargarEnAsistente()
+    await avisoEnModal(/Esta foto ya fue cargada/)
     cleanup()
 
     // 3) Se borra el movimiento (17:01) → el documento queda huérfano: «procesado», sin vínculo.
@@ -90,10 +97,11 @@ describe('huérfanos: borrar el movimiento → recargar la misma foto → se per
     expect(tablaDocs[0]).toMatchObject({ estado: 'procesado', linked_movement_id: null })
 
     // 4) Recarga de la misma foto (17:26): se permite, sin bloqueo por foto ni por clave FE ni aviso de «parecida».
-    onError = await cargarEnAsistente()
+    const onError = await cargarEnAsistente()
     const btn = await confirmar()
     await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Pescadería del Pacífico'))
     expect(onError).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('aviso-asistente')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Es otra' })).toBeNull()
     expect(btn.disabled).toBe(false)
     fireEvent.click(btn)
@@ -107,14 +115,15 @@ describe('huérfanos: borrar el movimiento → recargar la misma foto → se per
     const onError = await cargarEnAsistente()
     expect((await confirmar()).disabled).toBe(false)
     expect(onError).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('aviso-asistente')).toBeNull()
   })
 
   it('asistente «Agregar»: un huérfano MÁS NUEVO no tapa a un documento vigente más viejo de la misma foto', async () => {
     const fila = { image_path: 'x', sha256: 'sha-99001', clave_fe: CLAVE, tipo: 'factura', raw_json: FACTURA, created_by: 'u1' }
     tablaDocs.push({ ...fila, id: 'vivo', created_at: '2026-11-10T20:00:00Z', estado: 'procesado', linked_movement_id: 'mov-vivo' })
     tablaDocs.push({ ...fila, id: 'huerfano', created_at: '2026-11-13T23:01:00Z', estado: 'procesado', linked_movement_id: null })
-    const onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/Esta foto ya fue cargada/)))
+    await cargarEnAsistente()
+    await avisoEnModal(/Esta foto ya fue cargada/)
   })
 
   it('«➕ Agregar foto»: la foto del movimiento borrado se puede adjuntar al pago nuevo', async () => {
@@ -173,8 +182,8 @@ describe('un documento «nuevo» de la Bandeja bloquea con el aviso «confirmala
 
   it('asistente, misma foto → «ya está en la Bandeja… confirmala ahí»; no crea nada', async () => {
     enBandeja()
-    const onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(AVISO))
+    await cargarEnAsistente()
+    await avisoEnModal(AVISO)
     expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
     expect(tablaDocs).toHaveLength(1)
     expect(m.crearMov).not.toHaveBeenCalled()
@@ -182,9 +191,8 @@ describe('un documento «nuevo» de la Bandeja bloquea con el aviso «confirmala
 
   it('asistente, otra foto con la misma clave FE → el mismo aviso, para la factura', async () => {
     enBandeja({ sha256: 'otra-foto' })
-    const onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(
-      /^Esta factura \(misma clave FE\) ya está en la Bandeja esperando confirmación \(cargada el 12-nov 14:00\)\. No se registró nada: confirmala ahí\.$/)))
+    await cargarEnAsistente()
+    await avisoEnModal(/^⚠ Esta factura \(misma clave FE\) ya está en la Bandeja esperando confirmación \(cargada el 12-nov 14:00\)\. No se registró nada: confirmala ahí\.$/)
   })
 
   it('«➕ Agregar foto» → el mismo aviso; no enlaza', async () => {
@@ -221,5 +229,42 @@ describe('un documento «nuevo» de la Bandeja bloquea con el aviso «confirmala
     subirFoto()
     await screen.findByText(/Esta factura \(misma clave FE\) ya está en esta Bandeja esperando confirmación.*confirmala en la lista\./)
     expect(tablaDocs).toHaveLength(1)
+  })
+})
+
+// (13-nov, verificación) «Falla cerrada» con las consultas REALES: si la base no responde, ninguna pantalla deja pasar la
+// foto como «no repetida»: bloquea con el aviso de conexión y no registra nada.
+describe('no se pudo verificar duplicados → bloquea en las tres pantallas (13-nov)', () => {
+  const MSG = 'No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'
+
+  it('asistente «Agregar»: aviso de conexión; no abre el formulario ni crea nada', async () => {
+    fallas.lecturas = true
+    await cargarEnAsistente()
+    await avisoEnModal(MSG)
+    expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
+    expect(tablaDocs).toHaveLength(0)
+    expect(m.crearMov).not.toHaveBeenCalled()
+    expect(m.subir).not.toHaveBeenCalled()   // corta ANTES de subir la foto: el chequeo de la foto no deja pasar
+  })
+
+  it('«➕ Agregar foto»: aviso de conexión; no enlaza', async () => {
+    fallas.lecturas = true
+    const onAdded = vi.fn()
+    render(<PagoFoto movement={{ id: 'mov-x' } as CashMovement} doc={null} createdBy="u1" onAdded={onAdded} onRefresh={vi.fn()} />)
+    subirFoto()
+    await screen.findByText(MSG)
+    expect(onAdded).not.toHaveBeenCalled()
+    expect(tablaDocs).toHaveLength(0)
+    expect(m.subir).not.toHaveBeenCalled()
+  })
+
+  it('Bandeja: aviso de conexión; no entra nada a la cola', async () => {
+    render(<MemoryRouter><InboxModule /></MemoryRouter>)
+    await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeNull())
+    fallas.lecturas = true
+    subirFoto()
+    await screen.findByText(MSG)
+    expect(tablaDocs).toHaveLength(0)
+    expect(m.subir).not.toHaveBeenCalled()
   })
 })

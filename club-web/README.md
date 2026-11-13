@@ -126,6 +126,13 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    | Settings → Runtime | Compatibility date: `2025-10-01` o posterior |
 5. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
 
+## Cron del Worker: vencer los pases de las bajas (12-nov)
+El Worker `satori-club-api` tiene un cron cada 10 minutos (`[triggers]` en `worker/wrangler.toml`, `worker/programado.js`):
+le pide al Edge `club-pase` que venza en Google Wallet los pases de las personas dadas de baja (`POST
+/functions/v1/club-pase/vencer`, header `x-club-pase-sync`). Necesita el Secret **`CLUB_PASE_SYNC_KEY`** en el panel del
+Worker (la misma clave que el secreto del Edge); sin él, no hace nada. Al log va un resumen con conteos («club-pase-vencer»).
+Detalle: `docs/club-satori/WALLET-GOOGLE-ACTIVACION.md`.
+
 ## DNS: apuntar el dominio del Club (lo hace Ismael)
 1. En el proyecto de Pages, ir a **Custom domains → Set up a custom domain** y escribir el dominio del Club (`<dominio>`, el mismo de `VITE_CLUB_URL`).
 2. **Si el DNS del dominio está en Cloudflare**, Cloudflare crea solo el registro CNAME. Hay que confirmar.

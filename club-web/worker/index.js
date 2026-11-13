@@ -9,9 +9,12 @@
 //   funcionarían (todos compartirían el mismo cupo), así que falla cerrado.
 // · Responde solo /api/*; cada respuesta lleva «x-club-api: worker» (la Pages Function del plan A marca «pages»).
 // · Variables y secretos (SUPABASE_URL, SUPABASE_ANON_KEY, TURNSTILE_SECRET, CLUB_WEB_KEY) en el panel del Worker.
+// · (12-nov) Cron cada 10 minutos (scheduled): vence los pases de Google Wallet de las bajas. Necesita además el Secret
+//   CLUB_PASE_SYNC_KEY; sin él, no hace nada.
 import { manejar } from '../functions/_lib/api.js'
 import { HOST_INTERNO, ENCABEZADO_IP } from './interno.js'
 import { rutaApi, marcar } from './ruta.js'
+import { vencerBajasProgramado } from './programado.js'
 
 const ORIGEN = 'worker'
 const RE_IP = /^[0-9a-fA-F:.]{2,45}$/
@@ -33,5 +36,9 @@ export default {
     const pedido = new Request(request.url, { method: request.method, headers: h,
       body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer() })
     return marcar(await manejar(pedido, env, ruta), ORIGEN)
+  },
+  // (12-nov, opción c) el cron de wrangler.toml: vencer en Google Wallet los pases de las bajas (programado.js)
+  async scheduled(_evento, env, ctx) {
+    ctx.waitUntil(vencerBajasProgramado(env))
   },
 }

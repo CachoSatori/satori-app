@@ -4,7 +4,8 @@
 # · Sin rutas ni dominio: al Worker solo lo llama la Pages Function por el service binding CLUB_API, que se carga en el
 #   panel de Pages (satori-club → Settings → Bindings → Service binding CLUB_API → satori-club-api).
 # · Variables y secretos en el panel del Worker: SUPABASE_URL y SUPABASE_ANON_KEY (texto), TURNSTILE_SECRET y
-#   CLUB_WEB_KEY (Secret). Los mismos valores que en Pages.
+#   CLUB_WEB_KEY (Secret). Los mismos valores que en Pages. (12-nov) CLUB_PASE_SYNC_KEY (Secret), la misma que el
+#   secreto del Edge club-pase: sin ella, el cron de abajo no hace nada.
 name = "satori-club-api"
 main = "index.js"
 compatibility_date = "2025-10-01"
@@ -26,3 +27,8 @@ name = "RL_LEER"
 type = "ratelimit"
 namespace_id = "2002"
 simple = { limit = 60, period = 60 }
+
+# (12-nov, opción c del dueño) Cada 10 minutos: el Edge club-pase vence en Google Wallet los pases de las personas dadas
+# de baja (programado.js → POST /functions/v1/club-pase/vencer). Sin el Secret CLUB_PASE_SYNC_KEY, no hace nada.
+[triggers]
+crons = ["*/10 * * * *"]

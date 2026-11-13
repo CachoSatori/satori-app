@@ -14,7 +14,7 @@ import {
   armarClase, armarObjeto, firmarJwtFlaco, leerCuentaServicio, urlGuardar, validarDatos, idObjeto, DISENO_POR_DEFECTO, configurarBaseClub,
   entornoValido, type PaseDatos, type DisenoPase,
 } from './googlePase.ts'
-import { sincronizar, actualizarUno, guardarEnGoogle, tokenGoogle, type Fetch } from './sincronizar.ts'
+import { sincronizar, vencerBajas, actualizarUno, guardarEnGoogle, tokenGoogle, type Fetch } from './sincronizar.ts'
 
 export interface EnvPase {
   CLUB_WEB_KEY?: string
@@ -60,10 +60,11 @@ function diseno(env: EnvPase): DisenoPase {
 /**
  * B3: rutas de sincronización.
  *   POST /club-pase/sync        x-club-pase-sync: <CLUB_PASE_SYNC_KEY>          → resumen del lote
+ *   POST /club-pase/vencer      x-club-pase-sync: <CLUB_PASE_SYNC_KEY>          → (12-nov, piloto) solo vence las bajas
  *   POST /club-pase/actualizar  x-club-web: <CLUB_WEB_KEY>  { token del portal } → «Actualizar mi pase»
  * Fallan cerradas sin sus secretos. `fetchFn` es la red hacia Google (inyectada para las pruebas).
  */
-export async function manejarSync(req: Request, ruta: 'sync' | 'actualizar', env: EnvPase, rpc: Rpc, fetchFn: Fetch, ahora = new Date()): Promise<Response> {
+export async function manejarSync(req: Request, ruta: 'sync' | 'vencer' | 'actualizar', env: EnvPase, rpc: Rpc, fetchFn: Fetch, ahora = new Date()): Promise<Response> {
   // (08-nov noche) el dominio del Club sale de CLUB_WEB_ORIGIN (= club_config_global.club_url); sin él, falla cerrada
   if (!configurarBaseClub(env.CLUB_WEB_ORIGIN)) return json(503, { error: 'servicio_no_disponible' })
   if (req.method !== 'POST') return json(405, { error: 'metodo' })
@@ -73,11 +74,13 @@ export async function manejarSync(req: Request, ruta: 'sync' | 'actualizar', env
   let sa
   try { sa = leerCuentaServicio(env.GOOGLE_WALLET_SA_KEY) } catch { return json(503, { error: 'servicio_no_disponible' }) }
   const deps = { rpc, fetch: fetchFn, sa, issuer: env.GOOGLE_WALLET_ISSUER_ID, entorno, diseno: diseno(env), ahora }
-  if (ruta === 'sync') {
+  if (ruta === 'sync' || ruta === 'vencer') {
+    // (12-nov) /vencer: el piloto solo vence los pases de las bajas (opción c del dueño); /sync es la completa (después).
     if (!env.CLUB_PASE_SYNC_KEY || env.CLUB_PASE_SYNC_KEY.length < 32) return json(503, { error: 'servicio_no_disponible' })
     if (!igualSeguro(req.headers.get('x-club-pase-sync') ?? '', env.CLUB_PASE_SYNC_KEY)) return json(401, { error: 'no_autorizado' })
-    try { return json(200, await sincronizar(deps)) } catch { return json(502, { error: 'servicio' }) }
+    try { return json(200, ruta === 'vencer' ? await vencerBajas(deps) : await sincronizar(deps)) } catch { return json(502, { error: 'servicio' }) }
   }
+
   if (!env.CLUB_WEB_KEY || env.CLUB_WEB_KEY.length < 32) return json(503, { error: 'servicio_no_disponible' })
   if (!igualSeguro(req.headers.get('x-club-web') ?? '', env.CLUB_WEB_KEY)) return json(401, { error: 'no_autorizado' })
   let b: { token?: unknown }

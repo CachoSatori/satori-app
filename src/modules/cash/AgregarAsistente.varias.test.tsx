@@ -15,6 +15,9 @@
 //  M7. mostrarFactura: sin la memoria de la pasada (`enEstaPasada` → null) → caen las 2 de «[1]».
 //  M8. saltear: sin el candado por índice/ref → cae «[2]».
 //  M9. mostrarFactura: volver a borrar la pregunta de salida (`setConfirmarSalida(null)`) → cae «[3]».
+//  M10. cruzarConFoto: sin documento libre → no es duda (lo de antes) → caen «(a)» y «foto de 3 con 1 registrada».
+//  M11. cruzarConFoto: «claves distintas → es otra» (lo de antes) → caen «(a)», «(b)» y «foto de 3 con 1 registrada».
+//  M12. cruzarConFoto: sin contar las de la Bandeja → caen las 2 de «…en la Bandeja…».
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react'
 import type { CashMovement, CashSession, Supplier } from '../../shared/types/database'
@@ -212,14 +215,17 @@ describe('«➕ Agregar foto» con varias facturas (#149)', () => {
 
 // (D11 = B, decisión del dueño 13-nov 09:26) La MISMA foto subida otra vez después de cargar solo algunas facturas.
 describe('misma foto subida otra vez: ofrece solo las facturas que faltan (D11 = B)', () => {
-  it('foto de 3 con 1 registrada → ofrece 2 y registra 2 (3 en total, sin duplicar); no se sube otra vez', async () => {
+  it('foto de 3 con 1 registrada → ofrece 2 (como duda: «Es otra») y registra 2 (3 en total, sin duplicar); no se sube otra vez', async () => {
     yaCargada(fac(1, 10000), 1)
     m.leer.mockResolvedValue({ documentos: [fac(1, 10000), fac(2, 25000), fac(3, 7000)], fallo: false })
     const p = abrir()
-    await waitFor(() => expect(progreso()).toBe('Esta foto ya se cargó en parte: 1 de 3 facturas ya están registradas. Te quedan 2: Factura 1 de 2.'))
+    await waitFor(() => expect(progreso()).toBe('Esta foto ya se había cargado: 1 de 3 facturas ya están registradas. Revisá las otras 2 una por una: Factura 1 de 2.'))
     await waitFor(() => expect(monto()).toBe('25000'))
+    expect((await confirmarBtn()).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Es otra' }))
     fireEvent.click(await confirmarBtn())
     await enFactura(2, 2, 7000)
+    fireEvent.click(screen.getByRole('button', { name: 'Es otra' }))
     fireEvent.click(await confirmarBtn())
     await waitFor(() => expect(p.onClose).toHaveBeenCalledTimes(1))
     expect(m.subir).not.toHaveBeenCalled()
@@ -245,17 +251,16 @@ describe('misma foto subida otra vez: ofrece solo las facturas que faltan (D11 =
     yaCargada(fac(1, 10000, { clave_fe: null }), 1)
     m.leer.mockResolvedValue({ documentos: [fac(1, 10000, { clave_fe: null }), fac(2, 25000, { clave_fe: null })], fallo: false })
     abrir()
-    await waitFor(() => expect(progreso()).toBe('Esta foto ya se cargó en parte: 1 de 2 facturas ya están registradas. Te quedan 1: Factura 1 de 1.'))
-    await waitFor(() => expect(monto()).toBe('25000'))
-    expect(screen.queryByRole('button', { name: 'Es otra' })).toBeNull()
+    await waitFor(() => expect(progreso()).toBe('Esta foto ya se había cargado: 1 de 2 facturas ya están registradas. Revisá la otra: Factura 1 de 1.'))
+    await waitFor(() => expect(monto()).toBe('25000'))   // la 1 se reconoció y se salteó sola
   })
 
   it('factura indeterminada (lo cargado antes no se puede comparar) → «Es otra» o «Saltear»; nunca se registra sola', async () => {
     yaCargada({ tipo: 'factura', numero_documento: null, total: null, clave_fe: null }, 1)
     m.leer.mockResolvedValue({ documentos: [fac(1, 10000, { clave_fe: null }), fac(2, 25000, { clave_fe: null })], fallo: false })
     abrir()
-    await screen.findByText('⚠ Esta foto ya se había cargado (el 12-nov 14:00) y no se puede saber si esta factura ya está registrada. Si es otra, tocá «Es otra»; si no, «Saltear esta factura».', { exact: false })
-    expect(progreso()).toBe('Esta foto ya se había cargado: no se puede saber cuáles de sus 2 facturas ya están registradas. Factura 1 de 2.')
+    await screen.findByText('⚠ Esta foto ya se había cargado (el 12-nov 14:00) y no se puede confirmar si esta factura ya se pagó. Revisá en Pagos a proveedores: si no está, tocá «Es otra»; si ya está, «Saltear esta factura».', { exact: false })
+    expect(progreso()).toBe('Esta foto ya se había cargado: no se reconoció ninguna de sus 2 facturas como registrada. Revisalas una por una: Factura 1 de 2.')
     expect((await confirmarBtn()).disabled).toBe(true)
     expect(screen.getByRole('button', { name: 'Es otra' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Saltear esta factura' }))
@@ -325,5 +330,59 @@ describe('hallazgos de la verificación del #154', () => {
     expect(screen.getByTestId('confirmar-salida').textContent).toBe('⚠ Quedan 2 facturas de esta foto sin cargar. ¿Salir igual?')
     fireEvent.click(screen.getByRole('button', { name: 'Seguir cargando' }))
     await enFactura(2, 3, 25000)
+  })
+})
+
+// (re-verificación del #154, head 7cce859) Hueco de pago doble en D11: lo no reconocido es SIEMPRE duda.
+describe('re-verificación del #154: lo no reconocido de una foto ya vista es duda', () => {
+  it('(a) pago creado + documento caído → al recargar la foto esa factura sale como duda; sin «Es otra» no se registra', async () => {
+    m.leer.mockResolvedValue({ documentos: [fac(1, 10000), fac(2, 25000)], fallo: false })
+    m.crearDoc.mockRejectedValueOnce(new Error('red'))   // la 1: pago sí, documento no
+    abrir()
+    await enFactura(1, 2, 10000)
+    fireEvent.click(await confirmarBtn())
+    await enFactura(2, 2, 25000)
+    fireEvent.click(await confirmarBtn())
+    await screen.findByRole('button', { name: 'Cerrar' })
+    expect(m.crearMov).toHaveBeenCalledTimes(2)
+    expect(tablaDocs.map(d => d.clave_fe)).toEqual([clave(2)])   // la 1 quedó sin documento
+    cleanup()
+    // Recarga de la MISMA foto: la 1 no tiene documento, pero su pago existe → duda, nunca «limpia».
+    const p = abrir()
+    await waitFor(() => expect(progreso()).toBe('Esta foto ya se había cargado: 1 de 2 facturas ya están registradas. Revisá la otra: Factura 1 de 1.'))
+    await waitFor(() => expect(monto()).toBe('10000'))
+    expect(screen.getByText(/no se puede confirmar si esta factura ya se pagó/)).toBeTruthy()
+    const btn = await confirmarBtn()
+    expect(btn.disabled).toBe(true)
+    fireEvent.click(btn)
+    await new Promise(r => setTimeout(r, 20))
+    expect(m.crearMov).toHaveBeenCalledTimes(2)   // ningún pago nuevo
+    fireEvent.click(screen.getByRole('button', { name: 'Saltear esta factura' }))
+    await screen.findByText(/1 se salteó/)
+    expect(m.crearMov).toHaveBeenCalledTimes(2)
+    expect(p.onCreated).not.toHaveBeenCalled()
+  })
+
+  it('(b) clave leída distinta con un documento anterior libre de la misma foto → duda (no «es otra»)', async () => {
+    yaCargada(fac(9, 10000), 1)   // la IA leyó antes otra clave (o la leyó mal)
+    m.leer.mockResolvedValue({ documentos: [fac(1, 10000), fac(2, 25000)], fallo: false })
+    abrir()
+    await screen.findByText('⚠ Esta foto ya se había cargado (el 12-nov 14:00) y no se puede confirmar si esta factura ya se pagó. Revisá en Pagos a proveedores: si no está, tocá «Es otra»; si ya está, «Saltear esta factura».', { exact: false })
+    expect((await confirmarBtn()).disabled).toBe(true)
+    expect(m.crearMov).not.toHaveBeenCalled()
+  })
+
+  it('una reconocida que está en la Bandeja esperando confirmación → el aviso lo dice', async () => {
+    yaCargada(fac(1, 10000), 1, { estado: 'nuevo', linked_movement_id: null })
+    m.leer.mockResolvedValue({ documentos: [fac(1, 10000), fac(2, 25000)], fallo: false })
+    abrir()
+    await waitFor(() => expect(progreso()).toBe('Esta foto ya se había cargado: 1 de 2 facturas ya están registradas (1 está en la Bandeja esperando confirmación). Revisá la otra: Factura 1 de 1.'))
+  })
+
+  it('todas reconocidas y alguna en la Bandeja → el bloqueo dice «está en la Bandeja esperando confirmación»', async () => {
+    yaCargada(fac(1, 10000), 1); yaCargada(fac(2, 25000), 2, { estado: 'nuevo', linked_movement_id: null, created_at: '2026-11-11T20:00:00Z' })   // la más nueva NO es la de la Bandeja
+    m.leer.mockResolvedValue({ documentos: [fac(1, 10000), fac(2, 25000)], fallo: false })
+    abrir()
+    expect((await screen.findByTestId('aviso-asistente')).textContent).toMatch(/^⚠ Esta foto ya está en la Bandeja esperando confirmación/)
   })
 })

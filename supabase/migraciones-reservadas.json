@@ -93,6 +93,11 @@
       "bloque": "caja",
       "rama": "claude/contador-lee-caja"
     },
+    "096": {
+      "nombre": "proveedor_agregar_alias",
+      "bloque": "caja",
+      "rama": "claude/alias-proveedor-rpc"
+    },
     "100": {
       "nombre": "club_catalogo_locales",
       "bloque": "club",

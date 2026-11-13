@@ -1,6 +1,6 @@
 // (13-nov) Reglas de duplicados de facturas (decisiones del dueño): puras, sin red.
 import { describe, it, expect } from 'vitest'
-import { normNumero, mismaFactura, fechaCortaCR, revisarDocumentos, politicaPantalla, politicaBandeja, documentoVigente, mensajeBloqueo } from './facturaDuplicada'
+import { normNumero, mismaFactura, fechaCortaCR, revisarDocumentos, politicaPantalla, politicaBandeja, documentoVigente, mensajeBloqueo, elegirParaPago, resumenVarias } from './facturaDuplicada'
 
 const F = { proveedor: 'Distribuidora Ejemplo S.A.', numero_documento: '0354099', total: 25000, moneda: 'CRC' }
 
@@ -91,5 +91,20 @@ describe('mensajeBloqueo (12-nov): si lo que bloquea espera en la Bandeja, el av
   it('enlazado a un pago → el aviso de siempre', () => {
     expect(mensajeBloqueo('foto', enlazado, 'caja')).toMatch(/^Esta foto ya fue cargada \(el 12-nov 14:00\).*descartá la anterior\.$/)
     expect(mensajeBloqueo('clave', enlazado, 'bandeja')).toMatch(/^Esta factura \(misma clave FE\) ya fue cargada/)
+  })
+})
+
+// (#149) Varias facturas en una foto.
+describe('varias facturas en una foto (#149)', () => {
+  it('elegirParaPago: la de total más parecido al pago, en su moneda; sin totales, la primera', () => {
+    const docs = [{ total: 10000, moneda: 'CRC' }, { total: 25000, moneda: 'CRC' }, { total: 40, moneda: 'USD' }]
+    expect(elegirParaPago(docs, { amount_crc: 24000, amount_usd: 0 })).toBe(1)
+    expect(elegirParaPago(docs, { amount_crc: 0, amount_usd: 40 })).toBe(2)
+    expect(elegirParaPago([{ total: null }, { total: null }], { amount_crc: 5 })).toBe(0)
+  })
+  it('resumenVarias: todas registradas y sin avisos → null (se cierra como siempre)', () => {
+    expect(resumenVarias(2, 2, 0, [])).toBeNull()
+    expect(resumenVarias(3, 1, 1, [])?.aviso).toBe('Se registraron 1 de 3 facturas de la foto. 1 se salteó (no se registró). 1 no se cargó: cargala con ➕ Agregar factura subiendo la misma foto: te va a ofrecer solo la que falta.')
+    expect(resumenVarias(2, 0, 2, [])?.titulo).toBe('No se registró ninguna factura.')
   })
 })

@@ -1,8 +1,8 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-11.** Los hashes de este bloque se verificaron contra `origin` el 11-nov, y el ledger de staging
-contra la base (solo lectura). Lo de prod y lo de Cloudflare lo informó el dueño: Claude no corre nada en prod.
+**Al día: 2026-11-12.** Los hashes de este bloque se verificaron contra `origin` el 12-nov; el ledger de staging, contra la
+base el 11-nov (solo lectura). Lo de prod y lo de Cloudflare lo informó el dueño: Claude no corre nada en prod.
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md).** Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
 está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
@@ -12,7 +12,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`17a9efd`** (11/11 23:22:08 -06:00: merge del #59, el Club Satori, con la 150 y la 151) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. El 11/11 entró el Club (#59, `17a9efd`: la 150 y la 151). Ledger de prod: **67 · 151**. |
+| `main` | **`b6be32e`** (12/11 13:03:02 -06:00: merge del #126, la bitácora del pase del Club) | **PROD.** GitHub Pages (base `/satori-app/`). El 12/11 entraron, sin migraciones: #109 (`980cd74`) y #125 (`cf1a61d`) a la noche del 11; #128 (`9efde77`), #131 (`37cd66e`) y #139 (`38675bf`, con #134–#137) del rediseño; #129 (`a4300ab`) y #138 (`e3d0fde`) de club-web; y #126. El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. El 11/11 entró el Club (#59, `17a9efd`: la 150 y la 151). Ledger de prod: **67 · 151**. |
 | `staging` | **`fb29872`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
 | `integracion/analitica-staging` | **`850a22f`** | ⚠️ Rama vieja, 123 commits atrás de `staging`. **No la publica Cloudflare** (lo de septiembre ya no vale: la rama de producción es `staging`). |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
@@ -42,6 +42,25 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 | #55 | `4288fd2` | 06/11 | Guías de uso del área 6 (`docs/sop-app/`) y regla en `CLAUDE.md` (squash). |
 | #56 · #57 | `bb1a488` · `6bcfafb` | 06/11 | Saca nombres y correos reales de comentarios, tests y docs. |
 | este PR | — | 07/11 | **Prom/PAX explicado** (Ventas → Análisis) + **mig 080** `pos_prompax_agregado`, que la aplica el merge (Branching). Firmado por Ismael el 06/11. |
+
+- **📍 Foto del 12/11 (lo nuevo desde el 11/11; lo de prod y Cloudflare lo informó el dueño):**
+  - **Club Satori encendido en Santa Teresa** (12/11, con clientes reales). Configuración, carga única y modo transición
+    del 12/11 en la bitácora de [docs/pases/PASE-150-151-club.md](docs/pases/PASE-150-151-club.md) §10.
+    - **Pages `satori-club`:** se configura solo en el panel desde el #129 (`club-web/` ya no lleva `wrangler.toml`).
+    - **Worker `satori-club-api`:** conectado al repo (rama `main`, path `club-web/worker`) desde las 12:57. Su primer build
+      automático fue `ab5de674` (merge del #126, `b6be32e`): Ready, con `/api/salud` OK a las 13:09.
+    - **La prueba de fuego (§11.3 del PASE) sigue PENDIENTE.**
+  - **`extract-document` en prod: v9 con el código de `8a8dfb6`** (rama `claude/busy-brown-ssjq4e`, no `main`). Su hash
+    (`2f88ef52…`) difiere del de staging solo por el nombre interno del paquete. **`ANTHROPIC_MODEL` = `claude-sonnet-5-5`
+    desde las 16:19 CR.** Vuelta atrás: el secreto a `claude-sonnet-4-5`. Staging: v21, con el modelo nuevo.
+  - **Cambiar un secreto de Edge sube la versión de TODAS las funciones del proyecto.** No es un despliegue: el código no
+    cambia. Versiones de prod después del cambio de `ANTHROPIC_MODEL`: `monthly-report` v12, `extract-document` v10,
+    `cierre-email` v4, `pago-notificar` v4, `ingest-ndf` v4 (`verify_jwt` = false, verificado con tickets del PoS) y
+    `alta-empleado` v3 (tabla de Edge Functions, abajo).
+  - **Google Wallet (`club-pase`): SOLO en staging** (v1, desde `c6b54fc`, `verify_jwt` = false, `WALLET_ENTORNO` = `stg`).
+    **No está en prod.** El pase de prueba se guardó bien. Pendiente: la baja no vence el pase (se trabaja la opción c:
+    `/sync` solo para bajas). **La solicitud de publicación a Google se envió el 12/11 y está en revisión.** El código
+    para `main`, sin el Edge, es el #144 (borrador); el Edge vive en la rama `claude/club-pase-edge`.
 
 - **📍 Foto del 11/11 a la noche (lo nuevo desde el 10/11; el detalle, en el handoff):**
   - **`main` = `17a9efd`** (merge del #59, el Club, el 11/11 a las 23:22:08 -06:00). **Ledger de prod: 67 · 151.** El 10/11
@@ -116,7 +135,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 - **🔐 SEC-03 y SEC-04 (05/11, rama `claude/brave-brown-m45jd7`, PR #28, migs 072 y 073):** escritura anónima en el CRM y lectura anónima de propinas y empleados. Aplicadas en staging (ledger 72) y **en prod el 05/11 ~20:05 UTC** (ledger 48 → 50), a mano antes del merge. `/registro` y el QR del CRM quedan apagados hasta la F1 del Club Satori. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
   `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
-- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1425 tests** (con env dummy, 06/11, con los de SoP) · lint 86 (sin nuevos).
+- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1724 tests** (con env dummy, 12/11, en `b6be32e`) · lint 83 (sin nuevos).
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 - **🔐 SEC-01 (04/11, rama `claude/sec-01-perfiles`):**
   - **Paso A hecho en prod y staging:** `disable_signup=true` (antes `false`). El signup con anon da `422`.
@@ -146,6 +165,8 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
    **Ojo:** `supabase/functions/monthly-report/` de `main` es el código **anterior a SEC-02** (sin chequeo de
    service_role/owner). El ítem 11 tiene que traer el código de la **v10** (y el de `alta-empleado`, que vive en
    `claude/alta-empleado-fn`) **antes** de que Branching despliegue funciones; si no, pisaría la v10 de prod.
+   **`extract-document` (12-nov):** lo de prod es el código de `8a8dfb6` (rama `claude/busy-brown-ssjq4e`); el de `main` es
+   anterior. El ítem 11 tiene que traer ese código.
 3. **No mergear a `main` durante el servicio (19–22 h CR).** Una sola sesión de CC mergea a `main` a la vez, cada una
    solo sus PRs, y con el OK de Ismael.
 4. **«Ver como» usa los permisos del owner.** Sirve para ver lo que ve otro empleado, no para probar permisos:
@@ -211,17 +232,21 @@ pos_ndf_tickets · pos_ndf_ticket_lines · pos_ndf_open · pos_ndf_cursor   (RLS
 ¹ Versión según el backlog del 29/10 (no verificable desde fuera de la PC). Las dos tareas del PoS arrancan
 solas tras un reinicio (validado el 29/10).
 
-### Edge Functions (Management API, 30/10; `alta-empleado` 06/11)
+### Edge Functions (Management API, 30/10; `alta-empleado` 06/11; prod y `club-pase` al 12/11, informado por el dueño)
 
 | Función | PROD | STAGING |
 |---|---|---|
-| `monthly-report` | **v10 · on** (06/11, SEC-02; a mano, código en `claude/sec-02-monthly-report-fn`) | v2 · on |
-| `extract-document` | v7 · on | v15 · on |
-| `cierre-email` | v2 · on | v8 · on |
-| `pago-notificar` | v2 · on | — |
-| `ingest-ndf` | **v3 · off** (09/11 12:03:30 -06:00, pase del puente, desde `5da233a` con `--use-api`; su código vive en `claude/puente-item11-prod-v2`, no en `main`) | v16 · off (09/11, 082 v3) |
+| `monthly-report` | **v12 · on** (código de la v10 del 06/11, SEC-02; a mano, en `claude/sec-02-monthly-report-fn`) | v2 · on |
+| `extract-document` | **v10 · on** (código de la v9 del 12/11, `8a8dfb6`, rama `claude/busy-brown-ssjq4e`; `ANTHROPIC_MODEL` = `claude-sonnet-5-5` desde las 16:19 CR; vuelta atrás: el secreto a `claude-sonnet-4-5`) | **v21** · on (12/11, modelo nuevo) |
+| `cierre-email` | v4 · on | v8 · on |
+| `pago-notificar` | v4 · on | — |
+| `ingest-ndf` | **v4 · off** (código de la v3 del 09/11, desde `5da233a` con `--use-api`; en `claude/puente-item11-prod-v2`, no en `main`; `verify_jwt` = false verificado el 12/11 con tickets del PoS) | v16 · off (09/11, 082 v3) |
 | `ingest-punches` | — | v6 · off |
-| `alta-empleado` | v1 · on (06/11, a mano; código en `claude/alta-empleado-fn`, no en `main`) | v1 · on |
+| `alta-empleado` | v3 · on (código de la v1 del 06/11; en `claude/alta-empleado-fn`, no en `main`) | v1 · on |
+| `club-pase` | — (**no está en prod**) | **v1 · off** (12/11, desde `c6b54fc`, rama `claude/club-pase-edge`; `WALLET_ENTORNO` = `stg`) |
+
+**⚠️ Cambiar cualquier secreto de Edge sube la versión de TODAS las funciones del proyecto** (las de prod de la tabla son
+las que quedaron después del cambio de `ANTHROPIC_MODEL` del 12/11). No es un despliegue: el código sigue siendo el mismo. Para saber si cambió el código, mirar la fecha y el hash del despliegue, no el número de versión.
 
 ---
 
@@ -352,6 +377,12 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | PILAR de auth multi-tenant · FE-CR real | 🔲 |
 
 ### Pendientes de estabilización
+
+- **Después del piloto (12/11, lo anotó el dueño):**
+  - El «Agregar» de Caja guarda solo el **primer** documento de una foto y **no detecta duplicados**.
+  - Caja y Proveedores **no avisan cuando la lectura del documento falla** (`extract-document`).
+  - **Validación de la clave FE.**
+  - El texto «Requiere revisión».
 
 - **Propinas · reparto semanal de cocina:** mover la exclusión del reparto de cocina de un nombre fijo en el código a una marca en la base (requiere spec y firma: toca propinas).
 - **Privacidad · datos reales que siguen en el repo público** (tras #56 y #57, que limpiaron comentarios, tests y docs).

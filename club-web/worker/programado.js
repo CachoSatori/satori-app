@@ -24,10 +24,12 @@ export async function vencerBajasProgramado(env, fetchFn = fetch) {
   try { j = await r.json() } catch { /* sin cuerpo */ }
   const resumen = { evento: 'club-pase-vencer', ok: r.status === 200, status: r.status }
   if (j && typeof j === 'object') {
-    for (const k of ['eventos', 'vencidos', 'ya_vencidos', 'sin_pase', 'permanentes', 'cursor_antes', 'cursor_despues']) {
+    for (const k of ['eventos', 'con_pase', 'vencidos', 'ya_vencidos', 'sin_pase', 'permanentes', 'cursor_antes', 'cursor_despues']) {
       if (typeof j[k] === 'number') resumen[k] = j[k]
     }
     if (Array.isArray(j.errores)) resumen.errores = j.errores.length
+    // (13-nov) el Edge corta a los ~90 s y guarda el cursor: la pasada siguiente sigue desde ahí
+    if (typeof j.cortado_por_tiempo === 'boolean') resumen.cortado_por_tiempo = j.cortado_por_tiempo
   }
   console.log(JSON.stringify(resumen))
   return { hecho: r.status === 200, status: r.status }

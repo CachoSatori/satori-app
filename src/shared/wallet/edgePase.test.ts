@@ -1,5 +1,5 @@
 // B1: el flujo del Edge club-pase con una base simulada y una cuenta de servicio FALSA generada en memoria.
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { manejarPase, manejarSync, type EnvPase, type Rpc } from './edgePase'
 import { armarClase, armarObjeto, configurarBaseClub, type PaseDatos } from './googlePase'
 import { guardarEnGoogle } from './sincronizar'
@@ -52,6 +52,21 @@ function google(resp: { clase?: number; objeto?: number; patch?: number; token?:
 }
 const pedido = (cuerpo: unknown, headers: Record<string, string> = { 'x-club-web': CLAVE_WEB }, metodo = 'POST') =>
   new Request('https://edge.ejemplo/club-pase/google', { method: metodo, headers, body: metodo === 'POST' ? JSON.stringify(cuerpo) : undefined })
+
+/** Con reloj simulado: espera (en tiempo real) a que el pedido colgado arme su temporizador, avanza 1 ms menos que el
+ *  tope (no tiene que terminar) y después el ms que falta (tiene que terminar). */
+async function tope15s<T>(p: Promise<T>, tope: number): Promise<T> {
+  let hecho = false
+  const q = p.finally(() => { hecho = true })
+  for (let i = 0; i < 2000 && vi.getTimerCount() === 0; i++) await new Promise(r => setImmediate(r))
+  expect(vi.getTimerCount()).toBeGreaterThan(0)
+  await vi.advanceTimersByTimeAsync(tope - 1)
+  expect(hecho).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  for (let i = 0; i < 2000 && !hecho; i++) await new Promise(r => setImmediate(r))
+  expect(hecho).toBe(true)
+  return q
+}
 
 describe('club-pase (Edge)', () => {
   it('flujo completo: token → miembro → datos → JWT → registra el pase emitido', async () => {
@@ -234,7 +249,8 @@ describe('club-pase: rutas de B3 (sync y actualizar)', () => {
   it('(12-nov) /vencer: misma clave que /sync (sin ella 503; otra 401); con la buena, el resumen de las bajas', async () => {
     const SYNC = 's'.repeat(40)
     const { rpc } = base({ club_pase_cursor_leer: { data: 7, error: null }, club_pase_eventos_leer: { data: [{ id: 8, miembro_id: MIEMBRO }], error: null },
-                           club_pase_datos: { data: datos({ estado: 'baja' }), error: null } })
+                           club_pase_datos: { data: datos({ estado: 'baja' }), error: null },
+                           club_pases_emitidos: { data: [{ miembro_id: MIEMBRO, object_id: 'x', emitido_en: '2026-11-12T19:20:00Z' }], error: null } })
     // (13-nov) Google devuelve el objeto guardado (ACTIVE y con QR) al GET; /vencer lo reemplaza con PUT sin código
     const llamadas: Array<{ url: string; method: string; body?: string }> = []
     const g = { llamadas, fetch: async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
@@ -249,11 +265,20 @@ describe('club-pase: rutas de B3 (sync y actualizar)', () => {
     expect(g.llamadas).toHaveLength(0)
     const r = await manejarSync(req({ 'x-club-pase-sync': SYNC }), 'vencer', { ...env, CLUB_PASE_SYNC_KEY: SYNC }, rpc, g.fetch)
     expect(r.status).toBe(200)
-    expect(await r.json()).toMatchObject({ eventos: 1, vencidos: 1, cursor_antes: 7, cursor_despues: 8 })
+    expect(await r.json()).toMatchObject({ eventos: 1, con_pase: 1, vencidos: 1, cursor_antes: 7, cursor_despues: 8, cortado_por_tiempo: false })
     expect(g.llamadas.filter(l => l.method === 'PATCH')).toEqual([])
     const put = g.llamadas.filter(l => l.method === 'PUT').map(l => JSON.parse(l.body!))
     expect(put.map(b => b.state)).toEqual(['EXPIRED'])
     expect(put[0].barcode).toBeUndefined()
+  })
+  it('(13-nov) /google con Google colgado: a los 15 s responde 502 (no espera al límite del Edge)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { rpc } = base({ club_pase_por_token: { data: MIEMBRO, error: null }, club_pase_datos: { data: datos(), error: null } })
+      const colgado = (url: string) => (url.includes('oauth2') ? Promise.resolve({ status: 200, json: async () => ({ access_token: 't' }) }) : new Promise<never>(() => {}))
+      const p = manejarPase(pedido({ token: TOKEN }), 'google', env, rpc, colgado)
+      expect((await tope15s(p, 15_000)).status).toBe(502)
+    } finally { vi.useRealTimers() }
   })
   const SYNC = 's'.repeat(40)
   const googleOk = async (url: string) => ({ status: 200, json: async () => (url.includes('oauth2') ? { access_token: 't' } : {}) })

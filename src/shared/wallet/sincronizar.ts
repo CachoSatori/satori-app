@@ -25,7 +25,25 @@
 import { armarObjeto, idObjeto, idsDelAmbiente, importarClave, sinRolVigente, validarDatos, type CuentaServicio, type DisenoPase, type Entorno, type PaseDatos } from './googlePase.ts'
 
 export type Rpc = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
-export type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ status: number; json: () => Promise<unknown> }>
+export type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ status: number; json: () => Promise<unknown> }>
+
+/** (13-nov) Ninguna llamada a Google espera más de esto: si no contesta, se corta y cuenta como error transitorio. */
+export const TIMEOUT_GOOGLE_MS = 15_000
+export const MENSAJE_TIMEOUT = 'timeout de Google'
+/**
+ * (13-nov) Envuelve la red hacia Google con un tope por pedido: pasa un `AbortSignal.timeout` (la red real corta el
+ * pedido) y, por si la red no lo respeta, también corre una carrera con un temporizador. Al vencer lanza
+ * `Error('timeout de Google')`. Envolver dos veces no cambia nada.
+ */
+export function conTimeout(fetchFn: Fetch, ms = TIMEOUT_GOOGLE_MS): Fetch {
+  return (url, init) => {
+    let t: ReturnType<typeof setTimeout> | undefined
+    const corte = new Promise<never>((_, rechazar) => { t = setTimeout(() => rechazar(new Error(MENSAJE_TIMEOUT)), ms) })
+    const pedido = fetchFn(url, { ...init, signal: init.signal ?? AbortSignal.timeout(ms) })
+      .catch(e => { throw e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError') ? new Error(MENSAJE_TIMEOUT) : e })
+    return Promise.race([pedido, corte]).finally(() => clearTimeout(t))
+  }
+}
 
 export const API_WALLET = 'https://walletobjects.googleapis.com/walletobjects/v1'
 export const SCOPE_WALLET = 'https://www.googleapis.com/auth/wallet_object.issuer'
@@ -301,6 +319,16 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
  * escribe el objeto `EXPIRED` y SIN código de barras en Google (13-nov: GET + PUT, ver `vencerEnGoogle`); los demás cambios no tocan Google (el piloto no sincroniza saldos: para eso está
  * «Actualizar mi pase»). Los eventos globales (promociones) se saltean.
  *
+ * (13-nov, prod) RÁPIDO: la primera corrida del cron (500 eventos) dio 504 porque hacía, en serie, una RPC de datos y un
+ * GET a Google por CADA miembro (casi todos sin pase guardado → 404), y el cursor se guardaba solo al final. Ahora:
+ *  · por lote, UNA lectura de los pases emitidos de Google (`club_pases_emitidos('google')`, paginada de a 2.000): un
+ *    miembro sin pase emitido cuenta `sin_pase` sin RPC de datos y sin llamar a Google. Si esa lista falla, no se
+ *    procesa nada y el cursor no se mueve (la pasada siguiente reintenta).
+ *  · solo los que tienen pase siguen el camino de siempre (datos → `vencerEnGoogle`, idempotente).
+ *  · tope de tiempo (`TOPE_MS_VENCER`, 90 s; el Edge corta a los 150): al pasarlo, el cursor queda justo antes del
+ *    primer evento del primer miembro NO procesado (nunca saltea eventos) y la respuesta lleva `cortado_por_tiempo`.
+ *  · lote por defecto `LOTE_VENCER` (200).
+ *
  * Errores (sin la tabla de reintentos, que es para después del piloto):
  *  · 404 de Google: esa persona nunca guardó el pase → listo.
  *  · 4xx permanentes (400, 403, 409, …): se anotan en el resumen y el cursor sigue (reintentar no lo arregla).
@@ -309,42 +337,102 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
  * Usa el mismo cursor que la sincronización completa (`google`): cuando se encienda después del piloto, rebobinarlo
  * (`club_pase_cursor_rebobinar`) para que actualice los saldos de lo que esta pasada salteó.
  */
+export const LOTE_VENCER = 200
+export const TOPE_MS_VENCER = 90_000
+const PAGINA_EMITIDOS = 2000
 export interface ResultadoBajas {
   /** (13-nov) `ya_vencidos`: ya estaban EXPIRED y sin código en Google (no se escribió nada). */
   eventos: number; miembros: number; vencidos: number; ya_vencidos: number; sin_pase: number; sin_cambio: number
   permanentes: number; cursor_antes: number; cursor_despues: number; errores: string[]
+  /** (13-nov) miembros del lote con pase de Google emitido (los únicos que se miran). */
+  con_pase: number
+  /** (13-nov) la pasada llegó a `TOPE_MS_VENCER` y cortó; el resto queda para la siguiente. */
+  cortado_por_tiempo: boolean
+  /** (13-nov) miembros SIN registro en `club_pases` que igual se miraron porque tienen un evento `datos` (así sale la purga
+   *  de autoaltas, que borra el registro del pase y deja al miembro en baja): si quedaron vencidos, se vencen en Google
+   *  por su id determinístico (404 → `sin_pase`). */
+  revisados_sin_registro: number
+  /** (13-nov) si un error (no el tope de tiempo) frenó el cursor: el id del evento desde el que la pasada siguiente
+   *  reintenta. `null` si no hubo freno por error. Si se repite en varias pasadas, el cursor está trabado ahí. */
+  trabado_en: number | null
 }
-export async function vencerBajas(deps: DepsSync): Promise<ResultadoBajas> {
+export interface DepsVencer extends DepsSync {
+  /** Reloj en ms (inyectable para las pruebas). Por defecto, `Date.now`. */
+  reloj?: () => number
+  /** Tope por pedido a Google en ms (por defecto `TIMEOUT_GOOGLE_MS`); inyectable para las pruebas. */
+  timeoutGoogleMs?: number
+}
+export async function vencerBajas(deps: DepsVencer): Promise<ResultadoBajas> {
   const { rpc, issuer } = deps
+  const fetchG = conTimeout(deps.fetch, deps.timeoutGoogleMs)
+  const reloj = deps.reloj ?? Date.now
+  const inicio = reloj()
   const res: ResultadoBajas = { eventos: 0, miembros: 0, vencidos: 0, ya_vencidos: 0, sin_pase: 0, sin_cambio: 0, permanentes: 0,
-                                cursor_antes: 0, cursor_despues: 0, errores: [] }
+                                cursor_antes: 0, cursor_despues: 0, errores: [], con_pase: 0, cortado_por_tiempo: false,
+                                revisados_sin_registro: 0, trabado_en: null }
   const c = await rpc('club_pase_cursor_leer', { p_nombre: 'google' })
   if (c.error) throw new Error('no se pudo leer el cursor')
   res.cursor_antes = res.cursor_despues = Number(c.data ?? 0)
-  const ev = await rpc('club_pase_eventos_leer', { p_despues: res.cursor_antes, p_limite: deps.limite ?? 500 })
+  const ev = await rpc('club_pase_eventos_leer', { p_despues: res.cursor_antes, p_limite: deps.limite ?? LOTE_VENCER })
   if (ev.error) throw new Error('no se pudieron leer los eventos')
-  const eventos = (ev.data ?? []) as Array<{ id: number; miembro_id: string | null }>
+  const eventos = (ev.data ?? []) as Array<{ id: number; miembro_id: string | null; motivo?: string | null }>
   res.eventos = eventos.length
 
   const primerEvento = new Map<string, number>()
   for (const e of eventos) if (e.miembro_id && !primerEvento.has(e.miembro_id)) primerEvento.set(e.miembro_id, e.id)
   res.miembros = primerEvento.size
+  if (eventos.length === 0) return res
+
+  // (13-nov) UNA lectura por lote de los pases emitidos de Google. Si falla, no se toca nada y el cursor no se mueve.
+  const conPase = new Set<string>()
+  if (primerEvento.size > 0) {
+    let despues: string | null = null
+    for (let pagina = 0; ; pagina++) {
+      if (pagina >= 50) { res.errores.push('pases emitidos: demasiadas páginas'); res.trabado_en = eventos[0].id; return res }
+      const p = await rpc('club_pases_emitidos', { p_plataforma: 'google', p_despues: despues, p_limite: PAGINA_EMITIDOS })
+      if (p.error) { res.errores.push('pases emitidos'); res.trabado_en = eventos[0].id; return res }
+      const filas = (p.data ?? []) as Array<{ miembro_id: string }>
+      for (const f of filas) if (primerEvento.has(f.miembro_id)) conPase.add(f.miembro_id)
+      if (filas.length < PAGINA_EMITIDOS) break
+      despues = filas[filas.length - 1].miembro_id
+    }
+  }
+  res.con_pase = conPase.size
+  // (13-nov, verificación) la purga de autoaltas borra la fila de `club_pases` y deja al miembro en baja (evento `datos`):
+  // sin registro, igual se mira a quien tenga un evento `datos` en el lote (solo la base; Google solo si quedó vencido).
+  const conDatos = new Set<string>()
+  for (const e of eventos) if (e.miembro_id && e.motivo === 'datos' && !conPase.has(e.miembro_id)) conDatos.add(e.miembro_id)
+
   let tope = Number.POSITIVE_INFINITY   // el cursor no pasa del primer evento de un miembro con error transitorio
-  const frenar = (m: string, error: string) => { res.errores.push(`${error} de ${m.slice(0, 8)}`); tope = Math.min(tope, (primerEvento.get(m) ?? 1) - 1) }
+  let topeError = Number.POSITIVE_INFINITY   // (13-nov) solo los frenos por error (no el tope de tiempo): da `trabado_en`
+  const frenar = (m: string, error: string) => {
+    res.errores.push(`${error} de ${m.slice(0, 8)}`)
+    topeError = Math.min(topeError, (primerEvento.get(m) ?? 1) - 1)
+    tope = Math.min(tope, topeError)
+  }
 
   let token: string | null = null
-  for (const [m] of primerEvento) {
+  // los miembros se recorren en el orden de su primer evento: si se corta en uno, todo lo anterior ya está procesado
+  for (const [m, primero] of primerEvento) {
+    const sinRegistro = !conPase.has(m)
+    if (sinRegistro && !conDatos.has(m)) { res.sin_pase++; continue }   // sin pase emitido ni evento `datos`: ni base ni Google
+    if (reloj() - inicio >= TOPE_MS_VENCER) {
+      res.cortado_por_tiempo = true
+      tope = Math.min(tope, primero - 1)
+      break
+    }
     try {
       const d = await rpc('club_pase_datos', { p_miembro: m })
       if (d.error) { frenar(m, 'datos'); continue }
+      if (sinRegistro) res.revisados_sin_registro++
       if (d.data === null) { res.sin_cambio++; continue }                       // ya no existe: nada que vencer
       if (validarDatos(d.data) !== null) { res.permanentes++; res.errores.push(`contrato de ${m.slice(0, 8)}`); continue }
       const datos = d.data as PaseDatos
-      if (!estaVencido(datos)) { res.sin_cambio++; continue }   // no es una baja: no toca Google
+      if (!estaVencido(datos)) { if (sinRegistro) res.sin_pase++; else res.sin_cambio++; continue }   // no es una baja: no toca Google
       const objeto = armarObjeto(issuer, deps.entorno, datos, deps.diseno)
-      token ??= await tokenGoogle(deps.sa, deps.fetch, deps.ahora)
+      token ??= await tokenGoogle(deps.sa, fetchG, deps.ahora)
       // (13-nov) GET + PUT sin código de barras (el PATCH dejaba el QR): ver `vencerEnGoogle`
-      const r = await vencerEnGoogle(deps.fetch, token, objeto)
+      const r = await vencerEnGoogle(fetchG, token, objeto)
       if (r === 'vencido') res.vencidos++
       else if (r === 'ya_vencido') res.ya_vencidos++
       else if (r === 'sin_pase') res.sin_pase++
@@ -352,13 +440,17 @@ export async function vencerBajas(deps: DepsSync): Promise<ResultadoBajas> {
       else { res.permanentes++; res.errores.push(`${typeof r === 'object' ? `Google HTTP ${r.http}` : r} de ${m.slice(0, 8)} (permanente)`) }
     } catch (e) {
       const sinToken = e instanceof Error && /^token de Google/.test(e.message)
-      frenar(m, sinToken ? (e as Error).message : 'excepción')
-      if (sinToken) break   // sin token no sirve seguir: la pasada siguiente reintenta desde este miembro
+      const colgado = e instanceof Error && e.message === MENSAJE_TIMEOUT
+      frenar(m, sinToken || colgado ? (e as Error).message : 'excepción')
+      // sin token, o Google colgado (13-nov): no sirve seguir; la pasada siguiente reintenta desde este miembro
+      if (sinToken || colgado) break
     }
   }
   // el cursor avanza hasta el último evento procesado (también los globales, que esta pasada no usa), salvo que un miembro
-  // haya tenido un error transitorio: entonces queda justo antes de su primer evento (los miembros se recorren en el orden
-  // de su primer evento, así que nada anterior queda sin procesar; lo posterior se repite y `vencerEnGoogle` es idempotente)
+  // haya tenido un error transitorio o la pasada se haya cortado por tiempo: entonces queda justo antes del primer evento
+  // de ese miembro (nada anterior queda sin procesar; lo posterior se repite y `vencerEnGoogle` es idempotente). La base
+  // solo deja avanzar el cursor (`greatest`).
+  if (Number.isFinite(topeError)) res.trabado_en = topeError + 1
   const candidatos = eventos.filter(e => e.id <= tope)
   if (candidatos.length > 0) {
     const hasta = candidatos[candidatos.length - 1].id

@@ -33,6 +33,23 @@ reintentos) queda para después del piloto.
 **12-nov (tarde) · ambiente en los IDs del pase.** Staging y prod comparten el emisor de Google y los IDs de miembro pueden
 coincidir: `WALLET_ENTORNO` (`stg` → clase `club-satori-stg`, objetos `club-stg-<miembro>`; `prod` sin sufijo; otro valor
 → 503). La clase existente no se pisa y el Edge no escribe IDs de otro ambiente.
+**12-nov (noche) · hallazgo de la prueba en staging: la baja no vence el pase.** `club_pase_por_token` solo encuentra
+miembros activos con rol vigente: después de la baja, `/actualizar` responde 404 `portal_invalido` y, sin `/sync`, el pase
+queda vigente para siempre (la caja rechaza el QR). Caminos de baja: la app (`club_miembro_guardar` con estado «baja»;
+el trigger baja todos los roles), el portal (`club_socio_baja_portal`, solo el rol de socio) y la purga de autoaltas
+(`club_socios_mantenimiento`). Los tres ya dejan un evento en `club_pase_eventos` (`datos` o `rol`). Opciones para el dueño:
+- **a) Vencer en el momento de la baja.** El portal: después de la baja, club-web le pide al Edge que vuelva a escribir
+  el pase. La app: la pantalla llama al Edge con la sesión del usuario (el Edge valida que sea owner o manager). Sin
+  esquema. No cubre la purga ni ningún camino que sea solo SQL, y si la llamada falla (red), el pase queda vigente.
+- **b) `/actualizar` acepta el token de alguien de baja solo para vencer.** El Edge busca al miembro por su token sin
+  exigir rol (lectura directa con service_role, sin función nueva; con una función nueva sería esquema) y, si está de
+  baja o sin roles, escribe el pase vencido. Sin esquema. Pero alguien tiene que llamarlo: la persona de baja no va a
+  tocar «Actualizar mi pase», así que solo sirve combinado con (a) en el portal.
+- **c) `/sync` solo para bajas (recomendada).** Una pasada cada pocos minutos lee los eventos nuevos, arma el pase de esos
+  miembros con `club_pase_datos` y solo si queda vencido (baja o sin roles) escribe `EXPIRED` en Google. Cubre todos los
+  caminos. Sin esquema si el programador es un cron del Worker `satori-club-api` (secreto nuevo `CLUB_PASE_SYNC_KEY` en el
+  Worker y en el Edge); con `pg_cron` + `pg_net` sería esquema. Riesgo: sin la tabla de reintentos, un error de Google
+  frena el cursor y se reintenta en la pasada siguiente (se separan los 4xx permanentes para no trabarlo).
 
 ## Bitácora
 - 07-nov · Plan aprobado (6c1a5fb) con ajustes. Arranca A1.

@@ -7,7 +7,7 @@ import {
 } from '../../shared/api/documents'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import {
-  fechaCortaCR, revisarDocumentos, politicaPantalla, MSG_FOTO_DUPLICADA, MSG_CLAVE_DUPLICADA, MSG_PARECIDA,
+  fechaCortaCR, revisarDocumentos, politicaPantalla, mensajeBloqueo, MSG_PARECIDA,
 } from '../../shared/utils/facturaDuplicada'
 import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
@@ -453,11 +453,11 @@ export function PagoFoto({ movement, doc, createdBy, onAdded, onRefresh }: {
     try {
       const { blob, filename } = await normalizeInvoiceImage(file)
       const dupFoto = await findDuplicate(await sha256File(blob), null)
-      if (dupFoto) { setErr(MSG_FOTO_DUPLICADA(fechaCortaCR(dupFoto.created_at))); return }
+      if (dupFoto) { setErr(mensajeBloqueo('foto', dupFoto, 'caja')); return }
       const { path, sha } = await uploadImage(blob, filename)
       const { documentos, fallo } = await extractImageDetalle(path)   // la IA lee la factura (productos → inventario)
       const pol = politicaPantalla(await revisarDocumentos(documentos, { porClave: findDuplicateClave, parecida: findFacturaParecida }))
-      if (pol.bloqueo) { setErr(MSG_CLAVE_DUPLICADA(fechaCortaCR(pol.bloqueo.created_at))); return }
+      if (pol.bloqueo) { setErr(mensajeBloqueo('clave', pol.bloqueo, 'caja')); return }
       const ex = pol.primero
       const extras: DocExtract[] = pol.extras
       const par = pol.parecida

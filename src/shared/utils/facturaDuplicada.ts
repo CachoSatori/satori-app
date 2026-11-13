@@ -68,13 +68,29 @@ export const MSG_FOTO_DUPLICADA = (cuando: string) =>
   `Esta foto ya fue cargada${cuando ? ` (el ${cuando})` : ''}. No se registró nada. Para volver a cargarla, primero descartá la anterior.`
 export const MSG_CLAVE_DUPLICADA = (cuando: string) =>
   `Esta factura (misma clave FE) ya fue cargada${cuando ? ` (el ${cuando})` : ''}. No se registró nada. Para volver a cargarla, primero descartá la anterior.`
+// (12-nov, el dueño) Si lo que bloquea es un documento «nuevo» (esperando en la Bandeja), el aviso dice qué hacer.
+const queDocumento = (tipo: 'foto' | 'clave') => (tipo === 'foto' ? 'Esta foto' : 'Esta factura (misma clave FE)')
+export const MSG_EN_BANDEJA = (tipo: 'foto' | 'clave', cuando: string) =>
+  `${queDocumento(tipo)} ya está en la Bandeja esperando confirmación${cuando ? ` (cargada el ${cuando})` : ''}. No se registró nada: confirmala ahí.`
+export const MSG_EN_ESTA_BANDEJA = (tipo: 'foto' | 'clave', cuando: string) =>
+  `${queDocumento(tipo)} ya está en esta Bandeja esperando confirmación${cuando ? ` (cargada el ${cuando})` : ''}. No se registró nada: confirmala en la lista.`
+
+/**
+ * El aviso de bloqueo según QUÉ bloquea: un documento «nuevo» de la Bandeja → «confirmala ahí» (en la Bandeja misma,
+ * «confirmala en la lista»); uno ya enlazado a un pago → «ya fue cargada… descartá la anterior».
+ */
+export function mensajeBloqueo(tipo: 'foto' | 'clave', doc: ConFecha, donde: 'caja' | 'bandeja'): string {
+  const cuando = fechaCortaCR(doc.created_at)
+  if (doc.estado === 'nuevo') return donde === 'bandeja' ? MSG_EN_ESTA_BANDEJA(tipo, cuando) : MSG_EN_BANDEJA(tipo, cuando)
+  return tipo === 'foto' ? MSG_FOTO_DUPLICADA(cuando) : MSG_CLAVE_DUPLICADA(cuando)
+}
 export const MSG_PARECIDA = (cuando: string, numero: string) =>
   `Ya hay una factura de este proveedor con el número ${numero} por el mismo total${cuando ? `, cargada el ${cuando}` : ''}. Si es otra factura, tocá «Es otra».`
 export const MSG_VARIOS_DOCS = (n: number, k: number) =>
   `Esta foto tiene ${n} documentos: el primero está acá; ${k === 1 ? 'el otro queda' : `los otros ${k} quedan`} en la Bandeja para confirmar.`
 
 // ── Revisión de los documentos de una foto (la usan las tres pantallas) ──────────────────────────────────────────────
-interface ConFecha { created_at: string }
+interface ConFecha { created_at: string; estado?: string | null }
 export interface DocRevisado<T> { doc: T; claveRepetida: ConFecha | null; parecida: ConFecha | null }
 
 /** Para cada documento leído de la foto: ¿su clave FE ya está cargada? ¿se parece a una factura ya cargada? (red inyectada) */
@@ -103,9 +119,10 @@ export function politicaPantalla<T>(rev: DocRevisado<T>[]): { bloqueo: ConFecha 
 }
 
 /** Bandeja (13-nov): entra cada documento cuya clave FE no esté cargada; los parecidos entran con aviso. */
-export function politicaBandeja<T>(rev: DocRevisado<T>[]): { entran: T[]; bloqueados: number; parecidos: number; cuandoBloqueo: string } {
+export function politicaBandeja<T>(rev: DocRevisado<T>[]): { entran: T[]; bloqueados: number; parecidos: number; cuandoBloqueo: string; docBloqueo: ConFecha | null } {
   const bloq = rev.filter(r => r.claveRepetida)
   return {
+    docBloqueo: bloq[0]?.claveRepetida ?? null,
     entran: rev.filter(r => !r.claveRepetida).map(r => r.doc),
     bloqueados: bloq.length,
     parecidos: rev.filter(r => !r.claveRepetida && r.parecida).length,

@@ -163,3 +163,63 @@ describe('huérfanos: borrar el movimiento → recargar la misma foto → se per
     expect(tablaDocs[1]).toMatchObject({ estado: 'nuevo', linked_movement_id: null, clave_fe: CLAVE })
   })
 })
+
+// (12-nov, el dueño) Un «nuevo» de la Bandeja SIGUE bloqueando, pero el aviso dice qué hacer: confirmarla ahí.
+describe('un documento «nuevo» de la Bandeja bloquea con el aviso «confirmala ahí» (12-nov)', () => {
+  const enBandeja = (over: Partial<(typeof tablaDocs)[number]> = {}) => tablaDocs.push({ id: 'en-bandeja',
+    created_at: '2026-11-12T20:00:00Z', image_path: 'x', sha256: 'sha-99001', estado: 'nuevo', linked_movement_id: null,
+    clave_fe: CLAVE, tipo: 'factura', raw_json: FACTURA, created_by: 'u1', ...over })
+  const AVISO = 'Esta foto ya está en la Bandeja esperando confirmación (cargada el 12-nov 14:00). No se registró nada: confirmala ahí.'
+
+  it('asistente, misma foto → «ya está en la Bandeja… confirmala ahí»; no crea nada', async () => {
+    enBandeja()
+    const onError = await cargarEnAsistente()
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(AVISO))
+    expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
+    expect(tablaDocs).toHaveLength(1)
+    expect(m.crearMov).not.toHaveBeenCalled()
+  })
+
+  it('asistente, otra foto con la misma clave FE → el mismo aviso, para la factura', async () => {
+    enBandeja({ sha256: 'otra-foto' })
+    const onError = await cargarEnAsistente()
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(
+      /^Esta factura \(misma clave FE\) ya está en la Bandeja esperando confirmación \(cargada el 12-nov 14:00\)\. No se registró nada: confirmala ahí\.$/)))
+  })
+
+  it('«➕ Agregar foto» → el mismo aviso; no enlaza', async () => {
+    enBandeja()
+    const onAdded = vi.fn()
+    render(<PagoFoto movement={{ id: 'mov-x' } as CashMovement} doc={null} createdBy="u1" onAdded={onAdded} onRefresh={vi.fn()} />)
+    subirFoto()
+    await screen.findByText(AVISO)
+    expect(onAdded).not.toHaveBeenCalled()
+    expect(tablaDocs).toHaveLength(1)
+  })
+
+  it('«➕ Agregar foto», otra foto con la misma clave FE → el aviso de la factura', async () => {
+    enBandeja({ sha256: 'otra-foto' })
+    render(<PagoFoto movement={{ id: 'mov-x' } as CashMovement} doc={null} createdBy="u1" onAdded={vi.fn()} onRefresh={vi.fn()} />)
+    subirFoto()
+    await screen.findByText(/^Esta factura \(misma clave FE\) ya está en la Bandeja esperando confirmación.*confirmala ahí\.$/)
+    expect(tablaDocs).toHaveLength(1)
+  })
+
+  it('Bandeja → «ya está en esta Bandeja… confirmala en la lista»', async () => {
+    enBandeja()
+    render(<MemoryRouter><InboxModule /></MemoryRouter>)
+    await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeNull())
+    subirFoto()
+    await screen.findByText(/Esta foto ya está en esta Bandeja esperando confirmación \(cargada el 12-nov 14:00\)\. No se registró nada: confirmala en la lista\./)
+    expect(tablaDocs).toHaveLength(1)
+  })
+
+  it('Bandeja, otra foto con la misma clave FE → el aviso de la factura', async () => {
+    enBandeja({ sha256: 'otra-foto' })
+    render(<MemoryRouter><InboxModule /></MemoryRouter>)
+    await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeNull())
+    subirFoto()
+    await screen.findByText(/Esta factura \(misma clave FE\) ya está en esta Bandeja esperando confirmación.*confirmala en la lista\./)
+    expect(tablaDocs).toHaveLength(1)
+  })
+})

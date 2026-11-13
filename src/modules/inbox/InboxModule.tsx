@@ -7,7 +7,7 @@ import {
   insertInboxMovement, findDuplicate, findDuplicateClave, findFacturaParecida, sha256File, cuadra,
   type DocumentRow, type DocExtract,
 } from '../../shared/api/documents'
-import { fechaCortaCR, revisarDocumentos, politicaBandeja, MSG_CLAVE_DUPLICADA, MSG_FOTO_DUPLICADA } from '../../shared/utils/facturaDuplicada'
+import { revisarDocumentos, politicaBandeja, mensajeBloqueo } from '../../shared/utils/facturaDuplicada'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { getSuppliers, getAllCashMovements, updateMovementStatus, getOpenCashSession, createCashMovement, upsertSupplier } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
@@ -86,7 +86,7 @@ export default function InboxModule() {
       const { blob, filename } = await normalizeInvoiceImage(file)
       const sha = await sha256File(blob)
       const dup = await withTimeout(findDuplicate(sha, null))
-      if (dup) { setError(MSG_FOTO_DUPLICADA(fechaCortaCR(dup.created_at))); setBusy(null); return }
+      if (dup) { setError(mensajeBloqueo('foto', dup, 'bandeja')); setBusy(null); return }
       const { path } = await withTimeout(uploadImage(blob, filename), 30000)
       const detected = await extractImage(path)   // una foto puede traer varios documentos
       if (detected.length === 0) {
@@ -95,14 +95,16 @@ export default function InboxModule() {
       } else {
         // (13-nov, el dueño) misma clave FE → ese documento NO entra (bloqueo, sin excepción de rol);
         // mismo proveedor + número + total (otra foto) → entra, con aviso para revisarlo antes de confirmar.
-        const { entran, bloqueados, parecidos, cuandoBloqueo: cuandoBloq } = politicaBandeja(await revisarDocumentos(detected, {
+        const { entran, bloqueados, parecidos, cuandoBloqueo: cuandoBloq, docBloqueo } = politicaBandeja(await revisarDocumentos(detected, {
           porClave: c => withTimeout(findDuplicateClave(c)), parecida: d => withTimeout(findFacturaParecida(d)),
         }))
-        if (entran.length === 0) { setError(MSG_CLAVE_DUPLICADA(cuandoBloq)); setBusy(null); return }
+        if (entran.length === 0 && docBloqueo) { setError(mensajeBloqueo('clave', docBloqueo, 'bandeja')); setBusy(null); return }
         for (const ex of entran) await createDocumentRow(path, sha, ex, profile.id)
         setInfo([
           `${entran.length} documento(s) detectado(s) — la IA precargó los datos. Abrí cada uno, verificá la factura y confirmá. Nada se registra hasta confirmar.`,
-          bloqueados ? `${bloqueados} no entró/entraron: la misma factura (clave FE) ya estaba cargada${cuandoBloq ? ` (el ${cuandoBloq})` : ''}.` : '',
+          bloqueados ? (docBloqueo?.estado === 'nuevo'
+            ? `${bloqueados} no entró/entraron: la misma factura (clave FE) ya está en esta Bandeja esperando confirmación${cuandoBloq ? ` (cargada el ${cuandoBloq})` : ''}: confirmala en la lista.`
+            : `${bloqueados} no entró/entraron: la misma factura (clave FE) ya estaba cargada${cuandoBloq ? ` (el ${cuandoBloq})` : ''}.`) : '',
           parecidos ? `⚠ ${parecidos} se parece(n) a una factura ya cargada (mismo proveedor, número y total): revisá que no sea la misma antes de confirmar.` : '',
         ].filter(Boolean).join(' '))
       }

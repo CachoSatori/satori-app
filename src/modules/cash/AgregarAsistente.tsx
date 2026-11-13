@@ -17,6 +17,8 @@ import { norm } from '../../shared/api/inventoryIngest'
 import { tipShiftToCaja } from '../../shared/utils'
 import { fi, fd } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
+import { claveProveedor, matchSupplier, decidirAlias, puedeAprenderAlias, msgAliasGuardado } from '../../shared/utils/proveedorAlias'
+import { guardarAliasProveedor } from '../../shared/api/proveedorAlias'
 import type { CashSession, CashMovement, Supplier, UserRole } from '../../shared/types/database'
 
 // F4.3a — el "➕ Agregar" único de Caja Diaria (SPEC §5). Asistente de UNA pantalla con secciones
@@ -44,19 +46,13 @@ interface Props {
   /** (13-nov, prueba física caso B) Ya NO se usa: el aviso del módulo se pintaba DETRÁS del modal (overlay fijo).
    *  Todos los avisos del asistente se muestran ahora DENTRO del modal (estado `aviso`). Se deja opcional por compat. */
   onError?:    (msg: string) => void
+  /** (D12) Se guardó un alias de proveedor: el padre recarga la lista de proveedores AL CERRAR el asistente. */
+  onProveedoresCambiaron?: () => void
 }
 
-// Match de proveedor por nombre (trim + acentos/case vía norm) contra los activos — para enlazar
-// supplier_id en mercadería. Solo lee; no da de alta (eso queda para el flujo con foto / F4.3b).
-// (#154, prueba física 13-nov) La clave ignora también espacios y puntuación: la IA lee el MISMO nombre legal de
-// dos facturas de una foto con variaciones («X, S.A.» / «X S. A.» / «X SA ») y con el `norm` solo (minúsculas y
-// acentos) la segunda quedaba «no existe en el sistema». Cada factura pasa por esta misma función.
-const claveProveedor = (s: string) => norm(s ?? '').replace(/[^a-z0-9]/g, '')
-function matchSupplier(name: string, suppliers: Supplier[]): Supplier | null {
-  const key = claveProveedor(name)
-  if (!key) return null
-  return suppliers.find(s => s.is_active && (claveProveedor(s.name) === key || (s.aliases ?? []).some(a => claveProveedor(a) === key))) ?? null
-}
+// Match de proveedor por nombre (trim + acentos/case) contra los activos — para enlazar supplier_id. La clave ignora
+// también espacios y puntuación («X, S.A.» = «X S. A.» = «X SA», #154). Vive en shared/utils/proveedorAlias (D12): la
+// misma clave decide si un alias aprendido ya está.
 
 const claseLabel: Record<Clase, string> = { mercaderia: 'Mercadería', operativa: 'Operativa', ingreso: 'Ingreso' }
 
@@ -68,7 +64,7 @@ const claseLabel: Record<Clase, string> = { mercaderia: 'Mercadería', operativa
 const INGRESO_CATEGORIAS = ['Aceite/reciclaje', 'Reintegro', 'Devolución de proveedor', 'Otro'] as const
 const INGRESO_UMBRAL_CRC = 100_000
 
-export default function AgregarAsistente({ openSession, suppliers, role, createdBy, tc, onCreated, onClose }: Props) {
+export default function AgregarAsistente({ openSession, suppliers, role, createdBy, tc, onCreated, onClose, onProveedoresCambiaron }: Props) {
   // (13-nov, prueba física caso B) Aviso DENTRO del modal, arriba (bajo el título): bloqueo por foto/clave FE repetida,
   // «no se pudo verificar», lectura caída, error al registrar y el aviso post-pago. Antes iba a onError → el banner de
   // CashModule, que queda DETRÁS del overlay fijo del modal (index.css .cd-modal-overlay z-index 1000): la cajera no
@@ -89,11 +85,22 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const [pickedSupplierId, setPickedSupplierId] = useState<string | null>(null)
   const [createdSuppliers, setCreatedSuppliers] = useState<Supplier[]>([])
   const [creatingSup, setCreatingSup] = useState(false)
+  // (D12 = A) Nombre que leyó la IA y NO se reconoció, cuando la cajera eligió a mano un proveedor EXISTENTE para él.
+  // Al confirmar (después de crear el movimiento) se guarda como alias de ese proveedor. Se borra si cambia el nombre,
+  // si crea un proveedor nuevo o al pasar a otra factura.
+  const [aliasLeido, setAliasLeido] = useState<string | null>(null)
+  // Alias aprendidos en este asistente (aún no en el prop suppliers): la próxima factura de la misma foto ya los usa.
+  const [aprendidos, setAprendidos] = useState<Record<string, string[]>>({})
+  // Línea(s) discreta(s) «✓ Guardado: …». Ref para `terminar` (corre en el mismo tick que el guardado).
+  const [notasAlias, setNotasAlias] = useState<string[]>([])
+  const notasAliasRef = useRef<string[]>([])
 
   // ── 2. Clasificación advisory (RN-2: sugiere, el humano confirma) ──
   // (#154) La sugerencia usa el proveedor RESUELTO (si lo hay): así toda factura cuyo proveedor se reconoce (por nombre,
   // alias o variación de puntuación) recibe la misma sugerencia, no solo la que la IA leyó idéntica al alias.
-  const allSuppliers = useMemo(() => [...suppliers, ...createdSuppliers], [suppliers, createdSuppliers])
+  const allSuppliers = useMemo(() => [...suppliers, ...createdSuppliers].map(s =>
+    aprendidos[s.id] ? { ...s, aliases: [...(s.aliases ?? []), ...aprendidos[s.id]] } : s,
+  ), [suppliers, createdSuppliers, aprendidos])
   const autoMatch = useMemo(() => matchSupplier(supplierName, allSuppliers), [supplierName, allSuppliers])
   const pickedSupplier = pickedSupplierId ? (allSuppliers.find(s => s.id === pickedSupplierId) ?? null) : null
   const resolvedSupplier: Supplier | null = pickedSupplier ?? autoMatch   // elegido/creado pisa el auto-match
@@ -137,7 +144,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   // Borra los campos del formulario (no la foto). Lo usan «← Volver» y el paso a la próxima factura de la misma foto.
   const limpiarCampos = () => {
     setDescripcion(''); setSupplierName(''); setMontoCRC(''); setMontoUSD(''); setFechaFactura('')
-    setPickedSupplierId(null); setClasePicked(null)
+    setPickedSupplierId(null); setClasePicked(null); setAliasLeido(null)
     setIngresoCategoria(''); setIngresoMotivo('')
     setPago(formas[0]); setAccountId('')
   }
@@ -146,6 +153,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const volverAOpciones = () => {
     limpiarCampos()
     setPhoto(null); setParecida(null); setEsOtra(false); setAviso(null); setPendiente(null)
+    notasAliasRef.current = []; setNotasAlias([])
     setVista('opciones')
   }
 
@@ -257,7 +265,9 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     const total = photo?.docs.length ?? 0
     const post = postAvisosRef.current
     if (!varias) {
-      if (post.length) { setAviso(post.join(' ')); setResumenListo('✓ El movimiento quedó registrado.'); setVista('listo') }
+      // (D12) Con alias aprendido, también queda en «listo» para que se vea la línea «✓ Guardado: …».
+      if (post.length) setAviso(post.join(' '))
+      if (post.length || notasAliasRef.current.length) { setResumenListo('✓ El movimiento quedó registrado.'); setVista('listo') }
       else onClose()
       return
     }
@@ -332,6 +342,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       // Recorrido nuevo: nada registrado todavía de esta foto.
       registradasRef.current = new Set(); salteadasIdxRef.current = new Set(); registradasMemRef.current = []
       hechasRef.current = 0; salteadasRef.current = 0; postAvisosRef.current = []; saliendoRef.current = false
+      notasAliasRef.current = []; setNotasAlias([])
       setHechas(0); setConfirmarSalida(null)
       // Revisión de la PRIMERA factura (clave FE y parecida); las siguientes se revisan al llegar a cada una.
       const [rev] = await revisarDocumentos(base.docs.slice(0, 1), depsRevision)
@@ -388,12 +399,39 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     )).slice(0, 6)
   }, [supplierUnknown, nameTrimmed, allSuppliers])
 
-  const pickSupplier = (s: Supplier) => { setPickedSupplierId(s.id); setSupplierName(s.name) }
+  // (D12) Si el nombre no reconocido es el que leyó la IA, se recuerda para guardarlo como alias al confirmar.
+  const pickSupplier = (s: Supplier) => {
+    const leidoIA = photo?.extracted?.proveedor?.trim() ?? ''
+    setAliasLeido(supplierUnknown && leidoIA && claveProveedor(leidoIA) === claveProveedor(nameTrimmed) ? leidoIA : null)
+    setPickedSupplierId(s.id); setSupplierName(s.name)
+  }
+  // (D12) Guarda el alias DESPUÉS del pago. Nunca tira error ni bloquea: si falla (red, permisos, demora), el pago
+  // queda igual y no se muestra nada. Tope de 5 s para no dejar «Registrando…» colgado.
+  const aprenderAlias = async (leido: string, destinoId: string) => {
+    if (!puedeAprenderAlias(role)) return
+    const d = decidirAlias(leido, destinoId, allSuppliers)
+    if (!d.agregar) return
+    const destino = allSuppliers.find(x => x.id === destinoId)
+    try {
+      const r = await Promise.race([
+        guardarAliasProveedor(destinoId, d.alias),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5_000)),
+      ])
+      setAprendidos(prev => ({ ...prev, [destinoId]: [...(prev[destinoId] ?? []), d.alias] }))
+      if (r === 'agregado') {
+        const nota = msgAliasGuardado(d.alias, destino?.name ?? '')
+        notasAliasRef.current = [...notasAliasRef.current, nota]
+        setNotasAlias(notasAliasRef.current)
+        onProveedoresCambiaron?.()
+      }
+    } catch { /* best-effort: el pago ya está; el alias se puede aprender la próxima vez */ }
+  }
   const crearProveedor = async () => {
     if (!nameTrimmed || creatingSup) return
     setCreatingSup(true)
     try {
       const s = await upsertSupplier({ name: nameTrimmed })   // reusa el alta existente (defaults: CRC/Efectivo/activo)
+      setAliasLeido(null)   // proveedor nuevo con ese nombre: no hay alias que aprender
       setCreatedSuppliers(prev => [...prev, s])
       setPickedSupplierId(s.id)
       setSupplierName(s.name)
@@ -510,6 +548,11 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     }
     onCreated(mov)
     creandoRef.current = false
+    // Paso 3 (D12) — el movimiento ya está: si la cajera eligió un proveedor existente para un nombre leído que no se
+    // reconocía, ese nombre queda como alias. Nunca cambia ni bloquea el pago (errores tragados, con tope de tiempo).
+    if (aliasLeido && clase !== 'ingreso' && pickedSupplierId && resolvedSupplierId === pickedSupplierId) {
+      await aprenderAlias(aliasLeido, pickedSupplierId)
+    }
     setSaving(false)
     // (#149) Quedan facturas de esta foto → NO se cierra: pasa a la siguiente. El candado se suelta recién cuando la
     // siguiente quedó a la vista (y el índice registrado ya está en `registradas`).
@@ -556,6 +599,9 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           /* ── Pago registrado con aviso post-pago: solo el aviso (arriba) y «Cerrar». ── */
           <>
             <div className="cd-method-info ok" style={{ marginTop: '0.4rem' }}>{resumenListo}</div>
+            {notasAlias.map((n, i) => (
+              <div key={i} data-testid="nota-alias" style={{ fontSize: '0.66rem', color: 'var(--c-musgo)', marginTop: 4 }}>{n}</div>
+            ))}
             <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
               <button className="cd-btn-green" onClick={onClose}>Cerrar</button>
             </div>
@@ -624,6 +670,10 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             {msgProgreso(photo.docs.length, photo.idx + 1, photo.parcial ?? null)}
           </div>
         )}
+        {/* (D12) Alias aprendido en una factura anterior de esta foto: línea discreta. */}
+        {varias && notasAlias.map((n, i) => (
+          <div key={i} data-testid="nota-alias" style={{ fontSize: '0.66rem', color: 'var(--c-musgo)', marginTop: 4 }}>{n}</div>
+        ))}
         {/* ← Volver: descarta el borrador (no se creó nada) y regresa a las dos opciones. Con facturas de la foto ya
             registradas no se puede (se perderían las que faltan sin aviso): se sale con «Cancelar», que pregunta. */}
         <button type="button" className="tips-btn-ghost" onClick={volverAOpciones} disabled={saving || photoBusy || hechas > 0}
@@ -705,7 +755,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
               Llegando por foto, photo ya está seteado → sin autofocus (no roba scroll). */}
           <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Proveedor"
             placeholder="Nombre del proveedor, si aplica" autoFocus={!photo}
-            value={supplierName} onChange={e => { setSupplierName(e.target.value); setPickedSupplierId(null) }} />
+            value={supplierName} onChange={e => { setSupplierName(e.target.value); setPickedSupplierId(null); setAliasLeido(null) }} />
           {resolvedSupplier && (
             <div style={{ fontSize: '0.66rem', color: 'var(--c-musgo)', marginTop: 3 }}>✓ Proveedor reconocido: {resolvedSupplier.name}</div>
           )}

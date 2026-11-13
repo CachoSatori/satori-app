@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride, type ManagerAuth } from '../../shared/ManagerOverride'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../../shared/types/database'
@@ -92,6 +92,7 @@ export default function CashTurno({
   const [view, setView] = useState<ViewState>(openSession ? 'turno' : 'apertura')
   // F4.3a: el "➕ Agregar" único (asistente manual). Convive con los 3 botones viejos (F4.3c los retira).
   const [agregarOpen, setAgregarOpen] = useState(false)
+  const aliasAprendidoRef = useRef(false)   // (D12) el asistente guardó un alias → recargar proveedores al cerrar
 
   // Apertura form
   const [apCajero,  setApCajero]  = useState(profile?.full_name ?? '')
@@ -1183,7 +1184,13 @@ export default function CashTurno({
           // (13-nov, caso B) onCreated NO cierra: el asistente llama onClose solo; con un aviso post-pago queda abierto
           // en «listo» hasta que la cajera toque «Cerrar». Los avisos se ven dentro del modal (no van a onError).
           onCreated={mov => { onMovAdded(mov); recargarDocs() }}
-          onClose={() => setAgregarOpen(false)}
+          // (D12) Si el asistente aprendió un alias de proveedor, la lista se recarga al cerrar (no antes: recargar
+          // pinta la pantalla de carga y desmontaría el asistente a mitad de una foto con varias facturas).
+          onProveedoresCambiaron={() => { aliasAprendidoRef.current = true }}
+          onClose={() => {
+            setAgregarOpen(false)
+            if (aliasAprendidoRef.current) { aliasAprendidoRef.current = false; onRefresh() }
+          }}
         />
       )}
 

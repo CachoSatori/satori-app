@@ -48,10 +48,14 @@ interface Props {
 
 // Match de proveedor por nombre (trim + acentos/case vía norm) contra los activos — para enlazar
 // supplier_id en mercadería. Solo lee; no da de alta (eso queda para el flujo con foto / F4.3b).
+// (#154, prueba física 13-nov) La clave ignora también espacios y puntuación: la IA lee el MISMO nombre legal de
+// dos facturas de una foto con variaciones («X, S.A.» / «X S. A.» / «X SA ») y con el `norm` solo (minúsculas y
+// acentos) la segunda quedaba «no existe en el sistema». Cada factura pasa por esta misma función.
+const claveProveedor = (s: string) => norm(s ?? '').replace(/[^a-z0-9]/g, '')
 function matchSupplier(name: string, suppliers: Supplier[]): Supplier | null {
-  const key = norm(name)
+  const key = claveProveedor(name)
   if (!key) return null
-  return suppliers.find(s => s.is_active && (norm(s.name) === key || (s.aliases ?? []).some(a => norm(a) === key))) ?? null
+  return suppliers.find(s => s.is_active && (claveProveedor(s.name) === key || (s.aliases ?? []).some(a => claveProveedor(a) === key))) ?? null
 }
 
 const claseLabel: Record<Clase, string> = { mercaderia: 'Mercadería', operativa: 'Operativa', ingreso: 'Ingreso' }
@@ -87,9 +91,15 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const [creatingSup, setCreatingSup] = useState(false)
 
   // ── 2. Clasificación advisory (RN-2: sugiere, el humano confirma) ──
+  // (#154) La sugerencia usa el proveedor RESUELTO (si lo hay): así toda factura cuyo proveedor se reconoce (por nombre,
+  // alias o variación de puntuación) recibe la misma sugerencia, no solo la que la IA leyó idéntica al alias.
+  const allSuppliers = useMemo(() => [...suppliers, ...createdSuppliers], [suppliers, createdSuppliers])
+  const autoMatch = useMemo(() => matchSupplier(supplierName, allSuppliers), [supplierName, allSuppliers])
+  const pickedSupplier = pickedSupplierId ? (allSuppliers.find(s => s.id === pickedSupplierId) ?? null) : null
+  const resolvedSupplier: Supplier | null = pickedSupplier ?? autoMatch   // elegido/creado pisa el auto-match
   const sugerencia = useMemo(
-    () => classifyMovement({ text: descripcion, supplierName, amount: Number(montoCRC) || 0 }, suppliers),
-    [descripcion, supplierName, montoCRC, suppliers],
+    () => classifyMovement({ text: descripcion, supplierName: resolvedSupplier?.name ?? supplierName, amount: Number(montoCRC) || 0 }, suppliers),
+    [descripcion, supplierName, resolvedSupplier, montoCRC, suppliers],
   )
   // La clase efectiva sigue la sugerencia hasta que el humano elige otra (null = "seguir la sugerencia").
   const [clasePicked, setClasePicked] = useState<Clase | null>(null)
@@ -363,11 +373,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   // ── Resolución de proveedor ────────────────────────────────
   // Lista total = proveedores del padre + los recién creados acá. El RESUELTO = el elegido/creado a mano
   // (pickedSupplierId) o, si no, el match EXACTO por nombre (matchSupplier/norm reusado, sin reimplementar).
-  const allSuppliers = useMemo(() => [...suppliers, ...createdSuppliers], [suppliers, createdSuppliers])
+  // (allSuppliers / autoMatch / pickedSupplier / resolvedSupplier se calculan arriba, antes de la sugerencia.)
   const nameTrimmed = supplierName.trim()
-  const autoMatch = useMemo(() => matchSupplier(supplierName, allSuppliers), [supplierName, allSuppliers])
-  const pickedSupplier = pickedSupplierId ? (allSuppliers.find(s => s.id === pickedSupplierId) ?? null) : null
-  const resolvedSupplier: Supplier | null = pickedSupplier ?? autoMatch   // elegido/creado pisa el auto-match
   const resolvedSupplierId = resolvedSupplier?.id ?? null
   const supplierUnknown = nameTrimmed.length > 0 && !resolvedSupplier
   // Parecidos (anti-duplicado): comparten substring o un token significativo (≥4) con lo tipeado/leído.

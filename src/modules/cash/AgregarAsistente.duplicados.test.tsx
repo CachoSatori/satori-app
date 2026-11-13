@@ -12,9 +12,9 @@ const doc = (over: Partial<DocExtract> = {}): Partial<DocExtract> => ({
 })
 const m = vi.hoisted(() => ({
   createSpy: vi.fn(async (x: Record<string, unknown>) => ({ ...x, id: 'mov-1', _pending: false })),
-  uploadSpy: vi.fn(async (..._args: unknown[]) => ({ path: 'docs/f.jpg', sha: 'sha-foto' })),
+  uploadSpy: vi.fn<(...a: unknown[]) => Promise<{ path: string; sha: string }>>(async () => ({ path: 'docs/f.jpg', sha: 'sha-foto' })),
   leer: vi.fn(),
-  createDocSpy: vi.fn(async (..._args: unknown[]) => ({ id: 'doc1' })),
+  createDocSpy: vi.fn<(...a: unknown[]) => Promise<{ id: string }>>(async () => ({ id: 'doc1' })),
   dupFoto: vi.fn(async (): Promise<unknown> => null),
   dupClave: vi.fn(async (): Promise<unknown> => null),
   parecida: vi.fn(async (): Promise<unknown> => null),

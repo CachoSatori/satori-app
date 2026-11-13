@@ -8,9 +8,9 @@ import type { CashMovement } from '../../shared/types/database'
 const CLAVE = '5'.repeat(50)
 const m = vi.hoisted(() => ({
   normalize: vi.fn(async () => ({ blob: new Blob(['n']), filename: 'n.jpg' })),
-  upload: vi.fn(async (..._args: unknown[]) => ({ path: 'docs/n.jpg', sha: 'sha-n' })),
+  upload: vi.fn<(...a: unknown[]) => Promise<{ path: string; sha: string }>>(async () => ({ path: 'docs/n.jpg', sha: 'sha-n' })),
   leer: vi.fn(),
-  crear: vi.fn(async (..._args: unknown[]) => ({ id: 'doc-nuevo' })),
+  crear: vi.fn<(...a: unknown[]) => Promise<{ id: string }>>(async () => ({ id: 'doc-nuevo' })),
   dupFoto: vi.fn(async (): Promise<unknown> => null),
   dupClave: vi.fn(async (): Promise<unknown> => null),
   parecida: vi.fn(async (): Promise<unknown> => null),

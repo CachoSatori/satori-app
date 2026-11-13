@@ -721,7 +721,8 @@ a la rama del #59: una rama de trabajo conectada desplegaría sola con cada push
    son exactamente estas:
    - `vars`: `SUPABASE_URL` y `SUPABASE_ANON_KEY` (están en el panel y no en el archivo; las conserva `keep_vars = true`);
    - ratelimits: `RL_CREAR` (namespace `2001`, 5 por 60 s) y `RL_LEER` (`2002`, 60 por 60 s), que el archivo declara como
-     `[[unsafe.bindings]]`.
+     `[[unsafe.bindings]]`;
+   - (12-nov, opción c del pase de Wallet) triggers: el cron `*/10 * * * *`, que el archivo declara en `[triggers]`.
 
    **Con cualquier otra diferencia** (`preview_urls`, rutas, otra variable, otro tope o los mismos con otros números):
    contestar **NO**, parar y copiar el aviso tal cual. Después del deploy, `/api/salud` (§11.3) confirma.

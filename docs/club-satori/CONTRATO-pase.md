@@ -152,7 +152,8 @@ marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
   fecha y la hora de Costa Rica de sus datos («Créditos al 12-nov 13:20» o «Actualizado · 12-nov 13:20») y el portal
   tiene «Actualizar mi pase». Sin ningún rol vigente, el objeto se arma `EXPIRED`. **Hallazgo (12-nov, staging):** hoy
   nada lo vuelve a escribir después de una baja (`club_pase_por_token` no encuentra a la persona y `/sync` está apagado):
-  el pase no se vence. Las opciones están en `AVANCE-LC.md` (12-nov); elige el dueño.
+  el pase no se vence. **(12-nov) Opción c del dueño:** `/club-pase/vencer` (cron del Worker cada 10 minutos, clave
+  `CLUB_PASE_SYNC_KEY`) lee los eventos nuevos y vence en Google solo a los de baja o sin roles (`vencerBajas`).
 
 ## 6. Apple (apagado)
 Mismo contrato. Flag `club_config.wallet_apple_activo = false` (lo agrega A). B deja listo el `.pkpass` y el web

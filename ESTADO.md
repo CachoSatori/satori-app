@@ -1,10 +1,10 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-12.** Los hashes de este bloque se verificaron contra `origin` el 12-nov (`main` = `3cacf43`, 22:02 CR). Las Edge Functions y sus
-secretos (solo nombres y digests), contra la Management API de cada proyecto el 12-nov. Lo de Cloudflare lo informó el
-dueño. En prod, Claude solo hizo lo que firmó el dueño el 12-nov (el pase de `extract-document`, abajo).
-**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md).** Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
+**Al día: 2026-11-13.** Los hashes de este bloque se verificaron contra `origin` el 13-nov (`main` = `72d0835`, 12:14:41 CR;
+`staging` = `4726b7f`, 11:39:23 CR) y los PR contra la API de GitHub (número, merge y hora). Lo de prod fuera de `main` y lo de
+Cloudflare lo informó el dueño; en prod, Claude solo hizo lo que firmó el dueño.
+**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).** Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
 está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
@@ -13,8 +13,8 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`3cacf43`** (12/11 22:02:49 -06:00: merge del #144, Google Wallet del Club en `main`: el pase (`src/shared/wallet/`), las rutas de club-web y los botones del portal **apagados** con `VITE_WALLET_GOOGLE`; las imágenes del pase publicadas en `club-web/public/pase/`; el Edge `club-pase` no entra a `main` y no está en prod). Antes, `b6be32e` (12/11 13:03:02 -06:00: merge del #126, la bitácora del pase del Club) y `17a9efd` (11/11 23:22:08 -06:00: merge del #59, el Club Satori, con la 150 y la 151) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. El 11/11 entró el Club (#59, `17a9efd`: la 150 y la 151). Ledger de prod: **67 · 151**. |
-| `staging` | **`fb29872`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
+| `main` | **`72d0835`** (13/11 12:14:41 -06:00: merge del #163, bitácora del redespliegue de `club-pase`). Antes, `3cacf43` (12/11 22:02:49 -06:00: merge del #144, Google Wallet del Club en `main`, botones del portal **apagados** con `VITE_WALLET_GOOGLE`), `b6be32e` (12/11 13:03:02 -06:00: #126) y `17a9efd` (11/11 23:22:08 -06:00: merge del #59, el Club Satori, con la 150 y la 151). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **67 · 151** (sin migraciones nuevas el 13/11). El Edge `club-pase` está en prod pero su código no está en `main` (ver foto del 13/11). |
+| `staging` | **`4726b7f`** (13/11 11:39:23 -06:00, merge del #162) | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
 | `integracion/analitica-staging` | **`850a22f`** | ⚠️ Rama vieja, 123 commits atrás de `staging`. **No la publica Cloudflare** (lo de septiembre ya no vale: la rama de producción es `staging`). |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
@@ -44,6 +44,32 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 | #56 · #57 | `bb1a488` · `6bcfafb` | 06/11 | Saca nombres y correos reales de comentarios, tests y docs. |
 | este PR | — | 07/11 | **Prom/PAX explicado** (Ventas → Análisis) + **mig 080** `pos_prompax_agregado`, que la aplica el merge (Branching). Firmado por Ismael el 06/11. |
 
+- **📍 Foto del 13/11 (lo nuevo desde el 12/11; el detalle, en el [handoff](docs/handoffs/HANDOFF-2026-11-13.md)):**
+  - **Merges a `main` del 13/11** (hora -06:00, verificados con la API):
+
+    | PR | Merge | Hora | Qué entró |
+    |---|---|---|---|
+    | #133 | `429e0a4` | 07:34 | CI: gate «Gate» en los PR y pruebas antes de publicar (Node 22). |
+    | #143 | `12b94d2` | 07:37 | Tanda 4 del rediseño: montos de la Bandeja con `fi()`. |
+    | #151 | `cdbc6b1` | 08:08 | Skills del repo (`.claude/skills/`). |
+    | #152 | `df4f45a` | 08:08 | Docs: regla de merges D1, regla 1 por Branching, DoD, números del gate. |
+    | #148 | `ffcf31d` | 09:38 | Wallet: la baja vence el pase; cron del Worker cada 10 min. |
+    | #157 | `89e0f9c` | 10:12 | README del Worker; la ruta vigilada de Workers Builds pasó a `club-web/**`. |
+    | #158 | `5a43fcc` | 11:07 | Bitácora del pase de `club-pase` a prod. |
+    | #149 (con #154 adentro) | `b03ad9d` | 11:20 | Caja: varias facturas por foto, cargadas una por una en el asistente; aviso dentro del modal; falla cerrada en duplicados; recargar la misma foto ofrece solo las faltantes como duda; arreglo de pago doble; proveedor con puntuación distinta; «sin foto» que no se refrescaba. |
+    | #161 | `a763c9c` | 11:57 | El asistente aprende el nombre legal del proveedor como alias. |
+    | #160 | `2c24d58` | 12:12 | `/vencer` rápido: filtro por pases emitidos, tope 90 s, lotes de 200, timeout 15 s, purgados por id fijo, `trabado_en`. |
+    | #163 | `72d0835` | 12:14 | Bitácora del redespliegue de `club-pase`. |
+
+    PR cerrados sin merge: #94, #92 y #141 (este último lo reemplazó el #146).
+  - **`club-pase` EN PROD, fuera de `main` (firmado por el dueño):** v1 desde `d8f0280` (10:33) y redesplegado v2 desde
+    `c0369d5` (12:00), `verify_jwt` off. Secretos de prod: `GOOGLE_WALLET_SA_KEY` (propia de prod), `GOOGLE_WALLET_ISSUER_ID`,
+    `CLUB_WEB_KEY` y `CLUB_PASE_SYNC_KEY` (también en el Worker), cargados por el dueño; `WALLET_ENTORNO` = `prod`,
+    `CLUB_WEB_ORIGIN` y `WALLET_DISENO`, por la sesión. Cron verificado; backlog de 3.002 eventos vaciado (cursor 3002 a las
+    11:40). La primera corrida con `d8f0280` dio 504 (motivo del #160). **Los botones del Wallet en el portal siguen
+    apagados; Google, en modo demo.** Bitácora: `docs/pases/PASE-club-pase-prod.md`.
+  - **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
+    solo de merges.
 - **📍 Foto del 12/11 (lo nuevo desde el 11/11):**
   - **`extract-document` en PROD con Claude Sonnet 5.5** (pase firmado por el dueño el 12/11; Sonnet 4.5 se retira de la
     API el 30-nov-2026):
@@ -65,8 +91,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
     cambian). No es un despliegue. Versiones de prod después del cambio de secreto del 12/11: `monthly-report` v12,
     `extract-document` v10, `cierre-email` v4, `pago-notificar` v4, `ingest-ndf` v4 (`verify_jwt` off, verificado con
     tickets del PoS después del cambio) y `alta-empleado` v3.
-  - **`club-pase` (Google Wallet) SOLO en staging:** v1 desde `c6b54fc` (rama `claude/club-pase-edge`), `verify_jwt`
-    off, `WALLET_ENTORNO` = `stg`. **No está en prod.** Pendiente: la baja no vence el pase (la opción c está en curso).
+  - **`club-pase` (Google Wallet):** el 12/11 estaba solo en staging (v1 desde `c6b54fc`). **Desde el 13/11 está también en prod** (ver la foto del 13/11).
     La solicitud de publicación a Google se envió el 12/11 y está en revisión.
   - **Club:** el primer build automático del Worker desde el repo fue `ab5de674` (merge del #126, `b6be32e`), **Ready**,
     con `/api/salud` OK a las 13:09 CR. **La prueba de fuego (§11.3) sigue PENDIENTE.** Bitácora en
@@ -144,7 +169,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 - **🔐 SEC-03 y SEC-04 (05/11, rama `claude/brave-brown-m45jd7`, PR #28, migs 072 y 073):** escritura anónima en el CRM y lectura anónima de propinas y empleados. Aplicadas en staging (ledger 72) y **en prod el 05/11 ~20:05 UTC** (ledger 48 → 50), a mano antes del merge. `/registro` y el QR del CRM quedan apagados hasta la F1 del Club Satori. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
   `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
-- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1819 tests** pasan (4 skipped; con env dummy, 13/11, sobre `main`) · lint **83 problemas** (75 errores y 8 avisos, 13/11).
+- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1968 tests** pasan (4 skipped; 158 archivos; 13/11, sobre `main` = `72d0835`) · lint **83 problemas** (75 errores y 8 avisos, 13/11).
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 - **🔐 SEC-01 (04/11, rama `claude/sec-01-perfiles`):**
   - **Paso A hecho en prod y staging:** `disable_signup=true` (antes `false`). El signup con anon da `422`.

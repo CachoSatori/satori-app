@@ -1,7 +1,15 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createCashMovement, upsertSupplier } from '../../shared/api/cash'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
-import { uploadImage, extractImage, createDocumentRow, cuadra, type DocExtract } from '../../shared/api/documents'
+import {
+  uploadImage, extractImageDetalle, createDocumentRow, cuadra, sha256File, findDuplicate, findDuplicateClave, findFacturaParecida, findDocsPorSha,
+  type DocExtract,
+} from '../../shared/api/documents'
+import {
+  fechaCortaCR, revisarDocumentos, mensajeBloqueo, mensajePostPago, MSG_PARECIDA, MSG_QUEDAN_SIN_CARGAR,
+  MSG_YA_EN_ESTA_CARGA, MSG_PARECIDA_EN_ESTA_CARGA, MSG_INDETERMINADA, msgProgreso, resumenVarias, cruzarConFoto, enEstaPasada,
+  type DocRevisado, type ConFecha,
+} from '../../shared/utils/facturaDuplicada'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import { classifyMovement } from '../../shared/utils/classifyMovement'
 import { PAGO_META, formasPago, type Pago } from '../../shared/utils/pagoMatrix'
@@ -33,15 +41,21 @@ interface Props {
   tc:          number                 // tipo de cambio vigente
   onCreated:   (m: CashMovement) => void
   onClose:     () => void
-  onError:     (msg: string) => void
+  /** (13-nov, prueba física caso B) Ya NO se usa: el aviso del módulo se pintaba DETRÁS del modal (overlay fijo).
+   *  Todos los avisos del asistente se muestran ahora DENTRO del modal (estado `aviso`). Se deja opcional por compat. */
+  onError?:    (msg: string) => void
 }
 
 // Match de proveedor por nombre (trim + acentos/case vía norm) contra los activos — para enlazar
 // supplier_id en mercadería. Solo lee; no da de alta (eso queda para el flujo con foto / F4.3b).
+// (#154, prueba física 13-nov) La clave ignora también espacios y puntuación: la IA lee el MISMO nombre legal de
+// dos facturas de una foto con variaciones («X, S.A.» / «X S. A.» / «X SA ») y con el `norm` solo (minúsculas y
+// acentos) la segunda quedaba «no existe en el sistema». Cada factura pasa por esta misma función.
+const claveProveedor = (s: string) => norm(s ?? '').replace(/[^a-z0-9]/g, '')
 function matchSupplier(name: string, suppliers: Supplier[]): Supplier | null {
-  const key = norm(name)
+  const key = claveProveedor(name)
   if (!key) return null
-  return suppliers.find(s => s.is_active && (norm(s.name) === key || (s.aliases ?? []).some(a => norm(a) === key))) ?? null
+  return suppliers.find(s => s.is_active && (claveProveedor(s.name) === key || (s.aliases ?? []).some(a => claveProveedor(a) === key))) ?? null
 }
 
 const claseLabel: Record<Clase, string> = { mercaderia: 'Mercadería', operativa: 'Operativa', ingreso: 'Ingreso' }
@@ -54,7 +68,16 @@ const claseLabel: Record<Clase, string> = { mercaderia: 'Mercadería', operativa
 const INGRESO_CATEGORIAS = ['Aceite/reciclaje', 'Reintegro', 'Devolución de proveedor', 'Otro'] as const
 const INGRESO_UMBRAL_CRC = 100_000
 
-export default function AgregarAsistente({ openSession, suppliers, role, createdBy, tc, onCreated, onClose, onError }: Props) {
+export default function AgregarAsistente({ openSession, suppliers, role, createdBy, tc, onCreated, onClose }: Props) {
+  // (13-nov, prueba física caso B) Aviso DENTRO del modal, arriba (bajo el título): bloqueo por foto/clave FE repetida,
+  // «no se pudo verificar», lectura caída, error al registrar y el aviso post-pago. Antes iba a onError → el banner de
+  // CashModule, que queda DETRÁS del overlay fijo del modal (index.css .cd-modal-overlay z-index 1000): la cajera no
+  // veía nada. Se borra al cargar otra foto o al cerrar (el modal se desmonta).
+  const [aviso, setAviso] = useState<string | null>(null)
+  const avisoRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (aviso) avisoRef.current?.scrollIntoView?.({ block: 'nearest' })   // si el form estaba scrolleado, que se vea
+  }, [aviso])
   // ── 1. Captura manual ──────────────────────────────────────
   const [descripcion, setDescripcion] = useState('')
   const [supplierName, setSupplierName] = useState('')
@@ -68,9 +91,15 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const [creatingSup, setCreatingSup] = useState(false)
 
   // ── 2. Clasificación advisory (RN-2: sugiere, el humano confirma) ──
+  // (#154) La sugerencia usa el proveedor RESUELTO (si lo hay): así toda factura cuyo proveedor se reconoce (por nombre,
+  // alias o variación de puntuación) recibe la misma sugerencia, no solo la que la IA leyó idéntica al alias.
+  const allSuppliers = useMemo(() => [...suppliers, ...createdSuppliers], [suppliers, createdSuppliers])
+  const autoMatch = useMemo(() => matchSupplier(supplierName, allSuppliers), [supplierName, allSuppliers])
+  const pickedSupplier = pickedSupplierId ? (allSuppliers.find(s => s.id === pickedSupplierId) ?? null) : null
+  const resolvedSupplier: Supplier | null = pickedSupplier ?? autoMatch   // elegido/creado pisa el auto-match
   const sugerencia = useMemo(
-    () => classifyMovement({ text: descripcion, supplierName, amount: Number(montoCRC) || 0 }, suppliers),
-    [descripcion, supplierName, montoCRC, suppliers],
+    () => classifyMovement({ text: descripcion, supplierName: resolvedSupplier?.name ?? supplierName, amount: Number(montoCRC) || 0 }, suppliers),
+    [descripcion, supplierName, resolvedSupplier, montoCRC, suppliers],
   )
   // La clase efectiva sigue la sugerencia hasta que el humano elige otra (null = "seguir la sugerencia").
   const [clasePicked, setClasePicked] = useState<Clase | null>(null)
@@ -102,51 +131,219 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   // o carga manual — y el formulario completo recién se revela después. 'form' se alcanza por:
   // (a) foto sacada y leída (onPhoto lo setea al terminar) o (b) tap en "Carga manual".
   // Cancelar la cámara NO dispara el change del input → la vista queda en 'opciones' sola.
-  const [vista, setVista] = useState<'opciones' | 'form'>('opciones')
+  // 'listo' (13-nov, caso B): el pago YA se registró pero hubo un aviso post-pago → queda a la vista hasta «Cerrar».
+  const [vista, setVista] = useState<'opciones' | 'form' | 'listo'>('opciones')
 
-  // ← Volver desde el form: limpia el borrador SIN crear nada y regresa a las dos opciones.
-  // (createdSuppliers no se limpia: los proveedores creados ya existen en la base.)
-  const volverAOpciones = () => {
+  // Borra los campos del formulario (no la foto). Lo usan «← Volver» y el paso a la próxima factura de la misma foto.
+  const limpiarCampos = () => {
     setDescripcion(''); setSupplierName(''); setMontoCRC(''); setMontoUSD(''); setFechaFactura('')
     setPickedSupplierId(null); setClasePicked(null)
     setIngresoCategoria(''); setIngresoMotivo('')
     setPago(formas[0]); setAccountId('')
-    setPhoto(null)
+  }
+  // ← Volver desde el form: limpia el borrador SIN crear nada y regresa a las dos opciones.
+  // (createdSuppliers no se limpia: los proveedores creados ya existen en la base.)
+  const volverAOpciones = () => {
+    limpiarCampos()
+    setPhoto(null); setParecida(null); setEsOtra(false); setAviso(null); setPendiente(null)
     setVista('opciones')
   }
 
   // ── Foto/IA (aditivo) ──────────────────────────────────────
   // photo = la factura ya subida + lo extraído por la IA, para enlazarla al movimiento al confirmar.
-  const [photo, setPhoto] = useState<{ path: string; sha: string; extracted: DocExtract | null } | null>(null)
+  // (13-nov, el dueño — #149) `docs`: los documentos de la foto POR CARGAR; `idx`: el que se está cargando ahora
+  // (`extracted` = docs[idx]). Con 2 o más, el asistente los carga UNO POR UNO sin cerrarse: cada uno es su propio
+  // movimiento y su propio documento «procesado» (mismo path/sha). Nada va a la Bandeja como «nuevo» desde acá.
+  // (D11 = B) `parcial`: la MISMA foto ya se había cargado → `docs` son solo las NO reconocidas (R de N sí);
+  // `dudas[i]`: TODAS las no reconocidas: no se puede confirmar si ya se pagaron → «parecida» (Es otra / Saltear).
+  // `fallo`: la lectura falló (≠ la IA no vio documentos). `parecida`: aviso no bloqueante: hay que tocar «Es otra».
+  type Foto = {
+    path: string; sha: string; fallo: boolean; docs: DocExtract[]
+    parcial?: { registradas: number; total: number; enBandeja?: number } | null
+    dudas?: (ConFecha | null)[]
+  }
+  const [photo, setPhoto] = useState<(Foto & { idx: number; extracted: DocExtract | null }) | null>(null)
+  const [parecida, setParecida] = useState<{ texto: string } | null>(null)
+  const [esOtra, setEsOtra] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // ── Varias facturas en una foto (#149) ──
+  const varias = (photo?.docs.length ?? 0) >= 2 || !!photo?.parcial
+  // La factura actual no se puede registrar: 'repetida' (clave FE ya cargada) o 'error' (no se pudo verificar).
+  // El formulario se oculta y solo se ofrece «Saltear esta factura» (y «Reintentar» si fue error).
+  const [pendiente, setPendiente] = useState<'repetida' | 'error' | null>(null)
+  const [verificando, setVerificando] = useState(false)          // revisando la próxima factura de la foto
+  const [confirmarSalida, setConfirmarSalida] = useState<number | null>(null)   // K facturas sin cargar
+  const [resumenListo, setResumenListo] = useState('✓ El movimiento quedó registrado.')
+  const [hechas, setHechas] = useState(0)                        // espejo para el render (← Volver / Cambiar foto)
+  // Plata: refs (no estado) para que un doble toque en el MISMO render no pase dos veces. `registradas` = índices de
+  // la foto que ya tienen movimiento: confirmar nunca registra dos veces el mismo índice (doble toque, reintento).
+  // `salteadas` ídem para «Saltear». `creando`: el movimiento se está creando (no se puede salir en ese instante).
+  const guardandoRef = useRef(false)
+  const creandoRef = useRef(false)
+  const saliendoRef = useRef(false)
+  const registradasRef = useRef<Set<number>>(new Set())
+  const salteadasIdxRef = useRef<Set<number>>(new Set())
+  const hechasRef = useRef(0)
+  const salteadasRef = useRef(0)
+  const postAvisosRef = useRef<string[]>([])
+  // (verificación #154, hallazgo 1) Las facturas YA registradas en esta pasada, en memoria: la siguiente se compara
+  // contra esta lista además de contra la base. Si el enlace del documento falló, la base no la ve: la memoria sí.
+  const registradasMemRef = useRef<DocExtract[]>([])
+  const depsRevision = { porClave: findDuplicateClave, parecida: findFacturaParecida }
 
-  // Reusa EXACTO el pipeline de la Bandeja: normalizar → subir → leer. La extracción PRECARGA los campos
-  // (todo editable; RN-2: la IA no confirma). El doc se enlaza recién al confirmar (con el id del movimiento).
+  const precargar = (ex: DocExtract) => {
+    if (ex.proveedor) { setSupplierName(ex.proveedor); setPickedSupplierId(null) }   // re-resolver por el nombre leído
+    if (ex.concepto || ex.proveedor) setDescripcion(ex.concepto || ex.proveedor || '')
+    if (ex.total != null) {
+      if (ex.moneda === 'USD') setMontoUSD(ex.total)
+      else setMontoCRC(ex.total)
+    }
+    if (ex.fecha) setFechaFactura(ex.fecha)
+    setClasePicked(null)   // que la sugerencia se recalcule sobre lo recién precargado
+  }
+
+  // Deja a la vista la factura `idx` de la foto, ya revisada (clave FE y parecida, en la base y en esta pasada). Si su
+  // clave FE ya está cargada, no se precarga para registrar: solo «Saltear esta factura».
+  const mostrarFactura = (base: Foto, idx: number, rev: DocRevisado<DocExtract> | null) => {
+    const ex = base.docs[idx] ?? null
+    const k = base.docs.length
+    limpiarCampos()
+    if (ex) precargar(ex)
+    setPhoto({ ...base, idx, extracted: ex })
+    setEsOtra(false)
+    const enPasada = ex ? enEstaPasada(ex, registradasMemRef.current) : null
+    if (rev?.claveRepetida || enPasada === 'clave') {
+      setParecida(null)
+      setPendiente('repetida')
+      setAviso(rev?.claveRepetida
+        ? `Factura ${idx + 1} de ${k}: ${mensajeBloqueo('clave', rev.claveRepetida, 'caja')} Tocá «Saltear esta factura».`
+        : `Factura ${idx + 1} de ${k}: ${MSG_YA_EN_ESTA_CARGA}`)
+    } else {
+      setPendiente(null)
+      setAviso(null)
+      // D11: con la foto ya vista, toda factura ofrecida es duda (aunque falte el documento de referencia).
+      const duda = base.parcial ? (base.dudas?.[idx] ?? { created_at: '' }) : null
+      setParecida(rev?.parecida ? { texto: MSG_PARECIDA(fechaCortaCR(rev.parecida.created_at), String(ex?.numero_documento ?? '')) }
+        : enPasada === 'parecida' ? { texto: MSG_PARECIDA_EN_ESTA_CARGA }
+        : duda ? { texto: MSG_INDETERMINADA(fechaCortaCR(duda.created_at)) }
+        : null)
+    }
+  }
+
+  // Pasa a la factura `idx` de la misma foto: la revisa recién ahora (así ve la que se acaba de registrar).
+  // Si no se puede verificar → no se precarga para registrar: «Reintentar» o «Saltear esta factura».
+  // Si la cajera ya eligió «Salir» mientras se revisaba, no se pisa el resumen.
+  const irAFactura = async (base: Foto, idx: number) => {
+    setVerificando(true)
+    try {
+      const [rev] = await revisarDocumentos([base.docs[idx]], depsRevision)
+      if (saliendoRef.current) return
+      mostrarFactura(base, idx, rev ?? null)
+    } catch (e) {
+      if (saliendoRef.current) return
+      mostrarFactura(base, idx, null)
+      setParecida(null)
+      setPendiente('error')
+      setAviso(`Factura ${idx + 1} de ${base.docs.length}: ${e instanceof Error ? e.message : 'No se pudo verificar la factura.'}`)
+    } finally {
+      setVerificando(false)
+    }
+  }
+
+  // Fin del recorrido (o salida a medias). Sin nada que avisar → se cierra como siempre; si no → «listo» con el resumen.
+  const terminar = (salida: boolean) => {
+    saliendoRef.current = true
+    const total = photo?.docs.length ?? 0
+    const post = postAvisosRef.current
+    if (!varias) {
+      if (post.length) { setAviso(post.join(' ')); setResumenListo('✓ El movimiento quedó registrado.'); setVista('listo') }
+      else onClose()
+      return
+    }
+    const r = resumenVarias(total, hechasRef.current, salteadasRef.current, post)
+    if (!r || (salida && hechasRef.current === 0)) { onClose(); return }   // nada registrado al salir → nada que avisar
+    setAviso(r.aviso); setResumenListo(r.titulo); setPendiente(null); setConfirmarSalida(null); setVista('listo')
+  }
+
+  // (verificación #154, hallazgo 2) Mismo candado que «Confirmar»: un doble toque no saltea dos.
+  const saltear = async () => {
+    if (!photo || guardandoRef.current || salteadasIdxRef.current.has(photo.idx) || registradasRef.current.has(photo.idx)) return
+    guardandoRef.current = true
+    salteadasIdxRef.current.add(photo.idx)
+    salteadasRef.current += 1
+    try {
+      if (photo.idx + 1 >= photo.docs.length) terminar(false)
+      else await irAFactura(photo, photo.idx + 1)
+    } finally {
+      guardandoRef.current = false
+    }
+  }
+
+  // Cancelar / tocar afuera: con varias facturas a medias, primero se pregunta (dentro del modal). Se puede preguntar
+  // también mientras se revisa la próxima factura; solo no se corta mientras se crea el movimiento.
+  const intentarCerrar = () => {
+    if (creandoRef.current) return
+    if (vista === 'form' && varias && photo) {
+      const quedan = photo.docs.length - hechasRef.current - salteadasRef.current
+      if (quedan > 0) { setConfirmarSalida(quedan); return }
+    }
+    onClose()
+  }
+
+  // Reusa EXACTO el pipeline de la Bandeja: normalizar → (13-nov) ¿foto repetida? → subir → leer → (13-nov) ¿clave FE
+  // repetida? ¿factura parecida? La extracción PRECARGA los campos (todo editable; RN-2: la IA no confirma). El doc se
+  // enlaza recién al confirmar (con el id del movimiento).
+  // Misma clave FE → BLOQUEA (decisión del dueño, sin excepción de rol). Misma foto: (D11 = B) si trae varias facturas
+  // y faltan algunas, ofrece solo las que faltan; si están todas (o es de una sola factura) → BLOQUEA como siempre.
   const onPhoto = async (file: File) => {
     setPhotoBusy(true)
+    setAviso(null)   // otra foto → el aviso anterior se va
     try {
       const { blob, filename } = await normalizeInvoiceImage(file)
-      const { path, sha } = await uploadImage(blob, filename)
-      const detected = await extractImage(path)
-      const ex = detected[0] ?? null
-      if (ex) {
-        if (ex.proveedor) { setSupplierName(ex.proveedor); setPickedSupplierId(null) }   // re-resolver por el nombre leído
-        if (ex.concepto || ex.proveedor) setDescripcion(ex.concepto || ex.proveedor || '')
-        if (ex.total != null) {
-          if (ex.moneda === 'USD') setMontoUSD(ex.total)
-          else setMontoCRC(ex.total)
+      const shaFoto = await sha256File(blob)
+      // Foto repetida (sha): se revisa UNA vez, acá. Las facturas de esta misma foto comparten sha y no se bloquean entre sí.
+      const dupFoto = await findDuplicate(shaFoto, null)
+      let base: Foto
+      if (dupFoto) {
+        const bloquear = () => setAviso(mensajeBloqueo('foto', dupFoto, 'caja'))
+        // (D11 = B) Se vuelve a leer la foto YA subida (no se sube otra vez). Si no se puede leer o trae una sola
+        // factura → el bloqueo de siempre (falla cerrada).
+        if (!dupFoto.image_path) { bloquear(); return }
+        const lect = await extractImageDetalle(dupFoto.image_path).catch(() => null)
+        if (!lect || lect.fallo || lect.documentos.length < 2) { bloquear(); return }
+        const previos = await findDocsPorSha(shaFoto)
+        const cruce = cruzarConFoto(lect.documentos, previos)
+        const faltan = lect.documentos.map((d, i) => ({ d, i })).filter(x => !cruce.registradas[x.i])
+        // Todas reconocidas: el bloqueo de siempre; si alguna está en la Bandeja, el aviso lo dice (D11, punto 3).
+        if (!faltan.length) { setAviso(mensajeBloqueo('foto', cruce.docBandeja ?? dupFoto, 'caja')); return }
+        // (re-verificación) Las NO reconocidas son TODAS duda (cruce.dudas): puede que su pago exista sin documento
+        // (enlace caído en la primera pasada). Nunca se confirman directo: «Es otra» o «Saltear».
+        base = {
+          path: dupFoto.image_path, sha: shaFoto, fallo: false, docs: faltan.map(x => x.d),
+          parcial: { registradas: lect.documentos.length - faltan.length, total: lect.documentos.length, enBandeja: cruce.enBandeja },
+          dudas: faltan.map(x => cruce.dudas[x.i]),
         }
-        if (ex.fecha) setFechaFactura(ex.fecha)
-        setClasePicked(null)   // que la sugerencia se recalcule sobre lo recién precargado
+      } else {
+        const { path, sha } = await uploadImage(blob, filename)
+        const { documentos, fallo } = await extractImageDetalle(path)
+        base = { path, sha, fallo, docs: documentos }
       }
-      setPhoto({ path, sha, extracted: ex })
+      // Recorrido nuevo: nada registrado todavía de esta foto.
+      registradasRef.current = new Set(); salteadasIdxRef.current = new Set(); registradasMemRef.current = []
+      hechasRef.current = 0; salteadasRef.current = 0; postAvisosRef.current = []; saliendoRef.current = false
+      setHechas(0); setConfirmarSalida(null)
+      // Revisión de la PRIMERA factura (clave FE y parecida); las siguientes se revisan al llegar a cada una.
+      const [rev] = await revisarDocumentos(base.docs.slice(0, 1), depsRevision)
+      // Una sola factura con clave FE repetida → BLOQUEA como siempre (no abre el formulario).
+      if (base.docs.length < 2 && !base.parcial && rev?.claveRepetida) { setAviso(mensajeBloqueo('clave', rev.claveRepetida, 'caja')); return }
+      mostrarFactura(base, 0, rev ?? null)
       // Flujo guiado: con la foto lista (leída o no), recién ahora se revela el formulario
       // completo (precarga + confirmación). Si falla (catch), la vista no cambia → el usuario
       // sigue en las dos opciones y puede sacar otra foto o ir a manual.
       setVista('form')
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'No se pudo leer la factura — probá otra foto o cargá a mano.')
+      setAviso(e instanceof Error ? e.message : 'No se pudo leer la factura — probá otra foto o cargá a mano.')
     } finally {
       setPhotoBusy(false)
     }
@@ -176,11 +373,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   // ── Resolución de proveedor ────────────────────────────────
   // Lista total = proveedores del padre + los recién creados acá. El RESUELTO = el elegido/creado a mano
   // (pickedSupplierId) o, si no, el match EXACTO por nombre (matchSupplier/norm reusado, sin reimplementar).
-  const allSuppliers = useMemo(() => [...suppliers, ...createdSuppliers], [suppliers, createdSuppliers])
+  // (allSuppliers / autoMatch / pickedSupplier / resolvedSupplier se calculan arriba, antes de la sugerencia.)
   const nameTrimmed = supplierName.trim()
-  const autoMatch = useMemo(() => matchSupplier(supplierName, allSuppliers), [supplierName, allSuppliers])
-  const pickedSupplier = pickedSupplierId ? (allSuppliers.find(s => s.id === pickedSupplierId) ?? null) : null
-  const resolvedSupplier: Supplier | null = pickedSupplier ?? autoMatch   // elegido/creado pisa el auto-match
   const resolvedSupplierId = resolvedSupplier?.id ?? null
   const supplierUnknown = nameTrimmed.length > 0 && !resolvedSupplier
   // Parecidos (anti-duplicado): comparten substring o un token significativo (≥4) con lo tipeado/leído.
@@ -204,15 +398,22 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       setPickedSupplierId(s.id)
       setSupplierName(s.name)
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'No se pudo crear el proveedor — reintentá.')
+      setAviso(e instanceof Error ? e.message : 'No se pudo crear el proveedor — reintentá.')
     } finally { setCreatingSup(false) }
   }
 
   const confirmar = async () => {
-    if (!montoOk || saving) return
-    if (montoNegativo) { onError('El monto no puede ser negativo.'); return }   // Ítem 2
+    if (!montoOk || saving || guardandoRef.current || verificando || pendiente) return
+    // (#149) Índice de la factura de la foto que se registra. Si ya tiene movimiento, nunca se registra otra vez.
+    const idx = photo?.idx ?? 0
+    if (photo && registradasRef.current.has(idx)) return
+    setAviso(null)
+    if (parecida && !esOtra) return   // (13-nov) aviso de factura parecida: hay que confirmar «Es otra»
+    if (montoNegativo) { setAviso('El monto no puede ser negativo.'); return }   // Ítem 2
     // Ingreso adicional: sin categoría o sin motivo NO se crea (se elimina el default mudo).
     if (clase === 'ingreso' && !ingresoCompleto) return
+    guardandoRef.current = true
+    creandoRef.current = true
     setSaving(true)
 
     // Umbral (Caja Diaria): un ingreso cuyo equivalente en colones supera ₡100.000 exige autorización
@@ -220,7 +421,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     // la contraseña no valida (!auth.ok) → no se crea nada. Patrón canónico de ManagerOverride.
     if (ingresoSuperaUmbral) {
       const auth = await requireManager()
-      if (!auth.ok) { setSaving(false); return }
+      if (!auth.ok) { guardandoRef.current = false; creandoRef.current = false; setSaving(false); return }
     }
 
     // Paso 1 — crear el movimiento (plata). Si falla, NO se intenta el doc (no se duplica el movimiento).
@@ -278,23 +479,48 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         })
       }
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'No se pudo registrar el movimiento — reintentá.')
+      setAviso(e instanceof Error ? e.message : 'No se pudo registrar el movimiento — reintentá.')
+      guardandoRef.current = false
+      creandoRef.current = false
       setSaving(false)
       return
     }
+    // El movimiento YA está: este índice no se vuelve a registrar, y la factura queda en la memoria de esta pasada
+    // (aunque después falle el enlace del documento).
+    registradasRef.current.add(idx)
+    if (photo?.extracted) registradasMemRef.current.push(photo.extracted)
+    hechasRef.current += 1
+    setHechas(hechasRef.current)
 
     // Paso 2 — si hubo foto, enlazar la factura al movimiento recién creado (estado='procesado' → no entra
     // a la cola de la Bandeja). Best-effort: el movimiento ya está; si el enlace falla, la factura se puede
     // adjuntar después en Revisión (vía F4.3b) → NO se reintenta el movimiento (evita duplicar plata).
+    // (#149) Cada factura de la foto: su PROPIO documento «procesado» enlazado a SU movimiento (mismo path/sha).
     if (photo) {
+      let enlaceFallo = false
       try {
         await createDocumentRow(photo.path, photo.sha, photo.extracted, createdBy, mov.id, 'procesado')
       } catch {
-        onError('El pago se registró, pero la factura no se enlazó — adjuntala en Revisión de inventario.')
+        enlaceFallo = true
       }
+      // (13-nov, verificación) Si el enlace falló, nunca «subí la foto a la Bandeja»: entraría como «nuevo» y el pago
+      // ya hecho se podría pagar dos veces. El aviso se junta y se muestra al final (en «listo»).
+      const avisoPost = mensajePostPago(enlaceFallo, 0)
+      if (avisoPost) postAvisosRef.current.push(varias ? `Factura ${idx + 1}: ${avisoPost}` : avisoPost)
     }
     onCreated(mov)
-    onClose()
+    creandoRef.current = false
+    setSaving(false)
+    // (#149) Quedan facturas de esta foto → NO se cierra: pasa a la siguiente. El candado se suelta recién cuando la
+    // siguiente quedó a la vista (y el índice registrado ya está en `registradas`).
+    if (photo && varias && idx + 1 < photo.docs.length) {
+      await irAFactura(photo, idx + 1)
+      guardandoRef.current = false
+      return
+    }
+    guardandoRef.current = false
+    // (13-nov, caso B) Con aviso post-pago el modal queda en «listo» hasta «Cerrar» (sin formulario → no se paga dos veces).
+    terminar(false)
   }
 
   const confPct = Math.round(sugerencia.confidence * 100)
@@ -311,15 +537,30 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const fmtMoney = (n: number) => (lectura?.moneda === 'USD' ? fd : fi)(n)
 
   return (
-    <div className="cd-modal-overlay" onClick={onClose}>
+    <div className="cd-modal-overlay" onClick={intentarCerrar}>
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="cd-modal-title">➕ Agregar factura / movimiento</div>
+
+        {/* (13-nov, caso B) Aviso dentro del modal, arriba: se ve sin scroll en el celular. */}
+        {aviso && (
+          <div ref={avisoRef} className="tips-error" role="alert" data-testid="aviso-asistente" style={{ margin: '0.6rem 0 0.4rem' }}>
+            <span>⚠ {aviso}</span>
+          </div>
+        )}
 
         {/* Input de cámara SIEMPRE montado: lo disparan la opción grande de la pantalla inicial
             Y el botón "Cambiar foto" del form. Cancelar la cámara no emite change → no pasa nada. */}
         <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPickPhoto} aria-label="Foto de la factura" />
 
-        {vista === 'opciones' ? (
+        {vista === 'listo' ? (
+          /* ── Pago registrado con aviso post-pago: solo el aviso (arriba) y «Cerrar». ── */
+          <>
+            <div className="cd-method-info ok" style={{ marginTop: '0.4rem' }}>{resumenListo}</div>
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="cd-btn-green" onClick={onClose}>Cerrar</button>
+            </div>
+          </>
+        ) : vista === 'opciones' ? (
           /* ── Pantalla inicial (flujo guiado): foto protagonista, manual secundario ── */
           <>
             <p style={{ fontSize: '0.78rem', color: 'var(--c-gris)', margin: '0.4rem 0 1rem' }}>
@@ -344,17 +585,55 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
               <button className="tips-btn-ghost" onClick={onClose} disabled={photoBusy}>Cancelar</button>
             </div>
           </>
+        ) : confirmarSalida !== null ? (
+          /* ── (#149) Salir a medias de una foto con varias facturas: se confirma dentro del modal. ── */
+          <>
+            <div className="cd-method-info pend" role="alert" data-testid="confirmar-salida" style={{ marginTop: '0.6rem' }}>
+              ⚠ {MSG_QUEDAN_SIN_CARGAR(confirmarSalida)}
+            </div>
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="tips-btn-ghost" onClick={() => setConfirmarSalida(null)}>Seguir cargando</button>
+              <button className="cd-btn-green" onClick={() => { setConfirmarSalida(null); terminar(true) }}>Salir</button>
+            </div>
+          </>
+        ) : varias && (pendiente || verificando) ? (
+          /* ── (#149) Factura de la foto que no se puede registrar (repetida / sin verificar) o en revisión. ── */
+          <>
+            {photo && (
+              <div className="cd-method-info" role="status" data-testid="varias-progreso" style={{ marginTop: '0.4rem' }}>
+                {msgProgreso(photo.docs.length, photo.idx + 1, photo.parcial ?? null)}
+              </div>
+            )}
+            {verificando ? (
+              <p style={{ fontSize: '0.78rem', color: 'var(--c-gris)', margin: '0.6rem 0' }}>Revisando la próxima factura…</p>
+            ) : (
+              <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+                <button className="tips-btn-ghost" onClick={intentarCerrar}>Cancelar</button>
+                {pendiente === 'error' && photo && (
+                  <button className="tips-btn-ghost" onClick={() => void irAFactura(photo, photo.idx)}>Reintentar</button>
+                )}
+                <button className="cd-btn-green" onClick={() => void saltear()}>Saltear esta factura</button>
+              </div>
+            )}
+          </>
         ) : (
         <>
-        {/* ← Volver: descarta el borrador (no se creó nada) y regresa a las dos opciones. */}
-        <button type="button" className="tips-btn-ghost" onClick={volverAOpciones} disabled={saving || photoBusy}
+        {/* (#149) Varias facturas en la foto: en cuál va la cajera. */}
+        {varias && photo && (
+          <div className="cd-method-info" role="status" data-testid="varias-progreso" style={{ marginTop: '0.4rem' }}>
+            {msgProgreso(photo.docs.length, photo.idx + 1, photo.parcial ?? null)}
+          </div>
+        )}
+        {/* ← Volver: descarta el borrador (no se creó nada) y regresa a las dos opciones. Con facturas de la foto ya
+            registradas no se puede (se perderían las que faltan sin aviso): se sale con «Cancelar», que pregunta. */}
+        <button type="button" className="tips-btn-ghost" onClick={volverAOpciones} disabled={saving || photoBusy || hechas > 0}
           style={{ padding: '2px 10px', fontSize: '0.72rem', marginTop: '0.3rem' }}>
           ← Volver
         </button>
 
         {/* ── 1. Captura — foto (opcional) + manual ── */}
         <div className="tips-field" style={{ marginTop: '0.5rem' }}>
-          <button className="tips-btn-ghost" style={{ width: '100%' }} disabled={photoBusy}
+          <button className="tips-btn-ghost" style={{ width: '100%' }} disabled={photoBusy || hechas > 0}
             onClick={() => fileRef.current?.click()}>
             {photoBusy ? '📷 Leyendo factura…' : photo ? '📷 Cambiar foto' : '📷 Sacar foto de la factura (la IA precarga)'}
           </button>
@@ -374,8 +653,26 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             </div>
           )}
           {photo && !photo.extracted && (
-            <div style={{ fontSize: '0.66rem', color: 'var(--c-oro-texto)', marginTop: 3 }}>
-              La IA no pudo leer la factura — completá los campos a mano. La foto igual se enlaza al pago.
+            <div className="cd-method-info pend" role="alert" style={{ fontSize: '0.66rem', marginTop: 3 }}>
+              {photo.fallo
+                ? '⚠ No se pudo leer la factura (falló la lectura) — completá los campos a mano. La foto igual se enlaza al pago.'
+                : '⚠ La IA no encontró una factura en la foto — completá los campos a mano. La foto igual se enlaza al pago.'}
+            </div>
+          )}
+          {parecida && (
+            <div className="cd-method-info pend" role="alert" style={{ fontSize: '0.66rem', marginTop: 4 }}>
+              ⚠ {parecida.texto}{' '}
+              {esOtra ? <strong>✓ Marcada como otra factura.</strong> : (
+                <button type="button" className="tips-btn-ghost" style={{ padding: '1px 8px', fontSize: '0.66rem' }} onClick={() => setEsOtra(true)}>
+                  Es otra
+                </button>
+              )}
+              {/* (#149) Con varias facturas en la foto, la parecida también se puede saltear (p. ej. la misma leída dos veces). */}
+              {varias && !esOtra && (
+                <>{' '}<button type="button" className="tips-btn-ghost" style={{ padding: '1px 8px', fontSize: '0.66rem' }} onClick={() => void saltear()} disabled={saving}>
+                  Saltear esta factura
+                </button></>
+              )}
             </div>
           )}
         </div>
@@ -569,8 +866,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         </div>
 
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
-          <button className="tips-btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || montoNegativo || (clase === 'ingreso' && !ingresoCompleto) || saving}>
+          <button className="tips-btn-ghost" onClick={intentarCerrar} disabled={saving}>Cancelar</button>
+          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || montoNegativo || (clase === 'ingreso' && !ingresoCompleto) || (!!parecida && !esOtra) || saving}>
             {saving ? 'Registrando…' : '✓ Confirmar y registrar'}
           </button>
         </div>

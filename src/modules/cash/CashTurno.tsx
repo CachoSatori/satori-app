@@ -108,11 +108,15 @@ export default function CashTurno({
   // pagos de mercadería persistidos sin factura enlazada NI fotos adjuntas (control del manager).
   const [linkedDocMovs, setLinkedDocMovs] = useState<Set<string>>(new Set())
   const [docsLoaded, setDocsLoaded] = useState(false)
-  useEffect(() => {
+  // (#154, prueba física 13-nov) Antes solo se consultaba al montar: el pago que crea el asistente ➕ Agregar con foto
+  // quedaba con «⚠ sin foto» hasta que la pestaña se volvía a montar. Ahora se vuelve a consultar después de cada alta
+  // del asistente (onCreated llega con el documento ya enlazado). Si la consulta falla, queda lo último que se vio.
+  const recargarDocs = useCallback(() => {
     listLinkedDocs().then(ds => {
       setLinkedDocMovs(new Set(ds.map(d => d.linked_movement_id).filter((x): x is string => !!x)))
     }).catch(() => {}).finally(() => setDocsLoaded(true))
   }, [])
+  useEffect(() => { recargarDocs() }, [recargarDocs])
   const [carryFrom,  setCarryFrom]  = useState<string | null>(null) // fecha del cierre que asignó el fondo
   const [carrySugerido, setCarrySugerido] = useState<number | null>(null) // ₡ asignado a Caja Proveedores por ese cierre
 
@@ -1176,9 +1180,10 @@ export default function CashTurno({
           role={profile.role}
           createdBy={profile.id}
           tc={tc}
-          onCreated={mov => { onMovAdded(mov); setAgregarOpen(false) }}
+          // (13-nov, caso B) onCreated NO cierra: el asistente llama onClose solo; con un aviso post-pago queda abierto
+          // en «listo» hasta que la cajera toque «Cerrar». Los avisos se ven dentro del modal (no van a onError).
+          onCreated={mov => { onMovAdded(mov); recargarDocs() }}
           onClose={() => setAgregarOpen(false)}
-          onError={onError}
         />
       )}
 

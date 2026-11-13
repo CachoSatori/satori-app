@@ -12,9 +12,9 @@ const doc = (over: Partial<DocExtract> = {}): Partial<DocExtract> => ({
 })
 const m = vi.hoisted(() => ({
   createSpy: vi.fn(async (x: Record<string, unknown>) => ({ ...x, id: 'mov-1', _pending: false })),
-  uploadSpy: vi.fn(async () => ({ path: 'docs/f.jpg', sha: 'sha-foto' })),
+  uploadSpy: vi.fn(async (..._args: unknown[]) => ({ path: 'docs/f.jpg', sha: 'sha-foto' })),
   leer: vi.fn(),
-  createDocSpy: vi.fn(async () => ({ id: 'doc1' })),
+  createDocSpy: vi.fn(async (..._args: unknown[]) => ({ id: 'doc1' })),
   dupFoto: vi.fn(async (): Promise<unknown> => null),
   dupClave: vi.fn(async (): Promise<unknown> => null),
   parecida: vi.fn(async (): Promise<unknown> => null),
@@ -35,10 +35,10 @@ const sup: Supplier = { id: 'p1', name: 'Pescadería del Pacífico', category: n
   metodo_pago: 'Efectivo', cuenta_iban: '', aliases: null, is_active: true, email: null, whatsapp: null, notificar_pago: 'no',
   created_at: '2026-06-29T00:00:00Z', updated_at: '2026-06-29T00:00:00Z' }
 const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession
-let onError: ReturnType<typeof vi.fn>
+let onError: ReturnType<typeof vi.fn<(msg: string) => void>>
 
 function abrirYSacarFoto() {
-  onError = vi.fn()
+  onError = vi.fn<(msg: string) => void>()
   render(<AgregarAsistente openSession={session} suppliers={[sup]} role="cajero" createdBy="u1" tc={600}
     onCreated={vi.fn()} onClose={vi.fn()} onError={onError} />)
   const input = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -70,7 +70,7 @@ describe('asistente «Agregar» — fotos (13-nov)', () => {
     await waitFor(() => expect(m.createDocSpy).toHaveBeenCalledTimes(3))
     expect(m.createDocSpy.mock.calls[0][4]).toBe('mov-1')
     for (const c of m.createDocSpy.mock.calls.slice(1)) expect(c).toHaveLength(4)   // sin movimiento ni estado → «nuevo» en la Bandeja
-    expect(m.createDocSpy.mock.calls.slice(1).map(c => (c[2] as DocExtract).numero_documento)).toEqual(['2002', '3003'])
+    expect(m.createDocSpy.mock.calls.slice(1).map(c => (c[2] as unknown as DocExtract).numero_documento)).toEqual(['2002', '3003'])
     expect(m.createSpy).toHaveBeenCalledTimes(1)   // UN movimiento: los otros se confirman en la Bandeja
   })
 

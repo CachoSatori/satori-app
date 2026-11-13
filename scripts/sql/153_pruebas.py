@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Corre scripts/sql/153_pruebas.sql (origen 096) en STAGING: llena el marcador con el cuerpo de la 153, todo dentro de una
-transacción que termina en ROLLBACK, y sale 1 si algún caso falla o no hay resultado. Los usuarios (cajero, contador,
-salonero activos) los elige la batería dentro de la transacción: no hacen falta UUID.
+transacción que termina en ROLLBACK, y sale 1 si algún caso falla o no hay resultado. Los usuarios (el que escribe:
+cajero → manager → owner; contador; salonero, activos) los elige la batería dentro de la transacción: no hacen falta UUID.
 
   python3 scripts/sql/153_pruebas.py
   python3 scripts/sql/153_pruebas.py --mutar sin_dedup     # una mutación: tienen que caer sus casos (sale 1 si no)
@@ -96,7 +96,8 @@ def main() -> None:
         sys.exit(1 if malas else 0)
     casos = correr(armar(None))
     for c in casos:
-        print(('ok   ' if c['ok'] else 'FALLA ') + c['caso'] + (f" · {c['detalle']}" if not c['ok'] and c.get('detalle') else ''))
+        ver = c.get('detalle') and (not c['ok'] or c['caso'].startswith('00 '))   # el 00 dice con qué rol se escribió
+        print(('ok   ' if c['ok'] else 'FALLA ') + c['caso'] + (f" · {c['detalle']}" if ver else ''))
     caen = [c for c in casos if not c['ok']]
     print(f'── {len(casos)} casos · {len(casos) - len(caen)} ok')
     sys.exit(1 if caen else 0)

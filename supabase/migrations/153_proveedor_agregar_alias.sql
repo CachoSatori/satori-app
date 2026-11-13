@@ -29,7 +29,9 @@
 -- ── PERMISOS ───────────────────────────────────────────────────────────────────────────────
 --   · INVOKER: decide la RLS que ya existe. `suppliers_op_write` (mig 012) deja escribir a owner, manager y cajero
 --     activos; el contador solo lee (095) → su UPDATE afecta 0 filas → false. No hace falta DEFINER.
---   · `revoke all … from public` y `grant execute … to authenticated` en las dos funciones (anon no las ejecuta).
+--   · `revoke all … from public, anon` y `grant execute … to authenticated` en las dos funciones. El `anon` explícito
+--     hace falta: en Supabase los default privileges de public le dan EXECUTE a anon en cada función nueva, y revocar
+--     solo a PUBLIC no lo saca (visto en staging, 13-nov).
 --
 -- ── LO QUE NO TOCA ─────────────────────────────────────────────────────────────────────────
 --   · Ni tablas, ni columnas, ni policies, ni plata. El cliente sigue funcionando sin esta migración (cae al UPDATE de
@@ -91,8 +93,8 @@ $$;
 comment on function public.proveedor_agregar_alias(uuid, text) is
   'Agrega un alias al proveedor activo en un UPDATE atómico, sin duplicar por clave. INVOKER: decide la RLS de suppliers. Mig 153.';
 
-revoke all on function public.proveedor_clave_alias(text) from public;
-revoke all on function public.proveedor_agregar_alias(uuid, text) from public;
+revoke all on function public.proveedor_clave_alias(text) from public, anon;
+revoke all on function public.proveedor_agregar_alias(uuid, text) from public, anon;
 grant execute on function public.proveedor_clave_alias(text) to authenticated;
 grant execute on function public.proveedor_agregar_alias(uuid, text) to authenticated;
 

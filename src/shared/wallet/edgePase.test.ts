@@ -235,7 +235,14 @@ describe('club-pase: rutas de B3 (sync y actualizar)', () => {
     const SYNC = 's'.repeat(40)
     const { rpc } = base({ club_pase_cursor_leer: { data: 7, error: null }, club_pase_eventos_leer: { data: [{ id: 8, miembro_id: MIEMBRO }], error: null },
                            club_pase_datos: { data: datos({ estado: 'baja' }), error: null } })
-    const g = google()
+    // (13-nov) Google devuelve el objeto guardado (ACTIVE y con QR) al GET; /vencer lo reemplaza con PUT sin código
+    const llamadas: Array<{ url: string; method: string; body?: string }> = []
+    const g = { llamadas, fetch: async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
+      llamadas.push({ url, method: init.method, body: init.body })
+      if (url.includes('oauth2')) return { status: 200, json: async () => ({ access_token: 'tok-falso' }) }
+      const obj = { id: `${ISSUER}.club-${MIEMBRO}`, classId: `${ISSUER}.club-satori`, state: 'ACTIVE', barcode: { type: 'QR_CODE', value: 'x' } }
+      return { status: 200, json: async () => (init.method === 'GET' ? obj : JSON.parse(init.body!)) }
+    } }
     const req = (h: Record<string, string>) => new Request('https://edge.ejemplo/club-pase/vencer', { method: 'POST', headers: h })
     expect((await manejarSync(req({ 'x-club-pase-sync': SYNC }), 'vencer', env, rpc, g.fetch)).status).toBe(503)
     expect((await manejarSync(req({ 'x-club-pase-sync': 'x'.repeat(40) }), 'vencer', { ...env, CLUB_PASE_SYNC_KEY: SYNC }, rpc, g.fetch)).status).toBe(401)
@@ -243,7 +250,10 @@ describe('club-pase: rutas de B3 (sync y actualizar)', () => {
     const r = await manejarSync(req({ 'x-club-pase-sync': SYNC }), 'vencer', { ...env, CLUB_PASE_SYNC_KEY: SYNC }, rpc, g.fetch)
     expect(r.status).toBe(200)
     expect(await r.json()).toMatchObject({ eventos: 1, vencidos: 1, cursor_antes: 7, cursor_despues: 8 })
-    expect(g.llamadas.filter(l => l.method === 'PATCH').map(l => JSON.parse(l.body!).state)).toEqual(['EXPIRED'])
+    expect(g.llamadas.filter(l => l.method === 'PATCH')).toEqual([])
+    const put = g.llamadas.filter(l => l.method === 'PUT').map(l => JSON.parse(l.body!))
+    expect(put.map(b => b.state)).toEqual(['EXPIRED'])
+    expect(put[0].barcode).toBeUndefined()
   })
   const SYNC = 's'.repeat(40)
   const googleOk = async (url: string) => ({ status: 200, json: async () => (url.includes('oauth2') ? { access_token: 't' } : {}) })

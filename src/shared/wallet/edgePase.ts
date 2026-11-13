@@ -12,7 +12,7 @@
  */
 import {
   armarClase, armarObjeto, firmarJwtFlaco, leerCuentaServicio, urlGuardar, validarDatos, idObjeto, DISENO_POR_DEFECTO, configurarBaseClub,
-  entornoValido, type PaseDatos, type DisenoPase,
+  entornoValido, sinRolVigente, type PaseDatos, type DisenoPase,
 } from './googlePase.ts'
 import { sincronizar, vencerBajas, actualizarUno, guardarEnGoogle, tokenGoogle, type Fetch } from './sincronizar.ts'
 
@@ -137,7 +137,8 @@ export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc:
   if (d.error) return json(502, { error: 'servicio' })
   if (validarDatos(d.data) !== null) return json(502, { error: 'contrato' })
   const datos = d.data as PaseDatos
-  if (datos.estado === 'baja') return json(404, { error: 'portal_invalido' })
+  // (13-nov) una baja o alguien sin rol vigente no recibe link: su pase va vencido y sin QR (lo hace /vencer)
+  if (datos.estado === 'baja' || sinRolVigente(datos)) return json(404, { error: 'portal_invalido' })
 
   // 3. clase + objeto armados (si algo no cierra con el contrato, no se llama a Google)
   const issuer = env.GOOGLE_WALLET_ISSUER_ID

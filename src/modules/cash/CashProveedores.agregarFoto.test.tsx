@@ -8,9 +8,9 @@ import type { CashMovement } from '../../shared/types/database'
 const CLAVE = '5'.repeat(50)
 const m = vi.hoisted(() => ({
   normalize: vi.fn(async () => ({ blob: new Blob(['n']), filename: 'n.jpg' })),
-  upload: vi.fn(async () => ({ path: 'docs/n.jpg', sha: 'sha-n' })),
+  upload: vi.fn(async (..._args: unknown[]) => ({ path: 'docs/n.jpg', sha: 'sha-n' })),
   leer: vi.fn(),
-  crear: vi.fn(async () => ({ id: 'doc-nuevo' })),
+  crear: vi.fn(async (..._args: unknown[]) => ({ id: 'doc-nuevo' })),
   dupFoto: vi.fn(async (): Promise<unknown> => null),
   dupClave: vi.fn(async (): Promise<unknown> => null),
   parecida: vi.fn(async (): Promise<unknown> => null),
@@ -28,9 +28,9 @@ vi.mock('../../shared/FacturaVerify', () => ({ default: () => <span>📷 factura
 import { PagoFoto } from './CashProveedores'
 
 const mov = { id: 'mov-9' } as CashMovement
-let onAdded: ReturnType<typeof vi.fn>
+let onAdded: ReturnType<typeof vi.fn<(doc: unknown) => void>>
 function subir() {
-  onAdded = vi.fn()
+  onAdded = vi.fn<(doc: unknown) => void>()
   const r = render(<PagoFoto movement={mov} doc={null} createdBy="u1" onAdded={onAdded} onRefresh={vi.fn()} />)
   fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [new File(['d'], 'f.jpg', { type: 'image/jpeg' })] } })
   return r

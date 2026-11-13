@@ -13,7 +13,7 @@
 |---|---|
 | **Mig 081** (`pos_ndf_campos_factura`) | Aplicada a las **10:57**. Ledger md5 `d4acf8dafc964ed23072aa49098f5b42` (= el `.sql` del #71). **7 columnas** nuevas. |
 | **Secretos (3.2)** | OK. El agente manda `pos-bridge\.env`, con un secreto de **largo 64**. La huella del panel es igual a la huella del mapa. `POS_INGEST_SECRET` (el viejo) **sigue cargado**: es el punto de vuelta del Edge anterior. |
-| **Agente detenido** | **11:23 → 12:03:42**, ~40 min. **Desvío:** el paquete pedía 15 min o menos (§3, desvío 6). |
+| **Agente detenido** | **11:23 → 12:03:42**, ~40 min. **Desvío:** el paquete pedía 15 min o menos (§3, desvío 6). **Causa principal** (hallazgo del dueño, 09-nov noche): la espera de 4.1 filtraba `node.exe` por la palabra `agente` y agarraba también el agente de STAGING. |
 | **Mig 082 v3** (`pos_ndf_ingesta_transaccional`) | Aplicada **~12:00**. Ledger md5 `edb7ffc58976804e55968f75df530a05` (= el `.sql` del #71). Columna `pos_ndf_cursor.max_factura_vista`. `md5(prosrc)` de `pos_ndf_ingestar` = `dab8ffdf8d2f82dacf874af22eb6f55d` (= staging). `execute` solo para `service_role`. Prueba en vacío OK. |
 | **Edge `ingest-ndf`** | Desplegado desde `5da233a` a las **12:03:30**, con `--no-verify-jwt --use-api` (Supabase CLI **2.122.0**). Quedó en la **versión 3, no 2**: a las 10:57 estaba en la v1 (§4). El `index.ts` bajado de prod es **igual línea por línea** al de `5da233a`; solo cambian los finales de línea (CRLF/LF). |
 | **Portón** | **401 del Edge** (el cuerpo es del Edge, no de la plataforma: el JWT quedó apagado). |
@@ -43,7 +43,7 @@ con dobles que no se parecían lo suficiente a la PC real.
 | 3 | **1.9 / 3.2** | El clon está en `5da233a`, y ahí `armar_mapa_secretos.mjs` **no tiene `--solo-medir`**. | Se usó el script de `cd6d5a1` (md5 `73c4d9d207c22c13d5c42498bb63e8ca`), extraído con `git show` a `C:\satori\pase-scripts`. Antes se verificó que entre `5da233a` y `cd6d5a1` no cambia nada en `supabase/` ni en `src/`. | **Los scripts del pase salen del commit del PAQUETE** (no del código), con `git show` y md5 sobre los bytes, a `C:\satori\pase-scripts`. Bloque 0.5b. |
 | 4 | **1.10** | `npm` está **bloqueado** por la política de ejecución de PowerShell (`npm.ps1`). | Se usó `npm.cmd`. | El paquete usa **`npm.cmd`**. |
 | 5 | **0.6** | La PC **no tenía Supabase CLI**. | Se instaló la **2.122.0** en `C:\satori\supabase-cli`. sha256 del `.tar.gz` = `f891d9bb641f7fa28fd9c61ea0f31be4964254bc84be9ff66f2376b6aaa7a9ed`. | Prerrequisito **0.6** nuevo: el CLI instalado **antes** del día, en esa carpeta, con esa versión y ese sha256 (o uno nuevo, verificado y anotado). |
-| 6 | **§4** | El agente estuvo detenido **~40 min** (11:23 → 12:03:42); el paquete pedía 15 min o menos. | — | Todo lo que se pueda preparar va **antes** de 4.1: el CLI, los scripts, `--use-api` y la sesión del panel. Entre 4.1 y 4.5 solo quedan la 082, el deploy y el arranque. Si la tarea pasa los 15 min detenida, se anota el motivo en §10 (no es parada). |
+| 6 | **§4 / 4.1** | El agente estuvo detenido **~40 min** (11:23 → 12:03:42); el paquete pedía 15 min o menos. **Causa principal** (hallazgo del dueño, 09-nov noche): la espera de 4.1 filtraba `node.exe` por la palabra `agente`, y eso agarra también el agente de **STAGING**, que corre en la misma PC con la misma línea de comando. La espera no terminaba y el «cerrar node a mano» **probablemente cerró el de staging** (~11:58: el agente de staging quedó detenido desde las 11:58:10, cursor 112536). | Se cerró `node` a mano y se siguió. | **El proceso de prod se identifica por su carpeta** (`C:\satori\satori-app-prod`, o la carpeta nueva del pase), nunca por la palabra `agente`: la nombra su línea de comando o la de su `.cmd` padre. Sus PID se anotan antes de detener la tarea y la espera mira solo esos. **Ningún bloque cierra procesos**; si hace falta, solo por PID. El kit simula los dos agentes corriendo (#79 y #83). Además, todo lo que se pueda preparar va **antes** de 4.1 (el CLI, los scripts, `--use-api` y la sesión del panel); si igual pasa de 15 min, se anota el motivo en §10 (no es parada). |
 | — | **4.4 y §8.2** | El deploy necesitó **`--use-api`**: no hay Docker en la PC. **El rollback de §8.2 no lo tenía.** | El deploy de 4.4 se hizo con `--use-api`. | **`--use-api` en 4.4 y en §8.2.** |
 | — | **4.4** | El paquete esperaba la **v2** («una más que 1.6») y quedó la **v3**. | Se siguió: el código desplegado es el de `5da233a` (comparado línea por línea). | El paquete ya no exige «una más». Exige que la versión sea **mayor** que la de 1.6, anota las dos, y compara el código desplegado contra el del SHA del pase. |
 
@@ -90,6 +90,10 @@ con dobles que no se parecían lo suficiente a la PC real.
     Claude **no lo leyó**, porque leerlo es tocar prod. Lo confirma el dueño en el panel (Branches → la corrida de
     `2953994`).
 - Pages (`deploy`) y Cloudflare Pages: **success**.
+- **Ledger de prod después del merge del #71** (leído por el dueño, 09-nov; Claude no lee prod):
+  - **57 filas**, igual que antes del merge;
+  - la **081** con `d4acf8da…` y la **082** con `edb7ffc5…`: los mismos md5 del diff del #71 (arriba).
+  - **Branching no reaplicó nada.** Es la prueba que faltaba de que el merge del #71 no tocó prod.
 
 ## 6. Correcciones para el próximo pase (agente nuevo / Nosara)
 Van en `docs/puente/PASE-PROD-PLANTILLA.md` (el paquete del 09-nov, corregido) y en el kit `scripts/puente/` de esta
@@ -116,7 +120,8 @@ rama:
 
 ## 7. Pendientes después del pase
 - [ ] **R → C de la 112538** después del cierre de las 16:00 (lo controla el dueño), y conciliación (6.3) al cierre.
-- [ ] El texto de Branching en el panel («All migrations are up to date») lo confirma el dueño.
+- [x] Branching no reaplicó nada con el #71: el ledger de prod sigue en 57 filas, con la 081 y la 082 iguales (§5, leído
+  por el dueño). El texto literal del panel («All migrations are up to date») queda como confirmación opcional.
 - [ ] Qué creó la v2 del Edge (§4).
 - [ ] Conciliación de los 3 días siguientes (paquete §9).
 - [ ] Borrar `POS_INGEST_SECRET` del panel a los **7 días sin rollback** (**16-nov** o después).

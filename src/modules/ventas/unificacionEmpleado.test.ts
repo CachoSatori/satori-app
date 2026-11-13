@@ -106,3 +106,43 @@ describe('barmen 035, 036 y 037', () => {
     expect(nombreSalonero('036', ENTORNOS.prod)).toBe('MARCOS')
   })
 })
+
+// Alta 2026-11-13: la salonera del `039` salía «039 · sin asignar» en En vivo y en el ranking. Primer
+// ticket con `039`: 2026-11-05 (en prod el código no aparece antes, así que va sin vigencia).
+describe('salonera 039 (alta 2026-11-13)', () => {
+  it('tiene nombre en el ranking, sin `employees` (staging) y sin `pos_login` cargado (prod hoy)', () => {
+    expect(nombreSalonero('039', {})).toBe('AMPI')
+    expect(nombreSalonero('039', ENTORNOS.prod)).toBe('AMPI')
+    expect(nombreSalonero('039', {})).not.toMatch(/sin asignar/)
+  })
+
+  it('cuando se cargue su `pos_login` en Empleados, manda Empleados (como con el resto)', () => {
+    expect(nombreSalonero('039', { '039': 'AMPI R.' })).toBe('AMPI R.')
+  })
+
+  it('va al ranking de la lente por línea como mesera (no al balde «otro»)', () => {
+    const r = calcularLentes(
+      [{ id: 't1', cajero_login: '222', valor_servido_crc: 0, iva_crc: 0, servicio_crc: 0, pax: 0 }],
+      [{ ticket_id: 't1', codigo_producto: '100', cantidad: 1, monto: 1000, familia: 3, usuario_registra: '039' }],
+    )
+    expect(r.ventaPropia.map(f => f.rol)).toEqual(['mesero'])
+  })
+
+  it('En vivo: el día de hoy la pone por nombre, con su plata', () => {
+    const dia = armarDia('2026-11-12', [ticket('t1', '039', '2026-11-12')], [linea('t1', '039', 2500)],
+      'sello', {}).dia
+    expect(Object.keys(dia.saloneros)).toEqual(['AMPI'])
+    expect(dia.saloneros.AMPI.total).toBe(2500)
+  })
+
+  it('los días anteriores (desde su primer día, 2026-11-05) también salen con su nombre', () => {
+    const dias: DiasMap = {
+      '2026-11-05': armarDia('2026-11-05', [ticket('t1', '039', '2026-11-05')], [linea('t1', '039')], 's', {}).dia,
+      '2026-11-10': armarDia('2026-11-10', [ticket('t2', '039', '2026-11-10')], [linea('t2', '039', 3000)], 's', {}).dia,
+    }
+    expect(allSaloneros(dias)).toEqual(['AMPI'])
+    const agg = aggSalonero('AMPI', ['2026-11-05', '2026-11-10'], dias, {})
+    expect(agg.total).toBe(4000)
+    expect(agg.days).toBe(2)
+  })
+})

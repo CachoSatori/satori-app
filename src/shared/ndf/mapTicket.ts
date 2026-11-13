@@ -110,6 +110,8 @@ export const SALONEROS_CONOCIDOS: Record<string, string> = {
   '036': 'FRANCO',
   '037': 'VALENTINO',
   '038': 'NACHO',
+  // Alta 2026-11-13: salonera nueva, primer ticket con `039` el 2026-11-05 (antes, el código no se usó).
+  '039': 'AMPI',
 }
 
 /**

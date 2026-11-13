@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 
 import {
-  SIN_CODIGO, clasificarCodigo, esMesero, nombreDePersona, personasConocidas, rolDeCodigo,
+  SIN_CODIGO, clasificarCodigo, esMesero, nombreDeCodigo, nombreDePersona, personasConocidas, rolDeCodigo,
 } from './personasNdf'
 
 describe('clasificarCodigo — la tabla manda, no la forma del código', () => {
@@ -130,8 +130,8 @@ describe('nombreDePersona — manda `employees`, la etiqueta es respaldo', () =>
 })
 
 describe('la tabla firmada 2026-09-07', () => {
-  it('tiene los 19 meseros de la SPEC + los 3 barmen firmados el 2026-10-29', () => {
-    expect(personasConocidas().filter(p => p.rol === 'mesero')).toHaveLength(22)
+  it('tiene los 19 meseros de la SPEC + los 3 barmen firmados el 2026-10-29 + la salonera 039 (2026-11-13)', () => {
+    expect(personasConocidas().filter(p => p.rol === 'mesero')).toHaveLength(23)
   })
 
   it('marca a los inactivos que la SPEC anota con (I)', () => {
@@ -169,3 +169,19 @@ describe('alta 2026-10-29 — una persona, una fila', () => {
   })
 })
 
+
+describe('alta 2026-11-13 — salonera 039', () => {
+  it('es mesera, con su propia fila y sin vigencia (el código no se usó antes)', () => {
+    const p = clasificarCodigo('039')
+    expect(p.id).toBe('039')
+    expect(p.rol).toBe('mesero')
+    expect(p.codigos).toEqual(['039'])
+    expect(p.vigencias).toBeUndefined()
+    expect(esMesero('039')).toBe(true)
+  })
+
+  it('tiene nombre con o sin `employees`', () => {
+    expect(nombreDePersona(clasificarCodigo('039'), {})).toBe('AMPI')
+    expect(nombreDeCodigo('039', {}, '2026-11-05')).toBe('AMPI')
+  })
+})

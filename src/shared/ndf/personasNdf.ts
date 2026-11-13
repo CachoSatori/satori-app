@@ -118,6 +118,9 @@ const PERSONAS: readonly PersonaNdf[] = [
   { id: '035',  rol: 'mesero', etiqueta: 'Rodri',     codigos: ['035']  },
   { id: '036',  rol: 'mesero', etiqueta: 'Franco',    codigos: ['036']  },
   { id: '037',  rol: 'mesero', etiqueta: 'Valentino', codigos: ['037']  },
+  // Salonera nueva: primer ticket con `039` el 2026-11-05. Sin vigencia: en los tickets de prod
+  // (desde 2024-01-05) el código no aparece antes, así que no fue de otra persona.
+  { id: '039',  rol: 'mesero', etiqueta: 'Ampi',      codigos: ['039']  },
   // Los casos de unificación, curados a mano. Una sola fila cada uno, el canónico primero:
   //   · `01` es la salonera ROSAURA y `235` su login de manager ("M").
   //   · `023` es el activo de ESTEBAN y `555` el viejo.

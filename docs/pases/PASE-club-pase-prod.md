@@ -96,7 +96,7 @@ Las otras seis subieron una versión por el cambio de secretos; su código no ca
 | 0. Antes (solo lectura) | 12:00 | `club-pase` **v1** · off · `63818f6d5458` (= `d8f0280`, la vuelta atrás). Cursor `google` en **3002** (el último evento), 0 pendientes, 0 pases emitidos |
 | 1. Despliegue | 12:00:25 | `club-pase` **v2** · `verify_jwt` **off** · hash `6fd3c5bb5d5a…` |
 | 2. Humo | 12:00:29 | `/google` sin `x-club-web` → **401** · `/vencer` sin `x-club-pase-sync` → **401** |
-| 3. Cron del Worker | 12:00:55 | Primera corrida sobre la v2: el contador de llamadas a `club_pase_cursor_leer` pasó de 10 a 11 (`pg_stat_statements`). `/vencer` lo llama **después** del portón: la clave del Worker pasó (un 401 no lo cuenta). 0 eventos: el cursor queda en 3002, lo esperado |
+| 3. Cron del Worker | 12:00:55 | Primera corrida sobre la v2: el contador de llamadas a `club_pase_cursor_leer` pasó de 10 a 11 (`pg_stat_statements`). `/vencer` lo llama **después** del portón: la clave del Worker pasó (un 401 no lo cuenta). 0 eventos: el cursor queda en 3002, lo esperado. **Segunda corrida** a las **12:10:56** (contador 11 → 12): el cron sigue llamando cada 10 min |
 | 4. El resto | 12:01 | Las otras 6 funciones con **la misma versión y el mismo hash** que en el paso 0 (no hubo cambio de secretos) · tickets del PoS entrando (última ingesta 12:00:59) |
 
 **Antes / después:**

@@ -2,6 +2,8 @@ import { supabase } from './supabase'
 import { createDayMovement } from './cash'
 import type { Json } from '../types/database'
 import { documentoVigente, mismaFactura, normNumero, MSG_NO_VERIFICA } from '../utils/facturaDuplicada'
+import { normalizarFechaFactura } from '../utils/fechaFactura'
+import { todayCR } from '../utils'
 
 export interface DocItem {
   codigo?: string | null; descripcion: string; cantidad?: number | null; unidad?: string | null
@@ -32,6 +34,20 @@ export interface DocExtract {
   confianza: number
   requiere_revision?: boolean
   error?: string
+  // (13-nov) Puestos por el cliente, no por la IA (ver conFechaCR): la fecha tal como la leyó la IA, de dónde sale la
+  // `fecha` final y el aviso para el usuario, si hay que revisarla.
+  fecha_leida?: string | null
+  fecha_origen?: 'clave' | 'invertida' | 'ia' | 'ninguna'
+  aviso_fecha?: string | null
+}
+
+// (13-nov) Costa Rica escribe DÍA/MES: la IA a veces lee «9/11/2026» como 2026-09-11. Toda lectura pasa por acá antes de
+// precargar nada: la clave FE manda; una fecha ambigua imposible (futura o vieja con la invertida reciente) se invierte
+// con aviso. `hoy` = fecha de Costa Rica.
+export function conFechaCR(ex: DocExtract, hoy: string = todayCR()): DocExtract {
+  if (!ex || typeof ex !== 'object') return ex
+  const n = normalizarFechaFactura(ex.fecha, ex.clave_fe, hoy)
+  return { ...ex, fecha: n.fecha, fecha_leida: ex.fecha ?? null, fecha_origen: n.origen, aviso_fecha: n.aviso }
 }
 
 export interface DocumentRow {
@@ -105,7 +121,7 @@ export async function extractImage(imagePath: string): Promise<DocExtract[]> {
     const { data, error } = await supabase.functions.invoke('extract-document', { body: { image_path: imagePath } })
     if (error) throw error
     const docs = (data as { documentos?: DocExtract[] })?.documentos
-    return Array.isArray(docs) ? docs : []
+    return Array.isArray(docs) ? docs.map(d => conFechaCR(d)) : []
   } catch {
     return []  // función no desplegada o sin key → se crea 1 fila vacía para carga manual
   }
@@ -118,7 +134,7 @@ export async function extractImageDetalle(imagePath: string): Promise<{ document
     const { data, error } = await supabase.functions.invoke('extract-document', { body: { image_path: imagePath } })
     if (error) return { documentos: [], fallo: true }
     const docs = (data as { documentos?: DocExtract[] })?.documentos
-    return Array.isArray(docs) ? { documentos: docs, fallo: false } : { documentos: [], fallo: true }
+    return Array.isArray(docs) ? { documentos: docs.map(d => conFechaCR(d)), fallo: false } : { documentos: [], fallo: true }
   } catch {
     return { documentos: [], fallo: true }
   }

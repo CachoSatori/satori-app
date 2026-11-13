@@ -1,6 +1,6 @@
 // (13-nov) Reglas de duplicados de facturas (decisiones del dueño): puras, sin red.
 import { describe, it, expect } from 'vitest'
-import { normNumero, mismaFactura, fechaCortaCR, revisarDocumentos, politicaPantalla, politicaBandeja, documentoVigente } from './facturaDuplicada'
+import { normNumero, mismaFactura, fechaCortaCR, revisarDocumentos, politicaPantalla, politicaBandeja, documentoVigente, mensajeBloqueo } from './facturaDuplicada'
 
 const F = { proveedor: 'Distribuidora Ejemplo S.A.', numero_documento: '0354099', total: 25000, moneda: 'CRC' }
 
@@ -75,5 +75,21 @@ describe('documentoVigente (13-nov): solo los vigentes cuentan para duplicados',
     expect(documentoVigente({ estado: 'procesado', linked_movement_id: null })).toBe(false)   // su movimiento se borró
     expect(documentoVigente({ estado: 'descartado', linked_movement_id: null })).toBe(false)
     expect(documentoVigente({ estado: 'descartado', linked_movement_id: 'mov-1' })).toBe(false)
+  })
+})
+
+describe('mensajeBloqueo (12-nov): si lo que bloquea espera en la Bandeja, el aviso dice qué hacer', () => {
+  const enBandeja = { created_at: '2026-11-12T20:00:00Z', estado: 'nuevo' }
+  const enlazado = { created_at: '2026-11-12T20:00:00Z', estado: 'procesado' }
+  it('«nuevo», desde Caja → «ya está en la Bandeja esperando confirmación… confirmala ahí»', () => {
+    expect(mensajeBloqueo('foto', enBandeja, 'caja')).toBe('Esta foto ya está en la Bandeja esperando confirmación (cargada el 12-nov 14:00). No se registró nada: confirmala ahí.')
+    expect(mensajeBloqueo('clave', enBandeja, 'caja')).toMatch(/^Esta factura \(misma clave FE\) ya está en la Bandeja esperando confirmación .*confirmala ahí\.$/)
+  })
+  it('«nuevo», desde la Bandeja misma → «confirmala en la lista»', () => {
+    expect(mensajeBloqueo('foto', enBandeja, 'bandeja')).toMatch(/ya está en esta Bandeja esperando confirmación .*confirmala en la lista\.$/)
+  })
+  it('enlazado a un pago → el aviso de siempre', () => {
+    expect(mensajeBloqueo('foto', enlazado, 'caja')).toMatch(/^Esta foto ya fue cargada \(el 12-nov 14:00\).*descartá la anterior\.$/)
+    expect(mensajeBloqueo('clave', enlazado, 'bandeja')).toMatch(/^Esta factura \(misma clave FE\) ya fue cargada/)
   })
 })

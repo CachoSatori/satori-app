@@ -6,7 +6,7 @@ import {
   type DocExtract,
 } from '../../shared/api/documents'
 import {
-  fechaCortaCR, revisarDocumentos, politicaPantalla, MSG_FOTO_DUPLICADA, MSG_CLAVE_DUPLICADA, MSG_PARECIDA, MSG_VARIOS_DOCS,
+  fechaCortaCR, revisarDocumentos, politicaPantalla, mensajeBloqueo, MSG_PARECIDA, MSG_VARIOS_DOCS,
 } from '../../shared/utils/facturaDuplicada'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import { classifyMovement } from '../../shared/utils/classifyMovement'
@@ -142,12 +142,12 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       const { blob, filename } = await normalizeInvoiceImage(file)
       const shaFoto = await sha256File(blob)
       const dupFoto = await findDuplicate(shaFoto, null)
-      if (dupFoto) { onError(MSG_FOTO_DUPLICADA(fechaCortaCR(dupFoto.created_at))); return }
+      if (dupFoto) { onError(mensajeBloqueo('foto', dupFoto, 'caja')); return }
       const { path, sha } = await uploadImage(blob, filename)
       const { documentos, fallo } = await extractImageDetalle(path)
       // Clave FE repetida: la del primero bloquea todo; la de otro documento de la foto, solo lo saca de la Bandeja.
       const pol = politicaPantalla(await revisarDocumentos(documentos, { porClave: findDuplicateClave, parecida: findFacturaParecida }))
-      if (pol.bloqueo) { onError(MSG_CLAVE_DUPLICADA(fechaCortaCR(pol.bloqueo.created_at))); return }
+      if (pol.bloqueo) { onError(mensajeBloqueo('clave', pol.bloqueo, 'caja')); return }
       const ex = pol.primero
       const extras = pol.extras
       if (ex) {

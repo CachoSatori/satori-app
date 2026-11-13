@@ -75,6 +75,7 @@ tipo:
 - otro: cualquier cosa que no calce.
 
 Reglas de extracción (Costa Rica):
+- fecha: los documentos son de Costa Rica y las fechas numéricas van en DÍA/MES/AÑO, nunca mes/día. "9/11/2026" = 9 de noviembre de 2026 → "2026-11-09"; "03/12/26" = 3 de diciembre de 2026 → "2026-12-03". Devolvé SIEMPRE ISO YYYY-MM-DD. Es la fecha de emisión (no la de vencimiento). Si hay clave_fe, sus dígitos 4 a 9 son la fecha de emisión en DDMMAA: usala para confirmar.
 - clave_fe: la "Clave del Comprobante" / "Clave numérica" de 50 dígitos de las facturas electrónicas. Viene partida con espacios o en varias líneas → uní todo en 50 dígitos seguidos. Si no hay, null.
 - IVA mezclado por línea: en CR los alimentos básicos llevan 1% y el resto 13%; una misma factura puede tener ambos. Capturá iva_pct por ítem y, si el documento los desglosa, impuesto_1pct e impuesto_13pct.
 - Ítems en dos líneas: muchas facturas (BELCA, Guayafrut) ponen la descripción en una línea y en la siguiente el código + cantidad × precio_unitario + IVA + monto. Asocialos en un solo ítem.

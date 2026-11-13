@@ -334,8 +334,8 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | 087, 088, 089, 090, 091, 092, 093, 094, 095 | **096** |
-| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) | **101** |
-| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` | **152** (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase), 101 (`club_aviso_v1_2`; renumerada a 152) | **102** |
+| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 152 (← 101): aviso del Club v1.2, rama `claude/club-aviso-v1.2` (sin aplicar) | **153** (la 087, la 088 y cualquier migración de caja posterior al Club toman 153+ al armar su paquete) |
 | (fuera de bloque) | 086 | — | libre |
 
 **Asignadas en los bloques**
@@ -343,8 +343,10 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | Número | Nombre | Bloque | Rama | Dónde está aplicada |
 |---|---|---|---|---|
 | 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **renumerada a 151** en el pase del Club (`claude/pase-club`, 10-nov). El número 100 no se reutiliza (regla 4) |
+| 101 | `club_aviso_v1_2` | club | `claude/club-aviso-v1.2` | **renumerada a 152** (los ledgers de staging y prod ya están en 151). |
 | 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
+| 152 | `club_aviso_v1_2` | pase (origen **101**) | `claude/club-aviso-v1.2` | **Sin aplicar** (12/11: PR en borrador a `main`, espera firma). Aviso de privacidad del Club v1.2 («usted»; mismo sentido, inglés igual). Entra con el merge (Branching) junto con club-web v1.2. Rollback: `scripts/sql/152_rollback.sql` |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |

@@ -99,6 +99,12 @@
       "rama": "claude/club-100-catalogo",
       "renumerada_a": "151"
     },
+    "101": {
+      "nombre": "club_aviso_v1_2",
+      "bloque": "club",
+      "rama": "claude/club-aviso-v1.2",
+      "renumerada_a": "152"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -110,6 +116,12 @@
       "bloque": "pase",
       "rama": "claude/pase-club",
       "origen": "100"
+    },
+    "152": {
+      "nombre": "club_aviso_v1_2",
+      "bloque": "pase",
+      "rama": "claude/club-aviso-v1.2",
+      "origen": "101"
     }
   }
 }

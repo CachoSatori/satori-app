@@ -5,6 +5,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import worker from './index.js'
+import { vencerBajasProgramado } from './programado.js'
 import { rutaApi } from './ruta.js'
 import { HOST_INTERNO, ENCABEZADO_IP } from './interno.js'
 import { onRequest } from '../functions/api/[[path]].js'
@@ -112,4 +113,45 @@ test('sin el binding CLUB_API, Pages no tiene topes: crear y leer responden 503 
   assert.equal(j.rl_crear, false); assert.equal(j.rl_leer, false)
   assert.equal((await pedir('cupon', { method: 'POST', body: JSON.stringify({ referente: 'ABCDEFGH' }) })).status, 503)
   assert.equal((await pedir('cupon/ABCDEFGHJK')).status, 503)
+})
+
+// (12-nov, opción c) el cron que vence los pases de las bajas
+test('wrangler.toml del Worker: cron cada 10 minutos', () => {
+  const w = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8')
+  assert.match(w, /^\[triggers\]\ncrons = \["\*\/10 \* \* \* \*"\]$/m)
+  assert.equal(typeof worker.scheduled, 'function')
+})
+
+test('cron: sin CLUB_PASE_SYNC_KEY (o corta, o sin SUPABASE_URL válida) no llama a nada', async () => {
+  let llamadas = 0
+  const f = async () => { llamadas++; return new Response('{}') }
+  for (const env of [{ ...base }, { ...base, CLUB_PASE_SYNC_KEY: 'corta' }, { ...base, CLUB_PASE_SYNC_KEY: 's'.repeat(40), SUPABASE_URL: 'https://otro.ejemplo' }]) {
+    assert.deepEqual(await vencerBajasProgramado(env, f), { hecho: false, motivo: 'sin_configurar' })
+  }
+  assert.equal(llamadas, 0)
+})
+
+test('cron: con la clave, POST al Edge club-pase/vencer con x-club-pase-sync; el log lleva solo conteos', async () => {
+  const vistos = []
+  const f = async (url, init) => { vistos.push({ url, init }); return new Response(JSON.stringify({ eventos: 3, vencidos: 1, sin_pase: 0, errores: ['x de 12345678'] }), { status: 200 }) }
+  const logs = []
+  const logViejo = console.log
+  console.log = (s) => logs.push(s)
+  try {
+    const r = await vencerBajasProgramado({ ...base, CLUB_PASE_SYNC_KEY: 's'.repeat(40) }, f)
+    assert.deepEqual(r, { hecho: true, status: 200 })
+  } finally { console.log = logViejo }
+  assert.equal(vistos[0].url, `${base.SUPABASE_URL}/functions/v1/club-pase/vencer`)
+  assert.equal(vistos[0].init.method, 'POST')
+  assert.equal(vistos[0].init.headers['x-club-pase-sync'], 's'.repeat(40))
+  assert.deepEqual(JSON.parse(logs[0]), { evento: 'club-pase-vencer', ok: true, status: 200, eventos: 3, vencidos: 1, sin_pase: 0, errores: 1 })
+})
+
+test('cron: el Edge todavía no está (404) o la red falla → no rompe; lo deja en el log', async () => {
+  const logViejo = console.log
+  console.log = () => {}
+  try {
+    assert.deepEqual(await vencerBajasProgramado({ ...base, CLUB_PASE_SYNC_KEY: 's'.repeat(40) }, async () => new Response('no', { status: 404 })), { hecho: false, status: 404 })
+    assert.deepEqual(await vencerBajasProgramado({ ...base, CLUB_PASE_SYNC_KEY: 's'.repeat(40) }, async () => { throw new TypeError('red') }), { hecho: false, motivo: 'red' })
+  } finally { console.log = logViejo }
 })

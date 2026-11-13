@@ -231,6 +231,20 @@ describe('club-pase (Edge)', () => {
 })
 
 describe('club-pase: rutas de B3 (sync y actualizar)', () => {
+  it('(12-nov) /vencer: misma clave que /sync (sin ella 503; otra 401); con la buena, el resumen de las bajas', async () => {
+    const SYNC = 's'.repeat(40)
+    const { rpc } = base({ club_pase_cursor_leer: { data: 7, error: null }, club_pase_eventos_leer: { data: [{ id: 8, miembro_id: MIEMBRO }], error: null },
+                           club_pase_datos: { data: datos({ estado: 'baja' }), error: null } })
+    const g = google()
+    const req = (h: Record<string, string>) => new Request('https://edge.ejemplo/club-pase/vencer', { method: 'POST', headers: h })
+    expect((await manejarSync(req({ 'x-club-pase-sync': SYNC }), 'vencer', env, rpc, g.fetch)).status).toBe(503)
+    expect((await manejarSync(req({ 'x-club-pase-sync': 'x'.repeat(40) }), 'vencer', { ...env, CLUB_PASE_SYNC_KEY: SYNC }, rpc, g.fetch)).status).toBe(401)
+    expect(g.llamadas).toHaveLength(0)
+    const r = await manejarSync(req({ 'x-club-pase-sync': SYNC }), 'vencer', { ...env, CLUB_PASE_SYNC_KEY: SYNC }, rpc, g.fetch)
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({ eventos: 1, vencidos: 1, cursor_antes: 7, cursor_despues: 8 })
+    expect(g.llamadas.filter(l => l.method === 'PATCH').map(l => JSON.parse(l.body!).state)).toEqual(['EXPIRED'])
+  })
   const SYNC = 's'.repeat(40)
   const googleOk = async (url: string) => ({ status: 200, json: async () => (url.includes('oauth2') ? { access_token: 't' } : {}) })
   it('sync: sin su secreto → 503; con otro → 401; con el bueno → resumen', async () => {

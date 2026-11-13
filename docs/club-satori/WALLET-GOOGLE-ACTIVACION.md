@@ -6,9 +6,12 @@
 > Las claves **nunca** pasan por el chat ni por la línea de comandos (quedarían en el historial de la terminal).
 
 ## 0. Decisiones del dueño (12-nov) y dónde está el código
-- **Piloto sin sincronización automática.** No hay programador de `/club-pase/sync` ni migración de reintentos
-  (`propuestas/club_pase_reintentos.sql`): quedan para después del piloto. Sin `CLUB_PASE_SYNC_KEY`, `/sync` responde 503
-  (queda cerrado). Para que el pase no engañe:
+- **Piloto sin sincronización automática de saldos.** No hay programador de `/club-pase/sync` (la completa) ni migración
+  de reintentos (`propuestas/club_pase_reintentos.sql`): quedan para después del piloto. **(12-nov, opción c del dueño)
+  La única pasada automática es `/club-pase/vencer`:** cada 10 minutos, el cron del Worker `satori-club-api` le pide al
+  Edge que venza en Google los pases de las personas dadas de baja (o sin ningún rol vigente), por cualquier camino: la
+  app, el portal o la purga de autoaltas. Lee los eventos de `club_pase_eventos` que la base ya deja; **no toca el
+  esquema**. Los demás cambios no tocan Google. Para que el pase no engañe:
   - el pase dice de cuándo son sus datos: «Créditos al 12-nov 13:20» (anfitrión) o «Actualizado · 12-nov 13:20» (solo socio),
     en hora de Costa Rica;
   - el portal tiene **«Actualizar mi pase»**, que vuelve a escribir el pase de esa persona con los datos de ahora;
@@ -40,7 +43,7 @@
 | `CLUB_WEB_ORIGIN` | El dominio del Club **de ese proyecto**: el resultado de `select club_url from public.club_config_global;` | Sin barra final. El QR del pase tiene que empezar con este dominio |
 | `WALLET_DISENO` | **El mismo valor en staging y en prod** (son URLs públicas, no un secreto): `{"colorFondo":"#0d0d0d","logoUrl":"https://club.satoricostarica.com/pase/logo.png","heroUrl":"https://club.satoricostarica.com/pase/hero.png"}` | Opcional. Las imágenes son `club-web/public/pase/logo.png` (990×990) y `hero.png` (1032×336): Vite las copia a `dist/` y quedan en el dominio del Club **con el deploy de Pages del merge** del PR de `main`. Antes de eso esas URLs dan 404: hasta entonces, sin `WALLET_DISENO` (el pase sale sin logo ni franja). Staging usa las mismas imágenes del dominio de prod: no hay club-web de staging publicado. Lo cuida `club-web/src/paseImagenes.test.ts` |
 | `WALLET_ENTORNO` | **`stg`** en staging · **`prod`** en prod (en minúsculas, nada más) | **Obligatorio.** Staging y prod comparten el emisor de Google y los IDs de miembro pueden coincidir (el clon de prod a staging los copia; la carga única los trae escritos). Con `stg`, la clase es `…club-satori-stg` y los objetos `…club-stg-<miembro>`; con `prod`, sin sufijo. Falta o tiene otro valor → 503: nunca cae en prod |
-| `CLUB_PASE_SYNC_KEY` | — | **No va en el piloto** |
+| `CLUB_PASE_SYNC_KEY` | Una clave nueva al azar, de 32 caracteres o más, **distinta** de `CLUB_WEB_KEY` | **(12-nov) Va en el piloto, para la opción c:** el portón de `/club-pase/vencer` (y de `/sync`, que sigue sin programador). La misma clave va como **Secret** `CLUB_PASE_SYNC_KEY` en el **Worker** `satori-club-api` (solo prod: staging no tiene Worker). Sin ella en el Worker, el cron no hace nada |
 
 `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` los pone Supabase solo. Los secretos de Edge son **del proyecto**: los ven
 todas las Edge Functions de ese proyecto. Sin `CLUB_WEB_KEY`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SA_KEY`,
@@ -111,14 +114,19 @@ Docker: se despliega con `--use-api`. Los secretos de §1 ya cargados **en stagi
    ```
    → `{"resultado":"actualizado"}` y el pase del teléfono cambia (la hora de «Créditos al …» también). Para alguien que
    nunca pidió el pase (el objeto no existe en Google), la respuesta es `{"resultado":"sin_pase"}`.
-8. **Baja — HOY NO VENCE EL PASE (hallazgo de la prueba en staging, 12-nov).** Al dar de baja a la persona de prueba y
-   repetir el paso 7, la respuesta es **`404` `{"error":"portal_invalido"}`** y el pase del teléfono **sigue vigente**:
-   `club_pase_por_token` solo encuentra miembros activos con un rol vigente, así que `/actualizar` nunca llega a la
-   baja, y en el piloto no hay `/sync`. La caja igual rechaza el QR de alguien de baja. Pasa lo mismo con cualquier camino
-   de baja: desde la app (Club → Miembros → estado «baja»), desde el portal («Darme de baja del Local Club», si era su único
-   rol) y con la purga de autoaltas sin validar. **La solución la elige el dueño** (opciones en `AVANCE-LC.md`, 12-nov).
-   Cuando esté, esta prueba pasa a ser: dar de baja → el pase queda **vencido** en el teléfono.
-9. Borrar las variables y el archivo: `unset ANON CWK TOK; rm -f /tmp/pase.json`. Sacar las capturas para el pedido de
+8. **Baja (opción c, 12-nov).** `/actualizar` no sirve para esto: después de la baja responde `404 portal_invalido`
+   (`club_pase_por_token` solo encuentra miembros activos con un rol vigente). El que vence el pase es **`/vencer`**. En
+   staging no hay Worker ni cron: se llama a mano, con la `CLUB_PASE_SYNC_KEY` de staging cargada sin que se vea.
+   Dar de baja a la persona de prueba (app de staging → Club → Miembros → estado «baja») y correr:
+   ```bash
+   read -rs SYNC; echo
+   curl -sS -w '\n%{http_code}\n' -X POST "$E/vencer" -H "apikey: $ANON" -H "x-club-pase-sync: $SYNC"
+   ```
+   → `200` con un resumen (`"vencidos": 1`) y el pase del teléfono queda **vencido**. Repetirlo sin cambios nuevos da
+   `"eventos": 0`. Probar también la baja desde el portal («Darme de baja del Local Club», si era su único rol). Si la
+   respuesta trae `errores` con «permanente», Google rechazó el objeto: ver los logs del Edge. En prod lo hace el cron del
+   Worker cada 10 minutos (sus resúmenes, solo conteos, quedan en los logs del Worker: «club-pase-vencer»).
+9. Borrar las variables y el archivo: `unset ANON CWK TOK SYNC; rm -f /tmp/pase.json`. Sacar las capturas para el pedido de
    publicación (§3) y anotar el resultado (SHA del paso 1, hora, qué se vio) en `AVANCE-LC.md`.
 
 **Prod:** los mismos pasos con el ref de prod, los secretos de prod y **con la firma del dueño**. En modo demo solo las
@@ -141,8 +149,9 @@ club-pase --project-ref <ref>`. El portal y la caja siguen funcionando sin el pa
    volver a desplegar). Recién ahí aparecen «Agregar a Google Wallet» y «Actualizar mi pase» en el portal. **Condiciones,
    todas:**
    - [x] la prueba en staging: el pase se guarda y se ve bien (12-nov, clase `club-satori-stg`);
-   - [ ] **la baja vence el pase (probado en staging)** — hoy NO (§2, paso 8);
-   - [ ] el PR de `main` mergeado (las imágenes del pase publicadas en el dominio del Club);
+   - [ ] **la baja vence el pase (probado en staging)** — con la opción c (§2, paso 8), falta probarla;
+   - [ ] `CLUB_PASE_SYNC_KEY` cargada en el Edge de prod y como Secret en el Worker `satori-club-api` (el cron);
+   - [x] el PR de `main` mergeado (#144, `3cacf43`, 12-nov 22:02 CR: las imágenes del pase publicadas con el deploy de Pages);
    - [ ] el Edge de prod desplegado con sus secretos, `WALLET_ENTORNO` = `prod`, y el portón probado (§2, pasos 2 a 4 con el ref de prod);
    - [ ] la aprobación de publicación de Google.
 
@@ -172,10 +181,12 @@ Maqueta: `docs/club-satori/img/pase-propuesta.png` (v4, aprobada el 08-nov).
 ## 5. Riesgos del piloto
 - **Datos del pase:** el pase muestra datos de la última vez que se pidió o se actualizó (la línea con la fecha lo dice).
   Manda lo que diga el portal o la caja.
-- **Baja:** **hoy el pase de alguien dado de baja no se vence nunca** (ni con «Actualizar mi pase», que responde
-  `portal_invalido`; §2, paso 8). La caja igual rechaza su QR: no se pierde plata, pero la persona ve un pase que parece
-  vigente. Es condición para encender (§3, paso 7).
+- **Baja:** con la opción c, el pase de alguien dado de baja se vence en Google **en hasta 10 minutos** (el cron del
+  Worker). Mientras tanto la caja igual rechaza su QR. Si Google falla de forma transitoria (5xx, 429), la pasada siguiente
+  reintenta; un rechazo permanente queda en el resumen del log. Es condición para encender (§3, paso 7).
 - **Pase compartido:** quien tenga una captura del QR de socio puede intentar usar el beneficio (igual que con el portal).
   El enlace «Canjear» del pase genera códigos de canje de ese anfitrión: si se filtra, se corta con «Regenerar» o
   «Revocar» el botón «Canjear» en la ficha del miembro.
-- **Vencimiento:** el pase no tiene fecha propia. Se vence solo si se lo vuelve a escribir con la persona de baja o sin roles, y hoy eso no pasa (ver «Baja»).
+- **Vencimiento:** el pase no tiene fecha propia. Se vence con la baja (o sin ningún rol vigente), por `/vencer` (ver «Baja»).
+- **Cursor compartido:** `/vencer` usa el mismo cursor (`google`) que la sincronización completa. Cuando se encienda la
+  completa, después del piloto, rebobinarlo (`club_pase_cursor_rebobinar`) para que actualice los saldos que esta pasada salteó.

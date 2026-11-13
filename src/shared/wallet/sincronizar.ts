@@ -22,7 +22,7 @@
  *    Si la lista de pases emitidos falla, el cursor no pasa del primer evento global (como antes). La base solo deja
  *    avanzar el cursor (CLUB-AUD-70); PATCH es idempotente.
  */
-import { armarObjeto, idObjeto, idsDelAmbiente, importarClave, validarDatos, type CuentaServicio, type DisenoPase, type Entorno, type PaseDatos } from './googlePase.ts'
+import { armarObjeto, idObjeto, idsDelAmbiente, importarClave, sinRolVigente, validarDatos, type CuentaServicio, type DisenoPase, type Entorno, type PaseDatos } from './googlePase.ts'
 
 export type Rpc = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
 export type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ status: number; json: () => Promise<unknown> }>
@@ -236,6 +236,82 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
       const g = await rpc('club_pase_cursor_guardar', { p_nombre: 'google', p_id: hasta })
       if (g.error) res.errores.push('cursor')
       else res.cursor_despues = hasta
+    }
+  }
+  return res
+}
+
+/**
+ * (12-nov, opción c del dueño) Piloto: la sincronización SOLO vence los pases de las bajas.
+ *
+ * Lee los eventos nuevos de `club_pase_eventos` (los deja la base en TODO camino de baja: la app con
+ * `club_miembro_guardar`, el portal con `club_socio_baja_portal`, la purga de autoaltas y cualquier cambio de roles), y
+ * para cada miembro arma el pase con `club_pase_datos`. **Solo si queda vencido** (estado `baja` o sin ningún rol vigente)
+ * escribe el objeto `EXPIRED` en Google; los demás cambios no tocan Google (el piloto no sincroniza saldos: para eso está
+ * «Actualizar mi pase»). Los eventos globales (promociones) se saltean.
+ *
+ * Errores (sin la tabla de reintentos, que es para después del piloto):
+ *  · 404 de Google: esa persona nunca guardó el pase → listo.
+ *  · 4xx permanentes (400, 403, 409, …): se anotan en el resumen y el cursor sigue (reintentar no lo arregla).
+ *  · 429, 5xx, red, token o la base: el cursor se queda ANTES del primer evento de ese miembro y la pasada siguiente
+ *    vuelve a intentar. Nada se pierde.
+ * Usa el mismo cursor que la sincronización completa (`google`): cuando se encienda después del piloto, rebobinarlo
+ * (`club_pase_cursor_rebobinar`) para que actualice los saldos de lo que esta pasada salteó.
+ */
+export interface ResultadoBajas {
+  eventos: number; miembros: number; vencidos: number; sin_pase: number; sin_cambio: number
+  permanentes: number; cursor_antes: number; cursor_despues: number; errores: string[]
+}
+export async function vencerBajas(deps: DepsSync): Promise<ResultadoBajas> {
+  const { rpc, issuer } = deps
+  const res: ResultadoBajas = { eventos: 0, miembros: 0, vencidos: 0, sin_pase: 0, sin_cambio: 0, permanentes: 0,
+                                cursor_antes: 0, cursor_despues: 0, errores: [] }
+  const c = await rpc('club_pase_cursor_leer', { p_nombre: 'google' })
+  if (c.error) throw new Error('no se pudo leer el cursor')
+  res.cursor_antes = res.cursor_despues = Number(c.data ?? 0)
+  const ev = await rpc('club_pase_eventos_leer', { p_despues: res.cursor_antes, p_limite: deps.limite ?? 500 })
+  if (ev.error) throw new Error('no se pudieron leer los eventos')
+  const eventos = (ev.data ?? []) as Array<{ id: number; miembro_id: string | null }>
+  res.eventos = eventos.length
+
+  const primerEvento = new Map<string, number>()
+  for (const e of eventos) if (e.miembro_id && !primerEvento.has(e.miembro_id)) primerEvento.set(e.miembro_id, e.id)
+  res.miembros = primerEvento.size
+  let tope = Number.POSITIVE_INFINITY   // el cursor no pasa del primer evento de un miembro con error transitorio
+  const frenar = (m: string, error: string) => { res.errores.push(`${error} de ${m.slice(0, 8)}`); tope = Math.min(tope, (primerEvento.get(m) ?? 1) - 1) }
+
+  let token: string | null = null
+  for (const [m] of primerEvento) {
+    try {
+      const d = await rpc('club_pase_datos', { p_miembro: m })
+      if (d.error) { frenar(m, 'datos'); continue }
+      if (d.data === null) { res.sin_cambio++; continue }                       // ya no existe: nada que vencer
+      if (validarDatos(d.data) !== null) { res.permanentes++; res.errores.push(`contrato de ${m.slice(0, 8)}`); continue }
+      const datos = d.data as PaseDatos
+      if (datos.estado !== 'baja' && !sinRolVigente(datos)) { res.sin_cambio++; continue }   // no es una baja: no toca Google
+      const objeto = armarObjeto(issuer, deps.entorno, datos, deps.diseno)
+      token ??= await tokenGoogle(deps.sa, deps.fetch, deps.ahora)
+      const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, m, deps.entorno))}`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
+      if (r.status === 200) res.vencidos++
+      else if (r.status === 404) res.sin_pase++
+      else if (r.status === 429 || r.status >= 500) frenar(m, `PATCH HTTP ${r.status}`)
+      else { res.permanentes++; res.errores.push(`PATCH HTTP ${r.status} de ${m.slice(0, 8)} (permanente)`) }
+    } catch (e) {
+      const sinToken = e instanceof Error && /^token de Google/.test(e.message)
+      frenar(m, sinToken ? (e as Error).message : 'excepción')
+      if (sinToken) break   // sin token no sirve seguir: la pasada siguiente reintenta desde este miembro
+    }
+  }
+  // el cursor avanza hasta el último evento procesado (también los globales, que esta pasada no usa), salvo que un miembro
+  // haya tenido un error transitorio: entonces queda justo antes de su primer evento (los miembros se recorren en el orden
+  // de su primer evento, así que nada anterior queda sin procesar; lo posterior se repite y el PATCH es idempotente)
+  const candidatos = eventos.filter(e => e.id <= tope)
+  if (candidatos.length > 0) {
+    const hasta = candidatos[candidatos.length - 1].id
+    if (hasta > res.cursor_antes) {
+      const g = await rpc('club_pase_cursor_guardar', { p_nombre: 'google', p_id: hasta })
+      if (g.error) res.errores.push('cursor'); else res.cursor_despues = hasta
     }
   }
   return res

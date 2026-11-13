@@ -50,6 +50,9 @@ el trigger baja todos los roles), el portal (`club_socio_baja_portal`, solo el r
   caminos. Sin esquema si el programador es un cron del Worker `satori-club-api` (secreto nuevo `CLUB_PASE_SYNC_KEY` en el
   Worker y en el Edge); con `pg_cron` + `pg_net` sería esquema. Riesgo: sin la tabla de reintentos, un error de Google
   frena el cursor y se reintenta en la pasada siguiente (se separan los 4xx permanentes para no trabarlo).
+**12-nov (noche) · opción c elegida por el dueño.** `vencerBajas` (src/shared/wallet/sincronizar.ts) + ruta `/vencer` del
+Edge (misma clave que `/sync`) + cron del Worker `satori-club-api` cada 10 minutos (`club-web/worker/programado.js`; sin
+`CLUB_PASE_SYNC_KEY` no hace nada). Sin esquema. Falta: cargar la clave, desplegar el Edge y probarlo en staging.
 
 ## Bitácora
 - 07-nov · Plan aprobado (6c1a5fb) con ajustes. Arranca A1.

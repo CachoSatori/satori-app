@@ -1,6 +1,6 @@
 // (12-nov, opción c del dueño) La sincronización del piloto SOLO vence los pases de las bajas. Base y Google simulados.
-import { describe, it, expect, beforeAll } from 'vitest'
-import { vencerBajas, actualizarUno, API_WALLET, URL_TOKEN, LOTE_VENCER, TOPE_MS_VENCER, type Rpc, type Fetch } from './sincronizar'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { vencerBajas, actualizarUno, API_WALLET, URL_TOKEN, LOTE_VENCER, TOPE_MS_VENCER, TIMEOUT_GOOGLE_MS, conTimeout, type Rpc, type Fetch } from './sincronizar'
 import { configurarBaseClub, type CuentaServicio, type PaseDatos } from './googlePase'
 configurarBaseClub('https://club.ejemplo.test')
 
@@ -85,6 +85,21 @@ function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id
   }
   const cursorGuardado = () => rpcs.filter(r => r.fn === 'club_pase_cursor_guardar').map(r => r.args.p_id)
   return { deps, rpcs, patch, almacen, cursorGuardado }
+}
+
+/** Con reloj simulado: espera (en tiempo real) a que el pedido colgado arme su temporizador, avanza 1 ms menos que el
+ *  tope (no tiene que terminar) y después el ms que falta (tiene que terminar). */
+async function tope15s<T>(p: Promise<T>, tope: number): Promise<T> {
+  let hecho = false
+  const q = p.finally(() => { hecho = true })
+  for (let i = 0; i < 2000 && vi.getTimerCount() === 0; i++) await new Promise(r => setImmediate(r))
+  expect(vi.getTimerCount()).toBeGreaterThan(0)
+  await vi.advanceTimersByTimeAsync(tope - 1)
+  expect(hecho).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  for (let i = 0; i < 2000 && !hecho; i++) await new Promise(r => setImmediate(r))
+  expect(hecho).toBe(true)
+  return q
 }
 
 describe('vencerBajas (opción c, piloto)', () => {
@@ -326,5 +341,41 @@ describe('vencerBajas rápido (13-nov)', () => {
     expect(r).toMatchObject({ eventos: 200, con_pase: 1, sin_cambio: 1, cursor_despues: 210 })
     expect(llamadas).toEqual([])
     expect(e.almacen.get(`${ISSUER}.club-${B}`)).toMatchObject({ state: 'ACTIVE', barcode: qr(B) })
+  })
+})
+
+// (13-nov) Google colgado: cada pedido tiene tope (15 s). El miembro cuenta como transitorio, el cursor queda antes de él.
+describe('timeout por pedido a Google (13-nov)', () => {
+  const colgado: Fetch = () => new Promise(() => {})   // nunca contesta y no mira la señal
+  it('conTimeout corta un pedido colgado con «timeout de Google» y le pasa una señal a la red', async () => {
+    await expect(conTimeout(colgado, 20)('https://x.ejemplo/', { method: 'GET', headers: {} })).rejects.toThrow('timeout de Google')
+    let senal: AbortSignal | undefined
+    const r = await conTimeout(async (_u, i) => { senal = i.signal; return { status: 200, json: async () => ({}) } }, 20)('https://x.ejemplo/', { method: 'GET', headers: {} })
+    expect(r.status).toBe(200)
+    expect(senal).toBeInstanceOf(AbortSignal)
+    expect(TIMEOUT_GOOGLE_MS).toBe(15_000)
+  })
+
+  it('vencerBajas: Google cuelga con D → A vencido, cursor justo antes de D, C no se toca, la corrida termina y guarda', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }, { id: 13, miembro_id: C }] })
+    const d = e.deps()
+    const f: Fetch = (u, i) => (u.includes(D) ? colgado(u, i) : d.fetch(u, i))
+    const r = await vencerBajas({ ...d, fetch: f, timeoutGoogleMs: 20 })
+    expect(r).toMatchObject({ vencidos: 1, cursor_despues: 11 })
+    expect(r.errores.join()).toMatch(/timeout de Google/)
+    expect(e.cursorGuardado()).toEqual([11])
+    expect(e.almacen.get(`${ISSUER}.club-${C}`)).toMatchObject({ state: 'ACTIVE' })   // no se siguió con C
+  })
+
+  it('con el tope por defecto (15 s, reloj simulado) la corrida no queda colgada', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }] })
+      const d = e.deps()
+      const p = vencerBajas({ ...d, fetch: (u, i) => (u === URL_TOKEN ? d.fetch(u, i) : colgado(u, i)) })
+      const r = await tope15s(p, TIMEOUT_GOOGLE_MS)
+      expect(r).toMatchObject({ vencidos: 0, cursor_despues: 10 })
+      expect(r.errores.join()).toMatch(/timeout de Google/)
+    } finally { vi.useRealTimers() }
   })
 })

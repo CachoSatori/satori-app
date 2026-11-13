@@ -25,7 +25,25 @@
 import { armarObjeto, idObjeto, idsDelAmbiente, importarClave, sinRolVigente, validarDatos, type CuentaServicio, type DisenoPase, type Entorno, type PaseDatos } from './googlePase.ts'
 
 export type Rpc = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
-export type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ status: number; json: () => Promise<unknown> }>
+export type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ status: number; json: () => Promise<unknown> }>
+
+/** (13-nov) Ninguna llamada a Google espera más de esto: si no contesta, se corta y cuenta como error transitorio. */
+export const TIMEOUT_GOOGLE_MS = 15_000
+export const MENSAJE_TIMEOUT = 'timeout de Google'
+/**
+ * (13-nov) Envuelve la red hacia Google con un tope por pedido: pasa un `AbortSignal.timeout` (la red real corta el
+ * pedido) y, por si la red no lo respeta, también corre una carrera con un temporizador. Al vencer lanza
+ * `Error('timeout de Google')`. Envolver dos veces no cambia nada.
+ */
+export function conTimeout(fetchFn: Fetch, ms = TIMEOUT_GOOGLE_MS): Fetch {
+  return (url, init) => {
+    let t: ReturnType<typeof setTimeout> | undefined
+    const corte = new Promise<never>((_, rechazar) => { t = setTimeout(() => rechazar(new Error(MENSAJE_TIMEOUT)), ms) })
+    const pedido = fetchFn(url, { ...init, signal: init.signal ?? AbortSignal.timeout(ms) })
+      .catch(e => { throw e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError') ? new Error(MENSAJE_TIMEOUT) : e })
+    return Promise.race([pedido, corte]).finally(() => clearTimeout(t))
+  }
+}
 
 export const API_WALLET = 'https://walletobjects.googleapis.com/walletobjects/v1'
 export const SCOPE_WALLET = 'https://www.googleapis.com/auth/wallet_object.issuer'
@@ -334,9 +352,12 @@ export interface ResultadoBajas {
 export interface DepsVencer extends DepsSync {
   /** Reloj en ms (inyectable para las pruebas). Por defecto, `Date.now`. */
   reloj?: () => number
+  /** Tope por pedido a Google en ms (por defecto `TIMEOUT_GOOGLE_MS`); inyectable para las pruebas. */
+  timeoutGoogleMs?: number
 }
 export async function vencerBajas(deps: DepsVencer): Promise<ResultadoBajas> {
   const { rpc, issuer } = deps
+  const fetchG = conTimeout(deps.fetch, deps.timeoutGoogleMs)
   const reloj = deps.reloj ?? Date.now
   const inicio = reloj()
   const res: ResultadoBajas = { eventos: 0, miembros: 0, vencidos: 0, ya_vencidos: 0, sin_pase: 0, sin_cambio: 0, permanentes: 0,
@@ -390,9 +411,9 @@ export async function vencerBajas(deps: DepsVencer): Promise<ResultadoBajas> {
       const datos = d.data as PaseDatos
       if (!estaVencido(datos)) { res.sin_cambio++; continue }   // no es una baja: no toca Google
       const objeto = armarObjeto(issuer, deps.entorno, datos, deps.diseno)
-      token ??= await tokenGoogle(deps.sa, deps.fetch, deps.ahora)
+      token ??= await tokenGoogle(deps.sa, fetchG, deps.ahora)
       // (13-nov) GET + PUT sin código de barras (el PATCH dejaba el QR): ver `vencerEnGoogle`
-      const r = await vencerEnGoogle(deps.fetch, token, objeto)
+      const r = await vencerEnGoogle(fetchG, token, objeto)
       if (r === 'vencido') res.vencidos++
       else if (r === 'ya_vencido') res.ya_vencidos++
       else if (r === 'sin_pase') res.sin_pase++
@@ -400,8 +421,10 @@ export async function vencerBajas(deps: DepsVencer): Promise<ResultadoBajas> {
       else { res.permanentes++; res.errores.push(`${typeof r === 'object' ? `Google HTTP ${r.http}` : r} de ${m.slice(0, 8)} (permanente)`) }
     } catch (e) {
       const sinToken = e instanceof Error && /^token de Google/.test(e.message)
-      frenar(m, sinToken ? (e as Error).message : 'excepción')
-      if (sinToken) break   // sin token no sirve seguir: la pasada siguiente reintenta desde este miembro
+      const colgado = e instanceof Error && e.message === MENSAJE_TIMEOUT
+      frenar(m, sinToken || colgado ? (e as Error).message : 'excepción')
+      // sin token, o Google colgado (13-nov): no sirve seguir; la pasada siguiente reintenta desde este miembro
+      if (sinToken || colgado) break
     }
   }
   // el cursor avanza hasta el último evento procesado (también los globales, que esta pasada no usa), salvo que un miembro

@@ -79,6 +79,46 @@ export async function guardarEnGoogle(fetchFn: Fetch, token: string, issuer: str
   return p.status === 200 ? 'ok' : `objeto PATCH HTTP ${p.status}`
 }
 
+/**
+ * (13-nov) Vence UN objeto en Google **sin código de barras**. La prueba de staging del 12/13-nov mostró que el PATCH
+ * dejaba el pase EXPIRED pero CON el QR: según la guía oficial de Google («Update Passes Classes and Passes Objects»,
+ * developers.google.com/wallet/generic/use-cases/updates), en un `patch` «only the patched fields are updated» (un campo
+ * que no va queda como estaba), mientras que en un `update` (PUT) «any fields not included in the request will be
+ * cleared»; y recomienda un GET antes del `update` para trabajar sobre la última versión. La doc no dice qué hace un
+ * `barcode: null` en un PATCH, así que se usa la vía documentada:
+ *   1. GET del objeto (404 → la persona nunca guardó el pase).
+ *   2. El objeto tiene que ser el pedido y de la clase de ESTE ambiente; si no, no se toca (`ajeno`).
+ *   3. Si ya está EXPIRED y sin `barcode` ni `rotatingBarcode` → `ya_vencido`, sin escribir (idempotente).
+ *   4. PUT del objeto leído + los datos de ahora (`objeto`, ya armado vencido), SIN `barcode` ni `rotatingBarcode` y
+ *      con `state: EXPIRED`. Lo que no armamos nosotros (p. ej. los mensajes de canje) se conserva.
+ *   5. Si la respuesta del PUT todavía trae un código → `con_codigo` (error permanente: que se vea en el resumen).
+ * Solo acepta objetos vencidos: con un activo lanza error (nunca le saca el QR a un socio activo).
+ */
+export type ResultadoVencer = 'vencido' | 'ya_vencido' | 'sin_pase' | 'ajeno' | 'con_codigo' | { http: number }
+const tieneCodigo = (o: Record<string, unknown>) => (o.barcode !== undefined && o.barcode !== null) ||
+                                                   (o.rotatingBarcode !== undefined && o.rotatingBarcode !== null)
+export async function vencerEnGoogle(fetchFn: Fetch, token: string, objeto: Record<string, unknown>): Promise<ResultadoVencer> {
+  if (objeto.state !== 'EXPIRED' || tieneCodigo(objeto) || typeof objeto.id !== 'string') throw new Error('vencerEnGoogle: el objeto no está vencido')
+  const url = `${API_WALLET}/genericObject/${encodeURIComponent(objeto.id)}`
+  const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  const g = await fetchFn(url, { method: 'GET', headers: h })
+  if (g.status === 404) return 'sin_pase'
+  if (g.status !== 200) return { http: g.status }
+  const actual = await g.json().catch(() => null) as Record<string, unknown> | null
+  if (!actual || typeof actual !== 'object' || actual.id !== objeto.id || actual.classId !== objeto.classId) return 'ajeno'
+  if (actual.state === 'EXPIRED' && !tieneCodigo(actual)) return 'ya_vencido'
+  const cuerpo: Record<string, unknown> = { ...actual, ...objeto, state: 'EXPIRED' }
+  delete cuerpo.barcode
+  delete cuerpo.rotatingBarcode
+  const p = await fetchFn(url, { method: 'PUT', headers: h, body: JSON.stringify(cuerpo) })
+  if (p.status !== 200) return { http: p.status }
+  const nuevo = await p.json().catch(() => null) as Record<string, unknown> | null
+  return nuevo && typeof nuevo === 'object' && tieneCodigo(nuevo) ? 'con_codigo' : 'vencido'
+}
+const transitorio = (st: number) => st === 429 || st >= 500
+/** ¿El pase de estos datos queda vencido? (misma regla que `armarObjeto`). */
+const estaVencido = (d: PaseDatos) => d.estado === 'baja' || sinRolVigente(d)
+
 /** Texto del mensaje de canje (CONTRATO §4), ES y EN. */
 export function mensajeCanje(creditos: number, saldo: number) {
   const n = (x: number, coma: boolean) => { const s = (Math.round(x * 10) / 10).toString(); return coma ? s.replace('.', ',') : s }
@@ -181,11 +221,19 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
       else if (validarDatos(d.data) !== null) { fallo(m, 'contrato'); continue }
       else {
         const objeto = armarObjeto(issuer, deps.entorno, d.data as PaseDatos, deps.diseno)
-        const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, m, deps.entorno))}`, {
-          method: 'PATCH', headers: { Authorization: `Bearer ${await auth()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
-        if (r.status === 200) { res.actualizados++; st = 'ok' }
-        else if (r.status === 404) { res.sin_pase++; st = 'sin_pase' }
-        else { fallo(m, `PATCH HTTP ${r.status}`); continue }
+        if (estaVencido(d.data as PaseDatos)) {
+          // (13-nov) vencido → GET + PUT sin código (el PATCH dejaba el QR); los activos siguen con PATCH
+          const v = await vencerEnGoogle(deps.fetch, await auth(), objeto)
+          if (v === 'vencido' || v === 'ya_vencido') { res.actualizados++; st = 'ok' }
+          else if (v === 'sin_pase') { res.sin_pase++; st = 'sin_pase' }
+          else { fallo(m, typeof v === 'object' ? `Google HTTP ${v.http}` : v); continue }
+        } else {
+          const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, m, deps.entorno))}`, {
+            method: 'PATCH', headers: { Authorization: `Bearer ${await auth()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
+          if (r.status === 200) { res.actualizados++; st = 'ok' }
+          else if (r.status === 404) { res.sin_pase++; st = 'sin_pase' }
+          else { fallo(m, `PATCH HTTP ${r.status}`); continue }
+        }
       }
     } catch (e) {
       fallo(m, e instanceof Error && /^token de Google/.test(e.message) ? e.message : 'excepción'); continue
@@ -247,7 +295,7 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
  * Lee los eventos nuevos de `club_pase_eventos` (los deja la base en TODO camino de baja: la app con
  * `club_miembro_guardar`, el portal con `club_socio_baja_portal`, la purga de autoaltas y cualquier cambio de roles), y
  * para cada miembro arma el pase con `club_pase_datos`. **Solo si queda vencido** (estado `baja` o sin ningún rol vigente)
- * escribe el objeto `EXPIRED` en Google; los demás cambios no tocan Google (el piloto no sincroniza saldos: para eso está
+ * escribe el objeto `EXPIRED` y SIN código de barras en Google (13-nov: GET + PUT, ver `vencerEnGoogle`); los demás cambios no tocan Google (el piloto no sincroniza saldos: para eso está
  * «Actualizar mi pase»). Los eventos globales (promociones) se saltean.
  *
  * Errores (sin la tabla de reintentos, que es para después del piloto):
@@ -259,12 +307,13 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
  * (`club_pase_cursor_rebobinar`) para que actualice los saldos de lo que esta pasada salteó.
  */
 export interface ResultadoBajas {
-  eventos: number; miembros: number; vencidos: number; sin_pase: number; sin_cambio: number
+  /** (13-nov) `ya_vencidos`: ya estaban EXPIRED y sin código en Google (no se escribió nada). */
+  eventos: number; miembros: number; vencidos: number; ya_vencidos: number; sin_pase: number; sin_cambio: number
   permanentes: number; cursor_antes: number; cursor_despues: number; errores: string[]
 }
 export async function vencerBajas(deps: DepsSync): Promise<ResultadoBajas> {
   const { rpc, issuer } = deps
-  const res: ResultadoBajas = { eventos: 0, miembros: 0, vencidos: 0, sin_pase: 0, sin_cambio: 0, permanentes: 0,
+  const res: ResultadoBajas = { eventos: 0, miembros: 0, vencidos: 0, ya_vencidos: 0, sin_pase: 0, sin_cambio: 0, permanentes: 0,
                                 cursor_antes: 0, cursor_despues: 0, errores: [] }
   const c = await rpc('club_pase_cursor_leer', { p_nombre: 'google' })
   if (c.error) throw new Error('no se pudo leer el cursor')
@@ -288,15 +337,16 @@ export async function vencerBajas(deps: DepsSync): Promise<ResultadoBajas> {
       if (d.data === null) { res.sin_cambio++; continue }                       // ya no existe: nada que vencer
       if (validarDatos(d.data) !== null) { res.permanentes++; res.errores.push(`contrato de ${m.slice(0, 8)}`); continue }
       const datos = d.data as PaseDatos
-      if (datos.estado !== 'baja' && !sinRolVigente(datos)) { res.sin_cambio++; continue }   // no es una baja: no toca Google
+      if (!estaVencido(datos)) { res.sin_cambio++; continue }   // no es una baja: no toca Google
       const objeto = armarObjeto(issuer, deps.entorno, datos, deps.diseno)
       token ??= await tokenGoogle(deps.sa, deps.fetch, deps.ahora)
-      const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, m, deps.entorno))}`, {
-        method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
-      if (r.status === 200) res.vencidos++
-      else if (r.status === 404) res.sin_pase++
-      else if (r.status === 429 || r.status >= 500) frenar(m, `PATCH HTTP ${r.status}`)
-      else { res.permanentes++; res.errores.push(`PATCH HTTP ${r.status} de ${m.slice(0, 8)} (permanente)`) }
+      // (13-nov) GET + PUT sin código de barras (el PATCH dejaba el QR): ver `vencerEnGoogle`
+      const r = await vencerEnGoogle(deps.fetch, token, objeto)
+      if (r === 'vencido') res.vencidos++
+      else if (r === 'ya_vencido') res.ya_vencidos++
+      else if (r === 'sin_pase') res.sin_pase++
+      else if (typeof r === 'object' && transitorio(r.http)) frenar(m, `Google HTTP ${r.http}`)
+      else { res.permanentes++; res.errores.push(`${typeof r === 'object' ? `Google HTTP ${r.http}` : r} de ${m.slice(0, 8)} (permanente)`) }
     } catch (e) {
       const sinToken = e instanceof Error && /^token de Google/.test(e.message)
       frenar(m, sinToken ? (e as Error).message : 'excepción')
@@ -305,7 +355,7 @@ export async function vencerBajas(deps: DepsSync): Promise<ResultadoBajas> {
   }
   // el cursor avanza hasta el último evento procesado (también los globales, que esta pasada no usa), salvo que un miembro
   // haya tenido un error transitorio: entonces queda justo antes de su primer evento (los miembros se recorren en el orden
-  // de su primer evento, así que nada anterior queda sin procesar; lo posterior se repite y el PATCH es idempotente)
+  // de su primer evento, así que nada anterior queda sin procesar; lo posterior se repite y `vencerEnGoogle` es idempotente)
   const candidatos = eventos.filter(e => e.id <= tope)
   if (candidatos.length > 0) {
     const hasta = candidatos[candidatos.length - 1].id
@@ -318,7 +368,8 @@ export async function vencerBajas(deps: DepsSync): Promise<ResultadoBajas> {
 }
 
 /**
- * «Actualizar mi pase» (portal): PATCH del objeto de UNA persona, con sus datos de ahora. 404 = todavía no guardó el
+ * «Actualizar mi pase» (portal): PATCH del objeto de UNA persona, con sus datos de ahora. (13-nov) Si sus datos dan un
+ * pase vencido, no hay PATCH: se vence sin código con `vencerEnGoogle` (nunca le vuelve a poner el QR). 404 = todavía no guardó el
  * pase (no es error). No mueve el cursor.
  */
 export async function actualizarUno(deps: Omit<DepsSync, 'limite'>, miembro: string): Promise<'actualizado' | 'sin_pase' | 'baja' | 'error'> {
@@ -327,6 +378,11 @@ export async function actualizarUno(deps: Omit<DepsSync, 'limite'>, miembro: str
   const datos = d.data as PaseDatos
   const objeto = armarObjeto(deps.issuer, deps.entorno, datos, deps.diseno)
   const token = await tokenGoogle(deps.sa, deps.fetch, deps.ahora)
+  if (estaVencido(datos)) {
+    // (13-nov) una baja (o sin rol vigente) nunca va por PATCH: el PATCH dejaba el QR viejo. Se vence sin código.
+    const v = await vencerEnGoogle(deps.fetch, token, objeto)
+    return v === 'vencido' || v === 'ya_vencido' ? 'baja' : v === 'sin_pase' ? 'sin_pase' : 'error'
+  }
   const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(deps.issuer, miembro, deps.entorno))}`, {
     method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
   if (r.status === 404) return 'sin_pase'

@@ -1,6 +1,6 @@
 // (12-nov, opción c del dueño) La sincronización del piloto SOLO vence los pases de las bajas. Base y Google simulados.
 import { describe, it, expect, beforeAll } from 'vitest'
-import { vencerBajas, API_WALLET, URL_TOKEN, type Rpc, type Fetch } from './sincronizar'
+import { vencerBajas, actualizarUno, API_WALLET, URL_TOKEN, type Rpc, type Fetch } from './sincronizar'
 import { configurarBaseClub, type CuentaServicio, type PaseDatos } from './googlePase'
 configurarBaseClub('https://club.ejemplo.test')
 
@@ -33,10 +33,19 @@ beforeAll(async () => {
   sa = { client_email: 'bajas-prueba@proyecto-falso.iam.gserviceaccount.com', private_key: `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----` }
 })
 
+/** (13-nov) Google simulado con un «almacén» de objetos: GET devuelve el objeto, PUT lo REEMPLAZA (lo que no va se
+ *  borra) y PATCH lo MEZCLA (lo que no va queda: así quedaba el QR). Cada pase guardado arranca ACTIVE y con QR. */
+const qr = (m: string) => ({ type: 'QR_CODE', value: `https://club.ejemplo.test/r/${m.slice(-4)}`, alternateText: m.slice(-4) })
 function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id: string | null }>;
-                        google?: (miembro: string) => number; token?: number; datosError?: string }) {
+                        google?: (miembro: string) => number; token?: number; datosError?: string; sinPase?: string[] }) {
   const rpcs: Array<{ fn: string; args: Record<string, unknown> }> = []
-  const patch: Array<{ id: string; body: { state: string; id: string } }> = []
+  const patch: Array<{ id: string; metodo: string; body: { state: string; id: string; barcode?: unknown } }> = []
+  const almacen = new Map<string, Record<string, unknown>>()
+  const guardar = (entorno: 'prod' | 'stg', m: string) => {
+    const id = `${ISSUER}.club${entorno === 'stg' ? '-stg' : ''}-${m}`
+    almacen.set(id, { id, classId: `${ISSUER}.club-satori${entorno === 'stg' ? '-stg' : ''}`, state: 'ACTIVE', barcode: qr(m),
+                      messages: [{ id: 'canje-1', header: 'Canje de créditos', body: 'texto' }] })
+  }
   const rpc: Rpc = async (fn, args) => {
     rpcs.push({ fn, args })
     if (fn === 'club_pase_cursor_leer') return { data: o.cursor ?? 10, error: null }
@@ -51,12 +60,23 @@ function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id
     if (url === URL_TOKEN) return { status: o.token ?? 200, json: async () => ({ access_token: 'tok-falso' }) }
     expect(url.startsWith(`${API_WALLET}/genericObject/`)).toBe(true)
     const id = decodeURIComponent(url.split('/').pop()!)
-    patch.push({ id, body: JSON.parse(init.body!) })
-    return { status: o.google?.(id.split('club-').pop()!.replace(/^stg-/, '')) ?? 200, json: async () => ({}) }
+    const st = o.google?.(id.split('club-').pop()!.replace(/^stg-/, '')) ?? 200
+    if (st !== 200) return { status: st, json: async () => ({}) }
+    const actual = almacen.get(id)
+    if (!actual) return { status: 404, json: async () => ({}) }
+    if (init.method === 'GET') return { status: 200, json: async () => structuredClone(actual) }
+    const body = JSON.parse(init.body!)
+    patch.push({ id, metodo: init.method, body })
+    const nuevo = init.method === 'PUT' ? body : { ...actual, ...body }
+    almacen.set(id, nuevo)
+    return { status: 200, json: async () => structuredClone(nuevo) }
   }
-  const deps = (entorno: 'prod' | 'stg' = 'prod') => ({ rpc, fetch: fetchFn, sa, issuer: ISSUER, entorno })
+  const deps = (entorno: 'prod' | 'stg' = 'prod') => {
+    for (const m of [A, B, C, D]) if (!(o.sinPase ?? []).includes(m) && !almacen.has(`${ISSUER}.club${entorno === 'stg' ? '-stg' : ''}-${m}`)) guardar(entorno, m)
+    return { rpc, fetch: fetchFn, sa, issuer: ISSUER, entorno }
+  }
   const cursorGuardado = () => rpcs.filter(r => r.fn === 'club_pase_cursor_guardar').map(r => r.args.p_id)
-  return { deps, rpcs, patch, cursorGuardado }
+  return { deps, rpcs, patch, almacen, cursorGuardado }
 }
 
 describe('vencerBajas (opción c, piloto)', () => {
@@ -78,8 +98,8 @@ describe('vencerBajas (opción c, piloto)', () => {
   })
 
   it('404 de Google (nunca guardó el pase) no es error; un 4xx permanente se anota y el cursor sigue', async () => {
-    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }],
-                          google: m => (m === A ? 404 : 400) })
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }], sinPase: [A],
+                          google: m => (m === D ? 400 : 200) })
     const r = await vencerBajas(e.deps())
     expect(r).toMatchObject({ vencidos: 0, sin_pase: 1, permanentes: 1, cursor_despues: 12 })
     expect(r.errores.join()).toMatch(/permanente/)
@@ -114,5 +134,70 @@ describe('vencerBajas (opción c, piloto)', () => {
     expect(await vencerBajas(e.deps())).toMatchObject({ eventos: 0, vencidos: 0, cursor_despues: 10 })
     expect(e.patch).toEqual([])
     expect(e.cursorGuardado()).toEqual([])
+  })
+})
+
+// (13-nov) La prueba de staging mostró el pase vencido CON el QR: el PATCH no saca campos. Ahora GET + PUT sin código.
+describe('vencerBajas: el pase vencido queda SIN QR (13-nov)', () => {
+  it('(a) a Google le llega un PUT con EXPIRED y SIN barcode; el objeto queda sin QR y conserva los mensajes', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }] })
+    const r = await vencerBajas(e.deps())
+    expect(r).toMatchObject({ vencidos: 1, ya_vencidos: 0, permanentes: 0, errores: [] })
+    expect(e.patch).toHaveLength(1)
+    expect(e.patch[0].metodo).toBe('PUT')
+    expect(e.patch[0].body.state).toBe('EXPIRED')
+    expect('barcode' in e.patch[0].body).toBe(false)
+    expect('rotatingBarcode' in e.patch[0].body).toBe(false)
+    const final = e.almacen.get(`${ISSUER}.club-${A}`)!
+    expect(final).toMatchObject({ state: 'EXPIRED', classId: `${ISSUER}.club-satori` })
+    expect(final.barcode).toBeUndefined()
+    expect(final.messages).toHaveLength(1)   // lo que no armamos (mensajes de canje) se conserva
+  })
+
+  it('(b) un socio activo no recibe ningún pedido a Google (ni GET ni PUT ni PATCH) y conserva su QR', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: B }] })
+    const llamadas: string[] = []
+    const d = e.deps()
+    const f: Fetch = async (url, init) => { llamadas.push(`${init.method} ${url}`); return d.fetch(url, init) }
+    const r = await vencerBajas({ ...d, fetch: f })
+    expect(r).toMatchObject({ vencidos: 0, sin_cambio: 1 })
+    expect(llamadas).toEqual([])
+    expect(e.almacen.get(`${ISSUER}.club-${B}`)).toMatchObject({ state: 'ACTIVE', barcode: qr(B) })
+  })
+
+  it('(c) idempotente: la misma baja dos veces → un solo PUT; la segunda pasada lee y no escribe', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: C }] })
+    const r1 = await vencerBajas(e.deps())
+    const r2 = await vencerBajas(e.deps())
+    expect(r1).toMatchObject({ vencidos: 2, ya_vencidos: 0 })
+    expect(r2).toMatchObject({ vencidos: 0, ya_vencidos: 2, permanentes: 0, errores: [] })
+    expect(e.patch.map(p => p.metodo)).toEqual(['PUT', 'PUT'])
+    for (const m of [A, C]) expect(e.almacen.get(`${ISSUER}.club-${m}`)!.barcode).toBeUndefined()
+  })
+
+  it('un objeto de otra clase u otro id en Google no se toca (permanente, sin PUT)', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }] })
+    const d = e.deps()
+    e.almacen.get(`${ISSUER}.club-${A}`)!.classId = `${ISSUER}.club-satori-stg`
+    const r = await vencerBajas(d)
+    expect(r).toMatchObject({ vencidos: 0, permanentes: 1 })
+    expect(e.patch).toEqual([])
+  })
+
+  it('(d) «Actualizar mi pase» de un socio en baja (o sin rol) no reinstala el QR: sin PATCH, PUT sin código', async () => {
+    for (const m of [A, C]) {
+      const e = escenario({ eventos: [] })
+      const d = e.deps()
+      expect(await actualizarUno(d, m), m).toBe('baja')
+      expect(e.patch.map(p => p.metodo), m).toEqual(['PUT'])
+      expect(e.almacen.get(`${ISSUER}.club-${m}`)!.barcode, m).toBeUndefined()
+      expect(await actualizarUno(d, m), m).toBe('baja')            // otra vez: no escribe nada
+      expect(e.patch, m).toHaveLength(1)
+    }
+    // el activo sigue igual que antes: PATCH con su QR
+    const e = escenario({ eventos: [] })
+    expect(await actualizarUno(e.deps(), B)).toBe('actualizado')
+    expect(e.patch.map(p => p.metodo)).toEqual(['PATCH'])
+    expect(e.almacen.get(`${ISSUER}.club-${B}`)).toMatchObject({ state: 'ACTIVE', barcode: { type: 'QR_CODE' } })
   })
 })

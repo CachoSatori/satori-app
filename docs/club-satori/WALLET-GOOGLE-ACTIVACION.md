@@ -122,8 +122,11 @@ Docker: se despliega con `--use-api`. Los secretos de §1 ya cargados **en stagi
    read -rs SYNC; echo
    curl -sS -w '\n%{http_code}\n' -X POST "$E/vencer" -H "apikey: $ANON" -H "x-club-pase-sync: $SYNC"
    ```
-   → `200` con un resumen (`"vencidos": 1`) y el pase del teléfono queda **vencido**. Repetirlo sin cambios nuevos da
-   `"eventos": 0`. Probar también la baja desde el portal («Darme de baja del Local Club», si era su único rol). Si la
+   → `200` con un resumen (`"vencidos": 1`) y el pase del teléfono queda **vencido y SIN QR** (13-nov: `/vencer` lee el
+   objeto con GET y lo reemplaza con PUT sin código de barras; antes un PATCH lo dejaba vencido pero con el QR). Revisar
+   en el teléfono que no quede ningún código para escanear. Repetirlo sin cambios nuevos da `"eventos": 0`; si la misma
+   persona vuelve a tener un evento, el resumen dice `"ya_vencidos": 1` y Google no se reescribe. `/actualizar` de una
+   persona vencida tampoco le vuelve a poner el QR. Probar también la baja desde el portal («Darme de baja del Local Club», si era su único rol). Si la
    respuesta trae `errores` con «permanente», Google rechazó el objeto: ver los logs del Edge. En prod lo hace el cron del
    Worker cada 10 minutos (sus resúmenes, solo conteos, quedan en los logs del Worker: «club-pase-vencer»).
 9. Borrar las variables y el archivo: `unset ANON CWK TOK SYNC; rm -f /tmp/pase.json`. Sacar las capturas para el pedido de

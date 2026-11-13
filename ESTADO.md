@@ -1,7 +1,7 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-12.** Los hashes de este bloque se verificaron contra `origin` el 12-nov. Las Edge Functions y sus
+**Al día: 2026-11-12.** Los hashes de este bloque se verificaron contra `origin` el 12-nov (`main` = `3cacf43`, 22:02 CR). Las Edge Functions y sus
 secretos (solo nombres y digests), contra la Management API de cada proyecto el 12-nov. Lo de Cloudflare lo informó el
 dueño. En prod, Claude solo hizo lo que firmó el dueño el 12-nov (el pase de `extract-document`, abajo).
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md).** Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
@@ -13,7 +13,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`b6be32e`** (12/11 13:03:02 -06:00: merge del #126, la bitácora del pase del Club). Antes, `17a9efd` (11/11 23:22:08 -06:00: merge del #59, el Club Satori, con la 150 y la 151) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. El 11/11 entró el Club (#59, `17a9efd`: la 150 y la 151). Ledger de prod: **67 · 151**. |
+| `main` | **`3cacf43`** (12/11 22:02:49 -06:00: merge del #144, Google Wallet del Club en `main`: el pase (`src/shared/wallet/`), las rutas de club-web y los botones del portal **apagados** con `VITE_WALLET_GOOGLE`; las imágenes del pase publicadas en `club-web/public/pase/`; el Edge `club-pase` no entra a `main` y no está en prod). Antes, `b6be32e` (12/11 13:03:02 -06:00: merge del #126, la bitácora del pase del Club) y `17a9efd` (11/11 23:22:08 -06:00: merge del #59, el Club Satori, con la 150 y la 151) | **PROD.** GitHub Pages (base `/satori-app/`). El 10/11 entraron por Branching la 085 (#80), la 089 (#90), la 090 (#97), la 091 (#103, `b8cb74d`) y la tanda 092–095 (#107, `c41e18b`), cada merge con «Supabase Preview» en success. El 11/11 entró el Club (#59, `17a9efd`: la 150 y la 151). Ledger de prod: **67 · 151**. |
 | `staging` | **`fb29872`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
 | `integracion/analitica-staging` | **`850a22f`** | ⚠️ Rama vieja, 123 commits atrás de `staging`. **No la publica Cloudflare** (lo de septiembre ya no vale: la rama de producción es `staging`). |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
@@ -179,6 +179,10 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
    `claude-sonnet-5-5` (el modelo de prod desde el 12/11) devuelve la Bandeja vacía sin error. El ítem 11 tiene que
    traer `8a8dfb6` **antes** de que Branching despliegue funciones; si no, un despliegue desde `main` pisaría prod con
    el código viejo y la lectura de facturas dejaría de funcionar.
+   **`club-pase` (Google Wallet, 12-nov):** cuando entre a `main` con el ítem 11, el `config.toml` tiene que declararla
+   con **`verify_jwt = false`**. club-web (Pages y el Worker) la llama solo con `apikey` y el portón es `x-club-web`: con
+   `verify_jwt = true`, «Agregar a Google Wallet» y «Actualizar mi pase» responden 401. Hasta el ítem 11 su código vive
+   en la rama `claude/club-pase-edge` y se despliega a mano (`docs/club-satori/WALLET-GOOGLE-ACTIVACION.md`).
 3. **No mergear a `main` durante el servicio (19–22 h CR).** Una sola sesión de CC mergea a `main` a la vez, cada una
    solo sus PRs, y con el OK de Ismael.
 4. **«Ver como» usa los permisos del owner.** Sirve para ver lo que ve otro empleado, no para probar permisos:

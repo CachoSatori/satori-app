@@ -151,6 +151,60 @@ export function prefijoRed(ip) {
   return s || 'sin-ip'
 }
 
+/**
+ * B2: «Agregar a Google Wallet». club-web llama al Edge `club-pase` (B1) con el mismo `x-club-web`; el Edge firma el
+ * JWT. Devuelve solo `{ url }` y solo si es un link de Google Wallet. Errores con código fijo.
+ */
+async function walletGoogle(env, token) {
+  const url = String(env.SUPABASE_URL || '').replace(/\/+$/, '')
+  if (!RE_SUPABASE.test(url) || !env.SUPABASE_ANON_KEY || !env.CLUB_WEB_KEY) return json(503, { error: 'servicio_no_disponible' })
+  let r
+  try {
+    r = await fetch(`${url}/functions/v1/club-pase/google`, {
+      method: 'POST',
+      headers: { apikey: env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json', 'x-club-web': env.CLUB_WEB_KEY },
+      body: JSON.stringify({ token }),
+    })
+  } catch {
+    return json(502, { error: 'servicio' })
+  }
+  let data = null
+  try { data = await r.json() } catch { /* cuerpo vacío */ }
+  if (r.status === 404) return json(404, { error: 'portal_invalido' })
+  if (!r.ok) return json(r.status === 503 ? 503 : 502, { error: r.status === 503 ? 'servicio_no_disponible' : 'servicio' })
+  const link = data && typeof data.url === 'string' ? data.url : ''
+  if (!link.startsWith('https://pay.google.com/gp/v/save/')) return json(502, { error: 'servicio' })
+  return json(200, { data: { url: link } })
+}
+
+/**
+ * (12-nov) «Actualizar mi pase»: club-web llama a la ruta `actualizar` del Edge `club-pase` con el mismo `x-club-web`.
+ * El Edge vuelve a escribir el pase de esa persona en Google con los datos de ahora. En el piloto no hay
+ * sincronización automática: este botón es la única forma de poner el pase al día.
+ * Devuelve `{ resultado }` ('actualizado' | 'sin_pase' | 'baja'); errores con código fijo.
+ */
+async function walletActualizar(env, token) {
+  const url = String(env.SUPABASE_URL || '').replace(/\/+$/, '')
+  if (!RE_SUPABASE.test(url) || !env.SUPABASE_ANON_KEY || !env.CLUB_WEB_KEY) return json(503, { error: 'servicio_no_disponible' })
+  let r
+  try {
+    r = await fetch(`${url}/functions/v1/club-pase/actualizar`, {
+      method: 'POST',
+      headers: { apikey: env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json', 'x-club-web': env.CLUB_WEB_KEY },
+      body: JSON.stringify({ token }),
+    })
+  } catch {
+    return json(502, { error: 'servicio' })
+  }
+  let data = null
+  try { data = await r.json() } catch { /* cuerpo vacío */ }
+  if (r.status === 404) return json(404, { error: 'portal_invalido' })
+  if (!r.ok) return json(r.status === 503 ? 503 : 502, { error: r.status === 503 ? 'servicio_no_disponible' : 'servicio' })
+  const res = data && typeof data.resultado === 'string' ? data.resultado : ''
+  if (!['actualizado', 'sin_pase', 'baja'].includes(res)) return json(502, { error: 'servicio' })
+  return json(200, { data: { resultado: res } })
+}
+
 /** Router de /api/*. `path` sin el prefijo /api/. */
 export async function manejar(request, env, path) {
   const ip = request.headers.get('CF-Connecting-IP') || 'sin-ip'
@@ -269,6 +323,24 @@ export async function manejar(request, env, path) {
     const tok = String(partes[1]).toLowerCase()
     if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
     return rpc(env, 'club_socio_baja_portal', { p_token: tok })
+  }
+
+  // POST /api/portal/:token/wallet  → link «Save to Google Wallet» (B2). Tope de «crear» por IP.
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'wallet') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'crear', `wallet:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return walletGoogle(env, tok)
+  }
+
+  // POST /api/portal/:token/wallet/actualizar  → «Actualizar mi pase» (12-nov). Tope de «crear» por IP.
+  if (partes.length === 4 && partes[0] === 'portal' && partes[2] === 'wallet' && partes[3] === 'actualizar') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'crear', `wallet-act:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return walletActualizar(env, tok)
   }
 
   // GET /api/portal/:token

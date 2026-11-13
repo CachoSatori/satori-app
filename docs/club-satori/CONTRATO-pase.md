@@ -36,7 +36,7 @@ Ejecutable solo por `service_role`. Devuelve `null` si el miembro no existe. Eje
   "actualizado_en": "2026-11-07T19:30:00Z",
   "nombre_pila": "Ana",
   "estado": "activo",
-  "local": { "id": "santa-teresa", "nombre": "Satori Sushi Bar · Santa Teresa" },
+  "local": { "id": "<id del local>", "nombre": "<nombre del local, de club_config>" },
   "pestanas": ["mi_club", "anfitrion"],
   "codigo_barras": { "tipo": "socio", "valor": "https://club.satoricostarica.com/s/ABCD2345K" },
   "socio": {
@@ -117,7 +117,7 @@ Ya existe (R-01): una fila por canje (`tipo = 'canje'`, `miembro_id`, `movimient
 - `club_alertas_pendientes(p_limite int) → table(id, miembro_id, tipo, creditos, saldo_creditos, fecha)`
 - `club_alerta_enviada(p_id bigint, p_canal text)`: marca `enviado_en = now()` y `canal` (`google`, `apple`).
 
-B manda el mensaje del pase («Se canjearon 1,5 créditos de tu cuenta. Te quedan 2. ¿No fuiste vos? Avisanos.») y lo
+B manda el mensaje del pase («Se canjearon 1,5 créditos de su cuenta. Le quedan 2. ¿No fue usted? Avísenos.») y lo
 marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
 
 ## 5. Emisión: quién crea el pase
@@ -137,13 +137,22 @@ marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
 
 ### Notas de B1 (08-nov)
 - **Tipo de pase:** genérico (`genericClass` `<issuerId>.club-satori`, `genericObject` `<issuerId>.club-<miembro_id>`).
+  **(12-nov) Por ambiente:** staging y prod comparten el emisor, así que staging usa `<issuerId>.club-satori-stg` y
+  `<issuerId>.club-stg-<miembro_id>` (`WALLET_ENTORNO` = `stg`; prod = `prod`, sin sufijo; otro valor → 503). La clase que
+  ya existe no se pisa (409 → se deja), y el Edge no escribe la clase ni objetos de otro ambiente (`idsDelAmbiente`).
   Código en `src/shared/wallet/` y el Edge en `supabase/functions/club-pase/` (rama `claude/club-wallet`).
-- **Largo del JWT:** el completo (clase + objeto) ronda los **3 KB**; Google recomienda ≤ ~1.800 caracteres. Para eso
-  está el **JWT flaco** (solo `id` y `classId`), que sirve cuando el objeto ya existe en Google: lo crea o actualiza
-  la sincronización por API REST (B3). Hasta B3 se usa el completo (DECISIÓN PROVISORIA; se prueba en B5 con un
-  teléfono real).
-- **`club_pase_emitido` se registra al generar el link**, no cuando la persona toca «Guardar» (Google no avisa). B3 tiene
-  que tolerar un objeto que no existe en Google (404 al actualizar → no es error).
+- **Largo del JWT:** el completo (clase + objeto) ronda los **3 KB**; Google recomienda ≤ ~1.800 caracteres.
+  **(12-nov, decisión del dueño) Link corto:** al pedir el pase, el Edge crea la clase (409 = ya existe) y crea el objeto
+  (409 = ya existe → `PATCH` con los datos de ahora) por la API REST de Wallet, y recién ahí firma el **JWT flaco** (solo
+  `id` y `classId`). El JWT completo ya no se usa.
+- **`club_pase_emitido` se registra cuando el objeto quedó en Google**, no cuando la persona toca «Guardar» (Google no
+  avisa). «Actualizar mi pase» tolera un objeto que no existe (404 → «sin_pase», no es error).
+- **(12-nov) Piloto sin sincronización automática** (decisión del dueño): ni programador de `/club-pase/sync` ni la
+  migración de reintentos (`propuestas/club_pase_reintentos.sql`); quedan para después del piloto. El pase muestra la
+  fecha y la hora de Costa Rica de sus datos («Créditos al 12-nov 13:20» o «Actualizado · 12-nov 13:20») y el portal
+  tiene «Actualizar mi pase». Sin ningún rol vigente, el objeto se arma `EXPIRED`. **Hallazgo (12-nov, staging):** hoy
+  nada lo vuelve a escribir después de una baja (`club_pase_por_token` no encuentra a la persona y `/sync` está apagado):
+  el pase no se vence. Las opciones están en `AVANCE-LC.md` (12-nov); elige el dueño.
 
 ## 6. Apple (apagado)
 Mismo contrato. Flag `club_config.wallet_apple_activo = false` (lo agrega A). B deja listo el `.pkpass` y el web

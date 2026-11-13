@@ -57,9 +57,10 @@ export default defineConfig({
         // Long-press del ícono (Android/desktop) → atajo directo al puesto.
         // iOS no soporta shortcuts, pero el aterrizaje por rol cubre lo mismo.
         shortcuts: [
-          { name: 'Registrar proveedor', url: `${BASE}proveedor`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
-          { name: 'Comandero',           url: `${BASE}comandero`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          // Solo rutas que existen en `main` (src/atajosPwa.test.ts lo verifica). «Registrar proveedor»
+          // (/proveedor, fusionada en la Bandeja) y «Comandero» (/comandero, solo en staging) llevaban al Inicio.
           { name: 'Caja',                url: `${BASE}caja`,      icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Bandeja de facturas', url: `${BASE}inbox`,     icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
           { name: 'Propinas',            url: `${BASE}propinas`,  icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
         ],
         // Compartir una foto desde WhatsApp/galería → Satori (Bandeja). El POST
@@ -89,7 +90,9 @@ export default defineConfig({
         importScripts: [`${BASE}sw-share.js`],   // handler del Share Target
         navigateFallback: `${BASE}index.html`,
         navigateFallbackAllowlist: [new RegExp('^' + BASE)],
-        navigateFallbackDenylist: [/\/inbox\/share$/],   // el POST de compartir lo maneja sw-share.js
+        // /inbox/share: el POST de compartir lo maneja sw-share.js.
+        // /version.json: abrirlo en el navegador tiene que mostrar el JSON del build, no el login (backlog).
+        navigateFallbackDenylist: [/\/inbox\/share$/, /\/version\.json$/],
         // Claim clients immediately so new SW takes over all tabs right away
         clientsClaim: true,
         skipWaiting: true,

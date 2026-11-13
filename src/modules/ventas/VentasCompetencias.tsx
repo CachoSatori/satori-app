@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { DiasMap, ProductMap, Comp } from '../../shared/types/ventas'
 import { aggSalonero, allSaloneros, datesInRange, allDates } from './ventasUtils'
+import { todayCR } from '../../shared/utils'
 import { saveComp, deleteComp } from '../../shared/api/ventas'
 
 interface Props {
@@ -10,7 +11,9 @@ interface Props {
   onRefresh: () => void
 }
 
-function todayISO(): string { return new Date().toISOString().slice(0, 10) }
+// «Hoy» en hora de Costa Rica: con la fecha UTC, después de las 18:00 una competencia que
+// termina hoy figuraba como terminada en pleno servicio.
+function todayISO(): string { return todayCR() }
 
 export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props) {
   const [tab, setTab] = useState<'active'|'new'>('active')

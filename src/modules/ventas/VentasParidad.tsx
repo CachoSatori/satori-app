@@ -25,15 +25,17 @@ import {
   type Comparacion, type FilaParidad, type ReporteParidad, type Tolerancia,
 } from './ventasParidadCalc'
 import { fi } from './ventasUtils'
+import { todayCR } from '../../shared/utils'
 import './ventasEnVivo.css'
 
-/** `2026-09-05` → `2026-08-06` (un mes atrás), para el rango que abre por defecto. */
-function haceUnMes(hoy: Date): string {
-  const d = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() - 1, hoy.getUTCDate()))
-  return d.toISOString().slice(0, 10)
+/** `2026-09-05` → `2026-08-05` (un mes atrás), para el rango que abre por defecto. */
+function haceUnMes(hoy: string): string {
+  const [y, m, d] = hoy.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 2, d)).toISOString().slice(0, 10)
 }
 
-const hoyISO = (): string => new Date().toISOString().slice(0, 10)
+// «Hoy» en hora de Costa Rica (no la fecha UTC, que después de las 18:00 ya es mañana).
+const hoyISO = (): string => todayCR()
 
 /** Recorta un `DiasMap` al rango pedido. El xls se lee entero y se filtra acá. */
 function enRango(dias: DiasMap, desde: string, hasta: string): DiasMap {
@@ -83,7 +85,7 @@ function FilaTabla({ fila, total }: { fila: FilaParidad; total?: boolean }) {
 }
 
 export default function VentasParidad() {
-  const [desde, setDesde] = useState(() => haceUnMes(new Date()))
+  const [desde, setDesde] = useState(() => haceUnMes(hoyISO()))
   const [hasta, setHasta] = useState(hoyISO)
   const [tol, setTol]     = useState<Tolerancia>(TOLERANCIA_POR_DEFECTO)
 

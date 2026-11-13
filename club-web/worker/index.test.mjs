@@ -152,11 +152,11 @@ test('cron (13-nov): si el Edge cortó por tiempo, el log lo dice (cortado_por_t
   const logViejo = console.log
   console.log = (s) => logs.push(s)
   try {
-    const f = async () => new Response(JSON.stringify({ eventos: 200, con_pase: 2, vencidos: 1, sin_pase: 120, cursor_antes: 10, cursor_despues: 130, cortado_por_tiempo: true, errores: [] }), { status: 200 })
+    const f = async () => new Response(JSON.stringify({ eventos: 200, con_pase: 2, vencidos: 1, sin_pase: 120, cursor_antes: 10, cursor_despues: 130, cortado_por_tiempo: true, trabado_en: 131, revisados_sin_registro: 1, errores: [] }), { status: 200 })
     await vencerBajasProgramado({ ...base, CLUB_PASE_SYNC_KEY: 's'.repeat(40) }, f)
   } finally { console.log = logViejo }
   assert.deepEqual(JSON.parse(logs[0]), { evento: 'club-pase-vencer', ok: true, status: 200, eventos: 200, con_pase: 2, vencidos: 1, sin_pase: 120,
-                                          cursor_antes: 10, cursor_despues: 130, errores: 0, cortado_por_tiempo: true })
+                                          cursor_antes: 10, cursor_despues: 130, trabado_en: 131, revisados_sin_registro: 1, errores: 0, cortado_por_tiempo: true })
 })
 
 test('cron: el Edge todavía no está (404) o la red falla → no rompe; lo deja en el log', async () => {

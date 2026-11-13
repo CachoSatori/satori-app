@@ -24,7 +24,7 @@ export async function vencerBajasProgramado(env, fetchFn = fetch) {
   try { j = await r.json() } catch { /* sin cuerpo */ }
   const resumen = { evento: 'club-pase-vencer', ok: r.status === 200, status: r.status }
   if (j && typeof j === 'object') {
-    for (const k of ['eventos', 'con_pase', 'vencidos', 'ya_vencidos', 'sin_pase', 'permanentes', 'cursor_antes', 'cursor_despues']) {
+    for (const k of ['eventos', 'con_pase', 'revisados_sin_registro', 'vencidos', 'ya_vencidos', 'sin_pase', 'permanentes', 'cursor_antes', 'cursor_despues', 'trabado_en']) {
       if (typeof j[k] === 'number') resumen[k] = j[k]
     }
     if (Array.isArray(j.errores)) resumen.errores = j.errores.length

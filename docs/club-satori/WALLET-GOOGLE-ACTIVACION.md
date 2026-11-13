@@ -10,7 +10,7 @@
   de reintentos (`propuestas/club_pase_reintentos.sql`): quedan para después del piloto. **(12-nov, opción c del dueño)
   La única pasada automática es `/club-pase/vencer`:** cada 10 minutos, el cron del Worker `satori-club-api` le pide al
   Edge que venza en Google los pases de las personas dadas de baja (o sin ningún rol vigente), por cualquier camino: la
-  app, el portal o la purga de autoaltas. Lee los eventos de `club_pase_eventos` que la base ya deja; **no toca el
+  app, el portal o la purga de autoaltas (que borra el registro del pase: ver §5, «Purga de autoaltas»). Lee los eventos de `club_pase_eventos` que la base ya deja; **no toca el
   esquema**. Los demás cambios no tocan Google. Para que el pase no engañe:
   - el pase dice de cuándo son sus datos: «Créditos al 12-nov 13:20» (anfitrión) o «Actualizado · 12-nov 13:20» (solo socio),
     en hora de Costa Rica;
@@ -129,8 +129,8 @@ Docker: se despliega con `--use-api`. Los secretos de §1 ya cargados **en stagi
    persona vencida tampoco le vuelve a poner el QR. Probar también la baja desde el portal («Darme de baja del Local Club», si era su único rol). Si la
    respuesta trae `errores` con «permanente», Google rechazó el objeto: ver los logs del Edge. En prod lo hace el cron del
    Worker cada 10 minutos (sus resúmenes, solo conteos, quedan en los logs del Worker: «club-pase-vencer»). (13-nov) El
-   resumen trae también `con_pase` (miembros del lote con pase emitido: los únicos que se miran) y `cortado_por_tiempo`
-   (ver §5, «Atraso de eventos»).
+   resumen trae también `con_pase` (miembros del lote con pase emitido), `revisados_sin_registro` (purgas: ver §5),
+   `cortado_por_tiempo` (ver §5, «Atraso de eventos») y `trabado_en` (ver §5, «Cursor trabado»).
 9. Borrar las variables y el archivo: `unset ANON CWK TOK SYNC; rm -f /tmp/pase.json`. Sacar las capturas para el pedido de
    publicación (§3) y anotar el resultado (SHA del paso 1, hora, qué se vio) en `AVANCE-LC.md`.
 
@@ -202,6 +202,17 @@ Maqueta: `docs/club-satori/img/pase-propuesta.png` (v4, aprobada el 08-nov).
   contesta, en `/vencer` ese miembro cuenta como error transitorio (`timeout de Google` en `errores`), la pasada termina y
   guarda el cursor justo antes de él; la siguiente lo reintenta. En `/google` y `/actualizar`, la persona ve el error de
   siempre y puede volver a intentar.
+- **Purga de autoaltas (13-nov):** la purga diaria borra el registro del pase (`club_pases`) y deja al miembro en baja.
+  Para que su QR no quede vigente, `/vencer` mira igual a todo miembro del lote **sin registro** que tenga un evento
+  `datos` (la purga siempre lo deja: cambia el estado y el nombre): lee sus datos y, si quedó vencido, vence en Google su
+  objeto por el id fijo (`<emisor>.club-<miembro>`, o `club-stg-` en staging). Si Google no lo tiene (404), cuenta
+  `sin_pase`. Un activo sin registro nunca va a Google. El resumen lo cuenta en `revisados_sin_registro`.
+- **Cursor trabado (`trabado_en`):** un error transitorio (5xx, 429, la base, el token o `timeout de Google`) deja el
+  cursor justo antes del primer evento de ese miembro, y el resumen trae `trabado_en` con ese id (es `null` si no hubo
+  error; el corte por tiempo no lo marca). Si `trabado_en` se repite con **el mismo id** en varias pasadas seguidas (más
+  de una hora), el cursor está trabado en ese miembro y no avanza nadie más: mirar en los logs del Edge el error de
+  ese miembro (las primeras 8 letras de su id van en `errores`). Si es Google, esperar o revisar la consola de Google; si
+  persiste, avisar a Claude para decidir (la tabla de reintentos de después del piloto resuelve esto sin trabar).
 - **Pase compartido:** quien tenga una captura del QR de socio puede intentar usar el beneficio (igual que con el portal).
   El enlace «Canjear» del pase genera códigos de canje de ese anfitrión: si se filtra, se corta con «Regenerar» o
   «Revocar» el botón «Canjear» en la ficha del miembro.

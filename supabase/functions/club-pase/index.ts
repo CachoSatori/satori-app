@@ -26,7 +26,8 @@
 //                            stg → clase …club-satori-stg y objetos …club-stg-<miembro>; prod → sin sufijo.
 //                            Falta o es otro valor → 503 (nunca cae en prod).
 //   WALLET_DISENO            (opcional) {"colorFondo":"#0d0d0d","logoUrl":"https://…","heroUrl":"https://…"}
-//   CLUB_PASE_SYNC_KEY       NO en el piloto (decisión del dueño, 12-nov): sin él, /sync responde 503
+//   CLUB_PASE_SYNC_KEY       (12-nov, opción c) el portón de /vencer y /sync; la misma clave va como Secret en el Worker
+//                            satori-club-api (su cron llama a /vencer cada 10 minutos). Sin ella, 503
 // Sin cualquiera de los obligatorios: 503 a todo (falla cerrada), sin tocar la base.
 //
 // ── DESPLIEGUE (el dueño; staging primero; docs/club-satori/WALLET-GOOGLE-ACTIVACION.md §2) ──────
@@ -36,7 +37,8 @@
 //        → crea la clase y crea o actualiza el objeto en Google, y devuelve el link CORTO (JWT con solo los IDs)
 //        → 200 { url, object_id } · 401 · 404 portal_invalido · 502 servicio · 503 servicio_no_disponible
 //   POST /club-pase/actualizar  x-club-web   { "token": "…" }   «Actualizar mi pase» → { resultado }
-//   POST /club-pase/sync        x-club-pase-sync                  (después del piloto: sin su clave, 503)
+//   POST /club-pase/vencer      x-club-pase-sync                  (12-nov, opción c) vence en Google los pases de las bajas
+//   POST /club-pase/sync        x-club-pase-sync                  la sincronización completa (después del piloto)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { manejarPase, manejarSync, type Rpc } from '../../../src/shared/wallet/edgePase.ts'
@@ -72,7 +74,7 @@ Deno.serve(async (req) => {
       CLUB_PASE_SYNC_KEY: Deno.env.get('CLUB_PASE_SYNC_KEY') ?? undefined,
       WALLET_ENTORNO: Deno.env.get('WALLET_ENTORNO') ?? undefined,
     }
-    if (ruta === 'sync' || ruta === 'actualizar') return await manejarSync(req, ruta, env, rpc, fetchGoogle)
+    if (ruta === 'sync' || ruta === 'vencer' || ruta === 'actualizar') return await manejarSync(req, ruta, env, rpc, fetchGoogle)
     return await manejarPase(req, ruta, env, rpc, fetchGoogle)
   } catch (e) {
     console.error('club-pase: excepción', e instanceof Error ? e.message : String(e))

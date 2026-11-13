@@ -20,4 +20,6 @@ test('club-pase: la red hacia Google solo va a la API de Wallet y al token OAuth
   expect(indice).toMatch(/startsWith\('https:\/\/walletobjects\.googleapis\.com\/'\)/)
   expect(indice).toContain("url !== 'https://oauth2.googleapis.com/token'")
   expect(indice).toMatch(/manejarPase\(req, ruta, env, rpc, fetchGoogle\)/)
+  // (12-nov, opción c) /vencer llega a manejarSync, como /sync y /actualizar
+  expect(indice).toContain("if (ruta === 'sync' || ruta === 'vencer' || ruta === 'actualizar') return await manejarSync(req, ruta, env, rpc, fetchGoogle)")
 })

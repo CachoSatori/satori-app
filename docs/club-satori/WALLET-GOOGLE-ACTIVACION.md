@@ -198,6 +198,10 @@ Maqueta: `docs/club-satori/img/pase-propuesta.png` (v4, aprobada el 08-nov).
   varias pasadas seguidas, mirar los logs del Edge (Google lento). Si la lista de pases emitidos falla, la pasada no hace
   nada (`errores: ["pases emitidos"]`) y el cursor no se mueve. Un objeto creado en Google cuyo registro en `club_pases` no
   se guardó (el link de «Guardar» devolvió error) no se mira; la persona lo vuelve a pedir y queda registrado.
+  Además, **ningún pedido a Google espera más de 15 s** (en `/vencer`, `/google`, `/actualizar` y `/sync`): si Google no
+  contesta, en `/vencer` ese miembro cuenta como error transitorio (`timeout de Google` en `errores`), la pasada termina y
+  guarda el cursor justo antes de él; la siguiente lo reintenta. En `/google` y `/actualizar`, la persona ve el error de
+  siempre y puede volver a intentar.
 - **Pase compartido:** quien tenga una captura del QR de socio puede intentar usar el beneficio (igual que con el portal).
   El enlace «Canjear» del pase genera códigos de canje de ese anfitrión: si se filtra, se corta con «Regenerar» o
   «Revocar» el botón «Canjear» en la ficha del miembro.

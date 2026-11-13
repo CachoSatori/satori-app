@@ -14,7 +14,7 @@ import {
   armarClase, armarObjeto, firmarJwtFlaco, leerCuentaServicio, urlGuardar, validarDatos, idObjeto, DISENO_POR_DEFECTO, configurarBaseClub,
   entornoValido, sinRolVigente, type PaseDatos, type DisenoPase,
 } from './googlePase.ts'
-import { sincronizar, vencerBajas, actualizarUno, guardarEnGoogle, tokenGoogle, type Fetch } from './sincronizar.ts'
+import { sincronizar, vencerBajas, actualizarUno, guardarEnGoogle, tokenGoogle, conTimeout, type Fetch } from './sincronizar.ts'
 
 export interface EnvPase {
   CLUB_WEB_KEY?: string
@@ -64,7 +64,8 @@ function diseno(env: EnvPase): DisenoPase {
  *   POST /club-pase/actualizar  x-club-web: <CLUB_WEB_KEY>  { token del portal } → «Actualizar mi pase»
  * Fallan cerradas sin sus secretos. `fetchFn` es la red hacia Google (inyectada para las pruebas).
  */
-export async function manejarSync(req: Request, ruta: 'sync' | 'vencer' | 'actualizar', env: EnvPase, rpc: Rpc, fetchFn: Fetch, ahora = new Date()): Promise<Response> {
+export async function manejarSync(req: Request, ruta: 'sync' | 'vencer' | 'actualizar', env: EnvPase, rpc: Rpc, fetchSinTope: Fetch, ahora = new Date()): Promise<Response> {
+  const fetchFn = conTimeout(fetchSinTope)   // (13-nov) ningún pedido a Google espera más de 15 s
   // (08-nov noche) el dominio del Club sale de CLUB_WEB_ORIGIN (= club_config_global.club_url); sin él, falla cerrada
   if (!configurarBaseClub(env.CLUB_WEB_ORIGIN)) return json(503, { error: 'servicio_no_disponible' })
   if (req.method !== 'POST') return json(405, { error: 'metodo' })
@@ -100,7 +101,8 @@ export async function manejarSync(req: Request, ruta: 'sync' | 'vencer' | 'actua
   } catch { return json(502, { error: 'servicio' }) }
 }
 
-export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc: Rpc, fetchFn: Fetch, ahora = new Date()): Promise<Response> {
+export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc: Rpc, fetchSinTope: Fetch, ahora = new Date()): Promise<Response> {
+  const fetchFn = conTimeout(fetchSinTope)   // (13-nov) ningún pedido a Google espera más de 15 s
   // (08-nov noche) el dominio del Club sale de CLUB_WEB_ORIGIN (= club_config_global.club_url); sin él, falla cerrada
   if (!configurarBaseClub(env.CLUB_WEB_ORIGIN)) return json(503, { error: 'servicio_no_disponible' })
   if (req.method !== 'POST') return json(405, { error: 'metodo' })

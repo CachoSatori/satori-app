@@ -1,5 +1,5 @@
 // B1: el flujo del Edge club-pase con una base simulada y una cuenta de servicio FALSA generada en memoria.
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { manejarPase, manejarSync, type EnvPase, type Rpc } from './edgePase'
 import { armarClase, armarObjeto, configurarBaseClub, type PaseDatos } from './googlePase'
 import { guardarEnGoogle } from './sincronizar'
@@ -52,6 +52,21 @@ function google(resp: { clase?: number; objeto?: number; patch?: number; token?:
 }
 const pedido = (cuerpo: unknown, headers: Record<string, string> = { 'x-club-web': CLAVE_WEB }, metodo = 'POST') =>
   new Request('https://edge.ejemplo/club-pase/google', { method: metodo, headers, body: metodo === 'POST' ? JSON.stringify(cuerpo) : undefined })
+
+/** Con reloj simulado: espera (en tiempo real) a que el pedido colgado arme su temporizador, avanza 1 ms menos que el
+ *  tope (no tiene que terminar) y después el ms que falta (tiene que terminar). */
+async function tope15s<T>(p: Promise<T>, tope: number): Promise<T> {
+  let hecho = false
+  const q = p.finally(() => { hecho = true })
+  for (let i = 0; i < 2000 && vi.getTimerCount() === 0; i++) await new Promise(r => setImmediate(r))
+  expect(vi.getTimerCount()).toBeGreaterThan(0)
+  await vi.advanceTimersByTimeAsync(tope - 1)
+  expect(hecho).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  for (let i = 0; i < 2000 && !hecho; i++) await new Promise(r => setImmediate(r))
+  expect(hecho).toBe(true)
+  return q
+}
 
 describe('club-pase (Edge)', () => {
   it('flujo completo: token → miembro → datos → JWT → registra el pase emitido', async () => {
@@ -255,6 +270,15 @@ describe('club-pase: rutas de B3 (sync y actualizar)', () => {
     const put = g.llamadas.filter(l => l.method === 'PUT').map(l => JSON.parse(l.body!))
     expect(put.map(b => b.state)).toEqual(['EXPIRED'])
     expect(put[0].barcode).toBeUndefined()
+  })
+  it('(13-nov) /google con Google colgado: a los 15 s responde 502 (no espera al límite del Edge)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { rpc } = base({ club_pase_por_token: { data: MIEMBRO, error: null }, club_pase_datos: { data: datos(), error: null } })
+      const colgado = (url: string) => (url.includes('oauth2') ? Promise.resolve({ status: 200, json: async () => ({ access_token: 't' }) }) : new Promise<never>(() => {}))
+      const p = manejarPase(pedido({ token: TOKEN }), 'google', env, rpc, colgado)
+      expect((await tope15s(p, 15_000)).status).toBe(502)
+    } finally { vi.useRealTimers() }
   })
   const SYNC = 's'.repeat(40)
   const googleOk = async (url: string) => ({ status: 200, json: async () => (url.includes('oauth2') ? { access_token: 't' } : {}) })

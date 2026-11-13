@@ -7,8 +7,8 @@ dueño. En prod, Claude solo hizo lo que firmó el dueño el 12-nov (el pase de 
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md).** Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
 está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
-> **Regla (Definition of Done):** ninguna entrega se cierra sin actualizar este bloque ⚡ARRANQUE, en el
-> mismo commit. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se
+> **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
+> en un PR de docs inmediato después del merge. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se
 > corrige el archivo.
 
 | Puntero | Hash | Qué es |
@@ -144,7 +144,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 - **🔐 SEC-03 y SEC-04 (05/11, rama `claude/brave-brown-m45jd7`, PR #28, migs 072 y 073):** escritura anónima en el CRM y lectura anónima de propinas y empleados. Aplicadas en staging (ledger 72) y **en prod el 05/11 ~20:05 UTC** (ledger 48 → 50), a mano antes del merge. `/registro` y el QR del CRM quedan apagados hasta la F1 del Club Satori. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
   `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
-- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1425 tests** (con env dummy, 06/11, con los de SoP) · lint 86 (sin nuevos).
+- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1819 tests** pasan (4 skipped; con env dummy, 13/11, sobre `main`) · lint **83 problemas** (75 errores y 8 avisos, 13/11).
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 - **🔐 SEC-01 (04/11, rama `claude/sec-01-perfiles`):**
   - **Paso A hecho en prod y staging:** `disable_signup=true` (antes `false`). El signup con anon da `422`.
@@ -164,10 +164,12 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
 
 1. **Supabase Branching corre `migrate` contra PROD en cada push a `main`.** La integración de GitHub está atada
    a `main` (una sola rama, `main`, sin previews). El log del run lo dice explícito
-   (`Connecting to database... All migrations are up to date.`). **Por eso las migraciones se aplican a mano en
-   prod ANTES del merge** (Management API, una transacción con el archivo exacto + su fila en
-   `supabase_migrations.schema_migrations`), se verifican, y recién después se mergea: Branching queda sin nada
-   que hacer. Así entraron 062–066 y la 067.
+   (`Connecting to database... All migrations are up to date.`). **Desde la 085, las migraciones entran por
+   merge → Supabase Branching**: el PR con el `.sql` se mergea y Branching corre `migrate` contra prod (así
+   entraron 085 y 089–095). **Lo de «a mano antes del merge» es histórico** (Management API, una
+   transacción con el archivo exacto + su fila en `supabase_migrations.schema_migrations`): así entraron 062–077
+   y la 081–082 del puente. Sigue valiendo solo si el dueño lo firma como excepción, y antes se verifica
+   el ref de la base.
 2. **Ningún PR a `main` con archivos bajo `supabase/functions/` hasta cerrar el ítem 11** (versionar
    `ingest-ndf` con `config.toml`). Sin `config.toml`, Branching despliega las funciones que cambian con
    `verify_jwt=true`, y el agente del PoS solo manda `x-ingest-secret` → 401 en cada ciclo.
@@ -183,7 +185,9 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
    con **`verify_jwt = false`**. club-web (Pages y el Worker) la llama solo con `apikey` y el portón es `x-club-web`: con
    `verify_jwt = true`, «Agregar a Google Wallet» y «Actualizar mi pase» responden 401. Hasta el ítem 11 su código vive
    en la rama `claude/club-pase-edge` y se despliega a mano (`docs/club-satori/WALLET-GOOGLE-ACTIVACION.md`).
-3. **No mergear a `main` durante el servicio (19–22 h CR).** Una sola sesión de CC mergea a `main` a la vez, cada una
+3. **Regla de merges D1 (decidida por el dueño el 13/11, hora de Costa Rica):** libre de 23:30 a 15:50 ·
+   bloqueado de 15:50 a 19:00 (cierre de caja de la mañana y preparación del servicio) · de 19:00 a 23:30 solo
+   con OK explícito del dueño en el momento. Una sola sesión de CC mergea a `main` a la vez, cada una
    solo sus PRs, y con el OK de Ismael.
 4. **«Ver como» usa los permisos del owner.** Sirve para ver lo que ve otro empleado, no para probar permisos:
    **los permisos se prueban con un usuario real de ese rol** (o simulando su JWT en una transacción

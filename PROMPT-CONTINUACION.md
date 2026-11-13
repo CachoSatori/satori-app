@@ -74,13 +74,13 @@
 2. **⏸️ POSPUESTO por Ismael (06/11): rotar los secretos de ingesta** (los 3: `POS_INGEST_SECRET` de prod y de staging y el `INGEST_SECRET` de BioTime, con su copia en los `.env` de la PC del PoS y de la PC del reloj). El plan está en el Paso 0 de CC del 06/11; ver también el handoff. **`claude-code-prod`:** Ismael tiene que identificarlo en Supabase → Account → Access Tokens antes de tocarlo. Si es la credencial de las sesiones de CC, se **reemplaza**: nunca se revoca solo.
 3. ✅ **SEC-02**: cerrado en prod el 06/11 (`monthly-report` v10 con `verify_jwt` on; el cron con `Authorization` desde el Vault).
 4. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las 6 funciones con su `verify_jwt` actual:
-   - `monthly-report` false · `extract-document` true · `cierre-email` true · `pago-notificar` true · `ingest-ndf` false · `alta-empleado` true;
+   - `monthly-report` **true** (v10+, SEC-02) · `extract-document` true · `cierre-email` true · `pago-notificar` true · `ingest-ndf` false · `alta-empleado` true;
    - el código de `alta-empleado` está en la rama `claude/alta-empleado-fn`;
    - **`supabase/functions/monthly-report/` de `main` es el código anterior a SEC-02.** El ítem 11 tiene que traer el código de la **v10** (y el de `alta-empleado`) **antes** de que Branching despliegue funciones, o pisaría la v10 de prod;
    - **ojo:** el `config.toml` también sincroniza `[auth]`/`[api]` de prod. Tiene que copiar la config actual (`disable_signup = true`, el `site_url` y los redirects nuevos, mínimo 8) o un merge la pisaría.
    - Hasta cerrarlo, **ningún PR a `main` con `supabase/functions/`**. Detalle: P2 #11 de abajo.
 5. ✅ **`staging` sincronizada con `main` el 06/11** (merge `4793cf3`, sin conflictos). Sigue abierto: al ledger de staging le faltan las filas 065/066 (ítem 15).
-6. **🔐 Mig 079 · SoP solo para usuarios activos:** `sops_read` (010) y `sops_storage_read` (077) pasan a exigir `public.get_my_role() is not null`. **Aplicada y probada en staging el 06/11**; en prod la aplica Branching al mergear su PR (OK de Ismael, fuera de 19–22 h). Detalle en [ESTADO.md](ESTADO.md) § Migraciones.
+6. **🔐 Mig 079 · SoP solo para usuarios activos:** `sops_read` (010) y `sops_storage_read` (077) pasan a exigir `public.get_my_role() is not null`. **Aplicada y probada en staging el 06/11**; en prod la aplica Branching al mergear su PR (OK de Ismael, según la regla de merges D1 de [ESTADO.md](ESTADO.md)). Detalle en [ESTADO.md](ESTADO.md) § Migraciones.
 
 **También abierto, sin orden:**
 - **Club Satori** F1–F3: la 075 y la 081 están solo en staging; PR único «Club Satori» (borrador, ⛔ no mergear hasta el piloto). Spec en [docs/club-satori/](docs/club-satori/).
@@ -437,7 +437,7 @@
    Hoy la función corre en prod como v1 desplegada a mano (`verify_jwt=false`) y su código vive en
    `integracion/analitica-staging`. Antes de traerla a `main`: estudiar qué más sincroniza un `config.toml` en la
    rama de producción (auth, API, otras funciones), declarar las 5 funciones con su `verify_jwt` actual
-   (monthly-report false · extract-document true · cierre-email true · pago-notificar true · ingest-ndf false) y
+   (monthly-report true desde SEC-02 (06/11; false era lo de antes) · extract-document true · cierre-email true · pago-notificar true · ingest-ndf false) y
    validar en un proyecto aparte. Con firma.
 
 12. **🖊️ Ventas · merch de mostrador (familia 21) en una categoría propia (decide Ismael).** Hoy una remera

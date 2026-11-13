@@ -1,9 +1,9 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 096 — agregar un alias de proveedor de forma ATÓMICA (RPC proveedor_agregar_alias).      ║
+-- ║ 153 (origen 096) — agregar un alias de proveedor de forma ATÓMICA (proveedor_agregar_alias). ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
--- ⚠ SIN FIRMA. No se mergea ni se aplica en prod sin la firma del dueño. Prod va por la 151: al armar el paquete del
--- pase se renumera al siguiente libre del bloque de PASE (regla 3), con origen 096.
+-- ⚠ SIN FIRMA. No se mergea ni se aplica en prod sin la firma del dueño. Creada como 096 (bloque caja); prod va por la
+-- 151, así que se renumeró a la 153 del bloque de PASE (regla 3), con origen 096. La 152 la usa el #140 (aviso del Club).
 --
 -- ── QUÉ CIERRA ─────────────────────────────────────────────────────────────────────────────
 -- El #161 hace que el asistente de Caja guarde el nombre leído de la factura como alias del proveedor. El cliente relee
@@ -35,8 +35,9 @@
 --   · Ni tablas, ni columnas, ni policies, ni plata. El cliente sigue funcionando sin esta migración (cae al UPDATE de
 --     hoy si la función no existe).
 --
--- Pruebas: scripts/sql/096_pruebas.sql (+ 096_pruebas.py; solo staging, transacción descartada).
--- Rollback: scripts/sql/096_rollback.sql.
+-- Pruebas: scripts/sql/153_pruebas.sql (+ 153_pruebas.py; solo staging, transacción descartada, toma los usuarios de
+-- la base: no necesita UUID externos).
+-- Rollback: scripts/sql/153_rollback.sql.
 
 begin;
 
@@ -53,7 +54,7 @@ as $$
 $$;
 
 comment on function public.proveedor_clave_alias(text) is
-  'Clave de nombre de proveedor (sin tildes, minúsculas, solo a-z0-9). Igual a claveProveedor del cliente. Mig 096.';
+  'Clave de nombre de proveedor (sin tildes, minúsculas, solo a-z0-9). Igual a claveProveedor del cliente. Mig 153.';
 
 create or replace function public.proveedor_agregar_alias(p_supplier_id uuid, p_alias text)
 returns boolean
@@ -88,7 +89,7 @@ end
 $$;
 
 comment on function public.proveedor_agregar_alias(uuid, text) is
-  'Agrega un alias al proveedor activo en un UPDATE atómico, sin duplicar por clave. INVOKER: decide la RLS de suppliers. Mig 096.';
+  'Agrega un alias al proveedor activo en un UPDATE atómico, sin duplicar por clave. INVOKER: decide la RLS de suppliers. Mig 153.';
 
 revoke all on function public.proveedor_clave_alias(text) from public;
 revoke all on function public.proveedor_agregar_alias(uuid, text) from public;
@@ -99,16 +100,16 @@ grant execute on function public.proveedor_agregar_alias(uuid, text) to authenti
 do $$
 begin
   if exists (select 1 from pg_proc where oid = 'public.proveedor_agregar_alias(uuid,text)'::regprocedure and prosecdef) then
-    raise exception '096: proveedor_agregar_alias tiene que ser SECURITY INVOKER';
+    raise exception '153: proveedor_agregar_alias tiene que ser SECURITY INVOKER';
   end if;
   if has_function_privilege('anon', 'public.proveedor_agregar_alias(uuid,text)', 'EXECUTE') then
-    raise exception '096: anon no puede ejecutar proveedor_agregar_alias';
+    raise exception '153: anon no puede ejecutar proveedor_agregar_alias';
   end if;
   if not has_function_privilege('authenticated', 'public.proveedor_agregar_alias(uuid,text)', 'EXECUTE') then
-    raise exception '096: authenticated tiene que poder ejecutar proveedor_agregar_alias';
+    raise exception '153: authenticated tiene que poder ejecutar proveedor_agregar_alias';
   end if;
   if public.proveedor_clave_alias('Exportadora Ñandú, S.A.') <> 'exportadoranandusa' then
-    raise exception '096: la clave no coincide con la del cliente';
+    raise exception '153: la clave no coincide con la del cliente';
   end if;
 end
 $$;

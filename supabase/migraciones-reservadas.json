@@ -96,7 +96,8 @@
     "096": {
       "nombre": "proveedor_agregar_alias",
       "bloque": "caja",
-      "rama": "claude/alias-proveedor-rpc"
+      "rama": "claude/alias-proveedor-rpc",
+      "renumerada_a": "153"
     },
     "100": {
       "nombre": "club_catalogo_locales",
@@ -115,6 +116,12 @@
       "bloque": "pase",
       "rama": "claude/pase-club",
       "origen": "100"
+    },
+    "153": {
+      "nombre": "proveedor_agregar_alias",
+      "bloque": "pase",
+      "rama": "claude/alias-proveedor-rpc",
+      "origen": "096"
     }
   }
 }

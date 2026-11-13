@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-Corre scripts/sql/096_pruebas.sql en STAGING: llena los marcadores (el cuerpo de la 096 y los UUID), todo dentro de una
-transacción que termina en ROLLBACK, y sale 1 si algún caso falla o no hay resultado.
+Corre scripts/sql/153_pruebas.sql (origen 096) en STAGING: llena el marcador con el cuerpo de la 153, todo dentro de una
+transacción que termina en ROLLBACK, y sale 1 si algún caso falla o no hay resultado. Los usuarios (cajero, contador,
+salonero activos) los elige la batería dentro de la transacción: no hacen falta UUID.
 
-  CAJERO_UUID=… CONTADOR_UUID=… SALONERO_UUID=… python3 scripts/sql/096_pruebas.py
-  … python3 scripts/sql/096_pruebas.py --mutar sin_dedup     # una mutación: tiene que caer al menos un caso (sale 1 si no)
-  … python3 scripts/sql/096_pruebas.py --mutar todas         # todas, una por una
-  … python3 scripts/sql/096_pruebas.py --armar [--mutar X]   # solo imprime el SQL armado (no conecta a nada)
+  python3 scripts/sql/153_pruebas.py
+  python3 scripts/sql/153_pruebas.py --mutar sin_dedup     # una mutación: tienen que caer sus casos (sale 1 si no)
+  python3 scripts/sql/153_pruebas.py --mutar todas         # todas, una por una
+  python3 scripts/sql/153_pruebas.py --armar [--mutar X]   # solo imprime el SQL armado (no conecta a nada)
 
-Cada mutación reemplaza un pedazo del cuerpo de la 096 (dentro de la transacción descartada) y declara qué casos caen.
+Cada mutación reemplaza un pedazo del cuerpo de la 153 (dentro de la transacción descartada) y declara qué casos caen.
+El ASSERT final de la batería aborta con «153-FALLAN: <casos>»: el runner lee los casos de ese error.
 Token de la Management API: el proxy (o SUPABASE_ACCESS_TOKEN). Ref fijo de staging.
 """
 from __future__ import annotations
@@ -17,9 +19,9 @@ from pathlib import Path
 
 REF = 'hwiatgicyyqyezqwldia'   # SOLO staging
 RAIZ = Path(__file__).resolve().parents[2]
-MIG = RAIZ / 'supabase/migrations/096_proveedor_agregar_alias.sql'
+MIG = RAIZ / 'supabase/migrations/153_proveedor_agregar_alias.sql'
 
-# nombre → (texto de la 096, reemplazo, casos que tienen que caer)
+# nombre → (texto de la 153, reemplazo, casos que tienen que caer)
 MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     'sin_dedup': ("where public.proveedor_clave_alias(a.x) = v_clave)", "where false)", {'2'}),
     'sin_nombre': ("     and public.proveedor_clave_alias(s.name) <> v_clave\n", '', {'3'}),
@@ -38,28 +40,24 @@ def cuerpo(mutar: str | None) -> str:
     if mutar:
         viejo, nuevo, _ = MUTACIONES[mutar]
         if mig.count(viejo) != 1:
-            sys.exit(f'mutación {mutar}: el ancla no está (o está repetida) en la 096')
+            sys.exit(f'mutación {mutar}: el ancla no está (o está repetida) en la 153')
         mig = mig.replace(viejo, nuevo)
-    # la verificación final de la 096 aborta con algunas mutaciones (definer, grant_anon, clave): en la batería se saca
+    # la verificación final de la 153 aborta con algunas mutaciones (definer, grant_anon, clave): en la batería se saca
     # para que caigan los CASOS, no la migración
     mig = re.sub(r'(?s)-- Verificación \(si algo.*?\n\$\$;\n', '', mig)
     return '\n'.join(l for l in mig.splitlines() if l.strip().lower() not in ('begin;', 'commit;'))
 
 
 def armar(mutar: str | None) -> str:
-    sql = (RAIZ / 'scripts/sql/096_pruebas.sql').read_text(encoding='utf-8')
-    sql, n = re.subn(r'(?m)^-- @@096@@.*$', lambda _: cuerpo(mutar), sql)
+    sql = (RAIZ / 'scripts/sql/153_pruebas.sql').read_text(encoding='utf-8')
+    sql, n = re.subn(r'(?m)^-- @@153@@.*$', lambda _: cuerpo(mutar), sql)
     if n != 1:
-        sys.exit('096_pruebas.sql: falta el marcador «-- @@096@@» (o está repetido)')
-    for k in ('CAJERO', 'CONTADOR', 'SALONERO'):
-        v = os.environ.get(f'{k}_UUID')
-        if not v or not re.fullmatch(r'[0-9a-f-]{36}', v):
-            sys.exit(f'falta {k}_UUID')
-        sql = sql.replace(f'<{k}_UUID>', v)
+        sys.exit('153_pruebas.sql: falta el marcador «-- @@153@@» (o está repetido)')
     return sql
 
 
 def correr(sql: str) -> list[dict]:
+    """Casos de la batería. Si el ASSERT final abortó, arma la lista desde «153-FALLAN: …» (solo los que cayeron)."""
     req = urllib.request.Request(f'https://api.supabase.com/v1/projects/{REF}/database/query', method='POST',
                                  data=json.dumps({'query': sql}).encode(),
                                  headers={'Authorization': f"Bearer {os.environ.get('SUPABASE_ACCESS_TOKEN', 'x')}",
@@ -68,7 +66,11 @@ def correr(sql: str) -> list[dict]:
         with urllib.request.urlopen(req, timeout=120) as r:
             res = json.loads(r.read())
     except urllib.error.HTTPError as e:
-        sys.exit(f'ERROR: {e.read().decode()[:400]}')
+        txt = e.read().decode()
+        m = re.search(r'153-FALLAN: ([0-9,]+)', txt)
+        if m:
+            return [{'caso': c, 'ok': False, 'detalle': 'ASSERT'} for c in m.group(1).split(',')]
+        sys.exit(f'ERROR: {txt[:400]}')
     casos = res[0].get('json_agg') if isinstance(res, list) and res else None
     if not isinstance(casos, list) or not casos:
         sys.exit(f'SIN RESULTADO: {str(res)[:400]}')

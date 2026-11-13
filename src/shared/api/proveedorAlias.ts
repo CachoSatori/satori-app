@@ -1,8 +1,8 @@
 // (D12 = A, 13-nov) Guarda un alias aprendido en `suppliers.aliases`. No toca plata.
-// Camino principal: la RPC `proveedor_agregar_alias` (mig 096), que agrega el alias en UN UPDATE atómico (dos cajas a la
+// Camino principal: la RPC `proveedor_agregar_alias` (mig 153), que agrega el alias en UN UPDATE atómico (dos cajas a la
 // vez ya no se pisan), no duplica por la clave de matchSupplier y solo con el proveedor activo. Es SECURITY INVOKER:
 // decide la RLS de suppliers (suppliers_op_write: owner, manager, cajero).
-// Respaldo: si la base todavía no tiene la 096 (función inexistente), cae al método de antes — relee los alias FRESCOS
+// Respaldo: si la base todavía no tiene la 153 (función inexistente), cae al método de antes — relee los alias FRESCOS
 // y hace UPDATE del array —, así el front se puede mergear antes o después de la migración.
 import { supabase } from './supabase'
 import { sumarAlias } from '../utils/proveedorAlias'
@@ -12,7 +12,7 @@ export type ResultadoAlias = 'agregado' | 'ya_estaba'
 type PgError = { message: string; code?: string } | null
 type RpcInvoke = (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: PgError }>
 
-/** ¿El error dice que la función no existe en la base (sin la 096)? PostgREST: PGRST202; Postgres: 42883. */
+/** ¿El error dice que la función no existe en la base (sin la 153)? PostgREST: PGRST202; Postgres: 42883. */
 export const esFuncionInexistente = (e: PgError) =>
   !!e && (e.code === 'PGRST202' || e.code === '42883' || /could not find the function/i.test(e.message))
 

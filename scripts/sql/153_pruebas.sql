@@ -1,19 +1,31 @@
--- 096_pruebas · SOLO STAGING. Aplica la 096 dentro de una transacción, prueba y termina en ROLLBACK: no deja nada.
--- Devuelve un JSON con cada caso y ok. Se corre con scripts/sql/096_pruebas.py (sale 1 si algún caso falla).
+-- 153_pruebas (origen 096) · SOLO STAGING. Aplica la 153 dentro de una transacción, prueba y termina en ROLLBACK: no
+-- deja nada. Devuelve un JSON con cada caso y ok, y al final un ASSERT: si algún caso falla, aborta con
+-- «153-FALLAN: <casos>». Se corre con scripts/sql/153_pruebas.py, o a mano con el SQL armado (153_pruebas.py --armar).
 --
--- MARCADORES que llena el runner (este archivo no se corre tal cual):
---   · la línea «-- @@096@@ …» → el cuerpo de supabase/migrations/096_proveedor_agregar_alias.sql sin begin; / commit;
---     (la 096 es re-ejecutable: también vale sobre un staging que ya la tiene);
---   · «-- @@MUTAR@@» → vacío, o el SQL de una mutación (096_pruebas.py --mutar N): deshace un arreglo a propósito y
---     algún caso tiene que caer;
---   · <CAJERO_UUID>, <CONTADOR_UUID> y <SALONERO_UUID> → usuarios ACTIVOS de staging con ese rol.
+-- MARCADOR que llena el runner: la línea «-- @@153@@ …» → el cuerpo de supabase/migrations/153_proveedor_agregar_alias.sql
+-- sin begin; / commit; (es re-ejecutable: también vale sobre un staging que ya la tiene). Con --mutar, ese cuerpo va con
+-- un arreglo deshecho a propósito y algún caso tiene que caer.
+-- Usuarios: un cajero, un contador y un salonero ACTIVOS de la base, elegidos acá adentro (caso 00: si falta alguno,
+-- falla: NO PROBADO no da verde). El JWT se simula con set_config('request.jwt.claims', …, true).
 -- Proveedores de prueba con nombres ficticios; todo se descarta con el rollback.
 begin;
--- @@096@@   (aquí va el cuerpo de la 096 sin begin/commit)
--- @@MUTAR@@
+-- @@153@@   (aquí va el cuerpo de la 153 sin begin/commit)
 create temp table _r96 (n serial, caso text, ok boolean, detalle text) on commit drop;
 grant all on _r96 to authenticated;
 grant usage on sequence _r96_n_seq to authenticated;
+create temp table _u96 on commit drop as
+select r.rol, (select p.id from public.profiles p where p.role::text = r.rol and p.is_active order by p.id limit 1) as id
+  from unnest(array['cajero', 'contador', 'salonero']) as r(rol);
+-- claims de un rol de prueba (o sin sub si no hay usuario: el caso 00 ya falla)
+create function pg_temp.jwt96(p_rol text) returns text language sql as $f$
+  select json_build_object('sub', (select id from _u96 where rol = p_rol), 'role', 'authenticated')::text
+$f$;
+
+-- 00. hay un cajero, un contador y un salonero activos para probar
+insert into _r96 (caso, ok, detalle)
+select '00 hay cajero, contador y salonero activos en la base', bool_and(id is not null),
+       'faltan: ' || coalesce(string_agg(rol, ', ') filter (where id is null), '—')
+  from _u96;
 
 insert into public.suppliers (id, name, is_active, aliases) values
   ('00000000-0000-4000-8000-000000000961', 'Proveedor Prueba Noventa', true,  array['Legal Uno, S.A.']),
@@ -32,7 +44,7 @@ select '0 catálogo: INVOKER · anon sin EXECUTE · authenticated con EXECUTE',
 do $$
 declare r boolean; v text[];
 begin
-  perform set_config('request.jwt.claims', json_build_object('sub', '<CAJERO_UUID>', 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', pg_temp.jwt96('cajero'), true);
   set local role authenticated;
 
   -- 1. agrega y conserva los que había
@@ -72,7 +84,7 @@ end $$;
 
 -- 7. alias corto (clave < 4) → 22023
 do $$ begin
-  perform set_config('request.jwt.claims', json_build_object('sub', '<CAJERO_UUID>', 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', pg_temp.jwt96('cajero'), true);
   set local role authenticated;
   perform public.proveedor_agregar_alias('00000000-0000-4000-8000-000000000961', 'S. A.');
   reset role;
@@ -84,7 +96,7 @@ end $$;
 
 -- 8. alias vacío (solo puntuación) → 22023
 do $$ begin
-  perform set_config('request.jwt.claims', json_build_object('sub', '<CAJERO_UUID>', 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', pg_temp.jwt96('cajero'), true);
   set local role authenticated;
   perform public.proveedor_agregar_alias('00000000-0000-4000-8000-000000000961', ' ,.- ');
   reset role;
@@ -98,7 +110,7 @@ end $$;
 do $$
 declare r boolean; vio boolean;
 begin
-  perform set_config('request.jwt.claims', json_build_object('sub', '<CONTADOR_UUID>', 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', pg_temp.jwt96('contador'), true);
   set local role authenticated;
   vio := exists (select 1 from public.suppliers where id = '00000000-0000-4000-8000-000000000961');
   r := public.proveedor_agregar_alias('00000000-0000-4000-8000-000000000961', 'Alias Del Contador');
@@ -118,7 +130,7 @@ end $$;
 do $$
 declare r boolean;
 begin
-  perform set_config('request.jwt.claims', json_build_object('sub', '<SALONERO_UUID>', 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', pg_temp.jwt96('salonero'), true);
   set local role authenticated;
   r := public.proveedor_agregar_alias('00000000-0000-4000-8000-000000000961', 'Alias Del Salonero');
   reset role;
@@ -151,4 +163,13 @@ select '12 clave = claveProveedor del cliente',
        and public.proveedor_clave_alias(null) = '', null;
 
 select json_agg(json_build_object('caso', caso, 'ok', ok, 'detalle', detalle) order by n) from _r96;
+
+-- ASSERT: si algún caso falla, la transacción aborta y dice cuáles
+do $$
+declare v text;
+begin
+  select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r96 where not ok;
+  if v is not null then raise exception '153-FALLAN: %', v; end if;
+  if (select count(*) from _r96) <> 14 then raise exception '153-FALLAN: se esperaban 14 casos'; end if;
+end $$;
 rollback;

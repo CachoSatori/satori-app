@@ -11,6 +11,15 @@ Estado vivo, reglas operativas y punteros: [ESTADO.md](ESTADO.md). Backlog: [PRO
 - Las guías siguen [docs/sop-app/PLANTILLA.md](docs/sop-app/PLANTILLA.md) y el mapa de módulos está en
   [docs/sop-app/INVENTARIO.md](docs/sop-app/INVENTARIO.md).
 
+## Skills del repo (`.claude/skills/`)
+
+- `satori-estandar-pr`: al arrancar cualquier cambio que termina en un PR (rama, sagrados, gate, pruebas, guía, privacidad, reporte).
+- `satori-revision-pr`: para revisar un PR que hizo otra sesión, con hallazgos y veredicto (listo / cambios / bloquea).
+- `satori-migraciones-y-prod`: antes de crear una migración, tocar una base, una Edge Function o un secreto.
+- `satori-merge-y-deploy`: con el OK del dueño para mergear a `main`: ventana horaria, merge y verificación del deploy.
+
+Si una skill y `ESTADO.md` no coinciden, gana `ESTADO.md` y se corrige la skill.
+
 ## Repo público
 
 Nunca al repo: nombres de personas, clientes o proveedores, teléfonos, correos, cédulas, contraseñas, llaves o

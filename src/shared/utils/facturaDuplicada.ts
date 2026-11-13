@@ -194,14 +194,19 @@ export function politicaBandeja<T>(rev: DocRevisado<T>[]): { entran: T[]; bloque
 }
 
 // ── (D11 = B, 13-nov) La MISMA foto subida otra vez después de cargar solo algunas de sus facturas ───────────────────
-export const msgProgreso = (k: number, i: number, parcial: { registradas: number; total: number } | null) =>
-  parcial && i === 1 && parcial.registradas === 0
-    ? `Esta foto ya se había cargado: no se puede saber cuáles de sus ${parcial.total} facturas ya están registradas. Factura 1 de ${k}.`
-    : parcial && i === 1
-    ? `Esta foto ya se cargó en parte: ${parcial.registradas} de ${parcial.total} facturas ya están registradas. Te quedan ${k}: Factura 1 de ${k}.`
-    : MSG_VARIAS_FACTURAS(k, i)
+export const msgProgreso = (k: number, i: number, parcial: { registradas: number; total: number; enBandeja?: number } | null) => {
+  if (!parcial || i !== 1) return MSG_VARIAS_FACTURAS(k, i)
+  // (re-verificación) No afirma que las otras estén sin registrar: dice que hay que revisarlas.
+  const revisar = k === 1 ? 'Revisá la otra: Factura 1 de 1.' : `Revisá las otras ${k} una por una: Factura 1 de ${k}.`
+  if (parcial.registradas === 0) {
+    return `Esta foto ya se había cargado: no se reconoció ninguna de sus ${parcial.total} facturas como registrada. ${k === 1 ? 'Revisala: Factura 1 de 1.' : `Revisalas una por una: Factura 1 de ${k}.`}`
+  }
+  const b = parcial.enBandeja ?? 0
+  const bandeja = b ? ` (${b === 1 ? '1 está' : `${b} están`} en la Bandeja esperando confirmación)` : ''
+  return `Esta foto ya se había cargado: ${parcial.registradas} de ${parcial.total} facturas ya están registradas${bandeja}. ${revisar}`
+}
 export const MSG_INDETERMINADA = (cuando: string) =>
-  `Esta foto ya se había cargado${cuando ? ` (el ${cuando})` : ''} y no se puede saber si esta factura ya está registrada. Si es otra, tocá «Es otra»; si no, «Saltear esta factura».`
+  `Esta foto ya se había cargado${cuando ? ` (el ${cuando})` : ''} y no se puede confirmar si esta factura ya se pagó. Revisá en Pagos a proveedores: si no está, tocá «Es otra»; si ya está, «Saltear esta factura».`
 // (verificación #154) La misma factura dos veces en una foto, comparada contra las YA registradas en esta pasada.
 export const MSG_YA_EN_ESTA_CARGA = 'Esta factura (misma clave FE) ya se registró en esta misma foto. No se va a registrar otra vez: tocá «Saltear esta factura».'
 export const MSG_PARECIDA_EN_ESTA_CARGA = 'Ya registraste una factura igual en esta misma foto (mismo proveedor, número y total). Si es otra, tocá «Es otra»; si no, «Saltear esta factura».'
@@ -229,12 +234,14 @@ export function enEstaPasada(ex: Leida, registradas: Leida[]): 'clave' | 'pareci
 /**
  * (D11 = B) Cruza las facturas leídas de una foto contra los documentos VIGENTES de ese mismo sha. Registrada: primero
  * por clave FE; si la factura no tiene clave, por `mismaFactura`. Cada documento previo cuenta para UNA factura.
- * `dudas[i]`: no registrada con certeza, pero queda algún documento previo de la foto sin emparejar que podría ser ella
- * (sin clave de un lado o del otro) → la pantalla la trata como «parecida» (nunca se registra sola).
+ * (re-verificación #154) `dudas[i]`: TODA factura no reconocida es duda, aunque no quede ningún documento libre ni
+ * las claves difieran: su pago puede existir SIN documento (en la primera pasada el movimiento se creó y el enlace
+ * falló). La pantalla la trata como «parecida»: nunca se confirma sin «Es otra». `enBandeja`/`docBandeja`: las
+ * reconocidas que están en la Bandeja esperando confirmación («nuevo»), para que el aviso lo diga.
  */
 export function cruzarConFoto<P extends ConFecha & { clave_fe?: string | null; raw_json?: Leida | null }>(
   docs: Leida[], previos: P[],
-): { registradas: boolean[]; dudas: (P | null)[] } {
+): { registradas: boolean[]; dudas: (P | null)[]; enBandeja: number; docBandeja: P | null } {
   const usados = new Set<number>()
   const registradas = docs.map(() => false)
   docs.forEach((d, i) => {
@@ -249,11 +256,8 @@ export function cruzarConFoto<P extends ConFecha & { clave_fe?: string | null; r
     if (j >= 0) { usados.add(j); registradas[i] = true }
   })
   const libres = previos.filter((_, k) => !usados.has(k))
-  const dudas = docs.map((d, i) => {
-    if (registradas[i] || !libres.length) return null
-    const c = normClave(d.clave_fe)
-    if (c && libres.every(p => normClave(p.clave_fe ?? p.raw_json?.clave_fe))) return null   // claves distintas: es otra
-    return libres[0]
-  })
-  return { registradas, dudas }
+  const ref = libres[0] ?? previos[previos.length - 1] ?? null   // para la fecha del aviso
+  const dudas = docs.map((_, i) => (registradas[i] ? null : ref))
+  const enBandejaDocs = previos.filter((p, k) => usados.has(k) && p.estado === 'nuevo')
+  return { registradas, dudas, enBandeja: enBandejaDocs.length, docBandeja: enBandejaDocs[0] ?? null }
 }

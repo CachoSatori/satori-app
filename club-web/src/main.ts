@@ -13,7 +13,7 @@
  */
 import './styles.css'
 import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
-import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY } from './config'
+import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 
 let idioma: Idioma = idiomaInicial()
@@ -332,8 +332,36 @@ async function paginaPortal(token: string) {
   ]
   pintar(
     h('h1', {}, t.portal_hola(p.nombre)),
+    botonWallet(token, true),   // B2: un pase por persona (socio y/o anfitrión); en el portal, también «Actualizar mi pase»
     ...pestanas(p.socio ? [seccionSocio(token, p.socio)] : [], anfitrion),
   )
+}
+
+// ── B2: «Agregar a Google Wallet» (apagado por flag hasta desplegar el Edge) ──
+// (12-nov) En el portal, además, «Actualizar mi pase»: el piloto no tiene sincronización automática.
+function botonWallet(token: string, conActualizar = false): HTMLElement | null {
+  if (!WALLET_GOOGLE_ACTIVO || !/^[0-9a-f]{64}$/.test(token)) return null
+  const err = h('div')
+  const b = h('button', { type: 'button', class: 'btn sec' }, t.wallet_boton) as HTMLButtonElement
+  b.addEventListener('click', async () => {
+    b.disabled = true; b.textContent = t.wallet_generando; err.replaceChildren()
+    const r = await api<{ url: string }>(`portal/${token}/wallet`, { method: 'POST' })
+    if (r.ok && r.data?.url?.startsWith('https://pay.google.com/gp/v/save/')) { location.href = r.data.url; return }
+    b.disabled = false; b.textContent = t.wallet_boton
+    err.append(avisoEl('err', r.ok ? t.wallet_error : r.error === 'servicio' || r.error === 'servicio_no_disponible' ? t.wallet_error : msgError(r.error)))
+  })
+  if (!conActualizar) return h('div', { class: 'wallet' }, b, err)
+  const act = h('button', { type: 'button', class: 'btn sec' }, t.wallet_actualizar) as HTMLButtonElement
+  act.addEventListener('click', async () => {
+    act.disabled = true; act.textContent = t.wallet_actualizando; err.replaceChildren()
+    const r = await api<{ resultado: 'actualizado' | 'sin_pase' | 'baja' }>(`portal/${token}/wallet/actualizar`, { method: 'POST' })
+    act.disabled = false; act.textContent = t.wallet_actualizar
+    if (r.ok && r.data?.resultado === 'actualizado') { err.append(avisoEl('ok', t.wallet_actualizado)); return }
+    if (r.ok && r.data?.resultado === 'sin_pase') { err.append(avisoEl('ok', t.wallet_sin_pase)); return }
+    if (r.ok && r.data?.resultado === 'baja') { err.append(avisoEl('ok', t.wallet_baja)); return }
+    err.append(avisoEl('err', !r.ok && r.error !== 'servicio' && r.error !== 'servicio_no_disponible' ? msgError(r.error) : t.wallet_actualizar_error))
+  })
+  return h('div', { class: 'wallet' }, b, act, err)
 }
 
 // ── LC-A2: socio del Local Club ──────────────────────────────────────────────
@@ -430,7 +458,9 @@ async function paginaAlta() {
         const portal = r.data?.portal
         pintar(h('h1', {}, t.alta_titulo), avisoEl('ok', portal ? t.alta_listo : t.alta_listo_sin_link),
           portal && portal.startsWith(`${CLUB_BASE_URL}/p/`)
-            ? h('a', { class: 'btn', href: new URL(portal).pathname }, t.alta_portal) : null)
+            ? h('a', { class: 'btn', href: new URL(portal).pathname }, t.alta_portal) : null,
+          // B2: el pase en estado pendiente, al final de la autoalta (solo con el link del portal de una persona nueva)
+          portal && portal.startsWith(`${CLUB_BASE_URL}/p/`) ? botonWallet(new URL(portal).pathname.split('/').pop() ?? '') : null)
         anunciar(portal ? t.alta_listo : t.alta_listo_sin_link)
         return
       }

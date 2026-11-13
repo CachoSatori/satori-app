@@ -84,3 +84,35 @@ Las otras seis subieron una versión por el cambio de secretos; su código no ca
 - Encender los botones (`VITE_WALLET_GOOGLE`) recién con la aprobación de publicación de Google y la firma del dueño.
 - Imágenes del pase: verificar que `https://club.satoricostarica.com/pase/logo.png` y `hero.png` responden 200 (la
   sesión no llega a ese dominio). Solo se usan al emitir un pase; hoy no se emite ninguno.
+
+## Redespliegue c0369d5 (13-nov)
+**Firma:** el dueño, 13-nov-2026 (en el chat del asesor), sobre **`c0369d5`** de `claude/club-pase-edge` (PR #160: lote de
+200, filtro por pases emitidos, tope de 90 s, timeout de 15 s por pedido a Google, purgados por id fijo, campo
+`trabado_en`). Solo `club-pase`: **sin migraciones, sin tocar datos ni secretos, sin merges.** Probado antes en staging
+(300 eventos de miembros sin pase en 2 corridas de menos de 1 s, ya vencido y purga simulada).
+
+| Paso | Hora CR | Resultado |
+|---|---|---|
+| 0. Antes (solo lectura) | 12:00 | `club-pase` **v1** · off · `63818f6d5458` (= `d8f0280`, la vuelta atrás). Cursor `google` en **3002** (el último evento), 0 pendientes, 0 pases emitidos |
+| 1. Despliegue | 12:00:25 | `club-pase` **v2** · `verify_jwt` **off** · hash `6fd3c5bb5d5a…` |
+| 2. Humo | 12:00:29 | `/google` sin `x-club-web` → **401** · `/vencer` sin `x-club-pase-sync` → **401** |
+| 3. Cron del Worker | 12:00:55 | Primera corrida sobre la v2: el contador de llamadas a `club_pase_cursor_leer` pasó de 10 a 11 (`pg_stat_statements`). `/vencer` lo llama **después** del portón: la clave del Worker pasó (un 401 no lo cuenta). 0 eventos: el cursor queda en 3002, lo esperado. **Segunda corrida** a las **12:10:56** (contador 11 → 12): el cron sigue llamando cada 10 min |
+| 4. El resto | 12:01 | Las otras 6 funciones con **la misma versión y el mismo hash** que en el paso 0 (no hubo cambio de secretos) · tickets del PoS entrando (última ingesta 12:00:59) |
+
+**Antes / después:**
+
+| Función | Antes | Después |
+|---|---|---|
+| `club-pase` | v1 · off · `63818f6d5458` | **v2** · off · `6fd3c5bb5d5a` |
+| `extract-document` | v15 · on · `2f88ef52b498` | igual |
+| `ingest-ndf` | v9 · **off** · `cf6442cf20a5` | igual |
+| `monthly-report` | v17 · on · `12f040db8c16` | igual |
+| `cierre-email` | v9 · on · `36ff59eed179` | igual |
+| `pago-notificar` | v9 · on · `0e47a0350843` | igual |
+| `alta-empleado` | v8 · on · `f11ee8d21994` | igual |
+
+**No verificado:** el código HTTP y la duración de la corrida del cron en los logs (el endpoint de logs no estaba al
+alcance de la sesión). La señal usada es el contador de `pg_stat_statements`; para el 200 y el tiempo: panel de Supabase
+→ Edge Functions → `club-pase` → Logs, o los logs del Worker (`club-pase-vencer`).
+
+**Vuelta atrás:** volver a desplegar `d8f0280` (hash `63818f6d5458`), o borrar la función.

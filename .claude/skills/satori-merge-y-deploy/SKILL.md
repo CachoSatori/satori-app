@@ -9,11 +9,13 @@ Mergear a `main` **es** desplegar: GitHub Pages publica la app, Branching corre 
 Cloudflare construye `satori-club` y el Worker `satori-club-api` desde `main`.
 
 ## 1. Ventana horaria (hora de Costa Rica, UTC-6)
-- [ ] **Nunca entre las 17:00 y las 23:00 CR.** Es la regla más estricta vigente (decisión del dueño en
-      `docs/handoffs/HANDOFF-2026-11-11.md` §4 y prerrequisito 0.3 de cada PASE). La regla 3 de `ESTADO.md` dice 19–22 h
-      (el servicio); manda la más estricta. Una excepción solo vale si el dueño la escribe en su firma.
-- [ ] Lejos de los cierres de caja: el del turno mañana (~16:00) y el de la noche (~23:00). No mergear mientras se
-      está cerrando, ni con la caja abierta en servicio. Después de las 23:00, esperar a que el cierre de la noche termine.
+- [ ] Regla D1 (decisión del dueño, 13-nov-2026):
+      - 08:00–15:50: se mergea libre.
+      - 15:50–17:00: congelado (cierre de caja del turno mañana, nunca antes de las 16:00).
+      - 17:00–19:00: solo con OK explícito del dueño en el momento.
+      - 19:00–23:30: no se mergea (servicio y cierre de la noche).
+      - Después de 23:30: libre.
+      Una excepción solo vale si el dueño la escribe en su firma.
 - [ ] Una sola sesión mergea a `main` a la vez, cada una solo sus PRs (regla 3). Nadie más pushea a `main` en la ventana.
 - [ ] Hora real: `TZ=America/Costa_Rica date` (no la del contenedor).
 
@@ -32,8 +34,8 @@ Cloudflare construye `satori-club` y el Worker `satori-club-api` desde `main`.
 - [ ] La vuelta atrás está escrita (revert del merge + rollback SQL si aplica).
 
 ## 3. El merge
-- [ ] Sacar el borrador: `gh pr ready <n>` (usa GraphQL; si no está disponible, avisar: la API REST no saca un PR de
-      borrador y un borrador no se puede mergear).
+- [ ] Sacar el borrador por REST: `gh api -X POST repos/CachoSatori/satori-app/pulls/<n>/ccr/ready_for_review`
+      (para volver a borrador: `.../ccr/convert_to_draft`). Un borrador no se puede mergear.
 - [ ] Mergear con **merge commit** atado al SHA firmado:
       `gh api -X PUT repos/CachoSatori/satori-app/pulls/<n>/merge -f merge_method=merge -f sha=<cabeza firmada>`.
 - [ ] Anotar el SHA del merge y la hora `-06:00`.

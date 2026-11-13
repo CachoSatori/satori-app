@@ -16,7 +16,7 @@ Estado vivo, reglas operativas y punteros: [ESTADO.md](ESTADO.md). Backlog: [PRO
 - `satori-estandar-pr`: al arrancar cualquier cambio que termina en un PR (rama, sagrados, gate, pruebas, guía, privacidad, reporte).
 - `satori-revision-pr`: para revisar un PR que hizo otra sesión, con hallazgos y veredicto (listo / cambios / bloquea).
 - `satori-migraciones-y-prod`: antes de crear una migración, tocar una base, una Edge Function o un secreto.
-- `satori-merge-y-deploy`: con el OK del dueño para mergear a `main`: ventana horaria, merge y verificación del deploy.
+- `satori-merge-y-deploy`: con el OK del dueño para mergear a `main`: ventana horaria (regla D1: libre 08:00–15:50, congelado 15:50–17:00, 17:00–19:00 solo con OK del dueño, sin merge 19:00–23:30, libre después), merge y verificación del deploy.
 
 Si una skill y `ESTADO.md` no coinciden, gana `ESTADO.md` y se corrige la skill.
 

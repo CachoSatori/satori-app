@@ -29,6 +29,8 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 | `GET /api/portal/{token}` | `club_portal` | 60 por minuto |
 | `POST /api/portal/{token}/canje` | `club_canje_codigo_generar` | 5 por minuto |
 | `POST /api/portal/{token}/baja` | `club_socio_baja_portal` | 5 por minuto |
+| `POST /api/portal/{token}/wallet` | Edge `club-pase` (B1) → link «Save to Google Wallet» (corto: solo los IDs) | 5 por minuto |
+| `POST /api/portal/{token}/wallet/actualizar` | Edge `club-pase` → «Actualizar mi pase» (`actualizado`, `sin_pase` o `baja`) | 5 por minuto |
 | `POST /api/pase/{token_pase}/canje` | `club_canje_codigo_generar_pase` | 5 por minuto |
 | `POST /api/alta` `{nombre, whatsapp, acepto, ref?, turnstile}` | `club_socio_autoalta` (después de Turnstile) | 5 por minuto · tope global por día en SQL (`socio_autoalta_max_dia`, 60) |
 
@@ -43,6 +45,10 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
   llamar a la base. **Sin el secreto, responde 503.** En staging se usan las claves de prueba de Cloudflare (siempre
   pasan): la del sitio por defecto en `src/config.ts` y la secreta `1x0000000000000000000000000000000AA`. En prod,
   `VITE_TURNSTILE_SITEKEY` (variable de build) y `TURNSTILE_SECRET` las carga Ismael.
+- **Google Wallet (B2):** el botón «Agregar a Google Wallet» (portal y final de la autoalta) y, en el portal,
+  «Actualizar mi pase» aparecen solo si el build tiene `VITE_WALLET_GOOGLE=1`. Van **apagados** hasta que el Edge
+  `club-pase` esté desplegado con sus secretos y Google apruebe la publicación (en modo demo solo las cuentas de prueba
+  pueden guardar el pase). Pasos: `docs/club-satori/WALLET-GOOGLE-ACTIVACION.md`.
 - **Dominio (08-nov noche):** sale de la variable de build **`VITE_CLUB_URL`** (`https://<dominio>`, sin barra final);
   no está escrito en el código ni en los textos de club-web. **Sin la variable (o mal formada) el build de producción
   falla y el sitio no arranca** (09-nov; en desarrollo usa el origen donde corre). Para

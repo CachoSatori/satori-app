@@ -32,10 +32,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          # Misma clave que deploy.yml (package-lock.json de la raíz): los PR reusan el cache que guarda main.
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            club-web/package-lock.json
 
       - name: App · npm ci
         run: npm ci

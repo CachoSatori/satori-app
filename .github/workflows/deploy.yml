@@ -21,10 +21,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # Node 22: con Node 20 las pruebas no corren (@supabase/realtime-js exige WebSocket nativo al crear el
+      # cliente). El build da lo mismo; es la versión con la que se trabaja en local y la que usa ci.yml.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies

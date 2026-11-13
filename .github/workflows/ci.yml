@@ -26,11 +26,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # Node 20, igual que deploy.yml: si algo depende de la versión de Node, aparece acá antes que en el deploy.
+      # Node 22, igual que deploy.yml. Con Node 20 las pruebas no corren: @supabase/realtime-js exige WebSocket
+      # nativo (Node 22+) al crear el cliente (corrida 43374987628 de este PR).
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: |
             package-lock.json

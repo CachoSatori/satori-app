@@ -1,13 +1,25 @@
 /**
  * (13-nov, decisiones del dueño) Reglas de duplicados de facturas, PURAS (sin red), para el asistente «Agregar» de Caja,
  * «➕ Agregar foto» de Caja/Proveedores y la Bandeja:
- *  · misma foto (sha256) o misma clave FE → BLOQUEA, sin excepción de rol (eso lo hacen las pantallas con findDuplicate);
+ *  · misma foto (sha256) o misma clave FE de un documento VIGENTE (`documentoVigente`) → BLOQUEA, sin excepción de rol
+ *    (eso lo hacen las pantallas con findDuplicate); los huérfanos y los descartados no cuentan;
  *  · mismo proveedor + mismo número + mismo total con OTRA foto → AVISO no bloqueante («Es otra»): `mismaFactura`.
  */
 
 /** Número de factura comparable: sin espacios ni signos, en mayúsculas y sin ceros a la izquierda («0354099» = «354099»). */
 export function normNumero(n: string | null | undefined): string {
   return String(n ?? '').toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/^0+(?=.)/, '')
+}
+
+/**
+ * (13-nov) ¿Cuenta este documento para los duplicados? Solo los VIGENTES: los «nuevo» (en la Bandeja, esperando) y los
+ * «procesado» que siguen enlazados a un movimiento. NO cuentan los «descartado» ni los huérfanos («procesado» cuyo
+ * movimiento se borró: la FK deja `linked_movement_id` en null). Si no, el huérfano bloquearía la recarga legítima de
+ * esa misma factura (pasó el 12-nov: movimiento borrado a las 17:01, la misma foto recargada a las 17:26).
+ */
+export function documentoVigente(d: { estado?: string | null; linked_movement_id?: string | null }): boolean {
+  if (d.estado === 'nuevo') return true
+  return d.estado === 'procesado' && !!d.linked_movement_id
 }
 
 /** Nombre de proveedor comparable: sin acentos, minúsculas y espacios simples. */

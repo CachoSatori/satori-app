@@ -1,6 +1,6 @@
 // (13-nov) Reglas de duplicados de facturas (decisiones del dueño): puras, sin red.
 import { describe, it, expect } from 'vitest'
-import { normNumero, mismaFactura, fechaCortaCR, revisarDocumentos, politicaPantalla, politicaBandeja } from './facturaDuplicada'
+import { normNumero, mismaFactura, fechaCortaCR, revisarDocumentos, politicaPantalla, politicaBandeja, documentoVigente } from './facturaDuplicada'
 
 const F = { proveedor: 'Distribuidora Ejemplo S.A.', numero_documento: '0354099', total: 25000, moneda: 'CRC' }
 
@@ -65,5 +65,15 @@ describe('políticas: asistente / Caja-Proveedores y Bandeja', () => {
     const b = politicaBandeja(await revisarDocumentos(docs, deps([CLAVE], ['3'])))
     expect(b.entran.map(d => d.numero_documento)).toEqual(['2', '3'])
     expect(b).toMatchObject({ bloqueados: 1, parecidos: 1, cuandoBloqueo: '11-nov 14:00' })
+  })
+})
+
+describe('documentoVigente (13-nov): solo los vigentes cuentan para duplicados', () => {
+  it('«nuevo» (Bandeja) y «procesado» enlazado cuentan; huérfano y descartado no', () => {
+    expect(documentoVigente({ estado: 'nuevo', linked_movement_id: null })).toBe(true)
+    expect(documentoVigente({ estado: 'procesado', linked_movement_id: 'mov-1' })).toBe(true)
+    expect(documentoVigente({ estado: 'procesado', linked_movement_id: null })).toBe(false)   // su movimiento se borró
+    expect(documentoVigente({ estado: 'descartado', linked_movement_id: null })).toBe(false)
+    expect(documentoVigente({ estado: 'descartado', linked_movement_id: 'mov-1' })).toBe(false)
   })
 })

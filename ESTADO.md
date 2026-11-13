@@ -357,6 +357,29 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 
 ### Pendientes de estabilización
 
+- **Caja · documentos huérfanos al borrar un movimiento. DESPUÉS DEL PILOTO** (decisión del dueño, 12-nov: Inventario
+  todavía no se usa). Sin migración ni script por ahora.
+  - **Qué pasa:** `delete_movement_cascade` (en prod, la versión de la 053; el bug viene desde la 043) busca los
+    documentos por `linked_movement_id = p_movement_id` en la FASE 8, **después** de que la FASE 7 borró el movimiento.
+    Para entonces la FK `documents_linked_movement_id_fkey … ON DELETE SET NULL` ya dejó el vínculo en null: el
+    documento queda `procesado`, sin vínculo y sin limpiar (huérfano). Solo se limpian los que salen de
+    `inventory_movements` (`v_doc_ids`).
+  - **Medido en prod (solo lectura, 12-nov):** 114 documentos `procesado` sin vínculo. 112 se pueden limpiar; los
+    otros 2 los referencian `inventory_movements` o `ingredient_prices` y se deciden aparte. 9 de ellos se
+    ven hoy en «Inventario pendiente» de la Bandeja.
+  - **No tocan la plata:** caja, caja fuerte y cierres leen solo `cash_movements` (confirmado leyendo el código, 12-nov).
+    En el front, `documents` solo da la foto (FacturaVerify) y la nota «⚠ sin foto» de CashTurno. En la base, solo la
+    leen `delete_movement_cascade` y el trigger `unif_on_cash_movement`, que toma el `document_id` para la tarea de
+    revisión de inventario. Ninguna vista la usa.
+  - **Propuesta:**
+    1. Una migración nueva que, antes de la FASE 7, sume a `v_doc_ids` los documentos con
+       `linked_movement_id = p_movement_id`, con una prueba que falla sin el arreglo.
+    2. Un script en una transacción, con conteo antes y después y respaldo, que limpie los 112. Hay que decidir si se
+       marcan `descartado`, que guarda la fila y la foto (lo recomendado), o si se borran como pretendía la D5.
+    3. Las dos cosas, con la firma del dueño.
+  - **Mientras tanto:** el control de duplicados del #149 ignora los huérfanos y los descartados, así que un huérfano no
+    bloquea la recarga legítima de su factura.
+
 - **Propinas · reparto semanal de cocina:** mover la exclusión del reparto de cocina de un nombre fijo en el código a una marca en la base (requiere spec y firma: toca propinas).
 - **Privacidad · datos reales que siguen en el repo público** (tras #56 y #57, que limpiaron comentarios, tests y docs).
   No se sacaron porque hacerlo cambia el comportamiento o porque la zona está bloqueada:

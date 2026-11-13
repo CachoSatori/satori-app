@@ -1,6 +1,6 @@
 // (12-nov, opción c del dueño) La sincronización del piloto SOLO vence los pases de las bajas. Base y Google simulados.
-import { describe, it, expect, beforeAll } from 'vitest'
-import { vencerBajas, actualizarUno, API_WALLET, URL_TOKEN, type Rpc, type Fetch } from './sincronizar'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { vencerBajas, actualizarUno, API_WALLET, URL_TOKEN, LOTE_VENCER, TOPE_MS_VENCER, TIMEOUT_GOOGLE_MS, conTimeout, type Rpc, type Fetch } from './sincronizar'
 import { configurarBaseClub, type CuentaServicio, type PaseDatos } from './googlePase'
 configurarBaseClub('https://club.ejemplo.test')
 
@@ -9,6 +9,7 @@ const A = '00000000-0000-4000-8000-0000000000aa'   // dado de baja (estado baja)
 const B = '00000000-0000-4000-8000-0000000000bb'   // activo: un canje, no es baja
 const C = '00000000-0000-4000-8000-0000000000cc'   // activo pero sin ningún rol vigente (el socio se dio de baja en el portal)
 const D = '00000000-0000-4000-8000-0000000000dd'   // dado de baja
+const P = '00000000-0000-4000-8000-0000000000ee'   // (13-nov) autoalta purgada: en baja, sin roles y SIN fila en club_pases
 
 const base = (id: string, over: Partial<PaseDatos> = {}): PaseDatos => ({
   contrato: 1, miembro_id: id, version: 9, actualizado_en: '2026-11-12T19:20:00Z', nombre_pila: 'Cami', estado: 'activo',
@@ -24,6 +25,7 @@ const DATOS: Record<string, PaseDatos> = {
   [C]: base(C, { pestanas: [], anfitrion: null, codigo_barras: null,
                  socio: { estado: 'baja', desde: '2026-11-01', qr_url: 'https://club.ejemplo.test/s/ABCD2345K', beneficio: null, visitas_mes: 0, cortesias: [] } }),
   [D]: base(D, { estado: 'baja' }),
+  [P]: base(P, { estado: 'baja', nombre_pila: 'Purgado', pestanas: [], anfitrion: null, codigo_barras: null, socio: null }),
 }
 
 let sa: CuentaServicio
@@ -36,8 +38,10 @@ beforeAll(async () => {
 /** (13-nov) Google simulado con un «almacén» de objetos: GET devuelve el objeto, PUT lo REEMPLAZA (lo que no va se
  *  borra) y PATCH lo MEZCLA (lo que no va queda: así quedaba el QR). Cada pase guardado arranca ACTIVE y con QR. */
 const qr = (m: string) => ({ type: 'QR_CODE', value: `https://club.ejemplo.test/r/${m.slice(-4)}`, alternateText: m.slice(-4) })
-function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id: string | null }>;
-                        google?: (miembro: string) => number; token?: number; datosError?: string; sinPase?: string[] }) {
+function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id: string | null; motivo?: string }>;
+                        google?: (miembro: string) => number; token?: number; datosError?: string; sinPase?: string[]
+                        /** (13-nov) miembros con pase de Google emitido en la base (por defecto A, B, C y D). */
+                        emitidos?: string[]; emitidosError?: boolean }) {
   const rpcs: Array<{ fn: string; args: Record<string, unknown> }> = []
   const patch: Array<{ id: string; metodo: string; body: { state: string; id: string; barcode?: unknown } }> = []
   const almacen = new Map<string, Record<string, unknown>>()
@@ -49,7 +53,13 @@ function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id
   const rpc: Rpc = async (fn, args) => {
     rpcs.push({ fn, args })
     if (fn === 'club_pase_cursor_leer') return { data: o.cursor ?? 10, error: null }
-    if (fn === 'club_pase_eventos_leer') return { data: o.eventos, error: null }
+    if (fn === 'club_pase_eventos_leer') return { data: o.eventos.slice(0, Number(args.p_limite)), error: null }
+    if (fn === 'club_pases_emitidos') {
+      if (o.emitidosError) return { data: null, error: { message: 'x' } }
+      const todos = [...(o.emitidos ?? [A, B, C, D])].sort()
+      const desde = todos.filter(m => args.p_despues === null || m > String(args.p_despues))
+      return { data: desde.slice(0, Number(args.p_limite)).map(m => ({ miembro_id: m, object_id: `o-${m}`, emitido_en: '2026-11-12T19:20:00Z' })), error: null }
+    }
     if (fn === 'club_pase_datos') {
       if (o.datosError === args.p_miembro) return { data: null, error: { message: 'x' } }
       return { data: DATOS[String(args.p_miembro)] ?? null, error: null }
@@ -71,12 +81,27 @@ function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id
     almacen.set(id, nuevo)
     return { status: 200, json: async () => structuredClone(nuevo) }
   }
-  const deps = (entorno: 'prod' | 'stg' = 'prod') => {
-    for (const m of [A, B, C, D]) if (!(o.sinPase ?? []).includes(m) && !almacen.has(`${ISSUER}.club${entorno === 'stg' ? '-stg' : ''}-${m}`)) guardar(entorno, m)
+  const deps = (entorno: 'prod' | 'stg' = 'prod'): Parameters<typeof vencerBajas>[0] => {
+    for (const m of [A, B, C, D, P]) if (!(o.sinPase ?? []).includes(m) && !almacen.has(`${ISSUER}.club${entorno === 'stg' ? '-stg' : ''}-${m}`)) guardar(entorno, m)
     return { rpc, fetch: fetchFn, sa, issuer: ISSUER, entorno }
   }
   const cursorGuardado = () => rpcs.filter(r => r.fn === 'club_pase_cursor_guardar').map(r => r.args.p_id)
   return { deps, rpcs, patch, almacen, cursorGuardado }
+}
+
+/** Con reloj simulado: espera (en tiempo real) a que el pedido colgado arme su temporizador, avanza 1 ms menos que el
+ *  tope (no tiene que terminar) y después el ms que falta (tiene que terminar). */
+async function tope15s<T>(p: Promise<T>, tope: number): Promise<T> {
+  let hecho = false
+  const q = p.finally(() => { hecho = true })
+  for (let i = 0; i < 2000 && vi.getTimerCount() === 0; i++) await new Promise(r => setImmediate(r))
+  expect(vi.getTimerCount()).toBeGreaterThan(0)
+  await vi.advanceTimersByTimeAsync(tope - 1)
+  expect(hecho).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  for (let i = 0; i < 2000 && !hecho; i++) await new Promise(r => setImmediate(r))
+  expect(hecho).toBe(true)
+  return q
 }
 
 describe('vencerBajas (opción c, piloto)', () => {
@@ -231,5 +256,173 @@ describe('vencerEnGoogle: el estado se compara sin distinguir mayúsculas', () =
     e.almacen.get(`${ISSUER}.club-${A}`)!.state = 'expired'   // así lo devuelve Google en staging
     expect(await vencerBajas(d)).toMatchObject({ vencidos: 0, ya_vencidos: 1 })
     expect(e.patch).toHaveLength(1)
+  })
+})
+
+// (13-nov, prod) La primera corrida del cron (500 eventos) dio 504: una RPC de datos y un GET a Google por miembro, en
+// serie, y el cursor recién al final. Ahora: una lectura de pases emitidos por lote, tope de 90 s y lote de 200.
+const uuid = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`
+describe('vencerBajas rápido (13-nov)', () => {
+  it('500 eventos de miembros SIN pase emitido → 0 RPC de datos, 0 llamadas a Google, todos sin_pase', async () => {
+    const eventos = Array.from({ length: 500 }, (_, i) => ({ id: 11 + i, miembro_id: uuid(1000 + i) }))
+    const e = escenario({ eventos, emitidos: [A, B] })
+    const llamadas: string[] = []
+    const d = e.deps()
+    const r = await vencerBajas({ ...d, limite: 500, fetch: async (u, i) => { llamadas.push(u); return d.fetch(u, i) } })
+    expect(e.rpcs.filter(x => x.fn === 'club_pase_datos')).toHaveLength(0)
+    expect(llamadas).toEqual([])
+    expect(r).toMatchObject({ eventos: 500, miembros: 500, sin_pase: 500, con_pase: 0, vencidos: 0, cursor_despues: 510, cortado_por_tiempo: false })
+    expect(e.rpcs.filter(x => x.fn === 'club_pases_emitidos')).toHaveLength(1)   // UNA lectura por lote
+  })
+
+  it('mezcla: de muchos miembros, solo los 2 con pase emitido van a la base y a Google', async () => {
+    const otros = Array.from({ length: 40 }, (_, i) => uuid(2000 + i))
+    const eventos = [...otros.slice(0, 20), A, ...otros.slice(20), D].map((m, i) => ({ id: 11 + i, miembro_id: m }))
+    const e = escenario({ eventos, emitidos: [A, D] })
+    const llamadas: string[] = []
+    const d = e.deps()
+    const r = await vencerBajas({ ...d, fetch: async (u, i) => { llamadas.push(u); return d.fetch(u, i) } })
+    expect(e.rpcs.filter(x => x.fn === 'club_pase_datos').map(x => x.args.p_miembro)).toEqual([A, D])
+    const objetos = new Set(llamadas.filter(u => u !== URL_TOKEN).map(u => decodeURIComponent(u.split('/').pop()!)))
+    expect([...objetos]).toEqual([`${ISSUER}.club-${A}`, `${ISSUER}.club-${D}`])
+    expect(r).toMatchObject({ con_pase: 2, vencidos: 2, sin_pase: 40, cursor_despues: 11 + 41 })
+  })
+
+  it('reloj que pasa 90 s a la mitad → corta, cursor en el último procesado (antes del primer NO procesado), cortado_por_tiempo', async () => {
+    // A (eventos 11 y 14), B activo (12), C (13), D (15). El reloj salta 90 s después de procesar B.
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: B }, { id: 13, miembro_id: C },
+                                    { id: 14, miembro_id: A }, { id: 15, miembro_id: D }] })
+    let t = 1_000_000
+    const d = e.deps()
+    const rpc: Rpc = async (fn, args) => { const x = await d.rpc(fn, args); if (fn === 'club_pase_datos' && args.p_miembro === B) t += TOPE_MS_VENCER; return x }
+    const r = await vencerBajas({ ...d, rpc, reloj: () => t })
+    expect(r).toMatchObject({ cortado_por_tiempo: true, vencidos: 1, sin_cambio: 1, cursor_despues: 12 })
+    expect(e.cursorGuardado()).toEqual([12])
+    expect(e.rpcs.filter(x => x.fn === 'club_pase_datos').map(x => x.args.p_miembro)).toEqual([A, B])
+    // la pasada siguiente sigue desde el 13 y termina el resto, sin repetir el PUT de A
+    const e2 = escenario({ cursor: 12, eventos: [{ id: 13, miembro_id: C }, { id: 14, miembro_id: A }, { id: 15, miembro_id: D }] })
+    for (const [k, v] of e.almacen) e2.almacen.set(k, v)
+    const r2 = await vencerBajas(e2.deps())
+    expect(r2).toMatchObject({ cortado_por_tiempo: false, vencidos: 2, ya_vencidos: 1, cursor_despues: 15 })
+  })
+
+  it('sin pasar los 90 s no corta (frontera: 89.999 s)', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }] })
+    let t = 0
+    const d = e.deps()
+    const rpc: Rpc = async (fn, args) => { const x = await d.rpc(fn, args); if (fn === 'club_pase_datos') t += TOPE_MS_VENCER / 2 - 1; return x }
+    expect(await vencerBajas({ ...d, rpc, reloj: () => t })).toMatchObject({ cortado_por_tiempo: false, vencidos: 2, cursor_despues: 12 })
+  })
+
+  it('si la lista de pases emitidos falla, no toca nada y el cursor no se mueve', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }], emitidosError: true })
+    const r = await vencerBajas(e.deps())
+    expect(r).toMatchObject({ vencidos: 0, cursor_despues: 10 })
+    expect(r.errores).toContain('pases emitidos')
+    expect(e.cursorGuardado()).toEqual([])
+    expect(e.rpcs.filter(x => x.fn === 'club_pase_datos')).toHaveLength(0)
+  })
+
+  it('pases emitidos paginados: un miembro en la segunda página igual se mira', async () => {
+    const Z = 'ffffffff-0000-4000-8000-000000000000'
+    const muchos = Array.from({ length: 2000 }, (_, i) => uuid(i))
+    expect(muchos.every(m => m < Z)).toBe(true)   // todos van antes que Z en el orden: Z cae en la página 2
+    const e = escenario({ eventos: [{ id: 11, miembro_id: Z }], emitidos: [...muchos, Z] })
+    expect(await vencerBajas(e.deps())).toMatchObject({ con_pase: 1, sin_pase: 0 })
+    expect(e.rpcs.filter(x => x.fn === 'club_pase_datos').map(x => x.args.p_miembro)).toEqual([Z])
+    expect(e.rpcs.filter(x => x.fn === 'club_pases_emitidos')).toHaveLength(2)
+  })
+
+  it('lote por defecto de 200; con pase pero activo, ni GET ni PUT (el socio activo no se toca)', async () => {
+    const e = escenario({ eventos: Array.from({ length: 300 }, (_, i) => ({ id: 11 + i, miembro_id: i === 0 ? B : uuid(3000 + i) })) })
+    const llamadas: string[] = []
+    const d = e.deps()
+    const r = await vencerBajas({ ...d, fetch: async (u, i) => { llamadas.push(u); return d.fetch(u, i) } })
+    expect(LOTE_VENCER).toBe(200)
+    expect(e.rpcs.find(x => x.fn === 'club_pase_eventos_leer')!.args.p_limite).toBe(200)
+    expect(r).toMatchObject({ eventos: 200, con_pase: 1, sin_cambio: 1, cursor_despues: 210 })
+    expect(llamadas).toEqual([])
+    expect(e.almacen.get(`${ISSUER}.club-${B}`)).toMatchObject({ state: 'ACTIVE', barcode: qr(B) })
+  })
+})
+
+// (13-nov) Google colgado: cada pedido tiene tope (15 s). El miembro cuenta como transitorio, el cursor queda antes de él.
+describe('timeout por pedido a Google (13-nov)', () => {
+  const colgado: Fetch = () => new Promise(() => {})   // nunca contesta y no mira la señal
+  it('conTimeout corta un pedido colgado con «timeout de Google» y le pasa una señal a la red', async () => {
+    await expect(conTimeout(colgado, 20)('https://x.ejemplo/', { method: 'GET', headers: {} })).rejects.toThrow('timeout de Google')
+    let senal: AbortSignal | undefined
+    const r = await conTimeout(async (_u, i) => { senal = i.signal; return { status: 200, json: async () => ({}) } }, 20)('https://x.ejemplo/', { method: 'GET', headers: {} })
+    expect(r.status).toBe(200)
+    expect(senal).toBeInstanceOf(AbortSignal)
+    expect(TIMEOUT_GOOGLE_MS).toBe(15_000)
+  })
+
+  it('vencerBajas: Google cuelga con D → A vencido, cursor justo antes de D, C no se toca, la corrida termina y guarda', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }, { id: 13, miembro_id: C }] })
+    const d = e.deps()
+    const f: Fetch = (u, i) => (u.includes(D) ? colgado(u, i) : d.fetch(u, i))
+    const r = await vencerBajas({ ...d, fetch: f, timeoutGoogleMs: 20 })
+    expect(r).toMatchObject({ vencidos: 1, cursor_despues: 11 })
+    expect(r.errores.join()).toMatch(/timeout de Google/)
+    expect(e.cursorGuardado()).toEqual([11])
+    expect(e.almacen.get(`${ISSUER}.club-${C}`)).toMatchObject({ state: 'ACTIVE' })   // no se siguió con C
+  })
+
+  it('con el tope por defecto (15 s, reloj simulado) la corrida no queda colgada', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }] })
+      const d = e.deps()
+      const p = vencerBajas({ ...d, fetch: (u, i) => (u === URL_TOKEN ? d.fetch(u, i) : colgado(u, i)) })
+      const r = await tope15s(p, TIMEOUT_GOOGLE_MS)
+      expect(r).toMatchObject({ vencidos: 0, cursor_despues: 10 })
+      expect(r.errores.join()).toMatch(/timeout de Google/)
+    } finally { vi.useRealTimers() }
+  })
+})
+
+// (13-nov, verificación independiente) La purga de autoaltas borra la fila de `club_pases` y deja al miembro en baja: sin
+// registro, /vencer lo contaba `sin_pase` y su QR quedaba vigente. Ahora un evento `datos` lo hace mirar igual.
+describe('purga de autoaltas y trabado_en (13-nov)', () => {
+  const purga = [{ id: 11, miembro_id: P, motivo: 'rol' }, { id: 12, miembro_id: P, motivo: 'datos' }]
+  it('purgado CON pase en Google (sin registro) → se vence por su id, sin QR', async () => {
+    const e = escenario({ eventos: purga })
+    const r = await vencerBajas(e.deps())
+    expect(r).toMatchObject({ con_pase: 0, revisados_sin_registro: 1, vencidos: 1, sin_pase: 0, cursor_despues: 12, trabado_en: null })
+    expect(e.patch.map(x => [x.metodo, x.id])).toEqual([['PUT', `${ISSUER}.club-${P}`]])
+    expect(e.almacen.get(`${ISSUER}.club-${P}`)).toMatchObject({ state: 'EXPIRED' })
+    expect(e.almacen.get(`${ISSUER}.club-${P}`)!.barcode).toBeUndefined()
+  })
+  it('en staging, el id del ambiente («club-stg-»)', async () => {
+    const e = escenario({ eventos: purga })
+    await vencerBajas(e.deps('stg'))
+    expect(e.patch.map(x => x.id)).toEqual([`${ISSUER}.club-stg-${P}`])
+  })
+  it('purgado SIN pase en Google → GET 404 → sin_pase, sin escribir', async () => {
+    const e = escenario({ eventos: purga, sinPase: [P] })
+    const r = await vencerBajas(e.deps())
+    expect(r).toMatchObject({ revisados_sin_registro: 1, vencidos: 0, sin_pase: 1, cursor_despues: 12 })
+    expect(e.patch).toEqual([])
+  })
+  it('sin registro, con evento `datos` pero ACTIVO → solo la base, nunca Google; sin `datos` → ni la base', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: B, motivo: 'datos' }, { id: 12, miembro_id: D, motivo: 'rol' }], emitidos: [] })
+    const llamadas: string[] = []
+    const d = e.deps()
+    const r = await vencerBajas({ ...d, fetch: async (u, i) => { llamadas.push(u); return d.fetch(u, i) } })
+    expect(e.rpcs.filter(x => x.fn === 'club_pase_datos').map(x => x.args.p_miembro)).toEqual([B])
+    expect(llamadas).toEqual([])
+    expect(r).toMatchObject({ revisados_sin_registro: 1, sin_pase: 2, vencidos: 0, cursor_despues: 12 })
+  })
+  it('trabado_en: error transitorio → id del evento desde el que reintenta; corte por tiempo → null', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }, { id: 13, miembro_id: A }], google: m => (m === D ? 503 : 200) })
+    expect(await vencerBajas(e.deps())).toMatchObject({ cursor_despues: 11, trabado_en: 12 })
+    const f = escenario({ eventos: [{ id: 11, miembro_id: A }], emitidosError: true })
+    expect(await vencerBajas(f.deps())).toMatchObject({ cursor_despues: 10, trabado_en: 11 })
+    let t = 0
+    const g = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: D }] })
+    const dg = g.deps()
+    const rpc: Rpc = async (fn, args) => { const x = await dg.rpc(fn, args); if (fn === 'club_pase_datos') t += TOPE_MS_VENCER; return x }
+    expect(await vencerBajas({ ...dg, rpc, reloj: () => t })).toMatchObject({ cortado_por_tiempo: true, cursor_despues: 11, trabado_en: null })
   })
 })

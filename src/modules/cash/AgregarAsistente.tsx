@@ -144,12 +144,12 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   // (13-nov, el dueño — #149) `docs`: los documentos de la foto POR CARGAR; `idx`: el que se está cargando ahora
   // (`extracted` = docs[idx]). Con 2 o más, el asistente los carga UNO POR UNO sin cerrarse: cada uno es su propio
   // movimiento y su propio documento «procesado» (mismo path/sha). Nada va a la Bandeja como «nuevo» desde acá.
-  // (D11 = B) `parcial`: la MISMA foto ya se había cargado en parte → `docs` son solo las que faltan (R de N ya estaban);
-  // `dudas[i]`: no se puede saber si la factura i ya está registrada → se trata como «parecida» (Es otra / Saltear).
+  // (D11 = B) `parcial`: la MISMA foto ya se había cargado → `docs` son solo las NO reconocidas (R de N sí);
+  // `dudas[i]`: TODAS las no reconocidas: no se puede confirmar si ya se pagaron → «parecida» (Es otra / Saltear).
   // `fallo`: la lectura falló (≠ la IA no vio documentos). `parecida`: aviso no bloqueante: hay que tocar «Es otra».
   type Foto = {
     path: string; sha: string; fallo: boolean; docs: DocExtract[]
-    parcial?: { registradas: number; total: number } | null
+    parcial?: { registradas: number; total: number; enBandeja?: number } | null
     dudas?: (ConFecha | null)[]
   }
   const [photo, setPhoto] = useState<(Foto & { idx: number; extracted: DocExtract | null }) | null>(null)
@@ -212,7 +212,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     } else {
       setPendiente(null)
       setAviso(null)
-      const duda = base.dudas?.[idx] ?? null
+      // D11: con la foto ya vista, toda factura ofrecida es duda (aunque falte el documento de referencia).
+      const duda = base.parcial ? (base.dudas?.[idx] ?? { created_at: '' }) : null
       setParecida(rev?.parecida ? { texto: MSG_PARECIDA(fechaCortaCR(rev.parecida.created_at), String(ex?.numero_documento ?? '')) }
         : enPasada === 'parecida' ? { texto: MSG_PARECIDA_EN_ESTA_CARGA }
         : duda ? { texto: MSG_INDETERMINADA(fechaCortaCR(duda.created_at)) }
@@ -304,10 +305,13 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         const previos = await findDocsPorSha(shaFoto)
         const cruce = cruzarConFoto(lect.documentos, previos)
         const faltan = lect.documentos.map((d, i) => ({ d, i })).filter(x => !cruce.registradas[x.i])
-        if (!faltan.length) { bloquear(); return }
+        // Todas reconocidas: el bloqueo de siempre; si alguna está en la Bandeja, el aviso lo dice (D11, punto 3).
+        if (!faltan.length) { setAviso(mensajeBloqueo('foto', cruce.docBandeja ?? dupFoto, 'caja')); return }
+        // (re-verificación) Las NO reconocidas son TODAS duda (cruce.dudas): puede que su pago exista sin documento
+        // (enlace caído en la primera pasada). Nunca se confirman directo: «Es otra» o «Saltear».
         base = {
           path: dupFoto.image_path, sha: shaFoto, fallo: false, docs: faltan.map(x => x.d),
-          parcial: { registradas: lect.documentos.length - faltan.length, total: lect.documentos.length },
+          parcial: { registradas: lect.documentos.length - faltan.length, total: lect.documentos.length, enBandeja: cruce.enBandeja },
           dudas: faltan.map(x => cruce.dudas[x.i]),
         }
       } else {

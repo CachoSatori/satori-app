@@ -12,7 +12,7 @@ import { getSuppliers, getAllCashMovements, updateMovementStatus, getOpenCashSes
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { listDocsNeedingInventory } from '../../shared/api/inventoryIngest'
 import type { Supplier, CashMovement, UserRole } from '../../shared/types/database'
-import { fi } from '../cash/cashUtils'
+import { fi, fd } from '../cash/cashUtils'
 import { tipShiftToCaja } from '../../shared/utils'
 import { PAGO_META, isLocalRole, type Pago } from '../../shared/utils/pagoMatrix'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
@@ -209,7 +209,7 @@ export default function InboxModule() {
                     <div style={{ fontWeight: 700, fontSize: '0.92rem', marginTop: '0.4rem', color: 'var(--t-ink)' }}>{ex?.proveedor || '— sin leer —'}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#5a5040', marginTop: '0.2rem' }}>
                       <span>{ex?.fecha || doc.created_at.slice(0, 10)}</span>
-                      <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{ex?.total ? `${ex.moneda === 'USD' ? '$' : '₡'}${N(ex.total).toLocaleString('es-CR')}` : '—'}</span>
+                      <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{ex?.total ? (ex.moneda === 'USD' ? fd(N(ex.total)) : fi(N(ex.total))) : '—'}</span>
                     </div>
                   </div>
                 </div>

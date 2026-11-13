@@ -44,6 +44,13 @@ function abrirYSacarFoto() {
   const input = document.querySelector('input[type="file"]') as HTMLInputElement
   fireEvent.change(input, { target: { files: [new File(['d'], 'f.jpg', { type: 'image/jpeg' })] } })
 }
+// (13-nov, caso B) El aviso tiene que estar DENTRO del modal (no en onError → banner detrás del overlay).
+async function avisoEnModal(texto: string | RegExp) {
+  const el = await screen.findByText(typeof texto === 'string' ? `⚠ ${texto}` : texto)
+  expect(el.closest('[role="alert"]')).not.toBeNull()
+  expect(el.closest('.cd-modal')).not.toBeNull()
+  return el.textContent ?? ''
+}
 const confirmarBtn = () => screen.getByRole('button', { name: /Confirmar y registrar/ }) as HTMLButtonElement
 
 beforeEach(() => {
@@ -78,7 +85,7 @@ describe('asistente «Agregar» — fotos (13-nov)', () => {
   it('misma foto ya cargada → BLOQUEA: no sube, no lee, no abre el formulario', async () => {
     m.dupFoto.mockResolvedValue({ id: 'x', created_at: '2026-11-12T23:32:00Z' })
     abrirYSacarFoto()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/Esta foto ya fue cargada \(el 12-nov 17:32\)/)))
+    await avisoEnModal(/Esta foto ya fue cargada \(el 12-nov 17:32\)/)
     expect(m.uploadSpy).not.toHaveBeenCalled()
     expect(m.leer).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
@@ -88,7 +95,7 @@ describe('asistente «Agregar» — fotos (13-nov)', () => {
     m.leer.mockResolvedValue({ documentos: [doc({ clave_fe: CLAVE }), doc({ numero_documento: '2002' })], fallo: false })
     m.dupClave.mockResolvedValue({ id: 'x', created_at: '2026-11-11T20:00:00Z' })
     abrirYSacarFoto()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/misma clave FE\) ya fue cargada/)))
+    await avisoEnModal(/misma clave FE\) ya fue cargada/)
     expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
     expect(m.createDocSpy).not.toHaveBeenCalled()
     expect(m.createSpy).not.toHaveBeenCalled()
@@ -128,9 +135,8 @@ describe('asistente «Agregar» — avisos después del pago (13-nov, verificaci
     await screen.findByText(/Esta foto tiene 3 documentos/)
     fireEvent.click(confirmarBtn())
     await waitFor(() => expect(m.createDocSpy).toHaveBeenCalledTimes(3))
-    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1))
-    const msg = onError.mock.calls[0][0]
-    expect(msg).toBe('El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces. Tampoco pasaron 2 documento(s) más de la foto: avisá al encargado.')
+    const msg = (await avisoEnModal('El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces. Tampoco pasaron 2 documento(s) más de la foto: avisá al encargado.')).slice(2)
+    expect(screen.getAllByRole('alert').filter(a => /El pago se registró/.test(a.textContent ?? ''))).toHaveLength(1)   // UN solo aviso
     expect(msg).not.toMatch(/sub[ií] la foto a la Bandeja/)
     expect(m.createSpy).toHaveBeenCalledTimes(1)
   })
@@ -140,8 +146,9 @@ describe('asistente «Agregar» — avisos después del pago (13-nov, verificaci
     abrirYSacarFoto()
     await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Pescadería del Pacífico'))
     fireEvent.click(confirmarBtn())
-    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1))
-    expect(onError).toHaveBeenCalledWith('El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces.')
+    await avisoEnModal('El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces.')
+    expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()   // «listo»: no se puede pagar dos veces
+    expect(onError).not.toHaveBeenCalled()
   })
 
   it('fallan solo los extras (el enlace entró) → «cargá cada uno con su propia foto»', async () => {
@@ -150,14 +157,13 @@ describe('asistente «Agregar» — avisos después del pago (13-nov, verificaci
     abrirYSacarFoto()
     await screen.findByText(/Esta foto tiene 3 documentos/)
     fireEvent.click(confirmarBtn())
-    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1))
-    expect(onError).toHaveBeenCalledWith('El pago se registró, pero 2 documento(s) más de la foto no pasaron a la Bandeja: cargá cada uno con su propia foto.')
+    await avisoEnModal('El pago se registró, pero 2 documento(s) más de la foto no pasaron a la Bandeja: cargá cada uno con su propia foto.')
   })
 
   it('no se pudo verificar si la foto ya está cargada → aviso de conexión; no sube, no abre el formulario, no crea nada', async () => {
     m.dupFoto.mockRejectedValue(new Error('No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'))
     abrirYSacarFoto()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith('No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'))
+    await avisoEnModal('No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.')
     expect(m.uploadSpy).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
     expect(m.createSpy).not.toHaveBeenCalled()

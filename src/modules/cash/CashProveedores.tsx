@@ -494,7 +494,8 @@ export function PagoFoto({ movement, doc, createdBy, onAdded, onRefresh }: {
         {busy ? '⏳ subiendo…' : '➕ Agregar foto'}
         <input type="file" accept="image/*" capture="environment" hidden onChange={onPick} disabled={busy} />
       </label>
-      {err && <span style={{ color: 'var(--c-laca)' }}>{err}</span>}
+      {/* (13-nov, caso B) El bloqueo se ve al lado del botón, como alerta en su propia línea (en el celular no se pierde). */}
+      {err && <span role="alert" style={{ color: 'var(--c-laca)', fontWeight: 700, flexBasis: '100%' }}><span aria-hidden="true">⚠ </span><span>{err}</span></span>}
     </span>
   )
 }

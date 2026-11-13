@@ -7,7 +7,7 @@ import {
 } from '../../shared/api/documents'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import {
-  fechaCortaCR, revisarDocumentos, politicaPantalla, mensajeBloqueo, MSG_PARECIDA,
+  fechaCortaCR, revisarDocumentos, politicaPantalla, mensajeBloqueo, mensajePostPago, MSG_PARECIDA,
 } from '../../shared/utils/facturaDuplicada'
 import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
@@ -462,12 +462,23 @@ export function PagoFoto({ movement, doc, createdBy, onAdded, onRefresh }: {
       const extras: DocExtract[] = pol.extras
       const par = pol.parecida
       const row = await createDocumentRow(path, sha, ex, createdBy, movement.id, 'procesado')
-      for (const d of extras) await createDocumentRow(path, sha, d, createdBy)   // → Bandeja, «nuevo», sin enlazar
+      // → Bandeja, «nuevo», sin enlazar. (13-nov, verificación) La principal YA quedó enlazada: si un extra falla no se
+      // corta (igual se llama a onAdded) y se avisa con el mismo texto que el asistente.
+      let fallaron = 0
+      for (const d of extras) {
+        try { await createDocumentRow(path, sha, d, createdBy) } catch { fallaron++ }
+      }
+      const pasaron = extras.length - fallaron
       const avisos: string[] = []
       if (!ex) avisos.push(fallo
         ? 'La foto quedó guardada, pero no se pudo leer (falló la lectura): los productos no pasan solos a Inventario.'
         : 'La foto quedó guardada, pero la IA no encontró una factura: los productos no pasan solos a Inventario.')
-      if (extras.length) avisos.push(`La foto tenía ${documentos.length} documentos: ${extras.length === 1 ? 'el otro quedó' : `los otros ${extras.length} quedaron`} en la Bandeja para confirmar.`)
+      const quedaron = fallaron === 0
+        ? (pasaron === 1 ? 'el otro quedó' : `los otros ${pasaron} quedaron`)
+        : (pasaron === 1 ? '1 más quedó' : `${pasaron} más quedaron`)
+      if (pasaron) avisos.push(`La foto tenía ${documentos.length} documentos: ${quedaron} en la Bandeja para confirmar.`)
+      const avisoExtras = mensajePostPago(false, fallaron)
+      if (avisoExtras) avisos.push(avisoExtras)
       if (par) avisos.push(MSG_PARECIDA(fechaCortaCR(par.created_at), String(ex?.numero_documento ?? '')).replace(' Si es otra factura, tocá «Es otra».', ' Revisá que no sea la misma.'))
       setAviso(avisos.length ? avisos.join(' ') : null)
       onAdded(row)

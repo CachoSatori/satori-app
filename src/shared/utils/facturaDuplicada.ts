@@ -89,6 +89,24 @@ export const MSG_PARECIDA = (cuando: string, numero: string) =>
 export const MSG_VARIOS_DOCS = (n: number, k: number) =>
   `Esta foto tiene ${n} documentos: el primero está acá; ${k === 1 ? 'el otro queda' : `los otros ${k} quedan`} en la Bandeja para confirmar.`
 
+// (13-nov, verificación) Si no se pudo consultar si la factura ya está cargada, NO se registra nada («falla cerrada»).
+export const MSG_NO_VERIFICA = 'No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'
+
+/**
+ * (13-nov, verificación) El aviso ÚNICO después de un pago ya registrado con foto. `enlaceFallo`: la factura no se
+ * enlazó al movimiento; `extrasFallidos`: cuántos de los otros documentos de la foto no pasaron a la Bandeja.
+ * Si el enlace falló NUNCA se manda a la Bandeja: la factura entraría como «nuevo» y el pago se haría dos veces.
+ * Si solo fallaron los extras, la Bandeja bloquearía la misma foto → cada documento va con su propia foto.
+ */
+export function mensajePostPago(enlaceFallo: boolean, extrasFallidos: number): string | null {
+  if (enlaceFallo) {
+    const base = 'El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces.'
+    return extrasFallidos > 0 ? `${base} Tampoco pasaron ${extrasFallidos} documento(s) más de la foto: avisá al encargado.` : base
+  }
+  if (extrasFallidos > 0) return `El pago se registró, pero ${extrasFallidos} documento(s) más de la foto no pasaron a la Bandeja: cargá cada uno con su propia foto.`
+  return null
+}
+
 // ── Revisión de los documentos de una foto (la usan las tres pantallas) ──────────────────────────────────────────────
 interface ConFecha { created_at: string; estado?: string | null }
 export interface DocRevisado<T> { doc: T; claveRepetida: ConFecha | null; parecida: ConFecha | null }

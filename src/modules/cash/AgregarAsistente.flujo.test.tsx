@@ -23,6 +23,15 @@ vi.mock('../../shared/api/documents', () => ({
     tipo: 'factura', proveedor: 'Pescadería del Pacífico', moneda: 'CRC', total: 50000,
     fecha: '2026-07-01', confianza: 0.9, items: [],
   }]),
+  // (13-nov) lectura con detalle y chequeos de duplicados: sin duplicados en estas pruebas
+  extractImageDetalle: vi.fn(async () => ({ documentos: [{
+    tipo: 'factura', proveedor: 'Pescadería del Pacífico', moneda: 'CRC', total: 50000,
+    fecha: '2026-07-01', confianza: 0.9, items: [],
+  }], fallo: false })),
+  sha256File: vi.fn(async () => 'sha-foto'),
+  findDuplicate: vi.fn(async () => null),
+  findDuplicateClave: vi.fn(async () => null),
+  findFacturaParecida: vi.fn(async () => null),
   createDocumentRow: vi.fn(async () => ({ id: 'doc1' })),
   cuadra: vi.fn(() => true),
 }))

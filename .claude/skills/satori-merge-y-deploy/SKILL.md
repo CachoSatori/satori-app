@@ -9,13 +9,9 @@ Mergear a `main` **es** desplegar: GitHub Pages publica la app, Branching corre 
 Cloudflare construye `satori-club` y el Worker `satori-club-api` desde `main`.
 
 ## 1. Ventana horaria (hora de Costa Rica, UTC-6)
-- [ ] Regla D1 (decisión del dueño, 13-nov-2026):
-      - 08:00–15:50: se mergea libre.
-      - 15:50–17:00: congelado (cierre de caja del turno mañana, nunca antes de las 16:00).
-      - 17:00–19:00: solo con OK explícito del dueño en el momento.
-      - 19:00–23:30: no se mergea (servicio y cierre de la noche).
-      - Después de 23:30: libre.
-      Una excepción solo vale si el dueño la escribe en su firma.
+- [ ] Regla D1 (decisión del dueño, 13-nov-2026, hora CR): libre de 23:30 a 15:50 · bloqueado de 15:50 a 19:00
+      (cierre de caja de la mañana y preparación del servicio) · de 19:00 a 23:30 solo con OK explícito del dueño
+      en el momento. Una excepción solo vale si el dueño la escribe en su firma.
 - [ ] Una sola sesión mergea a `main` a la vez, cada una solo sus PRs (regla 3). Nadie más pushea a `main` en la ventana.
 - [ ] Hora real: `TZ=America/Costa_Rica date` (no la del contenedor).
 

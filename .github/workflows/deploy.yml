@@ -21,20 +21,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # Node 22: con Node 20 las pruebas no corren (@supabase/realtime-js exige WebSocket nativo al crear el
+      # cliente). El build da lo mismo; es la versión con la que se trabaja en local y la que usa ci.yml.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      # Gate: si una prueba falla, no se publica. Las pruebas usan valores falsos de Supabase
+      # (vite.config.ts → test.env): no hablan con ningún proyecto real ni necesitan secretos.
+      - name: Tests
+        run: npm test
+
       - name: Build
         env:
+          # Explícito: el build de producción no depende de lo que haya en un .env.
+          VITE_APP_ENV: production
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
+
+      # El bundle de producción no puede llevar las herramientas de diagnóstico de staging.
+      - name: Gate anti-diagnóstico
+        run: |
+          if grep -rlE "armBootHang|__satoriDiag|boot-hang|realtimeReproSwitch" dist/; then
+            echo "El build de producción trae código de diagnóstico de staging"; exit 1
+          fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5

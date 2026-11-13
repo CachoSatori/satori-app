@@ -128,7 +128,9 @@ Docker: se despliega con `--use-api`. Los secretos de §1 ya cargados **en stagi
    persona vuelve a tener un evento, el resumen dice `"ya_vencidos": 1` y Google no se reescribe. `/actualizar` de una
    persona vencida tampoco le vuelve a poner el QR. Probar también la baja desde el portal («Darme de baja del Local Club», si era su único rol). Si la
    respuesta trae `errores` con «permanente», Google rechazó el objeto: ver los logs del Edge. En prod lo hace el cron del
-   Worker cada 10 minutos (sus resúmenes, solo conteos, quedan en los logs del Worker: «club-pase-vencer»).
+   Worker cada 10 minutos (sus resúmenes, solo conteos, quedan en los logs del Worker: «club-pase-vencer»). (13-nov) El
+   resumen trae también `con_pase` (miembros del lote con pase emitido: los únicos que se miran) y `cortado_por_tiempo`
+   (ver §5, «Atraso de eventos»).
 9. Borrar las variables y el archivo: `unset ANON CWK TOK SYNC; rm -f /tmp/pase.json`. Sacar las capturas para el pedido de
    publicación (§3) y anotar el resultado (SHA del paso 1, hora, qué se vio) en `AVANCE-LC.md`.
 
@@ -187,6 +189,15 @@ Maqueta: `docs/club-satori/img/pase-propuesta.png` (v4, aprobada el 08-nov).
 - **Baja:** con la opción c, el pase de alguien dado de baja se vence en Google **en hasta 10 minutos** (el cron del
   Worker). Mientras tanto la caja igual rechaza su QR. Si Google falla de forma transitoria (5xx, 429), la pasada siguiente
   reintenta; un rechazo permanente queda en el resumen del log. Es condición para encender (§3, paso 7).
+- **Atraso de eventos (13-nov, prod):** la primera corrida del cron (500 eventos acumulados) dio 504: el Edge miraba a cada
+  miembro en la base y en Google, uno por uno. Ahora `/vencer` lee **una vez por lote** la lista de pases emitidos
+  (`club_pases_emitidos('google')`) y solo mira a quien tiene pase; los demás cuentan `sin_pase` sin tocar Google. El lote es
+  de **200** eventos y cada pasada **corta a los 90 s**: guarda el cursor justo antes de lo que no alcanzó a mirar y
+  responde `"cortado_por_tiempo": true` (también en el log del Worker). La pasada siguiente (10 minutos después) sigue
+  desde ahí: un atraso grande se pone al día solo, de a 200 eventos por pasada. Si `cortado_por_tiempo` sale `true` en
+  varias pasadas seguidas, mirar los logs del Edge (Google lento). Si la lista de pases emitidos falla, la pasada no hace
+  nada (`errores: ["pases emitidos"]`) y el cursor no se mueve. Un objeto creado en Google cuyo registro en `club_pases` no
+  se guardó (el link de «Guardar» devolvió error) no se mira; la persona lo vuelve a pedir y queda registrado.
 - **Pase compartido:** quien tenga una captura del QR de socio puede intentar usar el beneficio (igual que con el portal).
   El enlace «Canjear» del pase genera códigos de canje de ese anfitrión: si se filtra, se corta con «Regenerar» o
   «Revocar» el botón «Canjear» en la ficha del miembro.

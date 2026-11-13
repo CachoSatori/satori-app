@@ -185,10 +185,9 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
    con **`verify_jwt = false`**. club-web (Pages y el Worker) la llama solo con `apikey` y el portón es `x-club-web`: con
    `verify_jwt = true`, «Agregar a Google Wallet» y «Actualizar mi pase» responden 401. Hasta el ítem 11 su código vive
    en la rama `claude/club-pase-edge` y se despliega a mano (`docs/club-satori/WALLET-GOOGLE-ACTIVACION.md`).
-3. **Regla de merges D1 (decidida por el dueño el 13/11, hora de Costa Rica):** 08:00–15:50 se mergea libre ·
-   15:50–17:00 congelado (cierre de caja del turno mañana, nunca antes de las 16:00) · 17:00–19:00 solo con OK
-   explícito del dueño en el momento · 19:00–23:30 no se mergea (servicio y cierre de la noche) · después de
-   23:30 libre. Una sola sesión de CC mergea a `main` a la vez, cada una
+3. **Regla de merges D1 (decidida por el dueño el 13/11, hora de Costa Rica):** libre de 23:30 a 15:50 ·
+   bloqueado de 15:50 a 19:00 (cierre de caja de la mañana y preparación del servicio) · de 19:00 a 23:30 solo
+   con OK explícito del dueño en el momento. Una sola sesión de CC mergea a `main` a la vez, cada una
    solo sus PRs, y con el OK de Ismael.
 4. **«Ver como» usa los permisos del owner.** Sirve para ver lo que ve otro empleado, no para probar permisos:
    **los permisos se prueban con un usuario real de ese rol** (o simulando su JWT en una transacción

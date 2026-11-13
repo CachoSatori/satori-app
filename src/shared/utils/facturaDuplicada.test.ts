@@ -104,7 +104,7 @@ describe('varias facturas en una foto (#149)', () => {
   })
   it('resumenVarias: todas registradas y sin avisos → null (se cierra como siempre)', () => {
     expect(resumenVarias(2, 2, 0, [])).toBeNull()
-    expect(resumenVarias(3, 1, 1, [])?.aviso).toBe('Se registraron 1 de 3 facturas de la foto. 1 se salteó (no se registró). 1 no se cargó: cargalas con ➕ Agregar factura y otra foto (esta ya quedó cargada).')
+    expect(resumenVarias(3, 1, 1, [])?.aviso).toBe('Se registraron 1 de 3 facturas de la foto. 1 se salteó (no se registró). 1 no se cargó: cargala con ➕ Agregar factura subiendo la misma foto: te va a ofrecer solo la que falta.')
     expect(resumenVarias(2, 0, 2, [])?.titulo).toBe('No se registró ninguna factura.')
   })
 })

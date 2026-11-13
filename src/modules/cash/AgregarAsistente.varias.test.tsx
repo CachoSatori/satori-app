@@ -386,3 +386,59 @@ describe('re-verificación del #154: lo no reconocido de una foto ya vista es du
     expect((await screen.findByTestId('aviso-asistente')).textContent).toMatch(/^⚠ Esta foto ya está en la Bandeja esperando confirmación/)
   })
 })
+
+// (#154, prueba física del dueño 13-nov) Foto con 2 facturas del MISMO proveedor que en el sistema existe solo por alias
+// (nombre legal ≠ nombre corto). La IA lee el nombre legal con variaciones de puntuación/espacios entre una factura y
+// otra; la 2 quedaba «no existe en el sistema». Cada factura pasa por el mismo emparejamiento (matchSupplier) y la misma
+// sugerencia de clasificación.
+// Mutaciones: M13. matchSupplier: volver a la clave `norm` sola (sin quitar espacios/puntuación) → caen 3
+//             (las 2 con variación y la de la clasificación). M14. sugerencia: volver a `supplierName` crudo → cae la de la clasificación.
+describe('asistente «Agregar»: proveedor por alias en cada factura de la foto (#154)', () => {
+  const porAlias: Supplier = { ...sup, id: 'p2', name: 'Mariscos Ficticios', aliases: ['Exportadora Ficticia, S.A.'] }
+  const abrirAlias = () => {
+    const p = { onCreated: vi.fn(), onClose: vi.fn() }
+    render(<AgregarAsistente openSession={session} suppliers={[porAlias]} role="cajero" createdBy="u1" tc={600} {...p} />)
+    subirFoto()
+    return p
+  }
+  const reconocido = async () => {
+    await screen.findByText('✓ Proveedor reconocido: Mariscos Ficticios')
+    expect(screen.queryByText(/no existe en el sistema/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /\+ Crear/ })).toBeNull()
+  }
+  const leidas: [string, string][] = [
+    ['iguales', 'Exportadora Ficticia, S.A.'],
+    ['la 2 sin coma y con «S. A.»', 'Exportadora Ficticia S. A.'],
+    ['la 2 con espacios de más y sin puntos', '  Exportadora  Ficticia SA '],
+  ]
+  for (const [caso, prov2] of leidas) {
+    it(`2 facturas, proveedor solo por alias (${caso}) → las dos con el proveedor existente reconocido y el mismo supplier_id`, async () => {
+      m.leer.mockResolvedValue({ documentos: [fac(1, 10000, { proveedor: 'Exportadora Ficticia, S.A.' }), fac(2, 25000, { proveedor: prov2 })], fallo: false })
+      abrirAlias()
+      await enFactura(1, 2, 10000)
+      await reconocido()
+      fireEvent.click(await confirmarBtn())
+      await enFactura(2, 2, 25000)
+      await reconocido()
+      fireEvent.click(await confirmarBtn())
+      await waitFor(() => expect(m.crearMov).toHaveBeenCalledTimes(2))
+      expect(m.crearMov.mock.calls.map(c => [c[0].supplier_id, c[0].supplier_name])).toEqual([['p2', 'Mariscos Ficticios'], ['p2', 'Mariscos Ficticios']])
+    })
+  }
+
+  it('la sugerencia de clasificación es la misma en las dos (mercadería, proveedor exacto)', async () => {
+    m.leer.mockResolvedValue({ documentos: [
+      fac(1, 10000, { proveedor: 'Exportadora Ficticia, S.A.', concepto: null }),
+      fac(2, 25000, { proveedor: 'Exportadora Ficticia S. A.', concepto: null }),
+    ], fallo: false })
+    abrirAlias()
+    await enFactura(1, 2, 10000)
+    fireEvent.click(await confirmarBtn())
+    await enFactura(2, 2, 25000)
+    fireEvent.click(await confirmarBtn())
+    await waitFor(() => expect(m.crearMov).toHaveBeenCalledTimes(2))
+    const [a, b] = m.crearMov.mock.calls.map(c => [c[0].classification, c[0].suggested_classification, c[0].suggested_confidence])
+    expect(a[0]).toBe('mercaderia')
+    expect(b).toEqual(a)
+  })
+})

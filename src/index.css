@@ -3,8 +3,22 @@
    Paleta: diseño C («estilo carta») — fondo blanco, tinta, filetes de oro
    ============================================================ */
 
-/* Kanji: Noto Serif JP sigue desde Google, solo como respaldo (sin internet cae en la serif del sistema). */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&display=swap');
+/* ── Kanji sin internet (B10, auditoría 206) ──────────────────────────────
+   Noto Serif JP (SIL OFL 1.1, ver public/fonts/OFL-noto-serif-jp.txt), RECORTADA a los 25 kanji que usa la app:
+   人分卓厨受売客家庫心承日書月番祭管給評試財週里金鍵
+   Si se agrega un kanji nuevo: sumarlo a la lista, regenerar los dos woff2 desde NotoSerifJP[wght].ttf
+   (google/fonts, ofl/notoserifjp) con fonttools —
+     fonttools varLib.instancer NotoSerifJP[wght].ttf wght=400 --update-name-table -o i400.ttf   (y lo mismo con 600)
+     pyftsubset i400.ttf --text="<lista>" --flavor=woff2 --layout-features='' --no-hinting --desubroutinize \
+       --name-IDs='*' --output-file=public/fonts/noto-serif-jp-kanji-400-normal.woff2
+   — y agregar su código al unicode-range de abajo. Sin esto, ese kanji cae en la serif del sistema. */
+@font-face { font-family: 'Noto Serif JP'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/noto-serif-jp-kanji-400-normal.woff2') format('woff2'); unicode-range: U+4EBA,U+5206,U+5353,U+53A8,U+53D7,U+58F2,U+5BA2,U+5BB6,U+5EAB,U+5FC3,U+627F,U+65E5,U+66F8,U+6708,U+756A,U+796D,U+7BA1,U+7D66,U+8A55,U+8A66,U+8CA1,U+9031,U+91CC,U+91D1,U+9375; }
+@font-face { font-family: 'Noto Serif JP'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/noto-serif-jp-kanji-600-normal.woff2') format('woff2'); unicode-range: U+4EBA,U+5206,U+5353,U+53A8,U+53D7,U+58F2,U+5BA2,U+5BB6,U+5EAB,U+5FC3,U+627F,U+65E5,U+66F8,U+6708,U+756A,U+796D,U+7BA1,U+7D66,U+8A55,U+8A66,U+8CA1,U+9031,U+91CC,U+91D1,U+9375; }
+/* Pase a main (12-nov): main tiene además el Club (縁, U+7E01), que staging no tiene. Va en un archivo aparte para no
+   cambiar los dos de B10; sacado de @fontsource/noto-serif-jp 5.3.1 (archivo «japanese», SIL OFL 1.1) con
+   pyftsubset --text="縁" --flavor=woff2 --layout-features='' --no-hinting --desubroutinize --name-IDs='*'. */
+@font-face { font-family: 'Noto Serif JP'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/noto-serif-jp-kanji-extra-400-normal.woff2') format('woff2'); unicode-range: U+7E01; }
+@font-face { font-family: 'Noto Serif JP'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/noto-serif-jp-kanji-extra-600-normal.woff2') format('woff2'); unicode-range: U+7E01; }
 
 /* ── Fuentes locales (B6): funcionan sin internet ─────────────────────────
    Archivos en public/fonts/ (licencia SIL OFL 1.1, ver OFL-*.txt). Subconjuntos latin + latin-ext (₡). */
@@ -121,11 +135,28 @@ html, body, #root {
   background: var(--black);
 }
 
+/* B8 · Daruma mientras carga: la letra (kanji) queda en el DOM pero no se ve;
+   el Daruma va de fondo y se mece lento. Sin tocar los módulos. */
 .loading-mark {
-  font-family: var(--font-serif);
-  font-size: 3rem;
-  color: var(--accent);
-  animation: pulse 2s ease-in-out infinite;
+  display: inline-block;
+  width: 44px;
+  height: 48px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-indent: 200%;
+  color: transparent;
+  background: url('/marca/daruma.png') center / contain no-repeat;
+  transform-origin: 50% 90%;
+  animation: daruma-mecer 2.6s ease-in-out infinite;
+}
+
+@keyframes daruma-mecer {
+  0%, 100% { transform: rotate(-5deg); }
+  50%       { transform: rotate(5deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-mark { animation: none; }
 }
 
 @keyframes pulse {
@@ -167,6 +198,13 @@ html, body, #root {
   font-size: 3rem;
   color: var(--accent);
   line-height: 1;
+}
+
+/* B8 · En el login el Daruma reemplaza a la letra. */
+.login-daruma {
+  display: block;
+  width: 58px;
+  height: auto;
 }
 
 .login-header h1 {
@@ -343,9 +381,24 @@ html, body, #root {
   color: var(--accent);
 }
 
-/* Daruma: solo en el encabezado del celular (en computadora va en la marca del menú). */
+/* Daruma en el encabezado del Inicio: solo en celular. En computadora queda el de la marca del menú (B9). */
 .header-daruma { display: block; width: 22px; height: auto; }
 @media (min-width: 1024px) { .header-daruma { display: none; } }
+
+/* B8 · Daruma chico arriba a la izquierda de cada pantalla, al lado de la letra (kanji).
+   Va como ::before del bloque izquierdo del encabezado, así no se toca el JSX de los módulos. */
+.module-header-left::before,
+.tips-header-left::before,
+.cd-module-header > :first-child::before,
+.vt-module-header > :first-child::before,
+.resumen-header > :first-child::before,
+.sop-header > :first-child::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 22px;
+  height: 24px;
+  background: url('/marca/daruma.png') center / contain no-repeat;
+}
 
 .header-title {
   font-size: 0.72rem;
@@ -4551,7 +4604,8 @@ html, body, #root {
 /* Código del documento (mig 076): badge chico antes del título y en el detalle. */
 .sop-code {
   display: inline-block; margin-right: 0.45rem; padding: 1px 6px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
   color: var(--t-teal, var(--c-teal)); border: 1px solid var(--t-teal, var(--c-teal)); border-radius: 3px;
   vertical-align: 1px;

@@ -29,6 +29,8 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 | `GET /api/portal/{token}` | `club_portal` | 60 por minuto |
 | `POST /api/portal/{token}/canje` | `club_canje_codigo_generar` | 5 por minuto |
 | `POST /api/portal/{token}/baja` | `club_socio_baja_portal` | 5 por minuto |
+| `POST /api/portal/{token}/wallet` | Edge `club-pase` (B1) → link «Save to Google Wallet» (corto: solo los IDs) | 5 por minuto |
+| `POST /api/portal/{token}/wallet/actualizar` | Edge `club-pase` → «Actualizar mi pase» (`actualizado`, `sin_pase` o `baja`) | 5 por minuto |
 | `POST /api/pase/{token_pase}/canje` | `club_canje_codigo_generar_pase` | 5 por minuto |
 | `POST /api/alta` `{nombre, whatsapp, acepto, ref?, turnstile}` | `club_socio_autoalta` (después de Turnstile) | 5 por minuto · tope global por día en SQL (`socio_autoalta_max_dia`, 60) |
 
@@ -43,6 +45,10 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
   llamar a la base. **Sin el secreto, responde 503.** En staging se usan las claves de prueba de Cloudflare (siempre
   pasan): la del sitio por defecto en `src/config.ts` y la secreta `1x0000000000000000000000000000000AA`. En prod,
   `VITE_TURNSTILE_SITEKEY` (variable de build) y `TURNSTILE_SECRET` las carga Ismael.
+- **Google Wallet (B2):** el botón «Agregar a Google Wallet» (portal y final de la autoalta) y, en el portal,
+  «Actualizar mi pase» aparecen solo si el build tiene `VITE_WALLET_GOOGLE=1`. Van **apagados** hasta que el Edge
+  `club-pase` esté desplegado con sus secretos y Google apruebe la publicación (en modo demo solo las cuentas de prueba
+  pueden guardar el pase). Pasos: `docs/club-satori/WALLET-GOOGLE-ACTIVACION.md`.
 - **Dominio (08-nov noche):** sale de la variable de build **`VITE_CLUB_URL`** (`https://<dominio>`, sin barra final);
   no está escrito en el código ni en los textos de club-web. **Sin la variable (o mal formada) el build de producción
   falla y el sitio no arranca** (09-nov; en desarrollo usa el origen donde corre). Para
@@ -80,28 +86,44 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    3. Calcular su sha256 en la misma computadora: `printf %s '<la clave>' | shasum -a 256`, o `sha256sum` en Linux.
    4. En Supabase (staging; prod con su firma) → SQL Editor: `select public.club_web_clave_cargar('<el sha256>');`. **Va el sha256, nunca la clave.**
    5. Para rotarla, repetir los pasos 1 a 4 con una clave nueva. La anterior deja de valer cuando se carga el sha256 nuevo, así que conviene cargar primero el secreto en Pages y redesplegar.
-4. **Topes por IP** (`RL_CREAR` y `RL_LEER`): están declarados en `wrangler.toml`. **Verificación, después de cada deploy:**
-   - abrir `https://<dominio>/api/salud` (o la URL del deploy de prueba);
-   - tiene que decir `"rl_crear": true, "rl_leer": true, "club_web_key": true, "turnstile": true, "supabase": true`. No muestra ningún valor;
-   - si `rl_crear` o `rl_leer` sale en `false`, Pages no tomó el binding. Esos endpoints responden 503: fallan cerrados, el sitio no queda abierto;
-   - prueba de fuego: 6 «Obtener mi cupón» seguidos desde un mismo teléfono. El sexto tiene que mostrar «Demasiados intentos seguidos».
-
-   **Plan B, si Pages no toma los topes: `/api` en el Worker `satori-club-api` por un service binding** (`worker/`, sin
-   desplegar). El DNS del dominio queda en SiteGround: la zona no está en Cloudflare, así que no hay Workers Routes.
-   - La Pages Function, si tiene el binding `CLUB_API`, le pasa `/api/*` al Worker con un host interno que no existe en
-     ningún DNS y la IP real del cliente en `x-club-ip` (la lee de `CF-Connecting-IP`, que en Pages es la del cliente).
-     El Worker no tiene URL pública (`workers_dev = false`, sin rutas), rechaza otro host (404) y, sin IP, responde 503.
+4. **Topes por IP** (`RL_CREAR` y `RL_LEER`) **y el service binding `CLUB_API`.** Los topes los pone el Worker
+   `satori-club-api` (`worker/wrangler.toml`); la Pages Function le pasa `/api/*` por el binding `CLUB_API`.
+   - **`club-web/` no lleva `wrangler.toml` (12-nov).** El primer deploy de producción falló antes del build: Pages valida
+     ese archivo con sus reglas y no admite los topes (`Configuration file for Pages projects does not support "unsafe"`
+     → `Failed: unable to read the Wrangler configuration file with code: 1`). Por eso el proyecto de Pages se configura
+     **solo en el panel** («Configuración en el panel», abajo) y Pages no puede tener topes propios. Lo cuida
+     `src/build.test.ts`.
+   - **Service binding (panel):** Pages → `satori-club` → Settings → **Bindings** → **Add** → **Service binding** →
+     Variable name **`CLUB_API`** → Service **`satori-club-api`** → Save, en **Production**. Toma efecto en el próximo
+     deploy. El Worker tiene que existir antes (`worker/`, `npx wrangler deploy`).
+   - La Pages Function le pasa `/api/*` al Worker con un host interno que no existe en ningún DNS y la IP real del
+     cliente en `x-club-ip` (la lee de `CF-Connecting-IP`, que en Pages es la del cliente). El Worker no tiene URL
+     pública (`workers_dev = false`, sin rutas), rechaza otro host (404) y, sin IP, responde 503. El DNS del dominio
+     queda en SiteGround: la zona no está en Cloudflare, así que no hay Workers Routes.
    - El Worker usa el mismo `functions/_lib/api.js`; sus respuestas dicen `x-club-api: worker` y las de Pages,
-     `x-club-api: pages`: `/api/salud` dice quién contestó.
+     `x-club-api: pages`.
+
+   **Verificación, después de cada deploy:**
+   - abrir `https://<dominio>/api/salud` y mirar también el encabezado `x-club-api`;
+   - tiene que decir `x-club-api: worker` y `"rl_crear": true, "rl_leer": true, "club_web_key": true, "turnstile": true, "supabase": true`. No muestra ningún valor;
+   - **si dice `x-club-api: pages`, falta el binding `CLUB_API` en el panel** (o se cargó después del último deploy):
+     `rl_crear` y `rl_leer` salen en `false` y crear y leer responden 503. Fallan cerrados, el sitio no queda abierto;
+   - prueba de fuego: 6 «Obtener mi cupón» seguidos desde un mismo teléfono. El sexto tiene que mostrar «Demasiados intentos seguidos».
    - **Probado en local (10-nov):** `wrangler dev` (Worker) y `wrangler pages dev --service CLUB_API=satori-club-api`:
      `/api/salud` por Pages contesta el Worker con todo en `true`; 6 cupones desde una IP → el sexto 429; otra IP de la
      misma /24 → 429; otra red → pasa; un `x-club-ip` falso del cliente se pisa con la IP real.
-   - En local `wrangler pages dev` también lista `RL_CREAR` y `RL_LEER` como bindings de Pages (modo remoto): **no se
-     sabe** si el deploy real de Pages los toma. Eso lo dice `/api/salud` después del primer deploy.
-   - **B está activo desde el merge** (decisión del dueño, 10-nov): el `[[services]]` de `wrangler.toml` va descomentado.
-     El Worker se crea **antes** (el miércoles, desde la rama del #59). Volver al plan A: comentar esas tres líneas.
-     Pasos: `docs/pases/PASE-150-151-club.md` §11.
+   - Pasos del pase: `docs/pases/PASE-150-151-club.md` §11.
 
+   **Configuración en el panel** (Pages → `satori-club`; no hay archivo que la reemplace):
+
+   | Dónde | Qué |
+   |---|---|
+   | Settings → Build → Build configuration | Build command `npm ci && npm run build` · Build output directory `dist` · Root directory `club-web` |
+   | Settings → Build → Branch control | Production branch `main` |
+   | Settings → Variables and Secrets (Production), para el build | `NODE_VERSION` (22: Vite 8 pide Node 20.19 o 22.12 en adelante) · `VITE_CLUB_URL` · `VITE_TURNSTILE_SITEKEY` |
+   | Settings → Variables and Secrets (Production), de la función | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TURNSTILE_SECRET` (Secret), `CLUB_WEB_KEY` (Secret). Con el binding `CLUB_API` las usa el Worker (que tiene las suyas), no Pages |
+   | Settings → Bindings (Production) | Service binding `CLUB_API` → `satori-club-api` |
+   | Settings → Runtime | Compatibility date: `2025-10-01` o posterior |
 5. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
 
 ## DNS: apuntar el dominio del Club (lo hace Ismael)

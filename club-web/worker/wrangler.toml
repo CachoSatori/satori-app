@@ -1,9 +1,8 @@
-# Plan B de club-web (10-nov): Worker «satori-club-api» que atiende /api/* del dominio del Club con los topes por IP.
-# Se usa SOLO si, después del primer deploy de Pages, /api/salud dice rl_crear o rl_leer en false (Pages no tomó los
-# bindings). Pasos de panel: docs/pases/PASE-150-151-club.md §11.
+# Worker «satori-club-api» (10-nov): atiende /api/* del dominio del Club con los topes por IP. Es el único camino de la
+# API (12-nov): Pages no admite estos topes en su configuración. Pasos de panel: docs/pases/PASE-150-151-club.md §11.
 #
-# · La ruta «<dominio>/api/*» se agrega en el panel (Worker → Settings → Domains & Routes): el dominio no se escribe en
-#   el repo (src/dominioRepo.test.ts).
+# · Sin rutas ni dominio: al Worker solo lo llama la Pages Function por el service binding CLUB_API, que se carga en el
+#   panel de Pages (satori-club → Settings → Bindings → Service binding CLUB_API → satori-club-api).
 # · Variables y secretos en el panel del Worker: SUPABASE_URL y SUPABASE_ANON_KEY (texto), TURNSTILE_SECRET y
 #   CLUB_WEB_KEY (Secret). Los mismos valores que en Pages.
 name = "satori-club-api"
@@ -13,7 +12,9 @@ workers_dev = false   # sin URL pública *.workers.dev: al Worker solo lo llama 
 preview_urls = false  # (11-nov) sin URLs de vista previa: explícito, para que un deploy no las encienda ni las deje a criterio del panel
 keep_vars = true      # un deploy no borra las variables cargadas en el panel
 
-# Topes por IP (CLUB-AUD-14 y 24): los mismos que en ../wrangler.toml. Espacios de nombres propios del Worker.
+# Topes por IP (CLUB-AUD-14 y 24). Los dos son OBLIGATORIOS: sin ellos la API responde 503 (falla cerrada).
+#   RL_CREAR: crear cupón, opt-in, alta, bajas y código de canje (5 por 60 s por IP)
+#   RL_LEER:  ver cupón y portal (60 por 60 s por IP)
 [[unsafe.bindings]]
 name = "RL_CREAR"
 type = "ratelimit"

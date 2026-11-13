@@ -209,7 +209,7 @@ export default function InboxModule() {
                     <div style={{ fontWeight: 700, fontSize: '0.92rem', marginTop: '0.4rem', color: 'var(--t-ink)' }}>{ex?.proveedor || '— sin leer —'}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#5a5040', marginTop: '0.2rem' }}>
                       <span>{ex?.fecha || doc.created_at.slice(0, 10)}</span>
-                      <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>{ex?.total ? `${ex.moneda === 'USD' ? '$' : '₡'}${N(ex.total).toLocaleString('es-CR')}` : '—'}</span>
+                      <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{ex?.total ? `${ex.moneda === 'USD' ? '$' : '₡'}${N(ex.total).toLocaleString('es-CR')}` : '—'}</span>
                     </div>
                   </div>
                 </div>

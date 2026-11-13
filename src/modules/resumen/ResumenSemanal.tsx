@@ -183,6 +183,8 @@ export default function ResumenSemanal() {
       {/* Header */}
       <div style={{ background: 'var(--c-panel)', borderBottom: '1px solid var(--c-linea)', padding: '0 1.75rem', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {/* A11 · Daruma como el ::before de los otros módulos: 22×24 y 1rem hasta el kanji */}
+          <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" width={22} height={24} style={{ display: 'block', flex: '0 0 auto', objectFit: 'contain', marginRight: '0.25rem' }} />
           <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.3rem', color: 'var(--c-oro-texto)' }}>週</span>
           <div>
             <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--c-oro-texto)' }}>Semana</div>

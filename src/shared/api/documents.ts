@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import { createDayMovement } from './cash'
 import type { Json } from '../types/database'
-import { mismaFactura, normNumero } from '../utils/facturaDuplicada'
+import { documentoVigente, mismaFactura, normNumero } from '../utils/facturaDuplicada'
 
 export interface DocItem {
   codigo?: string | null; descripcion: string; cantidad?: number | null; unidad?: string | null
@@ -55,11 +55,14 @@ export async function sha256File(file: Blob): Promise<string> {
 }
 
 // ¿Ya se procesó un documento igual? (sha256 o clave_fe). Devuelve el doc si existe.
+// (13-nov) Solo cuentan los documentos VIGENTES (`documentoVigente`): un huérfano —su movimiento se borró— o un
+// descartado no bloquean la recarga de la misma foto. La base ya excluye los descartados; los huérfanos se filtran acá
+// (por eso trae hasta 20 candidatos y no 1).
 export async function findDuplicate(sha: string, claveFe: string | null): Promise<DocumentRow | null> {
-  let q = supabase.from('documents').select('*').neq('estado', 'descartado').limit(1)
+  let q = supabase.from('documents').select('*').neq('estado', 'descartado')
   q = claveFe ? q.or(`sha256.eq.${sha},clave_fe.eq.${claveFe}`) : q.eq('sha256', sha)
-  const { data } = await q
-  return (data?.[0] as DocumentRow | undefined) ?? null
+  const { data } = await q.order('created_at', { ascending: false }).limit(20)
+  return ((data ?? []) as DocumentRow[]).find(documentoVigente) ?? null
 }
 
 // Sube SOLO la imagen al bucket privado (sin crear fila todavía).
@@ -103,9 +106,10 @@ export async function extractImageDetalle(imagePath: string): Promise<{ document
 export async function findDuplicateClave(claveFe: string | null | undefined): Promise<DocumentRow | null> {
   const clave = String(claveFe ?? '').replace(/\D/g, '')
   if (clave.length < 20) return null   // sin una clave FE de verdad (50 dígitos) no se compara
-  const { data, error } = await supabase.from('documents').select('*').neq('estado', 'descartado').eq('clave_fe', claveFe as string).limit(1)
+  const { data, error } = await supabase.from('documents').select('*').neq('estado', 'descartado').eq('clave_fe', claveFe as string)
+    .order('created_at', { ascending: false }).limit(20)
   if (error) throw new Error(error.message)
-  return (data?.[0] as DocumentRow | undefined) ?? null
+  return ((data ?? []) as DocumentRow[]).find(documentoVigente) ?? null   // huérfanos fuera (ver findDuplicate)
 }
 
 // (13-nov) ¿Ya hay una factura vigente del mismo proveedor, con el mismo número y el mismo total (otra foto)? Solo avisa.
@@ -117,7 +121,7 @@ export async function findFacturaParecida(ex: DocExtract | null): Promise<Docume
     .ilike('raw_json->>numero_documento', `%${num}%`).order('created_at', { ascending: false }).limit(20)
   if (error) throw new Error(error.message)
   const filas = (data ?? []) as DocumentRow[]
-  return filas.find(d => d.raw_json && mismaFactura(ex, d.raw_json)) ?? null
+  return filas.find(d => documentoVigente(d) && d.raw_json && mismaFactura(ex, d.raw_json)) ?? null
 }
 
 // Crea una fila en documents para un documento detectado (o vacía si ex es null).

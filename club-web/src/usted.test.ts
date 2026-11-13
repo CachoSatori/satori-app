@@ -37,3 +37,8 @@ test('club-web: ningún texto en español para el cliente tutea ni vosea (salvo 
 test('club-web: el aviso legal sigue siendo el versionado (si se pasa a «usted», sacar la excepción y subir la versión)', () => {
   expect(TUTEO_VOSEO.test(TEXTOS.es.alta_aviso)).toBe(true)
 })
+
+// TEMPORAL (PR #133): prueba rota a propósito para ver que el gate del CI falla. Se revierte en el commit siguiente.
+test('TEMPORAL: el CI tiene que fallar con esta prueba', () => {
+  expect(1 + 1).toBe(3)
+})

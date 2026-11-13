@@ -81,14 +81,14 @@ const confirmar = () => screen.findByRole('button', { name: /Confirmar y registr
 describe('huérfanos: borrar el movimiento → recargar la misma foto → se permite (13-nov)', () => {
   it('asistente «Agregar»: con el movimiento vivo bloquea; borrado, la misma foto vuelve a entrar sin avisos', async () => {
     // 1) Primera carga: queda el documento «procesado» enlazado a mov-1.
-    let onError = await cargarEnAsistente()
+    await cargarEnAsistente()
     fireEvent.click(await confirmar())
     await waitFor(() => expect(tablaDocs).toHaveLength(1))
     expect(tablaDocs[0]).toMatchObject({ estado: 'procesado', linked_movement_id: 'mov-1', sha256: 'sha-99001' })
     cleanup()
 
     // 2) Control: con el movimiento vivo, la misma foto BLOQUEA.
-    onError = await cargarEnAsistente()
+    await cargarEnAsistente()
     await avisoEnModal(/Esta foto ya fue cargada/)
     cleanup()
 
@@ -97,7 +97,7 @@ describe('huérfanos: borrar el movimiento → recargar la misma foto → se per
     expect(tablaDocs[0]).toMatchObject({ estado: 'procesado', linked_movement_id: null })
 
     // 4) Recarga de la misma foto (17:26): se permite, sin bloqueo por foto ni por clave FE ni aviso de «parecida».
-    onError = await cargarEnAsistente()
+    const onError = await cargarEnAsistente()
     const btn = await confirmar()
     await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Pescadería del Pacífico'))
     expect(onError).not.toHaveBeenCalled()

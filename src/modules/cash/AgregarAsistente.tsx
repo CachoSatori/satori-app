@@ -2,12 +2,13 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { createCashMovement, upsertSupplier } from '../../shared/api/cash'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import {
-  uploadImage, extractImageDetalle, createDocumentRow, cuadra, sha256File, findDuplicate, findDuplicateClave, findFacturaParecida,
+  uploadImage, extractImageDetalle, createDocumentRow, cuadra, sha256File, findDuplicate, findDuplicateClave, findFacturaParecida, findDocsPorSha,
   type DocExtract,
 } from '../../shared/api/documents'
 import {
-  fechaCortaCR, revisarDocumentos, mensajeBloqueo, mensajePostPago, MSG_PARECIDA, MSG_VARIAS_FACTURAS, MSG_QUEDAN_SIN_CARGAR,
-  resumenVarias, type DocRevisado,
+  fechaCortaCR, revisarDocumentos, mensajeBloqueo, mensajePostPago, MSG_PARECIDA, MSG_QUEDAN_SIN_CARGAR,
+  MSG_YA_EN_ESTA_CARGA, MSG_PARECIDA_EN_ESTA_CARGA, MSG_INDETERMINADA, msgProgreso, resumenVarias, cruzarConFoto, enEstaPasada,
+  type DocRevisado, type ConFecha,
 } from '../../shared/utils/facturaDuplicada'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import { classifyMovement } from '../../shared/utils/classifyMovement'
@@ -140,20 +141,24 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   // ── Foto/IA (aditivo) ──────────────────────────────────────
   // photo = la factura ya subida + lo extraído por la IA, para enlazarla al movimiento al confirmar.
-  // (13-nov, el dueño — #149) `docs`: TODOS los documentos de la foto; `idx`: el que se está cargando ahora
+  // (13-nov, el dueño — #149) `docs`: los documentos de la foto POR CARGAR; `idx`: el que se está cargando ahora
   // (`extracted` = docs[idx]). Con 2 o más, el asistente los carga UNO POR UNO sin cerrarse: cada uno es su propio
   // movimiento y su propio documento «procesado» (mismo path/sha). Nada va a la Bandeja como «nuevo» desde acá.
-  // `fallo`: la lectura falló (≠ la IA no vio documentos). `parecida`: ya hay una factura del mismo proveedor, número y
-  // total → aviso no bloqueante: hay que tocar «Es otra» para confirmar.
-  type Foto = { path: string; sha: string; fallo: boolean; docs: DocExtract[] }
+  // (D11 = B) `parcial`: la MISMA foto ya se había cargado en parte → `docs` son solo las que faltan (R de N ya estaban);
+  // `dudas[i]`: no se puede saber si la factura i ya está registrada → se trata como «parecida» (Es otra / Saltear).
+  // `fallo`: la lectura falló (≠ la IA no vio documentos). `parecida`: aviso no bloqueante: hay que tocar «Es otra».
+  type Foto = {
+    path: string; sha: string; fallo: boolean; docs: DocExtract[]
+    parcial?: { registradas: number; total: number } | null
+    dudas?: (ConFecha | null)[]
+  }
   const [photo, setPhoto] = useState<(Foto & { idx: number; extracted: DocExtract | null }) | null>(null)
-  const [parecida, setParecida] = useState<{ cuando: string; numero: string } | null>(null)
+  const [parecida, setParecida] = useState<{ texto: string } | null>(null)
   const [esOtra, setEsOtra] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   // ── Varias facturas en una foto (#149) ──
-  const totalFacturas = photo?.docs.length ?? 0
-  const varias = totalFacturas >= 2
+  const varias = (photo?.docs.length ?? 0) >= 2 || !!photo?.parcial
   // La factura actual no se puede registrar: 'repetida' (clave FE ya cargada) o 'error' (no se pudo verificar).
   // El formulario se oculta y solo se ofrece «Saltear esta factura» (y «Reintentar» si fue error).
   const [pendiente, setPendiente] = useState<'repetida' | 'error' | null>(null)
@@ -163,11 +168,18 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const [hechas, setHechas] = useState(0)                        // espejo para el render (← Volver / Cambiar foto)
   // Plata: refs (no estado) para que un doble toque en el MISMO render no pase dos veces. `registradas` = índices de
   // la foto que ya tienen movimiento: confirmar nunca registra dos veces el mismo índice (doble toque, reintento).
+  // `salteadas` ídem para «Saltear». `creando`: el movimiento se está creando (no se puede salir en ese instante).
   const guardandoRef = useRef(false)
+  const creandoRef = useRef(false)
+  const saliendoRef = useRef(false)
   const registradasRef = useRef<Set<number>>(new Set())
+  const salteadasIdxRef = useRef<Set<number>>(new Set())
   const hechasRef = useRef(0)
   const salteadasRef = useRef(0)
   const postAvisosRef = useRef<string[]>([])
+  // (verificación #154, hallazgo 1) Las facturas YA registradas en esta pasada, en memoria: la siguiente se compara
+  // contra esta lista además de contra la base. Si el enlace del documento falló, la base no la ve: la memoria sí.
+  const registradasMemRef = useRef<DocExtract[]>([])
   const depsRevision = { porClave: findDuplicateClave, parecida: findFacturaParecida }
 
   const precargar = (ex: DocExtract) => {
@@ -181,34 +193,44 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     setClasePicked(null)   // que la sugerencia se recalcule sobre lo recién precargado
   }
 
-  // Deja a la vista la factura `idx` de la foto, ya revisada (clave FE y parecida). Si su clave FE ya está cargada
-  // (de otra foto o de una factura anterior de ESTA foto), no se precarga para registrar: solo «Saltear esta factura».
+  // Deja a la vista la factura `idx` de la foto, ya revisada (clave FE y parecida, en la base y en esta pasada). Si su
+  // clave FE ya está cargada, no se precarga para registrar: solo «Saltear esta factura».
   const mostrarFactura = (base: Foto, idx: number, rev: DocRevisado<DocExtract> | null) => {
     const ex = base.docs[idx] ?? null
+    const k = base.docs.length
     limpiarCampos()
     if (ex) precargar(ex)
     setPhoto({ ...base, idx, extracted: ex })
     setEsOtra(false)
-    setConfirmarSalida(null)
-    if (rev?.claveRepetida) {
+    const enPasada = ex ? enEstaPasada(ex, registradasMemRef.current) : null
+    if (rev?.claveRepetida || enPasada === 'clave') {
       setParecida(null)
       setPendiente('repetida')
-      setAviso(`Factura ${idx + 1} de ${base.docs.length}: ${mensajeBloqueo('clave', rev.claveRepetida, 'caja')} Tocá «Saltear esta factura».`)
+      setAviso(rev?.claveRepetida
+        ? `Factura ${idx + 1} de ${k}: ${mensajeBloqueo('clave', rev.claveRepetida, 'caja')} Tocá «Saltear esta factura».`
+        : `Factura ${idx + 1} de ${k}: ${MSG_YA_EN_ESTA_CARGA}`)
     } else {
       setPendiente(null)
       setAviso(null)
-      setParecida(rev?.parecida ? { cuando: fechaCortaCR(rev.parecida.created_at), numero: String(ex?.numero_documento ?? '') } : null)
+      const duda = base.dudas?.[idx] ?? null
+      setParecida(rev?.parecida ? { texto: MSG_PARECIDA(fechaCortaCR(rev.parecida.created_at), String(ex?.numero_documento ?? '')) }
+        : enPasada === 'parecida' ? { texto: MSG_PARECIDA_EN_ESTA_CARGA }
+        : duda ? { texto: MSG_INDETERMINADA(fechaCortaCR(duda.created_at)) }
+        : null)
     }
   }
 
   // Pasa a la factura `idx` de la misma foto: la revisa recién ahora (así ve la que se acaba de registrar).
   // Si no se puede verificar → no se precarga para registrar: «Reintentar» o «Saltear esta factura».
+  // Si la cajera ya eligió «Salir» mientras se revisaba, no se pisa el resumen.
   const irAFactura = async (base: Foto, idx: number) => {
     setVerificando(true)
     try {
       const [rev] = await revisarDocumentos([base.docs[idx]], depsRevision)
+      if (saliendoRef.current) return
       mostrarFactura(base, idx, rev ?? null)
     } catch (e) {
+      if (saliendoRef.current) return
       mostrarFactura(base, idx, null)
       setParecida(null)
       setPendiente('error')
@@ -220,9 +242,10 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   // Fin del recorrido (o salida a medias). Sin nada que avisar → se cierra como siempre; si no → «listo» con el resumen.
   const terminar = (salida: boolean) => {
+    saliendoRef.current = true
     const total = photo?.docs.length ?? 0
     const post = postAvisosRef.current
-    if (total < 2) {
+    if (!varias) {
       if (post.length) { setAviso(post.join(' ')); setResumenListo('✓ El movimiento quedó registrado.'); setVista('listo') }
       else onClose()
       return
@@ -232,16 +255,24 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     setAviso(r.aviso); setResumenListo(r.titulo); setPendiente(null); setConfirmarSalida(null); setVista('listo')
   }
 
-  const saltear = () => {
-    if (!photo || guardandoRef.current) return
+  // (verificación #154, hallazgo 2) Mismo candado que «Confirmar»: un doble toque no saltea dos.
+  const saltear = async () => {
+    if (!photo || guardandoRef.current || salteadasIdxRef.current.has(photo.idx) || registradasRef.current.has(photo.idx)) return
+    guardandoRef.current = true
+    salteadasIdxRef.current.add(photo.idx)
     salteadasRef.current += 1
-    if (photo.idx + 1 >= photo.docs.length) terminar(false)
-    else void irAFactura(photo, photo.idx + 1)
+    try {
+      if (photo.idx + 1 >= photo.docs.length) terminar(false)
+      else await irAFactura(photo, photo.idx + 1)
+    } finally {
+      guardandoRef.current = false
+    }
   }
 
-  // Cancelar / tocar afuera: con varias facturas a medias, primero se pregunta (dentro del modal).
+  // Cancelar / tocar afuera: con varias facturas a medias, primero se pregunta (dentro del modal). Se puede preguntar
+  // también mientras se revisa la próxima factura; solo no se corta mientras se crea el movimiento.
   const intentarCerrar = () => {
-    if (guardandoRef.current) return   // registrando: no se corta a la mitad
+    if (creandoRef.current) return
     if (vista === 'form' && varias && photo) {
       const quedan = photo.docs.length - hechasRef.current - salteadasRef.current
       if (quedan > 0) { setConfirmarSalida(quedan); return }
@@ -251,8 +282,9 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   // Reusa EXACTO el pipeline de la Bandeja: normalizar → (13-nov) ¿foto repetida? → subir → leer → (13-nov) ¿clave FE
   // repetida? ¿factura parecida? La extracción PRECARGA los campos (todo editable; RN-2: la IA no confirma). El doc se
-  // enlaza recién al confirmar (con el id del movimiento); los demás documentos de la foto van a la Bandeja al confirmar.
-  // Misma foto o misma clave FE → BLOQUEA (decisión del dueño, sin excepción de rol): no se precarga ni se enlaza nada.
+  // enlaza recién al confirmar (con el id del movimiento).
+  // Misma clave FE → BLOQUEA (decisión del dueño, sin excepción de rol). Misma foto: (D11 = B) si trae varias facturas
+  // y faltan algunas, ofrece solo las que faltan; si están todas (o es de una sola factura) → BLOQUEA como siempre.
   const onPhoto = async (file: File) => {
     setPhotoBusy(true)
     setAviso(null)   // otra foto → el aviso anterior se va
@@ -261,17 +293,36 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       const shaFoto = await sha256File(blob)
       // Foto repetida (sha): se revisa UNA vez, acá. Las facturas de esta misma foto comparten sha y no se bloquean entre sí.
       const dupFoto = await findDuplicate(shaFoto, null)
-      if (dupFoto) { setAviso(mensajeBloqueo('foto', dupFoto, 'caja')); return }
-      const { path, sha } = await uploadImage(blob, filename)
-      const { documentos, fallo } = await extractImageDetalle(path)
-      const base: Foto = { path, sha, fallo, docs: documentos }
+      let base: Foto
+      if (dupFoto) {
+        const bloquear = () => setAviso(mensajeBloqueo('foto', dupFoto, 'caja'))
+        // (D11 = B) Se vuelve a leer la foto YA subida (no se sube otra vez). Si no se puede leer o trae una sola
+        // factura → el bloqueo de siempre (falla cerrada).
+        if (!dupFoto.image_path) { bloquear(); return }
+        const lect = await extractImageDetalle(dupFoto.image_path).catch(() => null)
+        if (!lect || lect.fallo || lect.documentos.length < 2) { bloquear(); return }
+        const previos = await findDocsPorSha(shaFoto)
+        const cruce = cruzarConFoto(lect.documentos, previos)
+        const faltan = lect.documentos.map((d, i) => ({ d, i })).filter(x => !cruce.registradas[x.i])
+        if (!faltan.length) { bloquear(); return }
+        base = {
+          path: dupFoto.image_path, sha: shaFoto, fallo: false, docs: faltan.map(x => x.d),
+          parcial: { registradas: lect.documentos.length - faltan.length, total: lect.documentos.length },
+          dudas: faltan.map(x => cruce.dudas[x.i]),
+        }
+      } else {
+        const { path, sha } = await uploadImage(blob, filename)
+        const { documentos, fallo } = await extractImageDetalle(path)
+        base = { path, sha, fallo, docs: documentos }
+      }
       // Recorrido nuevo: nada registrado todavía de esta foto.
-      registradasRef.current = new Set(); hechasRef.current = 0; salteadasRef.current = 0; postAvisosRef.current = []
-      setHechas(0)
+      registradasRef.current = new Set(); salteadasIdxRef.current = new Set(); registradasMemRef.current = []
+      hechasRef.current = 0; salteadasRef.current = 0; postAvisosRef.current = []; saliendoRef.current = false
+      setHechas(0); setConfirmarSalida(null)
       // Revisión de la PRIMERA factura (clave FE y parecida); las siguientes se revisan al llegar a cada una.
-      const [rev] = await revisarDocumentos(documentos.slice(0, 1), depsRevision)
+      const [rev] = await revisarDocumentos(base.docs.slice(0, 1), depsRevision)
       // Una sola factura con clave FE repetida → BLOQUEA como siempre (no abre el formulario).
-      if (documentos.length < 2 && rev?.claveRepetida) { setAviso(mensajeBloqueo('clave', rev.claveRepetida, 'caja')); return }
+      if (base.docs.length < 2 && !base.parcial && rev?.claveRepetida) { setAviso(mensajeBloqueo('clave', rev.claveRepetida, 'caja')); return }
       mostrarFactura(base, 0, rev ?? null)
       // Flujo guiado: con la foto lista (leída o no), recién ahora se revela el formulario
       // completo (precarga + confirmación). Si falla (catch), la vista no cambia → el usuario
@@ -351,6 +402,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     // Ingreso adicional: sin categoría o sin motivo NO se crea (se elimina el default mudo).
     if (clase === 'ingreso' && !ingresoCompleto) return
     guardandoRef.current = true
+    creandoRef.current = true
     setSaving(true)
 
     // Umbral (Caja Diaria): un ingreso cuyo equivalente en colones supera ₡100.000 exige autorización
@@ -358,7 +410,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     // la contraseña no valida (!auth.ok) → no se crea nada. Patrón canónico de ManagerOverride.
     if (ingresoSuperaUmbral) {
       const auth = await requireManager()
-      if (!auth.ok) { guardandoRef.current = false; setSaving(false); return }
+      if (!auth.ok) { guardandoRef.current = false; creandoRef.current = false; setSaving(false); return }
     }
 
     // Paso 1 — crear el movimiento (plata). Si falla, NO se intenta el doc (no se duplica el movimiento).
@@ -418,11 +470,14 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     } catch (e) {
       setAviso(e instanceof Error ? e.message : 'No se pudo registrar el movimiento — reintentá.')
       guardandoRef.current = false
+      creandoRef.current = false
       setSaving(false)
       return
     }
-    // El movimiento YA está: este índice no se vuelve a registrar.
+    // El movimiento YA está: este índice no se vuelve a registrar, y la factura queda en la memoria de esta pasada
+    // (aunque después falle el enlace del documento).
     registradasRef.current.add(idx)
+    if (photo?.extracted) registradasMemRef.current.push(photo.extracted)
     hechasRef.current += 1
     setHechas(hechasRef.current)
 
@@ -443,6 +498,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       if (avisoPost) postAvisosRef.current.push(varias ? `Factura ${idx + 1}: ${avisoPost}` : avisoPost)
     }
     onCreated(mov)
+    creandoRef.current = false
     setSaving(false)
     // (#149) Quedan facturas de esta foto → NO se cierra: pasa a la siguiente. El candado se suelta recién cuando la
     // siguiente quedó a la vista (y el índice registrado ya está en `registradas`).
@@ -534,7 +590,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           <>
             {photo && (
               <div className="cd-method-info" role="status" data-testid="varias-progreso" style={{ marginTop: '0.4rem' }}>
-                {MSG_VARIAS_FACTURAS(photo.docs.length, photo.idx + 1)}
+                {msgProgreso(photo.docs.length, photo.idx + 1, photo.parcial ?? null)}
               </div>
             )}
             {verificando ? (
@@ -545,7 +601,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
                 {pendiente === 'error' && photo && (
                   <button className="tips-btn-ghost" onClick={() => void irAFactura(photo, photo.idx)}>Reintentar</button>
                 )}
-                <button className="cd-btn-green" onClick={saltear}>Saltear esta factura</button>
+                <button className="cd-btn-green" onClick={() => void saltear()}>Saltear esta factura</button>
               </div>
             )}
           </>
@@ -554,7 +610,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         {/* (#149) Varias facturas en la foto: en cuál va la cajera. */}
         {varias && photo && (
           <div className="cd-method-info" role="status" data-testid="varias-progreso" style={{ marginTop: '0.4rem' }}>
-            {MSG_VARIAS_FACTURAS(photo.docs.length, photo.idx + 1)}
+            {msgProgreso(photo.docs.length, photo.idx + 1, photo.parcial ?? null)}
           </div>
         )}
         {/* ← Volver: descarta el borrador (no se creó nada) y regresa a las dos opciones. Con facturas de la foto ya
@@ -594,7 +650,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           )}
           {parecida && (
             <div className="cd-method-info pend" role="alert" style={{ fontSize: '0.66rem', marginTop: 4 }}>
-              ⚠ {MSG_PARECIDA(parecida.cuando, parecida.numero)}{' '}
+              ⚠ {parecida.texto}{' '}
               {esOtra ? <strong>✓ Marcada como otra factura.</strong> : (
                 <button type="button" className="tips-btn-ghost" style={{ padding: '1px 8px', fontSize: '0.66rem' }} onClick={() => setEsOtra(true)}>
                   Es otra
@@ -602,7 +658,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
               )}
               {/* (#149) Con varias facturas en la foto, la parecida también se puede saltear (p. ej. la misma leída dos veces). */}
               {varias && !esOtra && (
-                <>{' '}<button type="button" className="tips-btn-ghost" style={{ padding: '1px 8px', fontSize: '0.66rem' }} onClick={saltear} disabled={saving}>
+                <>{' '}<button type="button" className="tips-btn-ghost" style={{ padding: '1px 8px', fontSize: '0.66rem' }} onClick={() => void saltear()} disabled={saving}>
                   Saltear esta factura
                 </button></>
               )}

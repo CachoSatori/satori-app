@@ -420,7 +420,6 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
   - **Mientras tanto:** el control de duplicados del #149 ignora los huérfanos y los descartados, así que un huérfano no
     bloquea la recarga legítima de su factura.
 
-
 - **Lectura de facturas (después del piloto; salieron del pase de `extract-document` del 12/11, nada construido):**
   - **«Agregar» de Caja** (`AgregarAsistente.tsx`): guarda solo el **primer** documento de una foto (una foto con dos
     proformas registra una) y **no detecta duplicados** (la misma foto entra dos veces). La Bandeja sí hace las dos cosas.

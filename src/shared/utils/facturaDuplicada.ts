@@ -86,8 +86,53 @@ export function mensajeBloqueo(tipo: 'foto' | 'clave', doc: ConFecha, donde: 'ca
 }
 export const MSG_PARECIDA = (cuando: string, numero: string) =>
   `Ya hay una factura de este proveedor con el número ${numero} por el mismo total${cuando ? `, cargada el ${cuando}` : ''}. Si es otra factura, tocá «Es otra».`
-export const MSG_VARIOS_DOCS = (n: number, k: number) =>
-  `Esta foto tiene ${n} documentos: el primero está acá; ${k === 1 ? 'el otro queda' : `los otros ${k} quedan`} en la Bandeja para confirmar.`
+// (#149, el dueño) Una foto con varias facturas se carga UNA POR UNA en el asistente (nada va a la Bandeja).
+export const MSG_VARIAS_FACTURAS = (n: number, i: number) =>
+  i === 1 ? `Esta foto tiene ${n} facturas: las vas a cargar una por una. Factura 1 de ${n}.` : `Factura ${i} de ${n}.`
+export const MSG_QUEDAN_SIN_CARGAR = (k: number) =>
+  k === 1 ? 'Queda 1 factura de esta foto sin cargar. ¿Salir igual?' : `Quedan ${k} facturas de esta foto sin cargar. ¿Salir igual?`
+// «➕ Agregar foto» adjunta UNA foto a UN pago: si trae varias facturas, enlaza solo una y avisa.
+export const MSG_FOTO_VARIAS_PAGO = (n: number) =>
+  `La foto tiene ${n} facturas: solo se enlazó una; cargá las otras con ➕ Agregar factura.`
+
+/**
+ * (#149) El cierre del recorrido de una foto con varias facturas: qué se registró, qué se salteó y qué quedó sin cargar.
+ * null = todas registradas y sin avisos (el asistente se cierra como siempre). Las que quedaron sin cargar no se pueden
+ * volver a cargar subiendo la MISMA foto: el asistente reconoce las ya registradas y ofrece solo las que faltan (D11 = B).
+ */
+export function resumenVarias(total: number, hechas: number, salteadas: number, postAvisos: string[]): { titulo: string; aviso: string } | null {
+  const faltan = Math.max(0, total - hechas - salteadas)
+  if (!salteadas && !faltan && !postAvisos.length) return null
+  const partes = [`Se registraron ${hechas} de ${total} facturas de la foto.`]
+  if (salteadas) partes.push(salteadas === 1 ? '1 se salteó (no se registró).' : `${salteadas} se saltearon (no se registraron).`)
+  // (D11 = B) Subiendo la MISMA foto, el asistente ofrece solo las que faltan.
+  if (faltan) partes.push(faltan === 1
+    ? '1 no se cargó: cargala con ➕ Agregar factura subiendo la misma foto: te va a ofrecer solo la que falta.'
+    : `${faltan} no se cargaron: cargalas con ➕ Agregar factura subiendo la misma foto: te va a ofrecer solo las que faltan.`)
+  partes.push(...postAvisos)
+  const titulo = hechas === 0 ? 'No se registró ninguna factura.'
+    : hechas === 1 ? '✓ Quedó registrada 1 factura.' : `✓ Quedaron registradas ${hechas} facturas.`
+  return { titulo, aviso: partes.join(' ') }
+}
+
+/**
+ * (#149) «➕ Agregar foto» con varias facturas: cuál se enlaza al pago. La de total más parecido al del pago (en su
+ * moneda; si el pago no tiene monto en la moneda de la factura, no compite); si no hay con qué comparar, la primera.
+ */
+export function elegirParaPago<T extends { total?: number | string | null; moneda?: string | null }>(
+  docs: T[], pago: { amount_crc?: number | null; amount_usd?: number | null },
+): number {
+  let mejor = 0, dif = Infinity
+  docs.forEach((d, i) => {
+    const t = Number(d.total)
+    if (d.total == null || !Number.isFinite(t)) return
+    const ref = Number(d.moneda === 'USD' ? pago.amount_usd : pago.amount_crc) || 0
+    if (ref <= 0) return   // el pago no tiene monto en esa moneda: no se compara
+    const x = Math.abs(t - ref)
+    if (x < dif) { dif = x; mejor = i }
+  })
+  return mejor
+}
 
 // (13-nov, verificación) Si no se pudo consultar si la factura ya está cargada, NO se registra nada («falla cerrada»).
 export const MSG_NO_VERIFICA = 'No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'
@@ -108,7 +153,7 @@ export function mensajePostPago(enlaceFallo: boolean, extrasFallidos: number): s
 }
 
 // ── Revisión de los documentos de una foto (la usan las tres pantallas) ──────────────────────────────────────────────
-interface ConFecha { created_at: string; estado?: string | null }
+export interface ConFecha { created_at: string; estado?: string | null }
 export interface DocRevisado<T> { doc: T; claveRepetida: ConFecha | null; parecida: ConFecha | null }
 
 /** Para cada documento leído de la foto: ¿su clave FE ya está cargada? ¿se parece a una factura ya cargada? (red inyectada) */
@@ -146,4 +191,73 @@ export function politicaBandeja<T>(rev: DocRevisado<T>[]): { entran: T[]; bloque
     parecidos: rev.filter(r => !r.claveRepetida && r.parecida).length,
     cuandoBloqueo: bloq.length ? fechaCortaCR(bloq[0].claveRepetida!.created_at) : '',
   }
+}
+
+// ── (D11 = B, 13-nov) La MISMA foto subida otra vez después de cargar solo algunas de sus facturas ───────────────────
+export const msgProgreso = (k: number, i: number, parcial: { registradas: number; total: number; enBandeja?: number } | null) => {
+  if (!parcial || i !== 1) return MSG_VARIAS_FACTURAS(k, i)
+  // (re-verificación) No afirma que las otras estén sin registrar: dice que hay que revisarlas.
+  const revisar = k === 1 ? 'Revisá la otra: Factura 1 de 1.' : `Revisá las otras ${k} una por una: Factura 1 de ${k}.`
+  if (parcial.registradas === 0) {
+    return `Esta foto ya se había cargado: no se reconoció ninguna de sus ${parcial.total} facturas como registrada. ${k === 1 ? 'Revisala: Factura 1 de 1.' : `Revisalas una por una: Factura 1 de ${k}.`}`
+  }
+  const b = parcial.enBandeja ?? 0
+  const bandeja = b ? ` (${b === 1 ? '1 está' : `${b} están`} en la Bandeja esperando confirmación)` : ''
+  return `Esta foto ya se había cargado: ${parcial.registradas} de ${parcial.total} facturas ya están registradas${bandeja}. ${revisar}`
+}
+export const MSG_INDETERMINADA = (cuando: string) =>
+  `Esta foto ya se había cargado${cuando ? ` (el ${cuando})` : ''} y no se puede confirmar si esta factura ya se pagó. Revisá en Pagos a proveedores: si no está, tocá «Es otra»; si ya está, «Saltear esta factura».`
+// (verificación #154) La misma factura dos veces en una foto, comparada contra las YA registradas en esta pasada.
+export const MSG_YA_EN_ESTA_CARGA = 'Esta factura (misma clave FE) ya se registró en esta misma foto. No se va a registrar otra vez: tocá «Saltear esta factura».'
+export const MSG_PARECIDA_EN_ESTA_CARGA = 'Ya registraste una factura igual en esta misma foto (mismo proveedor, número y total). Si es otra, tocá «Es otra»; si no, «Saltear esta factura».'
+
+/** Clave FE comparable: solo dígitos; menos de 20 dígitos no es una clave de verdad → ''. */
+const normClave = (c: string | null | undefined) => { const d = String(c ?? '').replace(/\D/g, ''); return d.length >= 20 ? d : '' }
+
+type Leida = FacturaComparable & { clave_fe?: string | null }
+
+/**
+ * (verificación #154) ¿La factura `ex` ya se registró en ESTA pasada (lista en memoria)? 'clave' = misma clave FE
+ * (bloquea: solo saltear); 'parecida' = sin poder comparar claves, mismo proveedor + número + total (Es otra / Saltear).
+ */
+export function enEstaPasada(ex: Leida, registradas: Leida[]): 'clave' | 'parecida' | null {
+  const c = normClave(ex.clave_fe)
+  let parecida = false
+  for (const r of registradas) {
+    const rc = normClave(r.clave_fe)
+    if (c && rc) { if (c === rc) return 'clave'; continue }   // las dos con clave: manda la clave
+    if (mismaFactura(ex, r)) parecida = true
+  }
+  return parecida ? 'parecida' : null
+}
+
+/**
+ * (D11 = B) Cruza las facturas leídas de una foto contra los documentos VIGENTES de ese mismo sha. Registrada: primero
+ * por clave FE; si la factura no tiene clave, por `mismaFactura`. Cada documento previo cuenta para UNA factura.
+ * (re-verificación #154) `dudas[i]`: TODA factura no reconocida es duda, aunque no quede ningún documento libre ni
+ * las claves difieran: su pago puede existir SIN documento (en la primera pasada el movimiento se creó y el enlace
+ * falló). La pantalla la trata como «parecida»: nunca se confirma sin «Es otra». `enBandeja`/`docBandeja`: las
+ * reconocidas que están en la Bandeja esperando confirmación («nuevo»), para que el aviso lo diga.
+ */
+export function cruzarConFoto<P extends ConFecha & { clave_fe?: string | null; raw_json?: Leida | null }>(
+  docs: Leida[], previos: P[],
+): { registradas: boolean[]; dudas: (P | null)[]; enBandeja: number; docBandeja: P | null } {
+  const usados = new Set<number>()
+  const registradas = docs.map(() => false)
+  docs.forEach((d, i) => {
+    const c = normClave(d.clave_fe)
+    if (!c) return
+    const j = previos.findIndex((p, k) => !usados.has(k) && normClave(p.clave_fe ?? p.raw_json?.clave_fe) === c)
+    if (j >= 0) { usados.add(j); registradas[i] = true }
+  })
+  docs.forEach((d, i) => {
+    if (registradas[i] || normClave(d.clave_fe)) return
+    const j = previos.findIndex((p, k) => !usados.has(k) && !!p.raw_json && mismaFactura(d, p.raw_json))
+    if (j >= 0) { usados.add(j); registradas[i] = true }
+  })
+  const libres = previos.filter((_, k) => !usados.has(k))
+  const ref = libres[0] ?? previos[previos.length - 1] ?? null   // para la fecha del aviso
+  const dudas = docs.map((_, i) => (registradas[i] ? null : ref))
+  const enBandejaDocs = previos.filter((p, k) => usados.has(k) && p.estado === 'nuevo')
+  return { registradas, dudas, enBandeja: enBandejaDocs.length, docBandeja: enBandejaDocs[0] ?? null }
 }

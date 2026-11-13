@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // (13-nov, decisiones del dueño) «➕ Agregar foto» de Caja/Proveedores: normaliza, bloquea duplicados, enlaza igual con
-// aviso si la lectura falla, y manda los demás documentos de la foto a la Bandeja.
+// aviso si la lectura falla y, con varias facturas en la foto, enlaza solo una y avisa (#149).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { CashMovement } from '../../shared/types/database'
@@ -77,23 +77,17 @@ describe('Caja/Proveedores — «➕ Agregar foto» (13-nov)', () => {
     expect(onAdded).not.toHaveBeenCalled()
   })
 
-  it('varios documentos → el primero enlazado, los demás a la Bandeja («nuevo», sin enlazar)', async () => {
+  // (#149) Agrega UNA foto a UN pago: si trae varias, enlaza solo la del pago y avisa; nada a la Bandeja.
+  it('varios documentos → enlaza solo uno (el de total más parecido, o el primero) y avisa; ninguno «nuevo»', async () => {
     m.leer.mockResolvedValue({ documentos: [{ tipo: 'factura', numero_documento: '1', items: [] }, { tipo: 'factura', numero_documento: '2', items: [] }], fallo: false })
-    subir()
-    await waitFor(() => expect(m.crear).toHaveBeenCalledTimes(2))
-    expect(m.crear.mock.calls[0][4]).toBe('mov-9')
-    expect(m.crear.mock.calls[1]).toHaveLength(4)
-  })
-
-  // (13-nov, verificación) La principal ya quedó enlazada: un extra que falla no corta el flujo.
-  it('extras que fallan → igual llama a onAdded y avisa «cargá cada uno con su propia foto»', async () => {
-    m.leer.mockResolvedValue({ documentos: [{ tipo: 'factura', numero_documento: '1', items: [] }, { tipo: 'factura', numero_documento: '2', items: [] }], fallo: false })
-    m.crear.mockImplementation(async (...a: unknown[]) => { if (a[4] === 'mov-9') return { id: 'doc-nuevo' }; throw new Error('red') })
     const { rerender } = subir()
     await waitFor(() => expect(onAdded).toHaveBeenCalledWith({ id: 'doc-nuevo' }))
+    expect(m.crear).toHaveBeenCalledTimes(1)
+    expect(m.crear.mock.calls[0][2]).toMatchObject({ numero_documento: '1' })   // sin totales → el primero
+    expect(m.crear.mock.calls[0].slice(3)).toEqual(['u1', 'mov-9', 'procesado'])
     rerender(<PagoFoto movement={mov} doc={{ id: 'doc-nuevo' } as never} createdBy="u1" onAdded={onAdded} onRefresh={vi.fn()} />)
-    expect(document.body.textContent).toMatch(/El pago se registró, pero 1 documento\(s\) más de la foto no pasaron a la Bandeja: cargá cada uno con su propia foto\./)
-    expect(document.body.textContent).not.toMatch(/quedó en la Bandeja/)
+    expect(document.body.textContent).toMatch('La foto tiene 2 facturas: solo se enlazó una; cargá las otras con ➕ Agregar factura.')
+    expect(document.body.textContent).not.toMatch(/Bandeja/)
   })
 
   it('no se pudo verificar si la foto ya está cargada → aviso de conexión; no sube ni enlaza', async () => {

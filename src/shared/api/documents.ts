@@ -69,6 +69,14 @@ export async function findDuplicate(sha: string, claveFe: string | null): Promis
   return data.find(documentoVigente) ?? null
 }
 
+// (D11 = B) Todos los documentos VIGENTES de una misma foto (sha), para saber cuáles de sus facturas ya se cargaron.
+// Falla cerrada como findDuplicate.
+export async function findDocsPorSha(sha: string): Promise<DocumentRow[]> {
+  const data = await consultarVerificacion(() => supabase.from('documents').select('*').neq('estado', 'descartado')
+    .eq('sha256', sha).order('created_at', { ascending: true }).limit(50))
+  return data.filter(documentoVigente)
+}
+
 // Corre una consulta de duplicados: error devuelto o excepción (red) → Error(MSG_NO_VERIFICA). Nunca «no hay duplicado».
 async function consultarVerificacion(
   consulta: () => PromiseLike<{ data: unknown; error: { message: string } | null }>,

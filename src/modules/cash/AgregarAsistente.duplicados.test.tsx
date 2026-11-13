@@ -70,16 +70,19 @@ describe('asistente «Agregar» — fotos (13-nov)', () => {
     expect(m.createDocSpy.mock.calls[0]).toEqual(['docs/f.jpg', 'sha-foto', expect.objectContaining({ numero_documento: '1001' }), 'u1', 'mov-1', 'procesado'])
   })
 
-  it('varios documentos → aviso; al confirmar: el primero enlazado y los otros 2 a la Bandeja («nuevo», sin enlazar)', async () => {
+  it('(#149) varios documentos → se cargan uno por uno (cada uno su movimiento y su documento enlazado); nada a la Bandeja', async () => {
     m.leer.mockResolvedValue({ documentos: [doc(), doc({ numero_documento: '2002', total: 1000 }), doc({ numero_documento: '3003', total: 2000 })], fallo: false })
     abrirYSacarFoto()
-    await screen.findByText(/Esta foto tiene 3 documentos: el primero está acá; los otros 2 quedan en la Bandeja/)
+    await screen.findByText('Esta foto tiene 3 facturas: las vas a cargar una por una. Factura 1 de 3.')
+    fireEvent.click(confirmarBtn())
+    await screen.findByText('Factura 2 de 3.')
+    fireEvent.click(confirmarBtn())
+    await screen.findByText('Factura 3 de 3.')
     fireEvent.click(confirmarBtn())
     await waitFor(() => expect(m.createDocSpy).toHaveBeenCalledTimes(3))
-    expect(m.createDocSpy.mock.calls[0][4]).toBe('mov-1')
-    for (const c of m.createDocSpy.mock.calls.slice(1)) expect(c).toHaveLength(4)   // sin movimiento ni estado → «nuevo» en la Bandeja
-    expect(m.createDocSpy.mock.calls.slice(1).map(c => (c[2] as unknown as DocExtract).numero_documento)).toEqual(['2002', '3003'])
-    expect(m.createSpy).toHaveBeenCalledTimes(1)   // UN movimiento: los otros se confirman en la Bandeja
+    for (const c of m.createDocSpy.mock.calls) expect(c[5]).toBe('procesado')   // ninguno «nuevo»
+    expect(m.createDocSpy.mock.calls.map(c => (c[2] as unknown as DocExtract).numero_documento)).toEqual(['1001', '2002', '3003'])
+    expect(m.createSpy).toHaveBeenCalledTimes(3)
   })
 
   it('misma foto ya cargada → BLOQUEA: no sube, no lee, no abre el formulario', async () => {
@@ -128,17 +131,21 @@ describe('asistente «Agregar» — fotos (13-nov)', () => {
 describe('asistente «Agregar» — avisos después del pago (13-nov, verificación)', () => {
   const tresDocs = () => m.leer.mockResolvedValue({ documentos: [doc(), doc({ numero_documento: '2002', total: 1000 }), doc({ numero_documento: '3003', total: 2000 })], fallo: false })
 
-  it('falla el enlace Y fallan los extras → UN solo aviso, sin «subí… a la Bandeja», con «se pagaría dos veces»', async () => {
+  it('(#149) falla el enlace de la factura 1 de 3 → sigue con la 2 y la 3; al final «listo» con el aviso de la 1, una vez', async () => {
     tresDocs()
-    m.createDocSpy.mockRejectedValue(new Error('red'))
+    m.createDocSpy.mockImplementation(async (...a: unknown[]) => { if (a[4] === 'mov-1' && m.createSpy.mock.calls.length === 1) throw new Error('red'); return { id: 'doc1' } })
     abrirYSacarFoto()
-    await screen.findByText(/Esta foto tiene 3 documentos/)
+    await screen.findByText(/Esta foto tiene 3 facturas/)
     fireEvent.click(confirmarBtn())
-    await waitFor(() => expect(m.createDocSpy).toHaveBeenCalledTimes(3))
-    const msg = (await avisoEnModal('El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces. Tampoco pasaron 2 documento(s) más de la foto: avisá al encargado.')).slice(2)
+    await screen.findByText('Factura 2 de 3.')
+    fireEvent.click(confirmarBtn())
+    await screen.findByText('Factura 3 de 3.')
+    fireEvent.click(confirmarBtn())
+    const msg = (await avisoEnModal('Se registraron 3 de 3 facturas de la foto. Factura 1: El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces.')).slice(2)
     expect(screen.getAllByRole('alert').filter(a => /El pago se registró/.test(a.textContent ?? ''))).toHaveLength(1)   // UN solo aviso
     expect(msg).not.toMatch(/sub[ií] la foto a la Bandeja/)
-    expect(m.createSpy).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()   // «listo»
+    expect(m.createSpy).toHaveBeenCalledTimes(3)
   })
 
   it('falla solo el enlace (sin extras) → el aviso de «se pagaría dos veces», una vez', async () => {
@@ -149,15 +156,6 @@ describe('asistente «Agregar» — avisos después del pago (13-nov, verificaci
     await avisoEnModal('El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces.')
     expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()   // «listo»: no se puede pagar dos veces
     expect(onError).not.toHaveBeenCalled()
-  })
-
-  it('fallan solo los extras (el enlace entró) → «cargá cada uno con su propia foto»', async () => {
-    tresDocs()
-    m.createDocSpy.mockImplementation(async (...a: unknown[]) => { if (a[4] === 'mov-1') return { id: 'doc1' }; throw new Error('red') })
-    abrirYSacarFoto()
-    await screen.findByText(/Esta foto tiene 3 documentos/)
-    fireEvent.click(confirmarBtn())
-    await avisoEnModal('El pago se registró, pero 2 documento(s) más de la foto no pasaron a la Bandeja: cargá cada uno con su propia foto.')
   })
 
   it('no se pudo verificar si la foto ya está cargada → aviso de conexión; no sube, no abre el formulario, no crea nada', async () => {

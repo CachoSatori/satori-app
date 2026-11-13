@@ -1,7 +1,14 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier, sendPagoProveedorEmail } from '../../shared/api/cash'
-import { listLinkedDocs, uploadImage, createDocumentRow, extractImage, type DocumentRow } from '../../shared/api/documents'
+import {
+  listLinkedDocs, uploadImage, createDocumentRow, extractImageDetalle, sha256File, findDuplicate, findDuplicateClave, findFacturaParecida,
+  type DocumentRow, type DocExtract,
+} from '../../shared/api/documents'
+import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
+import {
+  fechaCortaCR, revisarDocumentos, politicaPantalla, MSG_FOTO_DUPLICADA, MSG_CLAVE_DUPLICADA, MSG_PARECIDA,
+} from '../../shared/utils/facturaDuplicada'
 import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -414,9 +421,12 @@ export default function CashProveedores({ suppliers, movements, credits, applica
 
 // Indicador de FOTO por pago. Con factura → FacturaVerify (📷 ampliable + verificado,
 // reusa signedUrl). Sin factura → "⚠ falta factura" + "➕ Agregar foto": sube al bucket
-// `documents`, enlaza el doc al movimiento (estado 'procesado') y corre extractImage —
+// `documents`, enlaza el doc al movimiento (estado 'procesado') y corre la lectura —
 // si la IA detecta productos, la factura cae sola en "Inventario pendiente" (Bandeja).
-function PagoFoto({ movement, doc, createdBy, onAdded, onRefresh }: {
+// (13-nov, el dueño) Igual que la Bandeja: normaliza la foto; misma foto o misma clave FE → BLOQUEA (no se enlaza);
+// si la lectura falla o no ve una factura, la foto se enlaza IGUAL y avisa (los productos no pasan solos a Inventario);
+// los demás documentos de la foto van a la Bandeja como «nuevo»; factura parecida (proveedor + número + total) → avisa.
+export function PagoFoto({ movement, doc, createdBy, onAdded, onRefresh }: {
   movement: CashMovement
   doc: DocumentRow | null
   createdBy: string
@@ -425,20 +435,41 @@ function PagoFoto({ movement, doc, createdBy, onAdded, onRefresh }: {
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr]   = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
 
-  // Con factura: el verificado ya muestra la foto (📷) y permite ampliarla.
-  if (doc) return <FacturaVerify movement={movement} doc={doc} compact onVerified={onRefresh} />
+  // Con factura: el verificado ya muestra la foto (📷) y permite ampliarla. Si la carga dejó un aviso, se ve al lado.
+  if (doc) return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <FacturaVerify movement={movement} doc={doc} compact onVerified={onRefresh} />
+      {aviso && <span role="alert" style={{ color: 'var(--c-oro-texto)', fontSize: '0.66rem' }}>⚠ {aviso}</span>}
+    </span>
+  )
 
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    setBusy(true); setErr(null)
+    setBusy(true); setErr(null); setAviso(null)
     try {
-      const { path, sha } = await uploadImage(file, file.name)
-      const detected = await extractImage(path)         // la IA lee la factura (productos → inventario)
-      const ex = detected[0] ?? null
+      const { blob, filename } = await normalizeInvoiceImage(file)
+      const dupFoto = await findDuplicate(await sha256File(blob), null)
+      if (dupFoto) { setErr(MSG_FOTO_DUPLICADA(fechaCortaCR(dupFoto.created_at))); return }
+      const { path, sha } = await uploadImage(blob, filename)
+      const { documentos, fallo } = await extractImageDetalle(path)   // la IA lee la factura (productos → inventario)
+      const pol = politicaPantalla(await revisarDocumentos(documentos, { porClave: findDuplicateClave, parecida: findFacturaParecida }))
+      if (pol.bloqueo) { setErr(MSG_CLAVE_DUPLICADA(fechaCortaCR(pol.bloqueo.created_at))); return }
+      const ex = pol.primero
+      const extras: DocExtract[] = pol.extras
+      const par = pol.parecida
       const row = await createDocumentRow(path, sha, ex, createdBy, movement.id, 'procesado')
+      for (const d of extras) await createDocumentRow(path, sha, d, createdBy)   // → Bandeja, «nuevo», sin enlazar
+      const avisos: string[] = []
+      if (!ex) avisos.push(fallo
+        ? 'La foto quedó guardada, pero no se pudo leer (falló la lectura): los productos no pasan solos a Inventario.'
+        : 'La foto quedó guardada, pero la IA no encontró una factura: los productos no pasan solos a Inventario.')
+      if (extras.length) avisos.push(`La foto tenía ${documentos.length} documentos: ${extras.length === 1 ? 'el otro quedó' : `los otros ${extras.length} quedaron`} en la Bandeja para confirmar.`)
+      if (par) avisos.push(MSG_PARECIDA(fechaCortaCR(par.created_at), String(ex?.numero_documento ?? '')).replace(' Si es otra factura, tocá «Es otra».', ' Revisá que no sea la misma.'))
+      setAviso(avisos.length ? avisos.join(' ') : null)
       onAdded(row)
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : 'No se pudo agregar la foto')

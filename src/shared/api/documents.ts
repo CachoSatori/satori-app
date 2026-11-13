@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { createDayMovement } from './cash'
 import type { Json } from '../types/database'
+import { mismaFactura, normNumero } from '../utils/facturaDuplicada'
 
 export interface DocItem {
   codigo?: string | null; descripcion: string; cantidad?: number | null; unidad?: string | null
@@ -83,6 +84,40 @@ export async function extractImage(imagePath: string): Promise<DocExtract[]> {
   } catch {
     return []  // función no desplegada o sin key → se crea 1 fila vacía para carga manual
   }
+}
+
+// (13-nov) Como extractImage, pero distingue «la lectura FALLÓ» (la función dio error, no está desplegada o no hubo red)
+// de «la IA no vio documentos» (respondió bien con una lista vacía). extractImage queda igual para las otras pantallas.
+export async function extractImageDetalle(imagePath: string): Promise<{ documentos: DocExtract[]; fallo: boolean }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('extract-document', { body: { image_path: imagePath } })
+    if (error) return { documentos: [], fallo: true }
+    const docs = (data as { documentos?: DocExtract[] })?.documentos
+    return Array.isArray(docs) ? { documentos: docs, fallo: false } : { documentos: [], fallo: true }
+  } catch {
+    return { documentos: [], fallo: true }
+  }
+}
+
+// (13-nov) ¿Ya hay un documento vigente (no descartado) con esta clave FE? Bloquea, como la misma foto.
+export async function findDuplicateClave(claveFe: string | null | undefined): Promise<DocumentRow | null> {
+  const clave = String(claveFe ?? '').replace(/\D/g, '')
+  if (clave.length < 20) return null   // sin una clave FE de verdad (50 dígitos) no se compara
+  const { data, error } = await supabase.from('documents').select('*').neq('estado', 'descartado').eq('clave_fe', claveFe as string).limit(1)
+  if (error) throw new Error(error.message)
+  return (data?.[0] as DocumentRow | undefined) ?? null
+}
+
+// (13-nov) ¿Ya hay una factura vigente del mismo proveedor, con el mismo número y el mismo total (otra foto)? Solo avisa.
+// Trae candidatos por número (ilike, para tolerar ceros a la izquierda y espacios) y decide con `mismaFactura`.
+export async function findFacturaParecida(ex: DocExtract | null): Promise<DocumentRow | null> {
+  const num = normNumero(ex?.numero_documento)
+  if (!ex || !num) return null
+  const { data, error } = await supabase.from('documents').select('*').neq('estado', 'descartado')
+    .ilike('raw_json->>numero_documento', `%${num}%`).order('created_at', { ascending: false }).limit(20)
+  if (error) throw new Error(error.message)
+  const filas = (data ?? []) as DocumentRow[]
+  return filas.find(d => d.raw_json && mismaFactura(ex, d.raw_json)) ?? null
 }
 
 // Crea una fila en documents para un documento detectado (o vacía si ex es null).

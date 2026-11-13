@@ -4,9 +4,10 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import {
   listInbox, uploadImage, extractImage, createDocumentRow, signedUrl, setDocEstado,
-  insertInboxMovement, findDuplicate, sha256File, cuadra,
+  insertInboxMovement, findDuplicate, findDuplicateClave, findFacturaParecida, sha256File, cuadra,
   type DocumentRow, type DocExtract,
 } from '../../shared/api/documents'
+import { fechaCortaCR, revisarDocumentos, politicaBandeja, MSG_CLAVE_DUPLICADA, MSG_FOTO_DUPLICADA } from '../../shared/utils/facturaDuplicada'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { getSuppliers, getAllCashMovements, updateMovementStatus, getOpenCashSession, createCashMovement, upsertSupplier } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
@@ -85,15 +86,25 @@ export default function InboxModule() {
       const { blob, filename } = await normalizeInvoiceImage(file)
       const sha = await sha256File(blob)
       const dup = await withTimeout(findDuplicate(sha, null))
-      if (dup) { setError('Esta foto ya fue cargada (duplicado).'); setBusy(null); return }
+      if (dup) { setError(MSG_FOTO_DUPLICADA(fechaCortaCR(dup.created_at))); setBusy(null); return }
       const { path } = await withTimeout(uploadImage(blob, filename), 30000)
       const detected = await extractImage(path)   // una foto puede traer varios documentos
       if (detected.length === 0) {
         await createDocumentRow(path, sha, null, profile.id)
         setInfo('Cargado en modo manual — abrilo y completá los datos.')
       } else {
-        for (const ex of detected) await createDocumentRow(path, sha, ex, profile.id)
-        setInfo(`${detected.length} documento(s) detectado(s) — la IA precargó los datos. Abrí cada uno, verificá la factura y confirmá. Nada se registra hasta confirmar.`)
+        // (13-nov, el dueño) misma clave FE → ese documento NO entra (bloqueo, sin excepción de rol);
+        // mismo proveedor + número + total (otra foto) → entra, con aviso para revisarlo antes de confirmar.
+        const { entran, bloqueados, parecidos, cuandoBloqueo: cuandoBloq } = politicaBandeja(await revisarDocumentos(detected, {
+          porClave: c => withTimeout(findDuplicateClave(c)), parecida: d => withTimeout(findFacturaParecida(d)),
+        }))
+        if (entran.length === 0) { setError(MSG_CLAVE_DUPLICADA(cuandoBloq)); setBusy(null); return }
+        for (const ex of entran) await createDocumentRow(path, sha, ex, profile.id)
+        setInfo([
+          `${entran.length} documento(s) detectado(s) — la IA precargó los datos. Abrí cada uno, verificá la factura y confirmá. Nada se registra hasta confirmar.`,
+          bloqueados ? `${bloqueados} no entró/entraron: la misma factura (clave FE) ya estaba cargada${cuandoBloq ? ` (el ${cuandoBloq})` : ''}.` : '',
+          parecidos ? `⚠ ${parecidos} se parece(n) a una factura ya cargada (mismo proveedor, número y total): revisá que no sea la misma antes de confirmar.` : '',
+        ].filter(Boolean).join(' '))
       }
       await loadAll()
     } catch (e) {

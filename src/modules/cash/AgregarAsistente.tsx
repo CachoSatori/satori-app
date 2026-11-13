@@ -1,7 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createCashMovement, upsertSupplier } from '../../shared/api/cash'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
-import { uploadImage, extractImage, createDocumentRow, cuadra, type DocExtract } from '../../shared/api/documents'
+import {
+  uploadImage, extractImageDetalle, createDocumentRow, cuadra, sha256File, findDuplicate, findDuplicateClave, findFacturaParecida,
+  type DocExtract,
+} from '../../shared/api/documents'
+import {
+  fechaCortaCR, revisarDocumentos, politicaPantalla, MSG_FOTO_DUPLICADA, MSG_CLAVE_DUPLICADA, MSG_PARECIDA, MSG_VARIOS_DOCS,
+} from '../../shared/utils/facturaDuplicada'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import { classifyMovement } from '../../shared/utils/classifyMovement'
 import { PAGO_META, formasPago, type Pago } from '../../shared/utils/pagoMatrix'
@@ -111,25 +117,39 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     setPickedSupplierId(null); setClasePicked(null)
     setIngresoCategoria(''); setIngresoMotivo('')
     setPago(formas[0]); setAccountId('')
-    setPhoto(null)
+    setPhoto(null); setParecida(null); setEsOtra(false)
     setVista('opciones')
   }
 
   // ── Foto/IA (aditivo) ──────────────────────────────────────
   // photo = la factura ya subida + lo extraído por la IA, para enlazarla al movimiento al confirmar.
-  const [photo, setPhoto] = useState<{ path: string; sha: string; extracted: DocExtract | null } | null>(null)
+  // (13-nov, el dueño) `extras`: los OTROS documentos de la misma foto → al confirmar van a la Bandeja como tarjetas
+  // «nuevo» (sin enlazar). `fallo`: la lectura falló (≠ la IA no vio documentos). `parecida`: ya hay una factura del
+  // mismo proveedor, número y total (otra foto) → aviso no bloqueante: hay que tocar «Es otra» para confirmar.
+  const [photo, setPhoto] = useState<{ path: string; sha: string; extracted: DocExtract | null; extras: DocExtract[]; fallo: boolean } | null>(null)
+  const [parecida, setParecida] = useState<{ cuando: string; numero: string } | null>(null)
+  const [esOtra, setEsOtra] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Reusa EXACTO el pipeline de la Bandeja: normalizar → subir → leer. La extracción PRECARGA los campos
-  // (todo editable; RN-2: la IA no confirma). El doc se enlaza recién al confirmar (con el id del movimiento).
+  // Reusa EXACTO el pipeline de la Bandeja: normalizar → (13-nov) ¿foto repetida? → subir → leer → (13-nov) ¿clave FE
+  // repetida? ¿factura parecida? La extracción PRECARGA los campos (todo editable; RN-2: la IA no confirma). El doc se
+  // enlaza recién al confirmar (con el id del movimiento); los demás documentos de la foto van a la Bandeja al confirmar.
+  // Misma foto o misma clave FE → BLOQUEA (decisión del dueño, sin excepción de rol): no se precarga ni se enlaza nada.
   const onPhoto = async (file: File) => {
     setPhotoBusy(true)
     try {
       const { blob, filename } = await normalizeInvoiceImage(file)
+      const shaFoto = await sha256File(blob)
+      const dupFoto = await findDuplicate(shaFoto, null)
+      if (dupFoto) { onError(MSG_FOTO_DUPLICADA(fechaCortaCR(dupFoto.created_at))); return }
       const { path, sha } = await uploadImage(blob, filename)
-      const detected = await extractImage(path)
-      const ex = detected[0] ?? null
+      const { documentos, fallo } = await extractImageDetalle(path)
+      // Clave FE repetida: la del primero bloquea todo; la de otro documento de la foto, solo lo saca de la Bandeja.
+      const pol = politicaPantalla(await revisarDocumentos(documentos, { porClave: findDuplicateClave, parecida: findFacturaParecida }))
+      if (pol.bloqueo) { onError(MSG_CLAVE_DUPLICADA(fechaCortaCR(pol.bloqueo.created_at))); return }
+      const ex = pol.primero
+      const extras = pol.extras
       if (ex) {
         if (ex.proveedor) { setSupplierName(ex.proveedor); setPickedSupplierId(null) }   // re-resolver por el nombre leído
         if (ex.concepto || ex.proveedor) setDescripcion(ex.concepto || ex.proveedor || '')
@@ -140,7 +160,9 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         if (ex.fecha) setFechaFactura(ex.fecha)
         setClasePicked(null)   // que la sugerencia se recalcule sobre lo recién precargado
       }
-      setPhoto({ path, sha, extracted: ex })
+      setParecida(pol.parecida ? { cuando: fechaCortaCR(pol.parecida.created_at), numero: String(ex?.numero_documento ?? '') } : null)
+      setEsOtra(false)
+      setPhoto({ path, sha, extracted: ex, extras, fallo })
       // Flujo guiado: con la foto lista (leída o no), recién ahora se revela el formulario
       // completo (precarga + confirmación). Si falla (catch), la vista no cambia → el usuario
       // sigue en las dos opciones y puede sacar otra foto o ir a manual.
@@ -210,6 +232,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   const confirmar = async () => {
     if (!montoOk || saving) return
+    if (parecida && !esOtra) return   // (13-nov) aviso de factura parecida: hay que confirmar «Es otra»
     if (montoNegativo) { onError('El monto no puede ser negativo.'); return }   // Ítem 2
     // Ingreso adicional: sin categoría o sin motivo NO se crea (se elimina el default mudo).
     if (clase === 'ingreso' && !ingresoCompleto) return
@@ -292,6 +315,12 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       } catch {
         onError('El pago se registró, pero la factura no se enlazó — adjuntala en Revisión de inventario.')
       }
+      // (13-nov) Los demás documentos de la foto → tarjetas «nuevo» en la Bandeja (sin enlazar; se confirman ahí).
+      let fallaron = 0
+      for (const ex of photo.extras) {
+        try { await createDocumentRow(photo.path, photo.sha, ex, createdBy) } catch { fallaron++ }
+      }
+      if (fallaron > 0) onError(`El pago se registró, pero ${fallaron} documento(s) de la foto no pasaron a la Bandeja — subí la foto a la Bandeja.`)
     }
     onCreated(mov)
     onClose()
@@ -374,8 +403,25 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             </div>
           )}
           {photo && !photo.extracted && (
-            <div style={{ fontSize: '0.66rem', color: 'var(--c-oro-texto)', marginTop: 3 }}>
-              La IA no pudo leer la factura — completá los campos a mano. La foto igual se enlaza al pago.
+            <div className="cd-method-info pend" role="alert" style={{ fontSize: '0.66rem', marginTop: 3 }}>
+              {photo.fallo
+                ? '⚠ No se pudo leer la factura (falló la lectura) — completá los campos a mano. La foto igual se enlaza al pago.'
+                : '⚠ La IA no encontró una factura en la foto — completá los campos a mano. La foto igual se enlaza al pago.'}
+            </div>
+          )}
+          {photo && photo.extras.length > 0 && (
+            <div className="cd-method-info pend" role="alert" style={{ fontSize: '0.66rem', marginTop: 4 }}>
+              ⚠ {MSG_VARIOS_DOCS(photo.extras.length + 1, photo.extras.length)}
+            </div>
+          )}
+          {parecida && (
+            <div className="cd-method-info pend" role="alert" style={{ fontSize: '0.66rem', marginTop: 4 }}>
+              ⚠ {MSG_PARECIDA(parecida.cuando, parecida.numero)}{' '}
+              {esOtra ? <strong>✓ Marcada como otra factura.</strong> : (
+                <button type="button" className="tips-btn-ghost" style={{ padding: '1px 8px', fontSize: '0.66rem' }} onClick={() => setEsOtra(true)}>
+                  Es otra
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -570,7 +616,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || montoNegativo || (clase === 'ingreso' && !ingresoCompleto) || saving}>
+          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || montoNegativo || (clase === 'ingreso' && !ingresoCompleto) || (!!parecida && !esOtra) || saving}>
             {saving ? 'Registrando…' : '✓ Confirmar y registrar'}
           </button>
         </div>

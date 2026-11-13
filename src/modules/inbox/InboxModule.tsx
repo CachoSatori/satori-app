@@ -4,7 +4,7 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import {
   listInbox, uploadImage, extractImage, createDocumentRow, signedUrl, setDocEstado,
-  insertInboxMovement, findDuplicate, findDuplicateClave, findFacturaParecida, sha256File, cuadra,
+  insertInboxMovement, findDuplicate, findDuplicateClave, findFacturaParecida, sha256File, cuadra, conFechaCR,
   type DocumentRow, type DocExtract,
 } from '../../shared/api/documents'
 import { revisarDocumentos, politicaBandeja, mensajeBloqueo } from '../../shared/utils/facturaDuplicada'
@@ -14,7 +14,8 @@ import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { listDocsNeedingInventory } from '../../shared/api/inventoryIngest'
 import type { Supplier, CashMovement, UserRole } from '../../shared/types/database'
 import { fi, fd } from '../cash/cashUtils'
-import { tipShiftToCaja } from '../../shared/utils'
+import { tipShiftToCaja, todayCR, dateCR } from '../../shared/utils'
+import { avisoFechaFactura } from '../../shared/utils/fechaFactura'
 import { PAGO_META, isLocalRole, type Pago } from '../../shared/utils/pagoMatrix'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 
@@ -304,11 +305,15 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
   onDone: () => void
   onDiscard: () => void
 }) {
-  const ex = doc.raw_json
+  // (13-nov) Fecha D/M: las lecturas nuevas ya llegan normalizadas (fecha_origen). Las viejas se normalizan acá, con
+  // «hoy» = el día CR en que se subió el documento (no el de hoy: una factura vieja no se invierte por envejecer).
+  const ex = doc.raw_json && !doc.raw_json.fecha_origen ? conFechaCR(doc.raw_json, dateCR(doc.created_at) || todayCR()) : doc.raw_json
   const isLocal = isLocalRole(role)   // cajero/manager están en caja → pueden efectivo
   const [tipo, setTipo]     = useState<DocExtract['tipo']>((ex?.tipo as DocExtract['tipo']) ?? 'factura')
   const [prov, setProv]     = useState(ex?.proveedor ?? '')
-  const [fecha, setFecha]   = useState(ex?.fecha ?? new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha]   = useState(ex?.fecha ?? todayCR())
+  // Aviso de la lectura mientras siga la fecha precargada; si la cambian, solo si queda en el futuro.
+  const avisoFecha = ex?.aviso_fecha && fecha === ex.fecha ? ex.aviso_fecha : avisoFechaFactura(fecha, todayCR())
   const [total, setTotal]   = useState<number | ''>(ex?.total ? N2(ex.total) : '')
   const [moneda, setMoneda] = useState<'CRC' | 'USD'>(ex?.moneda === 'USD' ? 'USD' : 'CRC')
   // Forma de pago (matriz). Default: local → efectivo; oficina → pendiente.
@@ -485,7 +490,8 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
                 )}
               </Field>
               <Field label="Fecha">
-                <input type="date" className="tips-input-dark" style={{ width: '100%' }} value={fecha} onChange={e => setFecha(e.target.value)} />
+                <input type="date" className="tips-input-dark" style={{ width: '100%' }} aria-label="Fecha" value={fecha} onChange={e => setFecha(e.target.value)} />
+                {avisoFecha && <div role="status" style={{ fontSize: '0.7rem', color: '#a07030', marginTop: 3, fontWeight: 600 }}>⚠️ {avisoFecha}</div>}
               </Field>
               <Field label={`Monto final ${moneda === 'USD' ? '$' : '₡'}`}>
                 <input type="number" className="tips-input-dark" style={{ width: '100%' }} value={total} onChange={e => setTotal(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />

@@ -1,0 +1,80 @@
+# Gate de los PR contra main: lo mismo que cada sesión corría a mano antes de pedir merge.
+# Sin secretos: las variables de build son FICTICIAS (el bundle de un PR no se publica en ningún lado) y las
+# pruebas usan sus propios valores falsos de Supabase (vite.config.ts → test.env). El log es público.
+# Para que bloquee el merge, el dueño marca el check «Gate» como requerido en la protección de main.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # Node 20, igual que deploy.yml: si algo depende de la versión de Node, aparece acá antes que en el deploy.
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            club-web/package-lock.json
+
+      - name: App · npm ci
+        run: npm ci
+
+      - name: App · tsc -b
+        run: npx tsc -b
+
+      - name: App · vite build (production)
+        env:
+          VITE_APP_ENV: production
+          VITE_SUPABASE_URL: https://proyecto-ficticio.supabase.co
+          VITE_SUPABASE_ANON_KEY: clave-ficticia-solo-ci
+        run: npx vite build
+
+      # Mismo chequeo que deploy.yml: el bundle de producción no lleva diagnóstico de staging.
+      - name: App · gate anti-diagnóstico
+        run: |
+          if grep -rlE "armBootHang|__satoriDiag|boot-hang|realtimeReproSwitch" dist/; then
+            echo "::error::El build de producción trae código de diagnóstico de staging"; exit 1
+          fi
+
+      # Corre todas las pruebas del repo, incluidas las de club-web (vitest vive en la raíz).
+      - name: App · vitest run
+        run: npx vitest run
+
+      # Falla solo si la cantidad de problemas SUBE respecto de scripts/ci/lint-linea-base.json.
+      # Va antes del build de club-web para que eslint no recorra club-web/dist.
+      - name: App · lint (línea base)
+        run: node scripts/ci/lint-linea-base.mjs
+
+      - name: club-web · npm ci
+        working-directory: club-web
+        run: npm ci
+
+      # Las pruebas de club-web usan el vitest de la raíz; este paso las muestra aparte.
+      - name: club-web · pruebas
+        run: npx vitest run club-web
+
+      - name: club-web · build (production)
+        working-directory: club-web
+        env:
+          VITE_CLUB_URL: https://club.ejemplo.com
+        run: npm run build

@@ -1,0 +1,6 @@
+{
+  "problemas": 83,
+  "medido_en": "main 204917f (12-nov-2026): 75 errores + 8 advertencias de `eslint .`",
+  "para_que": "Deuda de lint vieja (PROMPT-CONTINUACION §9). El CI (.github/workflows/ci.yml, job «Gate») falla si `eslint .` da MÁS problemas que este número; si da los mismos o menos, pasa.",
+  "como_se_actualiza": "Cuando un PR baja la cuenta, el CI lo avisa: bajá este número en el mismo PR al valor nuevo. Subirlo solo con OK explícito del dueño y el motivo en el PR."
+}

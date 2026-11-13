@@ -6,7 +6,7 @@ import {
   type DocExtract,
 } from '../../shared/api/documents'
 import {
-  fechaCortaCR, revisarDocumentos, politicaPantalla, mensajeBloqueo, MSG_PARECIDA, MSG_VARIOS_DOCS,
+  fechaCortaCR, revisarDocumentos, politicaPantalla, mensajeBloqueo, mensajePostPago, MSG_PARECIDA, MSG_VARIOS_DOCS,
 } from '../../shared/utils/facturaDuplicada'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import { classifyMovement } from '../../shared/utils/classifyMovement'
@@ -310,17 +310,21 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     // a la cola de la Bandeja). Best-effort: el movimiento ya está; si el enlace falla, la factura se puede
     // adjuntar después en Revisión (vía F4.3b) → NO se reintenta el movimiento (evita duplicar plata).
     if (photo) {
+      let enlaceFallo = false
       try {
         await createDocumentRow(photo.path, photo.sha, photo.extracted, createdBy, mov.id, 'procesado')
       } catch {
-        onError('El pago se registró, pero la factura no se enlazó — adjuntala en Revisión de inventario.')
+        enlaceFallo = true
       }
       // (13-nov) Los demás documentos de la foto → tarjetas «nuevo» en la Bandeja (sin enlazar; se confirman ahí).
       let fallaron = 0
       for (const ex of photo.extras) {
         try { await createDocumentRow(photo.path, photo.sha, ex, createdBy) } catch { fallaron++ }
       }
-      if (fallaron > 0) onError(`El pago se registró, pero ${fallaron} documento(s) de la foto no pasaron a la Bandeja — subí la foto a la Bandeja.`)
+      // (13-nov, verificación) UN solo aviso combinado (no se pisan). Si el enlace falló, nunca «subí la foto a la
+      // Bandeja»: entraría como «nuevo» y el pago ya hecho se podría pagar dos veces.
+      const aviso = mensajePostPago(enlaceFallo, fallaron)
+      if (aviso) onError(aviso)
     }
     onCreated(mov)
     onClose()

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { CashMovement, CashSession, Supplier } from '../../shared/types/database'
-import { tablaDocs, vaciarDocs, borrarMovimiento } from '../../shared/api/documentosEnMemoria.testutil'
+import { tablaDocs, vaciarDocs, borrarMovimiento, fallas } from '../../shared/api/documentosEnMemoria.testutil'
 
 const CLAVE = '50612112600310100000000100001010000099001100000001'
 const FACTURA = {
@@ -19,6 +19,7 @@ const m = vi.hoisted(() => {
   let n = 0
   return {
     crearMov: vi.fn(async (x: Record<string, unknown>) => ({ ...x, id: `mov-${++n}`, _pending: false })),
+    subir: vi.fn(async () => ({ path: 'docs/99001.jpg', sha: 'sha-99001' })),
     reiniciar: () => { n = 0 },
   }
 })
@@ -28,7 +29,7 @@ vi.mock('../../shared/api/documents', async (orig) => {
   return {
     ...actual,                                    // findDuplicate / findDuplicateClave / findFacturaParecida / createDocumentRow REALES
     sha256File: async () => 'sha-99001',          // siempre la misma foto
-    uploadImage: async () => ({ path: 'docs/99001.jpg', sha: 'sha-99001' }),
+    uploadImage: m.subir,
     extractImageDetalle: async () => ({ documentos: [FACTURA], fallo: false }),
     extractImage: async () => [FACTURA],
     signedUrl: async () => null,
@@ -59,7 +60,7 @@ const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession
 const subirFoto = () => fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement,
   { target: { files: [new File(['d'], 'f.jpg', { type: 'image/jpeg' })] } })
 
-beforeEach(() => { cleanup(); vaciarDocs(); m.reiniciar(); m.crearMov.mockClear() })
+beforeEach(() => { cleanup(); vaciarDocs(); m.reiniciar(); m.crearMov.mockClear(); m.subir.mockClear() })
 
 // ── Asistente «Agregar» ────────────────────────────────────────────────────────
 async function cargarEnAsistente() {
@@ -221,5 +222,42 @@ describe('un documento «nuevo» de la Bandeja bloquea con el aviso «confirmala
     subirFoto()
     await screen.findByText(/Esta factura \(misma clave FE\) ya está en esta Bandeja esperando confirmación.*confirmala en la lista\./)
     expect(tablaDocs).toHaveLength(1)
+  })
+})
+
+// (13-nov, verificación) «Falla cerrada» con las consultas REALES: si la base no responde, ninguna pantalla deja pasar la
+// foto como «no repetida»: bloquea con el aviso de conexión y no registra nada.
+describe('no se pudo verificar duplicados → bloquea en las tres pantallas (13-nov)', () => {
+  const MSG = 'No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'
+
+  it('asistente «Agregar»: aviso de conexión; no abre el formulario ni crea nada', async () => {
+    fallas.lecturas = true
+    const onError = await cargarEnAsistente()
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(MSG))
+    expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
+    expect(tablaDocs).toHaveLength(0)
+    expect(m.crearMov).not.toHaveBeenCalled()
+    expect(m.subir).not.toHaveBeenCalled()   // corta ANTES de subir la foto: el chequeo de la foto no deja pasar
+  })
+
+  it('«➕ Agregar foto»: aviso de conexión; no enlaza', async () => {
+    fallas.lecturas = true
+    const onAdded = vi.fn()
+    render(<PagoFoto movement={{ id: 'mov-x' } as CashMovement} doc={null} createdBy="u1" onAdded={onAdded} onRefresh={vi.fn()} />)
+    subirFoto()
+    await screen.findByText(MSG)
+    expect(onAdded).not.toHaveBeenCalled()
+    expect(tablaDocs).toHaveLength(0)
+    expect(m.subir).not.toHaveBeenCalled()
+  })
+
+  it('Bandeja: aviso de conexión; no entra nada a la cola', async () => {
+    render(<MemoryRouter><InboxModule /></MemoryRouter>)
+    await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeNull())
+    fallas.lecturas = true
+    subirFoto()
+    await screen.findByText(MSG)
+    expect(tablaDocs).toHaveLength(0)
+    expect(m.subir).not.toHaveBeenCalled()
   })
 })

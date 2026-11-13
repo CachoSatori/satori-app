@@ -85,3 +85,20 @@ describe('huérfanos y descartados no cuentan como duplicado (13-nov)', () => {
     expect(await findFacturaParecida(ex)).toMatchObject({ id: 'vivo' })
   })
 })
+
+// (13-nov, verificación) «Falla cerrada»: si la consulta falla, las tres funciones LANZAN (antes findDuplicate dejaba pasar).
+describe('consultas de duplicados con error → lanzan el aviso de conexión (13-nov)', () => {
+  const MSG = 'No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'
+  const ex = { proveedor: 'Distribuidora Ejemplo', numero_documento: '99001', total: 48500, moneda: 'CRC' } as DocExtract
+  it('error devuelto por la base', async () => {
+    filas.error = { message: 'Failed to fetch' }
+    await expect(findDuplicate('sha', null)).rejects.toThrow(MSG)
+    await expect(findDuplicate('sha', '5'.repeat(50))).rejects.toThrow(MSG)
+    await expect(findDuplicateClave('5'.repeat(50))).rejects.toThrow(MSG)
+    await expect(findFacturaParecida(ex)).rejects.toThrow(MSG)
+  })
+  it('excepción de red', async () => {
+    from.mockImplementationOnce(() => { throw new TypeError('Failed to fetch') })
+    await expect(findDuplicate('sha', null)).rejects.toThrow(MSG)
+  })
+})

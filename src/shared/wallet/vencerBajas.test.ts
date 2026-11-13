@@ -201,3 +201,35 @@ describe('vencerBajas: el pase vencido queda SIN QR (13-nov)', () => {
     expect(e.almacen.get(`${ISSUER}.club-${B}`)).toMatchObject({ state: 'ACTIVE', barcode: { type: 'QR_CODE' } })
   })
 })
+
+// (13-nov, staging v5) Google devuelve «expired» en minúscula: la segunda pasada reescribía el objeto en cada cron.
+describe('vencerEnGoogle: el estado se compara sin distinguir mayúsculas', () => {
+  for (const estado of ['expired', 'EXPIRED', 'Expired']) {
+    it(`GET con state «${estado}» y sin código → no hay PUT y cuenta ya_vencidos`, async () => {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }] })
+      const d = e.deps()
+      const o = e.almacen.get(`${ISSUER}.club-${A}`)!
+      o.state = estado
+      delete o.barcode
+      const r = await vencerBajas(d)
+      expect(r).toMatchObject({ vencidos: 0, ya_vencidos: 1, permanentes: 0, errores: [] })
+      expect(e.patch).toEqual([])
+    })
+  }
+  it('«expired» pero todavía con QR → sí hay PUT (le saca el código)', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }] })
+    const d = e.deps()
+    e.almacen.get(`${ISSUER}.club-${A}`)!.state = 'expired'
+    expect(await vencerBajas(d)).toMatchObject({ vencidos: 1, ya_vencidos: 0 })
+    expect(e.patch.map(p => p.metodo)).toEqual(['PUT'])
+    expect(e.almacen.get(`${ISSUER}.club-${A}`)!.barcode).toBeUndefined()
+  })
+  it('simulando a Google: el PUT guarda «expired» en minúscula y la segunda pasada no reescribe', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }] })
+    const d = e.deps()
+    expect(await vencerBajas(d)).toMatchObject({ vencidos: 1 })
+    e.almacen.get(`${ISSUER}.club-${A}`)!.state = 'expired'   // así lo devuelve Google en staging
+    expect(await vencerBajas(d)).toMatchObject({ vencidos: 0, ya_vencidos: 1 })
+    expect(e.patch).toHaveLength(1)
+  })
+})

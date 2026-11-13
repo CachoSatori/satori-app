@@ -14,7 +14,8 @@ import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import { classifyMovement } from '../../shared/utils/classifyMovement'
 import { PAGO_META, formasPago, type Pago } from '../../shared/utils/pagoMatrix'
 import { norm } from '../../shared/api/inventoryIngest'
-import { tipShiftToCaja } from '../../shared/utils'
+import { tipShiftToCaja, todayCR } from '../../shared/utils'
+import { avisoFechaFactura } from '../../shared/utils/fechaFactura'
 import { fi, fd } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { claveProveedor, matchSupplier, decidirAlias, puedeAprenderAlias, msgAliasGuardado } from '../../shared/utils/proveedorAlias'
@@ -177,6 +178,11 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const fileRef = useRef<HTMLInputElement>(null)
   // ── Varias facturas en una foto (#149) ──
   const varias = (photo?.docs.length ?? 0) >= 2 || !!photo?.parcial
+  // (13-nov) Aviso de la fecha de factura: el de la lectura (D/M invertida o futura) mientras siga la fecha precargada;
+  // si el usuario la cambia, solo se avisa si queda en el futuro (nunca una fecha futura sin aviso).
+  const avisoFecha = photo?.extracted?.aviso_fecha && fechaFactura === photo.extracted.fecha
+    ? photo.extracted.aviso_fecha
+    : avisoFechaFactura(fechaFactura, todayCR())
   // La factura actual no se puede registrar: 'repetida' (clave FE ya cargada) o 'error' (no se pudo verificar).
   // El formulario se oculta y solo se ofrece «Saltear esta factura» (y «Reintentar» si fue error).
   const [pendiente, setPendiente] = useState<'repetida' | 'error' | null>(null)
@@ -843,6 +849,9 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           <div className="tips-field-label">Fecha de la factura (opcional)</div>
           <input type="date" className="tips-input-dark" style={{ width: '100%' }} aria-label="Fecha de factura"
             value={fechaFactura} onChange={e => setFechaFactura(e.target.value)} />
+          {avisoFecha && (
+            <div role="status" style={{ fontSize: '0.72rem', color: '#a07030', marginTop: 3, fontWeight: 600 }}>⚠️ {avisoFecha}</div>
+          )}
           <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)', marginTop: 3 }}>
             La fecha de registro es HOY (entra hoy a la caja). La de la factura, si difiere, va a la descripción.
           </div>

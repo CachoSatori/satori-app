@@ -86,8 +86,50 @@ export function mensajeBloqueo(tipo: 'foto' | 'clave', doc: ConFecha, donde: 'ca
 }
 export const MSG_PARECIDA = (cuando: string, numero: string) =>
   `Ya hay una factura de este proveedor con el número ${numero} por el mismo total${cuando ? `, cargada el ${cuando}` : ''}. Si es otra factura, tocá «Es otra».`
-export const MSG_VARIOS_DOCS = (n: number, k: number) =>
-  `Esta foto tiene ${n} documentos: el primero está acá; ${k === 1 ? 'el otro queda' : `los otros ${k} quedan`} en la Bandeja para confirmar.`
+// (#149, el dueño) Una foto con varias facturas se carga UNA POR UNA en el asistente (nada va a la Bandeja).
+export const MSG_VARIAS_FACTURAS = (n: number, i: number) =>
+  i === 1 ? `Esta foto tiene ${n} facturas: las vas a cargar una por una. Factura 1 de ${n}.` : `Factura ${i} de ${n}.`
+export const MSG_QUEDAN_SIN_CARGAR = (k: number) =>
+  k === 1 ? 'Queda 1 factura de esta foto sin cargar. ¿Salir igual?' : `Quedan ${k} facturas de esta foto sin cargar. ¿Salir igual?`
+// «➕ Agregar foto» adjunta UNA foto a UN pago: si trae varias facturas, enlaza solo una y avisa.
+export const MSG_FOTO_VARIAS_PAGO = (n: number) =>
+  `La foto tiene ${n} facturas: solo se enlazó una; cargá las otras con ➕ Agregar factura.`
+
+/**
+ * (#149) El cierre del recorrido de una foto con varias facturas: qué se registró, qué se salteó y qué quedó sin cargar.
+ * null = todas registradas y sin avisos (el asistente se cierra como siempre). Las que quedaron sin cargar no se pueden
+ * volver a cargar con ESTA foto (ya quedó cargada: la bloquea el sha) → se cargan con otra foto.
+ */
+export function resumenVarias(total: number, hechas: number, salteadas: number, postAvisos: string[]): { titulo: string; aviso: string } | null {
+  const faltan = Math.max(0, total - hechas - salteadas)
+  if (!salteadas && !faltan && !postAvisos.length) return null
+  const partes = [`Se registraron ${hechas} de ${total} facturas de la foto.`]
+  if (salteadas) partes.push(salteadas === 1 ? '1 se salteó (no se registró).' : `${salteadas} se saltearon (no se registraron).`)
+  if (faltan) partes.push(`${faltan === 1 ? '1 no se cargó' : `${faltan} no se cargaron`}: cargalas con ➕ Agregar factura y otra foto (esta ya quedó cargada).`)
+  partes.push(...postAvisos)
+  const titulo = hechas === 0 ? 'No se registró ninguna factura.'
+    : hechas === 1 ? '✓ Quedó registrada 1 factura.' : `✓ Quedaron registradas ${hechas} facturas.`
+  return { titulo, aviso: partes.join(' ') }
+}
+
+/**
+ * (#149) «➕ Agregar foto» con varias facturas: cuál se enlaza al pago. La de total más parecido al del pago (en su
+ * moneda; si el pago no tiene monto en la moneda de la factura, no compite); si no hay con qué comparar, la primera.
+ */
+export function elegirParaPago<T extends { total?: number | string | null; moneda?: string | null }>(
+  docs: T[], pago: { amount_crc?: number | null; amount_usd?: number | null },
+): number {
+  let mejor = 0, dif = Infinity
+  docs.forEach((d, i) => {
+    const t = Number(d.total)
+    if (d.total == null || !Number.isFinite(t)) return
+    const ref = Number(d.moneda === 'USD' ? pago.amount_usd : pago.amount_crc) || 0
+    if (ref <= 0) return   // el pago no tiene monto en esa moneda: no se compara
+    const x = Math.abs(t - ref)
+    if (x < dif) { dif = x; mejor = i }
+  })
+  return mejor
+}
 
 // (13-nov, verificación) Si no se pudo consultar si la factura ya está cargada, NO se registra nada («falla cerrada»).
 export const MSG_NO_VERIFICA = 'No se pudo verificar si la factura ya está cargada. Revisá la conexión y reintentá.'

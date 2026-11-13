@@ -70,6 +70,12 @@ async function cargarEnAsistente() {
   subirFoto()
   return onError
 }
+// (13-nov, caso B) El aviso del asistente se ve DENTRO del modal.
+async function avisoEnModal(texto: string | RegExp) {
+  const el = await screen.findByText(typeof texto === 'string' ? `⚠ ${texto}` : texto)
+  expect(el.closest('[role="alert"]')).not.toBeNull()
+  expect(el.closest('.cd-modal')).not.toBeNull()
+}
 const confirmar = () => screen.findByRole('button', { name: /Confirmar y registrar/ }) as Promise<HTMLButtonElement>
 
 describe('huérfanos: borrar el movimiento → recargar la misma foto → se permite (13-nov)', () => {
@@ -83,7 +89,7 @@ describe('huérfanos: borrar el movimiento → recargar la misma foto → se per
 
     // 2) Control: con el movimiento vivo, la misma foto BLOQUEA.
     onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/Esta foto ya fue cargada/)))
+    await avisoEnModal(/Esta foto ya fue cargada/)
     cleanup()
 
     // 3) Se borra el movimiento (17:01) → el documento queda huérfano: «procesado», sin vínculo.
@@ -95,6 +101,7 @@ describe('huérfanos: borrar el movimiento → recargar la misma foto → se per
     const btn = await confirmar()
     await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Pescadería del Pacífico'))
     expect(onError).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('aviso-asistente')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Es otra' })).toBeNull()
     expect(btn.disabled).toBe(false)
     fireEvent.click(btn)
@@ -108,14 +115,15 @@ describe('huérfanos: borrar el movimiento → recargar la misma foto → se per
     const onError = await cargarEnAsistente()
     expect((await confirmar()).disabled).toBe(false)
     expect(onError).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('aviso-asistente')).toBeNull()
   })
 
   it('asistente «Agregar»: un huérfano MÁS NUEVO no tapa a un documento vigente más viejo de la misma foto', async () => {
     const fila = { image_path: 'x', sha256: 'sha-99001', clave_fe: CLAVE, tipo: 'factura', raw_json: FACTURA, created_by: 'u1' }
     tablaDocs.push({ ...fila, id: 'vivo', created_at: '2026-11-10T20:00:00Z', estado: 'procesado', linked_movement_id: 'mov-vivo' })
     tablaDocs.push({ ...fila, id: 'huerfano', created_at: '2026-11-13T23:01:00Z', estado: 'procesado', linked_movement_id: null })
-    const onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/Esta foto ya fue cargada/)))
+    await cargarEnAsistente()
+    await avisoEnModal(/Esta foto ya fue cargada/)
   })
 
   it('«➕ Agregar foto»: la foto del movimiento borrado se puede adjuntar al pago nuevo', async () => {
@@ -174,8 +182,8 @@ describe('un documento «nuevo» de la Bandeja bloquea con el aviso «confirmala
 
   it('asistente, misma foto → «ya está en la Bandeja… confirmala ahí»; no crea nada', async () => {
     enBandeja()
-    const onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(AVISO))
+    await cargarEnAsistente()
+    await avisoEnModal(AVISO)
     expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
     expect(tablaDocs).toHaveLength(1)
     expect(m.crearMov).not.toHaveBeenCalled()
@@ -183,9 +191,8 @@ describe('un documento «nuevo» de la Bandeja bloquea con el aviso «confirmala
 
   it('asistente, otra foto con la misma clave FE → el mismo aviso, para la factura', async () => {
     enBandeja({ sha256: 'otra-foto' })
-    const onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(
-      /^Esta factura \(misma clave FE\) ya está en la Bandeja esperando confirmación \(cargada el 12-nov 14:00\)\. No se registró nada: confirmala ahí\.$/)))
+    await cargarEnAsistente()
+    await avisoEnModal(/^⚠ Esta factura \(misma clave FE\) ya está en la Bandeja esperando confirmación \(cargada el 12-nov 14:00\)\. No se registró nada: confirmala ahí\.$/)
   })
 
   it('«➕ Agregar foto» → el mismo aviso; no enlaza', async () => {
@@ -232,8 +239,8 @@ describe('no se pudo verificar duplicados → bloquea en las tres pantallas (13-
 
   it('asistente «Agregar»: aviso de conexión; no abre el formulario ni crea nada', async () => {
     fallas.lecturas = true
-    const onError = await cargarEnAsistente()
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(MSG))
+    await cargarEnAsistente()
+    await avisoEnModal(MSG)
     expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()
     expect(tablaDocs).toHaveLength(0)
     expect(m.crearMov).not.toHaveBeenCalled()

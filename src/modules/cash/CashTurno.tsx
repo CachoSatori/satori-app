@@ -1176,9 +1176,10 @@ export default function CashTurno({
           role={profile.role}
           createdBy={profile.id}
           tc={tc}
-          onCreated={mov => { onMovAdded(mov); setAgregarOpen(false) }}
+          // (13-nov, caso B) onCreated NO cierra: el asistente llama onClose solo; con un aviso post-pago queda abierto
+          // en «listo» hasta que la cajera toque «Cerrar». Los avisos se ven dentro del modal (no van a onError).
+          onCreated={mov => onMovAdded(mov)}
           onClose={() => setAgregarOpen(false)}
-          onError={onError}
         />
       )}
 

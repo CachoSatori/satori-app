@@ -17,7 +17,7 @@ import type { DocExtract } from '../../shared/api/documents'
 
 const m = vi.hoisted(() => ({
   crearMov: vi.fn(async (x: Record<string, unknown>) => ({ ...x, id: 'mov-1' })),
-  guardar: vi.fn(async (_id: string, _alias: string): Promise<'agregado' | 'ya_estaba'> => 'agregado'),
+  guardar: vi.fn<(id: string, alias: string) => Promise<'agregado' | 'ya_estaba'>>(async () => 'agregado'),
   leer: vi.fn(async (): Promise<{ documentos: Partial<DocExtract>[]; fallo: boolean }> => ({ documentos: [], fallo: false })),
 }))
 vi.mock('../../shared/api/cash', () => ({ createCashMovement: m.crearMov, upsertSupplier: vi.fn() }))

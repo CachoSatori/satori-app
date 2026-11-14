@@ -33,6 +33,9 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     # sin la auditoría del token
     'sin_auditoria': ("      perform public.club_auditar('ver_link_portal', 'club_miembros', v_id, null, jsonb_build_object('via', 'alta_caja'));\n",
                       "      null;\n", {'2'}),
+    # (verificador, 14-nov) activar un anfitrión sin regenerar el token: el link del alta abre el portal de canje
+    'sin_regenerar': ("  update public.club_miembros set tipo = p_rol, token_portal = encode(extensions.gen_random_bytes(32), 'hex'), updated_at = now()\n",
+                      "  update public.club_miembros set tipo = p_rol, updated_at = now()\n", {'12', '13', '14'}),
     'grant_anon': ("grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated;",
                    "grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated, anon;", {'0'}),   # el 10 no cae: el chequeo de rol adentro tira 42501 igual
 }

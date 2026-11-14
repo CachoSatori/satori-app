@@ -115,12 +115,44 @@ end $$;
 reset role;
 select set_config('request.jwt.claims', '', true);
 
+-- foto del token que quedó en club_miembros al alta (antes de activarlo como anfitrión, que lo regenera)
+insert into _j156 (paso, j, err)
+select 'tok_alta', jsonb_build_object('t', m.token_portal), null
+  from _j156 x join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid where x.paso = 'nuevo';
+
+-- el socio nuevo del cajero se activa como ANFITRIÓN (owner): el link que se le dio en el alta deja de servir.
+-- Clave de club-web ficticia, solo dentro de la transacción, para llamar a club_canje_codigo_generar como lo hace club-web.
+insert into public.club_web_clave (sha256) values (encode(extensions.digest('clave-de-prueba-156-0123456789abcdef', 'sha256'), 'hex'));
+select set_config('request.jwt.claims', json_build_object('sub', (select owner_id from _c156), 'role', 'authenticated')::text, true);
+set local role authenticated;
+do $$
+declare v_m uuid := (select (x.j->>'miembro_id')::uuid from _j156 x where x.paso = 'nuevo');
+begin
+  begin perform public.club_rol_activar_anfitrion(v_m, 'referente', 'Prueba 156: activar anfitrion');
+        insert into _j156 values ('activar', null, 'ok');
+  exception when others then insert into _j156 values ('activar', null, sqlstate || ' ' || sqlerrm); end;
+end $$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+select set_config('request.headers', json_build_object('x-club-web', 'clave-de-prueba-156-0123456789abcdef')::text, true);
+do $$
+declare v_viejo text := (select x.j->>'token_portal' from _j156 x where x.paso = 'nuevo');
+        v_nuevo text := (select m.token_portal from public.club_miembros m join _j156 x on m.id = (x.j->>'miembro_id')::uuid
+                          where x.paso = 'nuevo');
+begin
+  begin perform public.club_canje_codigo_generar(v_viejo); insert into _j156 values ('canje_viejo', null, 'ok');
+  exception when others then insert into _j156 values ('canje_viejo', null, sqlerrm); end;
+  begin perform public.club_canje_codigo_generar(v_nuevo); insert into _j156 values ('canje_nuevo', null, 'ok');
+  exception when others then insert into _j156 values ('canje_nuevo', null, sqlerrm); end;
+end $$;
+select set_config('request.headers', '', true);
+
 -- 1. cajero, alta nueva → token_portal = el del socio recién creado (64 hex)
 insert into _r156 (caso, ok, detalle)
 select '1 cajero: alta nueva devuelve el token del portal de ESE socio',
-       coalesce(x.j->>'token_portal' = m.token_portal and m.token_portal ~ '^[0-9a-f]{64}$', false),
+       coalesce(x.j->>'token_portal' = t.j->>'t' and t.j->>'t' ~ '^[0-9a-f]{64}$', false),
        coalesce(x.err, 'token ' || case when x.j->>'token_portal' is null then 'null' else 'presente' end)
-  from _j156 x left join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid where x.paso = 'nuevo';
+  from _j156 x left join _j156 t on t.paso = 'tok_alta' where x.paso = 'nuevo';
 -- 2. queda auditado una vez como ver_link_portal, con el cajero como actor y via alta_caja
 insert into _r156 (caso, ok, detalle)
 select '2 auditoría: 1 fila ver_link_portal (actor cajero, via alta_caja)',
@@ -161,6 +193,27 @@ insert into _r156 (caso, ok, detalle)
 select '9 respuesta: miembro_id, estado activo y provisional_hasta como antes',
        coalesce(j ? 'miembro_id' and j->>'estado' = 'activo' and (j->>'provisional_hasta')::timestamptz > now(), false), null
   from _j156 where paso = 'nuevo';
+-- 12. activar como anfitrión regenera el token del portal (distinto del que se entregó en el alta)
+insert into _r156 (caso, ok, detalle)
+select '12 activar anfitrión: token_portal nuevo, distinto del entregado en el alta',
+       coalesce(a.err = 'ok' and m.token_portal ~ '^[0-9a-f]{64}$' and m.token_portal <> (x.j->>'token_portal') and m.tipo = 'referente', false),
+       a.err
+  from _j156 x join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid, _j156 a
+ where x.paso = 'nuevo' and a.paso = 'activar';
+-- 13. el link del alta ya NO genera códigos de canje; el nuevo sí llega al anfitrión (sin saldo: «no te alcanza»)
+insert into _r156 (caso, ok, detalle)
+select '13 el link del alta ya no genera códigos de canje; el nuevo sí llega al anfitrión',
+       v.err = 'Enlace no válido' and n.err <> 'Enlace no válido', 'viejo: ' || v.err || ' · nuevo: ' || n.err
+  from _j156 v, _j156 n where v.paso = 'canje_viejo' and n.paso = 'canje_nuevo';
+-- 14. queda auditado: activar_anfitrion con token_portal_regenerado y el trigger con token_cambiado
+insert into _r156 (caso, ok, detalle)
+select '14 auditoría de la activación: token_portal_regenerado y regenerar_codigo con token_cambiado',
+       exists (select 1 from public.club_auditoria a where a.objeto_id = (x.j->>'miembro_id')::uuid and a.accion = 'activar_anfitrion'
+                  and a.despues->>'token_portal_regenerado' = 'true')
+       and exists (select 1 from public.club_auditoria a where a.objeto_id = (x.j->>'miembro_id')::uuid and a.accion = 'regenerar_codigo'
+                      and a.despues->>'token_cambiado' = 'true'),
+       null
+  from _j156 x where x.paso = 'nuevo';
 -- 10. anon: sin EXECUTE
 do $$ begin
   set local role anon;
@@ -194,6 +247,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r156 where ok is not true;   -- null = falla
   if v is not null then raise exception '156-FALLAN: %', v; end if;
-  if (select count(*) from _r156) <> 13 then raise exception '156-FALLAN: se esperaban 13 casos'; end if;
+  if (select count(*) from _r156) <> 16 then raise exception '156-FALLAN: se esperaban 16 casos'; end if;
 end $$;
 rollback;

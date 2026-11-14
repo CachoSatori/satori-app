@@ -28,6 +28,13 @@
 --   · Permisos iguales a los de la 150: revoke a public/anon/authenticated y grant execute a authenticated. Roles
 --     adentro sin cambios (owner, manager, cajero).
 --
+--   · (verificador independiente, 14-nov) `create or replace` de public.club_rol_activar_anfitrion(uuid, text, text):
+--     copia EXACTA de la vigente (150; md5 del cuerpo 024272ca…, igual en prod y staging) + al activar a un socio como
+--     anfitrión, REGENERA token_portal (mismo generador que el alta) y lo anota en su auditoría
+--     (`token_portal_regenerado`; el trigger de club_miembros además registra «regenerar_codigo» con token_cambiado).
+--     Sin esto, el link entregado al alta (que queda también en el WhatsApp del aparato de caja) pasaría a abrir un
+--     portal de anfitrión, que genera códigos de canje (plata). Al activarlo, el manager le manda el link nuevo.
+--
 -- ── LO QUE NO TOCA ─────────────────────────────────────────────────────────────────────────────
 --   · Ni tablas, ni datos, ni plata. club_miembro_token sigue solo para owner y manager.
 --   · club_socio_validar (validar en caja una autoalta del sitio) no cambia: ese socio ya recibió su link en el sitio.
@@ -110,6 +117,50 @@ $$;
 revoke all on function public.club_socio_alta_caja(text, text, text, boolean, text) from public, anon, authenticated;
 grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated;
 
+create or replace function public.club_rol_activar_anfitrion(p_miembro uuid, p_rol text, p_nota text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_nota text := btrim(coalesce(p_nota, ''));
+  v_m    public.club_miembros%rowtype;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_rol is null or p_rol not in ('referente','concierge_pm','equipo') then
+    raise exception 'Rol de anfitrión no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+  end if;
+  if length(v_nota) not between 5 and 300 then
+    raise exception 'La nota es obligatoria (de 5 a 300 caracteres): escribí por qué se activa como anfitrión' using errcode = 'P0001';
+  end if;
+  select * into v_m from public.club_miembros where id = p_miembro for update;
+  if not found or v_m.estado <> 'activo' then
+    raise exception 'No se encontró la cuenta activa: buscala de nuevo' using errcode = 'P0001';
+  end if;
+  if public.club_tiene_rol(p_miembro, array['referente','concierge_pm','equipo'], array['activo','baja']) then
+    raise exception 'Ya es anfitrión: si estaba de baja, reactivalo desde su ficha' using errcode = 'P0001';
+  end if;
+  insert into public.club_miembro_roles (miembro_id, rol, estado, alta_por, validado_por, validado_en)
+  values (p_miembro, p_rol, 'activo', 'gerencia', auth.uid(), now());
+  -- 156: el link del portal que tenía como socio (entregado en el alta, también por WhatsApp desde la caja) deja de
+  -- servir: pasa a ser anfitrión y con ese portal se generan códigos de canje. Token nuevo, mismo generador que el
+  -- alta (default de club_miembros.token_portal) y que club_miembro_regenerar_codigo. El manager le manda el link nuevo.
+  update public.club_miembros set tipo = p_rol, token_portal = encode(extensions.gen_random_bytes(32), 'hex'), updated_at = now()
+   where id = p_miembro;
+  perform public.club_auditar('activar_anfitrion', 'club_miembro_roles', p_miembro, null,
+                              jsonb_build_object('rol', p_rol, 'nota', v_nota, 'token_portal_regenerado', true));
+  return true;
+end;
+$$;
+
+revoke all on function public.club_rol_activar_anfitrion(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.club_rol_activar_anfitrion(uuid, text, text) to authenticated;
+
 -- Verificación (si algo no quedó como se espera, aborta y no queda nada)
 do $$
 declare v_src text; v_def boolean;
@@ -128,6 +179,13 @@ begin
   end if;
   if not has_function_privilege('authenticated', 'public.club_socio_alta_caja(text,text,text,boolean,text)', 'EXECUTE') then
     raise exception '156: authenticated tiene que poder ejecutar club_socio_alta_caja';
+  end if;
+  if position($q$token_portal = encode(extensions.gen_random_bytes(32), 'hex')$q$ in
+              (select p.prosrc from pg_proc p where p.oid = 'public.club_rol_activar_anfitrion(uuid,text,text)'::regprocedure)) = 0 then
+    raise exception '156: club_rol_activar_anfitrion no regenera token_portal';
+  end if;
+  if has_function_privilege('anon', 'public.club_rol_activar_anfitrion(uuid,text,text)', 'EXECUTE') then
+    raise exception '156: anon no puede ejecutar club_rol_activar_anfitrion';
   end if;
   if has_function_privilege('anon', 'public.club_miembro_token(uuid)', 'EXECUTE') then
     raise exception '156: club_miembro_token no se abre';

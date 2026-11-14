@@ -1,5 +1,6 @@
--- Rollback de la 156 (origen 103): vuelve club_socio_alta_caja a la versión de la 150, byte a byte (md5 de
--- pg_get_functiondef 22c4e664…, el de prod y staging al 14-nov): el alta en caja deja de devolver `token_portal`.
+-- Rollback de la 156 (origen 103): vuelve club_socio_alta_caja (md5 de pg_get_functiondef 22c4e664…) y
+-- club_rol_activar_anfitrion (md5 de pg_get_functiondef 9ee7b899…) a la versión de la 150, byte a byte (las de prod y
+-- staging al 14-nov): el alta deja de devolver `token_portal` y activar un anfitrión deja de regenerarlo.
 -- No toca datos (las filas «ver_link_portal» de club_auditoria quedan: es de solo inserción). Permisos iguales a los
 -- de la 150. Borra la fila 156 del ledger (la 103 nunca se aplicó con ese número).
 -- Si se corre en prod, en el mismo momento sale el .sql de main (regla 10 / satori-migraciones-y-prod §6). El front
@@ -63,6 +64,46 @@ $$;
 
 revoke all on function public.club_socio_alta_caja(text, text, text, boolean, text) from public, anon, authenticated;
 grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated;
+
+create or replace function public.club_rol_activar_anfitrion(p_miembro uuid, p_rol text, p_nota text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_nota text := btrim(coalesce(p_nota, ''));
+  v_m    public.club_miembros%rowtype;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_rol is null or p_rol not in ('referente','concierge_pm','equipo') then
+    raise exception 'Rol de anfitrión no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+  end if;
+  if length(v_nota) not between 5 and 300 then
+    raise exception 'La nota es obligatoria (de 5 a 300 caracteres): escribí por qué se activa como anfitrión' using errcode = 'P0001';
+  end if;
+  select * into v_m from public.club_miembros where id = p_miembro for update;
+  if not found or v_m.estado <> 'activo' then
+    raise exception 'No se encontró la cuenta activa: buscala de nuevo' using errcode = 'P0001';
+  end if;
+  if public.club_tiene_rol(p_miembro, array['referente','concierge_pm','equipo'], array['activo','baja']) then
+    raise exception 'Ya es anfitrión: si estaba de baja, reactivalo desde su ficha' using errcode = 'P0001';
+  end if;
+  insert into public.club_miembro_roles (miembro_id, rol, estado, alta_por, validado_por, validado_en)
+  values (p_miembro, p_rol, 'activo', 'gerencia', auth.uid(), now());
+  update public.club_miembros set tipo = p_rol, updated_at = now() where id = p_miembro;
+  perform public.club_auditar('activar_anfitrion', 'club_miembro_roles', p_miembro, null,
+                              jsonb_build_object('rol', p_rol, 'nota', v_nota));
+  return true;
+end;
+$$;
+
+revoke all on function public.club_rol_activar_anfitrion(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.club_rol_activar_anfitrion(uuid, text, text) to authenticated;
 
 delete from supabase_migrations.schema_migrations where version = '156';
 commit;

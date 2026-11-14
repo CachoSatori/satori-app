@@ -1,5 +1,5 @@
 -- Rollback de la 156 (origen 103): vuelve club_socio_alta_caja (md5 de pg_get_functiondef 22c4e664…) y
--- club_rol_activar_anfitrion (md5 de pg_get_functiondef 9ee7b899…) a la versión de la 150, byte a byte (las de prod y
+-- club_rol_activar_anfitrion (9ee7b899…) y club_miembro_guardar (5501bf4a…) a la versión de la 150, byte a byte (las de prod y
 -- staging al 14-nov): el alta deja de devolver `token_portal` y activar un anfitrión deja de regenerarlo.
 -- No toca datos (las filas «ver_link_portal» de club_auditoria quedan: es de solo inserción). Permisos iguales a los
 -- de la 150. Borra la fila 156 del ledger (la 103 nunca se aplicó con ese número).
@@ -104,6 +104,100 @@ $$;
 
 revoke all on function public.club_rol_activar_anfitrion(uuid, text, text) from public, anon, authenticated;
 grant execute on function public.club_rol_activar_anfitrion(uuid, text, text) to authenticated;
+
+create or replace function public.club_miembro_guardar(
+  p_id uuid, p_tipo text, p_nombre text, p_negocio_id uuid, p_estado text, p_contacto jsonb, p_location text default null)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol    public.user_role := public.get_my_role();
+  v_nombre text := regexp_replace(btrim(coalesce(p_nombre, '')), '\s+', ' ', 'g');
+  v_id     uuid;
+  v_tel    text;
+  v_email  text;
+  v_antes  text;
+  v_saldo  int;
+  v_cfg    public.club_config%rowtype;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if length(v_nombre) not between 1 and 120 then
+    raise exception 'El nombre es obligatorio (hasta 120 caracteres)' using errcode = 'P0001';
+  end if;
+  if p_tipo is null or p_tipo not in ('referente','concierge_pm','equipo') then
+    raise exception 'Tipo no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+  end if;
+  if p_estado is not null and p_estado not in ('activo','baja') then
+    raise exception 'Estado no válido' using errcode = 'P0001';
+  end if;
+  if p_negocio_id is not null and not exists (select 1 from public.club_negocios n where n.id = p_negocio_id) then
+    raise exception 'Negocio no encontrado' using errcode = 'P0001';
+  end if;
+
+  if p_contacto is not null then
+    if jsonb_typeof(p_contacto) <> 'object' then
+      raise exception 'Contacto no válido' using errcode = 'P0001';
+    end if;
+    v_tel := public.club_norm_telefono(p_contacto->>'telefono');
+    v_email := nullif(lower(btrim(coalesce(p_contacto->>'email', ''))), '');
+    if v_email is not null and (length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+      raise exception 'Email no válido' using errcode = 'P0001';
+    end if;
+  end if;
+
+  if p_id is null then
+    -- LC-ML: el local se elige (o sale del negocio); sin dato, el único local con el Club activo
+    insert into public.club_miembros (location_id, tipo, nombre, negocio_id, estado, origen)
+    values (public.club_local(coalesce(p_location, (select n.location_id from public.club_negocios n where n.id = p_negocio_id)), false),
+            p_tipo, v_nombre, p_negocio_id, coalesce(p_estado, 'activo'), 'app')
+    returning id into v_id;
+  else
+    select m.estado into v_antes from public.club_miembros m where m.id = p_id for update;
+    update public.club_miembros
+       set tipo = p_tipo, nombre = v_nombre, negocio_id = p_negocio_id,
+           estado = coalesce(p_estado, estado), updated_at = now()
+     where id = p_id
+    returning id into v_id;
+    if v_id is null then
+      raise exception 'Miembro no encontrado' using errcode = 'P0001';
+    end if;
+    -- Baja: el saldo vence en la misma transacción. Volver a activo NO restituye
+    -- (eso es club_ajuste tipo restitucion, solo owner).
+    if v_antes = 'activo' and p_estado = 'baja' then
+      v_saldo := public.club_saldo_personas(v_id);
+      if v_saldo > 0 then
+        select * into v_cfg from public.club_config c
+         where c.location_id = (select m.location_id from public.club_miembros m where m.id = v_id);
+        insert into public.club_movimientos
+          (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+           fecha_visita, registrado_por, origen, nota)
+        values
+          (v_cfg.location_id, v_id, 'vencimiento', -v_saldo, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
+           now(), auth.uid(), 'app', 'baja: saldo vencido');
+      end if;
+    end if;
+  end if;
+
+  if p_contacto is not null then
+    insert into public.club_miembros_contacto (miembro_id, location_id, telefono, email, optin_whatsapp, optin_email)
+    values (v_id, (select location_id from public.club_miembros where id = v_id), v_tel, v_email,
+            coalesce((p_contacto->>'optin_whatsapp')::boolean, false) and v_tel is not null,
+            coalesce((p_contacto->>'optin_email')::boolean, false) and v_email is not null)
+    on conflict (miembro_id) do update
+      set telefono = excluded.telefono, email = excluded.email,
+          optin_whatsapp = excluded.optin_whatsapp, optin_email = excluded.optin_email, updated_at = now();
+  end if;
+  return v_id;
+end;
+$$;
+
+revoke all on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text) from public, anon, authenticated;
+grant execute on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text) to authenticated;
 
 delete from supabase_migrations.schema_migrations where version = '156';
 commit;

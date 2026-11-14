@@ -34,6 +34,11 @@
 --     (`token_portal_regenerado`; el trigger de club_miembros además registra «regenerar_codigo» con token_cambiado).
 --     Sin esto, el link entregado al alta (que queda también en el WhatsApp del aparato de caja) pasaría a abrir un
 --     portal de anfitrión, que genera códigos de canje (plata). Al activarlo, el manager le manda el link nuevo.
+--   · (re-verificador, 14-nov) `create or replace` de public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb,
+--     text): copia EXACTA de la vigente (150; md5 del cuerpo 83c184eb…, igual en prod y staging) + (a) si un socio pasa
+--     a anfitrión desde «Editar», regenera token_portal y lo audita («tipo_a_anfitrion», token_portal_regenerado), como
+--     al activarlo; (b) acepta tipo 'socio' SOLO para editar a quien ya es socio (antes «Editar» sobre un socio fallaba
+--     con «Tipo no válido»); crear un socio o pasar a alguien a socio por acá sigue rechazado.
 --
 -- ── LO QUE NO TOCA ─────────────────────────────────────────────────────────────────────────────
 --   · Ni tablas, ni datos, ni plata. club_miembro_token sigue solo para owner y manager.
@@ -161,6 +166,118 @@ $$;
 revoke all on function public.club_rol_activar_anfitrion(uuid, text, text) from public, anon, authenticated;
 grant execute on function public.club_rol_activar_anfitrion(uuid, text, text) to authenticated;
 
+create or replace function public.club_miembro_guardar(
+  p_id uuid, p_tipo text, p_nombre text, p_negocio_id uuid, p_estado text, p_contacto jsonb, p_location text default null)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol    public.user_role := public.get_my_role();
+  v_nombre text := regexp_replace(btrim(coalesce(p_nombre, '')), '\s+', ' ', 'g');
+  v_id     uuid;
+  v_tel    text;
+  v_email  text;
+  v_antes  text;
+  v_saldo  int;
+  v_cfg    public.club_config%rowtype;
+  v_tipo_antes text;          -- 156
+  v_a_anfitrion boolean := false;   -- 156: pasa de no anfitrión (socio) a anfitrión
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if length(v_nombre) not between 1 and 120 then
+    raise exception 'El nombre es obligatorio (hasta 120 caracteres)' using errcode = 'P0001';
+  end if;
+  -- 156: 'socio' solo para editar a alguien que ya es socio (nombre, contacto, estado); no se crea ni se pasa a socio acá
+  if p_tipo is null or p_tipo not in ('referente','concierge_pm','equipo','socio') then
+    raise exception 'Tipo no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+  end if;
+  if p_estado is not null and p_estado not in ('activo','baja') then
+    raise exception 'Estado no válido' using errcode = 'P0001';
+  end if;
+  if p_negocio_id is not null and not exists (select 1 from public.club_negocios n where n.id = p_negocio_id) then
+    raise exception 'Negocio no encontrado' using errcode = 'P0001';
+  end if;
+
+  if p_contacto is not null then
+    if jsonb_typeof(p_contacto) <> 'object' then
+      raise exception 'Contacto no válido' using errcode = 'P0001';
+    end if;
+    v_tel := public.club_norm_telefono(p_contacto->>'telefono');
+    v_email := nullif(lower(btrim(coalesce(p_contacto->>'email', ''))), '');
+    if v_email is not null and (length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+      raise exception 'Email no válido' using errcode = 'P0001';
+    end if;
+  end if;
+
+  if p_id is null then
+    if p_tipo = 'socio' then
+      raise exception 'Tipo no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+    end if;
+    -- LC-ML: el local se elige (o sale del negocio); sin dato, el único local con el Club activo
+    insert into public.club_miembros (location_id, tipo, nombre, negocio_id, estado, origen)
+    values (public.club_local(coalesce(p_location, (select n.location_id from public.club_negocios n where n.id = p_negocio_id)), false),
+            p_tipo, v_nombre, p_negocio_id, coalesce(p_estado, 'activo'), 'app')
+    returning id into v_id;
+  else
+    select m.estado, m.tipo into v_antes, v_tipo_antes from public.club_miembros m where m.id = p_id for update;
+    if p_tipo = 'socio' and v_tipo_antes is distinct from 'socio' then
+      raise exception 'Tipo no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+    end if;
+    -- 156: un socio que pasa a anfitrión desde «Editar» recibe link nuevo (como club_rol_activar_anfitrion): el link
+    -- que tenía como socio (entregado en el alta) no puede abrir un portal que genera códigos de canje.
+    v_a_anfitrion := v_tipo_antes is not null and v_tipo_antes not in ('referente','concierge_pm','equipo')
+                     and p_tipo in ('referente','concierge_pm','equipo');
+    update public.club_miembros
+       set tipo = p_tipo, nombre = v_nombre, negocio_id = p_negocio_id,
+           token_portal = case when v_a_anfitrion then encode(extensions.gen_random_bytes(32), 'hex') else token_portal end,
+           estado = coalesce(p_estado, estado), updated_at = now()
+     where id = p_id
+    returning id into v_id;
+    if v_id is null then
+      raise exception 'Miembro no encontrado' using errcode = 'P0001';
+    end if;
+    if v_a_anfitrion then
+      perform public.club_auditar('tipo_a_anfitrion', 'club_miembros', v_id, jsonb_build_object('tipo', v_tipo_antes),
+                                  jsonb_build_object('tipo', p_tipo, 'token_portal_regenerado', true));
+    end if;
+    -- Baja: el saldo vence en la misma transacción. Volver a activo NO restituye
+    -- (eso es club_ajuste tipo restitucion, solo owner).
+    if v_antes = 'activo' and p_estado = 'baja' then
+      v_saldo := public.club_saldo_personas(v_id);
+      if v_saldo > 0 then
+        select * into v_cfg from public.club_config c
+         where c.location_id = (select m.location_id from public.club_miembros m where m.id = v_id);
+        insert into public.club_movimientos
+          (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+           fecha_visita, registrado_por, origen, nota)
+        values
+          (v_cfg.location_id, v_id, 'vencimiento', -v_saldo, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
+           now(), auth.uid(), 'app', 'baja: saldo vencido');
+      end if;
+    end if;
+  end if;
+
+  if p_contacto is not null then
+    insert into public.club_miembros_contacto (miembro_id, location_id, telefono, email, optin_whatsapp, optin_email)
+    values (v_id, (select location_id from public.club_miembros where id = v_id), v_tel, v_email,
+            coalesce((p_contacto->>'optin_whatsapp')::boolean, false) and v_tel is not null,
+            coalesce((p_contacto->>'optin_email')::boolean, false) and v_email is not null)
+    on conflict (miembro_id) do update
+      set telefono = excluded.telefono, email = excluded.email,
+          optin_whatsapp = excluded.optin_whatsapp, optin_email = excluded.optin_email, updated_at = now();
+  end if;
+  return v_id;
+end;
+$$;
+
+revoke all on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text) from public, anon, authenticated;
+grant execute on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text) to authenticated;
+
 -- Verificación (si algo no quedó como se espera, aborta y no queda nada)
 do $$
 declare v_src text; v_def boolean;
@@ -186,6 +303,13 @@ begin
   end if;
   if has_function_privilege('anon', 'public.club_rol_activar_anfitrion(uuid,text,text)', 'EXECUTE') then
     raise exception '156: anon no puede ejecutar club_rol_activar_anfitrion';
+  end if;
+  if position('v_a_anfitrion' in (select p.prosrc from pg_proc p
+       where p.oid = 'public.club_miembro_guardar(uuid,text,text,uuid,text,jsonb,text)'::regprocedure)) = 0 then
+    raise exception '156: club_miembro_guardar no regenera token_portal al pasar a anfitrión';
+  end if;
+  if has_function_privilege('anon', 'public.club_miembro_guardar(uuid,text,text,uuid,text,jsonb,text)', 'EXECUTE') then
+    raise exception '156: anon no puede ejecutar club_miembro_guardar';
   end if;
   if has_function_privilege('anon', 'public.club_miembro_token(uuid)', 'EXECUTE') then
     raise exception '156: club_miembro_token no se abre';

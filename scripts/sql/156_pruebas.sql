@@ -119,6 +119,9 @@ select set_config('request.jwt.claims', '', true);
 insert into _j156 (paso, j, err)
 select 'tok_alta', jsonb_build_object('t', m.token_portal), null
   from _j156 x join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid where x.paso = 'nuevo';
+insert into _j156 (paso, j, err)
+select 'tok_owner', jsonb_build_object('t', m.token_portal), null
+  from _j156 x join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid where x.paso = 'owner';
 
 -- el socio nuevo del cajero se activa como ANFITRIÓN (owner): el link que se le dio en el alta deja de servir.
 -- Clave de club-web ficticia, solo dentro de la transacción, para llamar a club_canje_codigo_generar como lo hace club-web.
@@ -144,6 +147,52 @@ begin
   exception when others then insert into _j156 values ('canje_viejo', null, sqlerrm); end;
   begin perform public.club_canje_codigo_generar(v_nuevo); insert into _j156 values ('canje_nuevo', null, 'ok');
   exception when others then insert into _j156 values ('canje_nuevo', null, sqlerrm); end;
+end $$;
+select set_config('request.headers', '', true);
+
+-- «Editar» (club_miembro_guardar, owner) sobre el socio que dio de alta el owner (60015604):
+--   editar_socio: con tipo socio (antes fallaba «Tipo no válido») · socio_crear / a_socio: 'socio' no se crea ni se asigna
+--   a_anfitrion: socio → referente desde «Editar»: token nuevo; el link del alta ya no genera códigos de canje
+select set_config('request.jwt.claims', json_build_object('sub', (select owner_id from _c156), 'role', 'authenticated')::text, true);
+set local role authenticated;
+do $$
+declare v_m uuid := (select (x.j->>'miembro_id')::uuid from _j156 x where x.paso = 'owner');
+begin
+  begin perform public.club_miembro_guardar(v_m, 'socio', 'Owner Alta Editada', null, 'activo', null, null);
+        insert into _j156 values ('editar_socio', null, 'ok');
+  exception when others then insert into _j156 values ('editar_socio', null, sqlstate || ' ' || sqlerrm); end;
+end $$;
+reset role;
+-- foto después de editar el socio (antes de pasarlo a referente más abajo)
+insert into _j156 (paso, j, err)
+select 'post_editar', jsonb_build_object('tipo', m.tipo, 'nombre', m.nombre, 'token', m.token_portal), null
+  from _j156 x join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid where x.paso = 'owner';
+set local role authenticated;
+do $$
+declare v_m uuid := (select (x.j->>'miembro_id')::uuid from _j156 x where x.paso = 'owner');
+begin
+  begin perform public.club_miembro_guardar(null, 'socio', 'Socio Por Editar Ficticio', null, 'activo', null, (select loc from _c156));
+        insert into _j156 values ('socio_crear', null, 'ok');
+  exception when others then insert into _j156 values ('socio_crear', null, sqlerrm); end;
+  begin perform public.club_miembro_guardar((select anfitrion_id from _c156), 'socio', 'Anfitrion Prueba 156', null, 'activo', null, null);
+        insert into _j156 values ('a_socio', null, 'ok');
+  exception when others then insert into _j156 values ('a_socio', null, sqlerrm); end;
+  begin perform public.club_miembro_guardar(v_m, 'referente', 'Owner Alta Editada', null, 'activo', null, null);
+        insert into _j156 values ('a_anfitrion', null, 'ok');
+  exception when others then insert into _j156 values ('a_anfitrion', null, sqlstate || ' ' || sqlerrm); end;
+end $$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+select set_config('request.headers', json_build_object('x-club-web', 'clave-de-prueba-156-0123456789abcdef')::text, true);
+do $$
+declare v_viejo text := (select x.j->>'t' from _j156 x where x.paso = 'tok_owner');
+        v_nuevo text := (select m.token_portal from public.club_miembros m join _j156 x on m.id = (x.j->>'miembro_id')::uuid
+                          where x.paso = 'owner');
+begin
+  begin perform public.club_canje_codigo_generar(v_viejo); insert into _j156 values ('g_canje_viejo', null, 'ok');
+  exception when others then insert into _j156 values ('g_canje_viejo', null, sqlerrm); end;
+  begin perform public.club_canje_codigo_generar(v_nuevo); insert into _j156 values ('g_canje_nuevo', null, 'ok');
+  exception when others then insert into _j156 values ('g_canje_nuevo', null, sqlerrm); end;
 end $$;
 select set_config('request.headers', '', true);
 
@@ -186,8 +235,8 @@ select '7 alta repetida del mismo número → «Ya es socio», sin token', j is 
 -- 8. owner: también recibe el token de la persona nueva
 insert into _r156 (caso, ok, detalle)
 select '8 owner: alta nueva devuelve el token de ese socio',
-       coalesce(x.j->>'token_portal' = m.token_portal, false), coalesce(x.err, 'ok')
-  from _j156 x left join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid where x.paso = 'owner';
+       coalesce(x.j->>'token_portal' = t.j->>'t', false), coalesce(x.err, 'ok')
+  from _j156 x left join _j156 t on t.paso = 'tok_owner' where x.paso = 'owner';
 -- 9. las claves de antes siguen igual
 insert into _r156 (caso, ok, detalle)
 select '9 respuesta: miembro_id, estado activo y provisional_hasta como antes',
@@ -214,6 +263,29 @@ select '14 auditoría de la activación: token_portal_regenerado y regenerar_cod
                       and a.despues->>'token_cambiado' = 'true'),
        null
   from _j156 x where x.paso = 'nuevo';
+-- 15. «Editar» sobre un socio puro (tipo socio) guarda; sigue socio y con el mismo link
+insert into _r156 (caso, ok, detalle)
+select '15 Editar un socio (tipo socio): guarda, sigue socio, mismo token',
+       coalesce(e.err = 'ok' and f.j->>'tipo' = 'socio' and f.j->>'nombre' = 'Owner Alta Editada' and f.j->>'token' = t.j->>'t'
+       and exists (select 1 from public.club_auditoria a where a.objeto_id = (x.j->>'miembro_id')::uuid and a.accion = 'edicion'), false),
+       e.err
+  from _j156 e, _j156 f, _j156 t, _j156 x
+ where e.paso = 'editar_socio' and f.paso = 'post_editar' and t.paso = 'tok_owner' and x.paso = 'owner';
+-- 16. 'socio' no se crea ni se asigna desde «Editar»
+insert into _r156 (caso, ok, detalle)
+select '16 Editar: crear un socio o pasar un anfitrión a socio → Tipo no válido',
+       c.err like 'Tipo no válido%' and a.err like 'Tipo no válido%', 'crear: ' || c.err || ' · a socio: ' || a.err
+  from _j156 c, _j156 a where c.paso = 'socio_crear' and a.paso = 'a_socio';
+-- 17. socio → referente desde «Editar»: token nuevo, el link del alta ya no genera canje, auditado
+insert into _r156 (caso, ok, detalle)
+select '17 Editar socio → referente: token nuevo, link del alta sin canje, auditado tipo_a_anfitrion',
+       g.err = 'ok' and m.tipo = 'referente' and m.token_portal <> (t.j->>'t')
+       and v.err = 'Enlace no válido' and n.err <> 'Enlace no válido'
+       and exists (select 1 from public.club_auditoria a where a.objeto_id = m.id and a.accion = 'tipo_a_anfitrion'
+                     and a.despues->>'token_portal_regenerado' = 'true'),
+       'guardar: ' || g.err || ' · viejo: ' || v.err || ' · nuevo: ' || n.err
+  from _j156 g, _j156 t, _j156 v, _j156 n, _j156 x join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid
+ where g.paso = 'a_anfitrion' and t.paso = 'tok_owner' and v.paso = 'g_canje_viejo' and n.paso = 'g_canje_nuevo' and x.paso = 'owner';
 -- 10. anon: sin EXECUTE
 do $$ begin
   set local role anon;
@@ -247,6 +319,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r156 where ok is not true;   -- null = falla
   if v is not null then raise exception '156-FALLAN: %', v; end if;
-  if (select count(*) from _r156) <> 16 then raise exception '156-FALLAN: se esperaban 16 casos'; end if;
+  if (select count(*) from _r156) <> 19 then raise exception '156-FALLAN: se esperaban 19 casos'; end if;
 end $$;
 rollback;

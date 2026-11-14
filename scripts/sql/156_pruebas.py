@@ -36,6 +36,12 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     # (verificador, 14-nov) activar un anfitrión sin regenerar el token: el link del alta abre el portal de canje
     'sin_regenerar': ("  update public.club_miembros set tipo = p_rol, token_portal = encode(extensions.gen_random_bytes(32), 'hex'), updated_at = now()\n",
                       "  update public.club_miembros set tipo = p_rol, updated_at = now()\n", {'12', '13', '14'}),
+    # (re-verificador, 14-nov) «Editar» socio → anfitrión sin regenerar el token: el link del alta llega al canje
+    'guardar_sin_regenerar': ("           token_portal = case when v_a_anfitrion then encode(extensions.gen_random_bytes(32), 'hex') else token_portal end,\n",
+                              "           token_portal = token_portal,\n", {'17'}),
+    # «Editar» sobre un socio vuelve a fallar con «Tipo no válido»
+    'guardar_sin_socio': ("  if p_tipo is null or p_tipo not in ('referente','concierge_pm','equipo','socio') then\n",
+                          "  if p_tipo is null or p_tipo not in ('referente','concierge_pm','equipo') then\n", {'15'}),
     'grant_anon': ("grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated;",
                    "grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated, anon;", {'0'}),   # el 10 no cae: el chequeo de rol adentro tira 42501 igual
 }

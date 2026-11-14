@@ -4,7 +4,7 @@
 --
 -- ⚠ Cambia una función del Club en prod: no se mergea sin el OK del dueño. Creada como 102 (bloque CLUB); prod va por
 -- la 153, así que se renumeró a la 155 del bloque de PASE (regla 3), con origen 102. La 101 (→ 152) es del #140 (aviso
--- del Club) y la 154 queda reservada para él (152 ≤ 153 de prod).
+-- del Club): usa la 154 solo si entra antes que la 155; si no, la siguiente libre del bloque PASE (156+).
 --
 -- ── QUÉ CIERRA ─────────────────────────────────────────────────────────────────────────────────
 -- La carga inicial de tarjetas del sistema anterior (club_movimientos.origen = 'migracion') entró con fecha de visita

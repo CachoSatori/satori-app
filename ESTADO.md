@@ -364,7 +364,7 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 |---|---|---|---|
 | CAJA / operación | 087–99 | 087, 088, 089, 090, 091, 092, 093, 094, 095, 096 | **097** |
 | CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) · 101 la usa el #140 (→ 152) · 102 (`club_tope_sin_carga_inicial`; renumerada a 155) | **103** |
-| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; como prod ya tiene la 153, al pasar toma la **154**, reservada para él); **156** después de la 155 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
+| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; como prod ya tiene la 153, regla 3: el #140 usa la **154** solo si entra antes que la 155; si no, la siguiente libre del bloque PASE, 156+); **156** después de la 155 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
 | (fuera de bloque) | 086 | — | libre |
 
 **Asignadas en los bloques**

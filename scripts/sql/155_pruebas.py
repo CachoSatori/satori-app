@@ -31,7 +31,7 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
                 'security invoker\nset search_path = public, pg_temp\nas $$\ndeclare\n  v_rol public.user_role := public.get_my_role();\n  v_cfg',
                 {'0'}),
     'grant_anon': ("grant execute on function public.club_excepciones(date, date, text, text) to authenticated;",
-                   "grant execute on function public.club_excepciones(date, date, text, text) to authenticated, anon;", {'0', '7'}),
+                   "grant execute on function public.club_excepciones(date, date, text, text) to authenticated, anon;", {'0'}),   # el 7 no cae: el chequeo de rol adentro tira 42501 igual
 }
 
 

@@ -6,7 +6,7 @@
 -- borrar: se apaga el registro (solo los triggers, bloque A) y se arregla con una migración nueva. El bloque B
 -- (tabla) frena solo si la tabla tiene filas, salvo que se lo pida explícitamente con
 --   set satori.rollback_165_borrar_historia = 'si';   -- en la misma sesión, antes de correr este archivo
--- Borra la fila 165 del ledger. El .sql de la 165 se QUEDA en main (regla 10 / satori-migraciones-y-prod §6): lo que se borra es su fila del ledger.
+-- Borra la fila 165 del ledger. Si se corre en prod, en el mismo momento sale el .sql de la 165 de main (si queda, Branching la vuelve a aplicar; regla 10 / satori-migraciones-y-prod §6).
 -- Si la 165 ya está en el ledger de prod y hay filas reales, se apaga con una migración nueva (bloque A).
 
 begin;

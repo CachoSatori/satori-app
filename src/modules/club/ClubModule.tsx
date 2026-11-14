@@ -27,15 +27,20 @@ export default function ClubModule() {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const gestiona = profile?.role === 'owner' || profile?.role === 'manager'
+  const [params] = useSearchParams()
   const esOwner = profile?.role === 'owner'
   // 164: los avisos del Inicio llegan con ?vista=…(&miembro=… | &tipo=…). Solo owner y manager entran a otra pestaña.
-  const [params] = useSearchParams()
   const pedida = params.get('vista') as Vista | null
   const [vista, setVista] = useState<Vista>(() => (gestiona && pedida && VISTAS_GESTION.includes(pedida) ? pedida : 'escanear'))
   const abrirMiembro = params.get('miembro')
   const tipoExcepcion = params.get('tipo')
   const [locales, setLocales] = useState<LocalClub[] | null>(null)
-  const [local, setLocal] = useState<string | null>(localActual())
+  // 164: un aviso del Inicio trae ?local=… → el Club abre en ese local (si el usuario lo ve; si no, cargarLocales elige otro).
+  const [local, setLocal] = useState<string | null>(() => {
+    const l = params.get('local')
+    if (l) elegirLocal(l)
+    return localActual()
+  })
 
   // El owner ve también los locales apagados (para preparar su configuración); el resto, solo los encendidos.
   const visibles = (locales ?? []).filter(l => l.activo || esOwner)
@@ -148,16 +153,24 @@ const ETIQUETAS_UMBRAL: Array<[keyof UmbralesAlerta, string, number, number]> = 
   ['alerta_canjes_sin_codigo_max', 'Avisar si hay más de … canjes sin código sin resolver (0 = desde el primero)', 0, 100],
 ]
 function Umbrales({ locales }: { locales: LocalClub[] }) {
-  const [local, setLocal] = useState<string>(locales[0]?.id ?? '')
+  const [elegido, setElegido] = useState<string>('')
+  // Si la lista de locales llega después (o cambia), se usa el primero: nunca queda «Cargando…» sin local.
+  const local = locales.some(l => l.id === elegido) ? elegido : (locales[0]?.id ?? '')
   const [u, setU] = useState<UmbralesAlerta | null>(null)
+  const [estado, setEstado] = useState<'cargando' | 'listo' | 'sin_config' | 'error'>('cargando')
+  const [reintento, setReintento] = useState(0)
   const [msg, setMsg] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
   useEffect(() => {
     if (!local) return
     let vivo = true
-    getUmbrales(local).then(r => { if (vivo) { setU(r); setMsg(null) } }).catch(e => { if (vivo) setMsg(aClubError(e).message) })
+    getUmbrales(local)
+      .then(r => { if (vivo) { setU(r); setEstado(r ? 'listo' : 'sin_config'); setMsg(null) } })
+      .catch(e => { if (vivo) { setEstado('error'); setMsg(aClubError(e).message) } })
     return () => { vivo = false }
-  }, [local])
+  }, [local, reintento])
+  const cargarDeNuevo = () => { setEstado('cargando'); setMsg(null); setReintento(n => n + 1) }
+  const elegir = (id: string) => { setElegido(id); setU(null); setEstado('cargando') }
   const validos = !!u && ETIQUETAS_UMBRAL.every(([k, , min, max]) => Number.isInteger(u[k]) && u[k] >= min && u[k] <= max)
   async function guardar() {
     if (!u || !validos) return
@@ -170,19 +183,26 @@ function Umbrales({ locales }: { locales: LocalClub[] }) {
     <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', display: 'grid', gap: 6 }}>
       <strong style={{ fontSize: 13 }}>Alertas del Inicio («Club · Para revisar hoy»)</strong>
       {locales.length > 1 && (
-        <select aria-label="Local de los umbrales" value={local} onChange={e => setLocal(e.target.value)} style={{ ...inputStyle, padding: '0.45rem 0.6rem' }}>
+        <select aria-label="Local de los umbrales" value={local} onChange={e => elegir(e.target.value)} style={{ ...inputStyle, padding: '0.45rem 0.6rem' }}>
           {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
         </select>
       )}
-      {u === null ? <span style={{ fontSize: 13, color: C.muted }}>Cargando…</span> : ETIQUETAS_UMBRAL.map(([k, texto, min, max]) => (
+      {!local ? <span style={{ fontSize: 13, color: C.muted }}>No hay locales del Club todavía.</span>
+        : estado === 'error' ? (
+          <span style={{ fontSize: 13, color: C.red }}>
+            No se pudieron leer los umbrales. <button className="cash-back-btn" onClick={cargarDeNuevo}>Reintentar</button>
+          </span>)
+        : estado === 'sin_config' ? <span style={{ fontSize: 13, color: C.red }}>Este local no tiene configuración del Club.</span>
+        : estado === 'cargando' || u === null ? <span style={{ fontSize: 13, color: C.muted }}>Cargando…</span>
+        : ETIQUETAS_UMBRAL.map(([k, texto, min, max]) => (
         <label key={k} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
           <span>{texto}</span>
           <input type="number" aria-label={texto} min={min} max={max} step={1} value={Number.isFinite(u[k]) ? u[k] : ''}
             onChange={e => setU({ ...u, [k]: e.target.value === '' ? NaN : Number(e.target.value) })} style={campo} />
         </label>
       ))}
-      {msg && <p style={{ color: C.ink, fontSize: 13, margin: 0 }}>{msg}</p>}
-      <button className="cash-back-btn" disabled={enviando || !validos} onClick={() => void guardar()}>Guardar umbrales</button>
+      {msg && <p style={{ color: estado === 'error' ? C.red : C.ink, fontSize: 13, margin: 0 }}>{msg}</p>}
+      {estado === 'listo' && <button className="cash-back-btn" disabled={enviando || !validos} onClick={() => void guardar()}>Guardar umbrales</button>}
     </div>
   )
 }

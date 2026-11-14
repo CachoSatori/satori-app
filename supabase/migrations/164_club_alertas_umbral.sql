@@ -19,6 +19,8 @@
 --     lo registre 3 veces en 3 días es raro (en el piloto, 2 socios). Visitas sin factura y canjes sin código: 0 es la
 --     meta de la guía 6.13 → cualquiera se avisa.
 --   · public.club_alertas_inicio(p_location text default null): lo que el Inicio muestra en «Club · Para revisar hoy».
+--     Sin local (lo que usa el Inicio): todos los locales con el Club encendido que el usuario ve (puede_ver_local), cada
+--     aviso con su local en el detalle (local, local_nombre, multilocal). Con local: solo ese.
 --     Ventana de revisión: AYER y HOY (hora de Costa Rica), salvo (d), que usa los mismos 30 días que el aviso de
 --     excepciones. Devuelve solo lo que pasa el umbral (cero filas = nada para revisar):
 --       (a) ANFITRION_24H     · anfitrión (cualquier tipo, también el equipo) con más de N acumulaciones en una ventana de
@@ -82,9 +84,24 @@ declare
   v_hoy   date := (now() at time zone 'America/Costa_Rica')::date;
   v_desde timestamptz;
   v_n     int;
+  v_loc   record;
+  v_multi boolean;
 begin
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  -- Sin local (el Inicio): TODOS los locales con el Club encendido que el usuario ve, cada aviso con su local. Así, con
+  -- dos locales encendidos y ninguno elegido en el aparato, el Inicio no queda en «sin comprobar» (verificador #183).
+  if p_location is null then
+    select count(*) > 1 into v_multi from public.club_config c
+     where c.club_activo and public.puede_ver_local(c.location_id);
+    for v_loc in select c.location_id from public.club_config c
+                  where c.club_activo and public.puede_ver_local(c.location_id) order by c.location_id loop
+      return query select a.tipo, a.ref, a.cantidad, a.umbral, a.fecha,
+                          a.detalle || jsonb_build_object('multilocal', v_multi)
+                     from public.club_alertas_inicio(v_loc.location_id) a;
+    end loop;
+    return;
   end if;
   p_location := public.club_local(p_location, false);
   if not public.puede_ver_local(p_location) then        -- 091: el manager ve solo sus locales
@@ -115,7 +132,8 @@ begin
     select distinct on (ve.miembro_id) ve.miembro_id, ve.n, ve.hasta
       from ve order by ve.miembro_id, ve.n desc, ve.hasta desc)
   select 'ANFITRION_24H'::text, 'anfitrion-24h:' || mx.miembro_id, mx.n::int, v_cfg.alerta_anfitrion_24h_max, mx.hasta,
-         jsonb_build_object('miembro_id', mx.miembro_id, 'miembro', public.club_nombre_limpio(mi.nombre),
+         jsonb_build_object('local', p_location, 'local_nombre', coalesce(v_cfg.nombre, p_location),
+                            'miembro_id', mx.miembro_id, 'miembro', public.club_nombre_limpio(mi.nombre),
                             'tipo_miembro', mi.tipo, 'desde', mx.hasta - interval '24 hours', 'hasta', mx.hasta)
     from mx join public.club_miembros mi on mi.id = mx.miembro_id
    where mx.n > v_cfg.alerta_anfitrion_24h_max
@@ -144,7 +162,8 @@ begin
       from ve order by ve.miembro_id, ve.usuario, ve.que, ve.n desc, ve.hasta desc)
   select 'MISMO_USUARIO'::text, 'mismo-usuario:' || mx.que || ':' || mx.miembro_id || ':' || mx.usuario, mx.n::int,
          v_cfg.alerta_mismo_usuario_max, mx.hasta,
-         jsonb_build_object('miembro_id', mx.miembro_id, 'miembro', public.club_nombre_limpio(mi.nombre), 'que', mx.que,
+         jsonb_build_object('local', p_location, 'local_nombre', coalesce(v_cfg.nombre, p_location),
+                            'miembro_id', mx.miembro_id, 'miembro', public.club_nombre_limpio(mi.nombre), 'que', mx.que,
                             'usuario', coalesce((select p.full_name from public.profiles p where p.id = mx.usuario), 'Sin perfil'),
                             'dias', v_cfg.alerta_mismo_usuario_dias)
     from mx join public.club_miembros mi on mi.id = mx.miembro_id
@@ -154,16 +173,19 @@ begin
   -- (c) visitas de socio sin factura cruzada (ayer y hoy): la misma cuenta que «Reportes → Visitas de socios por usuario»
   select coalesce(sum(r.sin_factura), 0)::int into v_n from public.club_reporte_visitas(v_hoy - 1, v_hoy, p_location) r;
   if v_n > v_cfg.alerta_visitas_sin_factura_max then
-    return query select 'VISITAS_SIN_FACTURA'::text, 'visitas-sin-factura:' || v_hoy, v_n, v_cfg.alerta_visitas_sin_factura_max,
-                        now(), jsonb_build_object('desde', v_hoy - 1, 'hasta', v_hoy);
+    return query select 'VISITAS_SIN_FACTURA'::text, 'visitas-sin-factura:' || p_location || ':' || v_hoy, v_n,
+                        v_cfg.alerta_visitas_sin_factura_max, now(),
+                        jsonb_build_object('local', p_location, 'local_nombre', coalesce(v_cfg.nombre, p_location),
+                                           'desde', v_hoy - 1, 'hasta', v_hoy);
   end if;
 
   -- (d) canjes sin código sin resolver (30 días): las mismas filas de Excepciones, solo el conteo
   select count(*)::int into v_n
     from public.club_excepciones(v_hoy - 30, v_hoy, p_location, 'CANJE_SIN_CODIGO') e where not e.resuelta;
   if v_n > v_cfg.alerta_canjes_sin_codigo_max then
-    return query select 'CANJE_SIN_CODIGO'::text, 'canjes-sin-codigo:' || v_hoy, v_n, v_cfg.alerta_canjes_sin_codigo_max,
-                        now(), jsonb_build_object('dias', 30);
+    return query select 'CANJE_SIN_CODIGO'::text, 'canjes-sin-codigo:' || p_location || ':' || v_hoy, v_n,
+                        v_cfg.alerta_canjes_sin_codigo_max, now(),
+                        jsonb_build_object('local', p_location, 'local_nombre', coalesce(v_cfg.nombre, p_location), 'dias', 30);
   end if;
 end;
 $$;

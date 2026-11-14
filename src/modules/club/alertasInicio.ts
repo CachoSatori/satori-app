@@ -27,7 +27,21 @@ export function rutaClub(vista: 'miembros' | 'reportes' | 'excepciones', extra: 
   return `/club?${q.toString()}`
 }
 
+/** Con más de un local encendido, cada aviso dice de qué local es y su link elige ese local en el Club. */
 export function avisoClub(a: AlertaInicio): AvisoClub {
+  const d = a.detalle ?? {}
+  const v = avisoSinLocal(a)
+  if (!d.local) return v
+  const q = new URLSearchParams(v.path.split('?')[1] ?? '')
+  q.set('local', d.local)
+  return {
+    ...v,
+    titulo: d.multilocal ? `${nombre(d.local_nombre ?? d.local)} · ${v.titulo}` : v.titulo,
+    path: `/club?${q.toString()}`,
+  }
+}
+
+function avisoSinLocal(a: AlertaInicio): AvisoClub {
   const d = a.detalle ?? {}
   switch (a.tipo) {
     case 'ANFITRION_24H': {
@@ -79,4 +93,12 @@ export function avisoClub(a: AlertaInicio): AvisoClub {
     default:
       return { id: String((a as { ref?: string }).ref ?? 'otro'), titulo: 'Aviso del Club', texto: 'Revisalo en el Club.', estado: '', path: '/club' }
   }
+}
+
+/** Canjes sin código que ya muestra el bloque del Club, del mismo local que cuenta «excepciones abiertas»: el elegido
+ *  en el Club o, sin elegir, el único encendido (con dos o más sin elegir esa lectura falla y no hay nada que descontar). */
+export function canjesEnBloque(alertas: AlertaInicio[] | 'fallo' | null, local: string | null): number {
+  if (!Array.isArray(alertas)) return 0
+  return alertas.filter(a => a.tipo === 'CANJE_SIN_CODIGO' && (local === null || a.detalle?.local === local))
+    .reduce((t, a) => t + a.cantidad, 0)
 }

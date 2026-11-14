@@ -5,14 +5,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
-const s = vi.hoisted(() => ({ role: 'manager', guardado: null as unknown, umbrales: null as unknown }))
+const s = vi.hoisted(() => ({
+  role: 'manager', guardado: null as unknown, umbrales: null as unknown, umbralesFalla: 0, lecturas: 0,
+  locales: [{ id: 'local-a', nombre: 'Local A', activo: true }] as Array<{ id: string; nombre: string; activo: boolean }>,
+  localesEnEspera: null as Promise<void> | null,
+}))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: s.role, full_name: 'Prueba' } }) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/api/club', async orig => ({
   ...(await orig<typeof import('../../shared/api/club')>()),
-  getLocalesClub: async () => [{ id: 'local-a', nombre: 'Local A', activo: true }],
+  getLocalesClub: async () => { if (s.localesEnEspera) await s.localesEnEspera; return s.locales },
   getClubUrl: async () => null,
-  getUmbrales: async () => s.umbrales,
+  getUmbrales: async () => { s.lecturas++; if (s.umbralesFalla > 0) { s.umbralesFalla--; throw new Error('sin conexión') } return s.umbrales },
   guardarUmbrales: async (_l: string, u: unknown) => { s.guardado = u },
 }))
 vi.mock('./Escanear', () => ({ default: () => <p>pantalla escanear</p> }))
@@ -25,7 +29,9 @@ import ClubModule from './ClubModule'
 const montar = (url: string) => render(<MemoryRouter initialEntries={[url]}><ClubModule /></MemoryRouter>)
 
 beforeEach(() => {
-  cleanup(); s.role = 'manager'; s.guardado = null
+  cleanup(); s.role = 'manager'; s.guardado = null; s.umbralesFalla = 0; s.lecturas = 0; s.localesEnEspera = null
+  s.locales = [{ id: 'local-a', nombre: 'Local A', activo: true }]
+  localStorage.clear()
   s.umbrales = { alerta_anfitrion_24h_max: 5, alerta_mismo_usuario_max: 2, alerta_mismo_usuario_dias: 3,
                  alerta_visitas_sin_factura_max: 0, alerta_canjes_sin_codigo_max: 0 }
 })
@@ -70,5 +76,40 @@ describe('Club · Locales · umbrales de las alertas (164, owner)', () => {
     fireEvent.click(boton)
     await waitFor(() => expect(s.guardado).toMatchObject({ alerta_anfitrion_24h_max: 8, alerta_canjes_sin_codigo_max: 0 }))
     expect(await screen.findByText(/Umbrales guardados/)).toBeTruthy()
+  })
+})
+
+describe('Club · verificador #183', () => {
+  it('?local=… abre el Club en ese local', async () => {
+    s.locales = [{ id: 'local-a', nombre: 'Local A', activo: true }, { id: 'local-b', nombre: 'Local B', activo: true }]
+    montar('/club?vista=reportes&local=local-b')
+    const sel = await screen.findByDisplayValue('Local B') as HTMLSelectElement
+    expect(sel.value).toBe('local-b')
+  })
+  it('umbrales: si la lectura falla, error visible y «Reintentar» los trae', async () => {
+    s.role = 'owner'; s.umbralesFalla = 1
+    montar('/club')
+    fireEvent.click(await screen.findByText('Locales'))
+    expect(await screen.findByText(/No se pudieron leer los umbrales/)).toBeTruthy()
+    expect(screen.queryByText('Guardar umbrales')).toBeNull()
+    fireEvent.click(screen.getByText('Reintentar'))
+    expect(await screen.findByLabelText('Avisar si un anfitrión suma más de … visitas en 24 h')).toBeTruthy()
+    expect(s.lecturas).toBe(2)
+  })
+  it('umbrales: si los locales llegan después de abrir «Locales», igual cargan (no queda «Cargando…»)', async () => {
+    s.role = 'owner'
+    let soltar = () => {}
+    s.localesEnEspera = new Promise<void>(r => { soltar = r })
+    montar('/club')
+    fireEvent.click(await screen.findByText('Locales'))
+    expect(s.lecturas).toBe(0)
+    soltar()
+    expect(await screen.findByLabelText('Avisar si un anfitrión suma más de … visitas en 24 h')).toBeTruthy()
+  })
+  it('umbrales: local sin configuración lo dice', async () => {
+    s.role = 'owner'; s.umbrales = null
+    montar('/club')
+    fireEvent.click(await screen.findByText('Locales'))
+    expect(await screen.findByText('Este local no tiene configuración del Club.')).toBeTruthy()
   })
 })

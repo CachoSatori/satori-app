@@ -33,6 +33,8 @@
 -- (d) p164-a: CS1 canje sin código abierto · CS2 resuelto · CS3 hace 40 días · CN canje con código → 1.
 begin;
 -- @@164@@   (aquí va el cuerpo de la 164 sin begin/commit)
+-- la fila del ledger que deja Branching al aplicar la 164 (el rollback la tiene que borrar)
+insert into supabase_migrations.schema_migrations (version, name) values ('164', 'club_alertas_umbral') on conflict (version) do nothing;
 create temp table _r164 (n serial, caso text, ok boolean, detalle text) on commit drop;
 grant all on _r164 to public;
 grant all on sequence _r164_n_seq to public;
@@ -201,6 +203,10 @@ select pg_temp.leer164('contador', '00000000-0000-4000-8000-000000164a03', 'p164
 select pg_temp.leer164('cajero',   '00000000-0000-4000-8000-000000164a04', 'p164-c');
 select pg_temp.leer164('owner',    '00000000-0000-4000-8000-000000164a01', 'p164-d');
 select pg_temp.leer164('mgr-otro', '00000000-0000-4000-8000-000000164a07', 'p164-b');
+-- sin local (lo que usa el Inicio): todos los locales encendidos que el usuario ve
+select pg_temp.leer164('owner-null',    '00000000-0000-4000-8000-000000164a01', null);
+select pg_temp.leer164('manager-null',  '00000000-0000-4000-8000-000000164a02', null);
+select pg_temp.leer164('mgr-otro-null', '00000000-0000-4000-8000-000000164a07', null);
 
 create temp view _a164 as select * from _o164 where quien = 'owner' and loc = 'p164-a';
 create or replace function pg_temp.hay(p_tipo text, p_ref text) returns boolean language sql as $f$
@@ -256,6 +262,29 @@ insert into _r164 (caso, ok, detalle) select '1k cero datos (p164-d): cero filas
   exists (select 1 from _o164 where quien = 'owner' and loc = 'p164-d' and tipo = '_ok')
   and not exists (select 1 from _o164 where loc = 'p164-d' and tipo not like '\_%'),
   (select string_agg(tipo || ':' || coalesce(ref, ''), ' · ') from _o164 where loc = 'p164-d');
+
+-- 1l–1n. sin local: por local, con el local en cada aviso (verificador #183: dos locales encendidos y ninguno elegido)
+insert into _r164 (caso, ok, detalle) select '1l owner sin local: avisos de p164-a y p164-b (no del apagado), cada uno con su local y multilocal',
+  exists (select 1 from _o164 where quien = 'owner-null' and tipo = '_ok')
+  and exists (select 1 from _o164 where quien = 'owner-null' and detalle->>'local' = 'p164-a' and ref = 'anfitrion-24h:00000000-0000-4000-8000-000000164b01'
+                and detalle->>'local_nombre' = 'Local P164 A' and (detalle->>'multilocal')::boolean)
+  and exists (select 1 from _o164 where quien = 'owner-null' and detalle->>'local' = 'p164-b')
+  and not exists (select 1 from _o164 where quien = 'owner-null' and detalle->>'local' in ('p164-c', 'p164-d'))
+  and (select count(*) from _o164 where quien = 'owner-null' and detalle->>'local' = 'p164-a')
+      = (select count(*) from _a164 where tipo not like '\_%'),
+  (select string_agg(distinct detalle->>'local', ',') from _o164 where quien = 'owner-null');
+insert into _r164 (caso, ok, detalle) select '1m manager sin local: solo su local (p164-a), multilocal falso',
+  exists (select 1 from _o164 where quien = 'manager-null' and tipo = '_ok')
+  and exists (select 1 from _o164 where quien = 'manager-null' and detalle->>'local' = 'p164-a')
+  and not exists (select 1 from _o164 where quien = 'manager-null' and tipo not like '\_%'
+                   and (detalle->>'local' <> 'p164-a' or (detalle->>'multilocal')::boolean)),
+  (select string_agg(distinct detalle->>'local', ',') from _o164 where quien = 'manager-null');
+insert into _r164 (caso, ok, detalle) select '1n manager de p164-b sin local: solo p164-b',
+  exists (select 1 from _o164 where quien = 'mgr-otro-null' and detalle->>'local' = 'p164-b')
+  and not exists (select 1 from _o164 where quien = 'mgr-otro-null' and tipo not like '\_%' and detalle->>'local' <> 'p164-b'), null;
+insert into _r164 (caso, ok, detalle) select '1o refs únicas por local en (c) y (d)',
+  exists (select 1 from _a164 where tipo = 'VISITAS_SIN_FACTURA' and ref like 'visitas-sin-factura:p164-a:%')
+  and exists (select 1 from _a164 where tipo = 'CANJE_SIN_CODIGO' and ref like 'canjes-sin-codigo:p164-a:%'), null;
 
 -- 2. (a) acumulaciones del mismo anfitrión en 24 h
 insert into _r164 (caso, ok, detalle) select '2a A1: 6 en 24 h → aviso con cantidad 6 y umbral 5',
@@ -354,8 +383,9 @@ insert into _r164 (caso, ok, detalle) select '6 leer no escribe movimientos', (s
 
 -- 7. rollback: saca la función y los umbrales
 -- @@164R@@   (aquí va el cuerpo de scripts/sql/164_rollback.sql sin begin/commit)
-insert into _r164 (caso, ok, detalle) select '7 rollback: sin función ni umbrales',
+insert into _r164 (caso, ok, detalle) select '7 rollback: sin función, sin umbrales y sin la fila 164 del ledger',
   to_regprocedure('public.club_alertas_inicio(text)') is null
+  and not exists (select 1 from supabase_migrations.schema_migrations where version = '164')
   and not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_config'
                    and column_name like 'alerta\_%'), null;
 
@@ -366,6 +396,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r164 where ok is not true;
   if v is not null then raise exception '164-FALLAN: %', v; end if;
-  if (select count(*) from _r164) < 37 then raise exception '164-FALLAN: faltan casos (NO PROBADO)'; end if;
+  if (select count(*) from _r164) < 41 then raise exception '164-FALLAN: faltan casos (NO PROBADO)'; end if;
 end $$;
 rollback;

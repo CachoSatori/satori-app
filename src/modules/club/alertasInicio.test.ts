@@ -48,4 +48,12 @@ describe('avisoClub', () => {
   it('rutaClub codifica los parámetros', () => {
     expect(rutaClub('miembros', { miembro: 'a b' })).toBe('/club?vista=miembros&miembro=a+b')
   })
+  it('con local: el link elige ese local; con varios locales, el título dice cuál', () => {
+    const uno = avisoClub(a({ tipo: 'CANJE_SIN_CODIGO', cantidad: 1, umbral: 0, detalle: { local: 'loc-a', local_nombre: 'Playa', multilocal: false } }))
+    expect(uno.titulo).toBe('1 canje sin código sin resolver')
+    expect(uno.path).toBe('/club?vista=excepciones&tipo=CANJE_SIN_CODIGO&local=loc-a')
+    const varios = avisoClub(a({ detalle: { miembro_id: 'm1', miembro: 'Hotel Ficticio', local: 'loc-b', local_nombre: 'Monte', multilocal: true } }))
+    expect(varios.titulo).toBe('Monte · Hotel Ficticio sumó 6 visitas con cupón o tarjeta en 24 horas')
+    expect(varios.path).toBe('/club?vista=miembros&miembro=m1&local=loc-b')
+  })
 })

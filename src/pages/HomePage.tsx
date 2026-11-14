@@ -11,7 +11,7 @@ import { calcularPendientes, fraseEstado, TODAS_LAS_SENALES, type Pendiente, typ
 import type { AlertaCierres } from '../modules/cash/diasSinCierre'
 import { alertaGuardada, leerAlertaInicio } from './alertaInicio'
 import type { AlertaInicio } from '../shared/api/club'
-import { avisoClub } from '../modules/club/alertasInicio'
+import { avisoClub, canjesEnBloque } from '../modules/club/alertasInicio'
 
 // La lista de módulos vive en `shared/layout/modulos.ts`: es la misma fuente del menú global (B3).
 
@@ -255,6 +255,7 @@ export default function HomePage() {
   const [clubFallo, setClubFallo] = useState(false)    // la lectura de excepciones del Club falló (208)
   // 164 (B6): «Club · Para revisar hoy» — alertas con umbral (owner y manager). null = cargando.
   const [clubAlertas, setClubAlertas] = useState<AlertaInicio[] | 'fallo' | null>(null)
+  const [clubLocal, setClubLocal] = useState<string | null>(null)   // el local con que se contaron las excepciones abiertas
   // B5: si `fetchHomeStatus` falla entero, se dice — no «Revisando el día…» para siempre.
   const [statusFallo, setStatusFallo] = useState(false)
 
@@ -283,11 +284,11 @@ export default function HomePage() {
     // Auditoría 208: si la lectura del Club falla, el Inicio dice «sin comprobar» (nunca «Todo en orden»).
     // Un solo import del módulo para las dos lecturas (excepciones abiertas y alertas con umbral).
     const club = import('../shared/api/club')
-    club.then(m => m.getExcepcionesAbiertas(30))
+    club.then(m => { setClubLocal(m.localActual()); return m.getExcepcionesAbiertas(30) })
       .then(n => { setClubAbiertas(n); setClubFallo(false) })
       .catch(() => setClubFallo(true))
     // 164: si falla, el bloque dice «sin comprobar» (nunca «nada para revisar»).
-    club.then(m => m.getAlertasInicio())
+    club.then(m => m.getAlertasInicio(null))   // todos los locales encendidos que ve (cada aviso con su local)
       .then(a => setClubAlertas(a ?? []))
       .catch(() => setClubAlertas('fallo'))
   }, [mustLand, gestionaClub])
@@ -340,9 +341,11 @@ export default function HomePage() {
       diasSinCierre: alertaOk ? alertaOk.dias.length : null,
       turnosViejos:  alertaOk ? alertaOk.turnos.length : null,
       sinComprobar,
-      clubExcepciones: gestionaClub && !clubFallo ? clubAbiertas : null,
+      // 164: un canje sin código no sale dos veces. Si el bloque «Club · Para revisar hoy» ya lo muestra, se descuenta
+      // de las excepciones abiertas (mismas filas, mismos 30 días) del local que leyó ese conteo.
+      clubExcepciones: gestionaClub && !clubFallo ? Math.max(0, clubAbiertas - canjesEnBloque(clubAlertas, clubLocal)) : null,
     }, visibles)
-  }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas, clubFallo])
+  }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas, clubFallo, clubAlertas, clubLocal])
 
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol

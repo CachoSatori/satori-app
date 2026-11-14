@@ -53,11 +53,16 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     'sin_check': ("  check (alerta_anfitrion_24h_max between 1 and 100);", ";", {'5d'}),
     'invoker': ("security definer\nset search_path = public, pg_temp\nas $$\ndeclare\n  v_rol   public.user_role",
                 "security invoker\nset search_path = public, pg_temp\nas $$\ndeclare\n  v_rol   public.user_role", {'0'}),
+    'null_sin_filtro_local': ("                  where c.club_activo and public.puede_ver_local(c.location_id) order by c.location_id loop",
+                              "                  where c.club_activo order by c.location_id loop", {'1m', '1n'}),
+    'multilocal_fijo': ("a.detalle || jsonb_build_object('multilocal', v_multi)", "a.detalle || jsonb_build_object('multilocal', false)", {'1l'}),
+    'refs_sin_local': ("'canjes-sin-codigo:' || p_location || ':' || v_hoy", "'canjes-sin-codigo:' || v_hoy", {'1o'}),
     'anon_ejecuta': ("grant execute on function public.club_alertas_inicio(text) to authenticated;",
                      "grant execute on function public.club_alertas_inicio(text) to authenticated, anon;", {'0'}),
 }
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
     'rollback_deja_funcion': ("drop function if exists public.club_alertas_inicio(text);\n", "", {'7'}),
+    'rollback_deja_ledger': ("delete from supabase_migrations.schema_migrations where version = '164';\n", "", {'7'}),
 }
 
 

@@ -537,10 +537,13 @@ export type TipoAlertaInicio = 'ANFITRION_24H' | 'MISMO_USUARIO' | 'VISITAS_SIN_
 /** Una fila de `club_alertas_inicio`: solo lo que pasó el umbral del local (cero filas = nada para revisar). */
 export interface AlertaInicio {
   tipo: TipoAlertaInicio; ref: string; cantidad: number; umbral: number; fecha: string
-  detalle: { miembro_id?: string; miembro?: string; tipo_miembro?: string; que?: 'socio' | 'equipo'; usuario?: string; dias?: number }
+  detalle: { miembro_id?: string; miembro?: string; tipo_miembro?: string; que?: 'socio' | 'equipo'; usuario?: string; dias?: number
+             /** El local del aviso; `multilocal` = el usuario ve más de un local con el Club encendido. */
+             local?: string; local_nombre?: string; multilocal?: boolean }
 }
-/** Owner y manager (rol activo; el manager, en sus locales). Club apagado en el local: lista vacía. */
-export const getAlertasInicio = (local: string | null = localClub) =>
+/** Owner y manager (rol activo; el manager, en sus locales). Club apagado en el local: lista vacía.
+ *  Sin local (`null`, lo que usa el Inicio): todos los locales encendidos que el usuario ve, cada aviso con su local. */
+export const getAlertasInicio = (local: string | null = null) =>
   llamar<AlertaInicio[]>('club_alertas_inicio', { p_location: local })
 
 /** Umbrales por local (club_config). Los lee el staff; los cambia solo el owner (RLS) y quedan en club_config_historial. */

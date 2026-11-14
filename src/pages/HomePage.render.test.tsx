@@ -57,9 +57,15 @@ let clubExcepciones = 0
 let clubAlertas: unknown[] = []
 let clubAlertasFalla = false
 let clubAlertasLecturas = 0
+let clubAlertasLocalPedido: unknown = 'sin llamar'
+let clubLocalActual: string | null = null
 vi.mock('../shared/api/club', () => ({
   getExcepcionesAbiertas: async () => { if (clubFalla) throw new Error('sin conexión'); return clubExcepciones },
-  getAlertasInicio: async () => { clubAlertasLecturas++; if (clubAlertasFalla) throw new Error('sin conexión'); return clubAlertas },
+  getAlertasInicio: async (local?: string | null) => {
+    clubAlertasLecturas++; clubAlertasLocalPedido = local
+    if (clubAlertasFalla) throw new Error('sin conexión'); return clubAlertas
+  },
+  localActual: () => clubLocalActual,
 }))
 
 import HomePage from './HomePage'
@@ -84,6 +90,8 @@ beforeEach(() => {
   clubAlertas = []
   clubAlertasFalla = false
   clubAlertasLecturas = 0
+  clubAlertasLocalPedido = 'sin llamar'
+  clubLocalActual = null
   olvidarAlertaInicio()
   sessionStorage.clear()
 })
@@ -351,5 +359,39 @@ describe('Inicio · Club · Para revisar hoy (164)', () => {
       expect(screen.queryByRole('region', { name: 'Club · Para revisar hoy' })).toBeNull()
       expect(clubAlertasLecturas).toBe(0)
     }
+  })
+})
+
+// Verificador #183: varios locales y el canje sin código que no sale dos veces.
+describe('Inicio · Club · Para revisar hoy · locales y duplicados (164)', () => {
+  const canje = (cantidad: number, local: string) => ({ tipo: 'CANJE_SIN_CODIGO', ref: `d:${local}`, cantidad, umbral: 0,
+    fecha: '2001-03-01T12:00:00Z', detalle: { local, local_nombre: `Local ${local}`, multilocal: false } })
+  it('pide las alertas SIN local (todos los encendidos que ve), no el elegido en el aparato', async () => {
+    clubLocalActual = 'local-a'
+    montar()
+    await waitFor(() => expect(screen.getByText('Nada para revisar en el Club (ayer y hoy).')).toBeTruthy())
+    expect(clubAlertasLocalPedido).toBeNull()
+  })
+  it('dos locales: cada aviso dice su local', async () => {
+    clubAlertas = [{ tipo: 'VISITAS_SIN_FACTURA', ref: 'c:b', cantidad: 1, umbral: 0, fecha: '2001-03-01T12:00:00Z',
+      detalle: { local: 'local-b', local_nombre: 'Local Bee', multilocal: true } }]
+    montar()
+    await waitFor(() => expect(screen.getByText('Local Bee · 1 visita de socio sin factura (ayer y hoy)')).toBeTruthy())
+  })
+  it('el canje sin código del bloque no se cuenta otra vez en «Revisar las excepciones del Club»', async () => {
+    clubExcepciones = 1
+    clubAlertas = [canje(1, 'local-a')]
+    montar()
+    await waitFor(() => expect(screen.getByText('1 canje sin código sin resolver')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
+    expect(screen.queryByText('Revisar las excepciones del Club')).toBeNull()
+  })
+  it('las demás excepciones siguen: 3 abiertas − 1 canje del bloque = «2 excepciones»', async () => {
+    clubExcepciones = 3
+    clubLocalActual = 'local-a'
+    clubAlertas = [canje(1, 'local-a'), canje(5, 'local-b')]   // el de otro local no se descuenta
+    montar()
+    await waitFor(() => expect(screen.getByText('Revisar las excepciones del Club')).toBeTruthy())
+    expect(screen.getByText('2 excepciones')).toBeTruthy()
   })
 })

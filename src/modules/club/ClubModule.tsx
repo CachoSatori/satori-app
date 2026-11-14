@@ -3,6 +3,7 @@
  * F1f: Excepciones del puente y Reportes (owner, manager). LC-A3: Promociones y cortesías (owner edita, manager lee).
  * LC-ML: multilocal. Los locales salen de club_config; el selector aparece solo si hay más de uno, y el owner enciende o
  * apaga el Club por local (pestaña Locales). Ninguna pantalla nombra un local.
+ * 166: Campañas (solo owner) — grupo de control: reservar un % sin la oferta y comparar los dos grupos.
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -18,8 +19,9 @@ const Excepciones = lazy(() => import('./Excepciones'))
 const Reportes = lazy(() => import('./Reportes'))
 const Promociones = lazy(() => import('./Promociones'))
 const Marcadores = lazy(() => import('./Marcadores'))
+const Campanas = lazy(() => import('./Campanas'))
 
-type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'promociones' | 'descuentos' | 'locales'
+type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'promociones' | 'descuentos' | 'campanas' | 'locales'
 
 export default function ClubModule() {
   const { profile } = useAuth()
@@ -83,6 +85,7 @@ export default function ClubModule() {
           <div className={`vt-nav-tab ${vista === 'reportes' ? 'active' : ''}`} onClick={() => setVista('reportes')}>Reportes</div>
           <div className={`vt-nav-tab ${vista === 'promociones' ? 'active' : ''}`} onClick={() => setVista('promociones')}>Promociones</div>
           <div className={`vt-nav-tab ${vista === 'descuentos' ? 'active' : ''}`} onClick={() => setVista('descuentos')}>Descuentos</div>
+          {esOwner && <div className={`vt-nav-tab ${vista === 'campanas' ? 'active' : ''}`} onClick={() => setVista('campanas')}>Campañas</div>}
           {esOwner && <div className={`vt-nav-tab ${vista === 'locales' ? 'active' : ''}`} onClick={() => setVista('locales')}>Locales</div>}
         </div>
       )}
@@ -96,6 +99,7 @@ export default function ClubModule() {
         {vista === 'reportes' && gestiona && <Reportes />}
         {vista === 'promociones' && gestiona && <Promociones />}
         {vista === 'descuentos' && gestiona && <Marcadores />}
+        {vista === 'campanas' && esOwner && <Campanas />}
       </Suspense>
     </div>
   )

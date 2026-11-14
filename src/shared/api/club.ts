@@ -531,3 +531,42 @@ export const getReporteVisitas = (desde: string, hasta: string, local: string | 
 export interface AltasPorCajero { usuario: string; altas_caja: number; validaciones: number; confirmo: number; sin_confirmar: number; vencidas: number }
 export const getReporteAltas = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<AltasPorCajero[]>('club_reporte_altas', { p_desde: desde, p_hasta: hasta, p_location: local })
+
+// ── 166 · Campañas con grupo de control (SPEC Club v2 ítem 12, B8). Solo owner. ──────────────────────────────────────
+// El grupo de cada miembro lo pone un sorteo fijo en la base (semilla guardada): la app no elige ni reasigna a nadie.
+// Al grupo reservado nunca se le quita el beneficio base (10 %/15 %, cortesía, créditos): solo no recibe el extra.
+export type FuenteCampana = 'a_contactar' | 'reto' | 'primeros_90'
+export interface Campana {
+  id: string; nombre: string; local: string; fuente: FuenteCampana; control_pct: number
+  inicio: string; creada_en: string; oferta: number; control: number
+}
+export interface FilaCampana {
+  miembro_id: string; nombre: string; negocio: string | null; tipo: TipoMiembro; estado: 'activo' | 'baja'
+  creditos: number; vence_en: string | null
+  /** Solo en el exporte, y solo si la persona lo autorizó. */
+  whatsapp?: string | null; email?: string | null
+}
+/** La lista de la campaña: SOLO el grupo con oferta; el reservado viene como número. */
+export interface ListaCampana { id: string; nombre: string; local: string; control_pct: number; oferta: number; control: number; filas: FilaCampana[] }
+export interface GrupoReporte {
+  miembros: number; con_visita: number; con_visita_pct: number | null; visitas: number; visitas_por_miembro: number | null
+  facturas: number; venta_respaldada_crc: number; venta_por_miembro_crc: number | null
+}
+export interface ReporteCampana {
+  id: string; nombre: string; local: string; fuente: FuenteCampana; control_pct: number; inicio: string; generado_en: string
+  ventana_dias: number; ventana_hasta: string | null; cerrado: boolean; umbral_minimo: number; no_concluyente: boolean
+  pos_sin_datos: boolean; oferta: GrupoReporte; control: GrupoReporte
+}
+export const crearCampana = (nombre: string, location: string | null, controlPct: number) =>
+  llamar<Campana>('club_campana_crear', { p_nombre: nombre, p_location: location, p_control_pct: controlPct, p_fuente: 'a_contactar' })
+export const sumarNuevosCampana = (campana: string) =>
+  llamar<{ id: string; nuevos: number; oferta: number; control: number }>('club_campana_sumar_nuevos', { p_campana: campana })
+export const getCampanas = (location: string | null) => llamar<Campana[]>('club_campanas_listar', { p_location: location })
+/** `apertura`: un id por apertura de la pantalla (la base deja UNA fila de rastro por apertura). */
+export const getListaCampana = (campana: string, apertura: string) =>
+  llamar<ListaCampana>('club_campana_lista', { p_campana: campana, p_exporte: false, p_apertura: apertura })
+/** El CSV de la campaña: la base lo entrega (con rastro, cuántas filas) y nunca trae al grupo reservado. */
+export const exportarListaCampana = (campana: string) =>
+  llamar<ListaCampana>('club_campana_lista', { p_campana: campana, p_exporte: true, p_apertura: null })
+export const getReporteCampana = (campana: string, apertura: string) =>
+  llamar<ReporteCampana>('club_campana_reporte', { p_campana: campana, p_apertura: apertura })

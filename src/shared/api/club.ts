@@ -523,7 +523,7 @@ export interface MarcadorDescuento {
   id: string; codigo_producto: string; nombre: string; pct_esperado: number | null; activo: boolean
   visto_en_facturas: boolean; actualizado_en: string
 }
-/** Owner y manager (en la base también el contador, pero no entra a /club). */
+/** Owner y manager (en la base también el contador, pero en /club solo ve el Tablero). */
 export const getMarcadores = () => llamar<MarcadorDescuento[]>('club_marcadores_listar', { p_location: localClub })
 /** Solo owner. Alta: `id` null + código del PoS. Edición: nombre, % esperado (null = cualquier descuento) y activo. */
 export const guardarMarcador = (id: string | null, codigo: string | null, nombre: string | null, pct: number | null, activo: boolean | null) =>

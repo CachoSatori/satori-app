@@ -798,7 +798,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             <div className="tips-field-label">Monto ₡ colones</div>
             <div className="cd-monto-wrap">
               <span className="cd-prefix">₡</span>
-              <input type="number" className="cd-monto-input" aria-label="Monto colones" placeholder="0" min={0}
+              <input type="number" className="cd-monto-input" aria-label="Monto colones" placeholder="0" min={0} step="any"
                 value={montoCRC} onChange={e => setMontoCRC(e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
           </div>
@@ -806,7 +806,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             <div className="tips-field-label">Monto $ dólares</div>
             <div className="cd-monto-wrap usd">
               <span className="cd-prefix">$</span>
-              <input type="number" className="cd-monto-input" aria-label="Monto dólares" placeholder="0" min={0}
+              <input type="number" className="cd-monto-input" aria-label="Monto dólares" placeholder="0" min={0} step="any"
                 value={montoUSD} onChange={e => setMontoUSD(e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
           </div>

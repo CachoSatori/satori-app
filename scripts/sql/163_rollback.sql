@@ -1,7 +1,6 @@
 -- 163_rollback (origen 109) — deshace la 163 y deja la 159 como estaba. Una transacción.
--- Orden de la vuelta atrás (skill satori-migraciones-y-prod §6): esto + en el MISMO momento un PR que saca
--- supabase/migrations/163_club_edad_validar_reactivar.sql de main (si queda, Branching la vuelve a aplicar) y revierte
--- la app (que llama a club_socio_validar_v2 y club_miembro_guardar_v2: sin ellas, «Validar socio» y «Guardar» de un
+-- Orden de la vuelta atrás (skill satori-migraciones-y-prod §6): esto (que borra la fila 163 del ledger) y, en el
+-- MISMO momento, revertir la app (que llama a club_socio_validar_v2 y club_miembro_guardar_v2: sin ellas, «Validar socio» y «Guardar» de un
 -- miembro fallan). La 159 y su trigger quedan.
 -- Los mayor_edad_en registrados por la 163 y sus filas de club_auditoria («socio_mayor_edad») se QUEDAN: son
 -- confirmaciones reales que dio el personal (la auditoría es inmutable).
@@ -36,4 +35,5 @@ end;
 $$;
 revoke all on function public.club_roles_mayor_edad_chk() from public, anon, authenticated;
 
+delete from supabase_migrations.schema_migrations where version = '163';
 commit;

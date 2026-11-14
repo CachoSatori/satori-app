@@ -7,18 +7,26 @@
  *   2. 💰 Reporte de Propinas — distribución sector, AM/PM split, top take-home
  *
  * Triggers:
- *   - Día 1 del mes 08:00 CR (pg_cron → mes anterior)
- *   - Día 15 del mes 08:00 CR (pg_cron → mes actual acumulado)
- *   - POST manual: body { "month": "2026-04", "tipo": "ventas"|"propinas"|"ambos" }
+ *   - pg_cron (día 1 y día 15) con Authorization: Bearer <service_role, desde Vault>
+ *   - Botón de Admin (owner activo) con su JWT
+ *   - body { "month"?: "YYYY-MM", "tipo"?: "ventas"|"propinas"|"ambos", "dry_run"?: boolean }
+ *
+ * SEC-02 (06/11): exige service_role u owner activo; CORS con allowlist; parámetros validados;
+ * la respuesta NO trae montos ni nombres; errores fijos. Deploy A MANO con verify_jwt = true
+ * (regla: ningún PR a main con supabase/functions/ hasta el ítem 11).
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { poolTotalSesion, type PoolEntry } from './pool.ts'
+import {
+  corsHeaders, decidirAcceso, destinatarioReporte, respuestaOk, validarParametros, type DepsAcceso,
+} from './acceso.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const TO_EMAIL       = Deno.env.get('REPORT_TO_EMAIL') ?? 'cachorrogp@gmail.com'
+// Sin correo por defecto en el código (repo público): sin el secreto, no se manda (ver acceso.ts).
+const TO_EMAIL       = destinatarioReporte(Deno.env.get('REPORT_TO_EMAIL'))
 const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
 
 // ── Shared helpers (ported from Apps Script) ─────────────────
@@ -434,54 +442,94 @@ ${p.sectores.length>0?`
 </div>${emailFooter(mes,anio)}</div>`
 }
 
+// ── SEC-02 (06/11) / SEC-02b: autenticación, CORS y validación ──────────────────
+// Antes la función corría con service_role SIN pedir nada (verify_jwt off): cualquiera podía pedirle
+// el total de ventas y el top salonero del mes, y disparar los correos del reporte.
+// Ahora: Authorization = service_role (el cron, desde Vault) o el JWT de un OWNER ACTIVO (botón de
+// Admin). La respuesta ya no trae montos ni nombres; los errores son fijos (+ ref en el log).
+// La lógica vive en ./acceso.ts (pura, probada con vitest en acceso.test.ts).
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+
+const deps: DepsAcceso = {
+  serviceKey: SUPABASE_KEY,
+  // Un endpoint de admin de GoTrue solo responde a una service_role real (JWT viejo o clave nueva).
+  esServiceRole: async (token) => {
+    try {
+      const c = createClient(SUPABASE_URL, token, { auth: { persistSession: false, autoRefreshToken: false } })
+      const { error } = await c.auth.admin.listUsers({ page: 1, perPage: 1 })
+      return !error
+    } catch { return false }
+  },
+  usuarioDeToken: async (token) => {
+    const comoUsuario = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+    const { data: ud } = await comoUsuario.auth.getUser()
+    return ud?.user?.id ?? null
+  },
+  esOwnerActivo: async (userId) => {
+    const admin = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+    const { data: owner, error } = await admin.from('profiles').select('id')
+      .eq('id', userId).eq('role', 'owner').eq('is_active', true).maybeSingle()
+    if (error) { console.error(JSON.stringify({ etapa: 'owner', detalle: error.message })); return 'error' }
+    return !!owner
+  },
+}
+
 // ── Main handler ─────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, {
-    headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' }
-  })
+  const cors = corsHeaders(req.headers.get('Origin'))
+  const ref = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  const responder = (status: number, body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+  const falla = (status: number, code: string, error: string) => responder(status, { ok: false, code, error, ref })
+
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  if (req.method !== 'POST') return falla(405, 'metodo', 'Método no permitido')
 
   try {
+    // 1) Quién llama: service_role (cron) u owner activo (botón de Admin). Nada más.
+    const acceso = await decidirAcceso(req.headers.get('Authorization'), deps)
+    if (!acceso.ok) return falla(acceso.status, acceso.code, acceso.error)
+    const quien = acceso.quien
+
+    // 2) Parámetros.
+    const body = await req.json().catch(() => ({}))
+    const par = validarParametros(body)
+    if (!par.ok) return falla(par.status, par.code, par.error)
+    const { ym, tipo, dry } = par   // dry: modo seco, calcula todo y NO manda correos
+    // Sin destinatario configurado no se manda nada (el modo seco sigue funcionando).
+    if (!dry && !TO_EMAIL) return falla(500, 'config', 'Falta configurar el destinatario del reporte')
+
+    // 3) Reporte. La respuesta dice qué se envió, sin montos ni nombres (van solo en el correo).
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    const body = await req.json().catch(() => ({})) as { month?: string; tipo?: string }
-
-    // Determine month
-    let ym = body.month ?? ''
-    if (!ym) {
-      const now = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Costa_Rica'}))
-      now.setMonth(now.getMonth() - 1)
-      ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
-    }
-
     const [y, m] = ym.split('-')
-    const mes    = MONTHS_ES[Number(m)-1] ?? m
-    const anio   = Number(y)
-    const tipo   = body.tipo ?? 'ambos'
-
-    const results: string[] = []
+    const mes  = MONTHS_ES[Number(m) - 1] ?? m
+    const anio = Number(y)
+    const enviados: string[] = [], sinDatos: string[] = []
 
     if (tipo === 'ventas' || tipo === 'ambos') {
       const v = await calcVentas(supabase, ym)
       if (v.diasVentas > 0) {
-        await send(`📈 Satori — Ventas ${mes} ${anio}`, buildVentasEmail(v, mes, anio))
-        results.push(`ventas: ${fi(v.total)} · ${v.diasVentas} días · IRS top: ${v.topSal[0]?.nombre??'—'} (${v.topSal[0]?.irs??0})`)
-      } else results.push('ventas: sin datos')
+        const html = buildVentasEmail(v, mes, anio)
+        if (!dry) await send(`📈 Satori — Ventas ${mes} ${anio}`, html)
+        enviados.push('ventas')
+      } else sinDatos.push('ventas')
     }
-
     if (tipo === 'propinas' || tipo === 'ambos') {
       const p = await calcPropinas(supabase, ym)
       if (p.turnos > 0) {
-        await send(`💰 Satori — Propinas ${mes} ${anio}`, buildPropinasEmail(p, mes, anio))
-        results.push(`propinas: ${fi(p.pool)} pool · ${p.turnos} turnos`)
-      } else results.push('propinas: sin datos')
+        const html = buildPropinasEmail(p, mes, anio)
+        if (!dry) await send(`💰 Satori — Propinas ${mes} ${anio}`, html)
+        enviados.push('propinas')
+      } else sinDatos.push('propinas')
     }
 
-    return new Response(JSON.stringify({ ok: true, month: `${mes} ${anio}`, results }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    })
-  } catch(err) {
-    console.error(err)
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), {
-      status: 500, headers: { 'Content-Type': 'application/json' }
-    })
+    console.log(JSON.stringify({ ref, quien, ym, tipo, dry, enviados, sinDatos }))
+    return responder(200, respuestaOk(mes, anio, dry, enviados, sinDatos))
+  } catch (err) {
+    console.error(JSON.stringify({ ref, etapa: 'no_controlado', detalle: String(err) }))
+    return falla(500, 'interno', 'No se pudo generar el reporte')
   }
 })

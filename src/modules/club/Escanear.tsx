@@ -21,6 +21,7 @@ import {
 import { parsearQR, urlPortal } from './qrFormato'
 import { linkAltaWhatsApp, puedeMandarLinkPortal } from './altaWhatsApp'
 import { Aviso, Btn, Card, Chip } from './ui'
+import { AvisoPrimeros90 } from './Primeros90'
 import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
 
@@ -682,6 +683,8 @@ function VisitaSocio({ miembro }: { miembro: string }) {
             {res.avisos.map(a => <li key={a}>{a}</li>)}
           </ul>
         )}
+        {/* mig 168: la cortesía especial de bienvenida (primeros 90 días), aparte para que no se pierda */}
+        <AvisoPrimeros90 p={res.primeros90} />
       </div>
     )
   }

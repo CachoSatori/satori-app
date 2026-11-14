@@ -321,3 +321,17 @@ test('(12-nov) /api/portal/:token/wallet/actualizar llama a la ruta «actualizar
     assert.equal((await manejar(pedido(ruta), conLimite(), ruta)).status, 405)
   } finally { globalThis.fetch = fetchViejo }
 })
+
+test('168: GET /api/portal/:token/avance llama a club_portal_avance con el header; POST → 405; token malo → 404; tope → 429', async () => {
+  llamadas = []
+  const tok = 'a'.repeat(64)
+  const r = await manejar(pedido(`portal/${tok}/avance`), conLimite(), `portal/${tok}/avance`)
+  assert.equal(r.status, 200)
+  assert.ok(String(llamadas.at(-1).url).endsWith('/rpc/club_portal_avance'))
+  assert.equal(JSON.parse(llamadas.at(-1).init.body).p_token, tok)
+  assert.equal(llamadas.at(-1).init.headers['x-club-web'], 'clave-de-prueba')
+  assert.equal((await manejar(pedido(`portal/${tok}/avance`, 'POST'), conLimite(), `portal/${tok}/avance`)).status, 405)
+  assert.equal((await manejar(pedido('portal/xyz/avance'), conLimite(), 'portal/xyz/avance')).status, 404)
+  assert.equal((await manejar(pedido(`portal/${tok}/avance`), conLimite(false), `portal/${tok}/avance`)).status, 429)
+  assert.equal((await manejar(pedido(`portal/${tok}/avance`), base, `portal/${tok}/avance`)).status, 503)
+})

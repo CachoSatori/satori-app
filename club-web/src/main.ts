@@ -15,6 +15,7 @@ import './styles.css'
 import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
+import { leerAvance, textosAvance } from './avance'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -372,6 +373,19 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
   const cort = socio.cortesias ?? []
   const sorpresas = cort.filter(c => c.motivo === 'promo').reduce((n, c) => n + c.cantidad, 0)
   const premios = cort.filter(c => c.motivo === 'premio_referido')
+  // mig 168: «Visita 2 de 4» de los primeros 90 días; se pide aparte y, si falla o no corresponde, no se muestra nada
+  const avanceBox = h('div')
+  if (activo) {
+    void api<unknown>(`portal/${token}/avance`).then(r => {
+      const a = r.ok ? leerAvance(r.data) : null
+      if (!a) return
+      const x = textosAvance(a, t, d => fecha(d + 'T12:00:00-06:00', false))
+      const barra = h('div', { class: 'avance-barra', role: 'img', 'aria-label': x.principal },
+        ...Array.from({ length: x.de }, (_, i) => h('span', { class: i < x.visita ? 'lleno' : '' })))
+      avanceBox.replaceChildren(h('div', { class: 'avance' + (x.ganada ? ' ganada' : '') },
+        h('h3', {}, x.titulo), h('p', {}, h('strong', {}, x.principal)), barra, h('p', { class: 'sub' }, x.detalle)))
+    })
+  }
   const qrBox = h('div', { class: 'socio-qr' })
   if (socio.codigo_socio) {
     const cod = socio.codigo_socio
@@ -386,6 +400,7 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     activo && sorpresas > 0 && h('p', {}, t.socio_sorpresa(sorpresas)),
     ...premios.map(p => h('p', {}, t.socio_premio(p.vence_en ? fecha(p.vence_en + 'T12:00:00-06:00', false) : '—'))),
     activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),
+    activo && avanceBox,
     qrBox,
     err, baja)
   baja.addEventListener('click', async () => {

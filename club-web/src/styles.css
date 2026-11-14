@@ -131,3 +131,10 @@ details.tarjeta > summary { font: 600 1.25rem/1.25 var(--serif); }
 h1, h2, .nombre, .cupon .etq, .saldo .num, .cuenta, .codigo, .btn, .tab, details.tarjeta > summary, label, input, select {
   font-variant-numeric: lining-nums tabular-nums;
 }
+
+/* mig 168: avance de los primeros 90 días en «Mi Club» */
+.avance { border: 1px dashed currentColor; border-radius: 10px; padding: .6rem .8rem; margin: .6rem 0; }
+.avance h3 { margin: 0 0 .2rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
+.avance-barra { display: flex; gap: 6px; margin: .4rem 0; }
+.avance-barra span { flex: 1; height: 8px; border-radius: 4px; background: rgba(127, 127, 127, .25); }
+.avance-barra span.lleno { background: currentColor; }

@@ -343,6 +343,15 @@ export async function manejar(request, env, path) {
     return walletActualizar(env, tok)
   }
 
+  // GET /api/portal/:token/avance  → «Visita 2 de 4» de los primeros 90 días (mig 168). Mismo tope que leer el portal.
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'avance') {
+    if (metodo !== 'GET') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'leer', `avance:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return rpc(env, 'club_portal_avance', { p_token: tok })
+  }
+
   // GET /api/portal/:token
   if (partes.length === 2 && partes[0] === 'portal') {
     if (metodo !== 'GET') return json(405, { error: 'metodo' })

@@ -39,6 +39,8 @@
 --     a anfitrión desde «Editar», regenera token_portal y lo audita («tipo_a_anfitrion», token_portal_regenerado), como
 --     al activarlo; (b) acepta tipo 'socio' SOLO para editar a quien ya es socio (antes «Editar» sobre un socio fallaba
 --     con «Tipo no válido»); crear un socio o pasar a alguien a socio por acá sigue rechazado.
+--     (c) un socio dado de baja no pasa a activo por «Editar» (LC-DES-01): «Para reactivar a un socio, dalo de alta de
+--     nuevo en caja» (el alta verifica residencia y la confirma otro manager).
 --
 -- ── LO QUE NO TOCA ─────────────────────────────────────────────────────────────────────────────
 --   · Ni tablas, ni datos, ni plata. club_miembro_token sigue solo para owner y manager.
@@ -227,6 +229,11 @@ begin
     select m.estado, m.tipo into v_antes, v_tipo_antes from public.club_miembros m where m.id = p_id for update;
     if p_tipo = 'socio' and v_tipo_antes is distinct from 'socio' then
       raise exception 'Tipo no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+    end if;
+    -- 156 (LC-DES-01): un socio dado de baja no vuelve a activo por «Editar»: el trigger le devolvería el rol de socio
+    -- sin verificar residencia ni confirmación de otro manager. Se reactiva con un alta nueva en caja.
+    if v_tipo_antes = 'socio' and v_antes = 'baja' and p_estado = 'activo' then
+      raise exception 'Para reactivar a un socio, dalo de alta de nuevo en caja' using errcode = 'P0001';
     end if;
     -- 156: un socio que pasa a anfitrión desde «Editar» recibe link nuevo (como club_rol_activar_anfitrion): el link
     -- que tenía como socio (entregado en el alta) no puede abrir un portal que genera códigos de canje.

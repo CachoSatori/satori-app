@@ -181,6 +181,17 @@ begin
         insert into _j156 values ('a_anfitrion', null, 'ok');
   exception when others then insert into _j156 values ('a_anfitrion', null, sqlstate || ' ' || sqlerrm); end;
 end $$;
+-- LC-DES-01: el socio de 60015603 se da de baja por «Editar» y después se intenta volver a activo por ahí
+do $$
+declare v_m uuid := (select (x.j->>'miembro_id')::uuid from _j156 x where x.paso = 'baja_vuelve');
+begin
+  begin perform public.club_miembro_guardar(v_m, 'socio', 'Socio Baja Ficticio', null, 'baja', null, null);
+        insert into _j156 values ('socio_a_baja', null, 'ok');
+  exception when others then insert into _j156 values ('socio_a_baja', null, sqlerrm); end;
+  begin perform public.club_miembro_guardar(v_m, 'socio', 'Socio Baja Ficticio', null, 'activo', null, null);
+        insert into _j156 values ('socio_reactivar', null, 'ok');
+  exception when others then insert into _j156 values ('socio_reactivar', null, sqlerrm); end;
+end $$;
 reset role;
 select set_config('request.jwt.claims', '', true);
 select set_config('request.headers', json_build_object('x-club-web', 'clave-de-prueba-156-0123456789abcdef')::text, true);
@@ -286,6 +297,13 @@ select '17 Editar socio → referente: token nuevo, link del alta sin canje, aud
        'guardar: ' || g.err || ' · viejo: ' || v.err || ' · nuevo: ' || n.err
   from _j156 g, _j156 t, _j156 v, _j156 n, _j156 x join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid
  where g.paso = 'a_anfitrion' and t.paso = 'tok_owner' and v.paso = 'g_canje_viejo' and n.paso = 'g_canje_nuevo' and x.paso = 'owner';
+-- 18. LC-DES-01: un socio dado de baja no vuelve a activo por «Editar» (sigue de baja)
+insert into _r156 (caso, ok, detalle)
+select '18 socio de baja → activo por Editar: rechazado, sigue de baja',
+       b.err = 'ok' and r.err = 'Para reactivar a un socio, dalo de alta de nuevo en caja' and m.estado = 'baja',
+       'baja: ' || b.err || ' · reactivar: ' || r.err || ' · estado: ' || m.estado
+  from _j156 b, _j156 r, _j156 x join public.club_miembros m on m.id = (x.j->>'miembro_id')::uuid
+ where b.paso = 'socio_a_baja' and r.paso = 'socio_reactivar' and x.paso = 'baja_vuelve';
 -- 10. anon: sin EXECUTE
 do $$ begin
   set local role anon;
@@ -319,6 +337,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r156 where ok is not true;   -- null = falla
   if v is not null then raise exception '156-FALLAN: %', v; end if;
-  if (select count(*) from _r156) <> 19 then raise exception '156-FALLAN: se esperaban 19 casos'; end if;
+  if (select count(*) from _r156) <> 20 then raise exception '156-FALLAN: se esperaban 20 casos'; end if;
 end $$;
 rollback;

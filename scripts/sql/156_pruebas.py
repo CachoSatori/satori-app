@@ -42,6 +42,9 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     # «Editar» sobre un socio vuelve a fallar con «Tipo no válido»
     'guardar_sin_socio': ("  if p_tipo is null or p_tipo not in ('referente','concierge_pm','equipo','socio') then\n",
                           "  if p_tipo is null or p_tipo not in ('referente','concierge_pm','equipo') then\n", {'15'}),
+    # LC-DES-01: sin el chequeo, un socio de baja vuelve a activo por «Editar» sin verificación
+    'guardar_reactiva_socio': ("    if v_tipo_antes = 'socio' and v_antes = 'baja' and p_estado = 'activo' then\n",
+                               "    if false then\n", {'18'}),
     'grant_anon': ("grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated;",
                    "grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated, anon;", {'0'}),   # el 10 no cae: el chequeo de rol adentro tira 42501 igual
 }

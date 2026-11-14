@@ -71,5 +71,5 @@ export function embudoCsv(e: Embudo): string {
     e.resena_disponible ? (t.clics_resena ?? 0) : '', e.resena_disponible ? (pct(t.clics_resena ?? 0, t.usados) ?? '') : '',
     t.con_factura, pct(t.con_factura, t.usados) ?? '', t.personas, t.facturas, t.mesas, t.venta_respaldada_crc,
     t.venta_neta_crc, t.mesas > 0 ? Math.round(t.venta_respaldada_crc / t.mesas) : '', t.vigentes, t.vencidos, t.anulados].map(q).join(';'))
-  return '﻿' + L.join('\r\n')
+  return '\ufeff' + L.join('\r\n')
 }

@@ -34,7 +34,7 @@ describe('embudoFormato', () => {
 
   it('CSV: una fila por anfitrión + total, celdas tipo fórmula escapadas, sin columnas de reseña si no está la 158', () => {
     const csv = embudoCsv(embudoDePrueba())
-    const filas = csv.replace(/^﻿/, '').split('\r\n')
+    const filas = csv.replace(/^\uFEFF/, '').split('\r\n')
     expect(filas).toHaveLength(4)
     expect(filas[2]).toContain('"\'=Referente Uno"')
     expect(filas[2]).toContain('"17000"')

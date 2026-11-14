@@ -17,7 +17,7 @@ const datos = (avance: unknown, estado: 'activo' | 'pendiente' = 'activo'): Pase
 const ISSUER = '3388000000012345678'
 const modulo = (d: PaseDatos) => (armarObjeto(ISSUER, 'stg', d).textModulesData as Array<{ id: string; body: string; localizedBody: { translatedValues: Array<{ value: string }> } }>)
   .find(m => m.id === 'avance')
-const apple = (d: PaseDatos) => ((armarPassJson(d, { passTypeIdentifier: 'pass.test.club', teamIdentifier: 'ABCDE12345' }, null)
+const apple = (d: PaseDatos) => ((armarPassJson(d, { passTypeIdentifier: 'pass.test.ejemplo.club', teamIdentifier: 'ABCDE12345', webServiceURL: null }, null)
   .storeCard as { secondaryFields: Array<{ key: string; value: string }> }).secondaryFields).find(f => f.key === 'avance')
 
 describe('pase · avance de los primeros 90 días (mig 168)', () => {

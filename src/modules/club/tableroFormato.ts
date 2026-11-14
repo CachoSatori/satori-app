@@ -80,8 +80,9 @@ export function tableroCsv(t: TableroMes): string {
   fila('config', 'valor_credito_crc', t.config.valor_credito_crc)
   const k = t.plata
   for (const [c, v] of Object.entries({
-    facturas_mes: k.facturas_mes, venta_mes_crc: k.venta_mes_crc, facturas_club: k.facturas_club,
-    venta_respaldada_crc: k.venta_respaldada_crc, descuento_estimado_crc: k.descuento_estimado_crc,
+    facturas_mes: k.facturas_mes, venta_mes_crc: k.venta_mes_crc, venta_mes_neta_crc: k.venta_mes_neta_crc,
+    facturas_club: k.facturas_club, venta_respaldada_crc: k.venta_respaldada_crc,
+    venta_respaldada_neta_crc: k.venta_respaldada_neta_crc, descuento_estimado_crc: k.descuento_estimado_crc,
     descuento_lineas: k.descuento_lineas, lineas_sin_referencia: k.lineas_sin_referencia,
     cortesias_unidades: k.cortesias_unidades, cortesias_lista_crc: k.cortesias_lista_crc, cortesias_costo_crc: k.cortesias_costo_crc,
     canjes: k.canjes, creditos_canjeados: k.creditos_canjeados, canjes_crc: k.canjes_crc,

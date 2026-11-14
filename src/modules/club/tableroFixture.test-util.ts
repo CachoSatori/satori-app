@@ -7,15 +7,16 @@ export function tableroDePrueba(over: Partial<TableroMes> = {}): TableroMes {
     pos_sin_datos: false,
     config: { cortesia_costo_pct: 35, valor_credito_crc: 18000, personas_por_credito: 6 },
     plata: {
-      venta_respaldada_crc: 33500, facturas_club: 3, facturas_mes: 4, venta_mes_crc: 43500,
+      venta_respaldada_crc: 23500, venta_respaldada_neta_crc: 33500, facturas_club: 3, facturas_mes: 4,
+      venta_mes_crc: 33500, venta_mes_neta_crc: 43500,
       descuento_estimado_crc: 3500, descuento_lineas: 2, descuento_facturas: 2, lineas_sin_referencia: 1,
       cortesias_lineas: 1, cortesias_unidades: 1, cortesias_lista_crc: 4000, cortesias_costo_crc: 1400, cortesias_sin_precio: 0,
-      canjes: 1, creditos_canjeados: 1.5, canjes_crc: 27000, costo_total_crc: 31900, tasa_efectiva_pct: 95.2,
-      por_motivo: { socio: { facturas: 2, venta_crc: 29000 }, cupon: { facturas: 1, venta_crc: 4500 }, canje: { facturas: 1, venta_crc: 10000 } },
+      canjes: 1, creditos_canjeados: 1.5, canjes_crc: 27000, costo_total_crc: 31900, tasa_efectiva_pct: 135.7,
+      por_motivo: { socio: { facturas: 2, venta_crc: 19000 }, cupon: { facturas: 1, venta_crc: 4500 }, canje: { facturas: 1, venta_crc: 0 } },
     },
     regalia: { facturas: 1, crc: 10000, en_canjes_crc: 10000 },
     comparacion: {
-      con_socio: { facturas: 2, venta_crc: 29000, personas: 3, tiquete_crc: 14500, personas_por_factura: 1.5, por_persona_crc: 9667 },
+      con_socio: { facturas: 2, venta_crc: 19000, personas: 3, tiquete_crc: 9500, personas_por_factura: 1.5, por_persona_crc: 6333 },
       sin_socio: { facturas: 2, venta_crc: 14500, personas: 5, tiquete_crc: 7250, personas_por_factura: 2.5, por_persona_crc: 2900 },
       con_cupon: { facturas: 1, venta_crc: 4500, personas: 3, tiquete_crc: 4500, personas_por_factura: 3, por_persona_crc: 1500 },
     },
@@ -35,7 +36,8 @@ export function tableroVacio(): TableroMes {
   const g = { facturas: 0, venta_crc: 0, personas: 0, tiquete_crc: null, personas_por_factura: null, por_persona_crc: null }
   const t = tableroDePrueba({ pos_sin_datos: true, regalia: { facturas: 0, crc: 0, en_canjes_crc: 0 },
     comparacion: { con_socio: g, sin_socio: g, con_cupon: g } })
-  t.plata = { ...t.plata, venta_respaldada_crc: 0, facturas_club: 0, facturas_mes: 0, venta_mes_crc: 0, descuento_estimado_crc: 0,
+  t.plata = { ...t.plata, venta_respaldada_crc: 0, venta_respaldada_neta_crc: 0, facturas_club: 0, facturas_mes: 0, venta_mes_crc: 0,
+    venta_mes_neta_crc: 0, descuento_estimado_crc: 0,
     descuento_lineas: 0, descuento_facturas: 0, lineas_sin_referencia: 0, cortesias_lineas: 0, cortesias_unidades: 0,
     cortesias_lista_crc: 0, cortesias_costo_crc: 0, canjes: 0, creditos_canjeados: 0, canjes_crc: 0, costo_total_crc: 0,
     tasa_efectiva_pct: null, por_motivo: { socio: { facturas: 0, venta_crc: 0 }, cupon: { facturas: 0, venta_crc: 0 }, canje: { facturas: 0, venta_crc: 0 } } }

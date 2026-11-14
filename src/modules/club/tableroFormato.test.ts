@@ -34,7 +34,7 @@ describe('tableroFormato', () => {
   })
 
   it('titular: cuánto costó el Club por cada ₡100 cobrados', () => {
-    expect(titular(tableroDePrueba())).toBe('Por cada ₡100 cobrados en facturas del Club, el Club costó ₡95,2.')
+    expect(titular(tableroDePrueba())).toBe('Por cada ₡100 cobrados en facturas del Club, el Club costó ₡135,7.')
   })
 
   it('sin facturas del PoS (local como Nosara): aviso claro, no error, y el titular lo dice', () => {
@@ -57,7 +57,9 @@ describe('tableroFormato', () => {
     const csv = tableroCsv(tableroDePrueba())
     expect(csv.startsWith('﻿')).toBe(true)
     expect(csv).toContain('plata;costo_total_crc;31900;;;')
-    expect(csv).toContain('plata;tasa_efectiva_pct;95.2;;;')
+    expect(csv).toContain('plata;tasa_efectiva_pct;135.7;;;')
+    expect(csv).toContain('plata;venta_respaldada_crc;23500;;;')
+    expect(csv).toContain('plata;venta_respaldada_neta_crc;33500;;;')
     expect(csv).toContain('pasivo;saldo_final;;18;3;54000')
     expect(csv).toContain('pasivo;congelado_fuera_del_pasivo;2;12;2;36000')
     expect(csv).not.toMatch(/Prueba|@/)

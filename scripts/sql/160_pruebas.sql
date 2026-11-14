@@ -42,7 +42,8 @@ on conflict (id) do update set role = excluded.role, is_active = excluded.is_act
 
 -- ── Locales ────────────────────────────────────────────────────────────────────────────────────────────────────────
 insert into public.locations (id, name) values ('p160-a', 'Local P160 A'), ('p160-b', 'Local P160 B') on conflict (id) do nothing;
-insert into public.club_config (location_id, nombre) values ('p160-a', 'Local P160 A'), ('p160-b', 'Local P160 B');
+-- p160-a con el Club encendido: club_excepciones (caso 9b) solo corre en un local encendido
+insert into public.club_config (location_id, nombre, club_activo) values ('p160-a', 'Local P160 A', true), ('p160-b', 'Local P160 B', false);
 -- el manager de prueba trabaja en p160-a; el otro manager, solo en p160-b
 -- cajero y salonero también trabajan en p160-a: así solo el ROL los deja afuera
 insert into public.profile_locations (profile_id, location_id, principal) values
@@ -91,7 +92,8 @@ insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrad
 select 'p160-a', '00000000-0000-4000-8000-000000160b05', (x.en at time zone 'America/Costa_Rica')::date, x.en, gen_random_uuid(),
        jsonb_build_object('modo', 'factura', 'numero_factura', x.f), 'aplica', '{}'::jsonb
   from (values (timestamptz '2001-03-05 20:00-06', '00160001'), (timestamptz '2001-03-14 20:00-06', '00160003'),
-               (timestamptz '2001-03-20 20:00-06', '00160005'), (timestamptz '2001-03-31 23:50-06', '00160006')) x(en, f);
+               (timestamptz '2001-03-20 20:00-06', '00160005'), (timestamptz '2001-03-31 23:50-06', '00160006'),
+               (timestamptz '2001-08-02 20:00-06', '00160206'), (timestamptz '2001-08-05 20:00-06', '00160210')) x(en, f);
 
 -- ── Facturas del PoS ───────────────────────────────────────────────────────────────────────────────────────────────
 create temp table _t160 (id uuid, nf text, f timestamptz, estado text, pax int, regalia numeric) on commit drop;
@@ -111,7 +113,21 @@ insert into _t160 values
   ('00000000-0000-4000-8000-000000160e05', '00160105', '2001-02-24 20:00-06', 'C', 2, 0),
   ('00000000-0000-4000-8000-000000160e06', '00160106', '2001-02-25 20:00-06', 'C', 2, 0),
   ('00000000-0000-4000-8000-000000160e07', '00160107', '2001-02-26 20:00-06', 'C', 2, 0),
-  ('00000000-0000-4000-8000-000000160e08', '00160108', '2001-02-27 20:00-06', 'C', 2, 0);
+  ('00000000-0000-4000-8000-000000160e08', '00160108', '2001-02-27 20:00-06', 'C', 2, 0),
+  -- agosto (caso 9, cambio de lista): julio Q1 a 10.000 y Q2 a 5.000 (×3); el 1-ago Q1 baja a 8.000 (lista nueva)
+  ('00000000-0000-4000-8000-000000160f01', '00160191', '2001-07-05 20:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f02', '00160192', '2001-07-06 20:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f03', '00160193', '2001-07-07 20:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f11', '00160201', '2001-08-01 13:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f12', '00160202', '2001-08-01 14:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f13', '00160203', '2001-08-01 15:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f14', '00160204', '2001-08-02 13:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f15', '00160205', '2001-08-02 14:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f16', '00160206', '2001-08-02 20:30-06', 'C', 2, 0),   -- Club: Q1 a 8.000 (no es descuento)
+  ('00000000-0000-4000-8000-000000160f17', '00160207', '2001-08-05 13:00-06', 'C', 2, 0),   -- sin Club: Q2 a 4.500 (Excepciones la marca)
+  ('00000000-0000-4000-8000-000000160f18', '00160208', '2001-08-05 14:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f19', '00160209', '2001-08-05 15:00-06', 'C', 2, 0),
+  ('00000000-0000-4000-8000-000000160f20', '00160210', '2001-08-05 20:30-06', 'C', 2, 0);   -- Club: Q2 a 4.500 (₡500)
 insert into public.pos_ndf_tickets (id, local, numero_factura, fecha_registra, fecha_cierra, estado, canal, registrado_por,
                                     con_servicio, pax, pax_alerta, regalia_crc, total_crc)
 select id, 'p160-a', nf, f, f, estado, 'salon', 'salonero', true, pax, 'ok', regalia, 0 from _t160;
@@ -140,7 +156,25 @@ insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, can
   ('00000000-0000-4000-8000-000000160e07', 'P1',  'Plato uno',     1, 10000,  7000, 2, false),
   ('00000000-0000-4000-8000-000000160e07', '856', 'Local Club',    1,     0,     0, 2, false),
   ('00000000-0000-4000-8000-000000160e08', 'P1',  'Plato uno',     1, 10000,  7000, 2, false),
-  ('00000000-0000-4000-8000-000000160e08', '856', 'Local Club',    1,     0,     0, 2, false);
+  ('00000000-0000-4000-8000-000000160e08', '856', 'Local Club',    1,     0,     0, 2, false),
+  ('00000000-0000-4000-8000-000000160f01', 'Q1',  'Plato q1',      1, 10000, 10000, 2, false),
+  ('00000000-0000-4000-8000-000000160f01', 'Q2',  'Plato q2',      1,  5000,  5000, 2, false),
+  ('00000000-0000-4000-8000-000000160f02', 'Q1',  'Plato q1',      1, 10000, 10000, 2, false),
+  ('00000000-0000-4000-8000-000000160f02', 'Q2',  'Plato q2',      1,  5000,  5000, 2, false),
+  ('00000000-0000-4000-8000-000000160f03', 'Q1',  'Plato q1',      1, 10000, 10000, 2, false),
+  ('00000000-0000-4000-8000-000000160f03', 'Q2',  'Plato q2',      1,  5000,  5000, 2, false),
+  ('00000000-0000-4000-8000-000000160f11', 'Q1',  'Plato q1',      1,  8000,  8000, 2, false),
+  ('00000000-0000-4000-8000-000000160f12', 'Q1',  'Plato q1',      1,  8000,  8000, 2, false),
+  ('00000000-0000-4000-8000-000000160f13', 'Q1',  'Plato q1',      1,  8000,  8000, 2, false),
+  ('00000000-0000-4000-8000-000000160f14', 'Q1',  'Plato q1',      1,  8000,  8000, 2, false),
+  ('00000000-0000-4000-8000-000000160f15', 'Q1',  'Plato q1',      1,  8000,  8000, 2, false),
+  ('00000000-0000-4000-8000-000000160f16', 'Q1',  'Plato q1',      1,  8000,  8000, 2, false),
+  ('00000000-0000-4000-8000-000000160f16', '856', 'Local Club',    1,     0,     0, 2, false),
+  ('00000000-0000-4000-8000-000000160f17', 'Q2',  'Plato q2',      1,  5000,  4500, 2, false),
+  ('00000000-0000-4000-8000-000000160f18', 'Q2',  'Plato q2',      1,  5000,  5000, 2, false),
+  ('00000000-0000-4000-8000-000000160f19', 'Q2',  'Plato q2',      1,  5000,  5000, 2, false),
+  ('00000000-0000-4000-8000-000000160f20', 'Q2',  'Plato q2',      1,  5000,  4500, 2, false),
+  ('00000000-0000-4000-8000-000000160f20', '856', 'Local Club',    1,     0,     0, 2, false);
 
 -- ── Llamar como un usuario (JWT simulado). Devuelve el JSON o «ERR:<sqlstate>» ───────────────────────────────────────
 create or replace function pg_temp.t160(p_uid uuid, p_mes date, p_loc text) returns jsonb language plpgsql as $f$
@@ -166,7 +200,8 @@ select pg_temp.t160('00000000-0000-4000-8000-000000160a01', date '2001-03-17', '
        pg_temp.t160('00000000-0000-4000-8000-000000160a07', date '2001-03-01', 'p160-a') as manager_otro_a,
        pg_temp.t160(null,                                   date '2001-03-01', 'p160-a') as sin_sesion_a,
        pg_temp.t160('00000000-0000-4000-8000-000000160a03', date '2001-03-01', 'p160-b') as contador_b,
-       pg_temp.t160('00000000-0000-4000-8000-000000160a01', date '2001-04-01', 'p160-a') as owner_abril;
+       pg_temp.t160('00000000-0000-4000-8000-000000160a01', date '2001-04-01', 'p160-a') as owner_abril,
+       pg_temp.t160('00000000-0000-4000-8000-000000160a01', date '2001-08-01', 'p160-a') as owner_agosto;
 
 -- 0. catálogo
 insert into _r160 (caso, ok, detalle)
@@ -211,11 +246,13 @@ insert into _r160 (caso, ok, detalle)
 select '3a facturas del Club = 3 (T3 con socio y canje cuenta una vez; la anulada no cuenta)',
        (owner_a->'plata'->>'facturas_club')::int = 3, owner_a->'plata'->>'facturas_club' from _o160;
 insert into _r160 (caso, ok, detalle)
-select '3b venta respaldada = ₡33.500 (neta: sin familia 17)', (owner_a->'plata'->>'venta_respaldada_crc')::numeric = 33500,
-       owner_a->'plata'->>'venta_respaldada_crc' from _o160;
+select '3b venta respaldada COBRADA = ₡23.500 (neta ₡33.500 − regalía ₡10.000; la neta sin familia 17)',
+       (owner_a->'plata'->>'venta_respaldada_crc')::numeric = 23500 and (owner_a->'plata'->>'venta_respaldada_neta_crc')::numeric = 33500,
+       (owner_a->'plata'->>'venta_respaldada_crc') || ' · neta ' || (owner_a->'plata'->>'venta_respaldada_neta_crc') from _o160;
 insert into _r160 (caso, ok, detalle)
-select '3c hora CR: facturas del mes = 4 (T4 31-mar 23:00 CR adentro; T6 1-abr 00:30 CR afuera); venta ₡43.500',
-       (owner_a->'plata'->>'facturas_mes')::int = 4 and (owner_a->'plata'->>'venta_mes_crc')::numeric = 43500,
+select '3c hora CR: facturas del mes = 4 (T4 31-mar 23:00 CR adentro; T6 1-abr 00:30 CR afuera); cobrada ₡33.500, neta ₡43.500',
+       (owner_a->'plata'->>'facturas_mes')::int = 4 and (owner_a->'plata'->>'venta_mes_crc')::numeric = 33500
+       and (owner_a->'plata'->>'venta_mes_neta_crc')::numeric = 43500,
        (owner_a->'plata'->>'facturas_mes') || ' · ' || (owner_a->'plata'->>'venta_mes_crc') from _o160;
 insert into _r160 (caso, ok, detalle)
 select '3d descuento estimado = ₡3.500 en 2 líneas y 2 facturas; 1 línea sin referencia',
@@ -231,17 +268,17 @@ select '3f canjes: 1, 1,5 créditos, ₡27.000 (valor del movimiento)',
        (owner_a->'plata'->>'canjes')::int = 1 and (owner_a->'plata'->>'creditos_canjeados')::numeric = 1.5
        and (owner_a->'plata'->>'canjes_crc')::numeric = 27000, (owner_a->'plata'->>'canjes_crc') from _o160;
 insert into _r160 (caso, ok, detalle)
-select '3g costo total ₡31.900 y tasa efectiva 95,2 %',
-       (owner_a->'plata'->>'costo_total_crc')::numeric = 31900 and (owner_a->'plata'->>'tasa_efectiva_pct')::numeric = 95.2,
+select '3g costo total ₡31.900 y tasa efectiva 135,7 % (sobre la cobrada)',
+       (owner_a->'plata'->>'costo_total_crc')::numeric = 31900 and (owner_a->'plata'->>'tasa_efectiva_pct')::numeric = 135.7,
        (owner_a->'plata'->>'costo_total_crc') || ' · ' || (owner_a->'plata'->>'tasa_efectiva_pct') from _o160;
 insert into _r160 (caso, ok, detalle)
 select '3h regalía del PoS en facturas del Club: 1 factura, ₡10.000, toda en canjes (aparte, no suma al costo)',
        (owner_a->'regalia'->>'facturas')::int = 1 and (owner_a->'regalia'->>'crc')::numeric = 10000
        and (owner_a->'regalia'->>'en_canjes_crc')::numeric = 10000, (owner_a->'regalia')::text from _o160;
 insert into _r160 (caso, ok, detalle)
-select '3i con socio: 2 facturas, ₡29.000, 3 personas, tiquete ₡14.500 · sin socio: 2, ₡14.500, 5 personas, ₡7.250',
-       (owner_a->'comparacion'->'con_socio'->>'facturas')::int = 2 and (owner_a->'comparacion'->'con_socio'->>'venta_crc')::numeric = 29000
-       and (owner_a->'comparacion'->'con_socio'->>'personas')::int = 3 and (owner_a->'comparacion'->'con_socio'->>'tiquete_crc')::numeric = 14500
+select '3i con socio: 2 facturas, ₡19.000 cobrados, 3 personas, tiquete ₡9.500 · sin socio: 2, ₡14.500, 5 personas, ₡7.250',
+       (owner_a->'comparacion'->'con_socio'->>'facturas')::int = 2 and (owner_a->'comparacion'->'con_socio'->>'venta_crc')::numeric = 19000
+       and (owner_a->'comparacion'->'con_socio'->>'personas')::int = 3 and (owner_a->'comparacion'->'con_socio'->>'tiquete_crc')::numeric = 9500
        and (owner_a->'comparacion'->'sin_socio'->>'facturas')::int = 2 and (owner_a->'comparacion'->'sin_socio'->>'venta_crc')::numeric = 14500
        and (owner_a->'comparacion'->'sin_socio'->>'personas')::int = 5 and (owner_a->'comparacion'->'sin_socio'->>'tiquete_crc')::numeric = 7250,
        (owner_a->'comparacion')::text from _o160;
@@ -249,6 +286,11 @@ insert into _r160 (caso, ok, detalle)
 select '3j el contador ve los mismos totales que el owner',
        case when jsonb_typeof(contador_a) = 'object' and jsonb_typeof(owner_a) = 'object'
             then (contador_a - 'generado_en') = (owner_a - 'generado_en') else false end, null from _o160;
+
+insert into _r160 (caso, ok, detalle)
+select '3k el canje no suma como costo y como venta: la factura con canje (todo regalado) aporta ₡0 de venta cobrada',
+       (owner_a->'plata'->'por_motivo'->'canje'->>'venta_crc')::numeric = 0 and (owner_a->'plata'->>'canjes_crc')::numeric = 27000,
+       (owner_a->'plata'->'por_motivo')::text from _o160;
 
 -- 4. pasivo
 insert into _r160 (caso, ok, detalle)
@@ -325,6 +367,23 @@ select '7 rastro en club_auditoria (ver_tablero) con mes y local',
        exists (select 1 from public.club_auditoria a where a.accion = 'ver_tablero' and a.actor = '00000000-0000-4000-8000-000000160a03'
                 and a.despues = '{"mes":"2001-03","local":"p160-a"}'::jsonb), null;
 
+-- 9. descuento estimado = reglas de «Descuento sin respaldo» (agosto)
+insert into _r160 (caso, ok, detalle)
+select '9a cambio de lista: Q1 baja a ₡8.000 el 1-ago; la factura del Club a ₡8.000 el 2-ago NO es descuento; Q2 a ₡4.500 sí (₡500)',
+       (owner_agosto->'plata'->>'descuento_estimado_crc')::numeric = 500 and (owner_agosto->'plata'->>'descuento_lineas')::int = 1,
+       (owner_agosto->'plata')::text from _o160;
+select set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-4000-8000-000000160a01', 'role', 'authenticated')::text, true);
+create temp table _x160 on commit drop as
+select coalesce(sum((e.detalle->>'descuento_crc')::numeric), 0) as crc, count(*) as n,
+       coalesce(string_agg(e.factura, ',' order by e.factura), '') as facturas
+  from public.club_excepciones('2001-08-01', '2001-08-31', 'p160-a', 'DESCUENTO_SIN_RESPALDO') e;
+select set_config('request.jwt.claims', '', true);
+insert into _r160 (caso, ok, detalle)
+select '9b paridad con Excepciones: la misma venta a ₡4.500 sin Club sale ₡500 en «Descuento sin respaldo» y nada por la baja de lista',
+       x.n = 1 and x.crc = (o.owner_agosto->'plata'->>'descuento_estimado_crc')::numeric and x.facturas = '00160207',
+       x.n || ' · ' || x.crc || ' · ' || x.facturas
+  from _x160 x, _o160 o;
+
 -- 8. vuelta atrás (dentro de esta misma transacción descartada): saca función y columna, y el resto del Club sigue
 -- @@160R@@   (aquí va el cuerpo de scripts/sql/160_rollback.sql sin begin/commit)
 insert into _r160 (caso, ok, detalle)
@@ -342,7 +401,7 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r160 where not ok;
   if v is not null then raise exception '160-FALLAN: %', v; end if;
-  if (select count(*) from _r160) < 32 then raise exception '160-FALLAN: faltan casos (NO PROBADO)'; end if;
+  if (select count(*) from _r160) < 35 then raise exception '160-FALLAN: faltan casos (NO PROBADO)'; end if;
 end $$;
 
 rollback;

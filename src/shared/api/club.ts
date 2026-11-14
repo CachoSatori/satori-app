@@ -421,7 +421,9 @@ export interface TableroMes {
   pos_sin_datos: boolean
   config: { cortesia_costo_pct: number; valor_credito_crc: number; personas_por_credito: number }
   plata: {
-    venta_respaldada_crc: number; facturas_club: number; facturas_mes: number; venta_mes_crc: number
+    /** Venta COBRADA (neta − regalía): base de la tasa. La neta (incluye lo regalado) va de referencia. */
+    venta_respaldada_crc: number; venta_respaldada_neta_crc: number; facturas_club: number; facturas_mes: number
+    venta_mes_crc: number; venta_mes_neta_crc: number
     descuento_estimado_crc: number; descuento_lineas: number; descuento_facturas: number; lineas_sin_referencia: number
     cortesias_lineas: number; cortesias_unidades: number; cortesias_lista_crc: number; cortesias_costo_crc: number; cortesias_sin_precio: number
     canjes: number; creditos_canjeados: number; canjes_crc: number

@@ -4,25 +4,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { tableroDePrueba, tableroVacio } from './tableroFixture.test-util'
 
-const st = vi.hoisted(() => ({ rol: 'owner', datos: null as unknown, pct: [] as Array<[string, number]>, mes: [] as string[] }))
+const st = vi.hoisted(() => ({ rol: 'owner', datos: null as unknown, pct: [] as Array<[string, number]>, mes: [] as string[], localGuardado: 'p160-a' as string | null }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: st.rol, full_name: 'Prueba' } }) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/api/club', async orig => ({
   ...(await orig<typeof import('../../shared/api/club')>()),
   getLocalesClub: async () => [{ id: 'p160-a', nombre: 'Local P160 A', activo: true }],
-  localActual: () => 'p160-a',
+  localActual: () => st.localGuardado,
   getTablero: async (mes: string) => { st.mes.push(mes); return st.datos },
   setCortesiaCostoPct: async (l: string, p: number) => { st.pct.push([l, p]) },
 }))
 
 import Tablero from './Tablero'
 
-beforeEach(() => { st.rol = 'owner'; st.datos = tableroDePrueba(); st.pct = []; st.mes = [] })
+beforeEach(() => { st.rol = 'owner'; st.datos = tableroDePrueba(); st.pct = []; st.mes = []; st.localGuardado = 'p160-a' })
 
 describe('Club → Tablero', () => {
   it('muestra la plata, el costo con el descuento rotulado «estimado» y el pasivo', async () => {
     render(<Tablero />)
-    expect((await screen.findByTestId('titular')).textContent).toContain('el Club costó ₡95,2')
+    expect((await screen.findByTestId('titular')).textContent).toContain('el Club costó ₡135,7')
+    expect(screen.getByText('venta respaldada cobrada')).toBeTruthy()
+    expect(screen.getByText(/neta ₡33\.500, con lo regalado/)).toBeTruthy()
     expect(screen.getByText('Descuento (estimado)')).toBeTruthy()
     expect(screen.getAllByText('₡31.900').length).toBeGreaterThan(0)
     expect(screen.getByText('Saldo final')).toBeTruthy()
@@ -30,6 +32,13 @@ describe('Club → Tablero', () => {
     expect(screen.getByText('Congelado (equipo), fuera del pasivo')).toBeTruthy()
     // pide el mes con día 1 («AAAA-MM-01»), en hora CR
     expect(st.mes[0]).toMatch(/^\d{4}-\d{2}-01$/)
+  })
+
+  it('sin local recordado espera la lista de locales: una sola lectura (una sola fila de auditoría)', async () => {
+    st.localGuardado = null
+    render(<Tablero />)
+    await screen.findByTestId('titular')
+    expect(st.mes.length).toBe(1)
   })
 
   it('owner: edita el % de las cortesías y recarga', async () => {

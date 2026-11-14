@@ -28,23 +28,30 @@
 --   · Factura del mes: pos_ndf_tickets del local en estado C (cerrada), por coalesce(fecha_registra, fecha_cierra). Una
 --     anulada (X) o provisional (R) no cuenta (decisión del dueño 14-nov: la anulada queda anulada).
 --   · Venta neta de una factura: Σ monto de sus líneas, menos las familias 6, 17 y 20 (src/modules/ventas/netaVenta.ts,
---     firmado por el dueño). Es la que cuadra con la «Venta Neta» del reporte del PoS.
+--     firmado por el dueño). Es la que cuadra con la «Venta Neta» del reporte del PoS. Incluye lo regalado.
+--   · Venta COBRADA (decisión del dueño 14-nov, base de la tasa): neta − regalia_crc de la factura (mínimo 0). Así un canje
+--     o una cortesía que el PoS registra como regalía no cuenta a la vez como costo y como venta. La neta va al lado.
 --   · Factura del Club (venta respaldada): factura del mes que cruza con un registro del Club del local: visita de socio
 --     (club_visitas_socio), cupón usado (club_movimientos tarjeta con cupón) o canje (club_movimientos canje). El cruce es
 --     el de Excepciones (club_cruce_facturas, o la factura elegida a mano en club_cruces_manuales). La factura se cuenta
 --     UNA vez aunque tenga varios motivos.
---   · Descuento ESTIMADO: el PoS manda descuento_crc en cero, así que se estima por línea como «Descuento sin respaldo»:
---     precio de referencia = el precio unitario más vendido (moda; empate → el más alto) de los 30 días anteriores en
---     facturas C del local SIN marcador de descuento y fuera del Club; descuento = (referencia − cobrado) × cantidad si el
---     cobrado está > 1 % por debajo. Sin referencia, la línea no se estima (se cuenta aparte).
+--   · Descuento ESTIMADO: el PoS manda descuento_crc en cero, así que se estima por línea con las MISMAS reglas que
+--     DESCUENTO_SIN_RESPALDO (club_excepciones): referencia = el precio unitario más vendido (moda; empate → el más alto)
+--     de los 30 días anteriores en facturas C SIN marcador (y, acá, fuera del Club); la línea cuenta si está > 1 % por
+--     debajo de la referencia y del precio más alto del período, y NO es cambio de lista (si ese día ≥ 60 % de las
+--     ventas del artículo, sin las respaldadas del todo y sin las del Club, van a ese precio o menos, es la lista nueva).
+--     Descuento = (referencia − cobrado) × cantidad. Sin referencia, la línea no se estima (se cuenta aparte). Lo que
+--     NO se copia de Excepciones: allá se descartan las facturas con marcador o cupón (están respaldadas); acá son
+--     justamente las del Club.
 --   · Cortesías: líneas de la sección de cortesías (cortesia_familia o club_cortesias) a ₡0 en facturas del Club. Valor de
 --     lista = la misma referencia (o el precio de la línea si no hay); a costo = lista × cortesia_costo_pct.
 --   · Canjes: club_movimientos canje del local en el mes, créditos × valor_credito_crc del movimiento.
---   · Tasa efectiva = (descuento estimado + cortesías a costo + canjes) ÷ venta respaldada.
+--   · Tasa efectiva = (descuento estimado + cortesías a costo + canjes) ÷ venta respaldada COBRADA.
 --   · Regalía (decisión del dueño 14-nov: lo no cobrado va como regalía en el PoS): Σ regalia_crc de las facturas del
 --     Club. Se muestra aparte y NO se suma al costo (ya está en canjes y cortesías): sirve para conciliar con el PoS.
 --   · Pasivo: Σ personas de club_movimientos del local (el libro de solo inserción), créditos = personas ÷ personas por
---     crédito del movimiento, colones = créditos × valor del crédito del movimiento. «Congelado» (fuera del pasivo): las
+--     crédito del movimiento, colones = créditos × valor del crédito DE CADA MOVIMIENTO (decisión del dueño 14-nov: sin
+--     revaluación; si el valor del crédito cambia, el saldo en ₡ deja de ser créditos × valor vigente). «Congelado» (fuera del pasivo): las
 --     cuentas de tipo equipo y, con la 157 (D7), lo registrado hasta el último corte del equipo (club_auditoria
 --     accion 'equipo_corte'). Sin la 157 no hay cortes y solo sale el tipo equipo. Funciona con y sin la 157.
 --
@@ -134,28 +141,43 @@ begin
   -- Una fila por factura del mes: una factura cuenta una vez
   fa as (
     select tk.id, tk.pax, tk.regalia, tk.f, coalesce(n.neta, 0) as neta,
+           -- venta COBRADA (decisión del dueño 14-nov): la neta menos lo regalado. Un canje o una cortesía que el PoS
+           -- registra como regalía no suma a la vez como costo (abajo) y como venta.
+           greatest(coalesce(n.neta, 0) - tk.regalia, 0) as cobrada,
            (fl.tid is not null) as club, coalesce(fl.socio, false) as socio,
            coalesce(fl.cupon, false) as cupon, coalesce(fl.canje, false) as canje
       from tk left join neta n on n.ticket_id = tk.id left join fl on fl.tid = tk.id),
-  -- Facturas con un marcador de descuento activo (856, 857, PROMO, tarjetas de hotel…): no dan precio de referencia
+  -- ── Descuento estimado: las MISMAS reglas que DESCUENTO_SIN_RESPALDO de club_excepciones (150/155: dmk, dpr, dday,
+  -- ddia, dref), aplicadas a las líneas de las facturas del Club. Si se cambia una, se cambia la otra (la batería 160
+  -- compara las dos sobre los mismos datos: caso 9b).
+  -- Facturas con un marcador de descuento activo (856, 857, PROMO, tarjetas de hotel…); «total» = alguno sin % esperado
   mk as materialized (
-    select distinct z.ticket_id
+    select z.ticket_id as tid, bool_or(k.pct_esperado is null) as total
       from public.pos_ndf_ticket_lines z join public.pos_ndf_tickets t on t.id = z.ticket_id
       join public.club_marcadores_descuento k on k.location_id = p_location and k.activo and k.codigo_producto = z.codigo_producto
      where t.local = p_location and t.estado = 'C'
-       and t.fecha_registra >= v_ini - interval '31 days' and t.fecha_registra < v_fin),
-  -- Precios unitarios cobrados de los 30 días anteriores (facturas sin marcador y fuera del Club), por artículo y día
+       and t.fecha_registra >= v_ini - interval '31 days' and t.fecha_registra < v_fin
+     group by z.ticket_id),
+  -- Precios unitarios cobrados de los 30 días anteriores y del mes, por artículo, día y precio, con sus marcas
   pr as materialized (
     select l.codigo_producto as cod, (t.fecha_registra at time zone 'America/Costa_Rica')::date as dia,
-           round(l.monto / l.cantidad, 2) as u, count(*) as n
+           round(l.monto / l.cantidad, 2) as u,
+           (k.tid is not null) as con_mk, coalesce(k.total, false) as mk_total,
+           exists (select 1 from fl where fl.tid = t.id) as club,
+           count(*) as n
       from public.pos_ndf_ticket_lines l join public.pos_ndf_tickets t on t.id = l.ticket_id
+      left join mk k on k.tid = t.id
      where t.local = p_location and t.estado = 'C'
        and t.fecha_registra >= v_ini - interval '31 days' and t.fecha_registra < v_fin
        and l.cantidad > 0 and l.monto > 0 and not coalesce(l.es_cortesia, false) and not coalesce(l.es_pax, false)
        and l.codigo_producto is not null
-       and not exists (select 1 from mk where mk.ticket_id = t.id)
-       and not exists (select 1 from fl where fl.tid = t.id)
-     group by 1, 2, 3),
+     group by 1, 2, 3, 4, 5, 6),
+  -- dday: base de la referencia (sin marcador; además, fuera del Club)
+  dday as (select cod, dia, u, sum(n) as n from pr where not con_mk and not club group by 1, 2, 3),
+  -- ddia: regla del cambio de lista: todas las ventas del día salvo las respaldadas del todo (marcador sin %) y, acá,
+  -- las del Club (si no, un socio que pidió el artículo solo ese día haría «lista nueva» de su propio descuento)
+  ddia as (select cod, dia, u, sum(n) as n from pr where not mk_total and not club group by 1, 2, 3),
+  umax as (select cod, max(u) as umax from pr where not con_mk and not club group by cod),
   -- Líneas de las facturas del Club, marcadas
   lc as (
     select l.codigo_producto as cod, l.cantidad, l.monto, l.precio, (fa.f at time zone 'America/Costa_Rica')::date as dia,
@@ -174,17 +196,28 @@ begin
     select distinct on (z.cod, z.dia) z.cod, z.dia, z.u as ref
       from (select d.cod, d.dia, p.u, sum(p.n) as n
               from (select distinct cod, dia from lc where cod is not null) d
-              join pr p on p.cod = d.cod and p.dia >= d.dia - 30 and p.dia < d.dia
+              join dday p on p.cod = d.cod and p.dia >= d.dia - 30 and p.dia < d.dia
              group by d.cod, d.dia, p.u) z
      order by z.cod, z.dia, z.n desc, z.u desc),
-  ds as (
-    select coalesce(sum((r.ref - x.monto / x.cantidad) * x.cantidad) filter (where x.monto / x.cantidad < r.ref * 0.99), 0) as crc,
-           count(*) filter (where x.monto / x.cantidad < r.ref * 0.99) as lineas,
-           count(distinct x.tid) filter (where x.monto / x.cantidad < r.ref * 0.99) as facturas,
-           count(*) filter (where r.ref is null) as sin_referencia
-      from lc x left join ref r on r.cod = x.cod and r.dia = x.dia
+  -- Cada línea candidata con su referencia y la parte de las ventas del día a ese precio o menos (cambio de lista)
+  dl as (
+    select x.tid, x.cantidad, round(x.monto / x.cantidad, 2) as u, r.ref, m.umax,
+           (select sum(q.n) filter (where q.u <= round(x.monto / x.cantidad, 2) * 1.001)::numeric / nullif(sum(q.n), 0)
+              from ddia q where q.cod = x.cod and q.dia = x.dia) as parte_dia
+      from lc x left join ref r on r.cod = x.cod and r.dia = x.dia left join umax m on m.cod = x.cod
      where x.cantidad > 0 and x.monto > 0 and x.cod is not null
        and not x.es_cortesia and not x.es_pax and not x.es_seccion and not x.es_marca),
+  dsc as (
+    select dl.*, (dl.ref is not null and dl.u < dl.ref * 0.99 and dl.u < dl.umax * 0.99
+                  -- cambio de lista: si ese día ≥ 60 % de las ventas (fuera del Club) van a ese precio o menos, es precio nuevo
+                  and coalesce(dl.parte_dia, 0) < 0.6) as es_desc
+      from dl),
+  ds as (
+    select coalesce(sum((ref - u) * cantidad) filter (where es_desc), 0) as crc,
+           count(*) filter (where es_desc) as lineas,
+           count(distinct tid) filter (where es_desc) as facturas,
+           count(*) filter (where ref is null) as sin_referencia
+      from dsc),
   ct as (
     select count(*) as lineas, coalesce(sum(x.cantidad), 0) as unidades,
            coalesce(sum(coalesce(r.ref, nullif(x.precio, 0)) * x.cantidad), 0) as lista_crc,
@@ -244,16 +277,17 @@ begin
       from lb where congelado),
   -- Totales del mes
   t as (
-    select count(*) as facturas, coalesce(sum(neta), 0) as venta,
-           count(*) filter (where club) as club_f, coalesce(sum(neta) filter (where club), 0) as club_v,
+    select count(*) as facturas, coalesce(sum(cobrada), 0) as venta, coalesce(sum(neta), 0) as venta_neta,
+           coalesce(sum(neta) filter (where club), 0) as club_neta,
+           count(*) filter (where club) as club_f, coalesce(sum(cobrada) filter (where club), 0) as club_v,
            coalesce(sum(pax) filter (where club), 0) as club_pax,
-           count(*) filter (where socio) as socio_f, coalesce(sum(neta) filter (where socio), 0) as socio_v,
+           count(*) filter (where socio) as socio_f, coalesce(sum(cobrada) filter (where socio), 0) as socio_v,
            coalesce(sum(pax) filter (where socio), 0) as socio_pax,
-           count(*) filter (where not socio) as nosocio_f, coalesce(sum(neta) filter (where not socio), 0) as nosocio_v,
+           count(*) filter (where not socio) as nosocio_f, coalesce(sum(cobrada) filter (where not socio), 0) as nosocio_v,
            coalesce(sum(pax) filter (where not socio), 0) as nosocio_pax,
-           count(*) filter (where cupon) as cupon_f, coalesce(sum(neta) filter (where cupon), 0) as cupon_v,
+           count(*) filter (where cupon) as cupon_f, coalesce(sum(cobrada) filter (where cupon), 0) as cupon_v,
            coalesce(sum(pax) filter (where cupon), 0) as cupon_pax,
-           count(*) filter (where canje) as canje_f, coalesce(sum(neta) filter (where canje), 0) as canje_v,
+           count(*) filter (where canje) as canje_f, coalesce(sum(cobrada) filter (where canje), 0) as canje_v,
            count(*) filter (where club and regalia > 0) as reg_f,
            coalesce(sum(regalia) filter (where club), 0) as reg_crc,
            coalesce(sum(regalia) filter (where canje), 0) as reg_canje_crc
@@ -267,10 +301,12 @@ begin
     'config', jsonb_build_object('cortesia_costo_pct', v_cfg.cortesia_costo_pct, 'valor_credito_crc', v_cfg.valor_credito_crc,
                                  'personas_por_credito', v_cfg.personas_por_credito),
     'plata', jsonb_build_object(
-      'venta_respaldada_crc', round(t.club_v),
+      'venta_respaldada_crc', round(t.club_v),            -- cobrada: neta − regalía (base de la tasa)
+      'venta_respaldada_neta_crc', round(t.club_neta),    -- neta de Ventas, de referencia (incluye lo regalado)
       'facturas_club', t.club_f,
       'facturas_mes', t.facturas,
       'venta_mes_crc', round(t.venta),
+      'venta_mes_neta_crc', round(t.venta_neta),
       'descuento_estimado_crc', round(ds.crc),
       'descuento_lineas', ds.lineas, 'descuento_facturas', ds.facturas, 'lineas_sin_referencia', ds.sin_referencia,
       'cortesias_lineas', ct.lineas, 'cortesias_unidades', ct.unidades,

@@ -30,6 +30,8 @@ export default function Tablero() {
     }).catch(() => {})
   }, [])
   useEffect(() => {
+    // sin local elegido no se lee: cada lectura deja una fila en club_auditoria (se esperaba una sola)
+    if (!local) return
     let vivo = true
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCargando(true); setError(null)
@@ -69,9 +71,10 @@ export default function Tablero() {
             <p style={{ margin: '0 0 10px', color: C.ink }} data-testid="titular">{titular(t)}</p>
             {avisos(t).map(a => <div key={a} role="status" style={{ color: C.muted, fontSize: '0.85rem', marginBottom: 4 }}>{a}</div>)}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginTop: 8 }}>
-              <Kpi v={crcTxt(k.venta_respaldada_crc)} e="venta respaldada (neta)" a={`${n0(k.facturas_club)} facturas del Club de ${n0(k.facturas_mes)}`} />
+              <Kpi v={crcTxt(k.venta_respaldada_crc)} e="venta respaldada cobrada"
+                a={`${n0(k.facturas_club)} facturas del Club de ${n0(k.facturas_mes)} · neta ${crcTxt(k.venta_respaldada_neta_crc)}, con lo regalado`} />
               <Kpi v={crcTxt(k.costo_total_crc)} e="costo del Club" a="descuento + cortesías + canjes" />
-              <Kpi v={pctTxt(k.tasa_efectiva_pct)} e="tasa efectiva de descuento" a="costo ÷ venta respaldada" />
+              <Kpi v={pctTxt(k.tasa_efectiva_pct)} e="tasa efectiva de descuento" a="costo ÷ venta cobrada" />
             </div>
           </Card>
 
@@ -85,18 +88,19 @@ export default function Tablero() {
               d={`${n0(k.canjes)} canjes · ${creditosTxt(k.creditos_canjeados)} créditos × valor del crédito de cada canje`} />
             <Renglon e="Total" v={crcTxt(k.costo_total_crc)} fuerte />
             <div style={{ color: C.muted, fontSize: '0.8rem', marginTop: 6 }}>
-              El PoS manda el descuento en cero: se estima línea por línea. Una factura con socio, cupón y canje cuenta una vez.
+              El PoS manda el descuento en cero: se estima línea por línea con las reglas de «Descuento sin respaldo» (un cambio
+              de lista no es descuento). Una factura con socio, cupón y canje cuenta una vez.
             </div>
             {esOwner && <EditarPct local={t.local} pct={t.config.cortesia_costo_pct} onGuardado={() => setRecarga(x => x + 1)} />}
           </Card>
 
           <Card>
             <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Regalía en el PoS</h3>
-            <Renglon e="Regalía en facturas del Club" v={crcTxt(t.regalia.crc)}
+            <Renglon e="Regalía en facturas del Club (total)" v={crcTxt(t.regalia.crc)}
               d={`${n0(t.regalia.facturas)} facturas · ${crcTxt(t.regalia.en_canjes_crc)} en facturas con canje`} />
             <div style={{ color: C.muted, fontSize: '0.8rem', marginTop: 6 }}>
-              Lo no cobrado (canjes y cortesías) va como regalía en el PoS. Se muestra para conciliar con el reporte del PoS: no se
-              suma al costo, que ya lo cuenta arriba.
+              Lo no cobrado (canjes y cortesías) va como regalía en el PoS: se resta de la venta (la venta respaldada es la cobrada)
+              y no se suma al costo, que ya lo cuenta arriba. El PoS no dice el motivo de cada regalía.
             </div>
           </Card>
 
@@ -116,7 +120,7 @@ export default function Tablero() {
                 </tbody>
               </table>
             </div>
-            <div style={{ color: C.muted, fontSize: '0.8rem', marginTop: 6 }}>Compara facturas, no personas. «Con cupón» es parte de «sin socio».</div>
+            <div style={{ color: C.muted, fontSize: '0.8rem', marginTop: 6 }}>Compara facturas, no personas, con la venta cobrada. «Con cupón» es parte de «sin socio».</div>
           </Card>
 
           <Card>
@@ -140,7 +144,8 @@ export default function Tablero() {
             </div>
             <div style={{ color: C.muted, fontSize: '0.8rem', marginTop: 6 }}>
               Canjeable hoy cuenta por cuenta: {creditosTxt(t.pasivo.canjeable_creditos)} créditos en {n0(t.pasivo.cuentas_con_saldo)} cuentas (la
-              diferencia con el saldo son personas que todavía no completan medio crédito).
+              diferencia con el saldo son personas que todavía no completan medio crédito). Los colones van al valor del crédito de
+              cada movimiento, sin revaluar.
             </div>
             <div style={{ marginTop: 8, paddingTop: 6, borderTop: `1px dashed ${C.border}` }}>
               <Renglon e="Congelado (equipo), fuera del pasivo" v={crcTxt(t.pasivo.congelado.crc)}

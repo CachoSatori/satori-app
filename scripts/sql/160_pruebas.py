@@ -49,13 +49,20 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     'neta_con_17': ("filter (where l.familia is null or l.familia not in (6, 17, 20)) as neta",
                     "filter (where true) as neta", {'3b'}),
     # la referencia toma también las facturas con marcador (856 a precio rebajado)
-    'ref_con_marcador': ("       and not exists (select 1 from mk where mk.ticket_id = t.id)\n", "", {'3d', '3g'}),
+    'ref_con_marcador': ("  dday as (select cod, dia, u, sum(n) as n from pr where not con_mk and not club group by 1, 2, 3),",
+                         "  dday as (select cod, dia, u, sum(n) as n from pr where not club group by 1, 2, 3),", {'3d', '3g'}),
     # % de cortesías fijo en 35 (ignora la config)
     'pct_fijo': ("'cortesias_costo_crc', round(ct.lista_crc * v_cfg.cortesia_costo_pct / 100),",
                  "'cortesias_costo_crc', round(ct.lista_crc * 35 / 100),", {'6b'}),
     # canjes a valor de la config de hoy en vez del movimiento (con valor distinto, cae; acá se fuerza 1)
     'canje_sin_valor': ("coalesce(sum(m.creditos * m.valor_credito_crc), 0) as crc", "coalesce(sum(m.creditos), 0) as crc",
                         {'3f', '3g'}),
+    # la venta respaldada vuelve a ser la neta (el canje regalado suma como venta y como costo)
+    'venta_neta': ("           greatest(coalesce(n.neta, 0) - tk.regalia, 0) as cobrada,",
+                   "           coalesce(n.neta, 0) as cobrada,", {'3b', '3c', '3g', '3i', '3k'}),
+    # sin la regla del cambio de lista (el caso del verificador: ₡2.000 falsos)
+    'sin_cambio_lista': ("                  and coalesce(dl.parte_dia, 0) < 0.6) as es_desc",
+                         "                  and true) as es_desc", {'9a', '9b'}),
     # el equipo cuenta en el pasivo
     'equipo_en_pasivo': ("(m.tipo = 'equipo' or (k.corte is not null and v.registrado_en <= k.corte)) as congelado",
                          "(k.corte is not null and v.registrado_en <= k.corte) as congelado", {'4a', '4c', '4d'}),

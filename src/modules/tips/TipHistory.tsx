@@ -436,7 +436,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: '0.6rem', marginBottom: '0.9rem' }}>
                     <div className="tips-field">
                       <div className="tips-field-label">💵 Efectivo ₡</div>
-                      <input type="number" className="tips-input-dark" min={0} step={100} value={ePoolCRC}
+                      <input type="number" className="tips-input-dark" min={0} step="any" value={ePoolCRC}
                         onChange={e => setEPoolCRC(e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
                     <div className="tips-field">
@@ -446,13 +446,13 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                     </div>
                     <div className="tips-field">
                       <div className="tips-field-label">🍸 Barra efectivo ₡</div>
-                      <input type="number" className="tips-input-dark" min={0} step={100} value={ePoolBarra}
+                      <input type="number" className="tips-input-dark" min={0} step="any" value={ePoolBarra}
                         title="Barra efectivo — ya en mano de la barra, no genera cuenta por pagar"
                         onChange={e => setEPoolBarra(e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
                     <div className="tips-field">
                       <div className="tips-field-label">🍸 Barra electrónico ₡</div>
-                      <input type="number" className="tips-input-dark" min={0} step={100} value={ePoolBarraElec}
+                      <input type="number" className="tips-input-dark" min={0} step="any" value={ePoolBarraElec}
                         title="Barra electrónico (datáfono/SINPE) — el encargado lo entrega, genera cuenta por pagar"
                         onChange={e => setEPoolBarraElec(e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
@@ -507,7 +507,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                                 <>
                                   <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                     <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>Electrónico ₡</span>
-                                    <input type="number" className="tips-input-dark" min={0} step={100} value={r.propina_crc} style={{ width: 90 }}
+                                    <input type="number" className="tips-input-dark" min={0} step="any" value={r.propina_crc} style={{ width: 90 }}
                                       onChange={e => setRow(r.employeeId, { propina_crc: e.target.value === '' ? '' : Number(e.target.value) })} />
                                   </label>
                                   <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

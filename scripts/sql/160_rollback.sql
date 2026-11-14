@@ -2,7 +2,7 @@
 -- Saca la función del tablero y la columna del % de cortesías. No toca datos de plata ni del PoS.
 -- Las filas de club_auditoria ('ver_tablero') y de club_config_historial ('cortesia_costo_pct') QUEDAN: las dos tablas
 -- son registros de solo lectura para la app (la auditoría es de solo inserción); son rastro, no estado.
--- Borra la fila 160 del ledger. El .sql de la 160 se QUEDA en main (regla 10 / satori-migraciones-y-prod §6): lo que se borra es su fila del ledger.
+-- Borra la fila 160 del ledger. Si se corre en prod, en el mismo momento sale el .sql de la 160 de main (si queda, Branching la vuelve a aplicar; regla 10 / satori-migraciones-y-prod §6).
 begin;
 
 drop function if exists public.club_tablero_mes(date, text);

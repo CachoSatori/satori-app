@@ -41,6 +41,8 @@ Cloudflare construye `satori-club` y el Worker `satori-club-api` desde `main`.
 - [ ] El run «Deploy to GitHub Pages» del merge en success (`gh run list --workflow deploy.yml -L 3`).
 - [ ] `curl -s https://cachosatori.github.io/satori-app/version.json` → `commit` = el SHA del merge. Con `curl`, no el
       navegador: el service worker devuelve `index.html` y lleva al login.
+- [ ] Si `curl` da **403 por el proxy de la sesión**: verificación alternativa = el run «Deploy to GitHub Pages» del SHA
+      del merge en success (`gh run list --workflow deploy.yml`), y anotar «version.json no verificable desde la sesión».
 
 **Supabase Branching**
 - [ ] Check «Supabase Preview» del merge en success; en el log, «All migrations are up to date» (o las migraciones

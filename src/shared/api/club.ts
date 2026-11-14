@@ -421,8 +421,12 @@ export interface Cohortes {
   cohortes: CohorteMes[]
   totales: { socios: number; bajas: number; con_2: number; con_4: number; visitas: number; visitas_por_socio: number | null }
 }
-/** owner, manager y contador. Solo conteos (sin nombres). `local` null = todos los locales que el usuario ve. Deja rastro. */
-export const getCohortes = (local: string | null) => llamar<Cohortes>('club_cohortes_socios', { p_location: local })
+/**
+ * owner, manager y contador. Solo conteos (sin nombres). `local` null = todos los locales que el usuario ve.
+ * Rastro: una fila por `apertura` (un id por vez que se abre la pantalla), no por cada cambio de filtro.
+ */
+export const getCohortes = (local: string | null, apertura: string | null = null) =>
+  llamar<Cohortes>('club_cohortes_socios', { p_location: local, p_apertura: apertura })
 
 export interface SocioRanking {
   id: string; nombre: string; local_alta: string; estado: 'activo' | 'baja'; alta: string
@@ -440,11 +444,16 @@ export interface Ranking {
   }
 }
 /**
- * Solo owner y manager. Nombres, sin teléfonos ni correos. Cada lectura queda en club_auditoria; con `exporte` la fila
- * dice que fue un CSV: el CSV de la pantalla SOLO se arma con lo que devuelve esta llamada.
+ * Solo owner y manager. Nombres, sin teléfonos ni correos. Rastro en club_auditoria: una fila por `apertura` de la
+ * pantalla (no por cada cambio de filtro) y una por cada exporte. El CSV de la pantalla SOLO se arma con lo que devuelve
+ * la llamada con `exporte`.
  */
-export const getRanking = (desde: string, hasta: string, local: string | null, exporte = false) =>
-  llamar<Ranking>('club_ranking_socios', { p_desde: desde, p_hasta: hasta, p_location: local, p_exporte: exporte })
+export const getRanking = (desde: string, hasta: string, local: string | null, exporte = false, apertura: string | null = null) =>
+  llamar<Ranking>('club_ranking_socios', { p_desde: desde, p_hasta: hasta, p_location: local, p_exporte: exporte, p_apertura: apertura })
+/** Un id por apertura de una pantalla auditada (Cohortes, Ranking). */
+export const nuevaApertura = (): string =>
+  typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16))
 
 // ── Piloto en paralelo: comparación con la página vieja ──────────────────────
 export interface FilaComparacion {

@@ -1,10 +1,10 @@
 /**
  * Club → Cohortes (SPEC Club v2, ítem 6; mig 161): socios del Local Club por mes de alta (hora CR): con 2.ª y 4.ª
  * visita, activos a 30/60/90 días y visitas por socio. owner y manager (en la base también el contador: solo conteos).
- * Una celda que todavía no puede medirse dice «aún no», nunca 0. Cada lectura deja rastro en club_auditoria.
+ * Una celda que todavía no puede medirse dice «aún no», nunca 0. Abrir la pantalla deja una fila en club_auditoria.
  */
 import { useEffect, useState } from 'react'
-import { getCohortes, getLocalesClub, localActual, aClubError, type Cohortes as TCohortes, type LocalClub } from '../../shared/api/club'
+import { getCohortes, getLocalesClub, localActual, nuevaApertura, aClubError, type Cohortes as TCohortes, type LocalClub } from '../../shared/api/club'
 import { Aviso, Card } from './ui'
 import { C, inputStyle, labelStyle } from './estilos'
 import { celdaCohorte, mesTxt, numTxt } from './cohortesFormato'
@@ -18,18 +18,20 @@ export default function Cohortes() {
   const [c, setC] = useState<TCohortes | null>(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // un id por apertura de la pantalla: la base deja UNA fila de rastro aunque se cambie el local
+  const [apertura] = useState(nuevaApertura)
 
   useEffect(() => { getLocalesClub().then(setLocales).catch(() => {}) }, [])
   useEffect(() => {
     let vivo = true
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCargando(true); setError(null)
-    getCohortes(local || null)
+    getCohortes(local || null, apertura)
       .then(r => { if (vivo) setC(r) })
       .catch(e => { if (vivo) { setC(null); setError(aClubError(e).message) } })
       .finally(() => { if (vivo) setCargando(false) })
     return () => { vivo = false }
-  }, [local])
+  }, [local, apertura])
 
   return (
     <div className="tips-body" style={{ maxWidth: 900, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>

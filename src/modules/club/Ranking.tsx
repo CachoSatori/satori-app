@@ -2,11 +2,12 @@
  * Club → Ranking de socios por consumo (SPEC Club v2, ítem 7; mig 161). Solo owner y manager. Por socio: visitas,
  * venta respaldada (la de la mesa; una factura cuenta una vez), tiquete promedio, invitados (857), descuento estimado
  * y última visita. Ordenable; filtro por local y período (días CR). Sin teléfonos ni correos (la base no los manda).
- * Abrirlo y exportarlo quedan en club_auditoria: el CSV sale de una llamada aparte con `exporte`, no de lo que está en
- * pantalla.
+ * Abrirlo y exportarlo quedan en club_auditoria: una fila por apertura de la pantalla (un id por apertura; los cambios
+ * de filtro no dejan otra) y una por cada exporte. El CSV sale de una llamada aparte con `exporte`, no de lo que está
+ * en pantalla. Los filtros esperan medio segundo (escribir una fecha no dispara una consulta por tecla).
  */
-import { useEffect, useMemo, useState } from 'react'
-import { getRanking, getLocalesClub, localActual, aClubError, type LocalClub, type Ranking as TRanking } from '../../shared/api/club'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getRanking, getLocalesClub, localActual, nuevaApertura, aClubError, type LocalClub, type Ranking as TRanking } from '../../shared/api/club'
 import { todayCR } from '../../shared/utils'
 import { Aviso, Btn, Card } from './ui'
 import { C, fmtFecha, inputStyle, labelStyle } from './estilos'
@@ -17,6 +18,7 @@ const COLS: Array<{ c: Columna; t: string; izq?: boolean }> = [
   { c: 'tiquete_promedio_crc', t: 'Tiquete promedio' }, { c: 'invitados', t: 'Invitados' },
   { c: 'descuento_estimado_crc', t: 'Descuento (estimado)' }, { c: 'ultima_visita', t: 'Última visita' },
 ]
+const DEBOUNCE_MS = 500
 const td: React.CSSProperties = { textAlign: 'right', padding: '6px', borderTop: `1px solid ${C.border}`, whiteSpace: 'nowrap' }
 
 export default function Ranking() {
@@ -31,19 +33,25 @@ export default function Ranking() {
   const [col, setCol] = useState<Columna>('venta_respaldada_crc')
   const [asc, setAsc] = useState(false)
   const invalido = periodoValido(desde, hasta)
+  const [apertura] = useState(nuevaApertura)
+  const primera = useRef(true)
 
   useEffect(() => { getLocalesClub().then(setLocales).catch(() => {}) }, [])
   useEffect(() => {
     if (invalido) return
     let vivo = true
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCargando(true); setError(null)
-    getRanking(desde, hasta, local || null)
-      .then(x => { if (vivo) setR(x) })
-      .catch(e => { if (vivo) { setR(null); setError(aClubError(e).message) } })
-      .finally(() => { if (vivo) setCargando(false) })
-    return () => { vivo = false }
-  }, [desde, hasta, local, invalido])
+    // la primera carga va directo; un cambio de filtro espera 500 ms (debounce)
+    const espera = primera.current ? 0 : DEBOUNCE_MS
+    primera.current = false
+    const t = setTimeout(() => {
+      setCargando(true); setError(null)
+      getRanking(desde, hasta, local || null, false, apertura)
+        .then(x => { if (vivo) setR(x) })
+        .catch(e => { if (vivo) { setR(null); setError(aClubError(e).message) } })
+        .finally(() => { if (vivo) setCargando(false) })
+    }, espera)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [desde, hasta, local, invalido, apertura])
 
   const filas = useMemo(() => (r ? ordenar(r.socios, col, asc) : []), [r, col, asc])
 
@@ -56,7 +64,7 @@ export default function Ranking() {
     if (invalido) return
     let datos: TRanking
     // el exporte lo entrega la base (y lo audita); se ordena igual que en pantalla
-    try { datos = await getRanking(desde, hasta, local || null, true) } catch (e) { setError(aClubError(e).message); return }
+    try { datos = await getRanking(desde, hasta, local || null, true, apertura) } catch (e) { setError(aClubError(e).message); return }
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([rankingCsv(datos, ordenar(datos.socios, col, asc))], { type: 'text/csv;charset=utf-8' }))
     a.download = `club-ranking-socios-${local || 'todos'}-${datos.desde}-${datos.hasta}.csv`

@@ -49,8 +49,10 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     # «todos» sin filtrar por mis_locales(): el manager de otro local ve p161-a
     'todos_sin_filtro': ("      from public.club_config c where c.location_id = any (public.mis_locales());",
                          "      from public.club_config c;", {'2i'}),
-    'co_sin_rastro': ("  perform public.club_auditar('ver_cohortes', 'club_cohortes_socios', null, null,\n"
-                      "    jsonb_build_object('local', coalesce(p_location, 'todos')));\n", "", {'6c'}),
+    'co_sin_rastro': ("  perform public.club_auditar_lectura('ver_cohortes', 'club_cohortes_socios', p_apertura,\n"
+                      "    jsonb_build_object('local', coalesce(p_location, 'todos')));\n", "", {'6c', '6d'}),
+    # una fila por CADA lectura (sin mirar la apertura)
+    'rastro_por_lectura': ("  if p_apertura is not null and exists (", "  if false and exists (", {'6d'}),
     # ── Ranking ──
     'rk_contador_entra': (_ROL_RK, "  if v_rol is null or v_rol not in ('owner','manager','contador') then", {'2c', '6c'}),
     'rk_cajero_entra': (_ROL_RK, "  if v_rol is null or v_rol not in ('owner','manager','cajero') then", {'2d'}),
@@ -71,12 +73,21 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     'rk_invitados_856': ("filter (where l.codigo_producto = cf.lc_invitado_codigo) as invitados",
                          "filter (where l.codigo_producto = cf.lc_articulo_codigo) as invitados", {'4b', '4c', '4f'}),
     # la referencia toma facturas del Club (F1 a ₡8.500 empata con G1 y no hay descuento en el P1 de F2)
-    'rk_ref_con_club': ("       and not exists (select 1 from fc where fc.tid = t.id)\n", "", {'4b', '4c', '4f'}),
+    'rk_ref_con_club': ("  dday as (select local, cod, dia, u, sum(n) as n from pr where not con_mk and not club group by 1, 2, 3, 4),",
+                        "  dday as (select local, cod, dia, u, sum(n) as n from pr where not con_mk group by 1, 2, 3, 4),", {'4b', '4c', '4f'}),
     # la referencia toma facturas con marcador (₡7.000 ×4 sería la moda de febrero)
-    'rk_ref_con_marcador': ("       and not exists (select 1 from mk where mk.ticket_id = t.id)\n", "", {'4b', '4f'}),
+    'rk_ref_con_marcador': ("  dday as (select local, cod, dia, u, sum(n) as n from pr where not con_mk and not club group by 1, 2, 3, 4),",
+                            "  dday as (select local, cod, dia, u, sum(n) as n from pr where not club group by 1, 2, 3, 4),", {'4b', '4f'}),
+    # sin la regla del cambio de lista (P4 a ₡8.000 el día que bajó la lista se estima como descuento de ₡2.000)
+    'rk_sin_cambio_lista': ("                  and coalesce(dl.parte_dia, 0) < 0.6) as es_desc", "                  ) as es_desc",
+                            {'4b', '4c', '4f', '4j'}),
+    # el cambio de lista cuenta las ventas del Club (F2 sola haría «lista nueva»: P1 y P2 ya no serían descuento)
+    'rk_cambio_lista_con_club': ("  ddia as (select local, cod, dia, u, sum(n) as n from pr where not mk_total and not club group by 1, 2, 3, 4),",
+                                 "  ddia as (select local, cod, dia, u, sum(n) as n from pr where not mk_total group by 1, 2, 3, 4),",
+                                 {'4b', '4c', '4f'}),
     # se estiman también las líneas de cortesía (K1)
-    'rk_estima_cortesias': ("     where x.cantidad > 0 and x.monto > 0 and x.cod is not null and not x.fuera",
-                            "     where x.cantidad > 0 and x.monto > 0 and x.cod is not null", {'4f'}),
+    'rk_estima_cortesias': ("     where x.cantidad > 0 and x.monto > 0 and x.cod is not null and not x.fuera),",
+                            "     where x.cantidad > 0 and x.monto > 0 and x.cod is not null),", {'4f'}),
     # los pendientes entran al ranking
     'rk_con_pendientes': ("     where r.rol = 'socio' and r.estado <> 'pendiente'\n       and (m.location_id",
                           "     where r.rol = 'socio'\n       and (m.location_id", {'4e'}),
@@ -86,18 +97,21 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     # sin aviso de local sin PoS (lista vacía siempre)
     'rk_sin_aviso_pos': ("     where not exists (select 1 from public.pos_ndf_tickets t\n",
                          "     where false and not exists (select 1 from public.pos_ndf_tickets t\n", {'5a', '5b'}),
-    'rk_sin_rastro': ("  perform public.club_auditar(case when p_exporte then 'exporte_ranking_socios_csv' else 'ver_ranking_socios' end,\n"
-                      "    'club_ranking_socios', null, null,\n"
-                      "    jsonb_build_object('desde', p_desde, 'hasta', p_hasta, 'local', coalesce(p_location, 'todos'), 'filas', v_n));\n",
-                      "", {'6a', '6b'}),
-    'rk_exporte_sin_marca': ("case when p_exporte then 'exporte_ranking_socios_csv' else 'ver_ranking_socios' end",
-                             "'ver_ranking_socios'", {'6b'}),
-    'anon_ejecuta': ("grant execute on function public.club_ranking_socios(date, date, text, boolean) to authenticated;",
-                     "grant execute on function public.club_ranking_socios(date, date, text, boolean) to authenticated, anon;", {'0', '2j'}),
+    'rk_sin_rastro': ("    perform public.club_auditar_lectura('ver_ranking_socios', 'club_ranking_socios', p_apertura,\n",
+                      "    perform 1; perform jsonb_build_object(\n", {'6a', '6b', '6d'}),
+    # el exporte también se deduplica (dos exportes → una fila)
+    'rk_exporte_dedup': ("  if p_exporte then\n    perform public.club_auditar('exporte_ranking_socios_csv', 'club_ranking_socios', p_apertura, null,",
+                         "  if p_exporte then\n    perform public.club_auditar_lectura('exporte_ranking_socios_csv', 'club_ranking_socios', p_apertura,",
+                         {'6d'}),
+    'rk_exporte_sin_marca': ("    perform public.club_auditar('exporte_ranking_socios_csv', 'club_ranking_socios', p_apertura, null,",
+                             "    perform public.club_auditar('ver_ranking_socios', 'club_ranking_socios', p_apertura, null,", {'6b', '6d'}),
+    'anon_ejecuta': ("grant execute on function public.club_ranking_socios(date, date, text, boolean, uuid) to authenticated;",
+                     "grant execute on function public.club_ranking_socios(date, date, text, boolean, uuid) to authenticated, anon;", {'0', '2j'}),
 }
 # mutaciones del rollback
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
-    'rollback_deja_ranking': ("drop function if exists public.club_ranking_socios(date, date, text, boolean);\n", "", {'7'}),
+    'rollback_deja_ranking': ("drop function if exists public.club_ranking_socios(date, date, text, boolean, uuid);\n", "", {'7'}),
+    'rollback_deja_rastro': ("drop function if exists public.club_auditar_lectura(text, text, uuid, jsonb);\n", "", {'7'}),
 }
 
 

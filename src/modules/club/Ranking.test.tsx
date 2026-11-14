@@ -4,21 +4,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { rankingDePrueba, rankingVacio } from './cohortesFixture.test-util'
 
-const st = vi.hoisted(() => ({ datos: null as unknown, llamadas: [] as Array<[string, string, string | null, boolean]> }))
+const st = vi.hoisted(() => ({ datos: null as unknown, llamadas: [] as Array<[string, string, string | null, boolean]>, aperturas: [] as Array<string | null> }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/utils', async orig => ({ ...(await orig<typeof import('../../shared/utils')>()), todayCR: () => '2026-11-14' }))
 vi.mock('../../shared/api/club', async orig => ({
   ...(await orig<typeof import('../../shared/api/club')>()),
   getLocalesClub: async () => [{ id: 'p161-a', nombre: 'Local P161 A', activo: true }],
   localActual: () => 'p161-a',
-  getRanking: async (d: string, h: string, l: string | null, e = false) => { st.llamadas.push([d, h, l, e]); return st.datos },
+  getRanking: async (d: string, h: string, l: string | null, e = false, a: string | null = null) => {
+    st.llamadas.push([d, h, l, e]); st.aperturas.push(a); return st.datos
+  },
 }))
 
 import Ranking from './Ranking'
 
 const nombres = () => screen.getAllByTestId('fila-socio').map(f => f.querySelector('td')?.textContent ?? '')
 
-beforeEach(() => { st.datos = rankingDePrueba(); st.llamadas = [] })
+beforeEach(() => { st.datos = rankingDePrueba(); st.llamadas = []; st.aperturas = [] })
 
 describe('Club → Ranking de socios', () => {
   it('abre con los últimos 90 días (hora CR) en el local del Club, sin exporte', async () => {
@@ -66,7 +68,27 @@ describe('Club → Ranking de socios', () => {
     await screen.findByTestId('resumen')
     fireEvent.click(screen.getByText('Exportar CSV'))
     await waitFor(() => expect(st.llamadas.at(-1)?.[3]).toBe(true))
+    expect(st.aperturas.at(-1)).toBe(st.aperturas[0])
     await waitFor(() => expect(crear).toHaveBeenCalled())
+  })
+
+  it('rastro: un id por apertura; varios cambios de filtro seguidos → una sola consulta, con el mismo id', async () => {
+    const { unmount } = render(<Ranking />)
+    await screen.findByTestId('resumen')
+    const id = st.aperturas[0]
+    expect(id).toMatch(/^[0-9a-f-]{36}$/)
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-01' } })
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-02' } })
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-31' } })
+    await waitFor(() => expect(st.llamadas.length).toBe(2))
+    await new Promise(r => setTimeout(r, 700))
+    expect(st.llamadas.length).toBe(2)   // debounce: los tres cambios, una consulta
+    expect(st.llamadas[1]).toEqual(['2026-10-02', '2026-10-31', 'p161-a', false])
+    expect(st.aperturas).toEqual([id, id])
+    unmount()
+    render(<Ranking />)
+    await waitFor(() => expect(st.aperturas.length).toBe(3))
+    expect(st.aperturas[2]).not.toBe(id)   // otra apertura, otro id (otra fila de rastro)
   })
 
   it('cero socios y local sin PoS: aviso informativo, sin tabla ni error', async () => {

@@ -4,18 +4,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { cohortesDePrueba, cohortesVacias } from './cohortesFixture.test-util'
 
-const st = vi.hoisted(() => ({ datos: null as unknown, pedidos: [] as Array<string | null> }))
+const st = vi.hoisted(() => ({ datos: null as unknown, pedidos: [] as Array<string | null>, aperturas: [] as Array<string | null> }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/api/club', async orig => ({
   ...(await orig<typeof import('../../shared/api/club')>()),
   getLocalesClub: async () => [{ id: 'p161-a', nombre: 'Local P161 A', activo: true }, { id: 'p161-b', nombre: 'Local P161 B', activo: true }],
   localActual: () => 'p161-a',
-  getCohortes: async (l: string | null) => { st.pedidos.push(l); return st.datos },
+  getCohortes: async (l: string | null, a: string | null = null) => { st.pedidos.push(l); st.aperturas.push(a); return st.datos },
 }))
 
 import Cohortes from './Cohortes'
 
-beforeEach(() => { st.datos = cohortesDePrueba(); st.pedidos = [] })
+beforeEach(() => { st.datos = cohortesDePrueba(); st.pedidos = []; st.aperturas = [] })
 
 describe('Club → Cohortes', () => {
   it('una fila por mes de alta, con cuenta y %, y «aún no» donde no puede medirse (no 0)', async () => {
@@ -36,6 +36,9 @@ describe('Club → Cohortes', () => {
     expect(st.pedidos[0]).toBe('p161-a')
     fireEvent.change(screen.getByLabelText('Local'), { target: { value: '' } })
     await waitFor(() => expect(st.pedidos.at(-1)).toBeNull())
+    // rastro: el mismo id de apertura en las dos consultas (la base deja una sola fila)
+    expect(st.aperturas[0]).toMatch(/^[0-9a-f-]{36}$/)
+    expect(st.aperturas.at(-1)).toBe(st.aperturas[0])
   })
 
   it('cero socios: mensaje, sin tabla y sin error', async () => {

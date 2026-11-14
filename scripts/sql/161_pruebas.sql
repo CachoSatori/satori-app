@@ -18,7 +18,11 @@
 --   N  (a) alta hace 5 días: su cohorte no puede medirse («aún no»)
 -- Facturas de p161-a (marzo): F1 5-mar pax 3 · P1 ×1 ₡8.500 dos veces (ref ₡10.000 → desc ₡3.000) · 856 · 857 ×2 · K1 fam. 17 ₡500
 --   F2 26-mar pax 4 · P2 ₡4.500 (ref ₡5.000 → ₡500) · P1 ₡8.500 (ref ₡10.000 de G1; sin excluir el Club sería ₡8.500) · 857 · P3 ₡2.000 sin ref
+--      · P4 ₡8.000: ref ₡10.000 (G1 y G2, 1 y 10-mar), pero ese día la LISTA bajó a ₡8.000 (G3 y G4, 100 % de las ventas fuera del Club)
+--        → cambio de lista, descuento 0 (sin la regla serían ₡2.000). Neta de F2 = ₡23.000
 --   F3 12-mar, de la visita del PENDIENTE: P1 ×1 ₡8.500 dos veces SIN marcador (Club: no es referencia; no entra al ranking)
+--   F4 26-mar, otra visita del PENDIENTE: P1 ×1 ₡8.500 dos veces SIN marcador. Es del Club: NO cuenta para el cambio de
+--      lista (si contara, ese día el 100 % del P1 fuera de marcadores sería ₡8.500 y el P1 de F2 dejaría de ser descuento)
 --   F9 8-mar ANULADA · G1 10-mar P1 ₡10.000 (sin Club) · G2 1-mar P2 ₡5.000 (sin Club)
 --   Febrero (referencia de F1): P1 ×3 a ₡10.000 y ×1 a ₡9.000 · P2 ₡5.000 · P1 a ₡7.000 ×4 CON 856 (no es referencia)
 begin;
@@ -100,6 +104,7 @@ select x.loc, x.m::uuid, (x.en at time zone 'America/Costa_Rica')::date, x.en, g
     ('p161-a', '00000000-0000-4000-8000-000000161b03', timestamptz '2001-03-08 20:00-06', '00161009'),
     ('p161-a', '00000000-0000-4000-8000-000000161b04', timestamptz '2001-02-07 20:00-06', null),   -- pendiente
     ('p161-a', '00000000-0000-4000-8000-000000161b04', timestamptz '2001-03-12 20:00-06', '00161003'), -- pendiente, con F3
+    ('p161-a', '00000000-0000-4000-8000-000000161b04', timestamptz '2001-03-26 12:00-06', '00161004'), -- pendiente, con F4
     ('p161-a', '00000000-0000-4000-8000-000000161b06', timestamptz '2001-03-26 20:05-06', '00161002')
   ) x(loc, m, en, f);
 
@@ -110,8 +115,12 @@ insert into _t161 values
   ('00000000-0000-4000-8000-000000161d02', '00161002', '2001-03-26 20:30-06', 'C', 4),
   ('00000000-0000-4000-8000-000000161d09', '00161009', '2001-03-08 20:30-06', 'X', 2),
   ('00000000-0000-4000-8000-000000161d03', '00161003', '2001-03-12 20:30-06', 'C', 2),
+  ('00000000-0000-4000-8000-000000161d04', '00161004', '2001-03-26 12:30-06', 'C', 2),
   ('00000000-0000-4000-8000-000000161d11', '00161011', '2001-03-10 20:30-06', 'C', 2),
   ('00000000-0000-4000-8000-000000161d12', '00161012', '2001-03-01 20:30-06', 'C', 2),
+  -- 26-mar: la lista de P4 baja de ₡10.000 a ₡8.000 (todas las ventas del día fuera del Club, a ₡8.000)
+  ('00000000-0000-4000-8000-000000161d13', '00161013', '2001-03-26 13:00-06', 'C', 2),
+  ('00000000-0000-4000-8000-000000161d14', '00161014', '2001-03-26 19:00-06', 'C', 2),
   ('00000000-0000-4000-8000-000000161e01', '00161101', '2001-02-20 20:00-06', 'C', 2),
   ('00000000-0000-4000-8000-000000161e02', '00161102', '2001-02-21 20:00-06', 'C', 2),
   ('00000000-0000-4000-8000-000000161e03', '00161103', '2001-02-22 20:00-06', 'C', 2),
@@ -134,11 +143,18 @@ insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, can
   ('00000000-0000-4000-8000-000000161d02', 'P1',  'Plato uno',   1, 10000, 8500, 2, false),
   ('00000000-0000-4000-8000-000000161d02', '857', 'Invitado',    1,     0,    0, 2, false),
   ('00000000-0000-4000-8000-000000161d02', 'P3',  'Plato nuevo', 1,  2000, 2000, 2, false),
+  ('00000000-0000-4000-8000-000000161d02', 'P4',  'Plato cuatro', 1, 8000, 8000, 2, false),
+  ('00000000-0000-4000-8000-000000161d13', 'P4',  'Plato cuatro', 1, 8000, 8000, 2, false),
+  ('00000000-0000-4000-8000-000000161d14', 'P4',  'Plato cuatro', 1, 8000, 8000, 2, false),
   ('00000000-0000-4000-8000-000000161d09', 'P1',  'Plato uno',   1, 10000, 5000, 2, false),
   ('00000000-0000-4000-8000-000000161d03', 'P1',  'Plato uno',   1, 10000, 8500, 2, false),
   ('00000000-0000-4000-8000-000000161d03', 'P1',  'Plato uno',   1, 10000, 8500, 2, false),
+  ('00000000-0000-4000-8000-000000161d04', 'P1',  'Plato uno',   1, 10000, 8500, 2, false),
+  ('00000000-0000-4000-8000-000000161d04', 'P1',  'Plato uno',   1, 10000, 8500, 2, false),
   ('00000000-0000-4000-8000-000000161d11', 'P1',  'Plato uno',   1, 10000, 10000, 2, false),
   ('00000000-0000-4000-8000-000000161d12', 'P2',  'Plato dos',   1,  5000, 5000, 2, false),
+  ('00000000-0000-4000-8000-000000161d11', 'P4',  'Plato cuatro', 1, 10000, 10000, 2, false),
+  ('00000000-0000-4000-8000-000000161d12', 'P4',  'Plato cuatro', 1, 10000, 10000, 2, false),
   ('00000000-0000-4000-8000-000000161e01', 'P1',  'Plato uno',   1, 10000, 10000, 2, false),
   ('00000000-0000-4000-8000-000000161e01', 'P2',  'Plato dos',   1,  5000, 5000, 2, false),
   ('00000000-0000-4000-8000-000000161e02', 'P1',  'Plato uno',   1, 10000, 10000, 2, false),
@@ -168,6 +184,23 @@ declare r jsonb;
 begin
   perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
   begin r := public.club_ranking_socios(p_desde, p_hasta, p_loc, p_exp); exception when others then r := to_jsonb('ERR:' || sqlstate); end;
+  perform set_config('request.jwt.claims', '', true);
+  return r;
+end $f$;
+create or replace function pg_temp.rk161_ap(p_uid uuid, p_desde date, p_hasta date, p_loc text, p_exp boolean, p_ap uuid)
+returns jsonb language plpgsql as $f$
+declare r jsonb;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
+  begin r := public.club_ranking_socios(p_desde, p_hasta, p_loc, p_exp, p_ap); exception when others then r := to_jsonb('ERR:' || sqlstate); end;
+  perform set_config('request.jwt.claims', '', true);
+  return r;
+end $f$;
+create or replace function pg_temp.co161_ap(p_uid uuid, p_loc text, p_ap uuid) returns jsonb language plpgsql as $f$
+declare r jsonb;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
+  begin r := public.club_cohortes_socios(p_loc, p_ap); exception when others then r := to_jsonb('ERR:' || sqlstate); end;
   perform set_config('request.jwt.claims', '', true);
   return r;
 end $f$;
@@ -210,13 +243,15 @@ select pg_temp.co161('00000000-0000-4000-8000-000000161a01', 'p161-a') as co_own
 insert into _r161 (caso, ok, detalle)
 select '0 catálogo: definer · search_path fijo · anon sin EXECUTE · authenticated con EXECUTE (la interna, sin)',
        bool_and(p.prosecdef and p.proconfig = array['search_path=public, pg_temp'] and not has_function_privilege('anon', p.oid, 'EXECUTE'))
-       and has_function_privilege('authenticated', 'public.club_cohortes_socios(text)', 'EXECUTE')
-       and has_function_privilege('authenticated', 'public.club_ranking_socios(date, date, text, boolean)', 'EXECUTE')
-       and not has_function_privilege('authenticated', 'public.club_locales_de_reporte(text)', 'EXECUTE'),
+       and has_function_privilege('authenticated', 'public.club_cohortes_socios(text, uuid)', 'EXECUTE')
+       and has_function_privilege('authenticated', 'public.club_ranking_socios(date, date, text, boolean, uuid)', 'EXECUTE')
+       and not has_function_privilege('authenticated', 'public.club_locales_de_reporte(text)', 'EXECUTE')
+       and not has_function_privilege('authenticated', 'public.club_auditar_lectura(text, text, uuid, jsonb)', 'EXECUTE'),
        string_agg(p.proname || ':' || coalesce(p.proacl::text, 'sin acl'), ' | ')
-  from pg_proc p where p.oid in ('public.club_cohortes_socios(text)'::regprocedure,
-                                 'public.club_ranking_socios(date, date, text, boolean)'::regprocedure,
-                                 'public.club_locales_de_reporte(text)'::regprocedure);
+  from pg_proc p where p.oid in ('public.club_cohortes_socios(text, uuid)'::regprocedure,
+                                 'public.club_ranking_socios(date, date, text, boolean, uuid)'::regprocedure,
+                                 'public.club_locales_de_reporte(text)'::regprocedure,
+                                 'public.club_auditar_lectura(text, text, uuid, jsonb)'::regprocedure);
 
 -- 1. permisos de Cohortes: owner, manager de su local y contador
 insert into _r161 (caso, ok, detalle) select '1a cohortes: owner entra', jsonb_typeof(co_owner) = 'object', left(co_owner::text, 80) from _o161;
@@ -306,9 +341,9 @@ select '3h local sin socios: objeto con cohortes [] y totales en cero (visitas p
 
 -- 4. ranking (p161-a, marzo 2001)
 insert into _r161 (caso, ok, detalle)
-select '4a S1: 3 visitas, 2 mesas, 2 facturas (F1 una vez aunque dos visitas), venta ₡32.000, tiquete ₡16.000',
+select '4a S1: 3 visitas, 2 mesas, 2 facturas (F1 una vez aunque dos visitas), venta ₡40.000, tiquete ₡20.000',
        (s->>'visitas')::int = 3 and (s->>'mesas')::int = 2 and (s->>'facturas')::int = 2
-       and (s->>'venta_respaldada_crc')::numeric = 32000 and (s->>'tiquete_promedio_crc')::numeric = 16000, s::text
+       and (s->>'venta_respaldada_crc')::numeric = 40000 and (s->>'tiquete_promedio_crc')::numeric = 20000, s::text
   from (select pg_temp.fila(rk_owner, 'Prueba Socio Uno') as s from _o161) x;
 insert into _r161 (caso, ok, detalle)
 select '4b S1: invitados 3 (857), personas 7, descuento estimado ₡5.000, última visita 26-mar',
@@ -316,8 +351,8 @@ select '4b S1: invitados 3 (857), personas 7, descuento estimado ₡5.000, últi
        and s->>'ultima_visita' = '2001-03-26', s::text
   from (select pg_temp.fila(rk_owner, 'Prueba Socio Uno') as s from _o161) x;
 insert into _r161 (caso, ok, detalle)
-select '4c socio de otro local que vino a p161-a (Club compartido): su mesa F2, ₡15.000, descuento ₡2.000',
-       (s->>'visitas')::int = 1 and (s->>'venta_respaldada_crc')::numeric = 15000 and (s->>'tiquete_promedio_crc')::numeric = 15000
+select '4c socio de otro local que vino a p161-a (Club compartido): su mesa F2, ₡23.000, descuento ₡2.000',
+       (s->>'visitas')::int = 1 and (s->>'venta_respaldada_crc')::numeric = 23000 and (s->>'tiquete_promedio_crc')::numeric = 23000
        and (s->>'descuento_estimado_crc')::numeric = 2000 and (s->>'invitados')::numeric = 1, coalesce(s::text, 'no está')
   from (select pg_temp.fila(rk_owner, 'Prueba Socio Otro Local') as s from _o161) x;
 insert into _r161 (caso, ok, detalle)
@@ -333,8 +368,8 @@ select '4e sin visitas en el período: S2 en cero con su última visita (31-ene)
        and pg_temp.fila(rk_owner, 'Prueba Socio Pendiente') is null and pg_temp.fila(rk_owner, 'Prueba Referente') is null
        and jsonb_array_length(rk_owner->'socios') = 5, (rk_owner->'socios')::text from _o161;
 insert into _r161 (caso, ok, detalle)
-select '4f totales: F2 compartida cuenta UNA vez y F3 del pendiente no entra: 2 facturas, ₡32.000, invitados 3, descuento ₡5.000, 1 línea sin ref, 5 visitas',
-       (t->>'facturas')::int = 2 and (t->>'venta_respaldada_crc')::numeric = 32000 and (t->>'invitados')::numeric = 3
+select '4f totales: F2 compartida cuenta UNA vez y F3 del pendiente no entra: 2 facturas, ₡40.000, invitados 3, descuento ₡5.000, 1 línea sin ref, 5 visitas',
+       (t->>'facturas')::int = 2 and (t->>'venta_respaldada_crc')::numeric = 40000 and (t->>'invitados')::numeric = 3
        and (t->>'descuento_estimado_crc')::numeric = 5000 and (t->>'lineas_sin_referencia')::int = 1 and (t->>'visitas')::int = 5
        and (t->>'socios')::int = 5 and (t->>'socios_con_visita')::int = 3, t::text
   from (select rk_owner->'totales' as t from _o161) x;
@@ -351,6 +386,11 @@ insert into _r161 (caso, ok, detalle)
 select '4i el manager ve lo mismo que el owner',
        case when jsonb_typeof(rk_manager) = 'object' and jsonb_typeof(rk_owner) = 'object'
             then (rk_manager - 'generado_en') = (rk_owner - 'generado_en') else false end, null from _o161;
+
+insert into _r161 (caso, ok, detalle)
+select '4j cambio de lista: P4 baja de ₡10.000 a ₡8.000 el 26-mar y el socio paga ₡8.000 → descuento 0 (no ₡2.000)',
+       (pg_temp.fila(rk_owner, 'Prueba Socio Otro Local')->>'descuento_estimado_crc')::numeric = 2000
+       and (rk_owner->'totales'->>'descuento_estimado_crc')::numeric = 5000, (rk_owner->'totales')::text from _o161;
 
 -- 5. cero datos y locales sin PoS
 insert into _r161 (caso, ok, detalle)
@@ -381,13 +421,35 @@ select '6c cohortes deja «ver_cohortes» del contador; el ranking rechazado no 
        and not exists (select 1 from public.club_auditoria a where a.accion like '%ranking%' and a.actor = '00000000-0000-4000-8000-000000161a03'),
        null;
 
+-- 6d. una fila por APERTURA: el owner abre el ranking (id A) y cambia tres veces los filtros → 1 fila; abre de nuevo
+-- (id B) → otra; exporta dos veces con el id B → 2 filas de exporte. Cohortes igual (id C, dos locales → 1 fila).
+create temp table _a161 on commit drop as
+select pg_temp.rk161_ap('00000000-0000-4000-8000-000000161a01', date '2001-03-01', date '2001-03-31', 'p161-a', false, '00000000-0000-4000-8000-0000001610a1') as x1,
+       pg_temp.rk161_ap('00000000-0000-4000-8000-000000161a01', date '2001-02-01', date '2001-03-31', 'p161-a', false, '00000000-0000-4000-8000-0000001610a1') as x2,
+       pg_temp.rk161_ap('00000000-0000-4000-8000-000000161a01', date '2001-02-01', date '2001-03-31', null,     false, '00000000-0000-4000-8000-0000001610a1') as x3,
+       pg_temp.rk161_ap('00000000-0000-4000-8000-000000161a01', date '2001-03-01', date '2001-03-31', 'p161-a', false, '00000000-0000-4000-8000-0000001610b1') as x4,
+       pg_temp.rk161_ap('00000000-0000-4000-8000-000000161a01', date '2001-03-01', date '2001-03-31', 'p161-a', true,  '00000000-0000-4000-8000-0000001610b1') as x5,
+       pg_temp.rk161_ap('00000000-0000-4000-8000-000000161a01', date '2001-03-01', date '2001-03-31', 'p161-a', true,  '00000000-0000-4000-8000-0000001610b1') as x6,
+       pg_temp.co161_ap('00000000-0000-4000-8000-000000161a01', 'p161-a', '00000000-0000-4000-8000-0000001610c1') as y1,
+       pg_temp.co161_ap('00000000-0000-4000-8000-000000161a01', null,     '00000000-0000-4000-8000-0000001610c1') as y2;
+insert into _r161 (caso, ok, detalle)
+select '6d una fila por apertura: id A con 3 filtros → 1 · id B → 1 · 2 exportes → 2 · cohortes id C con 2 locales → 1 (y las respuestas llegan)',
+       (select count(*) from public.club_auditoria a where a.accion = 'ver_ranking_socios' and a.objeto_id = '00000000-0000-4000-8000-0000001610a1') = 1
+       and (select count(*) from public.club_auditoria a where a.accion = 'ver_ranking_socios' and a.objeto_id = '00000000-0000-4000-8000-0000001610b1') = 1
+       and (select count(*) from public.club_auditoria a where a.accion = 'exporte_ranking_socios_csv' and a.objeto_id = '00000000-0000-4000-8000-0000001610b1') = 2
+       and (select count(*) from public.club_auditoria a where a.accion = 'ver_cohortes' and a.objeto_id = '00000000-0000-4000-8000-0000001610c1') = 1
+       and (select bool_and(jsonb_typeof(v) = 'object') from _a161, unnest(array[x1, x2, x3, x4, x5, x6, y1, y2]) v),
+       (select string_agg(a.accion || ':' || coalesce(a.objeto_id::text, '-'), ' ') from public.club_auditoria a
+         where a.objeto_id::text like '00000000-0000-4000-8000-0000001610%');
+
 -- 7. vuelta atrás (dentro de esta misma transacción descartada): saca las tres funciones; el resto del Club sigue
 -- @@161R@@   (aquí va el cuerpo de scripts/sql/161_rollback.sql sin begin/commit)
 insert into _r161 (caso, ok, detalle)
 select '7 rollback: sin las funciones de la 161; club_reporte_mes y club_config siguen',
-       to_regprocedure('public.club_cohortes_socios(text)') is null
-       and to_regprocedure('public.club_ranking_socios(date, date, text, boolean)') is null
+       to_regprocedure('public.club_cohortes_socios(text, uuid)') is null
+       and to_regprocedure('public.club_ranking_socios(date, date, text, boolean, uuid)') is null
        and to_regprocedure('public.club_locales_de_reporte(text)') is null
+       and to_regprocedure('public.club_auditar_lectura(text, text, uuid, jsonb)') is null
        and to_regprocedure('public.club_reporte_mes(date, text, boolean)') is not null
        and (select count(*) from public.club_config where location_id like 'p161-%') = 3, null;
 
@@ -398,7 +460,7 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r161 where not ok;
   if v is not null then raise exception '161-FALLAN: %', v; end if;
-  if (select count(*) from _r161) < 37 then raise exception '161-FALLAN: faltan casos (NO PROBADO)'; end if;
+  if (select count(*) from _r161) < 45 then raise exception '161-FALLAN: faltan casos (NO PROBADO)'; end if;
 end $$;
 
 rollback;

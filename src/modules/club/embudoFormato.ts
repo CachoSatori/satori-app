@@ -38,6 +38,15 @@ export function pasos(p: GrupoEmbudo | AnfitrionEmbudo, resena: boolean): Paso[]
   return out
 }
 
+/** Un id por apertura de la pantalla (la base deja una fila de auditoría por apertura). Igual a `nuevaApertura` de #180:
+ *  unificar cuando los dos estén en main. */
+export const nuevaAperturaEmbudo = (): string =>
+  typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16))
+
+/** Espera antes de pedir tras un cambio de filtro (la primera carga va directo). */
+export const DEBOUNCE_MS = 500
+
 export const tipoTxt = (t: string) => TIPO_MIEMBRO_LABEL[t] ?? t
 
 /** Texto de una pantalla sin datos (cero cupones), para que nadie lo lea como un error. */

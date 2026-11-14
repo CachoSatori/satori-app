@@ -559,8 +559,8 @@ export interface Embudo {
 }
 /**
  * Solo owner y manager. `mes` = «AAAA-MM» (hora CR). `local` null = todos los locales que el usuario ve. Nombres, sin
- * contactos. Cada lectura queda en club_auditoria; con `exporte` la fila dice que fue un CSV: el CSV de la pantalla SOLO se
- * arma con lo que devuelve esta llamada.
+ * contactos. Rastro en club_auditoria: una fila por `apertura` de la pantalla (un id por vez que se abre; los cambios de
+ * filtro no suman filas); con `exporte`, una fila SIEMPRE: el CSV de la pantalla SOLO se arma con lo que devuelve esta llamada.
  */
-export const getEmbudoAnfitrion = (mes: string, local: string | null, exporte = false) =>
-  llamar<Embudo>('club_embudo_anfitrion', { p_mes: `${mes}-01`, p_location: local, p_exporte: exporte })
+export const getEmbudoAnfitrion = (mes: string, local: string | null, exporte = false, apertura: string | null = null) =>
+  llamar<Embudo>('club_embudo_anfitrion', { p_mes: `${mes}-01`, p_location: local, p_exporte: exporte, p_apertura: apertura })

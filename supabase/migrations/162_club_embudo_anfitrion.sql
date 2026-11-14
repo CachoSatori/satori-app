@@ -8,21 +8,27 @@
 -- decisión del dueño 14-nov para el tablero) y su forma de elegir locales, sin depender de ellas.
 --
 -- ── QUÉ HACE ───────────────────────────────────────────────────────────────────────────────────
---   · public.club_embudo_anfitrion(p_mes date, p_location text default null, p_exporte boolean default false) → jsonb.
+--   · public.club_embudo_anfitrion(p_mes date, p_location text default null, p_exporte boolean default false,
+--     p_apertura uuid default null) → jsonb.
 --     Solo owner y manager ACTIVOS (get_my_role() da null con la cuenta inactiva, 069): la respuesta tiene nombres.
 --     Contador, cajero, salonero, anon, inactivo y manager de otro local: error 42501.
 --   · Por anfitrión, mes (hora CR) y local: cupones generados → usados → (clic en reseña) → con factura → personas →
 --     venta respaldada → tiquete promedio, con el % entre pasos. «QR visto» NO se guarda en la base: queda fuera.
 --   · Nombre limpio del anfitrión y números; nunca teléfono, correo, código, token ni el contacto del turista.
 --   · Rastro en club_auditoria: 'ver_embudo_anfitrion' o, con p_exporte, 'exporte_embudo_anfitrion_csv' (mes, local y
---     cuántas filas; sin datos). El CSV de la app SOLO sale de la llamada con p_exporte.
+--     cuántas filas; sin datos). El CSV de la app SOLO sale de la llamada con p_exporte. Una LECTURA deja una fila por
+--     apertura de la pantalla, no por cada cambio de filtro: la app manda un id por apertura (p_apertura → objeto_id) y el
+--     mismo usuario con la misma acción e id en 12 h no deja otra (club_embudo_auditar_lectura, interna). Sin id, siempre
+--     deja fila. El EXPORTE deja fila siempre. Mismo criterio que la 161 (#180, club_auditar_lectura), con nombre propio
+--     para no depender de ella: cuando las dos estén en main, conviene unificarlas en una sola función.
 --   · p_location null = todos los locales del Club que el usuario ve (mis_locales(), 091). Con local: tiene que estar en
 --     club_config (club_local) y en puede_ver_local (el manager ve solo sus locales).
 --   · SECURITY DEFINER, search_path fijo, EXECUTE solo authenticated (anon no).
 --
 -- ── DEFINICIONES ───────────────────────────────────────────────────────────────────────────────
 --   · Anfitrión: el dueño del cupón (club_cupones.referente_id). Tipo = su rol de anfitrión (club_miembro_roles, rol
---     distinto de 'socio') o, si no tiene, club_miembros.tipo. Grupo «equipo» (tipo equipo: con D7/157 no gana créditos
+--     distinto de 'socio'; el activo primero y, si hubiera dos, por nombre del rol) o, si no tiene, club_miembros.tipo. Es
+--     el rol de HOY: un referente que pasa al equipo lleva sus cupones viejos al grupo «equipo». Grupo «equipo» (tipo equipo: con D7/157 no gana créditos
 --     y su embudo es el ranking de DESEMPEÑO) y grupo «anfitrion» (referentes y concierges). Funciona con y sin la 157: el
 --     tipo existe desde la 150; la 157 solo cambia los créditos. 'd7' en la respuesta dice si la 157 está aplicada.
 --   · Cohorte de cupones: los GENERADOS en el mes (creado_en, hora CR) en los locales elegidos (el local del cupón).
@@ -49,13 +55,39 @@
 --   · Ninguna tabla, columna, saldo ni movimiento. Solo lectura (más la fila de auditoría). Ninguna función existente.
 --   · Ni sagrados, ni caja, ni Edge.
 --
+-- Seguimiento: cuando la 158 y la 162 estén en prod, una migración chica pasa el clic de reseña a SQL fijo (sin la
+-- detección ni el SQL dinámico) y saca el false de 'resena_disponible'.
+--
 -- Pruebas: scripts/sql/162_pruebas.sql (transacción con rollback; Postgres 16 local, con y sin 157/158, y staging).
 -- Rollback: scripts/sql/162_rollback.sql.
 
 begin;
 
+-- Rastro de una LECTURA: una fila por apertura de la pantalla, no por cada cambio de filtro. La app manda un id por
+-- apertura (p_apertura, va en objeto_id): si el mismo usuario ya dejó la fila de esa acción con ese id en las últimas
+-- 12 h, no se repite. Sin id, siempre deja fila. Un id viejo o repetido no borra nada: la primera fila ya está. Interna.
+-- Copia de club_auditar_lectura de la 161 (#180) con nombre propio (rama independiente).
+create or replace function public.club_embudo_auditar_lectura(p_accion text, p_tabla text, p_apertura uuid, p_despues jsonb)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_apertura is not null and exists (
+       select 1 from public.club_auditoria a
+        where a.actor = auth.uid() and a.accion = p_accion and a.objeto_id = p_apertura
+          and a.en > now() - interval '12 hours') then
+    return;
+  end if;
+  perform public.club_auditar(p_accion, p_tabla, p_apertura, null, p_despues);
+end;
+$$;
+revoke all on function public.club_embudo_auditar_lectura(text, text, uuid, jsonb) from public, anon, authenticated;
+
 create or replace function public.club_embudo_anfitrion(p_mes date, p_location text default null,
-                                                        p_exporte boolean default false)
+                                                        p_exporte boolean default false, p_apertura uuid default null)
 returns jsonb
 language plpgsql
 volatile
@@ -141,7 +173,7 @@ begin
   mi as (
     select m.id, public.club_nombre_limpio(m.nombre) as nombre, m.location_id, m.estado,
            coalesce((select rr.rol from public.club_miembro_roles rr where rr.miembro_id = m.id and rr.rol <> 'socio'
-                      order by (rr.estado = 'activo') desc limit 1), m.tipo) as tipo
+                      order by (rr.estado = 'activo') desc, rr.rol limit 1), m.tipo) as tipo
       from public.club_miembros m
      where m.id in (select referente_id from cu)),
   gi as (select mi.*, case when mi.tipo = 'equipo' then 'equipo' else 'anfitrion' end as grupo from mi),
@@ -179,7 +211,7 @@ begin
   sc as (
     select case when x.tipo = 'equipo' then 'equipo' else 'anfitrion' end as grupo, count(*) as n
       from (select m.id, coalesce((select rr.rol from public.club_miembro_roles rr
-                                    where rr.miembro_id = m.id and rr.rol <> 'socio' and rr.estado = 'activo' limit 1),
+                                    where rr.miembro_id = m.id and rr.rol <> 'socio' and rr.estado = 'activo' order by rr.rol limit 1),
                                   case when m.tipo in ('referente','concierge_pm','equipo') then m.tipo end) as tipo
               from public.club_miembros m
              where m.location_id = any (v_locs) and m.estado = 'activo'
@@ -257,30 +289,41 @@ begin
   ) into r;
 
   v_n := jsonb_array_length(r->'anfitriones');
-  perform public.club_auditar(case when p_exporte then 'exporte_embudo_anfitrion_csv' else 'ver_embudo_anfitrion' end,
-    'club_embudo_anfitrion', null, null,
-    jsonb_build_object('mes', to_char(v_mes, 'YYYY-MM'), 'local', coalesce(p_location, 'todos'), 'filas', v_n));
+  -- un exporte SIEMPRE deja fila; una lectura, una por apertura de la pantalla (el primer filtro de esa apertura)
+  if p_exporte then
+    perform public.club_auditar('exporte_embudo_anfitrion_csv', 'club_embudo_anfitrion', p_apertura, null,
+      jsonb_build_object('mes', to_char(v_mes, 'YYYY-MM'), 'local', coalesce(p_location, 'todos'), 'filas', v_n));
+  else
+    perform public.club_embudo_auditar_lectura('ver_embudo_anfitrion', 'club_embudo_anfitrion', p_apertura,
+      jsonb_build_object('mes', to_char(v_mes, 'YYYY-MM'), 'local', coalesce(p_location, 'todos'), 'filas', v_n));
+  end if;
   return r;
 end;
 $$;
 
-revoke all on function public.club_embudo_anfitrion(date, text, boolean) from public, anon, authenticated;
-grant execute on function public.club_embudo_anfitrion(date, text, boolean) to authenticated;
+revoke all on function public.club_embudo_anfitrion(date, text, boolean, uuid) from public, anon, authenticated;
+grant execute on function public.club_embudo_anfitrion(date, text, boolean, uuid) to authenticated;
 
-comment on function public.club_embudo_anfitrion(date, text, boolean) is
+comment on function public.club_embudo_auditar_lectura(text, text, uuid, jsonb) is
+  'Interna (162): rastro de una lectura del embudo en club_auditoria, una fila por apertura de la pantalla (id en objeto_id, 12 h). Igual a club_auditar_lectura de la 161: unificar cuando las dos estén en main.';
+comment on function public.club_embudo_anfitrion(date, text, boolean, uuid) is
   'Club → Embudo (162): por anfitrión, cupones generados en el mes (hora CR) → usados → clic en reseña (si está la 158) → con factura → personas → venta respaldada cobrada (neta − regalía; una factura una vez) → tiquete. Grupo equipo aparte. Solo owner y manager activos; sin contactos; cada lectura o exporte queda en club_auditoria.';
 
 -- Verificación: la función existe, es SECURITY DEFINER con search_path fijo y anon no la ejecuta.
 do $$
 declare v_p pg_proc%rowtype;
 begin
-  select * into v_p from pg_proc where oid = 'public.club_embudo_anfitrion(date, text, boolean)'::regprocedure;
+  select * into v_p from pg_proc where oid = 'public.club_embudo_anfitrion(date, text, boolean, uuid)'::regprocedure;
   if not v_p.prosecdef then raise exception '162: club_embudo_anfitrion no es SECURITY DEFINER'; end if;
   if not exists (select 1 from unnest(v_p.proconfig) c where c like 'search_path=%') then
     raise exception '162: club_embudo_anfitrion sin search_path fijo';
   end if;
-  if has_function_privilege('anon', 'public.club_embudo_anfitrion(date, text, boolean)', 'execute') then
+  if has_function_privilege('anon', 'public.club_embudo_anfitrion(date, text, boolean, uuid)', 'execute') then
     raise exception '162: anon puede ejecutar club_embudo_anfitrion';
+  end if;
+  if has_function_privilege('authenticated', 'public.club_embudo_auditar_lectura(text, text, uuid, jsonb)', 'execute')
+     or has_function_privilege('anon', 'public.club_embudo_auditar_lectura(text, text, uuid, jsonb)', 'execute') then
+    raise exception '162: club_embudo_auditar_lectura tiene que ser interna';
   end if;
 end $$;
 

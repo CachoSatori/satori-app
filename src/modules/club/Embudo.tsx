@@ -2,15 +2,16 @@
  * Club → Embudo del anfitrión (SPEC Club v2, ítem 8; mig 162). Solo owner y manager. Por anfitrión, mes (hora CR) y local:
  * cupones generados → usados → (clic en reseña, si la base tiene la 158) → con factura → personas → venta respaldada →
  * tiquete promedio, con el % entre pasos. El equipo (desempeño) va aparte de referentes y concierges.
- * «QR visto» no se guarda en la base: no se muestra (lo dice la pantalla). Abrir y exportar quedan en club_auditoria:
- * el CSV sale de una llamada aparte con `exporte`, no de lo que está en pantalla.
+ * «QR visto» no se guarda en la base: no se muestra (lo dice la pantalla). Abrir y exportar quedan en club_auditoria: una
+ * fila por apertura de la pantalla (un id por apertura; los cambios de filtro esperan 500 ms y no suman filas) y una por
+ * exporte. El CSV sale de una llamada aparte con `exporte`, no de lo que está en pantalla.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getEmbudoAnfitrion, getLocalesClub, localActual, aClubError, type AnfitrionEmbudo, type Embudo as TEmbudo,
   type GrupoEmbudo, type LocalClub } from '../../shared/api/club'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, mesActualCR } from './estilos'
-import { crcTxt, embudoCsv, numTxt, pasos, pctTxt, resumenVacio, tipoTxt } from './embudoFormato'
+import { crcTxt, DEBOUNCE_MS, embudoCsv, nuevaAperturaEmbudo, numTxt, pasos, pctTxt, resumenVacio, tipoTxt } from './embudoFormato'
 
 const td: React.CSSProperties = { textAlign: 'right', padding: '6px', borderTop: `1px solid ${C.border}`, whiteSpace: 'nowrap' }
 const pctChico = (p: number | null) => <span style={{ color: C.muted, fontSize: '0.75rem' }}> {pctTxt(p)}</span>
@@ -73,23 +74,29 @@ export default function Embudo() {
   const [r, setR] = useState<TEmbudo | null>(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [apertura] = useState(nuevaAperturaEmbudo)
+  const primera = useRef(true)
 
   useEffect(() => { getLocalesClub().then(setLocales).catch(() => {}) }, [])
   useEffect(() => {
     let vivo = true
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCargando(true); setError(null)
-    getEmbudoAnfitrion(mes, local || null)
-      .then(x => { if (vivo) setR(x) })
-      .catch(e => { if (vivo) { setR(null); setError(aClubError(e).message) } })
-      .finally(() => { if (vivo) setCargando(false) })
-    return () => { vivo = false }
-  }, [mes, local])
+    // la primera carga va directo; un cambio de filtro espera 500 ms (debounce)
+    const espera = primera.current ? 0 : DEBOUNCE_MS
+    primera.current = false
+    const t = setTimeout(() => {
+      setCargando(true); setError(null)
+      getEmbudoAnfitrion(mes, local || null, false, apertura)
+        .then(x => { if (vivo) setR(x) })
+        .catch(e => { if (vivo) { setR(null); setError(aClubError(e).message) } })
+        .finally(() => { if (vivo) setCargando(false) })
+    }, espera)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [mes, local, apertura])
 
   async function exportarCsv() {
     let datos: TEmbudo
     // el exporte lo entrega la base (y lo audita)
-    try { datos = await getEmbudoAnfitrion(mes, local || null, true) } catch (e) { setError(aClubError(e).message); return }
+    try { datos = await getEmbudoAnfitrion(mes, local || null, true, apertura) } catch (e) { setError(aClubError(e).message); return }
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([embudoCsv(datos)], { type: 'text/csv;charset=utf-8' }))
     a.download = `club-embudo-anfitrion-${local || 'todos'}-${datos.mes}.csv`

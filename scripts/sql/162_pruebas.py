@@ -67,19 +67,40 @@ MUTACIONES: dict[str, tuple[str, str, set[str], bool]] = {
                         "count(*) filter (where cu.estado = 'vigente') as vigentes,", {'2a'}, False),
     'sin_aviso_pos': ("       and not exists (select 1 from public.pos_ndf_tickets t\n",
                       "       and false and not exists (select 1 from public.pos_ndf_tickets t\n", {'5a', '5b'}, False),
-    'sin_rastro': ("  perform public.club_auditar(case when p_exporte then 'exporte_embudo_anfitrion_csv' else 'ver_embudo_anfitrion' end,\n"
-                   "    'club_embudo_anfitrion', null, null,\n"
-                   "    jsonb_build_object('mes', to_char(v_mes, 'YYYY-MM'), 'local', coalesce(p_location, 'todos'), 'filas', v_n));\n",
-                   "", {'6a', '6b'}, False),
-    'exporte_sin_marca': ("case when p_exporte then 'exporte_embudo_anfitrion_csv' else 'ver_embudo_anfitrion' end",
-                          "'ver_embudo_anfitrion'", {'6b'}, False),
-    'anon_ejecuta': ("grant execute on function public.club_embudo_anfitrion(date, text, boolean) to authenticated;",
-                     "grant execute on function public.club_embudo_anfitrion(date, text, boolean) to authenticated, anon;", {'0', '1j'}, False),
+    'sin_rastro': ("  if p_exporte then\n    perform public.club_auditar('exporte_embudo_anfitrion_csv'",
+                   "  if false then\n    perform public.club_auditar('exporte_embudo_anfitrion_csv'", {'6b', '6e'}, False),
+    'lectura_sin_rastro': ("    perform public.club_embudo_auditar_lectura('ver_embudo_anfitrion',",
+                           "    perform jsonb_build_array('ver_embudo_anfitrion',", {'6a', '6d'}, False),
+    'exporte_sin_marca': ("    perform public.club_auditar('exporte_embudo_anfitrion_csv', 'club_embudo_anfitrion', p_apertura, null,",
+                          "    perform public.club_auditar('ver_embudo_anfitrion', 'club_embudo_anfitrion', p_apertura, null,", {'6b', '6e'}, False),
+    # ── deduplicación por apertura (como la 161) ──
+    'lectura_sin_dedup': ("  if p_apertura is not null and exists (", "  if false and exists (", {'6d'}, False),
+    'exporte_deduplicado': ("    perform public.club_auditar('exporte_embudo_anfitrion_csv', 'club_embudo_anfitrion', p_apertura, null,",
+                            "    perform public.club_embudo_auditar_lectura('exporte_embudo_anfitrion_csv', 'club_embudo_anfitrion', p_apertura,",
+                            {'6e'}, False),
+    'interna_expuesta': ("revoke all on function public.club_embudo_auditar_lectura(text, text, uuid, jsonb) from public, anon, authenticated;",
+                         "grant execute on function public.club_embudo_auditar_lectura(text, text, uuid, jsonb) to authenticated;", {'6f'}, False),
+    # regla 4: la batería llama con el rol authenticated de verdad
+    'authenticated_sin_execute': ("grant execute on function public.club_embudo_anfitrion(date, text, boolean, uuid) to authenticated;",
+                                  "", {'0', '1a', '1b'}, False),
+    # ── plata: mismo anfitrión ×2 en una factura, mesa dividida, cruce manual a una R ──
+    'af_sin_distinct': ("  af as (select distinct cfc.referente_id, cfc.tid from cfc),", "  af as (select cfc.referente_id, cfc.tid from cfc),",
+                        {'2e'}, False),
+    'mesas_fila_sin_principal': ("from cfc where cfc.ord = 1 group by cfc.referente_id),", "from cfc group by cfc.referente_id),", {'2h'}, False),
+    'mesas_total_sin_principal': ("                  'mesas', (select count(distinct cfc.tid) from cfc where cfc.ord = 1),",
+                                  "                  'mesas', (select count(distinct cfc.tid) from cfc),", {'3a'}, False),
+    'mesas_grupo_sin_principal': ("  gm as (select distinct fi.grupo, cfc.tid from cfc join fi on fi.id = cfc.referente_id where cfc.ord = 1),",
+                                  "  gm as (select distinct fi.grupo, cfc.tid from cfc join fi on fi.id = cfc.referente_id),", {'3c'}, False),
+    'manual_en_R_cuenta': ("from public.pos_ndf_tickets t where t.id in (select tid from cf) and t.estado = 'C'),",
+                           "from public.pos_ndf_tickets t where t.id in (select tid from cf) and t.estado in ('C', 'R')),", {'2f', '3a'}, False),
+    'anon_ejecuta': ("grant execute on function public.club_embudo_anfitrion(date, text, boolean, uuid) to authenticated;",
+                     "grant execute on function public.club_embudo_anfitrion(date, text, boolean, uuid) to authenticated, anon;", {'0', '1j'}, False),
     # ── con la 158 ──
     'clic_apagado': ("  if v_resena then\n    execute", "  if false then\n    execute", {'8a'}, True),
 }
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str], bool]] = {
-    'rollback_deja_funcion': ("drop function if exists public.club_embudo_anfitrion(date, text, boolean);\n", "", {'7'}, False),
+    'rollback_deja_funcion': ("drop function if exists public.club_embudo_anfitrion(date, text, boolean, uuid);\n", "", {'7'}, False),
+    'rollback_deja_interna': ("drop function if exists public.club_embudo_auditar_lectura(text, text, uuid, jsonb);\n", "", {'7'}, False),
 }
 
 

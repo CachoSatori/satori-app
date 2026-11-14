@@ -102,7 +102,7 @@ describe('CashCierre post-corte — aviso de venta tecleada NETA', () => {
     render(<CashCierre onRefresh={() => {}} openSession={null} />)
 
     await screen.findByText(/Ventas en efectivo BRUTAS/)
-    const input = document.querySelectorAll('input[step="100"]')[0]
+    const input = document.querySelectorAll('.cierre-monto input')[0]
     fireEvent.change(input, { target: { value: '53' } })
 
     const aviso = await screen.findByTestId('aviso-venta-neta-m')
@@ -122,7 +122,7 @@ describe('CashCierre post-corte — aviso de venta tecleada NETA', () => {
     render(<CashCierre onRefresh={() => {}} openSession={null} />)
 
     await screen.findByText(/Ventas en efectivo BRUTAS/)
-    const input = document.querySelectorAll('input[step="100"]')[0]
+    const input = document.querySelectorAll('.cierre-monto input')[0]
     fireEvent.change(input, { target: { value: '300000' } })
 
     await waitFor(() => expect(screen.queryByTestId('aviso-venta-neta-m')).toBeNull())
@@ -132,7 +132,7 @@ describe('CashCierre post-corte — aviso de venta tecleada NETA', () => {
   it('sin propinas pagadas no hay aviso posible', async () => {
     render(<CashCierre onRefresh={() => {}} openSession={null} />)
     await screen.findByText(/Ventas en efectivo BRUTAS/)
-    const input = document.querySelectorAll('input[step="100"]')[0]
+    const input = document.querySelectorAll('.cierre-monto input')[0]
     fireEvent.change(input, { target: { value: '1' } })
     await waitFor(() => expect(screen.queryByTestId('aviso-venta-neta-m')).toBeNull())
   })

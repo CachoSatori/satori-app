@@ -16,24 +16,38 @@
 --     Estados: borrador → vigente (ARMADO, armado_en) → terminada. Armado, ya no se edita (solo se termina).
 --   · Reglas en la BASE (trigger club_retos_reglas, con candado; valen aunque alguien escriba por fuera de las funciones):
 --       – máximo 3 retos ARMADOS por año calendario (todos los locales juntos; un borrador no cuenta);
---       – dos retos armados no se superponen en fechas en un mismo local;
+--       – dos retos VIGENTES no se superponen en fechas en un mismo local (uno terminado ya no bloquea su local, pero
+--         sigue contando para el tope del año);
+--       – con retos_exige_factura prendida, no se arma un reto en un local sin facturas del PoS en la base;
 --       – armado, solo cambia el estado a terminada; terminado, nada; solo se borra un borrador.
 --   · Quién participa: socio ACTIVO del Local Club (rol socio activo). El EQUIPO nunca (tipo 'equipo' o rol equipo
 --     activo, con y sin la 157, D7). Grupo de control: con control_pct = 15, un sorteo FIJO y reproducible por (reto,
 --     socio) (md5, no cambia con la versión de Postgres) deja ~15 % de los socios sin el reto (no lo ven ni lo ganan; el
 --     beneficio base no cambia). No depende de #185 ni de la 168 (club_miembros.sin_avance no se usa).
---   · Avance (se calcula en LECTURA, desde club_visitas_socio): días CR distintos con una visita registrada en un local
+--   · Avance (se calcula en LECTURA, desde club_visitas_socio): JORNADAS distintas con una visita registrada en un local
 --     del reto, dentro de la ventana, en uno de sus días y dentro de la franja (la hora es la del REGISTRO de la visita en
---     caja, como la promoción del Local Club). Varias visitas el mismo día cuentan una.
+--     caja, como la promoción del Local Club). Varias visitas en la misma jornada cuentan una.
+--     JORNADA = el día CR en que empieza la franja (el «servicio»): con una franja que cruza la medianoche (22:00–02:00)
+--     una visita a la 01:00 es de la jornada del día anterior, así una misma noche cuenta UNA vez (verificador #188).
+--     Opción B (misma regla que la 168 de #187; FIRMA DEL DUEÑO): una jornada ANTERIOR cuenta solo si su visita cruza con
+--     una factura cerrada (C) con el 856/857 del local (como el premio por referir); la jornada de la visita que se
+--     evalúa cuenta por presencia. Configurable: club_config_global.retos_exige_factura (true por defecto). Con la
+--     exigencia prendida, la base NO deja armar un reto en un local sin facturas del PoS en la base (hoy Nosara): ahí
+--     nunca se podría ganar.
 --   · Ganar: trigger AFTER INSERT en club_visitas_socio (club_retos_visita_trg). Si con esa visita llega a la meta, se
---     guarda el premio en club_retos_ganados (UNO por reto y socio: unique) con vence_en = ahora + vence_dias.
+--     guarda el premio en club_retos_ganados (UNO por reto y socio: unique). Vence al FINAL del día CR que se muestra:
+--     ganado el día F, vale hasta F + vence_dias inclusive (límite = 00:00 CR del día siguiente), igual que la 168.
 --     Un error del reto NO frena el registro de la visita (se avisa con WARNING) y el paso de caja vuelve a evaluar.
+--     (Una cancelación por statement_timeout, 57014, no la atrapa `when others`: ahí sí cae la sentencia entera; la caja
+--     reintenta con la misma operación.)
 --   · Ofrecer: club_reto_en_visita(visita, local) — un PASO APARTE que la caja llama después de club_socio_visita, con
 --     la visita recién registrada (solo de HOY y del local de la caja). Bajo el MISMO candado por socio que
 --     club_socio_visita, un UPDATE condicionado (where estado = 'disponible') pasa el premio a 'usada': dos cajas a la
 --     vez, una sola lo da. Mismos criterios que la 168: factura pagada con créditos, socio como invitado o sin
 --     promoción → no va en esa factura, queda guardado; local sin artículo cargado/activo → NO se ofrece, queda
---     guardado y se avisa. Lo ofrecido se suma a la MISMA lista de cortesías de la visita (motivo 'reto') y a su
+--     guardado y se avisa. UNA cortesía de premio por visita: si la visita ya lleva una (bienvenida de la 168 o premio por
+--     referir), el del reto no se suma: queda guardado para la próxima («no juntar tres»; la cortesía sorteada de la promo
+--     del Local Club es el beneficio de siempre y no cuenta). Lo ofrecido se suma a la MISMA lista de cortesías de la visita (motivo 'reto') y a su
 --     `aplicar` (el reescaneo muestra lo mismo). Idempotente: llamarla otra vez con la misma visita devuelve lo guardado.
 --   · «Mi Club»: club_portal_retos(token) (PÚBLICA como club_portal, solo por club-web): retos en curso o por empezar
 --     con su avance, y los premios ganados sin usar.
@@ -56,6 +70,13 @@
 -- Rollback: scripts/sql/169_rollback.sql (aborta si ya hay premios ganados).
 
 begin;
+
+-- 0. Configuración global (solo owner; club_config_global_auditar_trg de la 150 audita cada cambio)
+alter table public.club_config_global add column if not exists retos_exige_factura boolean not null default true;
+comment on column public.club_config_global.retos_exige_factura is
+  '169 (opción B, firma del dueño): true = una jornada ANTERIOR cuenta para el reto solo si su visita cruza con una factura '
+  'cerrada (C) con el 856/857 del local. La jornada de la visita que se evalúa cuenta por presencia. Misma regla que la 168.';
+grant update (retos_exige_factura) on public.club_config_global to authenticated;   -- solo owner (policy club_config_global_owner)
 
 -- 1. Retos
 create table if not exists public.club_retos (
@@ -138,8 +159,18 @@ begin
   if v_n >= 3 then
     raise exception 'Ya hay 3 retos armados en %: es el máximo por año', v_anio using errcode = 'P0001';
   end if;
+  if new.estado = 'vigente' and (tg_op = 'INSERT' or old.armado_en is null)
+     and coalesce((select g.retos_exige_factura from public.club_config_global g limit 1), true) then
+    foreach v_loc in array new.locales loop
+      if not exists (select 1 from public.pos_ndf_tickets t
+                      where t.local = v_loc and t.fecha_registra > now() - interval '60 days') then
+        raise exception 'El local «%» no tiene facturas del PoS en la base: con la exigencia de factura prendida, ahí el reto no se puede ganar. Sacalo del reto (o que el owner apague «exigir factura»)',
+          coalesce((select c.nombre from public.club_config c where c.location_id = v_loc), v_loc) using errcode = 'P0001';
+      end if;
+    end loop;
+  end if;
   select * into v_otro from public.club_retos r
-   where r.armado_en is not null and r.id <> new.id and r.locales && new.locales
+   where r.estado = 'vigente' and new.estado = 'vigente' and r.id <> new.id and r.locales && new.locales
      and daterange(r.desde, r.hasta, '[]') && daterange(new.desde, new.hasta, '[]')
    limit 1;
   if v_otro.id is not null then
@@ -225,20 +256,57 @@ as $$
                                                        or (p_ts at time zone 'America/Costa_Rica')::time <  p_reto.hora_hasta)))
 $$;
 
--- Avance: días CR distintos con visita que cumple (local del reto, ventana, día y franja). Interna.
-create or replace function public.club_reto_avance(p_reto public.club_retos, p_miembro uuid)
+-- Jornada (día de servicio) de un momento para ese reto: el día CR, salvo en una franja que cruza la medianoche, donde
+-- lo de antes de hora_hasta es de la jornada del día anterior (una noche = una jornada). Interna.
+create or replace function public.club_reto_jornada(p_reto public.club_retos, p_ts timestamptz)
+returns date
+language sql
+stable
+set search_path = public, pg_temp
+as $$
+  select (p_ts at time zone 'America/Costa_Rica')::date
+         - case when p_reto.hora_desde > p_reto.hora_hasta
+                     and (p_ts at time zone 'America/Costa_Rica')::time < p_reto.hora_hasta then 1 else 0 end
+$$;
+
+-- ¿La visita cruza con una factura cerrada (C) que lleva el 856 o el 857 de su local? (como club_premios_generar). Interna.
+create or replace function public.club_reto_visita_con_factura(p_loc text, p_pos jsonb)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select p_pos is not null and exists (
+    select 1
+      from public.club_config c
+      cross join lateral unnest(public.club_cruce_facturas(p_loc, p_pos, null)) x(tid)
+      join public.pos_ndf_tickets t on t.id = x.tid and t.estado = 'C'
+     where c.location_id = p_loc
+       and exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = t.id
+                     and l.codigo_producto in (c.lc_articulo_codigo, c.lc_invitado_codigo)))
+$$;
+
+-- Avance: jornadas distintas con visita que cumple (local del reto, ventana, día y franja). p_hoy = la jornada de la visita
+-- que se evalúa (o la de ahora, para «Mi Club»): esa cuenta por presencia; las ANTERIORES, con retos_exige_factura
+-- (opción B, por defecto), solo si alguna de sus visitas cruza con una factura C con el 856/857. Interna.
+create or replace function public.club_reto_avance(p_reto public.club_retos, p_miembro uuid, p_hoy date)
 returns int
 language sql
 stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select count(distinct (vs.registrada_en at time zone 'America/Costa_Rica')::date)::int
+  select count(distinct j.jornada)::int
     from public.club_visitas_socio vs
+    cross join lateral (select public.club_reto_jornada(p_reto, vs.registrada_en) as jornada) j
    where vs.miembro_id = p_miembro
      and vs.fecha between p_reto.desde - 1 and p_reto.hasta + 1   -- índice (miembro_id, fecha); el filtro fino es la franja
      and vs.location_id = any(p_reto.locales)
      and public.club_reto_en_franja(p_reto, vs.registrada_en)
+     and (j.jornada = p_hoy
+          or not coalesce((select g.retos_exige_factura from public.club_config_global g limit 1), true)
+          or public.club_reto_visita_con_factura(vs.location_id, vs.pos_ref))
 $$;
 
 -- 6. Ganar: evalúa los retos armados y en curso de esa visita. Idempotente (unique). Devuelve cuántos ganó. Interna.
@@ -264,10 +332,11 @@ begin
   loop
     continue when not public.club_reto_participa(v_r, v_v.miembro_id);
     continue when exists (select 1 from public.club_retos_ganados g where g.reto_id = v_r.id and g.miembro_id = v_v.miembro_id);
-    continue when public.club_reto_avance(v_r, v_v.miembro_id) < v_r.meta;
+    continue when public.club_reto_avance(v_r, v_v.miembro_id, public.club_reto_jornada(v_r, v_v.registrada_en)) < v_r.meta;
     v_id := null;
     insert into public.club_retos_ganados (reto_id, miembro_id, visita_ganadora, vence_en)
-    values (v_r.id, v_v.miembro_id, v_v.id, now() + make_interval(days => v_r.vence_dias))
+    -- vence al FINAL del día CR mostrado: ganado el día F, vale hasta F + N (inclusive) → límite = 00:00 CR del día F + N + 1
+    values (v_r.id, v_v.miembro_id, v_v.id, ((v_v.fecha + v_r.vence_dias + 1)::timestamp at time zone 'America/Costa_Rica'))
     on conflict (reto_id, miembro_id) do nothing
     returning id into v_id;
     if v_id is not null then
@@ -363,6 +432,16 @@ begin
     return v_out;
   end if;
 
+  if exists (select 1 from jsonb_array_elements(coalesce(v_v.cortesias, '[]'::jsonb)) x
+              where x->>'motivo' in ('primeros_90', 'premio_referido')) then
+    -- una cortesía de premio por visita: esta ya lleva la de bienvenida o la de premio por referir → el reto, la próxima
+    v_out := v_a || jsonb_build_object('reto', jsonb_build_object('estado', 'guardada', 'nombre', v_nom),
+      'avisos', coalesce(v_a->'avisos', '[]'::jsonb)
+                || to_jsonb(format('Tiene el premio del reto «%s» guardado: esta factura ya lleva otra cortesía de premio, así que NO va ahora. Queda para su próxima visita.', v_nom)));
+    update public.club_visitas_socio set aplicar = v_out where id = v_v.id;
+    return v_out;
+  end if;
+
   select * into v_k from public.club_cortesias k
    where k.id = case when (v_r.cortesias->>v_v.location_id) ~ '^[0-9a-f-]{36}$' then (v_r.cortesias->>v_v.location_id)::uuid end
      and k.location_id = v_v.location_id and k.activa;
@@ -432,9 +511,11 @@ begin
       'nombre', v_r.nombre, 'nombre_en', v_r.nombre_en, 'desde', v_r.desde, 'hasta', v_r.hasta, 'dias', to_jsonb(v_r.dias),
       'hora_desde', to_char(v_r.hora_desde, 'HH24:MI'), 'hora_hasta', to_char(v_r.hora_hasta, 'HH24:MI'),
       'meta', v_r.meta,
-      'avance', case when v_g.id is not null then v_r.meta else least(public.club_reto_avance(v_r, p_miembro), v_r.meta) end,
+      'avance', case when v_g.id is not null then v_r.meta
+                     else least(public.club_reto_avance(v_r, p_miembro, public.club_reto_jornada(v_r, now())), v_r.meta) end,
       'ganada', v_g.id is not null,
-      'vence_en', case when v_g.id is not null then (v_g.vence_en at time zone 'America/Costa_Rica')::date end,
+      'vence_en', case when v_g.id is not null   -- último día que vale (vence a las 00:00 CR del día siguiente)
+                       then ((v_g.vence_en at time zone 'America/Costa_Rica') - interval '1 microsecond')::date end,
       'locales', (select coalesce(jsonb_agg(coalesce(c.nombre, c.location_id) order by c.location_id), '[]'::jsonb)
                     from public.club_config c where c.location_id = any(v_r.locales)));
   end loop;
@@ -481,7 +562,8 @@ declare
   v_hoy date := (now() at time zone 'America/Costa_Rica')::date;
 begin
   if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
-  return coalesce((
+  return jsonb_build_object('exige_factura', coalesce((select g.retos_exige_factura from public.club_config_global g limit 1), true),
+                            'retos', coalesce((
     select jsonb_agg(jsonb_build_object(
              'id', r.id, 'nombre', r.nombre, 'nombre_en', r.nombre_en, 'locales', to_jsonb(r.locales), 'estado', r.estado,
              'desde', r.desde, 'hasta', r.hasta, 'dias', to_jsonb(r.dias),
@@ -496,7 +578,7 @@ begin
              'usados', (select count(*) from public.club_retos_ganados g where g.reto_id = r.id and g.estado = 'usada'),
              'disponibles', (select count(*) from public.club_retos_ganados g where g.reto_id = r.id and g.estado = 'disponible' and g.vence_en > now()))
            order by r.desde desc, r.creada_en desc)
-      from public.club_retos r), '[]'::jsonb);
+      from public.club_retos r), '[]'::jsonb));
 end;
 $$;
 
@@ -675,7 +757,9 @@ revoke all on function public.club_retos_reglas()                              f
 revoke all on function public.club_reto_control(uuid, int, uuid)               from public, anon, authenticated;
 revoke all on function public.club_reto_participa(public.club_retos, uuid)     from public, anon, authenticated;
 revoke all on function public.club_reto_en_franja(public.club_retos, timestamptz) from public, anon, authenticated;
-revoke all on function public.club_reto_avance(public.club_retos, uuid)        from public, anon, authenticated;
+revoke all on function public.club_reto_avance(public.club_retos, uuid, date)  from public, anon, authenticated;
+revoke all on function public.club_reto_jornada(public.club_retos, timestamptz) from public, anon, authenticated;
+revoke all on function public.club_reto_visita_con_factura(text, jsonb)       from public, anon, authenticated;
 revoke all on function public.club_retos_evaluar(uuid)                         from public, anon, authenticated;
 revoke all on function public.club_retos_visita_trg()                          from public, anon, authenticated;
 revoke all on function public.club_reto_en_visita(uuid, text)                  from public, anon, authenticated;
@@ -719,12 +803,16 @@ begin
   if has_function_privilege('authenticated', 'public.club_retos_evaluar(uuid)', 'EXECUTE')
      or has_function_privilege('anon', 'public.club_retos_del_socio(uuid)', 'EXECUTE')
      or has_function_privilege('anon', 'public.club_reto_en_visita(uuid,text)', 'EXECUTE')
-     or has_function_privilege('authenticated', 'public.club_reto_avance(public.club_retos,uuid)', 'EXECUTE') then
+     or has_function_privilege('authenticated', 'public.club_reto_avance(public.club_retos,uuid,date)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.club_reto_visita_con_factura(text,jsonb)', 'EXECUTE') then
     raise exception '169: las internas no se abren';
   end if;
   if has_table_privilege('anon', 'public.club_retos', 'SELECT') or has_table_privilege('authenticated', 'public.club_retos', 'INSERT')
      or has_table_privilege('anon', 'public.club_retos_ganados', 'SELECT') then
     raise exception '169: las tablas no se abren';
+  end if;
+  if not (select retos_exige_factura from public.club_config_global limit 1) then
+    raise exception '169: la exigencia de factura (opción B) tiene que quedar PRENDIDA por defecto';
   end if;
 end
 $$;

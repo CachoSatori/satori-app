@@ -548,14 +548,25 @@ export interface RetoDatos {
   /** {location_id: id de la cortesía de ese local} */
   cortesias: Record<string, string>
 }
+/** Lista de retos + la exigencia de factura (opción B) del Club. */
+export interface RetosLista { exige_factura: boolean; retos: Reto[] }
 /** Owner y manager. Todos los retos (todos los locales). */
-export const getRetos = () => llamar<Reto[]>('club_retos_listar', {})
+export const getRetos = () => llamar<RetosLista>('club_retos_listar', {})
+/**
+ * Solo owner (RLS de club_config_global; auditado por trigger). Opción B: con `true`, los días anteriores cuentan para el
+ * reto solo si la visita cruza con una factura cerrada con el 856/857; con la exigencia prendida no se arma un reto en
+ * un local sin facturas del PoS en la base.
+ */
+export async function setRetosExigeFactura(v: boolean): Promise<void> {
+  const filas = await leer(from<{ id: boolean }>('club_config_global').update({ retos_exige_factura: v }).eq('id', true).select('id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner cambia esta regla', false)
+}
 /** Solo owner. `id` null = nuevo. Solo un borrador se edita. */
 export const guardarReto = (id: string | null, datos: RetoDatos) => llamar<string>('club_reto_guardar', { p_id: id, p_datos: datos })
 /** Solo owner. Borrador → vigente: la base rechaza el 4.º del año y la superposición en un local. */
-export const armarReto = (id: string) => llamar<Reto[]>('club_reto_armar', { p_id: id })
-export const terminarReto = (id: string) => llamar<Reto[]>('club_reto_terminar', { p_id: id })
-export const borrarReto = (id: string) => llamar<Reto[]>('club_reto_borrar', { p_id: id })
+export const armarReto = (id: string) => llamar<RetosLista>('club_reto_armar', { p_id: id })
+export const terminarReto = (id: string) => llamar<RetosLista>('club_reto_terminar', { p_id: id })
+export const borrarReto = (id: string) => llamar<RetosLista>('club_reto_borrar', { p_id: id })
 /** Cortesías de OTRO local (el premio del reto se elige por local). Owner y manager. */
 export const getCortesiasDe = (local: string) => llamar<Cortesia[]>('club_cortesias_listar', { p_location: local })
 

@@ -44,7 +44,7 @@ MUTACIONES: dict[str, tuple] = {
     # un reto armado se puede editar
     'armado_editable': ("       or new.estado <> 'terminada' then\n", "       and false then\n", {'5'}),
     # cuenta visitas, no días
-    'cuenta_visitas': ("  select count(distinct (vs.registrada_en at time zone 'America/Costa_Rica')::date)::int\n",
+    'cuenta_visitas': ("  select count(distinct j.jornada)::int\n",
                        "  select count(*)::int\n", {'6'}),
     # se entrega dos veces: ni el SELECT ni el UPDATE miran el estado, ni se mira si la visita ya se resolvió
     'dos_veces': ([("     where g.miembro_id = v_v.miembro_id and g.estado = 'disponible'\n     order by g.vence_en, g.ganada_en limit 1 for update;\n    exit when v_g.id is null or v_g.vence_en > now();\n",
@@ -68,6 +68,21 @@ MUTACIONES: dict[str, tuple] = {
                           "  if v_tok !~ '^[0-9a-f]{64}$' then\n    raise exception 'Enlace no válido' using errcode = 'P0001';\n  end if;\n  select m.id into v_id from public.club_miembros m where m.token_portal = v_tok and m.estado = 'activo';\n  if not found then\n    raise exception 'Enlace no válido' using errcode = 'P0001';\n  end if;\n  return jsonb_build_object('retos'", {'13'}),
     # se puede armar un reto que empezó en el pasado
     'pasado': ("  if nullif(p_datos->>'desde', '')::date < v_hoy then\n", "  if false then\n", {'14'}),
+    # opción B al revés: con la exigencia prendida cuenta cualquier visita (escaneos sin factura ganan)
+    'exige_invertida': ("          or not coalesce((select g.retos_exige_factura", "          or coalesce((select g.retos_exige_factura", {'17'}),
+    # vence a la hora en que se ganó (no al final del día CR mostrado)
+    'vence_hora': ("    values (v_r.id, v_v.miembro_id, v_v.id, ((v_v.fecha + v_r.vence_dias + 1)::timestamp at time zone 'America/Costa_Rica'))",
+                   "    values (v_r.id, v_v.miembro_id, v_v.id, now() + make_interval(days => v_r.vence_dias))", {'18'}),
+    # la jornada es el día calendario (una noche que cruza la medianoche cuenta dos)
+    'jornada_calendario': ("         - case when p_reto.hora_desde > p_reto.hora_hasta\n", "         - case when false\n", {'19'}),
+    # se apilan las cortesías de premio (bienvenida/referir + reto en la misma visita)
+    'premio_apilado': ("              where x->>'motivo' in ('primeros_90', 'premio_referido')) then\n",
+                       "              where false) then\n", {'20'}),
+    # se puede armar un reto en un local sin PoS con la exigencia prendida
+    'sin_pos': ("      if not exists (select 1 from public.pos_ndf_tickets t\n", "      if false and not exists (select 1 from public.pos_ndf_tickets t\n", {'21'}),
+    # un reto terminado sigue bloqueando su local
+    'terminado_bloquea': ("   where r.estado = 'vigente' and new.estado = 'vigente' and r.id <> new.id and r.locales && new.locales",
+                          "   where r.armado_en is not null and r.id <> new.id and r.locales && new.locales", {'4'}),
     # el manager (o cualquiera) guarda retos
     'guardar_sin_rol': ("  if v_rol is null or v_rol <> 'owner' then raise exception 'Sin permiso' using errcode = '42501'; end if;\n  if p_datos is null",
                         "  if p_datos is null", {'14'}),

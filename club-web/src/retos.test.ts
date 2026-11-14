@@ -21,7 +21,7 @@ describe('club-web · retos (mig 169)', () => {
     const [r] = leerRetos({ retos: [base] })
     const x = textosReto(r, TEXTOS.es, 'es', f, '2026-12-05')
     expect(x.principal).toBe('Visita 1 de 3')
-    expect(x.detalle).toBe('Visítenos 3 veces de lunes a viernes de 11:30 a 15:00 en Local Ficticio hasta el 2026-12-31 y le regalamos una cortesía.')
+    expect(x.detalle).toBe('Visítenos en 3 días distintos de lunes a viernes de 11:30 a 15:00 en Local Ficticio a más tardar el 2026-12-31 y le regalamos una cortesía. Muestre su QR de socio en caja en cada visita.')
     expect(x.titulo).toBe('3 almuerzos este mes')
   })
 

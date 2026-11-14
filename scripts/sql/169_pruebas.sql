@@ -37,7 +37,11 @@ grant all on _v169 to anon, authenticated;
 
 insert into public.club_config (location_id, nombre, club_activo) values
   ('prueba169a', 'Local Ficticio A', true), ('prueba169b', 'Local Ficticio B', true), ('prueba169c', 'Local Ficticio C', true),
-  ('prueba169d', 'Local Ficticio D', true), ('prueba169e', 'Local Ficticio E', true);
+  ('prueba169d', 'Local Ficticio D', true), ('prueba169e', 'Local Ficticio E', true), ('prueba169f', 'Local Ficticio F', true);
+-- una factura reciente en A–E (tienen PoS en la base); F no tiene ninguna (como Nosara hoy)
+insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+select l, '1690000' || right(l, 1), now() - interval '2 days', 'C', 'salon', 'cajero', true, 'ok', 10000
+  from unnest(array['prueba169a','prueba169b','prueba169c','prueba169d','prueba169e']) l;
 update public.club_promociones set estado = 'vigente', desde = null, hasta = null, hora_desde = null, hora_hasta = null,
                                    dias = '{1,2,3,4,5,6,7}'
  where location_id like 'prueba169_' and 'socio' = any(para);
@@ -62,14 +66,28 @@ begin
     on conflict (miembro_id, rol) do update set estado = 'activo';
   update public.club_miembro_roles set desde = now() - interval '10 days' where miembro_id = pg_temp.sid(p) and rol = 'socio';
 end $f$;
--- una visita registrada hace N días a una hora CR (directo en la tabla, como si la hubiera hecho la caja ese día)
+-- una visita registrada hace N días a una hora CR (directo en la tabla, como si la hubiera hecho la caja ese día). Con
+-- p_fact (por defecto), sobre una factura cerrada (C) con el 856 de ese momento (cuenta con la opción B); sin p_fact, un
+-- escaneo sobre un pedido que nunca tuvo factura. p_cort = cortesías que ya lleva la visita.
 create function pg_temp.visita(p text, p_dias int, p_loc text default 'prueba169a', p_hora text default '13:00',
-                               p_est text default 'aplica') returns uuid language sql as $f$
-  insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrada_en, client_op_id, estado_beneficio, aplicar)
-  values (p_loc, pg_temp.sid(p), (select hoy from _c169) - p_dias,
-          (((select hoy from _c169) - p_dias) + p_hora::time) at time zone 'America/Costa_Rica',
-          gen_random_uuid(), p_est, '{}'::jsonb)
-  returning id $f$;
+                               p_est text default 'aplica', p_fact boolean default true, p_cort jsonb default '[]') returns uuid
+language plpgsql as $f$
+declare v_nf text; v_t uuid; v_id uuid;
+        v_ts timestamptz := (((select hoy from _c169) - p_dias) + p_hora::time) at time zone 'America/Costa_Rica';
+begin
+  insert into _f169 default values;
+  v_nf := '169' || lpad(currval('_f169_n_seq')::text, 6, '0');
+  if p_fact then
+    insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+    values (p_loc, v_nf, v_ts, 'C', 'salon', 'cajero', true, 'ok', 10000) returning id into v_t;
+    insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values (v_t, '856', 'LOCAL CLUB', 1, 0);
+  end if;
+  insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrada_en, client_op_id, pos_ref, cortesias, estado_beneficio, aplicar)
+  values (p_loc, pg_temp.sid(p), (v_ts at time zone 'America/Costa_Rica')::date, v_ts, gen_random_uuid(),
+          jsonb_build_object('modo', 'factura', 'local', p_loc, 'numero_factura', v_nf), p_cort, p_est, '{}'::jsonb)
+  returning id into v_id;
+  return v_id;
+end $f$;
 -- llamar algo como un usuario (owner, sin rol…)
 create function pg_temp.como(p_uid uuid, p_sql text) returns jsonb language plpgsql as $f$
 declare r jsonb;
@@ -145,7 +163,7 @@ select '0 catálogo: definer con search_path · caja y club-web con permiso · i
        and has_function_privilege('anon', 'public.club_portal_retos(text)', 'EXECUTE')
        and not has_function_privilege('authenticated', 'public.club_retos_evaluar(uuid)', 'EXECUTE')
        and not has_function_privilege('anon', 'public.club_retos_del_socio(uuid)', 'EXECUTE')
-       and not has_function_privilege('authenticated', 'public.club_reto_avance(public.club_retos,uuid)', 'EXECUTE')
+       and not has_function_privilege('authenticated', 'public.club_reto_avance(public.club_retos,uuid,date)', 'EXECUTE')
        and not has_table_privilege('authenticated', 'public.club_retos', 'SELECT')
        and not has_table_privilege('authenticated', 'public.club_retos', 'INSERT')
        and not has_table_privilege('anon', 'public.club_retos_ganados', 'SELECT')
@@ -198,8 +216,8 @@ select '2 franja hora CR = la de promociones (grilla de 31 días × 48 medias ho
        and public.club_reto_en_franja(r2, timestamptz '2026-12-05 07:30:00+00')        -- sábado 01:30 CR (viernes de noche)
        and not public.club_reto_en_franja(r2, timestamptz '2026-12-01 05:30:00+00')    -- 23:30 CR del 30-nov (antes del desde)
        and public.club_reto_en_franja(r2, timestamptz '2027-01-01 05:30:00+00') = false -- 23:30 CR del 31-dic: jueves, no va
-       and public.club_reto_avance(rv, pg_temp.sid('f')) = 2,
-       'avance f = ' || public.club_reto_avance(rv, pg_temp.sid('f'))
+       and public.club_reto_avance(rv, pg_temp.sid('f'), (select hoy from _c169)) = 2,
+       'avance f = ' || public.club_reto_avance(rv, pg_temp.sid('f'), (select hoy from _c169))
   from public.club_retos r1, public.club_retos r2, public.club_retos rv
  where r1.nombre = 'Reto Ficticio Franja Uno' and r2.nombre = 'Reto Ficticio Franja Dos' and rv.nombre = 'Reto Ficticio Franja Avance';
 
@@ -231,9 +249,11 @@ begin
   e := e || pg_temp.error_de($q$select pg_temp.reto('Reto Ficticio S4', '{prueba169a}', '2031-04-01', '2031-04-30')$q$);
   e := e || pg_temp.error_de($q$select pg_temp.reto('Reto Ficticio S5', '{prueba169c,prueba169b}', '2028-03-01', '2028-03-02')$q$);
   e := e || pg_temp.error_de($q$select pg_temp.reto('Reto Ficticio S6', '{prueba169d,prueba169b}', '2028-03-02', '2028-03-20')$q$);
-  insert into _r169 (caso, ok, detalle) values ('4 superposición: mismo local y fechas que se pisan → error · otro local entra · pegado (día siguiente) entra · un local en común → error',
+  e := e || pg_temp.error_de($q$update public.club_retos set estado = 'terminada', terminada_en = now() where nombre = 'Reto Ficticio S5'$q$);
+  e := e || pg_temp.error_de($q$select pg_temp.reto('Reto Ficticio S7', '{prueba169d,prueba169b}', '2028-03-02', '2028-03-20')$q$);
+  insert into _r169 (caso, ok, detalle) values ('4 superposición: mismo local y fechas que se pisan → error · otro local entra · pegado (día siguiente) entra · un local en común → error · terminado ya no bloquea su local',
     e[1] is null and coalesce(e[2], '') like 'Se superpone con el reto «Reto Ficticio S1»%' and e[3] is null and e[4] is null
-    and e[5] is null and coalesce(e[6], '') like 'Se superpone%',
+    and e[5] is null and coalesce(e[6], '') like 'Se superpone%' and e[7] is null and e[8] is null,
     array_to_string(e, ' | ', '·'));
 end $$;
 
@@ -256,7 +276,7 @@ end $$;
 -- 6. GANA Y SE OFRECE: 2 días con visita (uno doble: cuenta uno) → la de hoy es la 3.ª: gana y la caja la ofrece
 select pg_temp.socio('c');
 select pg_temp.visita('c', 3); select pg_temp.visita('c', 2, 'prueba169b'); select pg_temp.visita('c', 2, 'prueba169b', '20:00');
-insert into _v169 values ('c0', to_jsonb(public.club_reto_avance((select r from public.club_retos r where r.nombre = 'Reto Ficticio Almuerzos'), pg_temp.sid('c'))));
+insert into _v169 values ('c0', to_jsonb(public.club_reto_avance((select r from public.club_retos r where r.nombre = 'Reto Ficticio Almuerzos'), pg_temp.sid('c'), (select hoy from _c169))));
 insert into _v169 values ('c1', pg_temp.caja('c'));
 insert into _r169 (caso, ok, detalle)
 select '6 avance 2 (dos visitas el mismo día cuentan una, en otro local del reto) · la 3.ª gana y se ofrece (motivo reto, texto, aviso con el artículo) · en la visita y la auditoría',
@@ -443,7 +463,7 @@ begin
   e_arm := pg_temp.error_de(format('select pg_temp.como(%L, %L)', o, format('public.club_reto_armar(%L::uuid)', v_id)));
   perform pg_temp.como(o, format('public.club_reto_guardar(%L::uuid, %L::jsonb)', v_id, d || '{"locales": ["prueba169a"]}'));
   perform pg_temp.como(o, format('public.club_reto_armar(%L::uuid)', v_id));
-  v_l := (select x from jsonb_array_elements(pg_temp.como(o, 'public.club_retos_listar()')) x where x->>'id' = v_id::text);
+  v_l := (select x from jsonb_array_elements(pg_temp.como(o, 'public.club_retos_listar()')->'retos') x where x->>'id' = v_id::text);
   perform pg_temp.como(o, format('public.club_reto_terminar(%L::uuid)', v_id));
   select count(*) into v_aud from public.club_auditoria a where a.objeto_id = v_id and a.accion in ('reto_alta','reto_edicion','reto_armado','reto_terminado');
   insert into _r169 (caso, ok, detalle) values ('14 gerencia: en el pasado → error · sin rol → 42501 (guardar y listar) · datos fuera de rango → error claro · cortesía inactiva u otro local → error · armar sin cortesía de cada local → error · armar/terminar con auditoría',
@@ -473,18 +493,92 @@ begin
     r := pg_temp.caja('m');
     v_op := (select client_op_id from public.club_visitas_socio where id = (r->>'visita_id')::uuid);
     r2 := pg_temp.caja('m', 'prueba169a', v_op);
+    execute 'update public.club_config_global set primeros90_activo = false';   -- los casos siguientes, sin bienvenida nueva
   end if;
-  insert into _r169 (caso, ok, detalle) values ('15 convivencia: club_socio_visita igual que antes (md5) · con la 168: las dos cortesías (bienvenida + reto) en la visita y en el reescaneo',
+  insert into _r169 (caso, ok, detalle) values ('15 convivencia: club_socio_visita igual que antes (md5) · con la 168: la visita que gana las dos lleva la bienvenida y el reto queda guardado (una cortesía de premio por visita), igual en el reescaneo',
     md5(pg_get_functiondef('public.club_socio_visita(uuid,jsonb,uuid,text)'::regprocedure)) = (select md5_visita from _p169)
-    and (not v_con or (pg_temp.premio(r) = 1
+    and (not v_con or (pg_temp.premio(r) = 0
          and (select count(*) from jsonb_array_elements(r->'cortesias') x where x->>'motivo' = 'primeros_90') = 1
-         and r->'primeros90'->>'estado' = 'ofrecida' and r->'reto'->>'estado' = 'ofrecida'
-         and pg_temp.premio(r2) = 1 and (r2->>'repetida')::boolean
-         and (select count(*) from public.club_visitas_socio v, jsonb_array_elements(v.cortesias) x
-               where v.id = (r->>'visita_id')::uuid and x->>'motivo' in ('reto','primeros_90')) = 2)),
+         and r->'primeros90'->>'estado' = 'ofrecida' and r->'reto'->>'estado' = 'guardada'
+         and pg_temp.premio(r2) = 0 and (r2->>'repetida')::boolean and r2->'reto'->>'estado' = 'guardada'
+         and (pg_temp.g('m')).estado = 'disponible')),
     'con 168: ' || v_con || ' · ' || coalesce(r::text, ''));
 exception when others then
   insert into _r169 (caso, ok, detalle) values ('15 convivencia', false, sqlstate || ' ' || sqlerrm);
+end $$;
+
+-- 17. OPCIÓN B: tres escaneos en tres días SIN factura (pedidos que nunca se cobraron) no ganan; la de hoy cuenta por
+--     presencia (avance 1). Con retos_exige_factura = false, los mismos días cuentan. Por defecto, prendida.
+select pg_temp.socio('n');
+select pg_temp.visita('n', 3, 'prueba169a', '13:00', 'aplica', false); select pg_temp.visita('n', 2, 'prueba169a', '13:00', 'aplica', false);
+insert into _v169 values ('n1', pg_temp.caja('n'));
+insert into _v169 values ('n0', to_jsonb(public.club_reto_avance((select r from public.club_retos r where r.nombre = 'Reto Ficticio Almuerzos'), pg_temp.sid('n'), (select hoy from _c169))));
+update public.club_config_global set retos_exige_factura = false;
+insert into _v169 values ('n2', to_jsonb(public.club_reto_avance((select r from public.club_retos r where r.nombre = 'Reto Ficticio Almuerzos'), pg_temp.sid('n'), (select hoy from _c169))));
+update public.club_config_global set retos_exige_factura = true;
+insert into _r169 (caso, ok, detalle)
+select '17 opción B: 3 escaneos sin factura no ganan (avance 1: solo la de hoy por presencia) · sin la exigencia, 3 · prendida por defecto',
+       pg_temp.premio((select r from _v169 where k = 'n1')) = 0 and (pg_temp.g('n')).id is null
+       and (select r from _v169 where k = 'n0') = '1'::jsonb and (select r from _v169 where k = 'n2') = '3'::jsonb
+       and (select pg_get_expr(d.adbin, d.adrelid) from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+             where d.adrelid = 'public.club_config_global'::regclass and a.attname = 'retos_exige_factura') = 'true',
+       'n0 ' || (select r::text from _v169 where k = 'n0') || ' n2 ' || (select r::text from _v169 where k = 'n2');
+
+-- 18. VENCIMIENTO al final del día CR mostrado: ganado hoy con 30 días → límite 00:00 CR de hoy + 31; «Mi Club» dice hoy + 30
+insert into _r169 (caso, ok, detalle)
+select '18 vence al final del día CR mostrado (00:00 CR del día siguiente) · «Mi Club» muestra ese último día',
+       (pg_temp.g('j')).vence_en = (((select hoy from _c169) + 31)::timestamp at time zone 'America/Costa_Rica')
+       and (pg_temp.g('k')).vence_en = (((select hoy from _c169) + 31)::timestamp at time zone 'America/Costa_Rica')
+       and (select (x->>'vence_en')::date from _v169, jsonb_array_elements(r->'retos') x
+             where k = 'jp' and x->>'nombre' = 'Reto Ficticio Almuerzos') = (select hoy from _c169) + 30,
+       (pg_temp.g('j')).vence_en::text;
+
+-- 19. JORNADA: en una franja que cruza la medianoche (22:00–02:00), una noche cuenta UNA vez (la 01:00 es de la jornada
+--     anterior); otra noche suma
+select pg_temp.socio('p');
+insert into _v169 values ('noc', to_jsonb(pg_temp.reto('Reto Ficticio Noche', '{prueba169e}', (select desde from _c169), (select hasta from _c169),
+                                                     false, 3, '{}', 0, '22:00', '02:00')));
+select pg_temp.visita('p', 3, 'prueba169e', '23:00'); select pg_temp.visita('p', 2, 'prueba169e', '01:00');
+select pg_temp.visita('p', 2, 'prueba169e', '23:30');
+insert into _r169 (caso, ok, detalle)
+select '19 jornada: vie 23:00 + sáb 01:00 = 1 noche · otra noche = 2 · la 01:30 del sábado es jornada del viernes',
+       public.club_reto_avance(r, pg_temp.sid('p'), (select hoy from _c169)) = 2
+       and public.club_reto_jornada(r, timestamptz '2026-12-05 07:30:00+00') = date '2026-12-04'
+       and public.club_reto_jornada(r, timestamptz '2026-12-05 05:00:00+00') = date '2026-12-04',
+       'avance p = ' || public.club_reto_avance(r, pg_temp.sid('p'), (select hoy from _c169))
+  from public.club_retos r where r.nombre = 'Reto Ficticio Noche';
+
+-- 20. UNA CORTESÍA DE PREMIO POR VISITA: la visita ganadora ya lleva el premio por referir → el reto NO va ahí (guardado,
+--     con aviso); en la próxima visita, sí
+select pg_temp.socio('q');
+select pg_temp.visita('q', 3); select pg_temp.visita('q', 2);
+insert into _v169 values ('q0', to_jsonb(pg_temp.visita('q', 0, 'prueba169a', to_char(now() at time zone 'America/Costa_Rica', 'HH24:MI:SS'), 'aplica', true,
+                                                     '[{"id":"x","codigo":"P169A2","nombre":"Bebida Ficticia A","motivo":"premio_referido"}]')));
+insert into _v169 values ('q1', pg_temp.como((select owner_id from _c169),
+  format('public.club_reto_en_visita(%L::uuid, %L)', (select r #>> '{}' from _v169 where k = 'q0'), 'prueba169a')));
+update public.club_config_global set socio_visitas_por_dia = 3;
+insert into _v169 values ('q2', pg_temp.caja('q'));
+update public.club_config_global set socio_visitas_por_dia = 1;
+insert into _r169 (caso, ok, detalle)
+select '20 una cortesía de premio por visita: con el premio por referir ya en la factura, el del reto queda guardado (aviso) · en la próxima, se ofrece',
+       pg_temp.premio((select r from _v169 where k = 'q1')) = 0
+       and (select r->'reto'->>'estado' from _v169 where k = 'q1') = 'guardada'
+       and exists (select 1 from _v169, jsonb_array_elements_text(r->'avisos') a where k = 'q1' and a like '%ya lleva otra cortesía de premio%')
+       and pg_temp.premio((select r from _v169 where k = 'q2')) = 1 and (pg_temp.g('q')).estado = 'usada',
+       (select r::text from _v169 where k = 'q1');
+
+-- 21. LOCAL SIN PoS (como Nosara): con la exigencia prendida, armar un reto ahí → error claro; apagada, entra
+do $$
+declare e text[] := '{}';
+begin
+  e := e || pg_temp.error_de($q$select pg_temp.reto('Reto Ficticio Sin PoS', '{prueba169a,prueba169f}', '2033-03-01', '2033-03-31')$q$);
+  e := e || pg_temp.error_de($q$select pg_temp.reto('Reto Ficticio Sin PoS B', '{prueba169f}', '2033-03-01', '2033-03-31', false)$q$);
+  update public.club_config_global set retos_exige_factura = false;
+  e := e || pg_temp.error_de($q$update public.club_retos set estado = 'vigente', armado_en = now() where nombre = 'Reto Ficticio Sin PoS B'$q$);
+  update public.club_config_global set retos_exige_factura = true;
+  insert into _r169 (caso, ok, detalle) values ('21 local sin facturas del PoS: armar con la exigencia prendida → error («no tiene facturas del PoS») · en borrador entra · sin la exigencia se arma',
+    coalesce(e[1], '') like 'El local «Local Ficticio F» no tiene facturas del PoS%' and e[2] is null and e[3] is null,
+    array_to_string(e, ' | ', '·'));
 end $$;
 
 -- 16a. ROLLBACK con premios ganados → la guarda aborta
@@ -510,6 +604,8 @@ select '16b rollback: sin tablas, funciones ni trigger de la 169 · club_socio_v
        and to_regprocedure('public.club_reto_en_visita(uuid,text)') is null and to_regprocedure('public.club_portal_retos(text)') is null
        and not exists (select 1 from pg_proc where proname like 'club_reto%' and pronamespace = 'public'::regnamespace)
        and not exists (select 1 from pg_trigger where tgname in ('club_retos_visita_trg', 'club_retos_reglas_trg'))
+       and not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_config_global'
+                         and column_name = 'retos_exige_factura')
        and pg_temp.visita('b', 1) is not null,
        null
   from _p169 p;
@@ -522,6 +618,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r169 where ok is not true;   -- null = falla
   if v is not null then raise exception '169-FALLAN: %', v; end if;
-  if (select count(*) from _r169) <> 19 then raise exception '169-FALLAN: se esperaban 19 casos (NO PROBADO)'; end if;
+  if (select count(*) from _r169) <> 24 then raise exception '169-FALLAN: se esperaban 24 casos (NO PROBADO)'; end if;
 end $$;
 rollback;

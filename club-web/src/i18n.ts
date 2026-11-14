@@ -134,7 +134,7 @@ const ES = {
   // mig 169: retos de temporada baja en «Mi Club»
   reto_titulo: 'Reto del Club',
   reto_avance: (n: number, de: number) => `Visita ${n} de ${de}`,
-  reto_txt: (de: number, cuando: string, f: string) => `Visítenos ${de} veces ${cuando} hasta el ${f} y le regalamos una cortesía.`,
+  reto_txt: (de: number, cuando: string, f: string) => `Visítenos en ${de} días distintos ${cuando} a más tardar el ${f} y le regalamos una cortesía. Muestre su QR de socio en caja en cada visita.`,
   reto_empieza: (f: string) => `Empieza el ${f}.`,
   reto_ganado: 'Cumplió el reto: ganó una cortesía.',
   reto_ganado_txt: (f: string) => `Muestre su QR de socio en caja en su próxima visita (vale hasta el ${f}).`,
@@ -272,7 +272,7 @@ const EN: Textos = {
   w_txt: 'This button comes from your Wallet pass. It creates a code valid for 10 minutes: show it at the register.',
   reto_titulo: 'Club challenge',
   reto_avance: (n: number, de: number) => `Visit ${n} of ${de}`,
-  reto_txt: (de: number, cuando: string, f: string) => `Visit us ${de} times ${cuando} until ${f} and we will give you a treat.`,
+  reto_txt: (de: number, cuando: string, f: string) => `Visit us on ${de} different days ${cuando} by ${f} and we will give you a treat. Show your member QR at the register on each visit.`,
   reto_empieza: (f: string) => `Starts ${f}.`,
   reto_ganado: 'Challenge completed: you earned a treat.',
   reto_ganado_txt: (f: string) => `Show your member QR at the register on your next visit (valid until ${f}).`,

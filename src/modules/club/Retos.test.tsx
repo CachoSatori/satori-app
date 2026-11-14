@@ -10,7 +10,7 @@ import { problemaReto, resumenFranja } from './retosReglas'
 const rol = vi.hoisted(() => ({ v: 'owner' }))
 const api = vi.hoisted(() => ({
   getRetos: vi.fn(), guardarReto: vi.fn(), armarReto: vi.fn(), terminarReto: vi.fn(), borrarReto: vi.fn(),
-  getCortesiasDe: vi.fn(), getLocalesClub: vi.fn(),
+  getCortesiasDe: vi.fn(), getLocalesClub: vi.fn(), setRetosExigeFactura: vi.fn(),
   resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), getFacturasRecientes: vi.fn(), registrarVisitaSocio: vi.fn(), conPremioDeReto: vi.fn(),
 }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: rol.v, full_name: 'Prueba' } }) }))
@@ -40,8 +40,8 @@ describe('Promociones · retos (mig 169)', () => {
 
   it('owner: borrador con Editar/Armar/Borrar; armar pide confirmación y llama a la base', async () => {
     rol.v = 'owner'
-    api.getRetos.mockResolvedValue([reto])
-    api.armarReto.mockResolvedValue([{ ...reto, estado: 'vigente', armado: true }])
+    api.getRetos.mockResolvedValue({ exige_factura: true, retos: [reto] })
+    api.armarReto.mockResolvedValue({ exige_factura: true, retos: [{ ...reto, estado: 'vigente', armado: true }] })
     render(<Retos owner />)
     expect(await screen.findByText('3 almuerzos ficticios')).toBeTruthy()
     expect(screen.getByText(/15 % sin reto/)).toBeTruthy()
@@ -55,22 +55,32 @@ describe('Promociones · retos (mig 169)', () => {
   })
 
   it('armado sin cortesía activa en un local: avisa que ahí la caja no lo ofrece', async () => {
-    api.getRetos.mockResolvedValue([{ ...reto, estado: 'vigente', armado: true,
-      cortesias: { 'loc-a': { ...reto.cortesias['loc-a'], activa: false } } }])
+    api.getRetos.mockResolvedValue({ exige_factura: true, retos: [{ ...reto, estado: 'vigente', armado: true,
+      cortesias: { 'loc-a': { ...reto.cortesias['loc-a'], activa: false } } }] })
     render(<Retos owner />)
     expect(await screen.findByText(/ahí la caja NO ofrece el premio/)).toBeTruthy()
   })
 
+  it('exigencia de factura: se ve la regla; el owner la apaga con confirmación', async () => {
+    api.getRetos.mockResolvedValue({ exige_factura: true, retos: [] })
+    api.setRetosExigeFactura.mockResolvedValue(undefined)
+    render(<Retos owner />)
+    expect(await screen.findByText(/Exige factura: los días anteriores cuentan solo si/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Dejar de exigir'))
+    await waitFor(() => expect(api.setRetosExigeFactura).toHaveBeenCalledWith(false))
+  })
+
   it('manager: ve la lista sin botones', async () => {
-    api.getRetos.mockResolvedValue([reto])
+    api.getRetos.mockResolvedValue({ exige_factura: true, retos: [reto] })
     render(<Retos owner={false} />)
     expect(await screen.findByText('3 almuerzos ficticios')).toBeTruthy()
     expect(screen.queryByText('Armar')).toBeNull()
     expect(screen.queryByText('+ Nuevo reto')).toBeNull()
+    expect(screen.queryByText('Dejar de exigir')).toBeNull()
   })
 
   it('error de la base (4.º del año) se muestra tal cual', async () => {
-    api.getRetos.mockResolvedValue([reto])
+    api.getRetos.mockResolvedValue({ exige_factura: true, retos: [reto] })
     api.armarReto.mockRejectedValue(new Error('Ya hay 3 retos armados en 2026: es el máximo por año'))
     render(<Retos owner />)
     fireEvent.click(await screen.findByText('Armar'))

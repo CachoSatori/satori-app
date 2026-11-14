@@ -9,8 +9,8 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  getRetos, guardarReto, armarReto, terminarReto, borrarReto, getCortesiasDe, getLocalesClub, aClubError,
-  type Reto, type RetoDatos, type LocalClub, type Cortesia,
+  getRetos, guardarReto, armarReto, terminarReto, borrarReto, getCortesiasDe, getLocalesClub, setRetosExigeFactura, aClubError,
+  type Reto, type RetoDatos, type LocalClub, type Cortesia, type RetosLista,
 } from '../../shared/api/club'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
@@ -18,7 +18,8 @@ import { todayCR } from '../../shared/utils'
 import { DIAS, problemaReto, resumenFranja } from './retosReglas'
 
 export default function Retos({ owner }: { owner: boolean }) {
-  const [lista, setLista] = useState<Reto[] | null>(null)
+  const [datos, setDatos] = useState<RetosLista | null>(null)
+  const lista = datos?.retos ?? null
   const [locales, setLocales] = useState<LocalClub[]>([])
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
@@ -27,7 +28,7 @@ export default function Retos({ owner }: { owner: boolean }) {
   const [enviando, setEnviando] = useState(false)
   useEffect(() => {
     let vivo = true
-    getRetos().then(l => { if (vivo) setLista(l) }).catch(e => { if (vivo) setError(aClubError(e).message) })
+    getRetos().then(l => { if (vivo) setDatos(l) }).catch(e => { if (vivo) setError(aClubError(e).message) })
     getLocalesClub().then(l => { if (vivo) setLocales(l) }).catch(() => { /* sin nombres: se muestran los ids */ })
     return () => { vivo = false }
   }, [recarga])
@@ -38,13 +39,23 @@ export default function Retos({ owner }: { owner: boolean }) {
   async function accion(r: Reto, que: 'armar' | 'terminar' | 'borrar') {
     const msg = que === 'armar'
       ? `¿Armar «${r.nombre}»? Desde el ${fmtFecha(r.desde)} los socios lo ven y pueden ganar el premio. Armado ya no se edita, y cuenta para el máximo de 3 por año.`
-      : que === 'terminar' ? `¿Terminar «${r.nombre}»? Nadie más lo gana; los premios ya ganados se respetan.` : `¿Borrar el borrador «${r.nombre}»?`
+      : que === 'terminar' ? `¿Terminar «${r.nombre}»? Nadie más lo gana; los premios ya ganados se respetan. Sigue contando para el máximo del año, pero ya no bloquea sus locales.` : `¿Borrar el borrador «${r.nombre}»?`
     if (!window.confirm(msg)) return
     setEnviando(true); setError(null); setOk(null)
     try {
-      setLista(await (que === 'armar' ? armarReto(r.id) : que === 'terminar' ? terminarReto(r.id) : borrarReto(r.id)))
+      setDatos(await (que === 'armar' ? armarReto(r.id) : que === 'terminar' ? terminarReto(r.id) : borrarReto(r.id)))
       setOk(que === 'armar' ? `«${r.nombre}» armado.` : que === 'terminar' ? `«${r.nombre}» terminado.` : 'Borrador borrado.')
     } catch (e) { setError(aClubError(e).message) }
+    finally { setEnviando(false) }
+  }
+  async function alternarExige() {
+    if (!datos) return
+    const v = !datos.exige_factura
+    if (!window.confirm(v ? '¿Exigir factura? Los días anteriores cuentan solo si la visita cruza con una factura cerrada con el 856/857.'
+                          : '¿Dejar de exigir factura? Cuenta cualquier visita registrada en caja, aunque el pedido no se haya cobrado.')) return
+    setEnviando(true); setError(null); setOk(null)
+    try { await setRetosExigeFactura(v); setOk(v ? 'Ahora se exige factura.' : 'Ya no se exige factura.'); setRecarga(n => n + 1) }
+    catch (e) { setError(aClubError(e).message) }
     finally { setEnviando(false) }
   }
 
@@ -60,8 +71,19 @@ export default function Retos({ owner }: { owner: boolean }) {
       </div>
       <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
         Ej. «3 almuerzos este mes»: el socio ve su avance en «Mi Club» y, al cumplir, gana una cortesía que la caja ofrece una sola vez.
-        Solo socios del Local Club (el equipo no). Máximo 3 retos armados por año ({armadosAnio} en {anio}).
+        Solo socios del Local Club (el equipo no). Máximo 3 retos armados por año ({armadosAnio} en {anio}). Cuenta una visita por
+        jornada (una noche que pasa la medianoche es una sola) y una sola cortesía de premio por factura.
       </div>
+      {datos && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82rem', marginBottom: 8 }}>
+          <span>
+            {datos.exige_factura
+              ? 'Exige factura: los días anteriores cuentan solo si la visita cruza con una factura cerrada con el 856/857. No se arma un reto en un local sin facturas del PoS en la app.'
+              : 'No exige factura: cuenta cualquier visita registrada en caja.'}
+          </span>
+          {owner && <Btn variant="secondary" onClick={alternarExige} disabled={enviando}>{datos.exige_factura ? 'Dejar de exigir' : 'Exigir factura'}</Btn>}
+        </div>
+      )}
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
       {ok && <Aviso tono="ok" onClose={() => setOk(null)}>{ok}</Aviso>}
       {lista === null ? <div style={{ color: C.muted }}>Cargando…</div> : lista.length === 0 ? (

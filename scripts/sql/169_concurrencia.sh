@@ -37,6 +37,9 @@ update public.club_promociones set estado = 'vigente', desde = null, hasta = nul
  where location_id = 'prueba169a' and 'socio' = any(para);
 insert into public.club_cortesias (location_id, codigo_producto, nombre) values ('prueba169a', 'P169A1', 'Postre Ficticio');
 update public.club_config_global set socio_visitas_por_dia = 2;
+insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+values ('prueba169a', '169900001', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok', 10000),
+       ('prueba169a', '169900002', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok', 10000);
 insert into public.club_retos (nombre, nombre_en, locales, estado, desde, hasta, meta, cortesias, armado_en)
 select 'Reto Ficticio', 'Ficticious Challenge', '{prueba169a}', 'vigente',
        greatest(h - 20, date_trunc('year', h)::date), least(h + 10, (date_trunc('year', h) + interval '1 year - 1 day')::date), 3,
@@ -45,12 +48,14 @@ select 'Reto Ficticio', 'Ficticious Challenge', '{prueba169a}', 'vigente',
 insert into public.club_miembros (id, location_id, tipo, nombre) values ('00000000-0000-4000-8169-0000000000c1', 'prueba169a', 'socio', 'Socio Ficticio');
 insert into public.club_miembro_roles (miembro_id, rol, estado) values ('00000000-0000-4000-8169-0000000000c1', 'socio', 'activo')
   on conflict (miembro_id, rol) do update set estado = 'activo';
-insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrada_en, client_op_id, estado_beneficio, aplicar)
-select 'prueba169a', '00000000-0000-4000-8169-0000000000c1', ((now() - make_interval(days => d)) at time zone 'America/Costa_Rica')::date,
-       now() - make_interval(days => d), gen_random_uuid(), 'aplica', '{}' from unnest(array[3, 2]) d;
-insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
-values ('prueba169a', '169900001', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok', 10000),
-       ('prueba169a', '169900002', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok', 10000);
+-- dos días anteriores con visita sobre una factura cerrada con el 856 (cuentan con la opción B)
+with d as (select x as dias, '16980000' || x as nf, now() - make_interval(days => x) as ts from unnest(array[3, 2]) x),
+     t as (insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+           select 'prueba169a', nf, ts, 'C', 'salon', 'cajero', true, 'ok', 10000 from d returning id),
+     l as (insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) select id, '856', 'LOCAL CLUB', 1, 0 from t)
+insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrada_en, client_op_id, pos_ref, estado_beneficio, aplicar)
+select 'prueba169a', '00000000-0000-4000-8169-0000000000c1', (ts at time zone 'America/Costa_Rica')::date, ts, gen_random_uuid(),
+       jsonb_build_object('modo', 'factura', 'local', 'prueba169a', 'numero_factura', nf), 'aplica', '{}' from d;
 -- las dos visitas de hoy (confirmadas): la primera gana el reto por el trigger
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8169-0000000000aa","role":"authenticated"}', false);
 set role authenticated;

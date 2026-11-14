@@ -1,6 +1,6 @@
 -- Rollback de la 169 (origen 115): salen los retos de temporada baja — triggers (club_retos_visita_trg sobre
 -- club_visitas_socio y club_retos_reglas_trg), las funciones club_reto*/club_retos*/club_portal_retos y las tablas
--- club_retos_ganados y club_retos. NO toca club_socio_visita, club_pase_datos ni club_portal (la 169 no los cambia), así
+-- club_retos_ganados y club_retos, y la columna club_config_global.retos_exige_factura. NO toca club_socio_visita, club_pase_datos ni club_portal (la 169 no los cambia), así
 -- que vale igual con o sin la 168. Las filas de club_auditoria (reto_*) quedan: son historial de solo inserción.
 -- Borra la fila 169 del ledger (la 115 nunca se aplicó con ese número).
 --
@@ -35,7 +35,9 @@ drop function if exists public.club_retos_listar();
 drop function if exists public.club_retos_del_socio(uuid);
 drop function if exists public.club_retos_visita_trg();
 drop function if exists public.club_retos_evaluar(uuid);
-drop function if exists public.club_reto_avance(public.club_retos, uuid);
+drop function if exists public.club_reto_avance(public.club_retos, uuid, date);
+drop function if exists public.club_reto_visita_con_factura(text, jsonb);
+drop function if exists public.club_reto_jornada(public.club_retos, timestamptz);
 drop function if exists public.club_reto_en_franja(public.club_retos, timestamptz);
 drop function if exists public.club_reto_participa(public.club_retos, uuid);
 drop function if exists public.club_reto_control(uuid, int, uuid);
@@ -43,6 +45,7 @@ drop table if exists public.club_retos_ganados;
 drop trigger if exists club_retos_reglas_trg on public.club_retos;
 drop function if exists public.club_retos_reglas();
 drop table if exists public.club_retos;
+alter table public.club_config_global drop column if exists retos_exige_factura;
 
 delete from supabase_migrations.schema_migrations where version = '169';
 
@@ -50,7 +53,9 @@ do $$
 begin
   if to_regclass('public.club_retos') is not null or to_regclass('public.club_retos_ganados') is not null
      or to_regprocedure('public.club_reto_en_visita(uuid,text)') is not null
-     or exists (select 1 from pg_trigger where tgname = 'club_retos_visita_trg') then
+     or exists (select 1 from pg_trigger where tgname = 'club_retos_visita_trg')
+     or exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_config_global'
+                  and column_name = 'retos_exige_factura') then
     raise exception '169 rollback: quedaron objetos de la 169';
   end if;
   if not has_function_privilege('authenticated', 'public.club_socio_visita(uuid,jsonb,uuid,text)', 'EXECUTE') then

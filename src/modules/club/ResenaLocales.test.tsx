@@ -5,7 +5,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 const api = vi.hoisted(() => ({
   guardados: {} as Record<string, string | null>,
-  set: vi.fn(async (_id: string, _url: string | null) => {}),
+  set: vi.fn<(id: string, url: string | null) => Promise<void>>(async () => {}),
 }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/api/club', async orig => ({

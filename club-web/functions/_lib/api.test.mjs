@@ -388,3 +388,43 @@ test('158: /resena con IP compartida: 6 clics seguidos de la misma IP se cuentan
   }
   assert.deepEqual(estados, [200, 200, 200, 200, 200, 200])
 })
+
+// 167: POST /api/portal/:token/resena {accion} → club_portal_resena (marcas de la tarjeta del socio, sin datos personales)
+const TOK167 = 'ab'.repeat(32)
+test('167: /api/portal/:token/resena llama a club_portal_resena con el token y la acción, y nada más', async () => {
+  for (const accion of ['mostrada', 'cerrada', 'clic']) {
+    llamadas = []
+    globalThis.fetch = async (url, init) => { llamadas.push({ url, init }); return new Response('{"ok":true}', { status: 200 }) }
+    const r = await manejar(pedido(`portal/${TOK167.toUpperCase()}/resena`, 'POST', JSON.stringify({ accion, nombre: 'x' })), conLimite(), `portal/${TOK167.toUpperCase()}/resena`)
+    assert.equal(r.status, 200)
+    assert.equal(llamadas.length, 1)
+    assert.ok(String(llamadas[0].url).endsWith('/rpc/club_portal_resena'))
+    assert.deepEqual(JSON.parse(llamadas[0].init.body), { p_token: TOK167, p_accion: accion })
+    assert.equal(llamadas[0].init.headers['x-club-web'], 'clave-de-prueba')
+  }
+})
+
+test('167: /resena del portal: solo POST, token válido, acción conocida y tope por IP (falla cerrada sin binding)', async () => {
+  llamadas = []
+  const ruta = `portal/${TOK167}/resena`
+  const cuerpo = JSON.stringify({ accion: 'cerrada' })
+  assert.equal((await manejar(pedido(ruta), conLimite(), ruta)).status, 405)
+  assert.equal((await manejar(pedido('portal/xyz/resena', 'POST', cuerpo), conLimite(), 'portal/xyz/resena')).status, 404)
+  assert.equal((await manejar(pedido(ruta, 'POST', JSON.stringify({ accion: 'borrar' })), conLimite(), ruta)).status, 400)
+  assert.equal((await manejar(pedido(ruta, 'POST', '{no json'), conLimite(), ruta)).status, 400)
+  assert.equal((await manejar(pedido(ruta, 'POST'), conLimite(), ruta)).status, 400)
+  assert.equal((await manejar(pedido(ruta, 'POST', cuerpo), conLimite(false), ruta)).status, 429)
+  assert.equal((await manejar(pedido(ruta, 'POST', cuerpo), base, ruta)).status, 503)
+  assert.equal(llamadas.length, 0)
+})
+
+test('167: /resena del portal cuenta en RL_LEER con «resena-socio:»; RL_CREAR agotado no la frena', async () => {
+  llamadas = []
+  globalThis.fetch = async (url, init) => { llamadas.push({ url, init }); return new Response('{"ok":true}', { status: 200 }) }
+  const claves = []
+  const env = { ...base, RL_CREAR: lim(false), RL_LEER: { limit: async ({ key }) => { claves.push(key); return { success: true } } } }
+  const ruta = `portal/${TOK167}/resena`
+  assert.equal((await manejar(pedido(ruta, 'POST', JSON.stringify({ accion: 'clic' })), env, ruta)).status, 200)
+  assert.deepEqual(claves, ['resena-socio:203.0.113.7'])
+  assert.equal(llamadas.length, 1)
+})

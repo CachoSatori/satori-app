@@ -117,6 +117,12 @@
       "rama": "claude/club-resena-cupon",
       "renumerada_a": "158"
     },
+    "113": {
+      "nombre": "club_resena_socios",
+      "bloque": "club",
+      "rama": "claude/club-resena-socios",
+      "renumerada_a": "167"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -146,6 +152,12 @@
       "bloque": "pase",
       "rama": "claude/club-resena-cupon",
       "origen": "105"
+    },
+    "167": {
+      "nombre": "club_resena_socios",
+      "bloque": "pase",
+      "rama": "claude/club-resena-socios",
+      "origen": "113"
     }
   }
 }

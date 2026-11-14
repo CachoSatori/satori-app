@@ -17,6 +17,7 @@ import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrF
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 import { esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon } from './resena'
+import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -278,6 +279,8 @@ interface Portal {
     estado: 'pendiente' | 'activo'; desde: string; codigo_socio: string | null; beneficio: string | null; visitas_mes: number | null
     cortesias: Array<{ sorpresa: boolean; cantidad: number; motivo: string; vence_en: string | null }> | null
   } | null
+  /** 167: reseña de Google cada N visitas (la base decide si toca y de qué local); null si no toca */
+  resena?: ResenaSocio | null
   movimientos: Array<{ tipo: string; personas: number; creditos: number | null; fecha: string }>
 }
 
@@ -370,7 +373,7 @@ async function paginaPortal(token: string) {
   pintar(
     h('h1', {}, t.portal_hola(p.nombre)),
     botonWallet(token, true),   // B2: un pase por persona (socio y/o anfitrión); en el portal, también «Actualizar mi pase»
-    ...pestanas(p.socio ? [seccionSocio(token, p.socio)] : [], anfitrion),
+    ...pestanas(p.socio ? [tarjetaResena(token, p), seccionSocio(token, p.socio)].filter((x): x is HTMLElement => !!x) : [], anfitrion),
   )
 }
 
@@ -402,6 +405,13 @@ function botonWallet(token: string, conActualizar = false): HTMLElement | null {
 }
 
 // ── LC-A2: socio del Local Club ──────────────────────────────────────────────
+/** 167: la tarjeta «¿Nos cuenta cómo le fue?» arriba de «Mi Club», solo con el socio activo y si la base dice que toca. */
+function tarjetaResena(token: string, p: Portal): HTMLElement | null {
+  if (p.socio?.estado !== 'activo') return null
+  return tarjetaResenaSocio(p.resena, { titulo: t.resena_socio_titulo, txt: t.resena_socio_txt, boton: t.resena_boton,
+    cerrar: t.resena_socio_cerrar }, a => marcarResenaSocio(token, a))
+}
+
 function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLElement {
   const err = h('div')
   const baja = h('button', { type: 'button', class: 'btn sec' }, t.socio_baja_boton) as HTMLButtonElement

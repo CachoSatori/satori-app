@@ -11,6 +11,8 @@ const RE_REF = /^[A-HJ-NP-Z2-9]{8}$/
 const RE_LOCAL = /^[a-z0-9-]{2,40}$/   // LC-ML: id de local de club_config
 const RE_CUPON = /^[A-HJ-NP-Z2-9]{10}$/
 const RE_TOKEN = /^[0-9a-f]{64}$/
+/** 167: marcas de la tarjeta de reseña del socio (portal, «Mi Club») */
+const ACCIONES_RESENA = ['mostrada', 'cerrada', 'clic']
 const RE_BAJA = /^[0-9a-f]{32}$/   // 136: la llave de baja del turista (128 bits), no el código del cupón
 const RE_SUPABASE = /^https:\/\/[a-z0-9]{20}\.supabase\.co$/
 
@@ -21,7 +23,8 @@ const memoria = new Map() // SOLO para el servidor local (CLUB_DEV=1)
  *   · RL_CREAR: crear cupón, opt-in, baja del turista, alta y código de canje → 5 por 60 s por IP (cupón y alta, también
  *     por prefijo de red /24 o /64).
  *   · RL_LEER:  ver cupón y portal → 60 por 60 s por IP. 158: el sondeo de la página del cupón (`sondeo:`) y la marca
- *     de clic de la reseña (`resena:`) usan este binding con su propia clave (60 por 60 s por IP cada una).
+ *     de clic de la reseña (`resena:`) usan este binding con su propia clave (60 por 60 s por IP cada una). 167: las
+ *     marcas de la tarjeta de reseña del socio (`resena-socio:`), igual.
  * Si el binding no está, devuelve `null` y la API responde 503 (falla cerrada). El contador en memoria existe
  * solo en el servidor local (`CLUB_DEV=1`). `RATE_LIMITER` (un solo binding de antes) ya no se usa.
  * @param {'crear'|'leer'} tipo
@@ -357,6 +360,21 @@ export async function manejar(request, env, path) {
     const tok = String(partes[1]).toLowerCase()
     if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
     return walletActualizar(env, tok)
+  }
+
+  // 167: POST /api/portal/:token/resena {accion}  → marca de la tarjeta «¿Nos cuenta cómo le fue?» del socio:
+  // 'mostrada' | 'cerrada' | 'clic'. Sin datos personales (solo la hora en el pedido). La base solo marca el pedido que
+  // toca (cada N visitas, máx. 1 cada X días) y responde {ok:true} siempre. De mejor esfuerzo, como el clic del cupón
+  // (158): tope de lectura (60/60 s por IP) con clave propia, para no perder marcas con IP compartida.
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'resena') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'leer', `resena-socio:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    const b = await leerCuerpo(request)
+    const accion = b && typeof b.accion === 'string' ? b.accion : ''
+    if (!ACCIONES_RESENA.includes(accion)) return json(400, { error: 'datos_invalidos' })
+    return rpc(env, 'club_portal_resena', { p_token: tok, p_accion: accion })
   }
 
   // GET /api/portal/:token

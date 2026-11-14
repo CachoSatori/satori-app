@@ -2,6 +2,8 @@
  * 158 · «Link de reseña de Google» por local (pestaña Locales, solo owner). club-web lo muestra al turista después de usar
  * su cupón («Gracias por su visita» + «Escribir una reseña en Google», durante 7 días). Solo direcciones de Google; vacío =
  * sin link (el turista ve el aviso corto de siempre). Cada cambio queda en club_config_historial.
+ * 167 · El mismo link lo usa la tarjeta «¿Nos cuenta cómo le fue?» de los socios en «Mi Club» (cada N visitas, máx. una
+ * vez cada X días; N y X en club_config_global, hoy 5 y 90).
  */
 import { useEffect, useState } from 'react'
 import { C, inputStyle } from './estilos'
@@ -41,11 +43,13 @@ export default function ResenaLocales({ locales }: { locales: LocalClub[] }) {
   const campo = { ...inputStyle, padding: '0.55rem 0.7rem' }
   return (
     <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', display: 'grid', gap: 8 }}>
-      <strong style={{ fontSize: 13 }}>Reseña de Google después del cupón</strong>
+      <strong style={{ fontSize: 13 }}>Reseña de Google (cupón y socios)</strong>
       <p style={{ fontSize: 12, color: C.ink, margin: 0 }}>
         Cuando la caja usa el cupón de un turista, su página le muestra «Gracias por su visita» y el botón «Escribir una
-        reseña en Google» durante 7 días. Pegá el link de reseña de Google de cada local (maps.app.goo.gl, g.page,
-        google.com/maps o search.google.com/local/writereview). Vacío = no se pide reseña.
+        reseña en Google» durante 7 días. A los socios del Local Club, «Mi Club» les muestra «¿Nos cuenta cómo le fue?»
+        cada 5 visitas con beneficio (máximo una vez cada 90 días), con el link del local de su última visita. Pegá el
+        link de reseña de Google de cada local (maps.app.goo.gl, g.page, google.com/maps o
+        search.google.com/local/writereview). Vacío = no se pide reseña en ese local.
       </p>
       {error && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{error}</p>}
       {!error && locales.map(l => {

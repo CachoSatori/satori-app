@@ -96,6 +96,14 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
 10. **Nunca revertir (ni borrar) el `.sql` de una migración que ya está en el ledger de prod.** Si se revierte el
     código de un PR, el archivo de su migración se queda en `supabase/migrations/`; si no, Branching falla en cada
     push a `main` (pasó con la 074 entre el 05 y el 06/11).
+11. **Bitácora de permisos (165, B10) caída = no se cambian roles ni activaciones (fail closed, decisión del dueño
+    14/11).** Si hay que cortarle el acceso a alguien igual: (1) ban o cambio de clave en Supabase Auth (no pasa por
+    `profiles`); (2) si además hay que desactivarla, soporte, como dueño de la tabla y en UNA transacción:
+    `alter table public.profiles disable trigger trg_profiles_bitacora_permisos;` →
+    `update public.profiles set is_active = false where id = '<UUID>';` →
+    `alter table public.profiles enable trigger trg_profiles_bitacora_permisos;`; (3) anotarlo a mano con
+    `origen = 'manual'` y la hora real cuando la bitácora vuelva. SQL completo y pasos: guía 6.6, «Urgencia».
+    Vale solo después del merge del PR de la 165.
 
 ---
 
@@ -241,7 +249,7 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 153 | `proveedor_agregar_alias` | pase (origen **096**) | `claude/alias-proveedor-rpc` | **Sin aplicar** (13/11: PR en borrador a `main`, espera firma). RPC `proveedor_agregar_alias` (SECURITY INVOKER) para que dos cajas no se pisen los alias. La **152** la usa el #140 (aviso del Club). Rollback: `scripts/sql/153_rollback.sql` |
 | 155 | `club_tope_sin_carga_inicial` | pase (origen **102**) | `claude/club-tope-sin-carga-inicial` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK). `create or replace` de `club_excepciones`: ANFITRION_SOBRE_TOPE no cuenta `club_movimientos.origen = 'migracion'` (la carga inicial del 12/11), como el reporte del mes. Prueba en staging en transacción descartada: 9/9. Rollback: `scripts/sql/155_rollback.sql` |
-| 165 | `admin_bitacora_permisos` | pase (origen **111**) | `claude/admin-bitacora-permisos` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK; vía merge → Branching). B10: tabla `bitacora_permisos` solo inserción (nadie la edita ni la borra) + triggers sobre `profiles` (rol, activación) y `profile_locations` (local); lee solo owner. Arranca vacía. Pruebas: `scripts/sql/165_pruebas.sql` (20 casos + 11 mutaciones en una transacción descartada; local 14/11 verde; **staging pendiente con el dueño**). Rollback: `scripts/sql/165_rollback.sql` |
+| 165 | `admin_bitacora_permisos` | pase (origen **111**) | `claude/admin-bitacora-permisos` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK; vía merge → Branching). B10: tabla `bitacora_permisos` solo inserción (nadie la edita ni la borra) + triggers sobre `profiles` (rol, activación) y `profile_locations` (local); lee solo owner. Arranca vacía. Pruebas: `scripts/sql/165_pruebas.sql` (21 casos + 12 mutaciones en una transacción descartada; verde en base local nueva con `local_armar_base.sh` + `--local`, 14/11; **staging pendiente con el dueño**). Rollback: `scripts/sql/165_rollback.sql` |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |

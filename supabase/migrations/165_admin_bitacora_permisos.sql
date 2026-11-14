@@ -28,6 +28,10 @@
 --   · la inserción no depende de datos (sin lecturas, sin FK, los CHECK se cumplen por construcción): solo puede
 --     fallar si la tabla no existe o la base no puede escribir, y ahí el cambio tampoco debería pasar;
 --   · lo que SÍ puede fallar por datos (leer el JWT) va en un bloque protegido: si falla, se registra como sistema.
+--   Salida de urgencia (guía 6.6 «Urgencia: la bitácora no guarda» y ESTADO): 1) bloquear la cuenta en Supabase Auth
+--   (ban o cambio de clave; no pasa por profiles); 2) si además hay que desactivarla, soporte, como dueño de la
+--   tabla y en UNA transacción: disable trigger → update → enable trigger; 3) anotarlo a mano con origen 'manual'
+--   cuando la bitácora vuelva a guardar (el dueño de la tabla puede insertar; nadie más).
 --
 -- Sesiones con `session_replication_role = replica` (solo superusuario, scripts de prueba) no disparan triggers:
 -- esos cambios no quedan. Es un canal de administración, no de la app.
@@ -45,7 +49,8 @@ create table if not exists public.bitacora_permisos (
   antes        text,                                 -- NULL = no tenía (p. ej. local recién asignado)
   despues      text,                                 -- NULL = se le quitó
   cambiado_por uuid,                                 -- auth.uid(); NULL = sistema (sin sesión o service_role)
-  origen       text        not null check (origen in ('sesion', 'service_role', 'sistema')),
+  -- 'manual' = anotado a mano por soporte (dueño de la tabla) tras la salida de urgencia de la guía 6.6
+  origen       text        not null check (origen in ('sesion', 'service_role', 'sistema', 'manual')),
   cambiado_en  timestamptz not null default now()
 );
 comment on table public.bitacora_permisos is

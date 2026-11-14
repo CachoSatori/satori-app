@@ -6,6 +6,7 @@ describe('bitácora de permisos: textos', () => {
   it('fecha y hora de Costa Rica, también de noche (05:30 UTC = 23:30 CR del día anterior)', () => {
     expect(fechaHoraCR('2026-11-15T05:30:00Z')).toBe('14-nov-2026 23:30')
     expect(fechaHoraCR('2026-11-14T15:05:00+00:00')).toBe('14-nov-2026 09:05')
+    expect(fechaHoraCR('2026-11-15T06:05:00Z')).toBe('15-nov-2026 00:05')   // medianoche: 00, no 24
     expect(fechaHoraCR('no-es-fecha')).toBe('—')
   })
 
@@ -22,6 +23,7 @@ describe('bitácora de permisos: textos', () => {
     expect(quienCambio({ cambiado_por: null, origen: 'sistema' }, nombres)).toBe('Sistema')
     expect(quienCambio({ cambiado_por: null, origen: 'service_role' }, nombres)).toBe('Sistema (servicio)')
     expect(quienCambio({ cambiado_por: 'zz', origen: 'sesion' }, nombres)).toBe('usuario borrado')
+    expect(quienCambio({ cambiado_por: null, origen: 'manual' }, nombres)).toBe('Soporte (anotado a mano)')
   })
 
   it('más reciente primero; empate de hora, el id más alto primero', () => {

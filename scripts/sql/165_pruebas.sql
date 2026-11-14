@@ -2,7 +2,8 @@
 -- Aplica la 165 dentro de una transacción, corre la batería y TODAS las mutaciones, y termina en ROLLBACK: no deja nada.
 --
 -- MARCADOR que llena el runner (165_pruebas.py): la línea «-- @@165@@ …» → el cuerpo de
--- supabase/migrations/165_admin_bitacora_permisos.sql sin begin; / commit;.
+-- supabase/migrations/165_admin_bitacora_permisos.sql sin begin; / commit; (con --local, precedido de
+-- scripts/sql/165_preludio_local.sql: policies de profiles como prod y permisos de Supabase).
 --
 -- La batería crea sus propios usuarios (UUID fijos, correos .test ficticios) en auth.users: el alta dispara
 -- handle_new_user (perfil salonero inactivo) como en la base real. Los JWT se simulan con request.jwt.claims y
@@ -245,6 +246,30 @@ begin
     if sqlerrm <> 'FIN17' then v_ok := false; v_t := sqlerrm; end if;
   end;
   perform pg_temp.caso(ro, '17 bitácora que no puede insertar: el cambio de rol falla; nombre sigue andando', v_ok, v_t);
+
+  -- 18. salida de urgencia (guía 6.6): con la bitácora rota, soporte (dueño de la tabla, sin JWT) desactiva en UNA
+  --     transacción apagando y prendiendo el trigger; cuando la bitácora vuelve, lo anota a mano con origen 'manual'.
+  begin
+    alter table public.bitacora_permisos add constraint _165_rota check (false) not valid;
+    v_t := pg_temp.como(null, null, format('update public.profiles set is_active = false where id = %L', C));
+    v_ok := v_t like '23514:%';   -- sin la salida, ni el editor SQL puede
+    v_t := pg_temp.como(null, null, format(
+      'alter table public.profiles disable trigger trg_profiles_bitacora_permisos; '
+      'update public.profiles set is_active = false where id = %L; '
+      'alter table public.profiles enable trigger trg_profiles_bitacora_permisos', C));
+    v_ok := v_ok and v_t = 'ok' and not (select is_active from public.profiles where id = C)
+      and (select tgenabled = 'O' from pg_trigger where tgname = 'trg_profiles_bitacora_permisos');
+    alter table public.bitacora_permisos drop constraint _165_rota;
+    v_t := pg_temp.como(null, null, format(
+      'insert into public.bitacora_permisos (profile_id, campo, antes, despues, cambiado_por, origen, cambiado_en) '
+      'values (%L, ''activo'', ''true'', ''false'', null, ''manual'', %L)', C, '2026-11-14 23:30:00-06'));
+    v_ok := v_ok and v_t = 'ok' and exists (select 1 from public.bitacora_permisos where profile_id = C and origen = 'manual'
+                                              and cambiado_en = '2026-11-15 05:30:00+00');
+    raise exception 'FIN18';
+  exception when others then
+    if sqlerrm <> 'FIN18' then v_ok := false; v_t := sqlerrm; end if;
+  end;
+  perform pg_temp.caso(ro, '18 urgencia: con la bitácora rota, desactivar apagando y prendiendo el trigger; anotar a mano', v_ok, v_t);
 end $t$;
 
 -- Una ronda en una subtransacción descartada; los resultados salen por el DETAIL del error que la descarta.
@@ -288,7 +313,10 @@ end;', 'return null;
 exception when others then return null;
 end;')$q$, '{17}'),
   (11, 'carga_inicial',       $q$insert into public.bitacora_permisos (profile_id, campo, antes, despues, origen)
-                                 values (gen_random_uuid(), 'rol', null, 'owner', 'sistema')$q$, '{01}');
+                                 values (gen_random_uuid(), 'rol', null, 'owner', 'sistema')$q$, '{01}'),
+  (12, 'sin_origen_manual',   $q$alter table public.bitacora_permisos drop constraint bitacora_permisos_origen_check;
+                                 alter table public.bitacora_permisos add constraint bitacora_permisos_origen_check
+                                   check (origen in ('sesion', 'service_role', 'sistema'))$q$, '{18}');
 
 select pg_temp.correr('base', null);
 select pg_temp.correr(m.nombre, m.sql) from _m165 m order by m.orden;

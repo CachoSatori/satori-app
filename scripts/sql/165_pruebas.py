@@ -7,7 +7,15 @@ muerde.
 
   python3 scripts/sql/165_pruebas.py            # STAGING (Management API). Nunca prod: el ref está fijo.
   python3 scripts/sql/165_pruebas.py --local    # Postgres local (psql; PGHOST/PGPORT/PGUSER/PGDATABASE del entorno)
-  python3 scripts/sql/165_pruebas.py --armar    # solo imprime el SQL armado (no conecta a nada); sirve para el MCP
+  python3 scripts/sql/165_pruebas.py --armar [--local]   # solo imprime el SQL armado (no conecta); sirve para el MCP
+
+Base local NUEVA, de cero (Postgres 16; nada de staging ni prod):
+  PGHOST=/tmp PGPORT=5499 PGUSER=pgv bash scripts/sql/local_armar_base.sh b165
+  PGHOST=/tmp PGPORT=5499 PGUSER=pgv PGDATABASE=b165 python3 scripts/sql/165_pruebas.py --local
+Con --local, antes de la 165 (dentro de la misma transacción descartada) corre scripts/sql/165_preludio_local.sql:
+policies de `profiles` como prod y permisos por defecto de Supabase. En staging no hace falta (ya es Supabase).
+
+Si la ronda base falla, NO se evalúan las mutaciones (una mutación sobre una base en rojo no prueba nada): sale 1.
 
 Token de la Management API: el proxy (o SUPABASE_ACCESS_TOKEN).
 """
@@ -18,7 +26,7 @@ from pathlib import Path
 REF = 'hwiatgicyyqyezqwldia'   # SOLO staging
 RAIZ = Path(__file__).resolve().parents[2]
 MIG = RAIZ / 'supabase/migrations/165_admin_bitacora_permisos.sql'
-MIN_CASOS = 19
+MIN_CASOS = 21
 
 
 def cuerpo() -> str:
@@ -26,9 +34,10 @@ def cuerpo() -> str:
     return '\n'.join(l for l in mig.splitlines() if l.strip().lower() not in ('begin;', 'commit;'))
 
 
-def armar() -> str:
+def armar(local: bool = False) -> str:
     sql = (RAIZ / 'scripts/sql/165_pruebas.sql').read_text(encoding='utf-8')
-    sql, n = re.subn(r'(?m)^-- @@165@@.*$', lambda _: cuerpo(), sql)
+    previo = (RAIZ / 'scripts/sql/165_preludio_local.sql').read_text(encoding='utf-8') + '\n' if local else ''
+    sql, n = re.subn(r'(?m)^-- @@165@@.*$', lambda _: previo + cuerpo(), sql)
     if n != 1:
         sys.exit('165_pruebas.sql: falta el marcador «-- @@165@@» (o está repetido)')
     return sql
@@ -67,13 +76,17 @@ def correr_local(sql: str) -> dict:
 
 def main() -> None:
     args = sys.argv[1:]
+    local = '--local' in args
     if '--armar' in args:
-        print(armar())
+        print(armar(local))
         return
-    r = correr_local(armar()) if '--local' in args else correr_staging(armar())
+    r = correr_local(armar(True)) if local else correr_staging(armar())
     print(f"base: {r['base_casos']} casos · fallan {len(r['base_fallan'])}")
     for c in r['base_fallan']:
         print(f"  FALLA {c['caso']} · {c.get('detalle')}")
+    if r['base_fallan'] or r['base_casos'] < MIN_CASOS:
+        print(f"ABORTA: la ronda base está en rojo (o tiene menos de {MIN_CASOS} casos): mutaciones NO evaluadas")
+        sys.exit(1)
     malas = [m for m in r['mutaciones'] if not m['muerde']]
     for m in r['mutaciones']:
         print(f"{'muerde' if m['muerde'] else 'NO MUERDE'} {m['m']}: caen {m['caen']} (esperadas {m['esperan']})")

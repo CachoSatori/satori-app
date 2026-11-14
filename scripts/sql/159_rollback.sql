@@ -4,7 +4,7 @@
 -- inmutable por trigger) y no molesta.
 -- Datos: los cumpleaños se BORRAN (se quitan las columnas: sin la guardia no hay que guardarlos). La columna
 -- mayor_edad_en se CONSERVA (es la constancia del consentimiento de quienes se anotaron con la 159); nadie la lee.
--- Borra la fila 159 del ledger. El .sql de la 159 se QUEDA en main (regla 10 / satori-migraciones-y-prod §6): lo que se borra es su fila del ledger.
+-- Borra la fila 159 del ledger. Si se corre en prod, en el mismo momento sale el .sql de la 159 de main (si queda, Branching la vuelve a aplicar; regla 10 / satori-migraciones-y-prod §6).
 -- Con actividad real (socios que ya dieron su cumpleaños) pensarlo dos veces: ver satori-migraciones-y-prod §6.
 
 -- 8. alta en caja: vuelve el EXECUTE a la de 5 argumentos y se va la v2

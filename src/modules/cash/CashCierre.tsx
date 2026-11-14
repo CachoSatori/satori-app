@@ -29,6 +29,7 @@ import {
   hayMontosNegativos, mensajeDiasPendientes, ventaSospechosaDeSerNeta,
 } from './cierrePozo'
 import { shiftLabel } from '../../shared/utils'
+import { errorTipoCambio } from './tipoCambio'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -284,6 +285,8 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   const handleConfirmParcial = async () => {
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     if (ventasMVacias) { setError('Ingresá las ventas de mediodía'); return }
+    // El TC se sella con la Fase 1 (la Fase 2 usa el sellado): acá se valida una sola vez, sin redondear.
+    { const errTc = errorTipoCambio(tc); if (errTc) { setError(errTc); return } }
     // Post-corte únicamente: pre-corte el cierre queda EXACTAMENTE como estaba.
     if (postCorte && hayMontosNegativos([vmCRC, vmUSD])) {
       setError('Las ventas no pueden ser negativas — corregí el monto'); return
@@ -542,12 +545,13 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           <div style={{ fontSize:'0.95rem', fontWeight:700, letterSpacing:'0.03em' }}>Cierre del día</div>
           <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', marginTop:4, display:'flex', alignItems:'center', gap:'0.4rem' }}>
             <span>TC ₡/$</span>
-            <input type="number" min={300} max={900} step={5} value={tc}
+            {/* TC con decimales (decisión del dueño, 14-nov): step="any" como los montos del #175. */}
+            <input type="number" min={300} max={900} step="any" inputMode="decimal" value={tc}
               disabled={!!parcial}
               onChange={e => setTc(Number(e.target.value) || tc)}
               title={parcial ? 'Sellado en Fase 1' : 'Tipo de cambio del día'}
               className="cierre-input"
-              style={{ width:64, color:'var(--c-oro-texto)', padding:'2px 6px', fontSize:'0.74rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', opacity: parcial ? 0.6 : 1 }} />
+              style={{ width:80, color:'var(--c-oro-texto)', padding:'2px 6px', fontSize:'0.74rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', opacity: parcial ? 0.6 : 1 }} />
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>

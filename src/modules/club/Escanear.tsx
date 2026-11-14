@@ -14,12 +14,13 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
-  describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, type QueAplicar,
+  describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, getEdadSocio, type EdadSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente,
 } from '../../shared/api/club'
 import { parsearQR, urlPortal } from './qrFormato'
 import { linkAltaWhatsApp, puedeMandarLinkPortal } from './altaWhatsApp'
+import { pideEdadAlValidar } from './edadSocio'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -592,20 +593,31 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
 /**
  * LC-A1/A2: QR fijo del socio del Local Club. Solo identifica (10 % y cortesía); NUNCA da créditos.
  * Pendiente (autoalta) → «Validar socio» con «verifiqué residencia» → activo provisional (LC-DES-01).
+ * D6 A (163): si no tiene la edad registrada (autoaltas de antes de la 159), también «Es mayor de 18 años».
  * «Qué aplicar» (10 % + cortesía, visita por factura con el 856) llega en la etapa A4.
  */
 function PanelSocio({ d, onCerrar, onValidado }: {
   d: ResolverSocio['datos']; onCerrar: () => void; onValidado: (texto: string) => Promise<void>
 }) {
   const [verifico, setVerifico] = useState(false)
+  const [mayor, setMayor] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const baja = d.persona_estado !== 'activo' || d.estado === 'baja'
   const pendiente = !baja && d.estado === 'pendiente'
+  // D6 A (163): rol de socio para saber si hay que preguntar la edad. undefined = no se pudo leer (se pregunta igual)
+  const [edad, setEdad] = useState<EdadSocio | null | undefined | 'cargando'>('cargando')
+  useEffect(() => {
+    if (!pendiente) return
+    let vivo = true
+    getEdadSocio(d.id).then(r => { if (vivo) setEdad(r) }).catch(() => { if (vivo) setEdad(undefined) })
+    return () => { vivo = false }
+  }, [d.id, pendiente])
+  const pideEdad = edad !== 'cargando' && pideEdadAlValidar(edad)
   async function validar() {
     setEnviando(true); setErr(null)
     try {
-      const r = await socioValidar(d.id, verifico)
+      const r = await socioValidar(d.id, verifico, pideEdad ? mayor : null)
       await onValidado(`${d.nombre} quedó activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}: ya tiene el beneficio; un manager confirma el alta.`)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }
@@ -630,8 +642,14 @@ function PanelSocio({ d, onCerrar, onValidado }: {
             <input type="checkbox" checked={verifico} onChange={e => setVerifico(e.target.checked)} />
             <span>Verifiqué que es local (no anotes ningún número de documento)</span>
           </label>
+          {pideEdad && (
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+              <input type="checkbox" checked={mayor} onChange={e => setMayor(e.target.checked)} />
+              <span>Es mayor de 18 años (preguntale; el Local Club es solo para mayores)</span>
+            </label>
+          )}
           {err && <Aviso tono="error">{err}</Aviso>}
-          <Btn onClick={validar} disabled={!verifico || enviando}>{enviando ? 'Validando…' : 'Validar socio'}</Btn>
+          <Btn onClick={validar} disabled={!verifico || edad === 'cargando' || (pideEdad && !mayor) || enviando}>{enviando ? 'Validando…' : 'Validar socio'}</Btn>
         </div>
       )}
       {!baja && !pendiente && (

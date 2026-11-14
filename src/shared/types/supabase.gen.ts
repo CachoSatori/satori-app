@@ -5724,6 +5724,19 @@ export type Database = {
         }
         Returns: string
       }
+      club_miembro_guardar_v2: {
+        Args: {
+          p_contacto: Json
+          p_estado: string
+          p_id: string
+          p_location?: string
+          p_mayor_edad: boolean
+          p_negocio_id: string
+          p_nombre: string
+          p_tipo: string
+        }
+        Returns: string
+      }
       club_miembro_por_telefono: { Args: { p_tel: string }; Returns: string }
       club_miembro_regenerar_codigo: {
         Args: { p_id: string }
@@ -6035,6 +6048,15 @@ export type Database = {
       club_socio_validar: {
         Args: {
           p_location?: string
+          p_miembro: string
+          p_verifico_residencia: boolean
+        }
+        Returns: Json
+      }
+      club_socio_validar_v2: {
+        Args: {
+          p_location?: string
+          p_mayor_edad: boolean
           p_miembro: string
           p_verifico_residencia: boolean
         }

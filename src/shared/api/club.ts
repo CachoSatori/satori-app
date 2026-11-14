@@ -234,12 +234,15 @@ export const buscar = (q: string) => llamar<BusquedaFila[]>('club_buscar', { p_q
 export const guardarNegocio = (p: { id: string | null; nombre: string; tipo: TipoNegocio; activo: boolean }) =>
   llamar<string>('club_negocio_guardar', { p_id: p.id, p_nombre: p.nombre, p_tipo: p.tipo, p_activo: p.activo, p_location: localClub })
 
+/** D6 A (163): `mayor_edad` solo cuenta al REACTIVAR a alguien cuyo rol de socio vuelve a activo sin la edad registrada
+ *  (club_miembro_guardar_v2 la pide y la registra); en cualquier otro caso la base lo ignora. */
 export const guardarMiembro = (p: {
   id: string | null; tipo: TipoMiembro; nombre: string; negocio_id: string | null; estado: 'activo' | 'baja'
   contacto: { telefono: string; email: string; optin_whatsapp: boolean; optin_email: boolean } | null
-}) => llamar<string>('club_miembro_guardar', {
+  mayor_edad?: boolean | null
+}) => llamar<string>('club_miembro_guardar_v2', {
   p_id: p.id, p_tipo: p.tipo, p_nombre: p.nombre, p_negocio_id: p.negocio_id, p_estado: p.estado, p_contacto: p.contacto,
-  p_location: localClub,
+  p_mayor_edad: p.mayor_edad ?? null, p_location: localClub,
 })
 
 export const regenerarCodigo = async (id: string) =>
@@ -434,9 +437,21 @@ export interface AltaSocio { miembro_id: string; estado: 'activo'; provisional_h
  *  D6 A (159): la caja confirma «es mayor de 18»; sin eso la base rechaza el alta (club_socio_alta_caja_v2). */
 export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean, mayorEdad: boolean) =>
   llamar<AltaSocio>('club_socio_alta_caja_v2', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad, p_location: localClub })
-/** Validar en caja una autoalta pendiente: pasa a activo provisional. */
-export const socioValidar = (miembro: string, verificoResidencia: boolean) =>
-  llamar<AltaSocio>('club_socio_validar', { p_miembro: miembro, p_verifico_residencia: verificoResidencia, p_location: localClub })
+/** Validar en caja una autoalta pendiente: pasa a activo provisional.
+ *  D6 A (163): si la persona no tiene la edad registrada (autoaltas de antes de la 159), la caja confirma «es mayor de
+ *  18» en esta misma llamada; sin eso la base rechaza (club_socio_validar_v2). `null` = no hizo falta preguntar. */
+export const socioValidar = (miembro: string, verificoResidencia: boolean, mayorEdad: boolean | null) =>
+  llamar<AltaSocio>('club_socio_validar_v2', { p_miembro: miembro, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad, p_location: localClub })
+
+/** D6 A (163): lo que hace falta del rol de socio para saber si hay que preguntar la edad. */
+export interface EdadSocio {
+  estado: 'pendiente' | 'activo' | 'baja'; baja_por: 'socio' | 'gerencia' | null; alta_por: string
+  validado_en: string | null; mayor_edad_en: string | null
+}
+/** Rol de socio de una persona (null si no es socio). Lectura directa: la RLS deja leer los roles a owner, manager y cajero. */
+export const getEdadSocio = async (miembro: string): Promise<EdadSocio | null> =>
+  (await leer(from<EdadSocio>('club_miembro_roles').select('estado,baja_por,alta_por,validado_en,mayor_edad_en')
+    .eq('miembro_id', miembro).eq('rol', 'socio').limit(1)))[0] ?? null
 /** Confirmar un alta provisional (owner o manager distinto de quien la cargó). */
 export const socioConfirmar = (miembro: string, nota: string) =>
   llamar<boolean>('club_socio_confirmar', { p_miembro: miembro, p_nota: nota })

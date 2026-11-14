@@ -9,10 +9,12 @@ import {
   getMiembros, getSaldos, getNegocios, getMovimientos, getContacto, guardarMiembro, guardarNegocio,
   regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp, getRoles, activarAnfitrion,
   getSociosPorConfirmar, socioConfirmar, paseToken, getSolicitudesSocio, type SocioPorConfirmar, type SolicitudSocio,
+  getEdadSocio, type EdadSocio,
   getPendientesAprobacion, resolverPendiente, type PendienteAprobacion, getLocalesClub,
   type ClubRol,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
+import { pideEdadAlReactivar } from './edadSocio'
 import { urlPortal, urlReferente } from './qrFormato'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha, fmtFechaHora, TIPO_MIEMBRO_LABEL, TIPO_NEGOCIO_LABEL, TIPO_MOV_LABEL } from './estilos'
@@ -392,7 +394,7 @@ function ActivarAnfitrion({ f, onHecho }: { f: Fila; onHecho: (texto: string) =>
 
 // ── Formulario ───────────────────────────────────────────────────────────────
 
-function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegocioCreado, onCancelar, onGuardado }: {
+export function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegocioCreado, onCancelar, onGuardado }: {
   inicial: ClubMiembro | null; tipoPorDefecto: TipoMiembro; negocios: ClubNegocio[]; saldoPersonas: number
   onNegocioCreado: (n: ClubNegocio) => void; onCancelar: () => void; onGuardado: (id: string) => Promise<void>
 }) {
@@ -407,6 +409,18 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
   const [nuevoNeg, setNuevoNeg] = useState<{ nombre: string; tipo: TipoNegocio } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
+  // D6 A (163): al reactivar a alguien con rol de socio sin la edad registrada, «Es mayor de 18 años».
+  // 'cargando' hasta leer el rol · null = no es socio · undefined = no se pudo leer (se pregunta igual)
+  const [edad, setEdad] = useState<EdadSocio | null | undefined | 'cargando'>(inicial?.estado === 'baja' ? 'cargando' : null)
+  const [mayor, setMayor] = useState(false)
+  const pideEdad = edad !== 'cargando' && pideEdadAlReactivar(edad, inicial?.estado, estado)
+
+  useEffect(() => {
+    if (!inicial || inicial.estado !== 'baja') return
+    let vivo = true
+    getEdadSocio(inicial.id).then(r => { if (vivo) setEdad(r) }).catch(() => { if (vivo) setEdad(undefined) })
+    return () => { vivo = false }
+  }, [inicial])
 
   useEffect(() => {
     if (!inicial) return
@@ -442,6 +456,7 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
       const id = await guardarMiembro({
         id: inicial?.id ?? null, tipo, nombre, negocio_id: negocioId || null, estado,
         contacto: contactoCargado ? { telefono: tel, email, optin_whatsapp: optWa, optin_email: optEm } : null,
+        mayor_edad: pideEdad ? mayor : null,
       })
       await onGuardado(id)
     } catch (e) { setError(aClubError(e).message); setGuardando(false) }
@@ -490,6 +505,12 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
           <option value="baja">Dado de baja</option>
         </select>
       </label>
+      {pideEdad && (
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+          <input type="checkbox" checked={mayor} onChange={e => setMayor(e.target.checked)} />
+          <span>Es mayor de 18 años (vuelve a ser socio del Local Club, que es solo para mayores: preguntale)</span>
+        </label>
+      )}
       <div style={{ borderTop: `1px solid ${C.panel}`, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ fontSize: '0.78rem', color: C.muted }}>Contacto (solo lo ven owner y manager)</div>
         {errContacto && (
@@ -508,7 +529,7 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <Btn variant="secondary" onClick={onCancelar} disabled={guardando} style={{ flex: 1 }}>Cancelar</Btn>
-        <Btn onClick={guardar} disabled={guardando || !nombre.trim()} style={{ flex: 2 }}>{guardando ? 'Guardando…' : 'Guardar'}</Btn>
+        <Btn onClick={guardar} disabled={guardando || !nombre.trim() || (inicial?.estado === 'baja' && estado === 'activo' && edad === 'cargando') || (pideEdad && !mayor)} style={{ flex: 2 }}>{guardando ? 'Guardando…' : 'Guardar'}</Btn>
       </div>
     </Card>
   )

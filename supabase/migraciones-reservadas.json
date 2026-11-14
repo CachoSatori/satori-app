@@ -117,6 +117,12 @@
       "rama": "claude/club-tope-sin-carga-inicial",
       "renumerada_a": "155"
     },
+    "109": {
+      "nombre": "club_edad_validar_reactivar",
+      "bloque": "club",
+      "rama": "claude/club-edad-validar",
+      "renumerada_a": "163"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -146,6 +152,12 @@
       "bloque": "pase",
       "rama": "claude/club-aviso-v1.2",
       "origen": "101"
+    },
+    "163": {
+      "nombre": "club_edad_validar_reactivar",
+      "bloque": "pase",
+      "rama": "claude/club-edad-validar",
+      "origen": "109"
     }
   }
 }

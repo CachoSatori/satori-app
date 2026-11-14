@@ -105,6 +105,12 @@
       "rama": "claude/club-100-catalogo",
       "renumerada_a": "151"
     },
+    "102": {
+      "nombre": "club_tope_sin_carga_inicial",
+      "bloque": "club",
+      "rama": "claude/club-tope-sin-carga-inicial",
+      "renumerada_a": "155"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -122,6 +128,12 @@
       "bloque": "pase",
       "rama": "claude/alias-proveedor-rpc",
       "origen": "096"
+    },
+    "155": {
+      "nombre": "club_tope_sin_carga_inicial",
+      "bloque": "pase",
+      "rama": "claude/club-tope-sin-carga-inicial",
+      "origen": "102"
     }
   }
 }

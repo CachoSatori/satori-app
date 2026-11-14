@@ -120,7 +120,7 @@ const ES = {
   // mig 168: primeros 90 días (el alta cuenta como la 1.ª visita)
   avance_titulo: 'Sus primeras visitas',
   avance_visita: (n: number, de: number) => `Visita ${n} de ${de}`,
-  avance_txt: (de: number, f: string) => `Si nos visita ${de} veces antes del ${f}, le regalamos una cortesía especial.`,
+  avance_txt: (de: number, f: string) => `Si nos visita ${de} veces a más tardar el ${f}, le regalamos una cortesía especial.`,
   avance_ganada: 'Ganó una cortesía especial de bienvenida.',
   avance_ganada_txt: (f: string) => `Muestre su QR de socio en caja en su próxima visita (vale hasta el ${f}).`,
   socio_baja_boton: 'Darme de baja del Local Club',
@@ -250,7 +250,7 @@ const EN: Textos = {
   socio_premio: (f: string) => `1 reward treat for inviting a member (expires ${f})`,
   avance_titulo: 'Your first visits',
   avance_visita: (n: number, de: number) => `Visit ${n} of ${de}`,
-  avance_txt: (de: number, f: string) => `Visit us ${de} times before ${f} and we will give you a special treat.`,
+  avance_txt: (de: number, f: string) => `Visit us ${de} times by ${f} and we will give you a special treat.`,
   avance_ganada: 'You earned a special welcome treat.',
   avance_ganada_txt: (f: string) => `Show your member QR at the register on your next visit (valid until ${f}).`,
   socio_baja_boton: 'Leave the Local Club',

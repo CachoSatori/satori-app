@@ -10,7 +10,7 @@ test('168: «Visita 2 de 4» con la fecha límite, en ES y EN', () => {
   expect(a).not.toBeNull()
   const es = textosAvance(a!, TEXTOS.es, dia)
   expect(es.principal).toBe('Visita 2 de 4')
-  expect(es.detalle).toBe('Si nos visita 4 veces antes del 11/02/2027, le regalamos una cortesía especial.')
+  expect(es.detalle).toBe('Si nos visita 4 veces a más tardar el 11/02/2027, le regalamos una cortesía especial.')
   expect(textosAvance(a!, TEXTOS.en, dia).principal).toBe('Visit 2 of 4')
 })
 

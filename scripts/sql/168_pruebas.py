@@ -61,6 +61,16 @@ MUTACIONES: dict[str, tuple] = {
                           "  if v_tok !~ '^[0-9a-f]{64}$' then\n    raise exception 'Enlace no válido' using errcode = 'P0001';\n  end if;\n  select m.id into v_id", {'12'}),
     # el owner puede elegir una cortesía inactiva
     'config_inactiva': ("    if not v_k.activa then raise exception", "    if false then raise exception", {'13'}),
+    # el día del alta en UTC (no en hora de Costa Rica)
+    'alta_utc': ("  select (r.desde at time zone 'America/Costa_Rica')::date\n", "  select (r.desde at time zone 'UTC')::date\n", {'16'}),
+    # opción B al revés: con exige_factura = true cuenta cualquier visita
+    'exige_invertida': ("          or not coalesce((select g.primeros90_exige_factura", "          or coalesce((select g.primeros90_exige_factura", {'17'}),
+    # vence a la hora en que se ganó (no al final del día CR mostrado)
+    'vence_hora': ("    values (v_v.miembro_id, v_v.id, ((v_v.fecha + v_g.primeros90_vence_dias + 1)::timestamp at time zone 'America/Costa_Rica'))",
+                   "    values (v_v.miembro_id, v_v.id, now() + make_interval(days => v_g.primeros90_vence_dias))", {'18'}),
+    # la cortesía de otro local sirve
+    'sin_local': ("   where k.id = v_cfg.primeros90_cortesia_id and k.location_id = v_v.location_id and k.activa;\n",
+                  "   where k.id = v_cfg.primeros90_cortesia_id and k.activa;\n", {'19'}),
     # la interna queda abierta
     'interna_abierta': ("revoke all on function public.club_primeros90_avance(uuid)               from public, anon, authenticated;\n",
                         "grant execute on function public.club_primeros90_avance(uuid) to anon, authenticated;\n", {'0'}),

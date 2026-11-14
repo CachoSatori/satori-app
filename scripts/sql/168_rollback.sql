@@ -60,7 +60,7 @@ grant execute on function public.club_pase_datos(uuid) to service_role;
 
 drop function if exists public.club_primeros90_en_visita(uuid, jsonb);
 drop function if exists public.club_primeros90_avance(uuid);
-drop function if exists public.club_primeros90_visitas(uuid, date, int);
+drop function if exists public.club_primeros90_visitas(uuid, date, int, date);
 drop function if exists public.club_primeros90_alta(uuid);
 drop table if exists public.club_primeros90;
 
@@ -69,6 +69,7 @@ alter table public.club_config_global drop column if exists primeros90_activo;
 alter table public.club_config_global drop column if exists primeros90_visitas;
 alter table public.club_config_global drop column if exists primeros90_dias;
 alter table public.club_config_global drop column if exists primeros90_vence_dias;
+alter table public.club_config_global drop column if exists primeros90_exige_factura;
 alter table public.club_config drop column if exists primeros90_cortesia_id;
 alter table public.club_miembros drop column if exists sin_avance;
 

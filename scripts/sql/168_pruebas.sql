@@ -52,11 +52,34 @@ begin
   update public.club_miembro_roles set desde = now() - make_interval(days => p_alta_dias)
    where miembro_id = pg_temp.sid(p) and rol = 'socio';
 end $f$;
--- una visita registrada hace N días (directo en la tabla, como si la hubiera hecho la caja ese día)
-create function pg_temp.visita(p text, p_dias int, p_loc text default 'prueba168a') returns void language sql as $f$
-  insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrada_en, client_op_id, estado_beneficio, aplicar)
-  values (p_loc, pg_temp.sid(p), ((now() - make_interval(days => p_dias)) at time zone 'America/Costa_Rica')::date,
-          now() - make_interval(days => p_dias), gen_random_uuid(), 'aplica', '{}'::jsonb) $f$;
+-- una visita registrada un día CR (directo en la tabla, como si la hubiera hecho la caja ese día a las 20:00 CR).
+-- p_fact: con su factura cerrada (C) en el PoS · p_856: la factura lleva el 856 (LOCAL CLUB). Opción B: sin las dos, un
+-- día anterior no cuenta para el avance.
+create function pg_temp.hoy() returns date language sql stable as $f$ select (now() at time zone 'America/Costa_Rica')::date $f$;
+create function pg_temp.visita_dia(p text, p_fecha date, p_loc text default 'prueba168a', p_fact boolean default true,
+                                   p_856 boolean default true) returns void language plpgsql as $f$
+declare v_nf text; v_t uuid; v_ts timestamptz := (p_fecha + time '20:00') at time zone 'America/Costa_Rica';
+begin
+  insert into _f168 default values;
+  v_nf := '168' || lpad(currval('_f168_n_seq')::text, 6, '0');
+  if p_fact then
+    insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+    values (p_loc, v_nf, v_ts, 'C', 'salon', 'cajero', true, 'ok', 10000) returning id into v_t;
+    if p_856 then
+      insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values (v_t, '856', 'LOCAL CLUB', 1, 0);
+    end if;
+  end if;
+  insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrada_en, client_op_id, pos_ref, estado_beneficio, aplicar)
+  values (p_loc, pg_temp.sid(p), p_fecha, v_ts, gen_random_uuid(),
+          jsonb_build_object('modo', 'factura', 'local', p_loc, 'numero_factura', v_nf), 'aplica', '{}'::jsonb);
+end $f$;
+create function pg_temp.visita(p text, p_dias int, p_loc text default 'prueba168a', p_fact boolean default true,
+                               p_856 boolean default true) returns void language sql as $f$
+  select pg_temp.visita_dia(p, pg_temp.hoy() - p_dias, p_loc, p_fact, p_856) $f$;
+-- alta a una HORA CR fija de un día CR (para los bordes de hora: 19:00 CR = 01:00 UTC del día siguiente)
+create function pg_temp.alta_a(p text, p_fecha date, p_hora time) returns void language sql as $f$
+  update public.club_miembro_roles set desde = (p_fecha + p_hora) at time zone 'America/Costa_Rica'
+   where miembro_id = pg_temp.sid(p) and rol = 'socio' $f$;
 -- la caja (owner) escanea al socio HOY con una factura nueva del local; devuelve «qué aplicar»
 create function pg_temp.escanear(p text, p_loc text default 'prueba168a', p_op uuid default null) returns jsonb language plpgsql as $f$
 declare v_nf text; r jsonb;
@@ -129,9 +152,10 @@ select pg_temp.visita('a', 6); select pg_temp.visita('a', 3);
 create temp table _v168 (k text primary key, r jsonb) on commit drop;
 insert into _v168 values ('a1', pg_temp.escanear('a'));
 insert into _r168 (caso, ok, detalle)
-select '1 apagado por defecto: la 4.ª visita no gana ni ofrece · sin avance en pase ni portal',
+select '1 apagado por defecto: la 4.ª visita no gana ni ofrece · sin avance en portal · pase idéntico al de antes',
        pg_temp.especial(r) = 0 and (pg_temp.fila('a')).id is null and public.club_primeros90_avance(pg_temp.sid('a')) is null
-       and (public.club_pase_datos(pg_temp.sid('a'))->'socio'->'avance') = 'null'::jsonb
+       and not (public.club_pase_datos(pg_temp.sid('a'))->'socio' ? 'avance')
+       and public.club_pase_datos(pg_temp.sid('a')) = public.club_pase_datos_base(pg_temp.sid('a'))
        and (public.club_portal_avance((select token_portal from public.club_miembros where id = pg_temp.sid('a')))->'avance') = 'null'::jsonb
        and r->>'estado' = 'aplica',
        r::text from _v168 where k = 'a1';
@@ -267,13 +291,12 @@ select '10 visita sin beneficio (sin promoción) → la especial NO va en esa fa
 
 -- 11. PASE: club_pase_datos = club_pase_datos_base + socio.avance (nada más); la ganada disponible se ve «ganada»
 insert into _r168 (caso, ok, detalle)
-select '11 pase = base + socio.avance (nada más) · ganada disponible → ganada:true con vence_en · alta de hoy → 1 de 4',
-       bool_and((public.club_pase_datos(pg_temp.sid(p)) #- '{socio,avance}') = public.club_pase_datos_base(pg_temp.sid(p))
-                and public.club_pase_datos(pg_temp.sid(p))->'socio' ? 'avance')
+select '11 pase = base + socio.avance (nada más) · ganada disponible → ganada:true con vence_en · alta de hoy → 1 de 4 · usada → sin avance',
+       bool_and((public.club_pase_datos(pg_temp.sid(p)) #- '{socio,avance}') = public.club_pase_datos_base(pg_temp.sid(p)))
        and (public.club_pase_datos(pg_temp.sid('l'))->'socio'->'avance'->>'ganada') = 'true'
        and (public.club_pase_datos(pg_temp.sid('l'))->'socio'->'avance'->>'vence_en') is not null
        and (public.club_pase_datos(pg_temp.sid('b'))->'socio'->'avance'->>'visita') = '1'
-       and (public.club_pase_datos(pg_temp.sid('c'))->'socio'->'avance') = 'null'::jsonb,
+       and not (public.club_pase_datos(pg_temp.sid('c'))->'socio' ? 'avance'),
        null
   from unnest(array['a', 'b', 'c', 'l']) p;
 
@@ -344,6 +367,76 @@ select '14 vencida → no se ofrece (estado vencida) · apagado el programa, la 
        and pg_temp.especial((select r from _v168 where k = 'k2')) = 1 and (pg_temp.fila('k')).estado = 'usada',
        (select r::text from _v168 where k = 'l2');
 
+-- (el caso 14 lo apagó: se vuelve a encender para 16–19)
+select pg_temp.guardar(true, 'P168A1', 'prueba168a', (select owner_id from _c168));
+
+-- 16. HORA CR (verificador del #187): el día del alta y la ventana se cuentan en hora de Costa Rica, no en UTC.
+--     m: alta el día D a las 19:30 CR (= 01:30 UTC de D+1) + visitas con factura en D+1 y D+5 + hoy → 4.ª, gana.
+--     n: alta hace 90 días a las 19:00 CR (en UTC sería hace 89) + 3 visitas dentro → hoy es el día 90: no gana.
+select pg_temp.socio('m', 0);
+select pg_temp.alta_a('m', pg_temp.hoy() - 10, time '19:30');
+select pg_temp.visita_dia('m', pg_temp.hoy() - 9); select pg_temp.visita_dia('m', pg_temp.hoy() - 5);
+insert into _v168 values ('m1', pg_temp.escanear('m'));
+select pg_temp.socio('n', 0);
+select pg_temp.alta_a('n', pg_temp.hoy() - 90, time '19:00');
+select pg_temp.visita('n', 80); select pg_temp.visita('n', 70); select pg_temp.visita('n', 60);
+insert into _v168 values ('n1', pg_temp.escanear('n'));
+select pg_temp.socio('q', 0);
+select pg_temp.alta_a('q', pg_temp.hoy() - 1, time '23:59:30');
+insert into _r168 (caso, ok, detalle)
+select '16 hora CR: alta a las 19:30 CR, la visita del día siguiente CR cuenta (gana) · alta hace 90 a las 19:00 CR → no gana · alta ayer 23:59:30 CR → hasta = ayer + 89',
+       pg_temp.especial((select r from _v168 where k = 'm1')) = 1
+       and pg_temp.especial((select r from _v168 where k = 'n1')) = 0 and (pg_temp.fila('n')).id is null
+       and (public.club_primeros90_avance(pg_temp.sid('q'))->>'hasta')::date = pg_temp.hoy() - 1 + 89
+       and public.club_primeros90_avance(pg_temp.sid('q'))->>'visita' = '1',
+       'm ' || (select r->>'texto' from _v168 where k = 'm1') || ' · n ' || (select r->>'texto' from _v168 where k = 'n1')
+       || ' · q ' || public.club_primeros90_avance(pg_temp.sid('q'))::text;
+
+-- 17. OPCIÓN B: los días anteriores cuentan solo con factura cerrada con el 856/857. Tres escaneos sin factura (dos días
+--     anteriores sin factura y uno con una factura ajena sin el 856) + hoy → no gana; el avance dice 2 (alta + hoy).
+--     Con primeros90_exige_factura = false, los mismos días cuentan.
+select pg_temp.socio('o', 20);
+select pg_temp.visita('o', 9, 'prueba168a', false); select pg_temp.visita('o', 6, 'prueba168a', false);
+select pg_temp.visita('o', 3, 'prueba168a', true, false);
+insert into _v168 values ('o1', pg_temp.escanear('o'));
+insert into _v168 values ('o2', public.club_primeros90_avance(pg_temp.sid('o')));
+update public.club_config_global set primeros90_exige_factura = false;
+insert into _v168 values ('o3', public.club_primeros90_avance(pg_temp.sid('o')));
+update public.club_config_global set primeros90_exige_factura = true;
+insert into _r168 (caso, ok, detalle)
+select '17 opción B: tres escaneos sin factura (o con factura ajena sin 856) + hoy → no gana, avance 2 de 4 · sin exigir factura → 4 de 4',
+       pg_temp.especial((select r from _v168 where k = 'o1')) = 0 and (pg_temp.fila('o')).id is null
+       and (select r->>'visita' from _v168 where k = 'o2') = '2'
+       and (select r->>'visita' from _v168 where k = 'o3') = '4'
+       and (select pg_get_expr(d.adbin, d.adrelid) from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+             where d.adrelid = 'public.club_config_global'::regclass and a.attname = 'primeros90_exige_factura') = 'true',
+       (select r::text from _v168 where k = 'o2') || ' · ' || (select r::text from _v168 where k = 'o3');
+
+-- 18. VENCIMIENTO al final del día CR mostrado: r gana hoy en B (sin cortesía: queda guardada) → «vale hasta» hoy + 60
+--     y el límite es las 00:00 CR del día siguiente (a las 23:59:59 CR del día mostrado todavía vale).
+select pg_temp.socio('r', 10);
+select pg_temp.visita('r', 7); select pg_temp.visita('r', 4);
+insert into _v168 values ('r1', pg_temp.escanear('r', 'prueba168b'));
+insert into _r168 (caso, ok, detalle)
+select '18 vencimiento: «vale hasta» = día de la visita + 60 y vence a las 00:00 CR del día siguiente',
+       (pg_temp.fila('r')).estado = 'disponible'
+       and (pg_temp.fila('r')).vence_en = ((pg_temp.hoy() + 61)::timestamp at time zone 'America/Costa_Rica')
+       and (public.club_primeros90_avance(pg_temp.sid('r'))->>'vence_en')::date = pg_temp.hoy() + 60
+       and ((pg_temp.hoy() + 60 + time '23:59:59') at time zone 'America/Costa_Rica') < (pg_temp.fila('r')).vence_en,
+       (pg_temp.fila('r')).vence_en::text || ' · ' || public.club_primeros90_avance(pg_temp.sid('r'))::text;
+
+-- 19. La cortesía tiene que ser del local de la caja: B apuntando (por fuera de la función) a la de A → no se ofrece en B.
+update public.club_config set primeros90_cortesia_id = (select k.id from public.club_cortesias k where k.codigo_producto = 'P168A1')
+ where location_id = 'prueba168b';
+select pg_temp.socio('s', 10);
+select pg_temp.visita('s', 7); select pg_temp.visita('s', 4);
+insert into _v168 values ('s1', pg_temp.escanear('s', 'prueba168b'));
+update public.club_config set primeros90_cortesia_id = null where location_id = 'prueba168b';
+insert into _r168 (caso, ok, detalle)
+select '19 local B con la cortesía de A cargada por fuera → sin_configurar en B, no se ofrece',
+       pg_temp.especial(r) = 0 and r->'primeros90'->>'estado' = 'sin_configurar' and (pg_temp.fila('s')).estado = 'disponible',
+       r::text from _v168 where k = 's1';
+
 -- 15a. ROLLBACK con cortesías ganadas → la guarda aborta
 do $$
 declare v_aborta boolean := false;
@@ -385,6 +478,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r168 where ok is not true;   -- null = falla
   if v is not null then raise exception '168-FALLAN: %', v; end if;
-  if (select count(*) from _r168) <> 18 then raise exception '168-FALLAN: se esperaban 18 casos (NO PROBADO)'; end if;
+  if (select count(*) from _r168) <> 22 then raise exception '168-FALLAN: se esperaban 22 casos (NO PROBADO)'; end if;
 end $$;
 rollback;

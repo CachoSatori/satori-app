@@ -67,7 +67,8 @@ export function ConfigPrimeros90({ owner }: { owner: boolean }) {
       <div style={{ fontSize: '0.82rem', color: C.muted, margin: '4px 0 8px' }}>
         El socio nuevo ve «Visita 2 de {cfg?.visitas ?? 4}» (el alta cuenta como la 1.ª). Si llega a la visita {cfg?.visitas ?? 4} dentro
         de sus primeros {cfg?.dias ?? 90} días, gana una cortesía especial, una sola vez, que la caja ofrece en esa visita o en la
-        siguiente (vale {cfg?.vence_dias ?? 60} días). El encendido es para todo el Club; la cortesía es la de cada local.
+        siguiente (vale {cfg?.vence_dias ?? 60} días, hasta el final de ese día). El encendido es para todo el Club; la cortesía es la de cada local.
+        {cfg?.exige_factura !== false && ' Una visita de otro día cuenta solo si su factura se cerró con el 856 o el 857.'}
       </div>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
       {ok && <Aviso tono="ok" onClose={() => setOk(null)}>{ok}</Aviso>}

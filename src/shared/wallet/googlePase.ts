@@ -118,8 +118,8 @@ export function textoAvance(a: AvancePase | null | undefined): { header: Txt; bo
   const f = diaTxt(a.hasta)
   if (!f) return null
   return { header: { es: 'Sus primeras visitas', en: 'Your first visits' },
-           body: { es: `Visita ${a.visita} de ${a.de} · cortesía especial al llegar a ${a.de} antes del ${f.es}`,
-                   en: `Visit ${a.visita} of ${a.de} · special treat at ${a.de} visits before ${f.en}` } }
+           body: { es: `Visita ${a.visita} de ${a.de} · cortesía especial al llegar a ${a.de}, a más tardar el ${f.es}`,
+                   en: `Visit ${a.visita} of ${a.de} · special treat at ${a.de} visits, by ${f.en}` } }
 }
 
 /** El beneficio viene de la base en español («10 % + 1 cortesía»): el inglés se arma con los mismos números. */

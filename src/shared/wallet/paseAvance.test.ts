@@ -24,8 +24,8 @@ describe('pase · avance de los primeros 90 días (mig 168)', () => {
   it('en curso: «Visita 2 de 4» con la fecha, en ES y EN (Google) y en Apple', () => {
     const d = datos({ visita: 2, de: 4, ganada: false, hasta: '2027-02-11' })
     const m = modulo(d)!
-    expect(m.body).toBe('Visita 2 de 4 · cortesía especial al llegar a 4 antes del 11-feb')
-    expect(m.localizedBody.translatedValues[0].value).toBe('Visit 2 of 4 · special treat at 4 visits before Feb 11')
+    expect(m.body).toBe('Visita 2 de 4 · cortesía especial al llegar a 4, a más tardar el 11-feb')
+    expect(m.localizedBody.translatedValues[0].value).toBe('Visit 2 of 4 · special treat at 4 visits, by Feb 11')
     expect(apple(d)?.value).toBe(m.body)
   })
   it('ganada: «Cortesía de bienvenida» con el vencimiento', () => {

@@ -482,6 +482,8 @@ export const guardarCortesia = (id: string | null, codigo: string | null, nombre
 // ── Mig 168: primeros 90 días · cortesía especial de bienvenida (4.ª visita) ──
 export interface Primeros90Config {
   activo: boolean; visitas: number; dias: number; vence_dias: number
+  /** Opción B: los días anteriores cuentan solo con factura cerrada con el 856/857 (config del Club). */
+  exige_factura: boolean
   cortesia: { id: string; codigo: string; nombre: string; activa: boolean } | null
   /** El salón la puede dar: hay artículo cargado en ESTE local y está activo. */
   lista_para_caja: boolean

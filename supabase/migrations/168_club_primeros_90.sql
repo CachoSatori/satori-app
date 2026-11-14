@@ -19,6 +19,10 @@
 --   · Conteo: socio ACTIVO del Local Club (el EQUIPO nunca, D7; con y sin la 157). El día del alta (hora CR) es la
 --     1.ª visita («ventaja inicial»); después cuenta cada DÍA CR distinto con visita registrada (club_visitas_socio,
 --     en cualquier local; varias visitas el mismo día cuentan una), dentro de los primeros N días desde el alta.
+--     Opción B (verificador del #187; FIRMA DEL DUEÑO): un día ANTERIOR cuenta solo si su visita cruza con una factura
+--     cerrada con el 856/857 (como el premio por referir); el día de la visita que se registra cuenta por presencia.
+--     Configurable: club_config_global.primeros90_exige_factura (true por defecto).
+--   · Vencimiento: al FINAL del día CR que se muestra (ganada el día F → vale hasta F + 60, 23:59:59 CR).
 --   · club_socio_visita: la de antes (150) pasa a llamarse club_socio_visita_base (interna) y club_socio_visita la
 --     envuelve. Después de registrar una visita NUEVA: si con ella llega a la 4.ª dentro de los 90 días, gana; y si
 --     tiene una ganada disponible, la caja la recibe como una cortesía más (motivo 'primeros_90') en la MISMA lista de
@@ -26,7 +30,8 @@
 --     Regla fija: una factura pagada con créditos, un socio que va como invitado o sin promoción vigente → no va en
 --     esa factura; queda guardada para la próxima. Una sola vez: el paso disponible → usada es un UPDATE condicionado
 --     (where estado = 'disponible') bajo el candado por socio de club_socio_visita: dos cajas a la vez, una sola gana.
---   · club_pase_datos: la de antes (150 o 157) pasa a club_pase_datos_base y club_pase_datos suma `socio.avance`.
+--   · club_pase_datos: la de antes (150 o 157) pasa a club_pase_datos_base y club_pase_datos suma `socio.avance` (sin
+--     avance devuelve exactamente lo de antes).
 --   · club_portal_avance(token) (NUEVA, PÚBLICA como club_portal, solo por club-web): {avance} para «Mi Club».
 --   · club_primeros90_config_ver / _guardar (owner y manager leen; solo el owner guarda).
 --
@@ -51,6 +56,7 @@ alter table public.club_config_global add column if not exists primeros90_activo
 alter table public.club_config_global add column if not exists primeros90_visitas int not null default 4;
 alter table public.club_config_global add column if not exists primeros90_dias int not null default 90;
 alter table public.club_config_global add column if not exists primeros90_vence_dias int not null default 60;
+alter table public.club_config_global add column if not exists primeros90_exige_factura boolean not null default true;
 alter table public.club_config_global drop constraint if exists club_config_global_primeros90_chk;
 alter table public.club_config_global add constraint club_config_global_primeros90_chk
   check (primeros90_visitas between 2 and 10 and primeros90_dias between 30 and 180 and primeros90_vence_dias between 7 and 365);
@@ -58,8 +64,12 @@ comment on column public.club_config_global.primeros90_activo is
   '168: programa «primeros 90 días» encendido (false por defecto: nadie gana la cortesía hasta que el owner lo enciende).';
 comment on column public.club_config_global.primeros90_visitas is '168: visitas para ganar la cortesía (el alta cuenta como la 1.ª).';
 comment on column public.club_config_global.primeros90_dias is '168: ventana desde el alta (días CR).';
-comment on column public.club_config_global.primeros90_vence_dias is '168: días que la cortesía ganada queda guardada.';
-grant update (primeros90_activo, primeros90_visitas, primeros90_dias, primeros90_vence_dias)
+comment on column public.club_config_global.primeros90_vence_dias is
+  '168: días que la cortesía ganada queda guardada (vence al FINAL del día CR: ganada el día F, vale hasta F + N inclusive).';
+comment on column public.club_config_global.primeros90_exige_factura is
+  '168 (opción B, firma del dueño): true = una visita de un día ANTERIOR cuenta solo si cruza con una factura cerrada (C) '
+  'con el 856/857 del local (mismo criterio que el premio por referir). La visita de hoy cuenta por presencia; el alta, como la 1.ª.';
+grant update (primeros90_activo, primeros90_visitas, primeros90_dias, primeros90_vence_dias, primeros90_exige_factura)
   on public.club_config_global to authenticated;   -- solo owner (policy club_config_global_owner)
 
 -- 2. La cortesía de cada local (club_config_auditar de la 150 deja el historial)
@@ -112,7 +122,11 @@ as $$
 $$;
 
 -- Visitas que cuentan: el alta (1) + cada día CR distinto con visita, después del alta y dentro de la ventana. Interna.
-create or replace function public.club_primeros90_visitas(p_miembro uuid, p_alta date, p_dias int)
+-- p_hoy = el día CR de la visita que se está registrando (o de hoy, para el avance): ese día cuenta por presencia. Los días
+-- ANTERIORES, con primeros90_exige_factura (B, por defecto), solo si la visita cruza con una factura cerrada (C) que lleva
+-- el 856 o el 857 de su local (como el premio por referir, club_premios_generar): un escaneo sobre una factura ajena o un
+-- pedido que después se anuló no suma.
+create or replace function public.club_primeros90_visitas(p_miembro uuid, p_alta date, p_dias int, p_hoy date)
 returns int
 language sql
 stable
@@ -122,6 +136,15 @@ as $$
   select 1 + count(distinct vs.fecha)::int
     from public.club_visitas_socio vs
    where vs.miembro_id = p_miembro and vs.fecha > p_alta and vs.fecha < p_alta + p_dias
+     and (vs.fecha = p_hoy
+          or not coalesce((select g.primeros90_exige_factura from public.club_config_global g limit 1), true)
+          or exists (select 1
+                       from public.club_config c
+                       cross join lateral unnest(public.club_cruce_facturas(vs.location_id, vs.pos_ref, null)) x(tid)
+                       join public.pos_ndf_tickets t on t.id = x.tid and t.estado = 'C'
+                      where c.location_id = vs.location_id
+                        and exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = t.id
+                                      and l.codigo_producto in (c.lc_articulo_codigo, c.lc_invitado_codigo))))
 $$;
 
 -- 6. El avance para «Mi Club» y el pase. Interna. null = no se muestra nada.
@@ -148,12 +171,12 @@ begin
   if v_p.id is not null then
     if v_p.estado = 'disponible' and v_p.vence_en > now() then
       return jsonb_build_object('visita', v_g.primeros90_visitas, 'de', v_g.primeros90_visitas, 'ganada', true,
-                                'vence_en', (v_p.vence_en at time zone 'America/Costa_Rica')::date);
+                                'vence_en', ((v_p.vence_en at time zone 'America/Costa_Rica') - interval '1 microsecond')::date);   -- último día que vale
     end if;
     return null;   -- ya la usó (o venció): el avance termina
   end if;
   if not coalesce(v_g.primeros90_activo, false) or v_hoy - v_alta >= v_g.primeros90_dias then return null; end if;
-  v_n := least(public.club_primeros90_visitas(p_miembro, v_alta, v_g.primeros90_dias), v_g.primeros90_visitas);
+  v_n := least(public.club_primeros90_visitas(p_miembro, v_alta, v_g.primeros90_dias, v_hoy), v_g.primeros90_visitas);
   return jsonb_build_object('visita', v_n, 'de', v_g.primeros90_visitas, 'ganada', false,
                             'hasta', v_alta + v_g.primeros90_dias - 1);
 end;
@@ -189,9 +212,10 @@ begin
   if coalesce(v_g.primeros90_activo, false)
      and v_v.fecha - v_alta < v_g.primeros90_dias
      and not exists (select 1 from public.club_primeros90 p where p.miembro_id = v_v.miembro_id)
-     and public.club_primeros90_visitas(v_v.miembro_id, v_alta, v_g.primeros90_dias) >= v_g.primeros90_visitas then
+     and public.club_primeros90_visitas(v_v.miembro_id, v_alta, v_g.primeros90_dias, v_v.fecha) >= v_g.primeros90_visitas then
     insert into public.club_primeros90 (miembro_id, visita_ganadora, vence_en)
-    values (v_v.miembro_id, v_v.id, now() + make_interval(days => v_g.primeros90_vence_dias))
+    -- vence al FINAL del día CR mostrado: ganada el día F, vale hasta F + N (inclusive) → límite = 00:00 CR del día F + N + 1
+    values (v_v.miembro_id, v_v.id, ((v_v.fecha + v_g.primeros90_vence_dias + 1)::timestamp at time zone 'America/Costa_Rica'))
     on conflict (miembro_id) do nothing
     returning id into v_id;
     if v_id is not null then
@@ -318,10 +342,13 @@ set search_path = public, pg_temp
 as $$
 declare
   d jsonb;
+  a jsonb;
 begin
   d := public.club_pase_datos_base(p_miembro);
   if d is null or jsonb_typeof(d->'socio') is distinct from 'object' then return d; end if;
-  return jsonb_set(d, '{socio,avance}', coalesce(public.club_primeros90_avance(p_miembro), 'null'::jsonb));
+  a := public.club_primeros90_avance(p_miembro);
+  if a is null then return d; end if;   -- sin avance (o apagado): exactamente lo de antes
+  return jsonb_set(d, '{socio,avance}', a);
 end;
 $$;
 comment on function public.club_pase_datos(uuid) is
@@ -378,7 +405,7 @@ begin
   select * into v_k from public.club_cortesias k where k.id = v_cfg.primeros90_cortesia_id and k.location_id = p_location;
   return jsonb_build_object(
     'activo', v_g.primeros90_activo, 'visitas', v_g.primeros90_visitas, 'dias', v_g.primeros90_dias,
-    'vence_dias', v_g.primeros90_vence_dias,
+    'vence_dias', v_g.primeros90_vence_dias, 'exige_factura', v_g.primeros90_exige_factura,
     'cortesia', case when v_k.id is not null then jsonb_build_object('id', v_k.id, 'codigo', v_k.codigo_producto,
                                                                       'nombre', v_k.nombre, 'activa', v_k.activa) end,
     'lista_para_caja', v_k.id is not null and v_k.activa,
@@ -421,7 +448,7 @@ end;
 $$;
 
 revoke all on function public.club_primeros90_alta(uuid)                 from public, anon, authenticated;
-revoke all on function public.club_primeros90_visitas(uuid, date, int)   from public, anon, authenticated;
+revoke all on function public.club_primeros90_visitas(uuid, date, int, date) from public, anon, authenticated;
 revoke all on function public.club_primeros90_avance(uuid)               from public, anon, authenticated;
 revoke all on function public.club_primeros90_en_visita(uuid, jsonb)     from public, anon, authenticated;
 revoke all on function public.club_primeros90_config_ver(text)           from public, anon, authenticated;

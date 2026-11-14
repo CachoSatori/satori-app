@@ -42,9 +42,15 @@ insert into public.club_miembros (id, location_id, tipo, nombre) values ('000000
 insert into public.club_miembro_roles (miembro_id, rol, estado) values ('00000000-0000-4000-8168-0000000000c1', 'socio', 'activo')
   on conflict (miembro_id, rol) do update set estado = 'activo';
 update public.club_miembro_roles set desde = now() - interval '10 days' where miembro_id = '00000000-0000-4000-8168-0000000000c1';
-insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrada_en, client_op_id, estado_beneficio, aplicar)
+-- dos días anteriores con su factura cerrada con el 856 (opción B: sin factura no cuentan)
+insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+select 'prueba168a', '16880000' || d, now() - make_interval(days => d), 'C', 'salon', 'cajero', true, 'ok', 10000 from unnest(array[7, 4]) d;
+insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto)
+select t.id, '856', 'LOCAL CLUB', 1, 0 from public.pos_ndf_tickets t where t.numero_factura in ('168800007', '168800004');
+insert into public.club_visitas_socio (location_id, miembro_id, fecha, registrada_en, client_op_id, pos_ref, estado_beneficio, aplicar)
 select 'prueba168a', '00000000-0000-4000-8168-0000000000c1', ((now() - make_interval(days => d)) at time zone 'America/Costa_Rica')::date,
-       now() - make_interval(days => d), gen_random_uuid(), 'aplica', '{}' from unnest(array[7, 4]) d;
+       now() - make_interval(days => d), gen_random_uuid(),
+       jsonb_build_object('modo', 'factura', 'local', 'prueba168a', 'numero_factura', '16880000' || d), 'aplica', '{}' from unnest(array[7, 4]) d;
 insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
 values ('prueba168a', '168900001', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok', 10000),
        ('prueba168a', '168900002', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok', 10000);

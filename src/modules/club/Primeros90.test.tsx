@@ -68,7 +68,7 @@ describe('Caja · cortesía especial de bienvenida (mig 168)', () => {
 })
 
 const cfg = (x: Partial<Primeros90Config> = {}): Primeros90Config => ({
-  activo: false, visitas: 4, dias: 90, vence_dias: 60, cortesia: null, lista_para_caja: false, disponibles: 0, usadas: 0, ...x,
+  activo: false, visitas: 4, dias: 90, vence_dias: 60, exige_factura: true, cortesia: null, lista_para_caja: false, disponibles: 0, usadas: 0, ...x,
 })
 const cortesias = [
   { id: 'k1', codigo_producto: 'P1', nombre: 'Postre Ficticio', familia: null, activa: true, en_seccion: true, visto_en_facturas: true, actualizada_en: '' },
@@ -85,6 +85,7 @@ describe('Promociones · config de la cortesía especial (mig 168)', () => {
     render(<ConfigPrimeros90 owner />)
     expect(await screen.findByText('apagada')).toBeTruthy()
     expect(screen.getByText(/no hay una cortesía especial cargada y activa/)).toBeTruthy()
+    expect(screen.getByText(/cuenta solo si su factura se cerró con el 856 o el 857/)).toBeTruthy()
     const encender = screen.getByText('Encender').closest('button') as HTMLButtonElement
     expect(encender.disabled).toBe(true)
     expect(screen.queryByText(/Bebida Apagada/)).toBeNull()

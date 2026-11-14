@@ -6,7 +6,22 @@
 -- Borra la fila 167 del ledger (la 113 nunca se aplicó con ese número).
 -- Si se corre en prod, en el mismo momento sale el .sql de main (skill §6).
 -- Orden: primero el código de club-web (revert del merge), así el portal deja de pintar la tarjeta y de marcar.
+-- ORDEN DE VUELTA ATRÁS (verificador del #186): primero ESTA (167), después la 157 y la 158 (sus rollbacks abortan si la
+-- 167 sigue aplicada). Y esta aborta, sin tocar nada, si club_portal ya no envuelve a club_portal_datos (alguien lo pisó,
+-- por ejemplo el rollback de la 157 corrido antes): devolverle el nombre a club_portal_datos dejaría un portal roto.
+-- Con marcas REALES en club_resena_socio (socios que ya vieron, cerraron o tocaron la tarjeta), no se borra: se apaga
+-- (subir resena_socio_cada a 50 o sacar el link del local en «Locales») y se arregla con una migración nueva (skill §6).
 begin;
+
+do $$
+begin
+  if to_regprocedure('public.club_portal_datos(text)') is not null
+     and position('club_portal_datos(p_token)' in coalesce((select prosrc from pg_proc
+                    where oid = to_regprocedure('public.club_portal(text)')), '')) = 0 then
+    raise exception '167 rollback: club_portal ya no envuelve a club_portal_datos (¿se revirtió antes la 157?): parar y revisar a mano';
+  end if;
+end
+$$;
 
 drop function if exists public.club_portal_resena(text, text);
 

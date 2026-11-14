@@ -42,8 +42,19 @@
 --
 -- Pruebas: scripts/sql/167_pruebas.sql (+ 167_pruebas.py; transacción descartada, sobre 155→158 y también con la 157).
 -- Rollback: scripts/sql/167_rollback.sql (club_portal vuelve a ser la de antes, sin envoltorio, ni tabla, ni columnas).
+-- Orden de vuelta atrás: primero la 167, después la 157 y la 158 (sus rollbacks abortan si la 167 sigue aplicada).
 
 begin;
+
+-- 0. Dependencia: la 158 (club_config.resena_url). Sin ella, aborta y no queda nada (verificador del #186).
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_config'
+                  and column_name = 'resena_url') then
+    raise exception '167: falta la 158 (club_config.resena_url): aplicar antes la 158';
+  end if;
+end
+$$;
 
 -- 1. Configuración global (una sola para todo el Club, como el tope del día)
 alter table public.club_config_global add column if not exists resena_socio_cada int not null default 5;
@@ -241,6 +252,7 @@ begin
     raise exception '167: club-web (anon) tiene que poder leer el portal y marcar la tarjeta';
   end if;
   if has_function_privilege('anon', 'public.club_portal_datos(text)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.club_portal_datos(text)', 'EXECUTE')
      or has_function_privilege('anon', 'public.club_resena_socio_toca(uuid)', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.club_resena_socio_toca(uuid)', 'EXECUTE') then
     raise exception '167: las internas no se abren';

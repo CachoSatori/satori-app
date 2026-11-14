@@ -6,6 +6,8 @@
 -- migración NUEVA que haga lo mismo que este archivo (hacia adelante, con su propia fila), con firma del dueño; así el
 -- .sql de la 164 y su fila quedan en su lugar y Branching no tiene nada que reaplicar. Este archivo, tal cual, es para
 -- staging y para la base local (y para la batería, dentro de su transacción descartada).
+-- Si igual se corre este archivo en prod, en el mismo momento sale el .sql de la 164 de main (si queda, Branching la
+-- vuelve a aplicar; satori-migraciones-y-prod §6).
 -- El código de la app sin la función muestra «sin comprobar» en el bloque del Club del Inicio: no rompe.
 begin;
 

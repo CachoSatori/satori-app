@@ -111,6 +111,12 @@
       "rama": "claude/club-tope-sin-carga-inicial",
       "renumerada_a": "155"
     },
+    "104": {
+      "nombre": "club_equipo_sin_creditos",
+      "bloque": "club",
+      "rama": "claude/club-equipo-sin-creditos",
+      "renumerada_a": "157"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -134,6 +140,12 @@
       "bloque": "pase",
       "rama": "claude/club-tope-sin-carga-inicial",
       "origen": "102"
+    },
+    "157": {
+      "nombre": "club_equipo_sin_creditos",
+      "bloque": "pase",
+      "rama": "claude/club-equipo-sin-creditos",
+      "origen": "104"
     }
   }
 }

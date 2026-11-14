@@ -27,9 +27,13 @@ pases de octubre y noviembre) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCH
   - **#169:** UI: link del portal al socio, login del PoS en Empleados y tope sin monto fijo.
   - **#170:** `club-web`: texto final del alta («puede ser hoy mismo»).
   - **#169 y #170 tocan la guía 6.13:** el segundo en mergear tiene un conflicto chico.
+- **`claude/club-equipo-sin-creditos` (14/11, PR en borrador):** migración **157** (origen 104), D7 A + saldos A (firma del
+  dueño 14-nov): el equipo no canjea, no vence ni cuenta en el pasivo; saldos congelados con foto en `club_auditoria`;
+  ranking del equipo. Vía merge → Branching. **La 156 es del #174** (sin mergear): la que se mergee después necesita su
+  número más alto que la última del ledger (regla 3); si la 157 entra antes que la 156, el #174 se renumera.
 - **Decisión firmada, pendiente de construir: D6 A** (alta del Local Club): mayor de 18 obligatorio, cumpleaños día/mes
-  opcional con permiso, aviso de privacidad v1.2 junto con el #140. Numeración: **154** solo si entra antes que la 155; si
-  no, **156+**.
+  opcional con permiso, aviso de privacidad v1.2 junto con el #140. Numeración: prod va por la 155; la 156 la reserva el
+  #174 y la 157 `claude/club-equipo-sin-creditos`: el #140 toma **158+** (regla 3).
 - **Local Club sigue en 15 %** hasta el lanzamiento del Club.
 - **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
   solo de merges.
@@ -223,8 +227,8 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | 087, 088, 089, 090, 091, 092, 093, 094, 095, 096 | **097** |
-| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) · 101 la usa el #140 (→ 152) · 102 (`club_tope_sin_carga_inicial`; renumerada a 155) | **103** |
-| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; como prod ya tiene la 153, regla 3: el #140 usa la **154** solo si entra antes que la 155; si no, la siguiente libre del bloque PASE, 156+); **156** después de la 155 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) · 101 la usa el #140 (→ 152) · 102 (`club_tope_sin_carga_inicial`; renumerada a 155) · 103 la usa el #174 (→ 156) · 104 (`club_equipo_sin_creditos`; renumerada a 157) | **105** |
+| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (en prod desde el merge del #168) · 156 (← 103): el #174 (sin aplicar) · 157 (← 104): `claude/club-equipo-sin-creditos` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; prod ya va por la 155, la 156 es del #174 y la 157 de `claude/club-equipo-sin-creditos`: el #140 toma **158** o la que siga; la 154 queda sin usar); **158** después de la 157 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
 | (fuera de bloque) | 086 | — | libre |
 
 **Asignadas en los bloques**
@@ -234,10 +238,12 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | 096 | `proveedor_agregar_alias` (RPC atómica para el alias del proveedor; sin firma) | caja | `claude/alias-proveedor-rpc` | **renumerada a 153** en el mismo PR (13-nov; regla 3: prod va por la 151). El número 096 no se reutiliza (regla 4) |
 | 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **renumerada a 151** en el pase del Club (`claude/pase-club`, 10-nov). El número 100 no se reutiliza (regla 4) |
 | 102 | `club_tope_sin_carga_inicial` (D5 A del dueño: ANFITRION_SOBRE_TOPE sin la carga inicial) | club | `claude/club-tope-sin-carga-inicial` | **renumerada a 155** en el mismo PR (14-nov; regla 3: prod va por la 153). El número 102 no se reutiliza (regla 4) |
+| 104 | `club_equipo_sin_creditos` (D7 A + saldos A, firma del dueño 14-nov: el equipo no canjea, no vence ni cuenta en el pasivo; saldos congelados) | club | `claude/club-equipo-sin-creditos` | **renumerada a 157** en el mismo PR (14-nov; regla 3: prod va por la 155 y la 156 es del #174). El número 104 no se reutiliza (regla 4) |
 | 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 153 | `proveedor_agregar_alias` | pase (origen **096**) | `claude/alias-proveedor-rpc` | **Sin aplicar** (13/11: PR en borrador a `main`, espera firma). RPC `proveedor_agregar_alias` (SECURITY INVOKER) para que dos cajas no se pisen los alias. La **152** la usa el #140 (aviso del Club). Rollback: `scripts/sql/153_rollback.sql` |
-| 155 | `club_tope_sin_carga_inicial` | pase (origen **102**) | `claude/club-tope-sin-carga-inicial` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK). `create or replace` de `club_excepciones`: ANFITRION_SOBRE_TOPE no cuenta `club_movimientos.origen = 'migracion'` (la carga inicial del 12/11), como el reporte del mes. Prueba en staging en transacción descartada: 9/9. Rollback: `scripts/sql/155_rollback.sql` |
+| 155 | `club_tope_sin_carga_inicial` | pase (origen **102**) | `claude/club-tope-sin-carga-inicial` | **En prod** (merge del #168, 14/11). Antes: PR en borrador a `main`. `create or replace` de `club_excepciones`: ANFITRION_SOBRE_TOPE no cuenta `club_movimientos.origen = 'migracion'` (la carga inicial del 12/11), como el reporte del mes. Prueba en staging en transacción descartada: 9/9. Rollback: `scripts/sql/155_rollback.sql` |
+| 157 | `club_equipo_sin_creditos` | pase (origen **104**) | `claude/club-equipo-sin-creditos` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK y verificador independiente; vía merge → Branching). D7 A: guarda del equipo en `club_canje_codigo_generar` y `club_canje_aplicar`; `club_saldo_canjeable` / `club_corte_equipo` (saldo congelado que no revive, foto en `club_auditoria`); portal, pase, ficha de caja, vencimiento y reporte del mes sin créditos del equipo; `club_reporte_equipo` (ranking). Pruebas: `scripts/sql/157_pruebas.sql` (batería + 10 mutaciones en una transacción descartada; **pendiente de correr en staging**). Rollback: `scripts/sql/157_rollback.sql` |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |

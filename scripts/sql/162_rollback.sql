@@ -2,7 +2,7 @@
 -- Saca la función del embudo y su interna de auditoría. No toca datos: la 162 no creó tablas ni columnas.
 -- Las filas de club_auditoria ('ver_embudo_anfitrion', 'exporte_embudo_anfitrion_csv') QUEDAN: la auditoría es de solo
 -- inserción; son rastro, no estado.
--- Borra la fila 162 del ledger. El .sql de la 162 se QUEDA en main (regla 10 / satori-migraciones-y-prod §6): lo que se borra es su fila del ledger.
+-- Borra la fila 162 del ledger. Si se corre en prod, en el mismo momento sale el .sql de la 162 de main (si queda, Branching la vuelve a aplicar; regla 10 / satori-migraciones-y-prod §6).
 begin;
 
 drop function if exists public.club_embudo_anfitrion(date, text, boolean, uuid);

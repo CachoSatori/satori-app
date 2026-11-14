@@ -122,7 +122,7 @@
 5. **🖊️ Umbrales del ICP** (hoy ≥13 % excelente, 10–13 % bueno, <10 % a mejorar): recalibrar contra el histórico
    real, que da **5–9 %**. Con el PoS, el ICP del equipo de octubre es 10,6 %. *(Nuevo, 30/10.)*
 6. **Usuarios de la app para RODRI, FRANCO y MAXI BARRA** (barmans activos sin perfil de login). El perfil
-   «NACHO» (`satorisushibarnacho@gmail.com`) es la cuenta de prueba de Ismael, sin empleado vinculado a
+   «NACHO» (`<correo del dueño>`) es la cuenta de prueba de Ismael, sin empleado vinculado a
    propósito: no hay nada que decidir. *(Nuevo, 29–30/10; corregido 30/10.)*
 7. **👁️ El deploy de #16 quedó en `waiting`** (job `deploy` del run #247: creado 17:42, arrancó 17:55 UTC). En
    GitHub Actions eso es una regla de protección del environment `github-pages` (aprobación o temporizador). El
@@ -377,7 +377,7 @@
      Ver [`_handoff/acl-prod-2026-07-27.md`](_handoff/acl-prod-2026-07-27.md) y el bloque `anon` de HALLAZGOS.
 4. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
-5. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+5. **⏳ Smoke real de C3** — el email del cierre nocturno (a `<correo del dueño>` por la restricción
    sandbox de Resend) se manda solo al confirmarse un cierre completo.
 6. **🧹 Deuda de limpieza en `main` (barrer en el PRÓXIMO pase a prod, NO suelta).** `main` todavía
    carga archivos que `staging` ya eliminó y que no aportan nada: `src/shared/api/auth.ts` (código
@@ -915,7 +915,7 @@ riesgo sin ganancia funcional). Dos grupos:
 > L50:    (`employees.pos_name`, idempotente, ya viva out-of-band) queda en el repo esperando un push firmado.
 > L51:    ⚠️ **047 sigue RESERVADA** para proveedores — el hueco 046→048 es intencional. Detalle → [ESTADO.md](ESTADO.md) §c.
 > L52: 3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
-> L54: 4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+> L54: 4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `<correo del dueño>` por la restricción
 > L59: 1. **🖊️ SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de **DNS**
 > L60:    (dominio propio en Resend; hoy el sender sandbox solo entrega a una dirección).
 > L69: 6. **🖊️👁️ Hora-CR en bordes de período.** Las queries de plata (P&L, `finance.ts`) acotan `created_at`

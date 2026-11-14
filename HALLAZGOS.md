@@ -7,6 +7,19 @@
 
 ---
 
+## 🔐 Noviembre 2026 — OPS-AUD-01: credenciales de prueba que quedaron en el historial público (✅ neutralizadas, 09/11)
+
+- **Qué era:** `ESTADO-ARCHIVO.md` (L1256 y L1292) tenía la contraseña de dos cuentas de prueba de **staging**
+  (`<CUENTA_PRUEBA_MANAGER>`, rol owner en staging, y `<CUENTA_PRUEBA_CAJERO>`). En prod esas cuentas no existen.
+  El #66 reemplazó las líneas por marcadores, pero la contraseña sigue en el historial de git (no se reescribe).
+- **Qué se hizo (08/11):** en staging, contraseña nueva aleatoria y larga en las dos (generada y hasheada dentro de
+  la base, no se guardó en ningún lado) y sesiones vivas cerradas (41).
+- **Verificación (09/11, 07:33 CR), sin imprimir la contraseña:** la contraseña vieja (`<CONTRASEÑA_VIEJA>`, sacada
+  del historial a una variable y usada solo dentro de la consulta) **no coincide** con el hash guardado de ninguna de
+  las dos cuentas (`crypt(<CONTRASEÑA_VIEJA>, hash) ≠ hash`) → con ella **no se puede entrar**. Las dos siguen sin
+  sesiones y sin ban (decisión del dueño: no banear). Es una comprobación contra el hash, no un intento de login por
+  la API de Auth (para eso hace falta la clave pública de staging, que no se pide desde la sesión).
+
 ## 🔐 Noviembre 2026 — SEC-02: `monthly-report` respondía ventas y mandaba los correos a cualquiera (✅ prod, 06/11)
 
 - **Qué es SEC-02:** la Edge Function `monthly-report` (prod v9, `verify_jwt` off) usaba service_role **sin pedir nada**. Cualquiera, sin token o con la anon key (que es pública), podía:

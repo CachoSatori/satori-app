@@ -321,3 +321,23 @@ test('(12-nov) /api/portal/:token/wallet/actualizar llama a la ruta «actualizar
     assert.equal((await manejar(pedido(ruta), conLimite(), ruta)).status, 405)
   } finally { globalThis.fetch = fetchViejo }
 })
+
+// 158: POST /api/cupon/:codigo/resena → club_cupon_resena_clic (la marca de clic, sin datos personales)
+test('158: /api/cupon/:codigo/resena llama a club_cupon_resena_clic con el código y nada más', async () => {
+  llamadas = []
+  const r = await manejar(pedido('cupon/abcdefgh23/resena', 'POST'), conLimite(), 'cupon/abcdefgh23/resena')
+  assert.equal(r.status, 200)
+  assert.equal(llamadas.length, 1)
+  assert.ok(String(llamadas[0].url).endsWith('/rpc/club_cupon_resena_clic'))
+  assert.deepEqual(JSON.parse(llamadas[0].init.body), { p_codigo: 'ABCDEFGH23' })
+  assert.equal(llamadas[0].init.headers['x-club-web'], 'clave-de-prueba')
+})
+
+test('158: /resena solo con POST, con código válido y con el tope por IP (falla cerrada sin binding)', async () => {
+  llamadas = []
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena'), conLimite(), 'cupon/ABCDEFGH23/resena')).status, 405)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH1O/resena', 'POST'), conLimite(), 'cupon/ABCDEFGH1O/resena')).status, 404)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena', 'POST'), conLimite(false), 'cupon/ABCDEFGH23/resena')).status, 429)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena', 'POST'), base, 'cupon/ABCDEFGH23/resena')).status, 503)
+  assert.equal(llamadas.length, 0)
+})

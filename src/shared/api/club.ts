@@ -400,6 +400,17 @@ export const getLocalesClub = async (): Promise<LocalClub[]> =>
   (await leer(from<{ location_id: string; nombre: string | null; club_activo: boolean }>('club_config')
     .select('location_id,nombre,club_activo').order('location_id')))
     .map(r => ({ id: r.location_id, nombre: r.nombre ?? r.location_id, activo: r.club_activo === true }))
+/** 158 · El link de reseña de Google de cada local (club-web lo muestra tras usar el cupón). Va aparte de getLocalesClub a
+ * propósito: si la app llega antes que la columna, solo falla esto (en «Locales»), no el selector de locales. */
+export const getResenasLocales = async (): Promise<Record<string, string | null>> =>
+  Object.fromEntries((await leer(from<{ location_id: string; resena_url: string | null }>('club_config')
+    .select('location_id,resena_url'))).map(r => [r.location_id, r.resena_url ?? null]))
+/** 158 · Solo owner (RLS de club_config; queda en club_config_historial). `null` borra el link. La base solo acepta
+ * direcciones de Google (CHECK club_config_resena_url_google); acá se valida antes con la misma expresión. */
+export async function setResenaUrl(id: string, url: string | null): Promise<void> {
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ resena_url: url }).eq('location_id', id).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner carga el link de reseña de un local', false)
+}
 /** Solo owner. Alta de un local: queda APAGADO; con `copiarDe`, arranca con la configuración de ese local. */
 export const crearLocal = (p: { id: string; nombre: string; direccion: string | null; mapa: string | null; copiarDe: string | null }) =>
   llamar<string>('club_local_crear', { p_id: p.id, p_nombre: p.nombre, p_direccion: p.direccion, p_mapa: p.mapa, p_copiar_de: p.copiarDe })

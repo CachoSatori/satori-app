@@ -264,6 +264,13 @@ export async function manejar(request, env, path) {
       if (!c || !c.optin || !RE_AVISO.test(c.acepto)) return json(400, { error: 'datos_invalidos' })
       return rpc(env, 'club_cupon_contacto', { p_codigo: cod, p_contacto: c })
     }
+    // 158: POST /api/cupon/:codigo/resena → marca (una sola vez, sin datos personales) que el turista tocó «Escribir una
+    // reseña en Google». No lleva cuerpo. La base solo marca un cupón usado hace < 7 días de un local con link cargado.
+    if (partes.length === 3 && partes[2] === 'resena') {
+      if (metodo !== 'POST') return json(405, { error: 'metodo' })
+      { const ok = await limitar(env, 'crear', `resena:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+      return rpc(env, 'club_cupon_resena_clic', { p_codigo: cod })
+    }
   }
 
   // POST /api/baja  {llave}  → LC-PRIV (Grok 63) + 136 + 183: el turista borra su contacto con su llave de baja (128 bits).

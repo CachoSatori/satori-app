@@ -584,7 +584,7 @@ export default function TipsModule() {
                 </div>
                 <div className="tips-field">
                   <div className="tips-field-label">Tipo de cambio (₡/USD)</div>
-                  <input type="number" className="tips-input-dark" value={exchangeRate} min={1}
+                  <input type="number" className="tips-input-dark" value={exchangeRate} min={1} step="any"
                     onChange={e => setExchangeRate(Number(e.target.value) || 640)} />
                 </div>
               </div>
@@ -663,7 +663,7 @@ export default function TipsModule() {
                 <div className="tips-efectivo-inputs">
                   <div className="tips-money-field">
                     <span className="tips-money-prefix">₡</span>
-                    <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
+                    <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                       value={efectivoCRC}
                       onChange={e => setEfectivoCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
                   </div>
@@ -703,7 +703,7 @@ export default function TipsModule() {
                             <span style={{ fontSize:'0.55rem', letterSpacing:'0.08em', color:'var(--t-muted)', fontWeight:700 }}>Barra efectivo</span>
                             <div className="tips-money-field">
                               <span className="tips-money-prefix">₡</span>
-                              <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
+                              <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                                 title="Barra efectivo — ya en mano de la barra, no genera cuenta por pagar"
                                 value={barraCRC}
                                 onChange={e => setBarraCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
@@ -713,7 +713,7 @@ export default function TipsModule() {
                             <span style={{ fontSize:'0.55rem', letterSpacing:'0.08em', color:'var(--t-muted)', fontWeight:700 }}>Barra electrónico</span>
                             <div className="tips-money-field">
                               <span className="tips-money-prefix">₡</span>
-                              <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
+                              <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                                 title="Barra electrónico (datáfono/SINPE) — el encargado lo entrega, genera cuenta por pagar"
                                 value={barraElecCRC}
                                 onChange={e => setBarraElecCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
@@ -972,7 +972,7 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
                 <div className="tips-money-wrap">
                   <span className="tips-money-sm-prefix">₡</span>
                   <input
-                    type="number" className="tips-emp-input-money" min={0} step={100}
+                    type="number" className="tips-emp-input-money" min={0} step="any"
                     value={line.propina_crc} placeholder="0"
                     onChange={e => onPropinaChange('propina_crc', e.target.value)}
                     onBlur={onBlur}

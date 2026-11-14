@@ -1178,7 +1178,7 @@ function MontoInput({ prefix, value, onChange, compact }: {
     <div className="cierre-monto" style={{ height: compact ? 34 : 38 }}>
       <span className="pfx" style={{ fontSize: compact ? '0.72rem' : '0.82rem' }}>{prefix}</span>
       <input
-        type="number" min={0} step={100} value={value}
+        type="number" min={0} step="any" value={value}
         onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))}
         style={{ fontSize: compact ? '0.82rem' : '0.9rem' }}
         placeholder="0"

@@ -6,7 +6,18 @@
 -- (verificador del PR #177, menor c). Borra la fila 158 del ledger (la 105 nunca se aplicó con ese número).
 -- Si se corre en prod, en el mismo momento sale el .sql de main (regla 10 / satori-migraciones-y-prod §6).
 -- Orden: primero el código de club-web (revert del merge), así la página deja de pedir `resena` y el clic.
+-- ORDEN con la 167 (verificador del #186): si la 167 está aplicada (existen club_resena_socio_toca o club_portal_datos),
+-- este rollback ABORTA sin tocar nada: revertir antes la 167 (scripts/sql/167_rollback.sql). Si no, la columna
+-- resena_url desaparece y club_portal falla para cada socio que llega a N visitas.
 begin;
+
+do $$
+begin
+  if to_regprocedure('public.club_resena_socio_toca(uuid)') is not null or to_regprocedure('public.club_portal_datos(text)') is not null then
+    raise exception '158 rollback: la 167 está aplicada (existe club_resena_socio_toca o club_portal_datos): revertir antes la 167 (167_rollback.sql)';
+  end if;
+end
+$$;
 
 drop function if exists public.club_cupon_resena_clic(text);
 

@@ -378,7 +378,7 @@ Edge (misma clave que `/sync`) + cron del Worker `satori-club-api` cada 10 minut
 
 ## 08-nov · noche (correcciones de Ismael) · `96ed1bd`
 - **Guía rápida:** cupón = aplicar el 10 % en el PoS **y** marcar «PROMO CLUB 10 %» (vale ₡0: es la marca).
-- **Créditos con colones** («1 crédito · ₡10.000») en el saldo y en «Créditos a canjear» de la caja, la confirmación, el
+- **Créditos con colones** («1 crédito · ₡18.000») en el saldo y en «Créditos a canjear» de la caja, la confirmación, el
   aviso del canje, el portal y las guías: coincide con el pase.
 - **Aviso v1.1** (ES/EN): «Qué datos guardamos» suma «y tu email, si lo das». **DECISIÓN:** versión nueva y no aclaración,
   porque agrega una categoría de datos a lo que la persona acepta; quien aceptó v1 queda con v1 en su fila. Costo cero:
@@ -398,7 +398,7 @@ Edge (misma clave que `/sync`) + cron del Worker `satori-club-api` cada 10 minut
 - Pruebas: batería **526/526** · paridad **901 = 901** · vitest **1.505** · club-web **20/20**. Staging en su base.
 - Autorrevisión: el exporte ya no depende de la app (sin pasar por la base no hay datos). El de contactos es solo owner y
   cada fila lleva su baja. Hueco que queda: quien tenga el CSV puede reenviarlo; el rastro dice quién lo bajó y cuándo.
-  Los botones de «Créditos a canjear» ahora son más largos («1,5 créditos · ₡15.000»): pasan las pruebas, pero no los
+  Los botones de «Créditos a canjear» ahora son más largos («1,5 créditos · ₡27.000»): pasan las pruebas, pero no los
   revisé en pantalla de teléfono (pendiente del recorrido).
 
 ## 08-nov · noche (tanda 3)

@@ -539,6 +539,8 @@ export type FuenteCampana = 'a_contactar' | 'reto' | 'primeros_90'
 export interface Campana {
   id: string; nombre: string; local: string; fuente: FuenteCampana; control_pct: number
   inicio: string; creada_en: string; oferta: number; control: number
+  /** Cierre explícito (con motivo). Una abierta por local y fuente: para armar otra, se cierra la anterior. */
+  cerrada_en: string | null; cierre_motivo: string | null
 }
 export interface FilaCampana {
   miembro_id: string; nombre: string; negocio: string | null; tipo: TipoMiembro; estado: 'activo' | 'baja'
@@ -547,7 +549,11 @@ export interface FilaCampana {
   whatsapp?: string | null; email?: string | null
 }
 /** La lista de la campaña: SOLO el grupo con oferta; el reservado viene como número. */
-export interface ListaCampana { id: string; nombre: string; local: string; control_pct: number; oferta: number; control: number; filas: FilaCampana[] }
+export interface ListaCampana {
+  id: string; nombre: string; local: string; control_pct: number; oferta: number; control: number; cerrada_en?: string | null
+  /** En el exporte, solo los que HOY siguen activos (la base filtra al exportar). */
+  filas: FilaCampana[]
+}
 export interface GrupoReporte {
   miembros: number; con_visita: number; con_visita_pct: number | null; visitas: number; visitas_por_miembro: number | null
   facturas: number; venta_respaldada_crc: number; venta_por_miembro_crc: number | null
@@ -561,6 +567,9 @@ export const crearCampana = (nombre: string, location: string | null, controlPct
   llamar<Campana>('club_campana_crear', { p_nombre: nombre, p_location: location, p_control_pct: controlPct, p_fuente: 'a_contactar' })
 export const sumarNuevosCampana = (campana: string) =>
   llamar<{ id: string; nuevos: number; oferta: number; control: number }>('club_campana_sumar_nuevos', { p_campana: campana })
+/** Cierre explícito y auditado (con motivo). Una cerrada no suma a nadie y no se reabre. */
+export const cerrarCampana = (campana: string, motivo: string) =>
+  llamar<{ id: string; cerrada_en: string; cierre_motivo: string }>('club_campana_cerrar', { p_campana: campana, p_motivo: motivo })
 export const getCampanas = (location: string | null) => llamar<Campana[]>('club_campanas_listar', { p_location: location })
 /** `apertura`: un id por apertura de la pantalla (la base deja UNA fila de rastro por apertura). */
 export const getListaCampana = (campana: string, apertura: string) =>

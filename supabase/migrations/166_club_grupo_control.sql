@@ -26,15 +26,23 @@
 --   · SORTEO FIJO Y AUDITADO: valor = md5(semilla:campaña:miembro) → número en [0, 1); control si valor < %/100. Es
 --     determinístico y reproducible: con la semilla (que queda en la campaña y en club_auditoria) cualquiera lo recalcula.
 --     El grupo lo pone un trigger BEFORE INSERT (club_campana_asignar_trg), nunca quien inserta: aunque alguien inserte a
---     mano con otro grupo, queda el del sorteo. UPDATE y DELETE de las dos tablas se rechazan siempre (trigger): nadie
+--     mano con otro grupo, queda el del sorteo. UPDATE, DELETE y TRUNCATE se rechazan (trigger; de la campaña solo pasa
+--     el cierre): nadie
 --     reasigna ni cambia la semilla o el % después. Sin acceso directo: RLS sin políticas y sin grants (solo funciones).
+--     La semilla también la pone un trigger (club_campana_nueva_trg): nadie la elige, ni con SQL directo. De
+--     club_campanas solo se puede cambiar, UNA vez, el cierre (cerrada_en, cerrada_por, cierre_motivo).
 --   · Funciones (SECURITY DEFINER, search_path fijo, SOLO owner ACTIVO —get_my_role() es null con la cuenta inactiva—,
 --     local en mis_locales()):
---       club_campana_crear(nombre, local, % reservado, fuente) → arma la campaña y sortea la lista de HOY.
+--       club_campana_crear(nombre, local, % reservado, fuente) → arma la campaña y sortea la lista de HOY. UNA campaña
+--         ABIERTA por local y fuente (índice único parcial + chequeo con mensaje claro): no se puede re-sortear hasta que
+--         salga un grupo conveniente, ni armar otra que le mande la oferta a los reservados de la abierta.
+--       club_campana_cerrar(campaña, motivo) → cierre explícito y auditado (con motivo). Una cerrada no suma a nadie y
+--         no se reabre; su reporte y su lista se siguen viendo.
 --       club_campana_sumar_nuevos(campaña) → suma a los que entraron a la lista después; los ya asignados no cambian.
 --       club_campanas_listar(local) → campañas del local con el tamaño de cada grupo (sin personas).
 --       club_campana_lista(campaña, exporte, apertura) → SOLO el grupo con oferta (el reservado sale como un número). Con
---         p_exporte, además WhatsApp y correo de quien los autorizó (optin): es el CSV de la campaña.
+--         p_exporte, el CSV: solo los que HOY siguen activos (quien pasó a baja después de asignado no sale) y el WhatsApp
+--         o el correo solo si HOY tienen el permiso (optin). El filtro es al exportar, no al asignar.
 --       club_campana_reporte(campaña, apertura) → los dos grupos lado a lado (ver «Reporte»), con el aviso honesto de
 --         que con pocos miembros la diferencia no es concluyente.
 --     Rastro en club_auditoria: crear y sumar (con la semilla, el % y los tamaños), cada exporte (cuántas filas, sin
@@ -80,8 +88,14 @@ create table if not exists public.club_campanas (
   semilla      text not null default encode(extensions.gen_random_bytes(16), 'hex') check (semilla ~ '^[0-9a-f]{32}$'),
   inicio       date not null,                 -- día CR en que se armó
   creada_por   uuid,
-  creada_en    timestamptz not null default now()
+  creada_en    timestamptz not null default now(),
+  cerrada_en   timestamptz,
+  cerrada_por  uuid,
+  cierre_motivo text check (cierre_motivo is null or length(btrim(cierre_motivo)) between 3 and 200),
+  check ((cerrada_en is null) = (cierre_motivo is null))
 );
+-- Una campaña ABIERTA por local y fuente (la segunda barrera; la primera es el chequeo de club_campana_crear)
+create unique index if not exists club_campanas_una_abierta_uq on public.club_campanas (location_id, fuente) where cerrada_en is null;
 create index if not exists club_campanas_loc_idx on public.club_campanas (location_id, creada_en desc);
 comment on table public.club_campanas is
   'Club (166): campañas del owner con grupo de control. La semilla fija el sorteo; nada se edita ni se borra (trigger).';
@@ -154,9 +168,43 @@ begin
   raise exception '% es de solo inserción: el sorteo no se reasigna', tg_table_name using errcode = 'P0001';
 end;
 $$;
+-- La campaña: no se borra; de un UPDATE solo pasa el CIERRE (una vez: de abierta a cerrada, con motivo), sin tocar
+-- nada más. No se reabre, no cambia la semilla ni el %.
+create or replace function public.club_campana_guardia()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if tg_op = 'UPDATE' and old.cerrada_en is null and new.cerrada_en is not null
+     and (to_jsonb(new) - array['cerrada_en', 'cerrada_por', 'cierre_motivo'])
+       = (to_jsonb(old) - array['cerrada_en', 'cerrada_por', 'cierre_motivo']) then
+    return new;
+  end if;
+  raise exception 'club_campanas: solo se puede cerrar una campaña abierta; nada más se edita ni se borra' using errcode = 'P0001';
+end;
+$$;
 drop trigger if exists club_campanas_inmutable_trg on public.club_campanas;
 create trigger club_campanas_inmutable_trg before update or delete on public.club_campanas
-  for each row execute function public.club_campana_inmutable();
+  for each row execute function public.club_campana_guardia();
+drop trigger if exists club_campanas_truncate_trg on public.club_campanas;
+create trigger club_campanas_truncate_trg before truncate on public.club_campanas
+  for each statement execute function public.club_campana_inmutable();
+-- La semilla la pone la base, siempre (ni con SQL directo se elige); la campaña nace abierta.
+create or replace function public.club_campana_nueva()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  new.semilla := encode(extensions.gen_random_bytes(16), 'hex');
+  new.cerrada_en := null; new.cerrada_por := null; new.cierre_motivo := null;
+  return new;
+end;
+$$;
+drop trigger if exists club_campana_nueva_trg on public.club_campanas;
+create trigger club_campana_nueva_trg before insert on public.club_campanas
+  for each row execute function public.club_campana_nueva();
 drop trigger if exists club_campana_asig_inmutable_trg on public.club_campana_asignaciones;
 create trigger club_campana_asig_inmutable_trg before update or delete on public.club_campana_asignaciones
   for each row execute function public.club_campana_inmutable();
@@ -244,6 +292,9 @@ as $$
 declare v_c public.club_campanas%rowtype; v_n int;
 begin
   select * into v_c from public.club_campanas c where c.id = p_campana;
+  if v_c.cerrada_en is not null then
+    raise exception 'La campaña está cerrada: no suma a nadie' using errcode = 'P0001';
+  end if;
   if v_c.fuente <> 'a_contactar' then
     raise exception 'Esa fuente todavía no está disponible' using errcode = 'P0001';
   end if;
@@ -305,6 +356,13 @@ begin
   if not public.puede_ver_local(p_location) then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
+  -- Una abierta por local y fuente: ni re-sorteo ni campañas superpuestas que le manden la oferta a los reservados.
+  select * into v_c from public.club_campanas c
+   where c.location_id = p_location and c.fuente = p_fuente and c.cerrada_en is null;
+  if found then
+    raise exception 'Ya hay una campaña abierta en este local: «%» (desde el %). Cerrala antes de armar otra.',
+      v_c.nombre, to_char(v_c.inicio, 'DD/MM/YYYY') using errcode = 'P0001';
+  end if;
 
   insert into public.club_campanas (location_id, nombre, fuente, control_pct, inicio, creada_por)
   values (p_location, btrim(p_nombre), p_fuente, round(p_control_pct, 2),
@@ -339,6 +397,33 @@ begin
 end;
 $$;
 
+-- Cerrar una campaña (solo owner): explícito, con motivo y con rastro. No se reabre.
+create or replace function public.club_campana_cerrar(p_campana uuid, p_motivo text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_c public.club_campanas%rowtype;
+begin
+  v_c := public.club_campana_de_owner(p_campana);
+  if v_c.cerrada_en is not null then
+    raise exception 'La campaña ya está cerrada' using errcode = 'P0001';
+  end if;
+  if p_motivo is null or length(btrim(p_motivo)) not between 3 and 200 then
+    raise exception 'Poné el motivo del cierre (3 a 200 letras)' using errcode = 'P0001';
+  end if;
+  update public.club_campanas c set cerrada_en = now(), cerrada_por = auth.uid(), cierre_motivo = btrim(p_motivo)
+   where c.id = v_c.id
+  returning * into v_c;
+  perform public.club_auditar('campana_cerrar', 'club_campanas', v_c.id, null,
+    jsonb_build_object('local', v_c.location_id, 'fuente', v_c.fuente, 'motivo', v_c.cierre_motivo)
+    || public.club_campana_tamanos(v_c.id));
+  return jsonb_build_object('id', v_c.id, 'cerrada_en', v_c.cerrada_en, 'cierre_motivo', v_c.cierre_motivo);
+end;
+$$;
+
 -- Campañas del local (solo owner): sin personas, solo tamaños.
 create or replace function public.club_campanas_listar(p_location text default null)
 returns jsonb
@@ -358,7 +443,8 @@ begin
   end if;
   return coalesce((
     select jsonb_agg(jsonb_build_object('id', c.id, 'nombre', c.nombre, 'local', c.location_id, 'fuente', c.fuente,
-                                        'control_pct', c.control_pct, 'inicio', c.inicio, 'creada_en', c.creada_en)
+                                        'control_pct', c.control_pct, 'inicio', c.inicio, 'creada_en', c.creada_en,
+                                        'cerrada_en', c.cerrada_en, 'cierre_motivo', c.cierre_motivo)
                      || public.club_campana_tamanos(c.id) order by c.creada_en desc)
       from public.club_campanas c where c.location_id = p_location), '[]'::jsonb);
 end;
@@ -389,7 +475,9 @@ begin
     left join public.club_negocios n on n.id = m.negocio_id
     left join public.club_campana_saldos(v_c.location_id) s on s.miembro_id = m.id
     left join public.club_miembros_contacto k on k.miembro_id = m.id
-   where a.campana_id = v_c.id and a.grupo = 'oferta';     -- el grupo reservado NUNCA sale en la lista ni en el CSV
+   where a.campana_id = v_c.id and a.grupo = 'oferta'      -- el grupo reservado NUNCA sale en la lista ni en el CSV
+     -- el CSV, con lo de HOY: quien pasó a baja después de asignado no sale (el optin ya se lee de hoy, arriba)
+     and (not coalesce(p_exporte, false) or m.estado = 'activo');
   if coalesce(p_exporte, false) then
     perform public.club_auditar('exporte_campana_csv', 'club_campanas', v_c.id, null,
       jsonb_build_object('campana', v_c.id, 'local', v_c.location_id, 'filas', v_n));
@@ -398,7 +486,7 @@ begin
       jsonb_build_object('campana', v_c.id, 'local', v_c.location_id));
   end if;
   return jsonb_build_object('id', v_c.id, 'nombre', v_c.nombre, 'local', v_c.location_id, 'control_pct', v_c.control_pct,
-                            'filas', v_filas) || public.club_campana_tamanos(v_c.id);
+                            'cerrada_en', v_c.cerrada_en, 'filas', v_filas) || public.club_campana_tamanos(v_c.id);
 end;
 $$;
 
@@ -503,6 +591,9 @@ $$;
 revoke all on function public.club_campana_sorteo(text, uuid, uuid)                    from public, anon, authenticated;
 revoke all on function public.club_campana_asignar_trg()                               from public, anon, authenticated;
 revoke all on function public.club_campana_inmutable()                                 from public, anon, authenticated;
+revoke all on function public.club_campana_guardia()                                   from public, anon, authenticated;
+revoke all on function public.club_campana_nueva()                                     from public, anon, authenticated;
+revoke all on function public.club_campana_cerrar(uuid, text)                          from public, anon, authenticated;
 revoke all on function public.club_campana_de_owner(uuid)                              from public, anon, authenticated;
 revoke all on function public.club_campana_auditar_lectura(text, uuid, jsonb)          from public, anon, authenticated;
 revoke all on function public.club_campana_saldos(text)                                from public, anon, authenticated;
@@ -515,6 +606,7 @@ revoke all on function public.club_campana_lista(uuid, boolean, uuid)           
 revoke all on function public.club_campana_reporte(uuid, uuid)                         from public, anon, authenticated;
 grant execute on function public.club_campana_crear(text, text, numeric, text)         to authenticated;
 grant execute on function public.club_campana_sumar_nuevos(uuid)                       to authenticated;
+grant execute on function public.club_campana_cerrar(uuid, text)                       to authenticated;
 grant execute on function public.club_campanas_listar(text)                            to authenticated;
 grant execute on function public.club_campana_lista(uuid, boolean, uuid)               to authenticated;
 grant execute on function public.club_campana_reporte(uuid, uuid)                      to authenticated;
@@ -527,6 +619,9 @@ comment on function public.club_campana_reporte(uuid, uuid) is
 do $$
 declare v_p record;
 begin
+  if to_regclass('public.club_campanas_una_abierta_uq') is null then
+    raise exception '166: falta el índice de una campaña abierta por local y fuente';
+  end if;
   if not (select relrowsecurity from pg_class where oid = 'public.club_campanas'::regclass)
      or not (select relrowsecurity from pg_class where oid = 'public.club_campana_asignaciones'::regclass) then
     raise exception '166: falta RLS en las tablas de campañas';
@@ -536,12 +631,13 @@ begin
     raise exception '166: authenticated tiene acceso directo a las tablas de campañas';
   end if;
   if (select count(*) from pg_trigger where not tgisinternal and tgrelid in
-        ('public.club_campanas'::regclass, 'public.club_campana_asignaciones'::regclass)) <> 4 then
+        ('public.club_campanas'::regclass, 'public.club_campana_asignaciones'::regclass)) <> 6 then
     raise exception '166: faltan triggers de las campañas';
   end if;
   for v_p in select p.oid, p.proname, p.prosecdef, p.proconfig from pg_proc p
               where p.pronamespace = 'public'::regnamespace and p.proname in
-                ('club_campana_crear', 'club_campana_sumar_nuevos', 'club_campanas_listar', 'club_campana_lista', 'club_campana_reporte')
+                ('club_campana_crear', 'club_campana_sumar_nuevos', 'club_campana_cerrar', 'club_campanas_listar',
+                 'club_campana_lista', 'club_campana_reporte')
   loop
     if not v_p.prosecdef then raise exception '166: % no es SECURITY DEFINER', v_p.proname; end if;
     if not exists (select 1 from unnest(v_p.proconfig) c where c like 'search_path=%') then

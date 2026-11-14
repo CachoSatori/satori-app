@@ -39,6 +39,12 @@ describe('campanaFormato', () => {
     expect(f.find(x => x[0] === 'Volvieron en 30 días')).toEqual(['Volvieron en 30 días', '10 (25 %)', '0 (—)'])
     expect(f.find(x => x[0] === 'Venta por miembro')).toEqual(['Venta por miembro', '₡2.250', '—'])
   })
+  it('CSV: «vence» en el día de Costa Rica (20:00 CR = 02:00 UTC del día siguiente)', () => {
+    const csv = campanaCsv([{ miembro_id: 'm1', nombre: 'Prueba Noche', negocio: null, tipo: 'referente', estado: 'activo', creditos: 1,
+      vence_en: '2026-12-02T02:00:00Z' }])
+    expect(csv).toContain('"2026-12-01"')
+    expect(csv).not.toContain('2026-12-02')
+  })
   it('CSV: cabecera, una fila por miembro, WhatsApp como texto y fórmulas neutralizadas', () => {
     const csv = campanaCsv([
       { miembro_id: 'm1', nombre: 'Prueba Uno', negocio: 'Hotel Prueba', tipo: 'referente', estado: 'activo', creditos: 1.5,

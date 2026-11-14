@@ -3,11 +3,12 @@
  * El owner arma una campaña con la lista «A contactar» de HOY (créditos que vencen en los próximos 30 días) y puede
  * reservar un % sin la oferta (por defecto 15). El grupo de cada uno lo pone un sorteo fijo en la base: la pantalla no
  * elige ni reasigna a nadie. La lista y el CSV traen SOLO al grupo con oferta. El reporte compara los dos grupos.
+ * Una campaña ABIERTA por local: para armar otra se cierra la anterior (con motivo; queda registrado, no se reabre).
  * El manager no ve esta pestaña: sigue viendo «A contactar» en Reportes, como hoy.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  aClubError, crearCampana, exportarListaCampana, fmtCreditos, getCampanas, getListaCampana, getReporteCampana,
+  aClubError, cerrarCampana, crearCampana, exportarListaCampana, fmtCreditos, getCampanas, getListaCampana, getReporteCampana,
   localActual, sumarNuevosCampana, type Campana, type ListaCampana, type ReporteCampana,
 } from '../../shared/api/club'
 import { todayCR } from '../../shared/utils'
@@ -35,6 +36,7 @@ export default function Campanas() {
   useEffect(() => { void cargar() }, [cargar])
 
   const pct = reservar ? pctReserva(pctTxt) : 0
+  const abierta0 = lista?.find(c => !c.cerrada_en) ?? null
   async function armar() {
     if (pct === null || nombre.trim().length < 2) return
     if (!window.confirm(reservar
@@ -55,6 +57,15 @@ export default function Campanas() {
       setMsg({ tono: 'ok', texto: r.nuevos ? `Se sumaron ${r.nuevos}. Los que ya estaban siguen en su grupo.` : 'No hay nadie nuevo en la lista.' })
       await cargar()
     } catch (e) { setMsg({ tono: 'error', texto: aClubError(e).message }) }
+    finally { setOcupado(false) }
+  }
+  async function cerrar(c: Campana) {
+    const motivo = window.prompt(`Cerrar «${c.nombre}». No se reabre y no suma a nadie más; el reporte se sigue viendo. Motivo:`)
+    if (motivo === null) return
+    if (motivo.trim().length < 3) { setMsg({ tono: 'error', texto: 'Poné el motivo del cierre.' }); return }
+    setOcupado(true); setMsg(null)
+    try { await cerrarCampana(c.id, motivo.trim()); setMsg({ tono: 'ok', texto: 'Campaña cerrada.' }); await cargar() }
+    catch (e) { setMsg({ tono: 'error', texto: aClubError(e).message }) }
     finally { setOcupado(false) }
   }
   async function exportar(c: Campana) {
@@ -88,8 +99,10 @@ export default function Campanas() {
           <Aviso tono="info">{REGLA_BENEFICIO_BASE}</Aviso>
           <div style={{ fontSize: '0.8rem', color: C.muted }}>
             Quién queda reservado lo decide un sorteo fijo y anotado: no se elige a mano y nadie cambia de grupo después.
+            Hay una sola campaña abierta por local: para armar otra, cerrá la anterior.
           </div>
-          <Btn onClick={armar} disabled={ocupado || pct === null || nombre.trim().length < 2}>{ocupado ? 'Armando…' : 'Armar campaña'}</Btn>
+          {abierta0 && <Aviso tono="info">Ya hay una campaña abierta: «{abierta0.nombre}». Cerrala antes de armar otra.</Aviso>}
+          <Btn onClick={armar} disabled={ocupado || pct === null || nombre.trim().length < 2 || !!abierta0}>{ocupado ? 'Armando…' : 'Armar campaña'}</Btn>
         </div>
       </Card>
       {msg && <Aviso tono={msg.tono} onClose={() => setMsg(null)}>{msg.texto}</Aviso>}
@@ -102,13 +115,15 @@ export default function Campanas() {
               <strong>{c.nombre}</strong>
               <div style={{ fontSize: '0.85rem', color: C.muted }}>
                 Desde {fmtFecha(c.inicio)} · {c.oferta} con oferta · {c.control} reservados ({c.control_pct} %)
+                {' · '}{c.cerrada_en ? `Cerrada el ${fmtFecha(c.cerrada_en)}${c.cierre_motivo ? ` (${c.cierre_motivo})` : ''}` : 'Abierta'}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <Btn variant="secondary" onClick={() => setAbierta(a => a?.id === c.id && a.vista === 'lista' ? null : { id: c.id, vista: 'lista' })}>Lista</Btn>
               <Btn variant="secondary" onClick={() => exportar(c)}>CSV (sin reservados)</Btn>
-              <Btn variant="secondary" onClick={() => sumar(c)} disabled={ocupado}>Sumar nuevos</Btn>
+              {!c.cerrada_en && <Btn variant="secondary" onClick={() => sumar(c)} disabled={ocupado}>Sumar nuevos</Btn>}
               <Btn variant="secondary" onClick={() => setAbierta(a => a?.id === c.id && a.vista === 'reporte' ? null : { id: c.id, vista: 'reporte' })}>Reporte</Btn>
+              {!c.cerrada_en && <Btn variant="danger" onClick={() => cerrar(c)} disabled={ocupado}>Cerrar campaña</Btn>}
             </div>
           </div>
           {abierta?.id === c.id && abierta.vista === 'lista' && <ListaVista id={c.id} apertura={apertura} />}
@@ -133,6 +148,7 @@ function ListaVista({ id, apertura }: { id: string; apertura: string }) {
     <div style={{ marginTop: 8 }}>
       <div style={{ fontSize: '0.85rem', color: C.muted, marginBottom: 6 }}>
         A quién mandarle la oferta: {l.oferta}. Los {l.control} reservados no salen acá ni en el CSV: no se les manda esta oferta.
+        Quien pasó a baja después de entrar sale marcado acá, pero no en el CSV.
       </div>
       {l.filas.length === 0 ? <Aviso tono="info">Nadie en la lista.</Aviso> : (
         <div style={{ maxHeight: 320, overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: 8 }}>

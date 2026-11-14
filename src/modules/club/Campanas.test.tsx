@@ -6,7 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { Campana, ListaCampana, ReporteCampana } from '../../shared/api/club'
 
 const st = vi.hoisted(() => ({
-  crear: vi.fn(), lista: null as unknown, reporte: null as unknown, campanas: [] as unknown[],
+  crear: vi.fn(), cerrar: vi.fn(), lista: null as unknown, reporte: null as unknown, campanas: [] as unknown[],
 }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/api/club', async orig => ({
@@ -14,6 +14,7 @@ vi.mock('../../shared/api/club', async orig => ({
   localActual: () => 'p166-a',
   getCampanas: async () => st.campanas,
   crearCampana: (...a: unknown[]) => st.crear(...a),
+  cerrarCampana: (...a: unknown[]) => st.cerrar(...a),
   getListaCampana: async () => st.lista,
   getReporteCampana: async () => st.reporte,
 }))
@@ -21,12 +22,12 @@ vi.mock('../../shared/api/club', async orig => ({
 import Campanas from './Campanas'
 
 const camp: Campana = { id: 'c1', nombre: 'Prueba vencen', local: 'p166-a', fuente: 'a_contactar', control_pct: 15,
-  inicio: '2026-11-14', creada_en: '2026-11-14T18:00:00Z', oferta: 5, control: 1 }
+  inicio: '2026-11-14', creada_en: '2026-11-14T18:00:00Z', oferta: 5, control: 1, cerrada_en: null, cierre_motivo: null }
 const grupo = (miembros: number) => ({ miembros, con_visita: 1, con_visita_pct: 20, visitas: 1, visitas_por_miembro: 0.2,
   facturas: 1, venta_respaldada_crc: 9000, venta_por_miembro_crc: 1800 })
 
 beforeEach(() => {
-  st.crear.mockReset(); st.campanas = []
+  st.crear.mockReset(); st.cerrar.mockReset(); st.campanas = []
   window.confirm = vi.fn(() => true)
 })
 
@@ -51,6 +52,24 @@ describe('Campañas', () => {
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(screen.getByText('Armar campaña'))
     await waitFor(() => expect(st.crear).toHaveBeenLastCalledWith('Prueba dos', 'p166-a', 0))
+  })
+  it('con una abierta no deja armar otra; «Cerrar campaña» pide motivo y llama con él', async () => {
+    st.campanas = [camp]
+    st.cerrar.mockResolvedValue({ id: 'c1', cerrada_en: '2026-11-14T20:00:00Z', cierre_motivo: 'Terminó' })
+    window.prompt = vi.fn(() => 'Terminó')
+    render(<Campanas />)
+    expect(await screen.findByText(/Ya hay una campaña abierta: «Prueba vencen»/)).toBeTruthy()
+    fireEvent.change(screen.getByPlaceholderText(/Créditos por vencer/), { target: { value: 'Prueba otra' } })
+    expect((screen.getByText('Armar campaña').closest('button') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByText('Cerrar campaña'))
+    await waitFor(() => expect(st.cerrar).toHaveBeenCalledWith('c1', 'Terminó'))
+  })
+  it('una cerrada dice «Cerrada» con el motivo y no ofrece «Sumar nuevos» ni «Cerrar»', async () => {
+    st.campanas = [{ ...camp, cerrada_en: '2026-11-14T20:00:00Z', cierre_motivo: 'Terminó' }]
+    render(<Campanas />)
+    expect(await screen.findByText(/Cerrada el .*\(Terminó\)/)).toBeTruthy()
+    expect(screen.queryByText('Sumar nuevos')).toBeNull()
+    expect(screen.queryByText('Cerrar campaña')).toBeNull()
   })
   it('la lista muestra solo a los de oferta y cuántos quedaron reservados', async () => {
     st.campanas = [camp]

@@ -5,7 +5,9 @@
 -- migraciones, §6). Este script frena si encuentra alguna campaña.
 -- Las filas de club_auditoria ('campana_crear', 'campana_sumar', 'exporte_campana_csv', 'ver_campana_*') QUEDAN: la
 -- auditoría es de solo inserción; son rastro, no estado.
--- En el mismo momento, un PR que saca el .sql de la 166 de main (si queda, Branching la vuelve a aplicar).
+-- Borra la fila 166 del ledger (supabase_migrations.schema_migrations), como la 155 y la 157 (la 112 nunca se aplicó
+-- con ese número). Si se corre en prod, en el mismo momento sale el .sql de la 166 de main (si queda, Branching la
+-- vuelve a aplicar; skill satori-migraciones-y-prod §6).
 begin;
 
 do $$
@@ -20,6 +22,7 @@ drop function if exists public.club_campana_reporte(uuid, uuid);
 drop function if exists public.club_campana_lista(uuid, boolean, uuid);
 drop function if exists public.club_campanas_listar(text);
 drop function if exists public.club_campana_sumar_nuevos(uuid);
+drop function if exists public.club_campana_cerrar(uuid, text);
 drop function if exists public.club_campana_crear(text, text, numeric, text);
 drop function if exists public.club_campana_tamanos(uuid);
 drop function if exists public.club_campana_sumar(uuid);
@@ -29,6 +32,8 @@ drop function if exists public.club_campana_de_owner(uuid);
 drop table if exists public.club_campana_asignaciones;
 drop table if exists public.club_campanas;
 drop function if exists public.club_campana_inmutable();
+drop function if exists public.club_campana_guardia();
+drop function if exists public.club_campana_nueva();
 drop function if exists public.club_campana_asignar_trg();
 drop function if exists public.club_campana_sorteo(text, uuid, uuid);
 
@@ -37,9 +42,12 @@ begin
   if to_regclass('public.club_campanas') is not null or to_regclass('public.club_campana_asignaciones') is not null
      or to_regprocedure('public.club_campana_reporte(uuid, uuid)') is not null
      or to_regprocedure('public.club_campana_crear(text, text, numeric, text)') is not null
-     or to_regprocedure('public.club_campana_sorteo(text, uuid, uuid)') is not null then
+     or to_regprocedure('public.club_campana_sorteo(text, uuid, uuid)') is not null
+     or to_regprocedure('public.club_campana_cerrar(uuid, text)') is not null then
     raise exception '166_rollback: algo de la 166 sigue';
   end if;
 end $$;
+
+delete from supabase_migrations.schema_migrations where version = '166';
 
 commit;

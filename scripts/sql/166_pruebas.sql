@@ -9,6 +9,8 @@
 -- 3, p166-c vacío), un usuario por rol (más un owner inactivo y un manager de otro local). JWT simulado con
 -- set_config('request.jwt.claims', …, true), como las baterías 160 y 161.
 --
+-- Una campaña ABIERTA por local y fuente: en p166-a se arman y cierran la de 0 % y la de 50 %, y queda abierta la de 15 %.
+-- Después de asignados, O4 (con permiso) pasa a baja y O5 tiene contacto sin permiso: el CSV filtra al exportar.
 -- Fuera de «A contactar» en p166-a: X1 vence en 40 días · X2 tipo equipo · X3 de baja · X4 ya vencido · X5 saldo 2
 -- personas (0 créditos). Los grupos salen del sorteo (semilla al azar): la batería toma O1, O2, O3 (oferta) y C1, C2
 -- (control) de las asignaciones y les arma actividad HOY:
@@ -91,22 +93,33 @@ begin
 end $f$;
 
 -- ── Campañas ───────────────────────────────────────────────────────────────────────────────────────────────────────
-create temp table _c166 on commit drop as
-select pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba vencen', 'p166-a')$$) as a15,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba sin reserva', 'p166-a', 0)$$) as a0,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba mitad', 'p166-a', 50)$$) as a50,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba chica', 'p166-b', 15)$$) as b15,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba vacia', 'p166-c', 15)$$) as c15,
-       pg_temp.como('00000000-0000-4000-8000-000000166a02', $$public.club_campana_crear('Prueba manager', 'p166-a')$$) as manager,
-       pg_temp.como('00000000-0000-4000-8000-000000166a03', $$public.club_campana_crear('Prueba contador', 'p166-a')$$) as contador,
-       pg_temp.como('00000000-0000-4000-8000-000000166a04', $$public.club_campana_crear('Prueba cajero', 'p166-a')$$) as cajero,
-       pg_temp.como('00000000-0000-4000-8000-000000166a06', $$public.club_campana_crear('Prueba inactivo', 'p166-a')$$) as inactivo,
-       pg_temp.como(null,                                   $$public.club_campana_crear('Prueba sin sesion', 'p166-a')$$) as sin_sesion,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba sesenta', 'p166-a', 60)$$) as pct60,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba negativo', 'p166-a', -1)$$) as pctneg,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear(' ', 'p166-a')$$) as sin_nombre,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba reto', 'p166-a', 15, 'reto')$$) as reto,
-       pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba local', 'p166-zz')$$) as local_malo;
+-- Una campaña ABIERTA por local y fuente: la de 0 % se arma y se cierra, después la de 50 % (y se cierra), y recién
+-- ahí la de 15 %, que queda abierta para el resto de la batería.
+create temp table _c166 (a0 jsonb, cerrar_a0 jsonb, a50 jsonb, cerrar_a50 jsonb, a15 jsonb, otra_abierta jsonb, b15 jsonb, c15 jsonb,
+  manager jsonb, contador jsonb, cajero jsonb, inactivo jsonb, sin_sesion jsonb, pct60 jsonb, pctneg jsonb, sin_nombre jsonb,
+  reto jsonb, local_malo jsonb) on commit drop;
+insert into _c166 default values;
+update _c166 set a0 = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba sin reserva', 'p166-a', 0)$$);
+update _c166 set cerrar_a0 = pg_temp.como('00000000-0000-4000-8000-000000166a01', format('public.club_campana_cerrar(%L, %L)', a0->>'id', 'Prueba terminada'));
+update _c166 set a50 = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba mitad', 'p166-a', 50)$$);
+update _c166 set cerrar_a50 = pg_temp.como('00000000-0000-4000-8000-000000166a01', format('public.club_campana_cerrar(%L, %L)', a50->>'id', 'Prueba terminada'));
+update _c166 set a15 = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba vencen', 'p166-a')$$);
+update _c166 set
+  pct60      = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba sesenta', 'p166-c', 60)$$),
+  pctneg     = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba negativo', 'p166-c', -1)$$),
+  sin_nombre = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear(' ', 'p166-c')$$),
+  reto       = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba reto', 'p166-c', 15, 'reto')$$);
+-- (validaciones antes de abrir campañas en p166-c: si una mutación las deja pasar, crean una y se nota)
+update _c166 set
+  otra_abierta = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba otra', 'p166-a', 15)$$),
+  b15        = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba chica', 'p166-b', 15)$$),
+  c15        = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba vacia', 'p166-c', 15)$$),
+  manager    = pg_temp.como('00000000-0000-4000-8000-000000166a02', $$public.club_campana_crear('Prueba manager', 'p166-a')$$),
+  contador   = pg_temp.como('00000000-0000-4000-8000-000000166a03', $$public.club_campana_crear('Prueba contador', 'p166-c')$$),
+  cajero     = pg_temp.como('00000000-0000-4000-8000-000000166a04', $$public.club_campana_crear('Prueba cajero', 'p166-c')$$),
+  inactivo   = pg_temp.como('00000000-0000-4000-8000-000000166a06', $$public.club_campana_crear('Prueba inactivo', 'p166-c')$$),
+  sin_sesion = pg_temp.como(null,                                   $$public.club_campana_crear('Prueba sin sesion', 'p166-c')$$),
+  local_malo = pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campana_crear('Prueba local', 'p166-zz')$$);
 create temp table _id166 on commit drop as
 select (a15->>'id')::uuid as a15, (a0->>'id')::uuid as a0, (a50->>'id')::uuid as a50, (b15->>'id')::uuid as b15,
        (c15->>'id')::uuid as c15 from _c166;
@@ -116,10 +129,11 @@ select a.miembro_id, a.grupo, a.sorteo from public.club_campana_asignaciones a, 
 
 -- 0. catálogo
 insert into _r166 (caso, ok, detalle)
-select '0 catálogo: definer · search_path fijo · anon sin EXECUTE · authenticated solo en las 5 de pantalla · tablas sin grants',
+select '0 catálogo: definer · search_path fijo · anon sin EXECUTE · authenticated solo en las 6 de pantalla · tablas sin grants',
        bool_and(p.prosecdef and p.proconfig = array['search_path=public, pg_temp'] and not has_function_privilege('anon', p.oid, 'EXECUTE'))
        and bool_and(has_function_privilege('authenticated', p.oid, 'EXECUTE') = (p.proname in
-             ('club_campana_crear', 'club_campana_sumar_nuevos', 'club_campanas_listar', 'club_campana_lista', 'club_campana_reporte')))
+             ('club_campana_crear', 'club_campana_sumar_nuevos', 'club_campana_cerrar', 'club_campanas_listar', 'club_campana_lista',
+              'club_campana_reporte')))
        and not has_table_privilege('authenticated', 'public.club_campanas', 'SELECT,INSERT,UPDATE,DELETE')
        and not has_table_privilege('authenticated', 'public.club_campana_asignaciones', 'SELECT,INSERT,UPDATE,DELETE')
        and not has_table_privilege('anon', 'public.club_campana_asignaciones', 'SELECT,INSERT,UPDATE,DELETE'),
@@ -281,13 +295,17 @@ create temp table _q166 on commit drop as
 select (select miembro_id from _g166 where grupo = 'oferta' order by miembro_id limit 1)          as o1,
        (select miembro_id from _g166 where grupo = 'oferta' order by miembro_id offset 1 limit 1) as o2,
        (select miembro_id from _g166 where grupo = 'oferta' order by miembro_id offset 2 limit 1) as o3,
+       (select miembro_id from _g166 where grupo = 'oferta' order by miembro_id offset 3 limit 1) as o4,
+       (select miembro_id from _g166 where grupo = 'oferta' order by miembro_id offset 4 limit 1) as o5,
        (select miembro_id from _g166 where grupo = 'control' order by miembro_id limit 1)          as c1,
        (select miembro_id from _g166 where grupo = 'control' order by miembro_id offset 1 limit 1) as c2;
 insert into public.club_miembros_contacto (miembro_id, location_id, telefono, email, optin_whatsapp, optin_email)
 select * from (
   select o1 as m, 'p166-a', '+50600000166', 'p166-o1@ejemplo.test', true, false from _q166
   union all select o2, 'p166-a', '+50600000167', 'p166-o2@ejemplo.test', false, true from _q166
-  union all select c1, 'p166-a', '+50600000168', 'p166-c1@ejemplo.test', true, true from _q166) x
+  union all select c1, 'p166-a', '+50600000168', 'p166-c1@ejemplo.test', true, true from _q166
+  union all select o4, 'p166-a', '+50600000169', 'p166-o4@ejemplo.test', true, true from _q166
+  union all select o5, 'p166-a', '+50600000170', 'p166-o5@ejemplo.test', false, false from _q166) x
  where m is not null;   -- con una mutación puede no haber control
 
 insert into public.pos_ndf_tickets (id, local, numero_factura, fecha_registra, fecha_cierra, estado, canal, registrado_por,
@@ -326,6 +344,9 @@ insert into public.club_cruces_manuales (movimiento_id, location_id, numero_fact
 select '00000000-0000-4000-8000-000000166e01', 'p166-a', '00166004'
 union all select id, 'p166-a', '00166002' from public.club_movimientos where id = '00000000-0000-4000-8000-000000166e02';
 
+-- después de asignados: O4 pasa a baja (tenía permiso); O5 tiene contacto sin permiso (lo retiró)
+update public.club_miembros set estado = 'baja' where id = (select o4 from _q166);
+
 -- 6. la lista y el CSV: solo el grupo con oferta
 create temp table _l166 on commit drop as
 select pg_temp.como('00000000-0000-4000-8000-000000166a01', format('public.club_campana_lista(%L)', a15)) as lista,
@@ -343,7 +364,7 @@ select '6a la lista trae SOLO la oferta: filas = oferta, ningún miembro del con
        (lista->>'oferta') || '/' || (lista->>'control') from _l166;
 insert into _r166 (caso, ok, detalle)
 select '6b el CSV excluye al control (ni su WhatsApp ni su correo) y trae el contacto solo con permiso',
-       jsonb_array_length(csv->'filas') = (csv->>'oferta')::int
+       jsonb_array_length(csv->'filas') = (csv->>'oferta')::int - 1
        and position('+50600000168' in csv::text) = 0 and position('p166-c1@' in csv::text) = 0
        and (select f->>'whatsapp' from jsonb_array_elements(csv->'filas') f, _q166 q where (f->>'miembro_id')::uuid = q.o1) = '+50600000166'
        and (select f->>'email'    from jsonb_array_elements(csv->'filas') f, _q166 q where (f->>'miembro_id')::uuid = q.o1) is null
@@ -355,6 +376,17 @@ select '6c la lista (sin exporte) no trae contactos', position('+506' in lista::
 insert into _r166 (caso, ok, detalle)
 select '6d campaña chica: CSV con los de oferta de p166-b (≤ 3)', jsonb_array_length(csv_b->'filas') = (csv_b->>'oferta')::int
        and (csv_b->>'oferta')::int + (csv_b->>'control')::int = 3, csv_b::text from _l166;
+
+insert into _r166 (caso, ok, detalle)
+select '6e el CSV se filtra al exportar: quien pasó a baja después de asignado no sale (ni su contacto); sin permiso, sin contacto',
+       not exists (select 1 from jsonb_array_elements(csv->'filas') f, _q166 q where (f->>'miembro_id')::uuid = q.o4)
+       and position('+50600000169' in csv::text) = 0 and position('p166-o4@' in csv::text) = 0
+       and position('+50600000170' in csv::text) = 0 and position('p166-o5@' in csv::text) = 0
+       and exists (select 1 from jsonb_array_elements(csv->'filas') f, _q166 q where (f->>'miembro_id')::uuid = q.o5)
+       and jsonb_array_length(csv->'filas') = (csv->>'oferta')::int - 1
+       -- la lista en pantalla lo sigue mostrando, marcado de baja (la asignación no cambia)
+       and exists (select 1 from jsonb_array_elements(lista->'filas') f, _q166 q where (f->>'miembro_id')::uuid = q.o4 and f->>'estado' = 'baja'),
+       (csv->>'oferta') || ' ' || jsonb_array_length(csv->'filas') from _l166;
 
 -- 7. reporte
 create temp table _rep166 on commit drop as
@@ -412,7 +444,7 @@ select '8b cada exporte del CSV deja su fila (2 exportes → 2), con cuántas fi
        (select count(*) from public.club_auditoria a, _id166 i where a.accion = 'exporte_campana_csv' and a.objeto_id in (i.a15, i.b15)) = 2
        and (select bool_and(not (a.despues ? 'filas') or position('@' in a.despues::text) = 0) from public.club_auditoria a where a.accion = 'exporte_campana_csv')
        and exists (select 1 from public.club_auditoria a, _id166 i, _l166 l where a.accion = 'exporte_campana_csv' and a.objeto_id = i.a15
-                     and (a.despues->>'filas')::int = (l.csv->>'oferta')::int),
+                     and (a.despues->>'filas')::int = jsonb_array_length(l.csv->'filas')),
        null;
 insert into _r166 (caso, ok, detalle)
 select '8c listar: las campañas del local con sus tamaños, sin personas',
@@ -420,15 +452,62 @@ select '8c listar: las campañas del local con sus tamaños, sin personas',
        and (select bool_and(e ? 'oferta' and e ? 'control') from jsonb_array_elements(x) e), left(x::text, 120)
   from (select pg_temp.como('00000000-0000-4000-8000-000000166a01', $$public.club_campanas_listar('p166-a')$$) x) y;
 
--- 9. vuelta atrás (dentro de esta misma transacción descartada)
+-- 10. una campaña abierta por local y fuente; cierre explícito y auditado
+create temp table _k166 on commit drop as
+select pg_temp.como('00000000-0000-4000-8000-000000166a02', format('public.club_campana_cerrar(%L, %L)', a15, 'Prueba manager')) as cerrar_manager,
+       pg_temp.como('00000000-0000-4000-8000-000000166a01', format('public.club_campana_cerrar(%L, %L)', a0, 'Prueba otra vez')) as cerrar_dos_veces,
+       pg_temp.como('00000000-0000-4000-8000-000000166a01', format('public.club_campana_cerrar(%L, %L)', b15, ' ')) as cerrar_sin_motivo,
+       pg_temp.como('00000000-0000-4000-8000-000000166a01', format('public.club_campana_sumar_nuevos(%L)', a0)) as sumar_cerrada,
+       pg_temp.intenta(format($$update public.club_campanas set cerrada_en = null, cierre_motivo = null where id = %L$$, a0)) as reabrir,
+       pg_temp.intenta(format($$update public.club_campanas set nombre = 'Otro' where id = %L$$, b15)) as editar_abierta,
+       pg_temp.intenta($$insert into public.club_campanas (location_id, nombre, fuente, inicio) values ('p166-a', 'Directa', 'a_contactar', current_date)$$) as directa,
+       pg_temp.intenta($$truncate public.club_campanas cascade$$) as truncar
+  from _id166;
+insert into _r166 (caso, ok, detalle)
+select '10a con una abierta en el local, otra campaña de la misma fuente → P0001 y no se crea (no se re-sortea)',
+       otra_abierta = to_jsonb('ERR:P0001'::text) and not exists (select 1 from public.club_campanas where nombre = 'Prueba otra'),
+       otra_abierta::text from _c166;
+insert into _r166 (caso, ok, detalle)
+select '10b cerrada la anterior, se arma la siguiente (0 % → 50 % → 15 % en el mismo local)',
+       cerrar_a0 ? 'cerrada_en' and cerrar_a50 ? 'cerrada_en' and a50 ? 'id' and a15 ? 'id'
+       and (select count(*) from public.club_campanas where location_id = 'p166-a' and cerrada_en is null) = 1,
+       concat_ws(' ', cerrar_a0, cerrar_a50) from _c166;
+insert into _r166 (caso, ok, detalle)
+select '10c cerrar: solo owner (42501), con motivo (P0001), una vez (P0001); una cerrada no suma (P0001)',
+       cerrar_manager = to_jsonb('ERR:42501'::text) and cerrar_dos_veces = to_jsonb('ERR:P0001'::text)
+       and cerrar_sin_motivo = to_jsonb('ERR:P0001'::text) and sumar_cerrada = to_jsonb('ERR:P0001'::text),
+       concat_ws(' ', cerrar_manager, cerrar_dos_veces, cerrar_sin_motivo, sumar_cerrada) from _k166;
+insert into _r166 (caso, ok, detalle)
+select '10d el cierre queda en club_auditoria (motivo y tamaños) y en la campaña (quién y cuándo)',
+       exists (select 1 from public.club_auditoria a, _id166 i where a.accion = 'campana_cerrar' and a.objeto_id = i.a0
+                 and a.despues->>'motivo' = 'Prueba terminada' and (a.despues->>'oferta')::int = 2000
+                 and a.actor = '00000000-0000-4000-8000-000000166a01')
+       and exists (select 1 from public.club_campanas c, _id166 i where c.id = i.a0 and c.cerrada_por = '00000000-0000-4000-8000-000000166a01'),
+       null;
+insert into _r166 (caso, ok, detalle)
+select '10e no se reabre ni se edita (P0001); SQL directo: otra abierta → 23505 (índice); TRUNCATE → rechazado',
+       reabrir = 'ERR:P0001' and editar_abierta = 'ERR:P0001' and directa = 'ERR:23505' and truncar like 'ERR:%',
+       concat_ws(' ', reabrir, editar_abierta, directa, truncar) from _k166;
+create temp table _f166 on commit drop as
+select pg_temp.intenta($$insert into public.club_campanas (location_id, nombre, fuente, inicio, semilla)
+                         values ('p166-c', 'Prueba semilla', 'primeros_90', current_date, '$$ || repeat('0', 32) || $$')$$) as r;
+insert into _r166 (caso, ok, detalle)
+select '10f la semilla la pone la base: un INSERT directo con semilla elegida queda con otra',
+       r = 'PASÓ' and (select semilla from public.club_campanas where nombre = 'Prueba semilla') <> repeat('0', 32), r
+  from _f166;
+
+-- 9. vuelta atrás (dentro de esta misma transacción descartada), con la fila del ledger
+insert into supabase_migrations.schema_migrations (version, name)
+select '166', 'club_grupo_control' where not exists (select 1 from supabase_migrations.schema_migrations where version = '166');
 -- @@166R@@   (aquí va el cuerpo de scripts/sql/166_rollback.sql sin begin/commit)
 insert into _r166 (caso, ok, detalle)
-select '9 rollback: sin tablas ni funciones de la 166; club_reporte_mes y club_config siguen',
+select '9 rollback: sin tablas ni funciones de la 166 ni su fila del ledger; club_reporte_mes y club_config siguen',
        to_regclass('public.club_campanas') is null and to_regclass('public.club_campana_asignaciones') is null
        and to_regprocedure('public.club_campana_reporte(uuid, uuid)') is null
        and to_regprocedure('public.club_campana_sorteo(text, uuid, uuid)') is null
        and to_regprocedure('public.club_reporte_mes(date, text, boolean)') is not null
-       and (select count(*) from public.club_config where location_id like 'p166-%') = 3, null;
+       and (select count(*) from public.club_config where location_id like 'p166-%') = 3
+       and not exists (select 1 from supabase_migrations.schema_migrations where version = '166'), null;
 
 -- Resultado
 select jsonb_agg(jsonb_build_object('caso', caso, 'ok', ok, 'detalle', detalle) order by n) as resultado from _r166;
@@ -437,7 +516,7 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r166 where not ok;
   if v is not null then raise exception '166-FALLAN: %', v; end if;
-  if (select count(*) from _r166) < 38 then raise exception '166-FALLAN: faltan casos (NO PROBADO)'; end if;
+  if (select count(*) from _r166) < 51 then raise exception '166-FALLAN: faltan casos (NO PROBADO)'; end if;
 end $$;
 
 rollback;

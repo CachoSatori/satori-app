@@ -2,6 +2,7 @@
  * Campañas con grupo de control (166, SPEC Club v2 ítem 12): textos y CSV. Funciones puras (se prueban sin pantalla).
  */
 import type { FilaCampana, GrupoReporte, ReporteCampana } from '../../shared/api/club'
+import { dateCR } from '../../shared/utils'
 
 /** La regla del dueño: al grupo reservado nunca se le quita el beneficio base, solo el extra de la campaña. */
 export const REGLA_BENEFICIO_BASE =
@@ -52,10 +53,11 @@ const q = (v: unknown) => {
   return `"${t.replace(/"/g, '""')}"`
 }
 
-/** CSV de la campaña. Las filas vienen de la base, que nunca manda al grupo reservado. */
+/** CSV de la campaña. Las filas vienen de la base, que nunca manda al grupo reservado ni a quien pasó a baja.
+ *  «vence» es el día de Costa Rica (una tarjeta a las 20:00 CR es 02:00 UTC del día siguiente: no se corta en UTC). */
 export function campanaCsv(filas: FilaCampana[]): string {
   const L = ['nombre;negocio;tipo;creditos;vence;whatsapp;email']
   for (const f of filas)
-    L.push([f.nombre, f.negocio ?? '', f.tipo, f.creditos, (f.vence_en ?? '').slice(0, 10), f.whatsapp ?? '', f.email ?? ''].map(q).join(';'))
+    L.push([f.nombre, f.negocio ?? '', f.tipo, f.creditos, dateCR(f.vence_en), f.whatsapp ?? '', f.email ?? ''].map(q).join(';'))
   return '﻿' + L.join('\r\n')
 }

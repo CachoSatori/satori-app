@@ -40,16 +40,30 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     'reasigna': ("create trigger club_campana_asig_inmutable_trg before update or delete on public.club_campana_asignaciones\n"
                  "  for each row execute function public.club_campana_inmutable();\n", "", {'5a', '5b'}),
     'cambia_semilla': ("create trigger club_campanas_inmutable_trg before update or delete on public.club_campanas\n"
-                       "  for each row execute function public.club_campana_inmutable();\n", "", {'5c'}),
+                       "  for each row execute function public.club_campana_guardia();\n", "", {'5c', '10e'}),
+    # ── una campaña abierta por local y fuente; cierre explícito (verificador de #185) ──
+    'dos_abiertas': ("  if found then\n    raise exception 'Ya hay una campaña abierta", "  if false then\n    raise exception 'Ya hay una campaña abierta", {'10a'}),
+    'sin_indice': ("create unique index if not exists club_campanas_una_abierta_uq on public.club_campanas (location_id, fuente) where cerrada_en is null;\n",
+                   "", {'10e'}),
+    'reabre': ("  if tg_op = 'UPDATE' and old.cerrada_en is null and new.cerrada_en is not null\n", "  if tg_op = 'UPDATE'\n", {'10e'}),
+    'cierre_sin_rastro': ("  perform public.club_auditar('campana_cerrar', 'club_campanas', v_c.id, null,\n",
+                          "  perform public.club_auditar('otra_cosa', 'club_campanas', null, null,\n", {'10d'}),
+    'cerrada_suma': ("  if v_c.cerrada_en is not null then\n    raise exception 'La campaña está cerrada: no suma a nadie'",
+                     "  if false then\n    raise exception 'La campaña está cerrada: no suma a nadie'", {'10c'}),
+    'semilla_elegida': ("  new.semilla := encode(extensions.gen_random_bytes(16), 'hex');\n", "", {'10f'}),
+    # el CSV no filtra a quien pasó a baja después de asignado
+    'csv_con_baja': ("\n     and (not coalesce(p_exporte, false) or m.estado = 'activo');", "\n     ;", {'6b', '6e'}),
     'truncate_libre': ("create trigger club_campana_asig_truncate_trg before truncate on public.club_campana_asignaciones\n"
                        "  for each statement execute function public.club_campana_inmutable();\n", "", {'5f'}),
     # el CSV y la lista traen también al control
-    'csv_con_control': ("   where a.campana_id = v_c.id and a.grupo = 'oferta';", "   where a.campana_id = v_c.id;", {'6a', '6b'}),
+    'csv_con_control': ("   where a.campana_id = v_c.id and a.grupo = 'oferta'      --", "   where a.campana_id = v_c.id      --", {'6a', '6b'}),
     # el contacto sale sin permiso
     'contacto_sin_optin': ("'whatsapp', case when k.optin_whatsapp then k.telefono end,", "'whatsapp', k.telefono,", {'6b'}),
     'manager_arma': (_ROL_CREAR, _ROL_CREAR.replace("v_rol <> 'owner'", "v_rol not in ('owner','manager')"), {'1b'}),
     'manager_ve': (_ROL_OWNER, _ROL_OWNER.replace("v_rol <> 'owner'", "v_rol not in ('owner','manager')"), {'1g'}),
     'pct_sin_tope': ("p_control_pct < 0 or p_control_pct > 50 then", "p_control_pct < 0 or p_control_pct > 100 then", {'2a'}),
+    # (TRUNCATE de club_campanas: su trigger y la FK con TRUNCATE de asignaciones (que también lo rechaza) se cubren
+    # entre sí; sacar uno solo no lo abre: no hay mutación de uno)
     # (la fuente «reto» tiene dos guardas, en crear y en sumar: sacar una sola no la abre; no hay mutación de una)
     # «A contactar» con los ya vencidos y con el equipo
     'con_vencidos': ("   where s.creditos > 0 and s.vence_en >= now() and", "   where s.creditos > 0 and", {'3a'}),
@@ -89,6 +103,7 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
     'rollback_deja_reporte': ("drop function if exists public.club_campana_reporte(uuid, uuid);\n", "", {'9'}),
     'rollback_deja_sorteo': ("drop function if exists public.club_campana_sorteo(text, uuid, uuid);\n", "", {'9'}),
+    'rollback_deja_ledger': ("delete from supabase_migrations.schema_migrations where version = '166';\n", "", {'9'}),
 }
 
 def sin_tx(sql: str) -> str:

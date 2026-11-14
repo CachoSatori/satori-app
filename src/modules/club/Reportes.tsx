@@ -4,7 +4,7 @@
  * del navegador → «Guardar como PDF». «Exportar CSV» baja el anexo con todas las filas.
  */
 import { useEffect, useState } from 'react'
-import { getReporteMes, getLocalesClub, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero, getReporteVisitas, type VisitasPorUsuario, exportarReporte, exportarContactosOfertas } from '../../shared/api/club'
+import { getReporteMes, getLocalesClubParaRol, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero, getReporteVisitas, type VisitasPorUsuario, exportarReporte, exportarContactosOfertas } from '../../shared/api/club'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
@@ -29,12 +29,14 @@ export default function Reportes() {
   const { profile } = useAuth()
   const esOwner = profile?.role === 'owner'
 
+  const rol = profile?.role
   useEffect(() => {
-    getLocalesClub().then(l => {
+    // 170: el manager solo ve sus locales; si el recordado no es suyo, arranca en uno que sí
+    getLocalesClubParaRol(rol).then(l => {
       setLocales(l)
-      setLocal(act => act ?? l.find(x => x.activo)?.id ?? l[0]?.id ?? null)
+      setLocal(act => (act && l.some(x => x.id === act) ? act : l.find(x => x.activo)?.id ?? l[0]?.id ?? null))
     }).catch(() => {})
-  }, [])
+  }, [rol])
   useEffect(() => {
     let vivo = true
     // eslint-disable-next-line react-hooks/set-state-in-effect

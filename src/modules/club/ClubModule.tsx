@@ -8,7 +8,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { C, inputStyle } from './estilos'
-import { getLocalesClub, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, getClubUrl, type LocalClub } from '../../shared/api/club'
+import { getLocalesClubParaRol, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, getClubUrl, type LocalClub } from '../../shared/api/club'
 import { configurarClubUrl } from './qrFormato'
 
 const Escanear = lazy(() => import('./Escanear'))
@@ -34,13 +34,14 @@ export default function ClubModule() {
   const visibles = (locales ?? []).filter(l => l.activo || esOwner)
   const cargarLocales = useCallback(async () => {
     try {
-      const l = await getLocalesClub()
+      // 170: el manager solo ve sus locales (mis_locales); el owner, todos (también los apagados)
+      const l = await getLocalesClubParaRol(profile?.role)
       setLocales(l)
       const vis = l.filter(x => x.activo || esOwner)
       const elegido = vis.find(x => x.id === localActual()) ?? vis.find(x => x.activo) ?? vis[0] ?? null
       elegirLocal(elegido?.id ?? null); setLocal(elegido?.id ?? null)
     } catch { setLocales([]) }
-  }, [esOwner])
+  }, [esOwner, profile?.role])
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void cargarLocales() }, [cargarLocales])
   // (08-nov noche) el dominio de los QR y links sale de la configuración, no del código

@@ -400,6 +400,18 @@ export const getLocalesClub = async (): Promise<LocalClub[]> =>
   (await leer(from<{ location_id: string; nombre: string | null; club_activo: boolean }>('club_config')
     .select('location_id,nombre,club_activo').order('location_id')))
     .map(r => ({ id: r.location_id, nombre: r.nombre ?? r.location_id, activo: r.club_activo === true }))
+/** 170: el manager solo ve y opera sus locales (`mis_locales()`, 091); el resto de los roles, igual que antes. */
+export function localesParaRol(locales: LocalClub[], rol: string | null | undefined, mios: string[] | null): LocalClub[] {
+  if (rol !== 'manager') return locales
+  const set = new Set(mios ?? [])
+  return locales.filter(l => set.has(l.id))
+}
+/** Los locales del Club que la pantalla le ofrece al usuario: para el manager, solo los suyos. */
+export async function getLocalesClubParaRol(rol: string | null | undefined): Promise<LocalClub[]> {
+  const locales = await getLocalesClub()
+  if (rol !== 'manager') return locales
+  return localesParaRol(locales, rol, await llamar<string[] | null>('mis_locales', {}))
+}
 /** Solo owner. Alta de un local: queda APAGADO; con `copiarDe`, arranca con la configuración de ese local. */
 export const crearLocal = (p: { id: string; nombre: string; direccion: string | null; mapa: string | null; copiarDe: string | null }) =>
   llamar<string>('club_local_crear', { p_id: p.id, p_nombre: p.nombre, p_direccion: p.direccion, p_mapa: p.mapa, p_copiar_de: p.copiarDe })

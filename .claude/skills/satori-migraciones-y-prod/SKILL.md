@@ -66,9 +66,12 @@ ledger de prod (regla 10).
 **Antes y después de cada despliegue o cambio de secreto** (Management API o CLI, solo lectura):
 - [ ] Por función: versión, `verify_jwt`, hash (`ezbr_sha256`) y fecha de actualización.
 - [ ] Secretos: **solo nombre y digest** (como `supabase secrets list`). Nunca el valor.
-- [ ] **Cambiar cualquier secreto sube la versión de TODAS las funciones del proyecto** sin cambiar código ni hash:
-      una versión nueva no es un despliegue. Para saber si cambió el código, mirar el hash.
+- [ ] **Cambiar un secreto puede subir la versión de las funciones o no** (el 13/11 se cargaron secretos en prod y
+      ninguna cambió de versión). La versión no prueba nada: para confirmar un secreto, mirar la lista de secretos
+      (nombre + huella), nunca la versión. Para saber si cambió el código, mirar el hash.
 - [ ] Prueba funcional mínima después (p. ej. `ingest-ndf`: tickets del PoS que siguen entrando).
+- [ ] Si la sesión no puede invocar la función (el proxy bloquea `*.supabase.co`), la prueba funcional en staging la hace
+      el dueño con una foto, o se habilita el dominio. Dejarlo anotado en el PR/PASE como pendiente, no darlo por probado.
 
 ## 6. Vuelta atrás (escrita antes, no improvisada)
 - [ ] Migración: `scripts/sql/NNN_rollback.sql` en el orden inverso (p. ej. 151 antes que 150) y, **en el mismo momento**,

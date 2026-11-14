@@ -1,11 +1,10 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-13.** Los hashes de este bloque se verificaron contra `origin` el 13-nov (`main` = `72d0835`, 12:14:41 CR;
-`staging` = `4726b7f`, 11:39:23 CR) y los PR contra la API de GitHub (número, merge y hora). Lo de prod fuera de `main` y lo de
-Cloudflare lo informó el dueño; en prod, Claude solo hizo lo que firmó el dueño.
-**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).** Lo de julio (pozo único, ramas viejas, ledger de 39 filas)
-está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
+**Al día: 2026-11-14, 01:30 hora de Costa Rica.** `main` verificado contra `origin`; lo de prod fuera de `main` y lo de
+Cloudflare lo informó el dueño (en prod, Claude solo hizo lo que firmó el dueño). El bloque del 13/11 (Edge, `club-pase`,
+pases de octubre y noviembre) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
+**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).**
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
 > en un PR de docs inmediato después del merge. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se
@@ -13,171 +12,32 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`72d0835`** (13/11 12:14:41 -06:00: merge del #163, bitácora del redespliegue de `club-pase`). Antes, `3cacf43` (12/11 22:02:49 -06:00: merge del #144, Google Wallet del Club en `main`, botones del portal **apagados** con `VITE_WALLET_GOOGLE`), `b6be32e` (12/11 13:03:02 -06:00: #126) y `17a9efd` (11/11 23:22:08 -06:00: merge del #59, el Club Satori, con la 150 y la 151). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **67 · 151** (sin migraciones nuevas el 13/11). El Edge `club-pase` está en prod pero su código no está en `main` (ver foto del 13/11). |
-| `staging` | **`4726b7f`** (13/11 11:39:23 -06:00, merge del #162) | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Al día con `main` hasta `6bcfafb` (#53–#57) + Prom/PAX (07/11 04:44 UTC, merge commits). **Es la rama de producción de Cloudflare Pages:** `satori-staging.pages.dev` publica `staging` con deploy automático (confirmado por Ismael en el panel el 06/11; `fb29872` = deploy `751a0c60`). Cada push a `staging` republica la URL principal; las demás ramas salen como preview. |
-| `integracion/analitica-staging` | **`850a22f`** | ⚠️ Rama vieja, 123 commits atrás de `staging`. **No la publica Cloudflare** (lo de septiembre ya no vale: la rama de producción es `staging`). |
+| `main` | **`93a5bf7`** (13/11 23:33 -06:00: merge del #166, fechas día/mes en las facturas). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **153**. |
+| `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Desarrollo y proyecto Supabase de staging. Cloudflare Pages (`satori-staging.pages.dev`) publica esta rama. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
-**Merges a `main` del 05 y 06/11** (los de octubre: #13 `9ada841`, #14 `c7b2f4b`, #15 `ba23a24` y #16 `43e843d`, FUENTE_VENTAS = 'pos'; el detalle está en `git show 44da704:ESTADO.md`):
-
-| PR | Merge | Fecha | Qué entró |
-|---|---|---|---|
-| #25 | `781eb72` | 05/11 | Fix «Borrar TODO el día» por día operativo. |
-| #23 | `b82ed81` | 05/11 | SEC-01b, mig 069 (`get_my_role()` mira `is_active`). |
-| #24 · #26 · #27 | `bb91623` · `5631681` · `93801b4` | 05/11 | Docs: estabilización de caja, staging y modal, backlog del 05/11. |
-| #29 | `7dc66c1` | 05/11 | Cierre del día atómico, mig 071. |
-| #28 | `c0a8a8b` | 05/11 | Club Satori docs + F0; migs 072 (SEC-03) y 073 (SEC-04). |
-| #31 | `9f8483a` | 05/11 | Conteo ciego (mig 074). **Revertido por #32** (`f73a8e9`, merge `57204d3`); el revert borró también el `.sql` de la 074 (ver Branching abajo). |
-| #33 | `37e11ee` | 05/11 | Reserva de la mig 075 para el Club Satori F1a. |
-| #36 | `342c5f0` | 05/11 | «Recontar» una vez en el cierre del día (usa la 074). |
-| #39 · #41 | `bddbef2` · `28f5333` | 05/11 | Alta de empleados desde Admin; docs del cierre del 05/11. |
-| #44 | `efa85bd` | 06/11 | Cierre de turno como antes del #36. |
-| #42 · #46 | `3b95890` · `39995e1` | 06/11 | SEC-02: botón de reportes con el JWT del owner; docs. |
-| #43 | `8c992fc` | 06/11 | Alerta de días sin cierre (owner/manager, solo lectura). |
-| #48 | `44da704` | 06/11 | Handoff del 06/11. |
-| #51 | `4babdc5` | 06/11 | Vuelve el `.sql` de la 074 y su rollback (byte a byte desde `d4012ec`) + docs. |
-| #52 | `d1e7902` | 06/11 | `.sql` de la 076 y la 077 (byte a byte = ledger de prod) + sus rollbacks + docs. Solo versiona: ya estaban aplicadas. |
-| #49 | `e7de76e` | 06/11 | **SoP noviembre 2026 en prod**: módulo por área y código, lector con el Estándar SOP, «Ver PDF» y «Libros». Solo SoP (cherry-pick de #45/#47 + fix del `@page`). |
-| #53 | `c20e688` | 06/11 | Docs: SoP en prod, nota de rollbacks y Branching, pendiente de la 079 y handoff de SoP. |
-| #54 | `d192549` | 06/11 | Mig 079 (SoP solo para usuarios activos), la aplicó el merge (Branching). |
-| #55 | `4288fd2` | 06/11 | Guías de uso del área 6 (`docs/sop-app/`) y regla en `CLAUDE.md` (squash). |
-| #56 · #57 | `bb1a488` · `6bcfafb` | 06/11 | Saca nombres y correos reales de comentarios, tests y docs. |
-| este PR | — | 07/11 | **Prom/PAX explicado** (Ventas → Análisis) + **mig 080** `pos_prompax_agregado`, que la aplica el merge (Branching). Firmado por Ismael el 06/11. |
-
-- **📍 Foto del 13/11 (lo nuevo desde el 12/11; el detalle, en el [handoff](docs/handoffs/HANDOFF-2026-11-13.md)):**
-  - **Merges a `main` del 13/11** (hora -06:00, verificados con la API):
-
-    | PR | Merge | Hora | Qué entró |
-    |---|---|---|---|
-    | #133 | `429e0a4` | 07:34 | CI: gate «Gate» en los PR y pruebas antes de publicar (Node 22). |
-    | #143 | `12b94d2` | 07:37 | Tanda 4 del rediseño: montos de la Bandeja con `fi()`. |
-    | #151 | `cdbc6b1` | 08:08 | Skills del repo (`.claude/skills/`). |
-    | #152 | `df4f45a` | 08:08 | Docs: regla de merges D1, regla 1 por Branching, DoD, números del gate. |
-    | #148 | `ffcf31d` | 09:38 | Wallet: la baja vence el pase; cron del Worker cada 10 min. |
-    | #157 | `89e0f9c` | 10:12 | README del Worker; la ruta vigilada de Workers Builds pasó a `club-web/**`. |
-    | #158 | `5a43fcc` | 11:07 | Bitácora del pase de `club-pase` a prod. |
-    | #149 (con #154 adentro) | `b03ad9d` | 11:20 | Caja: varias facturas por foto, cargadas una por una en el asistente; aviso dentro del modal; falla cerrada en duplicados; recargar la misma foto ofrece solo las faltantes como duda; arreglo de pago doble; proveedor con puntuación distinta; «sin foto» que no se refrescaba. |
-    | #161 | `a763c9c` | 11:57 | El asistente aprende el nombre legal del proveedor como alias. |
-    | #160 | `2c24d58` | 12:12 | `/vencer` rápido: filtro por pases emitidos, tope 90 s, lotes de 200, timeout 15 s, purgados por id fijo, `trabado_en`. |
-    | #163 | `72d0835` | 12:14 | Bitácora del redespliegue de `club-pase`. |
-
-    PR cerrados sin merge: #94, #92 y #141 (este último lo reemplazó el #146).
-  - **`club-pase` EN PROD, fuera de `main` (firmado por el dueño):** v1 desde `d8f0280` (10:33) y redesplegado v2 desde
-    `c0369d5` (12:00), `verify_jwt` off. Secretos de prod: `GOOGLE_WALLET_SA_KEY` (propia de prod), `GOOGLE_WALLET_ISSUER_ID`,
-    `CLUB_WEB_KEY` y `CLUB_PASE_SYNC_KEY` (también en el Worker), cargados por el dueño; `WALLET_ENTORNO` = `prod`,
-    `CLUB_WEB_ORIGIN` y `WALLET_DISENO`, por la sesión. Cron verificado; backlog de 3.002 eventos vaciado (cursor 3002 a las
-    11:40). La primera corrida con `d8f0280` dio 504 (motivo del #160). **Los botones del Wallet en el portal siguen
-    apagados; Google, en modo demo.** Bitácora: `docs/pases/PASE-club-pase-prod.md`.
-  - **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
-    solo de merges.
-- **📍 Foto del 12/11 (lo nuevo desde el 11/11):**
-  - **`extract-document` en PROD con Claude Sonnet 5.5** (pase firmado por el dueño el 12/11; Sonnet 4.5 se retira de la
-    API el 30-nov-2026):
-    - **Código:** v9 desplegada a las 15:32 CR desde `8a8dfb6` (rama `claude/busy-brown-ssjq4e`, **no en `main`**: regla 2),
-      `verify_jwt` on, hash `2f88ef52…`. Es la misma fuente que staging; el hash difiere solo por el nombre interno del
-      paquete (lleva el ref y la versión de cada proyecto). Cambios: lee los bloques de la respuesta por tipo (no
-      `content[0]`), avisa `max_tokens` y `refusal`, `max_tokens` 8000 y, solo con 5.5, `thinking: between_tools` y
-      effort `high`.
-    - **Secreto:** `ANTHROPIC_MODEL` = `claude-sonnet-5-5` desde las **16:19 CR** (digest `c13e6668…`). Antes,
-      `claude-sonnet-4-5` (digest `f2b3b47f…`, desde el 04/07).
-    - **Vuelta atrás:** `ANTHROPIC_MODEL` = `claude-sonnet-4-5`. El código nuevo funciona con los dos modelos; volver
-      también el código = desplegar desde `main` (hash `e0372efa…`).
-    - **Pruebas:** con 4.5 y el código nuevo, la lectura salió completa, igual que antes. Con 5.5, la proforma de prueba
-      salió con montos, fecha, número y líneas bien, sin modo manual. Evaluación previa en staging (20 facturas):
-      5.5 acertó más campos, en menos de la mitad del tiempo y a menor costo por factura que 4.5.
-    - **Staging:** v21 con el mismo código y `ANTHROPIC_MODEL` = `claude-sonnet-5-5` (12/11 14:07 CR). Hoy figura como v23:
-      los cambios de secretos posteriores subieron la versión, el código es el mismo (hash `67095c19…`).
-  - **⚠️ Cambiar cualquier secreto de Edge sube la versión de TODAS las funciones del proyecto** (el código y el hash no
-    cambian). No es un despliegue. Versiones de prod después del cambio de secreto del 12/11: `monthly-report` v12,
-    `extract-document` v10, `cierre-email` v4, `pago-notificar` v4, `ingest-ndf` v4 (`verify_jwt` off, verificado con
-    tickets del PoS después del cambio) y `alta-empleado` v3.
-  - **`club-pase` (Google Wallet):** el 12/11 estaba solo en staging (v1 desde `c6b54fc`). **Desde el 13/11 está también en prod** (ver la foto del 13/11).
-    La solicitud de publicación a Google se envió el 12/11 y está en revisión.
-  - **Club:** el primer build automático del Worker desde el repo fue `ab5de674` (merge del #126, `b6be32e`), **Ready**,
-    con `/api/salud` OK a las 13:09 CR. **La prueba de fuego (§11.3) sigue PENDIENTE.** Bitácora en
-    `docs/pases/PASE-150-151-club.md`.
-- **📍 Foto del 11/11 a la noche (lo nuevo desde el 10/11; el detalle, en el handoff):**
-  - **`main` = `17a9efd`** (merge del #59, el Club, el 11/11 a las 23:22:08 -06:00). **Ledger de prod: 67 · 151.** El 10/11
-    entraron por Branching la 085, la 089, la 090, la 091 y la tanda 092–095, cada una con su PASE cerrado en `docs/pases/`.
-  - **Agente del PoS en prod: `5da233a`** desde el 10/11 a las 23:37:18 -06:00 (carpeta de prod nueva en la PC del PoS;
-    la vieja se queda 7 días). **Pase cerrado el 11/11** (5.2–5.4 y el cierre de caja): bitácora en el §9 de
-    [docs/puente/PASE-AGENTE-PROD.md](docs/puente/PASE-AGENTE-PROD.md).
-  - **Club Satori: EN PROD desde el 11/11** (merge del #59, `17a9efd`; Branching aplicó la **150** y la **151**). **Pase
-    cerrado el 11/11; el local sigue apagado.** Paquete y bitácora: `docs/pases/PASE-150-151-club.md`.
-  - **Cloudflare (11/11):** el Worker `satori-club-api` está desplegado a mano desde el #59 @ `66c950d` con wrangler
-    4.160.1 (Version `ae142f3a-3bdf-46fd-b8e1-ab8d6ff70a59`), sin rutas ni `workers.dev`, con los bindings `RL_CREAR` y
-    `RL_LEER`. Las variables están cargadas en el panel: `SUPABASE_URL` y `SUPABASE_ANON_KEY` apuntan a **prod**, igual
-    que Pages; `TURNSTILE_SECRET` y `CLUB_WEB_KEY` van como Secret. La `CLUB_WEB_KEY` se creó el 11/11 y está cargada en
-    el Worker y en Pages; su sha256 se carga en prod el jueves, después de la 150. El valor lo tiene el dueño y no va al
-    repo.
-  - **Carga única del Club (G-56): firmada por el dueño el 11/11 a las 10:14.**
-    - `carga.sql`, sha256 `150f0c8e5ba0de07369bd42f0e52866aa905628549c40696c58ae6817d6b461f`, emitido con `d6c117b` desde
-      el export final del 10/11 15:46 (sha256 `0cc1b7ece316a05108e8e93136c0bbbdbbcdbcbfcb8df3e65f18a0924a6f8c00`).
-    - Esperados firmados: 115 / 174 (restos de inactivos vencidos). Ensayo en staging OK (`guardado: false`).
-    - Totales: 338 socios (88 en baja), 64,0 créditos en 37 cuentas y 0 diferencias. El monto de PM pendiente no se
-      escribe acá (repo público): está en el resumen de la carga.
-    - Los archivos viven fuera del repo, en la computadora del dueño. Se aplica el jueves con `aplicar-firmado`, con la
-      base del Club vacía y antes de la prueba interna.
-  - **Staging:** ledger **91 · 151** (leído el 11/11): tiene de la 085 a la 095, y la 150 y la 151 del Club.
-- **🔒 085 (SEC-01c) en PROD (10/11)**: lectura de empleados, propinas y tipos de cambio solo para cuentas **activas**.
-  - **Merge del #80** `bb12652` a las 08:24:48 -06:00, con la firma del dueño (08:23); la aplicó Branching. Control: el
-    encargado. Claude no corrió nada en prod.
-  - **Verificado por el dueño:** ledger **58 · 085**, 1 fila 085 con su `name` (9 statements); las 7 policies en
-    «Después» y las otras 8 iguales; 4a después 0·0·0·0·0·profiles 1; 4b después idéntico al antes en los 5 roles y en
-    `base` (0 PARADA); pantalla OK. **Pase cerrado sin vuelta atrás.** Bitácora en
-    [docs/pases/PASE-085-rls-lectura-rol-activo.md](docs/pases/PASE-085-rls-lectura-rol-activo.md) §9.
-- **🌉 Puente del PoS en PROD (09/11, pase ejecutado por el dueño en la PC del PoS; detalle en
-  [docs/puente/RESULTADO-PASE-2026-11-09.md](docs/puente/RESULTADO-PASE-2026-11-09.md)):**
-  - **Migraciones, a mano antes del merge:**
-    - **081** a las 10:57 -06:00, md5 `d4acf8da…`;
-    - **082 v3** a las ~12:00, md5 `edb7ffc5…`, `md5(prosrc)` `dab8ffdf…`, `execute` solo `service_role`.
-
-    Ledger de prod **55 → 57 filas**, según el pase; Claude no corre nada en prod.
-  - **Edge `ingest-ndf` v3** (`verify_jwt` apagado), desplegado desde `5da233a` el 09/11 a las 12:03:30 -06:00 con
-    `--use-api`. Quedó v3 y no v2: qué creó la v2 está pendiente, ver el RESULTADO §4.
-  - **El agente de prod sigue en `4d3513a`.** No manda `consecutivo_fe`, `clave_fe` ni `mesa_factura`: llegan en null,
-    y es lo esperado.
-  - **#71 mergeado** el 09/11 a las 13:21 -06:00 (`2953994`), con la autorización del dueño. `main` queda
-    descongelado (Branching: «Supabase Preview» en success; el texto «All migrations are up to date» del log lo confirma
-    el dueño en el panel).
-  - **Pendientes:**
-    - el paso R → C de la primera factura (112538) después del cierre de las 16:00;
-    - la conciliación de los 3 días;
-    - borrar `POS_INGEST_SECRET` a los 7 días sin rollback.
-  - **El próximo pase** (agente nuevo, Nosara) sale de la plantilla corregida
-    [docs/puente/PASE-PROD-PLANTILLA.md](docs/puente/PASE-PROD-PLANTILLA.md).
-- **⚠️ Supabase Branching falló en cada push a `main` desde el revert del #31 hasta este PR** (10 runs, del 05/11
-  20:32 UTC al 06/11 16:55 UTC: `migrate` → `ERROR Remote migration versions not found in local migrations
-  directory.`). La causa era la 074: estaba en el ledger de prod y su `.sql` ya no estaba en `main`. No se aplicó
-  ni se rompió nada en la base; solo que Branching no corría `migrate` ni `deploy`. Este PR devuelve el archivo
-  (idéntico al statement del ledger de prod y a la función viva) y Branching vuelve a «All migrations are up to date».
-  - **Esperado:** entre que una migración se aplica a mano en prod y su PR se mergea, cualquier push a `main` hace
-    fallar a Branching con ese mismo error (pasó el 05/11 a las 15:26 y 17:53 UTC con la 069 y la 071, y el 06/11 a las 18:05 UTC con la 076 y la 077 hasta el #52). Se corrige solo con el merge.
-- **📚 SoP noviembre 2026 en prod (06/11, firmado por Ismael, PR #49, merge `e7de76e`):** el módulo SoP muestra **27 documentos** con código (1.1 … 5.4, incluidos 2.10, 2.11 y 4.4) agrupados en **5 áreas** (Cultura y servicio · Salón y recepción · Menú y producto · Administración y caja · Equipo), con el lector del Estándar SOP (Cormorant Garamond + DM Sans), «Ver PDF» con URL firmada (10 min) y la sección «Libros» (empleado para todos; franquicia solo owner y manager).
-  - **Orden en prod (06/11, UTC):** respaldo de `public.sops` (18:01) → migs **076** y **077** a mano (18:03–18:05) → merge del #52 (`.sql` en `main`, 19:45) → merge del #49 (19:53; deploy de Pages 19:55, run 274 OK; Branching «All migrations are up to date») → `sync_sops` (19:56: **27 insertadas, 20 viejas → `is_active=false`, nada borrado**, una transacción) → PDF y libros subidos por Ismael con `subir_pdfs.ts --entorno prod`.
-  - **Verificado en prod (solo lectura):** 27 activas con código, 0 viejas activas, 20 inactivas con su contenido intacto, todas con `area`; **29 objetos** bajo `documents/sops/` (27 PDF + 2 libros) y `pdf_path` en los 27. Por rol, con usuarios reales: owner y manager ven el libro de franquicia; cajero, contador y salonero no; los cinco ven el libro del empleado y los 27 PDF.
-  - **Respaldos en Drive** (carpeta `respaldo` del paquete): `sops_prod_2026-11-06T18-01-15.json` (antes de las migs), `storage_policies_prod_antes_077.json` y `sops_prod_2026-11-06T19-56-10.json` (antes del sync).
-  - **Rollback:** app = revert de `e7de76e`; datos = `update public.sops set is_active=false where code is not null` + `set is_active=true where code is null` (sin borrar); PDF = `pdf_path = null`; base = `077_rollback.sql` y después `076_rollback.sql` (ver Migraciones).
-- **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10, validado físicamente por Ismael.** Ventas y Mi Rendimiento
-  leen el PoS fusionado con el Excel de respaldo (`{...xls, ...pos}`). Volver atrás = revert del merge de #16.
-- **🧯 Fix «Borrar TODO el día» (05/11, rama `claude/fix-borrar-dia`):** elige por día operativo, no por `created_at`; vista previa antes de confirmar; ningún delete sin chequear el error. Validado por Ismael en la preview de staging; **en prod desde el 05/11** (PR #25, merge `781eb72`). Rollback = revert del merge. Ver [HALLAZGOS.md](HALLAZGOS.md).
-- **🧾 Cierre del día atómico (05/11, rama `claude/cierre-atomico`, mig 071):** aplicada en staging (ledger 70) y **en prod el 05/11 a las 19:20 UTC** (ledger 47 → 48), a mano **antes** del merge del #29. En prod se verificó el catálogo (idéntico a staging) y se corrieron pruebas sin escribir datos. Rollback: revert del merge + `scripts/sql/071_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
-- **🔐 SEC-02 cerrado en prod (06/11, firmado por Ismael):** `monthly-report` v10 (`verify_jwt` on) exige service_role u owner activo, valida los parámetros y no devuelve montos ni nombres. El cron (jobs 3 y 4, 02:00 CR) manda `Authorization` desde el Vault (`service_role_key`), y el botón de Admin manda el JWT (PR #42). En staging se apagaron los jobs del cron (apuntaban a prod). Ver [HALLAZGOS.md](HALLAZGOS.md).
-- **👤 Alta de empleados desde Admin (06/11, firmado por Ismael, PR #39):** el owner crea las cuentas desde Admin → Usuarios → «+ Nuevo empleado», con la Edge Function `alta-empleado` (prod v1, `verify_jwt` on, desplegada a mano; su código vive en la rama `claude/alta-empleado-fn`, **no en `main`** hasta el ítem 11). Contraseña temporal que se muestra una vez, y cambio obligatorio en el primer ingreso (flag en `app_metadata.cambiar_password`, que solo baja la función). El login ya no tiene «Crear cuenta». **Auth de prod (06/11, Management API, GET antes y después):** `site_url` `http://localhost:3000` → `https://cachosatori.github.io/satori-app/`, redirects `''` → `https://cachosatori.github.io/satori-app/**` y `password_min_length` 6 → 8. Nada más cambió y `disable_signup` sigue en `true`. Ver [HALLAZGOS.md](HALLAZGOS.md).
-- **↩️ Cierre de TURNO vuelto a como estaba antes del #36 (06/11, firmado por Ismael):** el cierre de turno sin efectivo dejó al encargado sin el total de caja ni el total de gastos, y no podía verificar. `CashTurno.tsx`, `CashResumen.tsx` y su test vuelven **idénticos** al código previo al #36 (`342c5f0^1`): campo de efectivo, «Debería quedar en la Caja Diaria», «Cuadra / Diferencia», totales, resumen y «Disponible» con su aviso de déficit. `final_cash_*` se vuelve a guardar. **El «Recontar» del cierre del día se queda** (`CashCierre.tsx` sin cambios).
-- **🔁 «Recontar» una vez en el cierre del día + cierre de turno sin efectivo (06/11, rama `claude/recontar-cierre`, firmado por Ismael):** sin migración nueva, usa las columnas `primer_conteo_crc/usd` de la **074**, que ya estaba en prod. Primero se probó un conteo ciego (#31) y se revirtió (#32) a pedido de Ismael. La versión final mantiene la verificación en vivo. Recorrido real en staging con la pantalla montada contra la base: 4 casos, ver [HALLAZGOS.md](HALLAZGOS.md).
-- **🔐 SEC-03 y SEC-04 (05/11, rama `claude/brave-brown-m45jd7`, PR #28, migs 072 y 073):** escritura anónima en el CRM y lectura anónima de propinas y empleados. Aplicadas en staging (ledger 72) y **en prod el 05/11 ~20:05 UTC** (ledger 48 → 50), a mano antes del merge. `/registro` y el QR del CRM quedan apagados hasta la F1 del Club Satori. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
+- **Prod, dato (firma del dueño, 14/11 00:09):** `employees.pos_login` **041** quedó asignado a un salonero nuevo. Consta
+  en `club_pos_login_historial`. Sin nombres en el repo.
+- **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
+  de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging**: la sesión no puede invocar la función (el proxy
+  bloquea `*.supabase.co`), así que la hace el dueño con una foto o se habilita el dominio.
+- **PR en borrador (ninguno mergeado):**
+  - **#168:** migración **155**, alerta `ANFITRION_SOBRE_TOPE` sin la carga inicial. Verificador independiente: CAMBIOS
+    menores, corregidos en `70c00dc`.
+  - **#169:** UI: link del portal al socio, login del PoS en Empleados y tope sin monto fijo.
+  - **#170:** `club-web`: texto final del alta («puede ser hoy mismo»).
+  - **#169 y #170 tocan la guía 6.13:** el segundo en mergear tiene un conflicto chico.
+- **Decisión firmada, pendiente de construir: D6 A** (alta del Local Club): mayor de 18 obligatorio, cumpleaños día/mes
+  opcional con permiso, aviso de privacidad v1.2 junto con el #140. Numeración: **154** solo si entra antes que la 155; si
+  no, **156+**.
+- **Local Club sigue en 15 %** hasta el lanzamiento del Club.
+- **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
+  solo de merges.
 - **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
   `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
-- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1968 tests** pasan (4 skipped; 158 archivos; 13/11, sobre `main` = `72d0835`) · lint **83 problemas** (75 errores y 8 avisos, 13/11).
+- **Gate de `main`:** `vitest run` **1998 tests** pasan (4 skipped; 161 archivos; 14/11, sobre `main` = `93a5bf7`). `tsc` y
+  lint: último dato en el archivo (13/11: lint 83 problemas); se vuelve a medir en cada PR de código.
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
-- **🔐 SEC-01 (04/11, rama `claude/sec-01-perfiles`):**
-  - **Paso A hecho en prod y staging:** `disable_signup=true` (antes `false`). El signup con anon da `422`.
-  - **Bans firmados en prod:** dos cuentas de manager inactivas (`f54e3eff…` y `e317ac97…`), por `banned_until` directo (desvío aceptado), `is_active=false`, y borrado de sus 6 sesiones y 15 refresh tokens.
-  - **Mig 068 en staging (04/11) y en prod (04/11 23:30 CR = 05/11 05:30 UTC, ledger 45 → 46), aplicada a mano antes del merge.** PR #22 mergeado el 05/11 (`81ac2d4`); el deploy de Pages (run #252) dio OK.
-  - **Mig 069 (SEC-01b) en prod el 05/11 15:22 UTC (ledger 46 → 47).** Ismael validó en staging.
-    - En prod se verificó el catálogo y se corrieron la prueba 4 (anon, por SQL y REST) y la prueba 1 (manager, con rollback). No se corrió ninguna prueba que mute datos.
-    - El merge del PR queda como no-op para la base. Detalle en [HALLAZGOS.md](HALLAZGOS.md).
 
 Documentos: fases → [ROADMAP.md](ROADMAP.md) · backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) ·
 hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · historial → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) ·
@@ -279,9 +139,9 @@ solas tras un reinicio (validado el 29/10).
 
 ### Edge Functions (Management API, 12/11)
 
-«on» / «off» = `verify_jwt`. **Cambiar cualquier secreto de Edge sube la versión de TODAS las funciones del proyecto**
-sin cambiar su código ni su hash: una versión nueva no es un despliegue. Para saber si cambió el código, mirar el hash
-(`ezbr_sha256`) y la fecha de actualización de la función.
+«on» / «off» = `verify_jwt`. Cambiar un secreto de Edge **puede o no** subir la versión de las funciones (el 13/11 se
+cargaron secretos en prod y ninguna cambió de versión): la versión no prueba nada. Para confirmar un secreto, mirar la lista
+de secretos (nombre + huella); para saber si cambió el código, el hash (`ezbr_sha256`) y la fecha de actualización.
 
 | Función | PROD | STAGING |
 |---|---|---|
@@ -363,8 +223,8 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | 087, 088, 089, 090, 091, 092, 093, 094, 095, 096 | **097** |
-| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) | **101** |
-| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`); **154** después de la 153 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) · 101 la usa el #140 (→ 152) · 102 (`club_tope_sin_carga_inicial`; renumerada a 155) | **103** |
+| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; como prod ya tiene la 153, regla 3: el #140 usa la **154** solo si entra antes que la 155; si no, la siguiente libre del bloque PASE, 156+); **156** después de la 155 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
 | (fuera de bloque) | 086 | — | libre |
 
 **Asignadas en los bloques**
@@ -373,9 +233,11 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 |---|---|---|---|---|
 | 096 | `proveedor_agregar_alias` (RPC atómica para el alias del proveedor; sin firma) | caja | `claude/alias-proveedor-rpc` | **renumerada a 153** en el mismo PR (13-nov; regla 3: prod va por la 151). El número 096 no se reutiliza (regla 4) |
 | 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **renumerada a 151** en el pase del Club (`claude/pase-club`, 10-nov). El número 100 no se reutiliza (regla 4) |
+| 102 | `club_tope_sin_carga_inicial` (D5 A del dueño: ANFITRION_SOBRE_TOPE sin la carga inicial) | club | `claude/club-tope-sin-carga-inicial` | **renumerada a 155** en el mismo PR (14-nov; regla 3: prod va por la 153). El número 102 no se reutiliza (regla 4) |
 | 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 153 | `proveedor_agregar_alias` | pase (origen **096**) | `claude/alias-proveedor-rpc` | **Sin aplicar** (13/11: PR en borrador a `main`, espera firma). RPC `proveedor_agregar_alias` (SECURITY INVOKER) para que dos cajas no se pisen los alias. La **152** la usa el #140 (aviso del Club). Rollback: `scripts/sql/153_rollback.sql` |
+| 155 | `club_tope_sin_carga_inicial` | pase (origen **102**) | `claude/club-tope-sin-carga-inicial` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK). `create or replace` de `club_excepciones`: ANFITRION_SOBRE_TOPE no cuenta `club_movimientos.origen = 'migracion'` (la carga inicial del 12/11), como el reporte del mes. Prueba en staging en transacción descartada: 9/9. Rollback: `scripts/sql/155_rollback.sql` |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |

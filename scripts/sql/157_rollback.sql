@@ -3,7 +3,18 @@
 -- movimientos (la 157 no escribió ninguno). Las fotos 'equipo_corte' de club_auditoria quedan (es de solo inserción):
 -- sin las funciones nuevas nadie las lee. Permisos: create or replace los conserva.
 -- Si se corre en prod, en el mismo momento sale el .sql de main (regla 10 / satori-migraciones-y-prod §6).
+-- ORDEN (verificador del #186): si la 167 está aplicada (existe club_portal_datos), este rollback ABORTA sin tocar nada:
+-- revertir antes la 167 (scripts/sql/167_rollback.sql). Si no, pisaría el envoltorio de club_portal y, al revertir la 167
+-- después, el portal quedaría llamando a club_corte_equipo (ya borrada) y se caería para todos.
 begin;
+
+do $$
+begin
+  if to_regprocedure('public.club_portal_datos(text)') is not null then
+    raise exception '157 rollback: la 167 está aplicada (existe club_portal_datos): revertir antes la 167 (167_rollback.sql)';
+  end if;
+end
+$$;
 
 create or replace function public.club_canje_codigo_generar(p_token text)
 returns table (codigo text, vence_en timestamptz, url text)

@@ -10,7 +10,9 @@ los elige la batería dentro de la transacción: no hacen falta UUID.
   python3 scripts/sql/159_pruebas.py --armar [--mutar X]        # solo imprime el SQL armado (no conecta a nada)
   python3 scripts/sql/159_pruebas.py --psql "host=… port=… user=postgres" [--mutar todas]   # base LOCAL descartable
     (14-nov: corrida en una Postgres 16 local con 150, 151, 153 y 155 aplicadas, un owner, un manager, un local
-     encendido y club_config_global.club_url cargado; no reemplaza la corrida en staging)
+     encendido y club_config_global.club_url cargado; no reemplaza la corrida en staging. Conectar como un rol con
+     permiso para crear roles y cambiar dueños (superusuario local, o PGOPTIONS='-c role=postgres'): el caso 20 crea
+     un rol de prueba y le pasa la autoalta. Las funciones pueden ser de cualquier dueño: la guardia mira el real.)
 
 Cada mutación reemplaza un pedazo del cuerpo de la 159 (dentro de la transacción descartada) y declara qué casos caen.
 El ASSERT final de la batería aborta con «159-FALLAN: <casos>»: el runner lee los casos de ese error.
@@ -40,15 +42,21 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     'guardia_abierta': ("  raise exception 'El cumpleaños no se cambia después del alta: lo corrige solo el owner' using errcode = '42501';\n",
                         "  return new;\n", {'11', '12'}),
     # la guardia deja cargarlo después del alta (sin mirar que la fila nazca en la transacción)
-    'guardia_sin_created_at': ("current_user = 'postgres' and new.created_at = now() then", "current_user = 'postgres' then", {'12'}),
+    'guardia_sin_created_at': ("  if not v_tenia and new.created_at = now()\n", "  if not v_tenia\n", {'12'}),
     # la baja no borra el cumpleaños
-    'baja_no_borra': ("  if new.rol = 'socio' and new.estado = 'baja' and old.estado is distinct from 'baja' then\n",
-                      "  if false then\n", {'14'}),
+    'baja_no_borra': ("  if (tg_op = 'UPDATE' and new.rol = 'socio' and new.estado = 'baja' and old.estado is distinct from 'baja')\n",
+                      "  if false\n", {'14'}),
     # la v2 no pide la edad (la frena el trigger, con otro mensaje)
     'v2_sin_edad': ("  if coalesce(p_mayor_edad, false) is not true then\n", "  if false then\n", {'15'}),
     # se olvida el revoke de la de 5 argumentos
-    'alta_caja_abierta': ("revoke all on function public.club_socio_alta_caja(text, text, text, boolean, text) from public, anon, authenticated;\n",
-                          "", {'02', '18'}),
+    'alta_caja_abierta': ("    revoke all on function public.club_socio_alta_caja(text, text, text, boolean, text) from public, anon, authenticated;\n",
+                          "    null;\n", {'02', '18'}),
+    # (verificador #1) la guardia vuelve a mirar el nombre «postgres» en vez del dueño real de la autoalta
+    'guardia_postgres': ("     and current_user = (select pg_get_userbyid(p.proowner) from pg_proc p\n"
+                         "                          where p.oid = to_regprocedure('public.club_socio_autoalta(jsonb)')) then\n",
+                         "     and current_user = 'postgres' then\n", {'20'}),
+    # (verificador #2) el rol de socio eliminado (purga) no borra el cumpleaños
+    'borrado_no_borra': ("     or (tg_op = 'DELETE' and old.rol = 'socio') then\n", " then\n", {'21'}),
     # la corrección no exige owner
     'corregir_manager': ("  if public.get_my_role() is null or public.get_my_role() <> 'owner' then\n",
                          "  if public.get_my_role() is null or public.get_my_role() not in ('owner','manager') then\n", {'10'}),

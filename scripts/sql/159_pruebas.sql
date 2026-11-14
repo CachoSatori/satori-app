@@ -40,7 +40,7 @@ $f$;
 -- 00. hay owner y manager activos y un local con el Club encendido; los teléfonos de prueba no existen
 select pg_temp.r('00 owner y manager activos, local con el Club encendido, teléfonos de prueba libres',
        owner_id is not null and manager_id is not null and loc is not null
-       and not exists (select 1 from public.club_miembros_contacto k where k.telefono like '+5066001590%'),
+       and not exists (select 1 from public.club_miembros_contacto k where k.telefono like '+5066001590%' or k.telefono like '+5066001591%'),
        'local = ' || coalesce(loc, 'NINGUNO'))
   from _c159;
 
@@ -130,14 +130,22 @@ begin
          and (select cumple_dia is null and cumple_permiso_en is null from public.club_miembros_contacto where miembro_id = v), e);
 end $$;
 
--- 09. la tabla rechaza 31-abr y el día sin el permiso (check), aunque escriba postgres
+-- 09. la tabla rechaza 31-abr y el día sin el permiso (check), aunque escriba el dueño de la autoalta (la guardia lo deja
+--     pasar: fila nacida en la transacción)
 do $$
 declare e1 text := 'pasó'; e2 text := 'pasó'; v uuid := pg_temp.mid('60015902');
+  dueno text := (select pg_get_userbyid(p.proowner) from pg_proc p where p.oid = 'public.club_socio_autoalta(jsonb)'::regprocedure);
 begin
-  begin update public.club_miembros_contacto set cumple_dia = 31, cumple_mes = 4, cumple_permiso_en = now() where miembro_id = v;
-  exception when others then e1 := sqlstate; end;
-  begin update public.club_miembros_contacto set cumple_dia = 3, cumple_mes = 4 where miembro_id = v;
-  exception when others then e2 := sqlstate; end;
+  begin
+    execute format('set local role %I', dueno);
+    update public.club_miembros_contacto set cumple_dia = 31, cumple_mes = 4, cumple_permiso_en = now() where miembro_id = v;
+    reset role;
+  exception when others then reset role; e1 := sqlstate; end;
+  begin
+    execute format('set local role %I', dueno);
+    update public.club_miembros_contacto set cumple_dia = 3, cumple_mes = 4 where miembro_id = v;
+    reset role;
+  exception when others then reset role; e2 := sqlstate; end;
   perform pg_temp.r('09 check: 31-abr y día/mes sin permiso → 23514', e1 = '23514' and e2 = '23514', e1 || ' · ' || e2);
 end $$;
 
@@ -172,14 +180,18 @@ begin
   perform pg_temp.r('11 postgres + JWT de manager: cumpleaños ya cargado no cambia (42501)', e = '42501', e);
 end $$;
 
--- 12. cargar un cumpleaños DESPUÉS del alta (fila de contacto de antes) → rechazado, aunque escriba postgres
+-- 12. cargar un cumpleaños DESPUÉS del alta (fila de contacto de antes) → rechazado, aunque escriba el dueño de la autoalta
 do $$
 declare e text := 'pasó'; v uuid := pg_temp.mid('60015902');
+  dueno text := (select pg_get_userbyid(p.proowner) from pg_proc p where p.oid = 'public.club_socio_autoalta(jsonb)'::regprocedure);
 begin
   perform pg_temp.como((select manager_id from pg_temp._c159));
   update public.club_miembros_contacto set created_at = now() - interval '1 day' where miembro_id = v;
-  begin update public.club_miembros_contacto set cumple_dia = 5, cumple_mes = 5, cumple_permiso_en = now() where miembro_id = v;
-  exception when others then e := sqlstate; end;
+  begin
+    execute format('set local role %I', dueno);
+    update public.club_miembros_contacto set cumple_dia = 5, cumple_mes = 5, cumple_permiso_en = now() where miembro_id = v;
+    reset role;
+  exception when others then reset role; e := sqlstate; end;
   perform pg_temp.r('12 cumpleaños agregado después del alta (portal o función) → 42501', e = '42501', e);
 end $$;
 
@@ -292,6 +304,60 @@ select pg_temp.r('19 privacidad: club_portal, club_miembro_contacto_ver y el exp
            = 5,   -- solo la guardia, su rastro, la baja, la autoalta y la corrección del owner
        (select string_agg(p.proname, ',') from pg_proc p where p.pronamespace = 'public'::regnamespace and pg_get_functiondef(p.oid) ~* 'cumple_dia'));
 
+-- 20. (verificador #1) la guardia mira el dueño REAL de club_socio_autoalta, no el nombre «postgres»: con la autoalta de
+--     otro dueño, ese dueño carga el cumpleaños en el alta y el dueño anterior ya no puede
+do $$
+declare e1 text := 'ok'; e2 text := 'pasó'; v1 uuid; v2 uuid;
+  d1 jsonb := pg_temp.datos('60015911', '{"mayor_edad":true}'::jsonb);
+  d2 jsonb := pg_temp.datos('60015912', '{"mayor_edad":true}'::jsonb);
+  dueno text := (select pg_get_userbyid(p.proowner) from pg_proc p where p.oid = 'public.club_socio_autoalta(jsonb)'::regprocedure);
+begin
+  set local role anon;
+  perform public.club_socio_autoalta(d1);
+  perform public.club_socio_autoalta(d2);
+  reset role;
+  v1 := pg_temp.mid('60015911'); v2 := pg_temp.mid('60015912');
+  create role club159_dueno_prueba nologin;
+  execute format('grant club159_dueno_prueba to %I', current_user);
+  grant select, update on public.club_miembros_contacto to club159_dueno_prueba;
+  create policy club159_dueno_prueba on public.club_miembros_contacto for all to club159_dueno_prueba using (true) with check (true);
+  alter function public.club_socio_autoalta(jsonb) owner to club159_dueno_prueba;
+  begin
+    set local role club159_dueno_prueba;
+    update public.club_miembros_contacto set cumple_dia = 4, cumple_mes = 7, cumple_permiso_en = now() where miembro_id = v1;
+    reset role;
+  exception when others then reset role; e1 := sqlstate || ' ' || sqlerrm; end;
+  begin
+    execute format('set local role %I', dueno);
+    update public.club_miembros_contacto set cumple_dia = 4, cumple_mes = 7, cumple_permiso_en = now() where miembro_id = v2;
+    reset role;
+  exception when others then reset role; e2 := sqlstate; end;
+  execute format('alter function public.club_socio_autoalta(jsonb) owner to %I', dueno);
+  perform pg_temp.r('20 autoalta de otro dueño: ese dueño carga el cumpleaños en el alta; «' || dueno || '» ya no (42501)',
+         e1 = 'ok' and e2 = '42501' and v1 is not null and v2 is not null
+         and (select cumple_dia = 4 from public.club_miembros_contacto where miembro_id = v1)
+         and (select cumple_dia is null from public.club_miembros_contacto where miembro_id = v2), e1 || ' · ' || e2);
+end $$;
+
+-- 21. (verificador #2) la purga borra el rol de socio (DELETE) y conserva el contacto si hay otro rol: el cumpleaños se borra
+do $$
+declare v uuid; e text := 'ok'; d jsonb := pg_temp.datos('60015913', '{"mayor_edad":true,"cumple_dia":5,"cumple_mes":6,"cumple_permiso":true}'::jsonb);
+begin
+  begin
+    set local role anon;
+    perform public.club_socio_autoalta(d);
+    reset role;
+  exception when others then reset role; e := sqlerrm; end;
+  v := pg_temp.mid('60015913');
+  delete from public.club_socio_solicitudes where miembro_id = v;
+  delete from public.club_miembro_roles where miembro_id = v and rol = 'socio';   -- lo mismo que hace club_socios_mantenimiento
+  perform pg_temp.r('21 rol de socio eliminado (purga) con el contacto vivo → cumpleaños borrado y auditado',
+         e = 'ok' and v is not null
+         and (select cumple_dia is null and cumple_mes is null and cumple_permiso_en is null and telefono is not null
+                from public.club_miembros_contacto where miembro_id = v)
+         and exists (select 1 from public.club_auditoria where accion = 'cumple_borrado' and objeto_id = v), e);
+end $$;
+
 select json_agg(json_build_object('caso', caso, 'ok', coalesce(ok, false), 'detalle', detalle) order by n) from _r159;
 
 -- ASSERT: si algún caso falla, la transacción aborta y dice cuáles
@@ -300,6 +366,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r159 where ok is not true;   -- null = falla
   if v is not null then raise exception '159-FALLAN: %', v; end if;
-  if (select count(*) from _r159) <> 20 then raise exception '159-FALLAN: se esperaban 20 casos'; end if;
+  if (select count(*) from _r159) <> 22 then raise exception '159-FALLAN: se esperaban 22 casos'; end if;
 end $$;
 rollback;

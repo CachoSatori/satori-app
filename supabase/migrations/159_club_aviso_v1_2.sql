@@ -17,11 +17,12 @@
 --  4. Trigger diferido club_roles_mayor_edad_chk: un alta de socio por caja o autoalta (INSERT del rol, o `desde` que
 --     cambia en una re-alta) sin mayor_edad_en se RECHAZA al confirmar la transacción, venga de la función que venga.
 --  5. Trigger club_contacto_cumple_guardia: el cumpleaños se carga SOLO en el alta (fila de contacto creada en la misma
---     transacción, por una función de la base). Después no lo cambia nadie salvo el owner, con
+--     transacción, escrita con el rol dueño de club_socio_autoalta, sin depender de cómo se llame ese rol). Después no lo cambia nadie salvo el owner, con
 --     club_socio_cumple_corregir (nota obligatoria; auditado sin el dato). Borrarlo siempre se puede. Ni anon, ni el
 --     portal, ni un manager lo editan (la app ya no puede escribir la tabla directo: no tiene SELECT para el WHERE).
---  6. Trigger club_roles_baja_borra_cumple: cuando el rol de socio pasa a baja (portal, gerencia, cualquier vía), el
---     cumpleaños se borra (el aviso lo dice: «Si se da de baja, lo borramos»).
+--  6. Trigger club_roles_baja_borra_cumple: cuando el rol de socio pasa a baja (portal, gerencia, cualquier vía) o se
+--     BORRA (la purga de autoaltas sin validar borra el rol y, si la persona tiene otro rol activo, conserva el contacto),
+--     el cumpleaños se borra (el aviso lo dice: «Si se da de baja, lo borramos»).
 --  7. club_socio_autoalta(jsonb): copia EXACTA de la 150 + exige `mayor_edad` = true y valida el cumpleaños opcional;
 --     guarda mayor_edad_en y, solo para una persona NUEVA, el cumpleaños. Si el teléfono ya existía (solicitud), no toca nada.
 --  8. club_socio_alta_caja_v2(…, p_mayor_edad, …): nueva. Exige «es mayor de 18» y llama a club_socio_alta_caja (la
@@ -108,8 +109,11 @@ begin
   if not v_tiene then   -- borrarlo (baja, retiro del permiso): siempre (el rastro lo deja club_contacto_cumple_auditar)
     return new;
   end if;
-  -- en el alta: la fila de contacto nace en esta transacción y la escribe una función de la base (no la app ni el portal)
-  if not v_tenia and current_user = 'postgres' and new.created_at = now() then
+  -- en el alta: la fila de contacto nace en esta transacción y la escribe la autoalta (corre como SU dueño, sea cual sea
+  -- el rol: postgres, supabase_admin…; verificador 14-nov), no la app ni el portal
+  if not v_tenia and new.created_at = now()
+     and current_user = (select pg_get_userbyid(p.proowner) from pg_proc p
+                          where p.oid = to_regprocedure('public.club_socio_autoalta(jsonb)')) then
     return new;
   end if;
   if coalesce(public.get_my_role()::text, '') = 'owner' then
@@ -185,15 +189,20 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
-  if new.rol = 'socio' and new.estado = 'baja' and old.estado is distinct from 'baja' then
+  -- baja (UPDATE) o rol de socio eliminado (DELETE: la purga de autoaltas sin validar)
+  if (tg_op = 'UPDATE' and new.rol = 'socio' and new.estado = 'baja' and old.estado is distinct from 'baja')
+     or (tg_op = 'DELETE' and old.rol = 'socio') then
     update public.club_miembros_contacto set cumple_dia = null, cumple_mes = null, cumple_permiso_en = null, updated_at = now()
-     where miembro_id = new.miembro_id and cumple_dia is not null;
+     where miembro_id = old.miembro_id and cumple_dia is not null;
   end if;
   return null;
 end;
 $$;
 drop trigger if exists club_roles_baja_borra_cumple_trg on public.club_miembro_roles;
 create trigger club_roles_baja_borra_cumple_trg after update of estado on public.club_miembro_roles
+  for each row execute function public.club_roles_baja_borra_cumple();
+drop trigger if exists club_roles_borrado_borra_cumple_trg on public.club_miembro_roles;
+create trigger club_roles_borrado_borra_cumple_trg after delete on public.club_miembro_roles
   for each row execute function public.club_roles_baja_borra_cumple();
 
 -- ── 7. Autoalta (club-web /alta): copia exacta de la 150 + edad y cumpleaños (marcado «159») ──────
@@ -317,8 +326,13 @@ $$;
 
 revoke all on function public.club_socio_alta_caja_v2(text, text, text, boolean, boolean, text) from public, anon, authenticated;
 grant execute on function public.club_socio_alta_caja_v2(text, text, text, boolean, boolean, text) to authenticated;
--- la de 5 argumentos queda solo como implementación interna (la llama la v2, que corre como su dueño)
-revoke all on function public.club_socio_alta_caja(text, text, text, boolean, text) from public, anon, authenticated;
+-- la de 5 argumentos queda solo como implementación interna (la llama la v2, que corre como su dueño). La 156 (#174) le
+-- vuelve a dar EXECUTE a authenticated: como la 159 corre después, este revoke la cierra otra vez. Idempotente.
+do $$ begin
+  if to_regprocedure('public.club_socio_alta_caja(text,text,text,boolean,text)') is not null then
+    revoke all on function public.club_socio_alta_caja(text, text, text, boolean, text) from public, anon, authenticated;
+  end if;
+end $$;
 
 -- Las funciones de trigger no se llaman por RPC
 revoke all on function public.club_roles_mayor_edad_chk() from public, anon, authenticated;

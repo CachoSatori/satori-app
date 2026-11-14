@@ -79,6 +79,7 @@ grant execute on function public.club_socio_autoalta(jsonb) to anon, authenticat
 
 -- 6 y 5. triggers y funciones del cumpleaños
 drop trigger if exists club_roles_baja_borra_cumple_trg on public.club_miembro_roles;
+drop trigger if exists club_roles_borrado_borra_cumple_trg on public.club_miembro_roles;
 drop function if exists public.club_roles_baja_borra_cumple();
 drop function if exists public.club_socio_cumple_corregir(uuid, int, int, text);
 drop trigger if exists club_contacto_cumple_auditar_trg on public.club_miembros_contacto;

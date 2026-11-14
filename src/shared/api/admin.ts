@@ -15,6 +15,8 @@ export async function getAllEmployees(): Promise<Employee[]> {
 export async function createEmployee(payload: {
   full_name: string
   role: UserRole
+  /** Solo owner (lo exige el trigger club_employees_pos_login_guardia de la base). */
+  pos_login?: string | null
 }): Promise<Employee> {
   const { data, error } = await supabase
     .from('employees')
@@ -27,7 +29,7 @@ export async function createEmployee(payload: {
 
 export async function updateEmployee(
   id: string,
-  payload: Partial<Pick<Employee, 'full_name' | 'role' | 'is_active' | 'pos_name'>>
+  payload: Partial<Pick<Employee, 'full_name' | 'role' | 'is_active' | 'pos_name' | 'pos_login'>>
 ): Promise<void> {
   const { error } = await supabase
     .from('employees')

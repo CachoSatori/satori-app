@@ -399,11 +399,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
             <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
               <div className="tips-field">
                 <div className="tips-field-label">Monto ₡</div>
-                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" min={0} onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" min={0} step="any" onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Monto $ (opcional)</div>
-                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" min={0} onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" min={0} step="any" onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Fecha</div>
@@ -538,14 +538,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                       disabled={saving === m.id} />
                   </td>
                   <td className="r">
-                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number" min={0}
+                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number" min={0} step="any"
                       defaultValue={m.amount_crc || ''}
                       style={{ color: col, fontWeight: 600 }}
                       onBlur={e => handleFieldChange(m.id, 'amount_crc', Number(e.target.value) || 0)}
                       disabled={saving === m.id} />
                   </td>
                   <td className="r">
-                    <input key={m.id + '-usd'} className="cd-tbl-input r" type="number" min={0}
+                    <input key={m.id + '-usd'} className="cd-tbl-input r" type="number" min={0} step="any"
                       defaultValue={m.amount_usd || ''}
                       style={{ color: 'var(--c-azul)' }}
                       onBlur={e => handleFieldChange(m.id, 'amount_usd', Number(e.target.value) || 0)}

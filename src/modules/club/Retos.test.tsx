@@ -4,7 +4,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { QueAplicar, Reto, RetoDatos } from '../../shared/api/club'
-import Retos, { problemaReto, resumenFranja } from './Retos'
+import Retos from './Retos'
+import { problemaReto, resumenFranja } from './retosReglas'
 
 const rol = vi.hoisted(() => ({ v: 'owner' }))
 const api = vi.hoisted(() => ({

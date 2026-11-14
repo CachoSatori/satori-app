@@ -274,13 +274,15 @@ export default function HomePage() {
   }, [mustLand])
 
   const gestionaClub = profile?.role === 'owner' || profile?.role === 'manager'
+  const rolClub = profile?.role
   useEffect(() => {
     if (mustLand || !gestionaClub) return
     // Auditoría 208: si la lectura del Club falla, el Inicio dice «sin comprobar» (nunca «Todo en orden»).
-    import('../shared/api/club').then(m => m.getExcepcionesAbiertas(30))
+    // 170: el manager lee solo un local suyo (el recordado en el navegador puede ser de otro)
+    import('../shared/api/club').then(async m => { await m.asegurarLocalParaRol(rolClub); return m.getExcepcionesAbiertas(30) })
       .then(n => { setClubAbiertas(n); setClubFallo(false) })
       .catch(() => setClubFallo(true))
-  }, [mustLand, gestionaClub])
+  }, [mustLand, gestionaClub, rolClub])
 
   const role = profile?.role ?? ''
   const isManager = ['owner', 'manager', 'contador'].includes(role)

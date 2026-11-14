@@ -412,6 +412,14 @@ export async function getLocalesClubParaRol(rol: string | null | undefined): Pro
   if (rol !== 'manager') return locales
   return localesParaRol(locales, rol, await llamar<string[] | null>('mis_locales', {}))
 }
+/** 170: si el local recordado en el navegador no es uno de los que el usuario puede usar (p. ej. una tablet compartida
+ *  donde el owner dejó otro), elige uno suyo (el primero encendido) antes de leer. Para los demás roles no cambia nada. */
+export async function asegurarLocalParaRol(rol: string | null | undefined): Promise<void> {
+  if (rol !== 'manager') return
+  const l = await getLocalesClubParaRol(rol)
+  if (localClub && l.some(x => x.id === localClub)) return
+  elegirLocal(l.find(x => x.activo)?.id ?? l[0]?.id ?? null)
+}
 /** Solo owner. Alta de un local: queda APAGADO; con `copiarDe`, arranca con la configuración de ese local. */
 export const crearLocal = (p: { id: string; nombre: string; direccion: string | null; mapa: string | null; copiarDe: string | null }) =>
   llamar<string>('club_local_crear', { p_id: p.id, p_nombre: p.nombre, p_direccion: p.direccion, p_mapa: p.mapa, p_copiar_de: p.copiarDe })

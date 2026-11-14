@@ -55,6 +55,7 @@ vi.mock('../shared/api/jornadasConVentas', () => ({
 let clubFalla = false
 let clubExcepciones = 0
 vi.mock('../shared/api/club', () => ({
+  asegurarLocalParaRol: async () => {},   // 170: el manager lee solo un local suyo
   getExcepcionesAbiertas: async () => { if (clubFalla) throw new Error('sin conexión'); return clubExcepciones },
 }))
 

@@ -10,7 +10,7 @@ vi.mock('../../shared/api/supabase', () => ({
   },
 }))
 
-import { getLocalesClubParaRol, localesParaRol, type LocalClub } from '../../shared/api/club'
+import { asegurarLocalParaRol, elegirLocal, getLocalesClubParaRol, localActual, localesParaRol, type LocalClub } from '../../shared/api/club'
 
 const A: LocalClub = { id: 'local-a', nombre: 'Local A', activo: true }
 const B: LocalClub = { id: 'local-b', nombre: 'Local B', activo: true }
@@ -43,5 +43,28 @@ describe('getLocalesClubParaRol', () => {
     rpc.mockReset(); select.mockResolvedValue(filas)
     expect(await getLocalesClubParaRol('owner')).toEqual([A, B])
     expect(rpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('asegurarLocalParaRol (Inicio)', () => {
+  const filas = { data: [A, B].map(l => ({ location_id: l.id, nombre: l.nombre, club_activo: l.activo })), error: null }
+  it('manager con un local ajeno recordado: pasa a uno suyo', async () => {
+    rpc.mockReset(); select.mockResolvedValue(filas); rpc.mockResolvedValue({ data: ['local-b'], error: null })
+    elegirLocal('local-a')
+    await asegurarLocalParaRol('manager')
+    expect(localActual()).toBe('local-b')
+  })
+  it('manager con su local recordado: no lo cambia', async () => {
+    rpc.mockReset(); select.mockResolvedValue(filas); rpc.mockResolvedValue({ data: ['local-a', 'local-b'], error: null })
+    elegirLocal('local-a')
+    await asegurarLocalParaRol('manager')
+    expect(localActual()).toBe('local-a')
+  })
+  it('owner: no consulta ni cambia nada', async () => {
+    rpc.mockReset(); select.mockReset()
+    elegirLocal('local-a')
+    await asegurarLocalParaRol('owner')
+    expect(localActual()).toBe('local-a')
+    expect(rpc).not.toHaveBeenCalled(); expect(select).not.toHaveBeenCalled()
   })
 })

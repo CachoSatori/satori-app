@@ -67,7 +67,8 @@ insert into public.profile_locations (profile_id, location_id, principal) values
 insert into public.club_negocios (id, location_id, nombre, tipo) values
   ('00000000-0000-4000-8000-000000170c01', 'p170-b', 'Negocio Prueba P170', 'hotel');
 insert into public.club_miembros (id, location_id, tipo, nombre, negocio_id) values
-  ('00000000-0000-4000-8000-000000170b01', 'p170-b', 'referente', 'Prueba Referente P170', '00000000-0000-4000-8000-000000170c01');
+  ('00000000-0000-4000-8000-000000170b01', 'p170-b', 'referente', 'Prueba Referente P170', '00000000-0000-4000-8000-000000170c01'),
+  ('00000000-0000-4000-8000-000000170b02', 'p170-a', 'referente', 'Prueba Referente A P170', null);
 
 -- Llama una función como el usuario dado y devuelve 'ok' o 'SQLSTATE mensaje'. Sin usuario = sin sesión (anon). Lo
 -- que la llamada escribe se DESHACE siempre (subtransacción que termina en un error propio): cada llamada ve la misma
@@ -264,6 +265,18 @@ select '6b alta de referente sin local, con negocio de B: M_A → 42501 (el loca
        pg_temp.como(pg_temp.uid('M_A'), $q$select public.club_miembro_guardar(null, 'referente', 'Otro Referente P170', '00000000-0000-4000-8000-000000170c01', null, null, null)$q$)
          = '42501 Sin permiso en ese local', null;
 
+insert into _r170 (caso, ok, detalle)
+select '6c M_A cuelga un referente de A del negocio de B (edición y alta con p_location = A) → 42501; M_AB puede; el owner, igual que hoy',
+       pg_temp.como(pg_temp.uid('M_A'), $q$select public.club_miembro_guardar('00000000-0000-4000-8000-000000170b02', 'referente', 'Referente A', '00000000-0000-4000-8000-000000170c01', null, null, 'p170-a')$q$)
+         = '42501 Sin permiso en ese local'
+       and pg_temp.como(pg_temp.uid('M_A'), $q$select public.club_miembro_guardar(null, 'referente', 'Otro Referente A', '00000000-0000-4000-8000-000000170c01', null, null, 'p170-a')$q$)
+         = '42501 Sin permiso en ese local'
+       and pg_temp.como(pg_temp.uid('M_A'), $q$select public.club_miembro_guardar('00000000-0000-4000-8000-000000170b02', 'referente', 'Referente A', null, null, null, 'p170-a')$q$) = 'ok'
+       and pg_temp.como(pg_temp.uid('M_AB'), $q$select public.club_miembro_guardar('00000000-0000-4000-8000-000000170b02', 'referente', 'Referente A', '00000000-0000-4000-8000-000000170c01', null, null, 'p170-a')$q$) = 'ok'
+       and pg_temp.como(pg_temp.uid('OW'), $q$select public.club_miembro_guardar('00000000-0000-4000-8000-000000170b02', 'referente', 'Referente A', '00000000-0000-4000-8000-000000170c01', null, null, 'p170-a')$q$)
+         = pg_temp.como(pg_temp.uid('OW'), $q$select public.club_miembro_guardar__nucleo('00000000-0000-4000-8000-000000170b02', 'referente', 'Referente A', '00000000-0000-4000-8000-000000170c01', null, null, 'p170-a')$q$),
+       null;
+
 -- 7. la API no llega al núcleo: authenticated no lo puede ejecutar ─────────────────────────────────────────────────
 create temp table _k170 (r text) on commit drop;
 grant insert on _k170 to authenticated;
@@ -303,7 +316,7 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r170 where not ok or ok is null;
   if v is not null then raise exception '170-FALLAN: %', v; end if;
-  if (select count(*) from _r170) < 17 then raise exception '170-FALLAN: faltan casos (NO PROBADO)'; end if;
+  if (select count(*) from _r170) < 19 then raise exception '170-FALLAN: faltan casos (NO PROBADO)'; end if;
 end $$;
 
 rollback;

@@ -39,11 +39,17 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     'nucleo_abierto': ("    execute format('revoke all on function public.%I(%s) from public, anon, authenticated', v_nom || '__nucleo', v_ident);\n",
                        "", {'0c', '7a'}),
     # la edición por id mira el local que manda el cliente
-    'id_sin_objeto': ("         'case when p_id is not null then coalesce((select n.location_id from public.club_negocios n where n.id = p_id), p_location) '\n"
-                      "         'else p_location end'),\n", "         'p_location'),\n", {'6a'}),
-    # el envoltorio ignora el local del negocio en el alta
-    'alta_sin_negocio': ("         'else coalesce(p_location, (select n.location_id from public.club_negocios n where n.id = p_negocio_id)) end')\n",
-                         "         'else p_location end')\n", {'6b'}),
+    'id_sin_objeto': ("         'perform public.club_exigir_local(case when p_id is not null then coalesce((select n.location_id from public.club_negocios n where n.id = p_id), p_location) '\n"
+                      "         'else p_location end);'),\n", "         'perform public.club_exigir_local(p_location);'),\n", {'6a'}),
+    # sin el chequeo del negocio al que se cuelga el anfitrión
+    'sin_negocio': ("         'if p_negocio_id is not null and exists (select 1 from public.club_negocios n where n.id = p_negocio_id) then '\n"
+                    "         'perform public.club_exigir_local((select n.location_id from public.club_negocios n where n.id = p_negocio_id)); end if;')\n",
+                    "         '')\n", {'6c'}),
+    # el alta sin local ignora el negocio (y sin el chequeo del negocio)
+    'alta_sin_negocio': ("         'else coalesce(p_location, (select n.location_id from public.club_negocios n where n.id = p_negocio_id)) end); '\n"
+                         "         'if p_negocio_id is not null and exists (select 1 from public.club_negocios n where n.id = p_negocio_id) then '\n"
+                         "         'perform public.club_exigir_local((select n.location_id from public.club_negocios n where n.id = p_negocio_id)); end if;')\n",
+                         "         'else p_location end);')\n", {'6b', '6c'}),
 }
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
     # el rollback no devuelve el EXECUTE de authenticated

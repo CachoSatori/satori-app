@@ -15,16 +15,20 @@
 --     byte; sin EXECUTE para public/anon/authenticated) y la nueva <nombre>, con la MISMA firma, defaults, resultado,
 --     volatilidad y los mismos EXECUTE que tenía la original, llama a club_exigir_local y después al núcleo. No se copia ni se reescribe ningún cuerpo.
 --   · club_negocio_guardar y club_miembro_guardar, al editar (p_id con dato), chequean el local del objeto (no el que
---     viene en p_location): si no, un manager editaba un negocio o un miembro de otro local por id.
+--     viene en p_location): si no, un manager editaba un negocio o un miembro de otro local por id. club_miembro_guardar
+--     chequea además el local del negocio al que se cuelga el anfitrión.
 --
 -- Cubiertas sin envoltorio propio (llaman por nombre a una envuelta, así que pasan por el chequeo):
 --   club_excepciones_abiertas → club_excepciones · club_reporte_exportar → club_reporte_mes.
 -- Fuera (ya cerradas): club_reporte_cerrar y club_contactos_ofertas_exportar (solo owner); club_premios_generar y los
 -- helpers internos (sin EXECUTE para authenticated).
 --
--- OJO PRs abiertos: una migración posterior que haga `create or replace` de una función envuelta REEMPLAZA el envoltorio
--- y se pierde el chequeo. Por eso supabase/club_local_manager.test.ts falla si una migración > 170 redefine una de estas
--- funciones sin llamar a public.club_exigir_local.
+-- RECETA para cambiar una función envuelta DESPUÉS de la 170 (y para rebasear un PR que la redefine): se cambia el
+-- NÚCLEO, no el envoltorio: `create or replace function public.<nombre>__nucleo(<misma firma>) …` con el cuerpo nuevo
+-- (conserva su ACL: sin EXECUTE para authenticated). Un `create or replace function public.<nombre>(` con el cuerpo
+-- completo REEMPLAZA el envoltorio y se pierde el chequeo. supabase/club_local_manager.test.ts falla si una migración
+-- > 170 redefine, renombra o borra un envoltorio (salvo que repita exactamente su chequeo de esta lista) o le da EXECUTE
+-- a la API sobre un núcleo. Si cambia la firma: drop del envoltorio y del núcleo y se rehace el par con esta receta.
 --
 -- Pruebas: scripts/sql/170_pruebas.sql (+ 170_pruebas.py; transacción con rollback). Rollback: scripts/sql/170_rollback.sql.
 begin;
@@ -74,7 +78,8 @@ comment on function public.club_exigir_local(text) is
   '170: para el manager, corta con 42501 si el local (resuelto con club_local) no es suyo. Para otros roles no hace nada.';
 
 -- ── 3. Envoltorios ─────────────────────────────────────────────────────────────────────────────────────────────────
--- (función, expresión del local a chequear). La expresión usa los parámetros de la función.
+-- (función, chequeo). Sin chequeo propio: perform public.club_exigir_local(p_location);. El chequeo usa los parámetros
+-- de la función. supabase/club_local_manager.test.ts lee esta lista: un envoltorio redefinido después tiene que repetirlo.
 do $$
 declare
   r       record;
@@ -90,40 +95,43 @@ declare
   v_g     text;
 begin
   for r in
-    select v.fn::regprocedure as fn, v.loc
+    select v.fn::regprocedure as fn, coalesce(v.chequeo, 'perform public.club_exigir_local(p_location);') as chequeo
       from (values
-        ('public.club_pendientes_listar(text)',                         'p_location'),
-        ('public.club_pedidos_abiertos(text)',                          'p_location'),
-        ('public.club_facturas_recientes(text)',                        'p_location'),
-        ('public.club_excepciones(date,date,text,text)',                'p_location'),
-        ('public.club_excepcion_resolver(text,text,text,text)',         'p_location'),
-        ('public.club_reporte_mes(date,text,boolean)',                  'p_location'),
-        ('public.club_comparacion_cargar(jsonb,text)',                  'p_location'),
-        ('public.club_comparacion(date,date,text)',                     'p_location'),
-        ('public.club_reporte_altas(date,date,text)',                   'p_location'),
-        ('public.club_reporte_visitas(date,date,text)',                 'p_location'),
-        ('public.club_reporte_descuentos(date,date,text)',              'p_location'),
-        ('public.club_alertas_prioritarias(text)',                      'p_location'),
-        ('public.club_promociones_listar(text)',                        'p_location'),
-        ('public.club_promocion_guardar(uuid,jsonb,text)',              'p_location'),
-        ('public.club_productos(text,text)',                            'p_location'),
-        ('public.club_cortesias_listar(text)',                          'p_location'),
-        ('public.club_cortesia_guardar(uuid,text,text,boolean,text)',   'p_location'),
-        ('public.club_marcadores_listar(text)',                         'p_location'),
-        ('public.club_marcador_guardar(uuid,text,text,numeric,boolean,text)', 'p_location'),
-        ('public.club_descuentos_tipo_listar(text)',                    'p_location'),
-        ('public.club_descuento_tipo_guardar(uuid,text,numeric,boolean,text)', 'p_location'),
-        ('public.club_socio_alta_caja(text,text,text,boolean,text)',    'p_location'),
-        ('public.club_socio_validar(uuid,boolean,text)',                'p_location'),
-        ('public.club_socio_visita(uuid,jsonb,uuid,text)',              'p_location'),
+        ('public.club_pendientes_listar(text)',                         null::text),
+        ('public.club_pedidos_abiertos(text)',                          null),
+        ('public.club_facturas_recientes(text)',                        null),
+        ('public.club_excepciones(date,date,text,text)',                null),
+        ('public.club_excepcion_resolver(text,text,text,text)',         null),
+        ('public.club_reporte_mes(date,text,boolean)',                  null),
+        ('public.club_comparacion_cargar(jsonb,text)',                  null),
+        ('public.club_comparacion(date,date,text)',                     null),
+        ('public.club_reporte_altas(date,date,text)',                   null),
+        ('public.club_reporte_visitas(date,date,text)',                 null),
+        ('public.club_reporte_descuentos(date,date,text)',              null),
+        ('public.club_alertas_prioritarias(text)',                      null),
+        ('public.club_promociones_listar(text)',                        null),
+        ('public.club_promocion_guardar(uuid,jsonb,text)',              null),
+        ('public.club_productos(text,text)',                            null),
+        ('public.club_cortesias_listar(text)',                          null),
+        ('public.club_cortesia_guardar(uuid,text,text,boolean,text)',   null),
+        ('public.club_marcadores_listar(text)',                         null),
+        ('public.club_marcador_guardar(uuid,text,text,numeric,boolean,text)', null),
+        ('public.club_descuentos_tipo_listar(text)',                    null),
+        ('public.club_descuento_tipo_guardar(uuid,text,numeric,boolean,text)', null),
+        ('public.club_socio_alta_caja(text,text,text,boolean,text)',    null),
+        ('public.club_socio_validar(uuid,boolean,text)',                null),
+        ('public.club_socio_visita(uuid,jsonb,uuid,text)',              null),
         -- edición por id: el local del objeto; alta: el elegido
         ('public.club_negocio_guardar(uuid,text,text,boolean,text)',
-         'case when p_id is not null then coalesce((select n.location_id from public.club_negocios n where n.id = p_id), p_location) '
-         'else p_location end'),
+         'perform public.club_exigir_local(case when p_id is not null then coalesce((select n.location_id from public.club_negocios n where n.id = p_id), p_location) '
+         'else p_location end);'),
+        -- y el negocio al que se cuelga el anfitrión también tiene que ser de un local del manager
         ('public.club_miembro_guardar(uuid,text,text,uuid,text,jsonb,text)',
-         'case when p_id is not null then coalesce((select m.location_id from public.club_miembros m where m.id = p_id), p_location) '
-         'else coalesce(p_location, (select n.location_id from public.club_negocios n where n.id = p_negocio_id)) end')
-      ) v(fn, loc)
+         'perform public.club_exigir_local(case when p_id is not null then coalesce((select m.location_id from public.club_miembros m where m.id = p_id), p_location) '
+         'else coalesce(p_location, (select n.location_id from public.club_negocios n where n.id = p_negocio_id)) end); '
+         'if p_negocio_id is not null and exists (select 1 from public.club_negocios n where n.id = p_negocio_id) then '
+         'perform public.club_exigir_local((select n.location_id from public.club_negocios n where n.id = p_negocio_id)); end if;')
+      ) v(fn, chequeo)
   loop
     select p.proname, pg_get_function_arguments(p.oid), pg_get_function_identity_arguments(p.oid),
            pg_get_function_result(p.oid), p.proretset,
@@ -162,8 +170,8 @@ begin
 
     execute format(
       'create function public.%I(%s) returns %s language plpgsql %s security definer set search_path = public, pg_temp '
-      'as $f$ begin perform public.club_exigir_local(%s); %s end $f$',
-      v_nom, v_args, v_res, v_vol, r.loc, v_body);
+      'as $f$ begin %s %s end $f$',
+      v_nom, v_args, v_res, v_vol, r.chequeo, v_body);
     execute format('revoke all on function public.%I(%s) from public, anon, authenticated, service_role', v_nom, v_ident);
     foreach v_g in array v_gran loop
       execute format('grant execute on function public.%I(%s) to %I', v_nom, v_ident, v_g);

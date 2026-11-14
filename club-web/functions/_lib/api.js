@@ -316,6 +316,15 @@ export async function manejar(request, env, path) {
     return rpc(env, 'club_canje_codigo_generar_pase', { p_token_pase: tok })
   }
 
+  // GET /api/portal/:token/retos  → retos de temporada baja con el avance del socio (mig 169). Mismo tope que leer el portal.
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'retos') {
+    if (metodo !== 'GET') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'leer', `retos:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return rpc(env, 'club_portal_retos', { p_token: tok })
+  }
+
   // POST /api/portal/:token/baja  → baja del Local Club (link del aviso de privacidad)
   if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'baja') {
     if (metodo !== 'POST') return json(405, { error: 'metodo' })

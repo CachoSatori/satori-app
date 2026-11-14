@@ -531,3 +531,50 @@ export const getReporteVisitas = (desde: string, hasta: string, local: string | 
 export interface AltasPorCajero { usuario: string; altas_caja: number; validaciones: number; confirmo: number; sin_confirmar: number; vencidas: number }
 export const getReporteAltas = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<AltasPorCajero[]>('club_reporte_altas', { p_desde: desde, p_hasta: hasta, p_location: local })
+
+// ── Mig 169: retos de temporada baja («3 almuerzos este mes») ─────────────────
+export type EstadoReto = 'borrador' | 'vigente' | 'terminada'
+export interface Reto {
+  id: string; nombre: string; nombre_en: string; locales: string[]; estado: EstadoReto
+  desde: string; hasta: string; dias: number[]; hora_desde: string | null; hora_hasta: string | null
+  meta: number; vence_dias: number; control_pct: 0 | 15; armado: boolean; en_curso: boolean
+  /** Premio de cada local del reto: {location_id: cortesía}. */
+  cortesias: Record<string, { id: string; codigo: string; nombre: string; activa: boolean }>
+  ganados: number; usados: number; disponibles: number
+}
+export interface RetoDatos {
+  nombre: string; nombre_en: string; locales: string[]; desde: string; hasta: string; dias: number[]
+  hora_desde: string | null; hora_hasta: string | null; meta: number; vence_dias: number; control_pct: 0 | 15
+  /** {location_id: id de la cortesía de ese local} */
+  cortesias: Record<string, string>
+}
+/** Owner y manager. Todos los retos (todos los locales). */
+export const getRetos = () => llamar<Reto[]>('club_retos_listar', {})
+/** Solo owner. `id` null = nuevo. Solo un borrador se edita. */
+export const guardarReto = (id: string | null, datos: RetoDatos) => llamar<string>('club_reto_guardar', { p_id: id, p_datos: datos })
+/** Solo owner. Borrador → vigente: la base rechaza el 4.º del año y la superposición en un local. */
+export const armarReto = (id: string) => llamar<Reto[]>('club_reto_armar', { p_id: id })
+export const terminarReto = (id: string) => llamar<Reto[]>('club_reto_terminar', { p_id: id })
+export const borrarReto = (id: string) => llamar<Reto[]>('club_reto_borrar', { p_id: id })
+/** Cortesías de OTRO local (el premio del reto se elige por local). Owner y manager. */
+export const getCortesiasDe = (local: string) => llamar<Cortesia[]>('club_cortesias_listar', { p_location: local })
+
+/** Mig 169: qué pasó con el premio del reto en esta visita. `ofrecida` = va en esta factura (una sola vez). */
+export type RetoEnCaja =
+  | { estado: 'ofrecida'; nombre: string; cortesia: string; codigo: string }
+  | { estado: 'guardada' | 'sin_configurar'; nombre: string }
+/**
+ * Mig 169: paso aparte DESPUÉS de registrar la visita: si el socio tiene un premio de reto, lo suma a «qué aplicar» (una
+ * sola vez). Si la visita no es nueva y ya trae el reto, o no hay visita, no llama. Si falla (sin la 169, sin red), la
+ * caja sigue con lo que ya tenía: el premio queda guardado para la próxima visita.
+ */
+export async function conPremioDeReto(r: QueAplicar & { reto?: RetoEnCaja }): Promise<QueAplicar & { reto?: RetoEnCaja }> {
+  if (!r.visita_id || r.reto) return r
+  try {
+    const x = await llamar<QueAplicar & { reto?: RetoEnCaja }>('club_reto_en_visita', { p_visita: r.visita_id, p_location: localClub })
+    if (!x || typeof x !== 'object' || !Array.isArray(x.avisos)) return r
+    return { ...x, repetida: r.repetida, avisos: [...r.avisos, ...x.avisos.filter(a => !r.avisos.includes(a))] }
+  } catch {
+    return r
+  }
+}

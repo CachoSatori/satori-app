@@ -14,6 +14,7 @@ import {
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
+import Retos from './Retos'
 
 const PARA: Array<[ParaPromo, string]> = [['socio', 'Socios'], ['referente', 'Referentes'], ['turista_cupon', 'Turistas con cupón'], ['todos', 'Todos']]
 const DIAS: Array<[number, string]> = [[1, 'Lu'], [2, 'Ma'], [3, 'Mi'], [4, 'Ju'], [5, 'Vi'], [6, 'Sá'], [7, 'Do']]
@@ -27,6 +28,7 @@ export default function Promociones() {
       {!owner && <Aviso tono="info">Las promociones y las cortesías las edita el owner. Acá las ves.</Aviso>}
       <ListaPromociones owner={owner} />
       <ListaCortesias owner={owner} />
+      <Retos owner={owner} />{/* mig 169: retos de temporada baja */}
     </div>
   )
 }

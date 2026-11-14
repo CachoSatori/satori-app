@@ -292,6 +292,20 @@ test('136: la ruta vieja POST /api/cupon/:codigo/baja ya no existe (con el códi
   assert.equal(llamadas.length, 0)
 })
 
+test('169: GET /api/portal/:token/retos llama a club_portal_retos con el header; POST → 405; token malo → 404; tope → 429', async () => {
+  llamadas = []
+  const tok = 'b'.repeat(64)
+  const r = await manejar(pedido(`portal/${tok}/retos`), conLimite(), `portal/${tok}/retos`)
+  assert.equal(r.status, 200)
+  assert.ok(String(llamadas.at(-1).url).endsWith('/rpc/club_portal_retos'))
+  assert.equal(JSON.parse(llamadas.at(-1).init.body).p_token, tok)
+  assert.equal(llamadas.at(-1).init.headers['x-club-web'], 'clave-de-prueba')
+  assert.equal((await manejar(pedido(`portal/${tok}/retos`, 'POST'), conLimite(), `portal/${tok}/retos`)).status, 405)
+  assert.equal((await manejar(pedido('portal/xyz/retos'), conLimite(), 'portal/xyz/retos')).status, 404)
+  assert.equal((await manejar(pedido(`portal/${tok}/retos`), conLimite(false), `portal/${tok}/retos`)).status, 429)
+  assert.equal((await manejar(pedido(`portal/${tok}/retos`), base, `portal/${tok}/retos`)).status, 503)
+})
+
 test('(12-nov) /api/portal/:token/wallet/actualizar llama a la ruta «actualizar» del Edge y devuelve solo el resultado', async () => {
   const tok = 'e'.repeat(64)
   const ruta = `portal/${tok}/wallet/actualizar`

@@ -7,6 +7,11 @@ import { allSaloneros } from '../ventas/ventasUtils'
 // Se elige desde un dropdown de nombres reales para evitar typos; ata Mi Rendimiento y VentasICP al empleado.
 
 import { ROLE_LABELS } from '../../shared/constants'
+import { useAuth } from '../../shared/hooks/useAuth'
+import { leerLoginsSinEmpleado, POS_LOGIN_RE, DIAS_LOGINS, type LoginSinEmpleado } from './loginsPosSinEmpleado'
+
+/** D2: '' = sin login; si no, 3 dígitos. Devuelve el mensaje de error o null. */
+const errorLogin = (v: string) => v.trim() === '' || POS_LOGIN_RE.test(v.trim()) ? null : 'El login del PoS son 3 dígitos (ej. 041).'
 
 const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
@@ -16,6 +21,9 @@ interface Props {
 }
 
 export default function EmployeeList({ employees, onRefresh }: Props) {
+  // D2: el login del PoS lo ve y lo cambia SOLO el owner (la base lo exige con club_employees_pos_login_guardia).
+  const { profile } = useAuth()
+  const esOwner = profile?.role === 'owner'
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [salNames, setSalNames] = useState<string[]>([])   // nombres reales de ventas (claves de dias.saloneros)
   const [linkingId, setLinkingId] = useState<string | null>(null)
@@ -37,6 +45,20 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
   }
   const [name, setName] = useState('')
   const [role, setRole] = useState<UserRole>('salonero')
+  const [newPosLogin, setNewPosLogin] = useState('')
+  const [editPosLogin, setEditPosLogin] = useState('')
+  // D2: logins del PoS de los últimos 14 días sin empleado (null = cargando; 'fallo' = no se pudo revisar).
+  const [sinEmpleado, setSinEmpleado] = useState<LoginSinEmpleado[] | 'fallo' | null>(null)
+  const clavesLogin = employees.map(e => e.pos_login ?? '').join('|')
+  useEffect(() => {
+    if (!esOwner) return
+    let vivo = true
+    leerLoginsSinEmpleado(employees)
+      .then(l => { if (vivo) setSinEmpleado(l) })
+      .catch(() => { if (vivo) setSinEmpleado('fallo') })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- se relee solo si cambian los logins cargados
+  }, [esOwner, clavesLogin])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
@@ -55,12 +77,18 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
+    const errLogin = esOwner ? errorLogin(newPosLogin) : null
+    if (errLogin) { setError(errLogin); return }
     setSaving(true)
     setError(null)
     try {
-      await createEmployee({ full_name: name.trim().toUpperCase(), role })
+      await createEmployee({
+        full_name: name.trim().toUpperCase(), role,
+        ...(esOwner && newPosLogin.trim() ? { pos_login: newPosLogin.trim() } : {}),
+      })
       setName('')
       setRole('salonero')
+      setNewPosLogin('')
       setShowForm(false)
       await onRefresh()
     } catch (err) {
@@ -72,14 +100,31 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
 
   const [editPosName, setEditPosName] = useState('')
 
-  const handleEdit = (emp: Employee) => {
+  const handleEdit = (emp: Employee, posLogin?: string) => {
     setEditId(emp.id)
     setEditName(emp.full_name)
     setEditRole(emp.role)
     setEditPosName(emp.pos_name ?? '')
+    setEditPosLogin(posLogin ?? emp.pos_login ?? '')
+    setError(null)
+  }
+
+  // D2: «asignar» desde el aviso → Editar del empleado elegido, o Agregar, con el login precargado.
+  const asignarAEmpleado = (login: string, empId: string) => {
+    const emp = employees.find(e => e.id === empId)
+    if (emp) { setShowForm(false); handleEdit(emp, login) }
+  }
+  const asignarANuevo = (login: string) => {
+    setEditId(null); setNewPosLogin(login); setError(null); setShowForm(true)
   }
 
   const handleSaveEdit = async (id: string) => {
+    const antes = employees.find(e => e.id === id)?.pos_login ?? null
+    const login = editPosLogin.trim() || null
+    // Solo el owner manda el login, y solo si cambió (el trigger guarda historial de cada cambio).
+    const cambiaLogin = esOwner && login !== antes
+    const errLogin = cambiaLogin ? errorLogin(editPosLogin) : null
+    if (errLogin) { setError(errLogin); return }
     setSaving(true)
     setError(null)
     try {
@@ -88,6 +133,7 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
         role: editRole,
         // pos_name: valor exacto de dias.saloneros (del dropdown) → match exacto en Mi Rendimiento. null = sin vincular.
         pos_name: editPosName.trim() ? editPosName.trim() : null,
+        ...(cambiaLogin ? { pos_login: login } : {}),
       })
       setEditId(null)
       await onRefresh()
@@ -142,6 +188,21 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
               ))}
             </select>
           </div>
+          {esOwner && (
+            <div className="field">
+              <label htmlFor="nuevo-pos-login">Login del PoS (opcional)</label>
+              <input
+                id="nuevo-pos-login"
+                type="text"
+                inputMode="numeric"
+                maxLength={3}
+                value={newPosLogin}
+                onChange={e => setNewPosLogin(e.target.value.replace(/\D/g, ''))}
+                placeholder="Ej: 041"
+                disabled={saving}
+              />
+            </div>
+          )}
           {error && <p className="field-error">{error}</p>}
           <div className="form-actions">
             <button type="submit" className="btn-primary" disabled={saving}>
@@ -149,6 +210,20 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
             </button>
           </div>
         </form>
+      )}
+
+      {esOwner && sinEmpleado === 'fallo' && (
+        <p style={{ fontSize: '0.72rem', color: 'var(--c-gris)', margin: '0 0 0.75rem' }}>
+          No se pudieron revisar los logins del PoS de los últimos {DIAS_LOGINS} días.
+        </p>
+      )}
+      {esOwner && Array.isArray(sinEmpleado) && sinEmpleado.length > 0 && (
+        <LoginsSinEmpleadoPanel
+          logins={sinEmpleado}
+          employees={employees}
+          onAsignarEmpleado={asignarAEmpleado}
+          onAsignarNuevo={asignarANuevo}
+        />
       )}
 
       {unassignedNames.length > 0 && (
@@ -198,6 +273,23 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                         {salNames.map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
+                    {esOwner && (
+                      <div>
+                        <input
+                          className="tip-input"
+                          aria-label="Login del PoS"
+                          title="Login del PoS (3 dígitos). Solo el owner lo cambia; queda en el historial."
+                          inputMode="numeric"
+                          maxLength={3}
+                          value={editPosLogin}
+                          onChange={e => setEditPosLogin(e.target.value.replace(/\D/g, ''))}
+                          disabled={saving}
+                          placeholder="Login PoS"
+                          style={{ width: '130px', fontSize: '0.72rem', marginTop: '2px' }}
+                        />
+                      </div>
+                    )}
+                    {error && <div className="field-error" style={{ fontSize: '0.72rem' }}>{error}</div>}
                   </td>
                   <td>
                     <select
@@ -227,6 +319,11 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                     {emp.pos_name && (
                       <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)', marginTop: '1px' }}>
                         Ventas: {emp.pos_name}
+                      </div>
+                    )}
+                    {esOwner && emp.pos_login && (
+                      <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)', marginTop: '1px' }}>
+                        Login del PoS: {emp.pos_login}
                       </div>
                     )}
                   </td>
@@ -369,6 +466,55 @@ function BulkImport({ employees, onRefresh }: { employees: Employee[]; onRefresh
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── D2 · Panel «Login del PoS sin empleado» (solo owner) ──
+// Logins que facturaron en el PoS en los últimos 14 días y no son el pos_login de ningún empleado. «Asignar» abre
+// Editar del empleado elegido, o Agregar, con el login precargado; guardar sigue siendo del owner (la base lo exige).
+function LoginsSinEmpleadoPanel({ logins, employees, onAsignarEmpleado, onAsignarNuevo }: {
+  logins: LoginSinEmpleado[]
+  employees: Employee[]
+  onAsignarEmpleado: (login: string, empId: string) => void
+  onAsignarNuevo: (login: string) => void
+}) {
+  const [abierto, setAbierto] = useState<string | null>(null)
+  const candidatos = employees.filter(e => e.is_active && !e.pos_login)
+  return (
+    <div role="alert" style={{ margin: '0 0 1rem', background: 'var(--c-panel)', border: '1px solid var(--c-oro)', borderRadius: 2, padding: '0.75rem 1rem' }}>
+      <div style={{ fontSize: '0.72rem', color: 'var(--c-oro-texto)', marginBottom: '0.5rem' }}>
+        Facturaron en el PoS en los últimos {DIAS_LOGINS} días y no están cargados en ningún empleado: sus ventas no se le
+        acreditan a nadie.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+        {logins.map(l => (
+          <div key={l.login} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--c-oro-texto)' }}>
+              Login del PoS {l.login} sin empleado: asignar
+            </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--c-gris)' }}>
+              ({l.facturas} {l.facturas === 1 ? 'factura' : 'facturas'})
+            </span>
+            {abierto === l.login ? (
+              <>
+                <select
+                  aria-label={`Asignar ${l.login} a un empleado`}
+                  value=""
+                  onChange={e => { if (e.target.value) onAsignarEmpleado(l.login, e.target.value) }}
+                  style={{ fontSize: '0.78rem', padding: '4px 8px', border: '1px solid var(--c-linea)', borderRadius: 2, background: 'var(--c-fondo)' }}
+                >
+                  <option value="">— empleado sin login —</option>
+                  {candidatos.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+                </select>
+                <button className="btn-secondary" onClick={() => onAsignarNuevo(l.login)}>+ Empleado nuevo</button>
+              </>
+            ) : (
+              <button className="btn-secondary" onClick={() => setAbierto(l.login)}>Asignar</button>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

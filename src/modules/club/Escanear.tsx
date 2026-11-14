@@ -14,11 +14,12 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
-  describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, type QueAplicar,
+  describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente,
 } from '../../shared/api/club'
-import { parsearQR } from './qrFormato'
+import { parsearQR, urlPortal } from './qrFormato'
+import { linkAltaWhatsApp, puedeMandarLinkPortal } from './altaWhatsApp'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -230,7 +231,8 @@ export default function Escanear() {
               </div>
             )}
           </Card>
-          <NuevoSocio onHecho={t => setMsg({ tono: 'ok', texto: t })} />
+          <NuevoSocio mandaLink={puedeMandarLinkPortal(profile?.role)}
+            onHecho={(t, href) => setMsg({ tono: 'ok', texto: t, ...(href ? { link: { href, texto: 'Mandarle su link por WhatsApp' } } : {}) })} />
           {cargando && <div style={{ textAlign: 'center', color: C.muted }}>Buscando…</div>}
         </>
       )}
@@ -693,7 +695,8 @@ function VisitaSocio({ miembro }: { miembro: string }) {
 }
 
 /** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia»; NUNCA un número de documento. */
-function NuevoSocio({ onHecho }: { onHecho: (texto: string) => void }) {
+/** D1: al terminar, owner y manager ven «Mandarle su link por WhatsApp ↗» (el token del portal es solo para ellos en la base). */
+function NuevoSocio({ onHecho, mandaLink }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; mandaLink: boolean }) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState('')
   const [tel, setTel] = useState('')
@@ -708,7 +711,15 @@ function NuevoSocio({ onHecho }: { onHecho: (texto: string) => void }) {
     setEnviando(true); setErr(null)
     try {
       const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico)
-      onHecho(`${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`)
+      const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`
+      let link: string | null = null
+      if (mandaLink) {
+        // Sin link no se frena nada: el alta ya quedó (el link se puede copiar después desde Miembros).
+        try { link = linkAltaWhatsApp(tel, nombre, urlPortal(await tokenPortal(r.miembro_id))) } catch { link = null }
+      }
+      const extra = !mandaLink ? ' El link de su portal se lo manda un manager desde Miembros.'
+        : !link ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).' : ''
+      onHecho(texto + extra, link)
       setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }

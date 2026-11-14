@@ -36,11 +36,21 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CORTESIA_DISTINTA:        { titulo: 'Cortesía distinta', que: 'En la factura de la visita se cobró otra cortesía de «CORTESÍA CLUB» que la sorteada, o más de las sorteadas.' },
   CORTESIA_SIN_SOCIO:       { titulo: 'Cortesía sin socio', que: 'Un artículo de «CORTESÍA CLUB» en una factura sin visita de socio.' },
   CORTESIA_NO_CONFIGURADA:  { titulo: 'Línea a ₡0 fuera de cortesías', que: 'Una línea a ₡0 que no es de «CORTESÍA CLUB», ni PAX, ni el Local Club, ni la promo.' },
-  ANFITRION_SOBRE_TOPE:     { titulo: 'Anfitrión sobre el tope', que: 'Un anfitrión ganó en el mes más que el tope configurado (₡25.000). Si es nuevo, lo que pasó quedó pendiente de aprobación.' },
+  ANFITRION_SOBRE_TOPE:     { titulo: 'Anfitrión sobre el tope', que: 'Un anfitrión ganó en el mes más que el tope configurado del mes. Si es nuevo, lo que pasó quedó pendiente de aprobación.' },
   SOCIO_ALTA_SIN_CONFIRMAR: { titulo: 'Alta de socio sin confirmar', que: 'Alta provisional (en caja o validación) que todavía no confirmó un manager u owner distinto de quien la cargó.' },
 }
 const esClasificado = (e: Excepcion) => e.tipo === 'DESCUENTO_SIN_RESPALDO' && typeof e.detalle.clasificacion === 'string'
 const crc = (n: unknown) => (typeof n === 'number' || typeof n === 'string') && n !== '' ? `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}` : '—'
+/**
+ * «Qué es» del detalle. ANFITRION_SOBRE_TOPE dice el tope que trae la excepción (`detalle.tope_crc`, el
+ * `anfitrion_tope_mes_crc` de la configuración del local): el tope es configuración, no un monto fijo.
+ */
+function queEs(e: Pick<Excepcion, 'tipo' | 'detalle'>): string {
+  const base = TIPO_EXC[e.tipo].que
+  const tope = e.detalle?.tope_crc
+  if (e.tipo !== 'ANFITRION_SOBRE_TOPE' || tope == null || tope === '' || !Number.isFinite(Number(tope))) return base
+  return base.replace('el tope configurado del mes', `el tope configurado del mes (${crc(tope)})`)
+}
 const hoyCR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' })
 const haceDias = (d: number) => { const t = new Date(); t.setDate(t.getDate() - d); return t.toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }) }
 
@@ -157,7 +167,7 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
     : e.tipo === 'TARJETA_MANUAL' || e.tipo === 'CANJE_SIN_CODIGO' ? 'Es un registro tuyo: la resuelve otra persona.'
     : profile?.role !== 'owner' ? 'Es un registro tuyo: la resuelve el owner.' : null
   const filas: Array<[string, string]> = [
-    ['Qué es', TIPO_EXC[e.tipo].que],
+    ['Qué es', queEs(e)],
     [e.tipo === 'SIN_CRUCE' ? 'Pedido (PoS)' : 'Factura (PoS)', e.factura ?? '—'],
     // (08-nov) las que salen del PoS: turno (corte del local) y login; los fijos de caja se identifican por fecha y turno
     ...(d.turno ? [['Turno', String(d.turno)] as [string, string]] : []),

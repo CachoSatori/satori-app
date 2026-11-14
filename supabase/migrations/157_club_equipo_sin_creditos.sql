@@ -1026,7 +1026,8 @@ security definer
 set search_path = public, pg_temp
 as $$
   select a.id, a.miembro_id, a.tipo, mv.creditos,
-         public.club_creditos(coalesce(public.club_saldo_canjeable(a.miembro_id), 0), c.personas_por_credito)   -- D7 A (mig 157), mv.fecha_visita
+         public.club_creditos(coalesce(public.club_saldo_canjeable(a.miembro_id), 0), c.personas_por_credito),   -- D7 A (mig 157)
+         mv.fecha_visita
     from public.club_alertas a
     join public.club_movimientos mv on mv.id = a.movimiento_id
     join public.club_config c on c.location_id = a.location_id

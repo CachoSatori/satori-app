@@ -55,6 +55,7 @@ declare
   S uuid := '00000000-0000-4000-8000-0000000157d1';   -- socio que se anotó con el link de E
   W uuid := '00000000-0000-4000-8000-0000000157f1';   -- ex equipo (caso del verificador): 20 congeladas + 5 nuevas
   Q uuid := '00000000-0000-4000-8000-000000015701';   -- equipo que se da de baja
+  EV uuid := '00000000-0000-4000-8000-0000000157e2';  -- equipo viejo: solo actividad de hace 800 días (caso 13)
   v_mv uuid;
   v_loc text; v_cfg public.club_config%rowtype;
   v_own uuid; v_man uuid; v_caj uuid;
@@ -106,7 +107,7 @@ begin
   insert into public.club_miembros (id, location_id, tipo, nombre) values
     (E, v_loc, 'equipo', 'Equipo Prueba Uno'), (R, v_loc, 'referente', 'Referente Prueba Uno'),
     (V, v_loc, 'referente', 'Referente Prueba Viejo'), (X, v_loc, 'equipo', 'Equipo Prueba Dos'),
-    (S, v_loc, 'socio', 'Socio Prueba Uno');
+    (S, v_loc, 'socio', 'Socio Prueba Uno'), (EV, v_loc, 'equipo', 'Equipo Prueba Viejo');
   select token_portal into v_tokE from public.club_miembros where id = E;
   select token_portal into v_tokR from public.club_miembros where id = R;
   select token_portal into v_tokX from public.club_miembros where id = X;
@@ -114,7 +115,8 @@ begin
   insert into public.club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
                                        fecha_visita, registrado_en, origen, nota) values
     (v_loc, R, 'tarjeta', 3 * v_cfg.personas_por_credito, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now() - interval '1 day', now() - interval '1 day', 'app', 'prueba 157'),
-    (v_loc, V, 'tarjeta', v_cfg.personas_por_credito, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now() - interval '800 days', now() - interval '800 days', 'app', 'prueba 157');
+    (v_loc, V, 'tarjeta', v_cfg.personas_por_credito, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now() - interval '800 days', now() - interval '800 days', 'app', 'prueba 157'),
+    (v_loc, EV, 'tarjeta', v_cfg.personas_por_credito, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now() - interval '800 days', now() - interval '800 days', 'app', 'prueba 157');
   perform pg_temp.como(v_man);
   v_r0 := public.club_reporte_mes((now() at time zone 'America/Costa_Rica')::date, v_loc, true);
   -- saldo viejo del equipo (2 créditos) y de X (2 créditos) antes de su corte
@@ -232,10 +234,10 @@ begin
   on conflict (miembro_id, rol) do nothing;
   update public.club_miembro_roles set referido_por = E, desde = now() where miembro_id = S and rol = 'socio';
   begin
-    select jsonb_agg(to_jsonb(q)) into v_j from public.club_reporte_equipo((now() at time zone 'America/Costa_Rica')::date, v_loc) q where q.miembro_id = E;
+    select jsonb_agg(to_jsonb(rq)) into v_j from public.club_reporte_equipo((now() at time zone 'America/Costa_Rica')::date, v_loc) rq where rq.miembro_id = E;
     v_ok := jsonb_array_length(v_j) = 1 and (v_j->0->>'cupones_usados')::int = 1 and (v_j->0->>'personas')::int = 2
             and (v_j->0->>'mesas')::int = 1 and (v_j->0->>'altas_socios')::int = 1 and v_j->0->>'nombre' = 'Equipo Prueba Uno'
-            and not exists (select 1 from public.club_reporte_equipo((now() at time zone 'America/Costa_Rica')::date, v_loc) q where q.miembro_id in (R, X));
+            and not exists (select 1 from public.club_reporte_equipo((now() at time zone 'America/Costa_Rica')::date, v_loc) rq where rq.miembro_id in (R, X));
     v_t := v_j::text;
   exception when others then
     v_ok := false; v_t := sqlerrm;
@@ -258,7 +260,7 @@ begin
     (v_j->>'equipo')::boolean and (v_j->>'creditos')::numeric = 0 and (v_j->>'personas')::int = 0
     and (v_j->>'personas_registradas')::int = 2 * v_cfg.personas_por_credito + 2 and (v_j->>'personas_registradas_mes')::int = 2
     and v_j->'vencimiento_meses' = 'null'::jsonb
-    and not exists (select 1 from jsonb_array_elements(v_j->'movimientos') x where x->>'tipo' <> 'tarjeta'),
+    and not exists (select 1 from jsonb_array_elements(v_j->'movimientos') mvj where mvj->>'tipo' <> 'tarjeta'),
     (v_j - 'socio' - 'nombre' - 'codigo')::text);
   v_j := public.club_portal(v_tokR);
   perform pg_temp.caso(ro, '9 portal del referente: créditos y vencimiento como siempre (control)',
@@ -267,7 +269,7 @@ begin
   v_j := public.club_portal(v_tokX);
   perform pg_temp.caso(ro, '9b portal de X: solo lo de después del corte (saldo y movimientos)',
     (v_j->>'personas')::int = public.club_saldo_canjeable(X)
-    and not exists (select 1 from jsonb_array_elements(v_j->'movimientos') x where (x->>'fecha')::timestamptz < now() - interval '1 day'),
+    and not exists (select 1 from jsonb_array_elements(v_j->'movimientos') mvj where (mvj->>'fecha')::timestamptz < now() - interval '1 day'),
     (v_j - 'socio' - 'nombre' - 'codigo')::text);
 
   -- 10–11. pase
@@ -280,16 +282,17 @@ begin
   perform pg_temp.caso(ro, '11 pase del referente: con créditos y «Canjear» (control)',
     v_j->'anfitrion'->>'con_creditos' = 'true' and v_j->>'canjear_url' like '%/w/%' and (v_j->'anfitrion'->>'creditos')::numeric > 0);
 
-  -- 13. vencimiento: el equipo no entra; el referente viejo sí (control)
+  -- 13. vencimiento: el equipo no entra (tampoco EV, que solo tiene actividad vieja); el referente viejo sí (control)
   perform pg_temp.como(v_own);
   begin
-    select count(*) filter (where s.miembro_id = E), count(*) filter (where s.miembro_id = V) into v_n, v_n2
+    select count(*) filter (where s.miembro_id in (E, EV)), count(*) filter (where s.miembro_id = V) into v_n, v_n2
       from (select k.miembro_id from public.club_vencer_simular((now() at time zone 'America/Costa_Rica')::date) k) s;
   exception when others then
     v_n := -1; v_t := sqlerrm;
   end;
   perform pg_temp.caso(ro, '13 vencimiento: el equipo no es candidato; el referente viejo sí',
-    v_n = 0 and v_n2 = 1 and (select count(*) from public.club_vencer_candidatos((now() at time zone 'America/Costa_Rica')::date) k where k.miembro_id = V) = 1,
+    v_n = 0 and v_n2 = 1 and (select count(*) from public.club_vencer_candidatos((now() at time zone 'America/Costa_Rica')::date) k where k.miembro_id = V) = 1
+    and not exists (select 1 from public.club_vencer_candidatos((now() at time zone 'America/Costa_Rica')::date) k where k.miembro_id in (E, EV)),
     'equipo en la lista: ' || v_n);
   perform pg_temp.como(null);
 
@@ -387,7 +390,15 @@ insert into _m157 values
   (3, 'canjeable_es_saldo',  $q$create or replace function public.club_saldo_canjeable(p_miembro uuid) returns int language sql stable security definer set search_path = public, pg_temp as $$ select public.club_saldo_personas(p_miembro) $$$q$, '{8,10,12,14,15}'),
   (4, 'sin_corte',           $q$create or replace function public.club_corte_equipo(p_miembro uuid) returns timestamptz language sql stable security definer set search_path = public, pg_temp as $$ select null::timestamptz $$$q$, '{14,15,16}'),
   (5, 'sin_trigger',         $q$drop trigger club_equipo_corte_trg on public.club_miembros$q$, '{14,15,16}'),
-  (6, 'vence_el_equipo',     $q$select pg_temp.reemplazar('public.club_vencer_candidatos(date)', 'where m.tipo <> ''equipo''', 'where true')$q$, '{13}'),
+  (6, 'vence_el_equipo',     $q$select pg_temp.reemplazar('public.club_vencer_candidatos(date)', 'select public.club_saldo_canjeable(m.id) as personas,
+             max(mv.fecha_visita) filter (where mv.tipo in (''tarjeta'',''canje'',''restitucion'')) as ultima_actividad
+        from public.club_movimientos mv
+       where mv.miembro_id = m.id and (k.corte is null or mv.registrado_en > k.corte)) s
+   where m.tipo <> ''equipo''', 'select public.club_saldo_personas(m.id) as personas,
+             max(mv.fecha_visita) filter (where mv.tipo in (''tarjeta'',''canje'',''restitucion'')) as ultima_actividad
+        from public.club_movimientos mv
+       where mv.miembro_id = m.id and (k.corte is null or mv.registrado_en > k.corte)) s
+   where true')$q$, '{13}'),   -- saca las DOS guardas (tipo y saldo canjeable): con una sola, la otra ya lo frena
   (7, 'pasivo_con_equipo',   $q$select pg_temp.reemplazar('public.club_reporte_mes(date,text,boolean)', 'case when p.tipo = ''equipo'' then 0 else greatest(p.canj_p, 0) end', 'greatest(p.saldo_p, 0)')$q$, '{16}'),
   (8, 'pase_con_canjear',    $q$select pg_temp.reemplazar('public.club_pase_datos(uuid)', 'and v_m.tipo <> ''equipo'' then v_base', 'then v_base')$q$, '{10}'),
   (9, 'ranking_sin_rol',     $q$select pg_temp.reemplazar('public.club_reporte_equipo(date,text)', 'v_rol is null or v_rol not in (''owner'',''manager'')', 'false')$q$, '{17}'),

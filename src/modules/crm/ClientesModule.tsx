@@ -396,7 +396,7 @@ export default function ClientesModule() {
                           </select>
                         </Field>
                         <Field label="Monto ₡">
-                          <input type="number" value={iAmount} onChange={e => onAmountChange(e.target.value)} placeholder="0" style={{ ...selStyle, width: 90 }} />
+                          <input type="number" step="any" value={iAmount} onChange={e => onAmountChange(e.target.value)} placeholder="0" style={{ ...selStyle, width: 90 }} />
                         </Field>
                         <Field label="Puntos +">
                           <input type="number" value={iEarned} onChange={e => setIEarned(e.target.value)} placeholder="0" style={{ ...selStyle, width: 70 }} />

@@ -67,7 +67,7 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
           </div>
           <div className="tips-field">
             <div className="tips-field-label">Monto ₡ (CRC)</div>
-            <input className="tips-input-dark" inputMode="numeric" value={monto} onChange={e => setMonto(e.target.value.replace(/[^\d.]/g, ''))} placeholder="0" />
+            <input className="tips-input-dark" inputMode="decimal" value={monto} onChange={e => setMonto(e.target.value.replace(/[^\d.]/g, ''))} placeholder="0" />
           </div>
           <div className="tips-field">
             <div className="tips-field-label">Monto $ (USD)</div>
@@ -294,7 +294,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
                       {v > 0 && <> → quedará <strong style={{ color: resultante <= 0.001 ? 'var(--c-teal)' : 'var(--c-oro-texto)' }}>{fi(Math.max(0, resultante))}</strong>{resultante <= 0.001 && ' ✓ aprobada'}</>}
                     </div>
                   </div>
-                  <input className="tips-input-dark" inputMode="numeric" placeholder="0"
+                  <input className="tips-input-dark" inputMode="decimal" placeholder="0"
                     style={{ width: 108, textAlign: 'right', borderColor: over ? 'var(--c-laca)' : undefined }}
                     value={montos[m.id] ?? ''}
                     onChange={e => { const val = e.target.value.replace(/[^\d.]/g, ''); setMontos(prev => ({ ...prev, [m.id]: val })) }} />

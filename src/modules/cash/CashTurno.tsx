@@ -1266,7 +1266,7 @@ export default function CashTurno({
                 <div className="tips-field-label">Monto ₡ colones</div>
                 <div className="cd-monto-wrap">
                   <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" aria-label="Monto ₡ del pago" value={draftCRC} placeholder="0" min={0} autoFocus
+                  <input type="number" className="cd-monto-input" aria-label="Monto ₡ del pago" value={draftCRC} placeholder="0" min={0} step="any" autoFocus
                     onChange={e => setDraftCRC(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>
@@ -1274,7 +1274,7 @@ export default function CashTurno({
                 <div className="tips-field-label">Monto $ dólares</div>
                 <div className="cd-monto-wrap usd">
                   <span className="cd-prefix">$</span>
-                  <input type="number" className="cd-monto-input" aria-label="Monto $ del pago" value={draftUSD} placeholder="0" min={0}
+                  <input type="number" className="cd-monto-input" aria-label="Monto $ del pago" value={draftUSD} placeholder="0" min={0} step="any"
                     onChange={e => setDraftUSD(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>

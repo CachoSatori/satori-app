@@ -494,7 +494,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
                 {avisoFecha && <div role="status" style={{ fontSize: '0.7rem', color: '#a07030', marginTop: 3, fontWeight: 600 }}>⚠️ {avisoFecha}</div>}
               </Field>
               <Field label={`Monto final ${moneda === 'USD' ? '$' : '₡'}`}>
-                <input type="number" className="tips-input-dark" style={{ width: '100%' }} value={total} onChange={e => setTotal(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />
+                <input type="number" step="any" className="tips-input-dark" style={{ width: '100%' }} value={total} onChange={e => setTotal(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />
                 {moneda === 'USD' && <div style={{ fontSize: '0.66rem', color: 'var(--t-muted)', marginTop: 2 }}>≈ {fi(amountCRC)} al TC {tc}</div>}
               </Field>
               <Field label="Moneda">

@@ -58,7 +58,7 @@ export default function InvLineTable({ lines, ingredients, onUpdate, onSelIngred
                   <input type="number" className="cd-tbl-input" value={l.factor} onChange={e => onUpdate(i, { factor: N(e.target.value) })} style={{ width: 64, textAlign: 'right' }} disabled={!esInv} />
                 </td>
                 <td style={{ textAlign: 'right' }}>
-                  <input type="number" className="cd-tbl-input" value={l.precio} onChange={e => onUpdate(i, { precio: N(e.target.value) })} style={{ width: 80, textAlign: 'right' }} />
+                  <input type="number" step="any" className="cd-tbl-input" value={l.precio} onChange={e => onUpdate(i, { precio: N(e.target.value) })} style={{ width: 80, textAlign: 'right' }} />
                 </td>
               </tr>
             )

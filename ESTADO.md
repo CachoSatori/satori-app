@@ -27,9 +27,11 @@ pases de octubre y noviembre) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCH
   - **#169:** UI: link del portal al socio, login del PoS en Empleados y tope sin monto fijo.
   - **#170:** `club-web`: texto final del alta («puede ser hoy mismo»).
   - **#169 y #170 tocan la guía 6.13:** el segundo en mergear tiene un conflicto chico.
+  - **`claude/club-link-portal-cajero` (14/11):** migración **156** (origen 103): el alta en caja devuelve el link del
+    portal del socio recién creado, también al cajero (firma del dueño 14-nov 06:04). Vía merge → Branching.
 - **Decisión firmada, pendiente de construir: D6 A** (alta del Local Club): mayor de 18 obligatorio, cumpleaños día/mes
-  opcional con permiso, aviso de privacidad v1.2 junto con el #140. Numeración: **154** solo si entra antes que la 155; si
-  no, **156+**.
+  opcional con permiso, aviso de privacidad v1.2 junto con el #140. Numeración: prod ya va por la 155 y la 156 la reserva
+  `claude/club-link-portal-cajero`: el #140 toma **157+** (regla 3).
 - **Local Club sigue en 15 %** hasta el lanzamiento del Club.
 - **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
   solo de merges.
@@ -223,8 +225,8 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | 087, 088, 089, 090, 091, 092, 093, 094, 095, 096 | **097** |
-| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) · 101 la usa el #140 (→ 152) · 102 (`club_tope_sin_carga_inicial`; renumerada a 155) | **103** |
-| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; como prod ya tiene la 153, regla 3: el #140 usa la **154** solo si entra antes que la 155; si no, la siguiente libre del bloque PASE, 156+); **156** después de la 155 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) · 101 la usa el #140 (→ 152) · 102 (`club_tope_sin_carga_inicial`; renumerada a 155) · 103 (`club_alta_caja_link_portal`; renumerada a 156) | **104** |
+| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (en prod desde el merge del #168) · 156 (← 103): `claude/club-link-portal-cajero` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; prod ya va por la 155, así que el #140 toma la siguiente libre del bloque PASE: **157**, o la que siga si entra otra antes; la 154 queda sin usar); **157** después de la 156 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
 | (fuera de bloque) | 086 | — | libre |
 
 **Asignadas en los bloques**
@@ -234,10 +236,12 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | 096 | `proveedor_agregar_alias` (RPC atómica para el alias del proveedor; sin firma) | caja | `claude/alias-proveedor-rpc` | **renumerada a 153** en el mismo PR (13-nov; regla 3: prod va por la 151). El número 096 no se reutiliza (regla 4) |
 | 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **renumerada a 151** en el pase del Club (`claude/pase-club`, 10-nov). El número 100 no se reutiliza (regla 4) |
 | 102 | `club_tope_sin_carga_inicial` (D5 A del dueño: ANFITRION_SOBRE_TOPE sin la carga inicial) | club | `claude/club-tope-sin-carga-inicial` | **renumerada a 155** en el mismo PR (14-nov; regla 3: prod va por la 153). El número 102 no se reutiliza (regla 4) |
+| 103 | `club_alta_caja_link_portal` (firma del dueño 14-nov 06:04: el cajero manda el link del portal al socio que acaba de dar de alta) | club | `claude/club-link-portal-cajero` | **renumerada a 156** en el mismo PR (14-nov; regla 3: prod va por la 155). El número 103 no se reutiliza (regla 4) |
 | 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 153 | `proveedor_agregar_alias` | pase (origen **096**) | `claude/alias-proveedor-rpc` | **Sin aplicar** (13/11: PR en borrador a `main`, espera firma). RPC `proveedor_agregar_alias` (SECURITY INVOKER) para que dos cajas no se pisen los alias. La **152** la usa el #140 (aviso del Club). Rollback: `scripts/sql/153_rollback.sql` |
 | 155 | `club_tope_sin_carga_inicial` | pase (origen **102**) | `claude/club-tope-sin-carga-inicial` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK). `create or replace` de `club_excepciones`: ANFITRION_SOBRE_TOPE no cuenta `club_movimientos.origen = 'migracion'` (la carga inicial del 12/11), como el reporte del mes. Prueba en staging en transacción descartada: 9/9. Rollback: `scripts/sql/155_rollback.sql` |
+| 156 | `club_alta_caja_link_portal` | pase (origen **103**) | `claude/club-link-portal-cajero` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK; vía merge → Branching). `create or replace` de `club_socio_alta_caja`: devuelve `token_portal` solo si esa alta creó a la persona (número que no era de nadie), y lo audita como `ver_link_portal`. `club_miembro_token` sigue solo owner/manager. Prueba en staging en transacción descartada: 13/13; mutaciones muerden. Rollback: `scripts/sql/156_rollback.sql` |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |

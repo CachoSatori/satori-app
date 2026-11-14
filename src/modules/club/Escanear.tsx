@@ -19,7 +19,7 @@ import {
   type FacturaReciente,
 } from '../../shared/api/club'
 import { parsearQR, urlPortal } from './qrFormato'
-import { linkAltaWhatsApp, puedeMandarLinkPortal } from './altaWhatsApp'
+import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -231,7 +231,7 @@ export default function Escanear() {
               </div>
             )}
           </Card>
-          <NuevoSocio mandaLink={puedeMandarLinkPortal(profile?.role)}
+          <NuevoSocio rol={profile?.role}
             onHecho={(t, href) => setMsg({ tono: 'ok', texto: t, ...(href ? { link: { href, texto: 'Mandarle su link por WhatsApp' } } : {}) })} />
           {cargando && <div style={{ textAlign: 'center', color: C.muted }}>Buscando…</div>}
         </>
@@ -695,8 +695,8 @@ function VisitaSocio({ miembro }: { miembro: string }) {
 }
 
 /** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia»; NUNCA un número de documento. */
-/** D1: al terminar, owner y manager ven «Mandarle su link por WhatsApp ↗» (el token del portal es solo para ellos en la base). */
-function NuevoSocio({ onHecho, mandaLink }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; mandaLink: boolean }) {
+/** D1 + mig 156: al terminar, «Mandarle su link por WhatsApp ↗» también para el cajero (el alta devuelve el token del socio nuevo). */
+function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; rol: string | null | undefined }) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState('')
   const [tel, setTel] = useState('')
@@ -712,13 +712,15 @@ function NuevoSocio({ onHecho, mandaLink }: { onHecho: (texto: string, linkWhats
     try {
       const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico)
       const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`
+      // Sin link no se frena nada: el alta ya quedó (el link sale después desde Miembros).
       let link: string | null = null
-      if (mandaLink) {
-        // Sin link no se frena nada: el alta ya quedó (el link se puede copiar después desde Miembros).
-        try { link = linkAltaWhatsApp(tel, nombre, urlPortal(await tokenPortal(r.miembro_id))) } catch { link = null }
-      }
-      const extra = !mandaLink ? ' El link de su portal se lo manda un manager desde Miembros.'
-        : !link ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).' : ''
+      try {
+        const tok = await tokenDelAlta(r, rol, tokenPortal)
+        link = tok ? linkAltaWhatsApp(tel, nombre, urlPortal(tok)) : null
+      } catch { link = null }
+      const extra = link ? ''
+        : puedeMandarLinkPortal(rol) ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).'
+        : ' El link de su portal se lo manda un manager desde Miembros.'
       onHecho(texto + extra, link)
       setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false)
     } catch (e) { setErr(aClubError(e).message) }

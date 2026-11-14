@@ -4,6 +4,7 @@
 -- inmutable por trigger) y no molesta.
 -- Datos: los cumpleaños se BORRAN (se quitan las columnas: sin la guardia no hay que guardarlos). La columna
 -- mayor_edad_en se CONSERVA (es la constancia del consentimiento de quienes se anotaron con la 159); nadie la lee.
+-- Borra la fila 159 del ledger. El .sql de la 159 se QUEDA en main (regla 10 / satori-migraciones-y-prod §6): lo que se borra es su fila del ledger.
 -- Con actividad real (socios que ya dieron su cumpleaños) pensarlo dos veces: ver satori-migraciones-y-prod §6.
 
 -- 8. alta en caja: vuelve el EXECUTE a la de 5 argumentos y se va la v2
@@ -100,3 +101,6 @@ alter table public.club_miembros_contacto drop column if exists cumple_dia;
 -- 1. aviso: vuelve a pedir v1.1
 alter table public.club_config alter column aviso_privacidad_version set default 'v1.1';
 update public.club_config set aviso_privacidad_version = 'v1.1' where aviso_privacidad_version = 'v1.2';
+
+-- 0. ledger: sin la fila, Branching puede volver a aplicar la 159 (y el .sql no se saca de main)
+delete from supabase_migrations.schema_migrations where version = '159';

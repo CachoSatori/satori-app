@@ -531,3 +531,28 @@ export const getReporteVisitas = (desde: string, hasta: string, local: string | 
 export interface AltasPorCajero { usuario: string; altas_caja: number; validaciones: number; confirmo: number; sin_confirmar: number; vencidas: number }
 export const getReporteAltas = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<AltasPorCajero[]>('club_reporte_altas', { p_desde: desde, p_hasta: hasta, p_location: local })
+
+// ── 164 (SPEC-club-v2 ítem 10, B6): alertas con umbral del Inicio («Club · Para revisar hoy») ─────────────────────
+export type TipoAlertaInicio = 'ANFITRION_24H' | 'MISMO_USUARIO' | 'VISITAS_SIN_FACTURA' | 'CANJE_SIN_CODIGO'
+/** Una fila de `club_alertas_inicio`: solo lo que pasó el umbral del local (cero filas = nada para revisar). */
+export interface AlertaInicio {
+  tipo: TipoAlertaInicio; ref: string; cantidad: number; umbral: number; fecha: string
+  detalle: { miembro_id?: string; miembro?: string; tipo_miembro?: string; que?: 'socio' | 'equipo'; usuario?: string; dias?: number }
+}
+/** Owner y manager (rol activo; el manager, en sus locales). Club apagado en el local: lista vacía. */
+export const getAlertasInicio = (local: string | null = localClub) =>
+  llamar<AlertaInicio[]>('club_alertas_inicio', { p_location: local })
+
+/** Umbrales por local (club_config). Los lee el staff; los cambia solo el owner (RLS) y quedan en club_config_historial. */
+export interface UmbralesAlerta {
+  alerta_anfitrion_24h_max: number; alerta_mismo_usuario_max: number; alerta_mismo_usuario_dias: number
+  alerta_visitas_sin_factura_max: number; alerta_canjes_sin_codigo_max: number
+}
+export const CAMPOS_UMBRAL = ['alerta_anfitrion_24h_max', 'alerta_mismo_usuario_max', 'alerta_mismo_usuario_dias',
+  'alerta_visitas_sin_factura_max', 'alerta_canjes_sin_codigo_max'] as const
+export const getUmbrales = async (local: string): Promise<UmbralesAlerta | null> =>
+  (await leer(from<UmbralesAlerta>('club_config').select(CAMPOS_UMBRAL.join(',')).eq('location_id', local)))[0] ?? null
+export async function guardarUmbrales(local: string, u: UmbralesAlerta): Promise<void> {
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ ...u }).eq('location_id', local).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner cambia los umbrales de las alertas', false)
+}

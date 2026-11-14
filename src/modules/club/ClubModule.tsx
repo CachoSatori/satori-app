@@ -26,6 +26,7 @@ export default function ClubModule() {
   const navigate = useNavigate()
   const gestiona = profile?.role === 'owner' || profile?.role === 'manager'
   const esOwner = profile?.role === 'owner'
+  const rol = profile?.role
   const [vista, setVista] = useState<Vista>('escanear')
   const [locales, setLocales] = useState<LocalClub[] | null>(null)
   const [local, setLocal] = useState<string | null>(localActual())
@@ -35,13 +36,13 @@ export default function ClubModule() {
   const cargarLocales = useCallback(async () => {
     try {
       // 170: el manager solo ve sus locales (mis_locales); el owner, todos (también los apagados)
-      const l = await getLocalesClubParaRol(profile?.role)
+      const l = await getLocalesClubParaRol(rol)
       setLocales(l)
       const vis = l.filter(x => x.activo || esOwner)
       const elegido = vis.find(x => x.id === localActual()) ?? vis.find(x => x.activo) ?? vis[0] ?? null
       elegirLocal(elegido?.id ?? null); setLocal(elegido?.id ?? null)
     } catch { setLocales([]) }
-  }, [esOwner, profile?.role])
+  }, [esOwner, rol])
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void cargarLocales() }, [cargarLocales])
   // (08-nov noche) el dominio de los QR y links sale de la configuración, no del código

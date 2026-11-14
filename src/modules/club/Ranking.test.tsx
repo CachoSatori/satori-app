@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Club → Ranking de socios (mig 161): orden, período, aviso de local sin PoS, cero datos y exporte auditado.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { rankingDePrueba, rankingVacio } from './cohortesFixture.test-util'
 
 const st = vi.hoisted(() => ({ datos: null as unknown, llamadas: [] as Array<[string, string, string | null, boolean]>, aperturas: [] as Array<string | null> }))
@@ -77,8 +77,10 @@ describe('Club → Ranking de socios', () => {
     await screen.findByTestId('resumen')
     const id = st.aperturas[0]
     expect(id).toMatch(/^[0-9a-f-]{36}$/)
-    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-01' } })
-    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-02' } })
+    // como quien escribe una fecha: cambios separados por 50 ms
+    const pausa = () => act(() => new Promise<void>(r => setTimeout(r, 50)))
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-01' } }); await pausa()
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-02' } }); await pausa()
     fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-31' } })
     await waitFor(() => expect(st.llamadas.length).toBe(2))
     await new Promise(r => setTimeout(r, 700))

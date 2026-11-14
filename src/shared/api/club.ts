@@ -409,6 +409,45 @@ export async function setClubActivo(id: string, activo: boolean): Promise<void> 
   if (filas.length !== 1) throw new ClubError('Solo el owner enciende o apaga el Club en un local', false)
 }
 
+// ── Club → Tablero (mig 160): «¿El Club deja plata?» y pasivo de créditos. Solo totales (owner, manager, contador). ──
+export interface TableroLinea { personas: number; creditos: number; crc: number }
+export interface TableroGrupo {
+  facturas: number; venta_crc: number; personas: number
+  tiquete_crc: number | null; personas_por_factura: number | null; por_persona_crc: number | null
+}
+export interface TableroMes {
+  mes: string; local: string; local_nombre: string; parcial: boolean; generado_en: string
+  /** El local no tiene facturas del PoS en el mes (p. ej. un local sin el puente): aviso, no error. */
+  pos_sin_datos: boolean
+  config: { cortesia_costo_pct: number; valor_credito_crc: number; personas_por_credito: number }
+  plata: {
+    venta_respaldada_crc: number; facturas_club: number; facturas_mes: number; venta_mes_crc: number
+    descuento_estimado_crc: number; descuento_lineas: number; descuento_facturas: number; lineas_sin_referencia: number
+    cortesias_lineas: number; cortesias_unidades: number; cortesias_lista_crc: number; cortesias_costo_crc: number; cortesias_sin_precio: number
+    canjes: number; creditos_canjeados: number; canjes_crc: number
+    costo_total_crc: number; tasa_efectiva_pct: number | null
+    por_motivo: Record<'socio' | 'cupon' | 'canje', { facturas: number; venta_crc: number }>
+  }
+  regalia: { facturas: number; crc: number; en_canjes_crc: number }
+  comparacion: { con_socio: TableroGrupo; sin_socio: TableroGrupo; con_cupon: TableroGrupo }
+  pasivo: {
+    saldo_inicial: TableroLinea; emitidos: TableroLinea; carga_inicial: TableroLinea; canjeados: TableroLinea
+    vencidos: TableroLinea; ajustes: TableroLinea; saldo_final: TableroLinea
+    canjeable_creditos: number; cuentas_con_saldo: number
+    congelado: TableroLinea & { cuentas: number }
+  }
+}
+/** Cada lectura deja rastro en club_auditoria (quién, mes y local). */
+export const getTablero = (mes: string, local: string | null = localClub) =>
+  llamar<TableroMes>('club_tablero_mes', { p_mes: mes, p_location: local })
+/** Solo owner (RLS de club_config). Queda en club_config_historial, como el resto de la configuración. */
+export async function setCortesiaCostoPct(local: string, pct: number): Promise<void> {
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) throw new ClubError('El % va de 0 a 100', false)
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ cortesia_costo_pct: Math.round(pct * 100) / 100 })
+    .eq('location_id', local).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner cambia el % de costo de las cortesías', false)
+}
+
 // ── Piloto en paralelo: comparación con la página vieja ──────────────────────
 export interface FilaComparacion {
   semana: string; miembro_id: string; referente: string; negocio: string | null

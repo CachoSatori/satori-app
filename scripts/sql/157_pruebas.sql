@@ -6,6 +6,7 @@
 -- Antes del marcador se guarda una foto del catálogo (permisos, definer, search_path) y de club_movimientos: la 157 no
 -- puede cambiar ni los permisos de las funciones vigentes ni el libro.
 --
+-- (CAMBIOS del verificador: casos 18–20 y mutaciones 11–13: baja, ajuste y alertas con lo canjeable.)
 -- Cada ronda (la base y una por mutación) corre en una subtransacción que se descarta: la batería crea sus miembros de
 -- prueba (nombres ficticios, UUID fijos), los perfiles de manager y cajero se activan solo adentro, y los JWT se simulan con
 -- set_config('request.jwt.claims', …, true). Una mutación rompe a propósito UN arreglo (reemplazo de texto sobre
@@ -19,7 +20,8 @@ select p.oid::regprocedure::text as fn, p.proacl::text as acl, p.prosecdef as de
  where n.nspname = 'public'
    and p.proname in ('club_canje_codigo_generar','club_canje_codigo_generar_pase','club_canje_aplicar','club_canje_aprobado',
                      'club_canje','club_canje_aviso','club_portal','club_pase_datos','club_vencer_candidatos','club_vencer',
-                     'club_vencer_simular','club_referente_json','club_reporte_mes');
+                     'club_vencer_simular','club_referente_json','club_reporte_mes','club_miembro_guardar','club_ajuste',
+                     'club_alertas_pendientes');
 create temp table _mov157 on commit drop as
 select count(*) as n, coalesce(sum(personas), 0) as p, md5(coalesce(string_agg(id::text, ',' order by id), '')) as h
   from public.club_movimientos;
@@ -51,6 +53,9 @@ declare
   V uuid := '00000000-0000-4000-8000-0000000157b1';   -- referente viejo (control del vencimiento)
   X uuid := '00000000-0000-4000-8000-0000000157c1';   -- equipo que pasa a referente
   S uuid := '00000000-0000-4000-8000-0000000157d1';   -- socio que se anotó con el link de E
+  W uuid := '00000000-0000-4000-8000-0000000157f1';   -- ex equipo (caso del verificador): 20 congeladas + 5 nuevas
+  Q uuid := '00000000-0000-4000-8000-000000015701';   -- equipo que se da de baja
+  v_mv uuid;
   v_loc text; v_cfg public.club_config%rowtype;
   v_own uuid; v_man uuid; v_caj uuid;
   v_clave text := 'clave-de-prueba-157-club-web-no-es-real-0123456789';
@@ -81,7 +86,7 @@ begin
   select count(*) into v_n from _pre157 a
     join pg_proc p on p.oid = a.fn::regprocedure
    where p.proacl::text is distinct from a.acl or p.prosecdef <> a.def or p.proconfig::text is distinct from a.cfg;
-  perform pg_temp.caso(ro, '0b vigentes: permisos, definer y search_path iguales a antes', v_n = 0 and (select count(*) from _pre157) = 13,
+  perform pg_temp.caso(ro, '0b vigentes: permisos, definer y search_path iguales a antes', v_n = 0 and (select count(*) from _pre157) = 16,
     v_n || ' distintas de ' || (select count(*) from _pre157));
   -- 0c. la 157 no escribió movimientos y dejó una foto por cada cuenta del equipo, con su saldo
   perform pg_temp.caso(ro, '0c la 157 no escribe en club_movimientos',
@@ -287,6 +292,72 @@ begin
     v_n = 0 and v_n2 = 1 and (select count(*) from public.club_vencer_candidatos((now() at time zone 'America/Costa_Rica')::date) k where k.miembro_id = V) = 1,
     'equipo en la lista: ' || v_n);
   perform pg_temp.como(null);
+
+  -- 18. baja (club_miembro_guardar): vence solo lo canjeable. Caso del verificador: 20 congeladas + 5 nuevas, baja,
+  -- reactiva, gana 10 → canjeable 10. Y la baja de alguien del equipo no vence nada (lo congelado queda intacto).
+  -- El corte de W se escribe con hora vieja (una hora antes) para que la baja, que se registra con now(), quede
+  -- después del corte, como en la operación real (corte y baja en transacciones distintas).
+  insert into public.club_miembros (id, location_id, tipo, nombre) values
+    (W, v_loc, 'referente', 'Ex Equipo Prueba'), (Q, v_loc, 'equipo', 'Equipo Prueba Tres');
+  insert into public.club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+                                       fecha_visita, registrado_en, origen, nota) values
+    (v_loc, W, 'tarjeta', 20, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now() - interval '2 hours', now() - interval '2 hours', 'app', 'prueba 157'),
+    (v_loc, Q, 'tarjeta', 12, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now() - interval '2 hours', now() - interval '2 hours', 'app', 'prueba 157');
+  insert into public.club_auditoria (en, accion, tabla, objeto_id, despues)
+  values (now() - interval '1 hour', 'equipo_corte', 'club_miembros', W, jsonb_build_object('motivo', 'sale_del_equipo', 'personas', 20));
+  insert into public.club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+                                       fecha_visita, registrado_en, origen, nota)
+  values (v_loc, W, 'tarjeta', 5, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now() - interval '30 minutes', now() - interval '30 minutes', 'app', 'prueba 157');
+  perform pg_temp.como(v_man);
+  begin
+    perform public.club_miembro_guardar(W, 'referente', 'Ex Equipo Prueba', null, 'baja', null, v_loc);
+    perform public.club_miembro_guardar(W, 'referente', 'Ex Equipo Prueba', null, 'activo', null, v_loc);
+    perform public.club_miembro_guardar(Q, 'equipo', 'Equipo Prueba Tres', null, 'baja', null, v_loc);
+    insert into public.club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+                                         fecha_visita, registrado_en, origen, nota)
+    values (v_loc, W, 'tarjeta', 10, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now(), now() + interval '1 minute', 'app', 'prueba 157');
+    v_ok := public.club_saldo_canjeable(W) = 10
+            and (select coalesce(sum(personas), 0) from public.club_movimientos where miembro_id = W and tipo = 'vencimiento') = -5
+            and not exists (select 1 from public.club_movimientos where miembro_id = Q and tipo = 'vencimiento')
+            and public.club_saldo_personas(Q) = 12;
+    v_t := format('W canjeable %s · vencido W %s · vencido Q %s', public.club_saldo_canjeable(W),
+                  (select coalesce(sum(personas), 0) from public.club_movimientos where miembro_id = W and tipo = 'vencimiento'),
+                  (select coalesce(sum(personas), 0) from public.club_movimientos where miembro_id = Q and tipo = 'vencimiento'));
+  exception when others then
+    v_ok := false; v_t := sqlerrm;
+  end;
+  perform pg_temp.caso(ro, '18 baja: vence solo lo canjeable (ex equipo reactivado gana 10 → 10; equipo: no vence lo congelado)', v_ok, v_t);
+  perform pg_temp.como(null);
+
+  -- 19. ajuste (owner): el tope es lo canjeable (10), no el saldo total (30)
+  perform pg_temp.como(v_own);
+  begin
+    perform * from public.club_ajuste(W, -15, 'ajuste', 'prueba 157 tope canjeable', gen_random_uuid());
+    v_ok := false; v_t := 'dejó bajar 15 con 10 canjeables';
+  exception when others then
+    v_ok := sqlerrm like 'El saldo no puede quedar negativo%'; v_t := sqlerrm;
+  end;
+  begin
+    select a.personas into v_n from public.club_ajuste(W, -4, 'ajuste', 'prueba 157 tope canjeable', gen_random_uuid()) a;
+    v_ok := v_ok and v_n = 6;
+    v_t := v_t || ' · tras −4 quedan ' || v_n;
+  exception when others then
+    v_ok := false; v_t := v_t || ' · −4: ' || sqlerrm;
+  end;
+  perform pg_temp.caso(ro, '19 ajuste: tope contra lo canjeable (−15 no; −4 deja 6)', v_ok, v_t);
+  perform pg_temp.como(null);
+
+  -- 20. alerta de canje para el pase: «le quedan» = lo canjeable (6 − 6 = 0), no el total
+  insert into public.club_movimientos (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc,
+                                       fecha_visita, registrado_en, origen, nota)
+  values (v_loc, W, 'canje', -v_cfg.personas_por_credito, 1, v_cfg.personas_por_credito, v_cfg.valor_credito_crc, now(), now() + interval '2 minutes', 'app', 'prueba 157')
+  returning id into v_mv;
+  insert into public.club_alertas (location_id, tipo, miembro_id, movimiento_id) values (v_loc, 'canje', W, v_mv);
+  select a.saldo_creditos into v_crE from public.club_alertas_pendientes(1000) a where a.miembro_id = W;
+  perform pg_temp.caso(ro, '20 alerta del pase: saldo = lo canjeable',
+    v_crE = public.club_creditos(public.club_saldo_canjeable(W), v_cfg.personas_por_credito)
+    and v_crE <> public.club_creditos(public.club_saldo_personas(W), v_cfg.personas_por_credito),
+    'saldo en la alerta: ' || coalesce(v_crE::text, 'sin alerta'));
 end $t$;
 
 -- Una ronda en una subtransacción descartada; los resultados salen por el DETAIL del error que la descarta.
@@ -320,6 +391,11 @@ insert into _m157 values
   (7, 'pasivo_con_equipo',   $q$select pg_temp.reemplazar('public.club_reporte_mes(date,text,boolean)', 'case when p.tipo = ''equipo'' then 0 else greatest(p.canj_p, 0) end', 'greatest(p.saldo_p, 0)')$q$, '{16}'),
   (8, 'pase_con_canjear',    $q$select pg_temp.reemplazar('public.club_pase_datos(uuid)', 'and v_m.tipo <> ''equipo'' then v_base', 'then v_base')$q$, '{10}'),
   (9, 'ranking_sin_rol',     $q$select pg_temp.reemplazar('public.club_reporte_equipo(date,text)', 'v_rol is null or v_rol not in (''owner'',''manager'')', 'false')$q$, '{17}'),
+  (11, 'baja_vence_todo',     $q$select pg_temp.reemplazar('public.club_miembro_guardar(uuid,text,text,uuid,text,jsonb,text)', 'v_saldo := coalesce(public.club_saldo_canjeable(v_id), 0);', 'v_saldo := public.club_saldo_personas(v_id);')$q$, '{18}'),
+  (12, 'ajuste_saldo_total',  $q$select pg_temp.reemplazar('public.club_ajuste(uuid,integer,text,text,uuid)', 'v_saldo := coalesce(public.club_saldo_canjeable(p_miembro), 0);
+  if v_saldo + p_personas < 0', 'v_saldo := public.club_saldo_personas(p_miembro);
+  if v_saldo + p_personas < 0')$q$, '{19}'),
+  (13, 'alertas_saldo_total', $q$select pg_temp.reemplazar('public.club_alertas_pendientes(integer)', 'coalesce(public.club_saldo_canjeable(a.miembro_id), 0)', 'public.club_saldo_personas(a.miembro_id)')$q$, '{20}'),
   (10, 'portal_con_creditos', $q$select pg_temp.reemplazar('public.club_portal(text)', 'v_saldo := coalesce(public.club_saldo_canjeable(v_m.id), 0);', 'v_saldo := public.club_saldo_personas(v_m.id);')$q$, '{8,9b}');
 
 select pg_temp.correr('base', null);

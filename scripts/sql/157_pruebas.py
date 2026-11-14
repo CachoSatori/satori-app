@@ -60,7 +60,7 @@ def main() -> None:
     malas = [m for m in r['mutaciones'] if not m['muerde']]
     for m in r['mutaciones']:
         print(f"{'muerde' if m['muerde'] else 'NO MUERDE'} {m['m']}: caen {m['caen']} (esperadas {m['esperan']})")
-    sys.exit(1 if r['base_fallan'] or malas or r['base_casos'] < 20 else 0)
+    sys.exit(1 if r['base_fallan'] or malas or r["base_casos"] < 26 else 0)
 
 
 if __name__ == '__main__':

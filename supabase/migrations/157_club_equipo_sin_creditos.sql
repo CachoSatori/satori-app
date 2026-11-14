@@ -18,6 +18,8 @@
 -- Funciones: copia exacta de la vigente en prod (md5 del cuerpo igual al de prod y staging, leído el 14-nov) + el cambio.
 -- create or replace conserva dueño y permisos (security definer, search_path y grants iguales). Las nuevas: revoke de
 -- public y anon (y de authenticated si son internas).
+-- La baja (club_miembro_guardar) vence solo lo canjeable; club_ajuste topa contra lo canjeable; club_alertas_pendientes
+-- (el «le quedan» del pase) muestra lo canjeable.
 -- club_canje_aprobado y club_canje_codigo_generar_pase NO cambian: llaman a club_canje_aplicar y a club_canje_codigo_generar,
 -- que tienen la guarda.
 -- Rollback: scripts/sql/157_rollback.sql (las fotos de club_auditoria quedan: es de solo inserción).
@@ -853,6 +855,185 @@ begin
 end;
 $$;
 
+create or replace function public.club_miembro_guardar(
+  p_id uuid, p_tipo text, p_nombre text, p_negocio_id uuid, p_estado text, p_contacto jsonb, p_location text default null)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol    public.user_role := public.get_my_role();
+  v_nombre text := regexp_replace(btrim(coalesce(p_nombre, '')), '\s+', ' ', 'g');
+  v_id     uuid;
+  v_tel    text;
+  v_email  text;
+  v_antes  text;
+  v_saldo  int;
+  v_cfg    public.club_config%rowtype;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if length(v_nombre) not between 1 and 120 then
+    raise exception 'El nombre es obligatorio (hasta 120 caracteres)' using errcode = 'P0001';
+  end if;
+  if p_tipo is null or p_tipo not in ('referente','concierge_pm','equipo') then
+    raise exception 'Tipo no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+  end if;
+  if p_estado is not null and p_estado not in ('activo','baja') then
+    raise exception 'Estado no válido' using errcode = 'P0001';
+  end if;
+  if p_negocio_id is not null and not exists (select 1 from public.club_negocios n where n.id = p_negocio_id) then
+    raise exception 'Negocio no encontrado' using errcode = 'P0001';
+  end if;
+
+  if p_contacto is not null then
+    if jsonb_typeof(p_contacto) <> 'object' then
+      raise exception 'Contacto no válido' using errcode = 'P0001';
+    end if;
+    v_tel := public.club_norm_telefono(p_contacto->>'telefono');
+    v_email := nullif(lower(btrim(coalesce(p_contacto->>'email', ''))), '');
+    if v_email is not null and (length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+      raise exception 'Email no válido' using errcode = 'P0001';
+    end if;
+  end if;
+
+  if p_id is null then
+    -- LC-ML: el local se elige (o sale del negocio); sin dato, el único local con el Club activo
+    insert into public.club_miembros (location_id, tipo, nombre, negocio_id, estado, origen)
+    values (public.club_local(coalesce(p_location, (select n.location_id from public.club_negocios n where n.id = p_negocio_id)), false),
+            p_tipo, v_nombre, p_negocio_id, coalesce(p_estado, 'activo'), 'app')
+    returning id into v_id;
+  else
+    select m.estado into v_antes from public.club_miembros m where m.id = p_id for update;
+    update public.club_miembros
+       set tipo = p_tipo, nombre = v_nombre, negocio_id = p_negocio_id,
+           estado = coalesce(p_estado, estado), updated_at = now()
+     where id = p_id
+    returning id into v_id;
+    if v_id is null then
+      raise exception 'Miembro no encontrado' using errcode = 'P0001';
+    end if;
+    -- Baja: el saldo vence en la misma transacción. Volver a activo NO restituye
+    -- (eso es club_ajuste tipo restitucion, solo owner).
+    if v_antes = 'activo' and p_estado = 'baja' then
+      -- D7 A (mig 157): vence solo lo canjeable (0 en el equipo). El saldo congelado no se toca: si no, el vencimiento
+      -- quedaría después del corte y se comería lo que la cuenta gane si la reactivan.
+      v_saldo := coalesce(public.club_saldo_canjeable(v_id), 0);
+      if v_saldo > 0 then
+        select * into v_cfg from public.club_config c
+         where c.location_id = (select m.location_id from public.club_miembros m where m.id = v_id);
+        insert into public.club_movimientos
+          (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+           fecha_visita, registrado_por, origen, nota)
+        values
+          (v_cfg.location_id, v_id, 'vencimiento', -v_saldo, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
+           now(), auth.uid(), 'app', 'baja: saldo vencido');
+      end if;
+    end if;
+  end if;
+
+  if p_contacto is not null then
+    insert into public.club_miembros_contacto (miembro_id, location_id, telefono, email, optin_whatsapp, optin_email)
+    values (v_id, (select location_id from public.club_miembros where id = v_id), v_tel, v_email,
+            coalesce((p_contacto->>'optin_whatsapp')::boolean, false) and v_tel is not null,
+            coalesce((p_contacto->>'optin_email')::boolean, false) and v_email is not null)
+    on conflict (miembro_id) do update
+      set telefono = excluded.telefono, email = excluded.email,
+          optin_whatsapp = excluded.optin_whatsapp, optin_email = excluded.optin_email, updated_at = now();
+  end if;
+  return v_id;
+end;
+$$;
+
+create or replace function public.club_ajuste(p_miembro uuid, p_personas int, p_tipo text, p_nota text, p_op uuid)
+returns table (personas int, creditos numeric)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol   public.user_role := public.get_my_role();
+  v_nota  text := btrim(coalesce(p_nota, ''));
+  v_m     public.club_miembros%rowtype;
+  v_cfg   public.club_config%rowtype;
+  v_prev  public.club_movimientos%rowtype;
+  v_saldo int;
+begin
+  if v_rol is null or v_rol <> 'owner' then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_op is null then
+    raise exception 'Falta el id de operación' using errcode = 'P0001';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));
+  select * into v_prev from public.club_movimientos where client_op_id = p_op;
+  if found then
+    if v_prev.tipo is distinct from p_tipo or v_prev.miembro_id is distinct from p_miembro or v_prev.personas is distinct from p_personas then
+      raise exception 'El id de operación ya se usó para otra cosa' using errcode = 'P0001';
+    end if;
+    select * into v_cfg from public.club_config where location_id = v_prev.location_id;
+    v_saldo := coalesce(public.club_saldo_canjeable(p_miembro), 0);   -- D7 A (mig 157)
+    personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+    return next; return;
+  end if;
+  if p_tipo is null or p_tipo not in ('ajuste','restitucion','vencimiento') then
+    raise exception 'Tipo no válido (ajuste, restitucion o vencimiento)' using errcode = 'P0001';
+  end if;
+  if v_nota = '' then
+    raise exception 'La nota es obligatoria' using errcode = 'P0001';
+  end if;
+  if p_personas is null or p_personas = 0
+     or (p_tipo = 'restitucion' and p_personas < 0)
+     or (p_tipo = 'vencimiento' and p_personas > 0) then
+    raise exception 'Personas no válidas para el tipo %', p_tipo using errcode = 'P0001';
+  end if;
+
+  select * into v_m from public.club_miembros m where m.id = p_miembro for update;
+  if not found then
+    raise exception 'Miembro no encontrado' using errcode = 'P0001';
+  end if;
+  select * into v_cfg from public.club_config where location_id = v_m.location_id;
+
+  -- D7 A (mig 157): el tope es lo canjeable, no el saldo total: un ajuste negativo no puede tocar el saldo congelado
+  -- (en el equipo, lo canjeable es 0: solo admite ajustes positivos, que tampoco se pueden canjear).
+  v_saldo := coalesce(public.club_saldo_canjeable(p_miembro), 0);
+  if v_saldo + p_personas < 0 then
+    raise exception 'El saldo no puede quedar negativo' using errcode = 'P0001';
+  end if;
+
+  insert into public.club_movimientos
+    (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+     fecha_visita, registrado_por, origen, nota, client_op_id)
+  values
+    (v_m.location_id, p_miembro, p_tipo, p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
+     now(), auth.uid(), 'app', v_nota, p_op);
+
+  v_saldo := v_saldo + p_personas;
+  personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+  return next;
+end;
+$$;
+
+create or replace function public.club_alertas_pendientes(p_limite int default 100)
+returns table (id bigint, miembro_id uuid, tipo text, creditos numeric, saldo_creditos numeric, fecha timestamptz)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select a.id, a.miembro_id, a.tipo, mv.creditos,
+         public.club_creditos(coalesce(public.club_saldo_canjeable(a.miembro_id), 0), c.personas_por_credito)   -- D7 A (mig 157), mv.fecha_visita
+    from public.club_alertas a
+    join public.club_movimientos mv on mv.id = a.movimiento_id
+    join public.club_config c on c.location_id = a.location_id
+   where a.enviado_en is null and a.tipo = 'canje'   -- las de cupo de autoalta no van al pase
+   order by a.id limit least(greatest(coalesce(p_limite, 100), 1), 1000)
+$$;
+
 -- ── 4. Ranking del equipo (#2): por persona del equipo y mes. Solo owner y manager; deja rastro ──────────────────
 -- cupones usados (sus cupones usados en el mes) · personas (tarjetas de la app) · mesas (visitas distintas) · facturas y
 -- venta respaldada (facturas cerradas del PoS que cruzan con esas visitas, cada una una sola vez) · altas de socios (socios
@@ -923,7 +1104,10 @@ begin
      or not has_function_privilege('anon', 'public.club_portal(text)', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.club_canje_aplicar(uuid, text, numeric, text, uuid, jsonb, text)', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.club_pase_datos(uuid)', 'EXECUTE')
-     or has_function_privilege('authenticated', 'public.club_vencer_candidatos(date)', 'EXECUTE') then
+     or has_function_privilege('authenticated', 'public.club_vencer_candidatos(date)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.club_alertas_pendientes(int)', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text)', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.club_ajuste(uuid, int, text, text, uuid)', 'EXECUTE') then
     raise exception '157: los permisos de las funciones vigentes cambiaron';
   end if;
   -- las nuevas: internas cerradas; el ranking solo para authenticated (el rol se chequea adentro)

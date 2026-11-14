@@ -21,7 +21,9 @@ beforeEach(() => { invoke.mockReset(); from.mockClear(); filas.data = []; filas.
 describe('extractImageDetalle', () => {
   it('lectura bien con documentos → fallo false', async () => {
     invoke.mockResolvedValue({ data: { documentos: [{ tipo: 'factura' }] }, error: null })
-    expect(await extractImageDetalle('p')).toEqual({ documentos: [{ tipo: 'factura' }], fallo: false })
+    // (13-nov) cada documento pasa por conFechaCR: sin fecha ni clave, quedan los campos de fecha en null
+    expect(await extractImageDetalle('p')).toEqual({ documentos: [{ tipo: 'factura', fecha: null, fecha_leida: null,
+      fecha_origen: 'ninguna', aviso_fecha: null }], fallo: false })
   })
   it('lectura bien sin documentos → fallo false (la IA no vio una factura)', async () => {
     invoke.mockResolvedValue({ data: { documentos: [] }, error: null })

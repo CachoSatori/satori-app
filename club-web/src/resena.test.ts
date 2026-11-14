@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { TEXTOS } from './i18n'
-import { RE_RESENA_GOOGLE, esUrlResena, sondearCupon, vistaDelCupon, type CuponEstado } from './resena'
+import { RE_RESENA_GOOGLE, esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon, type CuponEstado } from './resena'
 import { RE_RESENA_GOOGLE as RE_APP } from '../../src/modules/club/resenaUrl'
 
 const VALIDAS = [
@@ -122,4 +122,35 @@ test('sondeo: la función que devuelve lo para', async () => {
   parar()
   await vi.advanceTimersByTimeAsync(200_000)
   expect(consultar).toHaveBeenCalledTimes(1)
+})
+
+// Verificador, menor a: el sondeo va marcado para que la API lo cuente aparte del portal
+test('el sondeo pide el cupón con ?sondeo=1 (clave de tope propia en la API)', () => {
+  expect(rutaSondeo('ABCDEFGH23')).toBe('cupon/ABCDEFGH23?sondeo=1')
+  const main = readFileSync(join(__dirname, 'main.ts'), 'utf8')
+  expect(main).toContain('api<CuponVer>(rutaSondeo(codigo))')
+})
+
+// Verificador, menor b: la marca del clic nunca frena ni rompe la apertura de Google
+test('marcarClicResena: POST a /api/cupon/:codigo/resena con keepalive, sin esperar y sin lanzar', async () => {
+  const llamadas: [string, RequestInit | undefined][] = []
+  let soltar: (r: Response) => void = () => undefined
+  const lenta = ((u: string, i?: RequestInit) => { llamadas.push([u, i]); return new Promise<Response>(r => { soltar = r }) }) as typeof fetch
+  expect(marcarClicResena('ABCDEFGH23', lenta)).toBeUndefined()   // vuelve en el acto, sin esperar la respuesta
+  expect(llamadas).toEqual([['/api/cupon/ABCDEFGH23/resena', { method: 'POST', keepalive: true }]])
+  soltar(new Response('{"error":"demasiados_pedidos"}', { status: 429 }))
+  // sin señal (promesa rechazada) o fetch que lanza de una: nada se propaga. Un rechazo sin manejar hace que vitest
+  // termine con «Errors 1 error» y salga 1 (así cae la mutación «sin .catch»).
+  expect(() => marcarClicResena('ABCDEFGH23', (() => Promise.reject(new TypeError('red'))) as typeof fetch)).not.toThrow()
+  expect(() => marcarClicResena('ABCDEFGH23', (() => { throw new TypeError('sin fetch') }) as typeof fetch)).not.toThrow()
+  for (let i = 0; i < 5; i++) await Promise.resolve()   // (relojes falsos en este archivo: microtareas, no setTimeout)
+})
+
+test('el botón de la reseña es un link (<a href>) y el clic solo llama a marcarClicResena', () => {
+  const main = readFileSync(join(__dirname, 'main.ts'), 'utf8')
+  expect(main).toMatch(/h\('a', \{ class: 'btn', href: resena, target: '_blank'/)
+  expect(main).toContain("boton.addEventListener('click', () => marcarClicResena(codigo))")
+  const gracias = main.slice(main.indexOf('function vistaGracias'), main.indexOf('function formOptin'))
+  expect(gracias.length).toBeGreaterThan(100)
+  expect(gracias).not.toMatch(/preventDefault|await /)
 })

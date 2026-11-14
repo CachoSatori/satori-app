@@ -4,7 +4,8 @@
 --
 -- MARCADOR que llena el runner: la línea «-- @@158@@ …» → el cuerpo de supabase/migrations/158_club_resena_cupon.sql
 -- sin begin; / commit; ni su bloque de verificación. Con --mutar, ese cuerpo va con el arreglo deshecho a propósito y
--- sus casos tienen que caer.
+-- sus casos tienen que caer. La línea «-- @@158R@@ …» → el cuerpo de scripts/sql/158_rollback.sql (sin begin/commit ni
+-- su bloque de verificación), para el caso 15.
 -- Usa el primer local de club_config y un owner ACTIVO; si falta alguno, el caso 00 falla (NO PROBADO no da verde).
 -- Anfitrión y cupones de prueba con nombres ficticios. Links de reseña ficticios (no son de ningún local real).
 begin;
@@ -198,6 +199,31 @@ exception when others then
   insert into _r158 (caso, ok, detalle) values ('14 owner carga el link (queda en el historial); un usuario sin rol no cambia nada', false, sqlstate || ' ' || sqlerrm);
 end $$;
 
+-- 15. ROLLBACK (verificador, menor c): con el link cargado (14 dejó una fila en el historial) y clics marcados, se corre
+-- el cuerpo de scripts/sql/158_rollback.sql (marcador de abajo, sin begin/commit ni su bloque de verificación) y no
+-- queda nada de la 158: ni la función del clic, ni las columnas, ni el CHECK, ni filas resena_url en el historial; y
+-- club_cupon_ver vuelve a la de la 150 (md5). El resto del historial no se toca. Todo dentro de esta transacción.
+create temp table _h158 on commit drop as
+select (select count(*) from public.club_config_historial where campo = 'resena_url') as hist_resena,
+       (select count(*) from public.club_config_historial where campo <> 'resena_url') as hist_otros;
+-- @@158R@@   (aquí va el cuerpo de 158_rollback.sql sin begin/commit)
+insert into _r158 (caso, ok, detalle)
+select '15 rollback: sin función del clic, columnas, CHECK ni historial de resena_url; ver = 150; el resto del historial igual',
+       h.hist_resena >= 1
+       and to_regprocedure('public.club_cupon_resena_clic(text)') is null
+       and not exists (select 1 from information_schema.columns where table_schema = 'public'
+                        and ((table_name = 'club_config' and column_name = 'resena_url')
+                          or (table_name = 'club_cupones' and column_name = 'resena_clic_en')))
+       and not exists (select 1 from pg_constraint where conname = 'club_config_resena_url_google')
+       and not exists (select 1 from public.club_config_historial where campo = 'resena_url')
+       and (select count(*) from public.club_config_historial where campo <> 'resena_url') = h.hist_otros
+       and md5(pg_get_functiondef('public.club_cupon_ver(text)'::regprocedure)) = 'd6f98caf8a564261b7eb39e636f6ab73',
+       'historial resena_url antes ' || h.hist_resena || ' · después '
+         || (select count(*) from public.club_config_historial where campo = 'resena_url')
+         || ' · otros antes ' || h.hist_otros || ' · después '
+         || (select count(*) from public.club_config_historial where campo <> 'resena_url')
+  from _h158 h;
+
 select json_agg(json_build_object('caso', caso, 'ok', coalesce(ok, false), 'detalle', detalle) order by n) from _r158;
 
 -- ASSERT: si algún caso falla, la transacción aborta y dice cuáles
@@ -206,6 +232,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r158 where ok is not true;   -- null = falla
   if v is not null then raise exception '158-FALLAN: %', v; end if;
-  if (select count(*) from _r158) <> 16 then raise exception '158-FALLAN: se esperaban 16 casos'; end if;
+  if (select count(*) from _r158) <> 17 then raise exception '158-FALLAN: se esperaban 17 casos'; end if;
 end $$;
 rollback;

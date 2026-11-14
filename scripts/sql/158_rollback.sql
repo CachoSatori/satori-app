@@ -1,7 +1,9 @@
 -- Rollback de la 158 (origen 105): vuelve club_cupon_ver a la versión de la 150, byte a byte (md5 de pg_get_functiondef
 -- d6f98caf…, el de prod y staging antes de la 158), saca club_cupon_resena_clic, el CHECK y las dos columnas
 -- (club_config.resena_url y club_cupones.resena_clic_en: se pierden los links cargados y las marcas de clic; no hay plata
--- ni datos personales). Borra la fila 158 del ledger (la 105 nunca se aplicó con ese número).
+-- ni datos personales). Borra también las filas de club_config_historial con campo = 'resena_url' (las crea el trigger
+-- club_config_auditar de la 150 cada vez que el owner carga o cambia el link): sin la columna, no son de nada
+-- (verificador del PR #177, menor c). Borra la fila 158 del ledger (la 105 nunca se aplicó con ese número).
 -- Si se corre en prod, en el mismo momento sale el .sql de main (regla 10 / satori-migraciones-y-prod §6).
 -- Orden: primero el código de club-web (revert del merge), así la página deja de pedir `resena` y el clic.
 begin;
@@ -47,6 +49,9 @@ $$;
 revoke all on function public.club_cupon_ver(text)    from public, anon, authenticated;
 grant execute on function public.club_cupon_ver(text) to anon, authenticated;
 
+-- lo que creó la 158 en el historial de club_config (solo ese campo; el resto del historial no se toca)
+delete from public.club_config_historial where campo = 'resena_url';
+
 alter table public.club_config  drop constraint if exists club_config_resena_url_google;
 alter table public.club_config  drop column if exists resena_url;
 alter table public.club_cupones drop column if exists resena_clic_en;
@@ -57,6 +62,9 @@ do $$
 begin
   if md5(pg_get_functiondef('public.club_cupon_ver(text)'::regprocedure)) <> 'd6f98caf8a564261b7eb39e636f6ab73' then
     raise exception '158 rollback: club_cupon_ver no quedó igual a la de la 150';
+  end if;
+  if exists (select 1 from public.club_config_historial where campo = 'resena_url') then
+    raise exception '158 rollback: quedaron filas de resena_url en club_config_historial';
   end if;
 end
 $$;

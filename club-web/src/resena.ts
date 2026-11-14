@@ -69,3 +69,13 @@ export function sondearCupon<T extends CuponEstado>(o: Sondeo<T>): () => void {
   timer = setTimeout(() => { void tic() }, intervalo)
   return parar
 }
+
+/** Ruta del sondeo (verificador, menor a): `?sondeo=1` hace que la API lo cuente con su propia clave de tope y no le gaste
+ * la lectura al portal ni a la primera carga desde la misma IP. */
+export const rutaSondeo = (codigo: string) => `cupon/${codigo}?sondeo=1`
+
+/** Marca el clic en «Escribir una reseña en Google» (verificador, menor b): mejor esfuerzo. No espera ni lanza nunca, pase
+ * lo que pase con la red o el tope: el link a Google lo abre el navegador igual (es un <a href>, no depende de esto). */
+export function marcarClicResena(codigo: string, f: typeof fetch = (...a) => fetch(...a)): void {
+  try { void Promise.resolve(f(`/api/cupon/${codigo}/resena`, { method: 'POST', keepalive: true })).catch(() => undefined) } catch { /* nada */ }
+}

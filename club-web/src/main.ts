@@ -16,7 +16,7 @@ import './styles.css'
 import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
-import { esUrlResena, sondearCupon, vistaDelCupon } from './resena'
+import { esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon } from './resena'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -119,7 +119,7 @@ async function vistaCupon(codigo: string, venceEn: string, referente: string | n
   // 158: mientras el cupón está vigente y la página abierta, se fija cada ~20 s (máx. 10 min) si la caja ya lo usó
   pararSondeo?.()
   pararSondeo = sondearCupon<CuponVer>({
-    consultar: async () => { const r = await api<CuponVer>(`cupon/${codigo}`); return r.ok ? r.data : null },
+    consultar: async () => { const r = await api<CuponVer>(rutaSondeo(codigo)); return r.ok ? r.data : null },
     alCambiar: c => { pararSondeo = null; trasUso(codigo, c) },
     visible: () => document.visibilityState !== 'hidden',
   })
@@ -139,10 +139,8 @@ function trasUso(codigo: string, c: CuponVer) {
 function vistaGracias(codigo: string, resena: string, local: LocalPub | null) {
   if (!esUrlResena(resena)) return pintar(h('h1', {}, t.cupon_titulo), avisoEl('ok', t.cupon_usado))
   const boton = h('a', { class: 'btn', href: resena, target: '_blank', rel: 'noopener noreferrer' }, t.resena_boton)
-  boton.addEventListener('click', () => {
-    // sin esperar la respuesta: el link se abre igual aunque la marca no llegue
-    try { void fetch(`/api/cupon/${codigo}/resena`, { method: 'POST', keepalive: true }).catch(() => undefined) } catch { /* nada */ }
-  })
+  // sin esperar la respuesta: el link se abre igual aunque la marca no llegue (sin señal, tope o error)
+  boton.addEventListener('click', () => marcarClicResena(codigo))
   pintar(
     h('h1', {}, local?.nombre ? `${LOCAL.nombre} · ${local.nombre}` : LOCAL.nombre),
     h('section', { class: 'tarjeta', 'aria-label': t.resena_boton },

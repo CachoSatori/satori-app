@@ -21,6 +21,7 @@ from pathlib import Path
 REF = 'hwiatgicyyqyezqwldia'   # SOLO staging
 RAIZ = Path(__file__).resolve().parents[2]
 MIG = RAIZ / 'supabase/migrations/158_club_resena_cupon.sql'
+ROLLBACK = RAIZ / 'scripts/sql/158_rollback.sql'
 REGEX = ("'^https://(maps\\.app\\.goo\\.gl/[^[:space:]\"<>\\\\]+|g\\.page/[^[:space:]\"<>\\\\]+|(www\\.)?google\\.com/maps"
          "([/?][^[:space:]\"<>\\\\]*)?|search\\.google\\.com/local/writereview\\?[^[:space:]\"<>\\\\]+)$'")
 
@@ -50,6 +51,17 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
                       "grant execute on function public.club_cupon_resena_clic(text) to authenticated;", {'0', '13'}),
 }
 
+# Mutaciones del ROLLBACK (caso 15): mismo formato, pero el ancla está en scripts/sql/158_rollback.sql
+MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
+    # el rollback deja las filas de resena_url en el historial (lo que marcó el verificador, menor c)
+    'rollback_deja_historial': ("delete from public.club_config_historial where campo = 'resena_url';\n", "", {'15'}),
+    # el rollback borra TODO el historial de club_config (no solo lo de la 158)
+    'rollback_borra_todo': ("delete from public.club_config_historial where campo = 'resena_url';\n",
+                            "delete from public.club_config_historial;\n", {'15'}),
+    # el rollback deja la función del clic
+    'rollback_deja_clic': ("drop function if exists public.club_cupon_resena_clic(text);\n", "", {'15'}),
+}
+
 
 def cuerpo(mutar: str | None) -> str:
     mig = MIG.read_text(encoding='utf-8')
@@ -63,11 +75,26 @@ def cuerpo(mutar: str | None) -> str:
     return '\n'.join(l for l in mig.splitlines() if l.strip().lower() not in ('begin;', 'commit;'))
 
 
+def cuerpo_rollback(mutar: str | None) -> str:
+    rb = ROLLBACK.read_text(encoding='utf-8')
+    if mutar in MUTACIONES_ROLLBACK:
+        viejo, nuevo, _ = MUTACIONES_ROLLBACK[mutar]
+        if rb.count(viejo) != 1:
+            sys.exit(f'mutación {mutar}: el ancla no está (o está repetida) en 158_rollback.sql')
+        rb = rb.replace(viejo, nuevo)
+    # su verificación final aborta con las mutaciones: en la batería se saca para que caiga el CASO 15
+    rb = re.sub(r'(?s)\ndo \$\$\nbegin\n  if md5\(.*?\nend\n\$\$;\n', '\n', rb)
+    return '\n'.join(l for l in rb.splitlines() if l.strip().lower() not in ('begin;', 'commit;'))
+
+
 def armar(mutar: str | None) -> str:
     sql = (RAIZ / 'scripts/sql/158_pruebas.sql').read_text(encoding='utf-8')
-    sql, n = re.subn(r'(?m)^-- @@158@@.*$', lambda _: cuerpo(mutar), sql)
+    sql, n = re.subn(r'(?m)^-- @@158@@.*$', lambda _: cuerpo(mutar if mutar in MUTACIONES else None), sql)
     if n != 1:
         sys.exit('158_pruebas.sql: falta el marcador «-- @@158@@» (o está repetido)')
+    sql, n = re.subn(r'(?m)^-- @@158R@@.*$', lambda _: cuerpo_rollback(mutar), sql)
+    if n != 1:
+        sys.exit('158_pruebas.sql: falta el marcador «-- @@158R@@» (o está repetido)')
     return sql
 
 
@@ -95,16 +122,17 @@ def correr(sql: str) -> list[dict]:
 def main() -> None:
     args = sys.argv[1:]
     mutar = args[args.index('--mutar') + 1] if '--mutar' in args else None
-    if mutar and mutar != 'todas' and mutar not in MUTACIONES:
-        sys.exit(f'mutación desconocida: {mutar} (hay: {", ".join(MUTACIONES)})')
+    todas = {**MUTACIONES, **MUTACIONES_ROLLBACK}
+    if mutar and mutar != 'todas' and mutar not in todas:
+        sys.exit(f'mutación desconocida: {mutar} (hay: {", ".join(todas)})')
     if '--armar' in args:
         print(armar(None if mutar == 'todas' else mutar))
         return
     if mutar:
         malas = []
-        for nombre in (MUTACIONES if mutar == 'todas' else [mutar]):
+        for nombre in (todas if mutar == 'todas' else [mutar]):
             caen = {c['caso'].split(' ')[0] for c in correr(armar(nombre)) if not c['ok']}
-            esperadas = MUTACIONES[nombre][2]
+            esperadas = todas[nombre][2]
             print(f"{'muerde' if esperadas <= caen else 'NO MUERDE'} {nombre}: caen {sorted(caen)} (esperadas {sorted(esperadas)})")
             if not esperadas <= caen:
                 malas.append(nombre)

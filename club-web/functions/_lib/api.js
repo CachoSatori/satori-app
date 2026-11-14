@@ -20,7 +20,8 @@ const memoria = new Map() // SOLO para el servidor local (CLUB_DEV=1)
  * Tope por endpoint y por IP (CLUB-AUD-14 y 24, ronda 3). Un binding de Rate Limiting por tipo de pedido:
  *   · RL_CREAR: crear cupón, opt-in, baja del turista, alta y código de canje → 5 por 60 s por IP (cupón y alta, también
  *     por prefijo de red /24 o /64).
- *   · RL_LEER:  ver cupón y portal → 60 por 60 s por IP.
+ *   · RL_LEER:  ver cupón y portal → 60 por 60 s por IP. 158: el sondeo de la página del cupón (`sondeo:`) y la marca
+ *     de clic de la reseña (`resena:`) usan este binding con su propia clave (60 por 60 s por IP cada una).
  * Si el binding no está, devuelve `null` y la API responde 503 (falla cerrada). El contador en memoria existe
  * solo en el servidor local (`CLUB_DEV=1`). `RATE_LIMITER` (un solo binding de antes) ya no se usa.
  * @param {'crear'|'leer'} tipo
@@ -253,7 +254,11 @@ export async function manejar(request, env, path) {
     if (!RE_CUPON.test(cod)) return json(404, { error: 'cupon_invalido' })
     if (partes.length === 2) {
       if (metodo !== 'GET') return json(405, { error: 'metodo' })
-      { const ok = await limitar(env, 'leer', `leer:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+      // 158 (verificador, menor a): el sondeo de la página del cupón abierta (`?sondeo=1`, ~3 por minuto y por pestaña) va
+      // con su propia clave en RL_LEER: no le gasta el tope de lectura al portal ni a la primera carga de la misma IP
+      // (hotel, wifi del local). Mismo binding y mismo tope (60/60 s) por clave: no hace falta tocar el Worker.
+      const clave = new URL(request.url).searchParams.get('sondeo') === '1' ? `sondeo:${ip}` : `leer:${ip}`
+      { const ok = await limitar(env, 'leer', clave, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
       return rpc(env, 'club_cupon_ver', { p_codigo: cod })
     }
     if (partes.length === 3 && partes[2] === 'contacto') {
@@ -266,9 +271,13 @@ export async function manejar(request, env, path) {
     }
     // 158: POST /api/cupon/:codigo/resena → marca (una sola vez, sin datos personales) que el turista tocó «Escribir una
     // reseña en Google». No lleva cuerpo. La base solo marca un cupón usado hace < 7 días de un local con link cargado.
+    // Verificador, menor b: la marca es de mejor esfuerzo. El link a Google se abre en el navegador sin esperar esta
+    // respuesta (un 429 acá no frena a nadie), y el tope va con el de lectura (60/60 s por IP, clave propia) y no con
+    // el de crear (5/60 s): con IP compartida (hotel, wifi del local) no se pierden clics. Cada cupón se marca una sola
+    // vez en la base, así que el tope holgado no abre nada.
     if (partes.length === 3 && partes[2] === 'resena') {
       if (metodo !== 'POST') return json(405, { error: 'metodo' })
-      { const ok = await limitar(env, 'crear', `resena:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+      { const ok = await limitar(env, 'leer', `resena:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
       return rpc(env, 'club_cupon_resena_clic', { p_codigo: cod })
     }
   }

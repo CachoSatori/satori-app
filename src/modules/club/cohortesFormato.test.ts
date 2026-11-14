@@ -59,9 +59,9 @@ describe('ordenar', () => {
 
 describe('rankingCsv', () => {
   const csv = rankingCsv(rankingDePrueba())
-  const lineas = csv.replace(/^﻿/, '').split('\r\n')
+  const lineas = csv.replace(/^\uFEFF/, '').split('\r\n')
   it('encabezado, una fila por socio, total y período; BOM y CRLF', () => {
-    expect(csv.startsWith('﻿')).toBe(true)
+    expect(csv.startsWith('\uFEFF')).toBe(true)
     expect(lineas[0]).toBe('socio;local_alta;estado;visitas;mesas;facturas;venta_respaldada_crc;tiquete_promedio_crc;personas;invitados;descuento_estimado_crc;ultima_visita')
     expect(lineas).toHaveLength(1 + 5 + 2)
     expect(lineas[1]).toBe('"Socio Uno";"Local P161 A";"activo";"3";"2";"2";"32000";"16000";"7";"3";"5000";"2001-03-26"')

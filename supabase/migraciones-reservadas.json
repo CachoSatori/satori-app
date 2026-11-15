@@ -201,6 +201,12 @@
       "rama": "claude/club-local-manager",
       "renumerada_a": "170"
     },
+    "117": {
+      "nombre": "club_miembro_guardar_reune_156_157",
+      "bloque": "club",
+      "rama": "claude/hotfix-miembro-guardar",
+      "renumerada_a": "171"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -314,6 +320,12 @@
       "bloque": "pase",
       "rama": "claude/club-local-manager",
       "origen": "116"
+    },
+    "171": {
+      "nombre": "club_miembro_guardar_reune_156_157",
+      "bloque": "pase",
+      "rama": "claude/hotfix-miembro-guardar",
+      "origen": "117"
     }
   }
 }

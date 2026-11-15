@@ -92,6 +92,10 @@ test('R-01: tope de códigos y sin saldo se traducen a códigos fijos', async ()
   globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Todavía no te alcanza para canjear' }), { status: 400 })
   r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
   assert.equal(r.status, 409); assert.equal((await r.json()).error, 'sin_saldo_canje')
+  // D7 A (mig 157): la cuenta del equipo no canjea → código propio, no «servicio»
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Las cuentas del equipo no canjean créditos' }), { status: 400 })
+  r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
+  assert.equal(r.status, 409); assert.equal((await r.json()).error, 'equipo_sin_canje')
 })
 
 test('14/24: un binding por endpoint: crear usa RL_CREAR (5/60 s) y leer usa RL_LEER (60/60 s); falta uno → 503 solo ahí', async () => {

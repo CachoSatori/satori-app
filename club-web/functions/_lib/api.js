@@ -60,6 +60,8 @@ function traducirError(msg) {
   if (m === 'Enlace no válido') return [404, 'portal_invalido']
   if (m === 'Demasiados códigos de canje') return [429, 'tope_canje']
   if (m === 'Todavía no te alcanza para canjear') return [409, 'sin_saldo_canje']
+  // D7 A (mig 157): las cuentas del equipo registran personas pero no canjean créditos
+  if (m === 'Las cuentas del equipo no canjean créditos') return [409, 'equipo_sin_canje']
   if (m === 'Demasiadas altas hoy') return [429, 'tope_altas']
   // LC-ML: el local sale de datos; con dos o más encendidos, la persona elige
   if (/^Hay más de un local/.test(m)) return [400, 'elegir_local']

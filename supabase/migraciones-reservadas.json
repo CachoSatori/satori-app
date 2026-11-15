@@ -117,6 +117,12 @@
       "rama": "claude/club-link-portal-cajero",
       "renumerada_a": "156"
     },
+    "104": {
+      "nombre": "club_equipo_sin_creditos",
+      "bloque": "club",
+      "rama": "claude/club-equipo-sin-creditos",
+      "renumerada_a": "157"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -146,6 +152,12 @@
       "bloque": "pase",
       "rama": "claude/club-link-portal-cajero",
       "origen": "103"
+    },
+    "157": {
+      "nombre": "club_equipo_sin_creditos",
+      "bloque": "pase",
+      "rama": "claude/club-equipo-sin-creditos",
+      "origen": "104"
     }
   }
 }

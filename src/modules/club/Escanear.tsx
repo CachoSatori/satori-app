@@ -20,6 +20,7 @@ import {
 } from '../../shared/api/club'
 import { parsearQR, urlPortal } from './qrFormato'
 import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
+import { esCuentaSinCreditos, MSG_EQUIPO_SIN_CANJE } from './equipo'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -220,7 +221,8 @@ export default function Escanear() {
                     style={{ textAlign: 'left', background: C.paper, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.7rem 0.8rem', cursor: 'pointer', minHeight: 44 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <strong>{f.nombre}</strong>
-                      <span>{fmtCreditos(f.creditos)} cr.</span>
+                      {/* D7 A (mig 157): el equipo no tiene créditos (el saldo de antes quedó congelado) */}
+                      <span>{f.tipo === 'equipo' ? 'sin créditos' : `${fmtCreditos(f.creditos)} cr.`}</span>
                     </div>
                     <div style={{ fontSize: '0.78rem', color: C.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
                       {f.negocio ?? 'Sin negocio'} · {TIPO_MIEMBRO_LABEL[f.tipo] ?? f.tipo}
@@ -453,8 +455,11 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
 }) {
   const d = a.r.datos
   const conCodigo = a.kind === 'canje'
-  const codigoMal = a.kind === 'canje' && a.r.datos.codigo_estado !== 'vigente' ? MSG_CODIGO[a.r.datos.codigo_estado] : null
-  const canjea = conCodigo || modo === 'aprobado'
+  // D7 A (mig 157): la cuenta del equipo registra personas con sus cupones, pero no tiene créditos ni canje.
+  const sinCreditos = esCuentaSinCreditos(d)
+  const codigoMal = conCodigo && sinCreditos ? MSG_EQUIPO_SIN_CANJE
+    : a.kind === 'canje' && a.r.datos.codigo_estado !== 'vigente' ? MSG_CODIGO[a.r.datos.codigo_estado] : null
+  const canjea = !sinCreditos && (conCodigo || modo === 'aprobado')
   const notaOk = nota.trim().length >= 5
   const opciones = opcionesCanje(d)
   const alcanza = (v: number) => d.personas >= v * d.personas_por_credito
@@ -483,6 +488,15 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
         </div>
       ) : (
         <>
+          {sinCreditos ? (
+            <div style={{ margin: '0.9rem 0' }}>
+              <div style={{ background: C.paper, borderRadius: 8, padding: '0.7rem', textAlign: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: '2rem', fontWeight: 800 }}>{Number(d.personas_mes ?? 0)}</div>
+                <div style={{ fontSize: '0.72rem', color: C.muted }}>personas registradas este mes</div>
+              </div>
+              <Aviso tono="info">{MSG_EQUIPO_SIN_CANJE}</Aviso>
+            </div>
+          ) : (<>
           <div style={{ display: 'flex', gap: 10, margin: '0.9rem 0' }}>
             <div style={{ flex: 1, background: C.paper, borderRadius: 8, padding: '0.7rem', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', fontWeight: 800 }}>{fmtCreditos(d.creditos)}</div>
@@ -500,18 +514,21 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
               Hoy ya canjeó {fmtCreditos(d.canjeado_hoy)} de {fmtCreditos(d.max_creditos_por_visita)}.
             </div>
           )}
+          </>)}
 
           {!conCodigo && (
             <>
-              <Aviso tono="info">
-                Para canjear, pedile al referente su <strong>código de canje</strong>: lo genera en su portal con el botón
-                «Canjear» y vale 10 minutos. Escanealo o escribí los 6 caracteres en «Código a mano».
-              </Aviso>
+              {!sinCreditos && (
+                <Aviso tono="info">
+                  Para canjear, pedile al referente su <strong>código de canje</strong>: lo genera en su portal con el botón
+                  «Canjear» y vale 10 minutos. Escanealo o escribí los 6 caracteres en «Código a mano».
+                </Aviso>
+              )}
               <div style={{ display: 'flex', gap: 6, margin: '12px 0' }}>
                 {d.tarjeta_manual_activa && (
                   <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
                 )}
-                {gestiona && (
+                {gestiona && !sinCreditos && (
                   <Btn variant={modo === 'aprobado' ? 'primary' : 'secondary'} onClick={() => setModo('aprobado')} style={{ flex: 1 }}>Canje sin celular</Btn>
                 )}
               </div>

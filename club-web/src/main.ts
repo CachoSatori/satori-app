@@ -17,6 +17,7 @@ import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrF
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 import { esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon } from './resena'
+import { modoPortal } from './portalEquipo'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -57,7 +58,8 @@ const msgError = (e: string) =>
   ({ referente_invalido: t.ref_invalido, cupon_invalido: t.cupon_invalido, portal_invalido: t.portal_invalido,
      tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red, tope_canje: t.tope_canje,
      sin_saldo_canje: t.sin_saldo_canje, tope_altas: t.tope_altas, verificacion: t.alta_verificacion,
-     datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible } as Record<string, string>)[e] ?? t.servicio
+     datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible,
+     equipo_sin_canje: t.equipo_sin_canje } as Record<string, string>)[e] ?? t.servicio
 
 // ── Formatos ─────────────────────────────────────────────────────────────────
 const fecha = (iso: string, conHora = true) =>
@@ -279,6 +281,8 @@ interface Portal {
     cortesias: Array<{ sorpresa: boolean; cantidad: number; motivo: string; vence_en: string | null }> | null
   } | null
   movimientos: Array<{ tipo: string; personas: number; creditos: number | null; fecha: string }>
+  /** D7 A (mig 157): cuenta del equipo → personas registradas, sin créditos ni «Canjear». */
+  equipo?: boolean; personas_registradas?: number | null; personas_registradas_mes?: number | null
 }
 
 // R-01: código de canje de un solo uso (10 min). El QR del portal (/r/) ya no sirve para canjear.
@@ -343,17 +347,24 @@ async function paginaPortal(token: string) {
   }, 'image/png'))
   const descargar = h('a', { class: 'btn sec', href: canvas.toDataURL('image/png'), download: `satori-${p.codigo}.png` }, t.descargar)
   const esAnfitrion = p.anfitrion !== false
+  const modo = modoPortal(p)   // D7 A (mig 157): el equipo ve personas registradas; nunca «Canjear»
+  const saldo = modo.equipo
+    ? h('section', { class: 'tarjeta' },
+        h('h2', {}, t.equipo_titulo),
+        h('p', {}, h('strong', {}, t.equipo_mes(Number(p.personas_registradas_mes ?? 0)))),
+        h('p', { class: 'sub' }, t.equipo_total(Number(p.personas_registradas ?? 0))))
+    : h('section', { class: 'tarjeta' },
+        h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)),
+          h('span', {}, (p.creditos === 1 ? t.portal_creditos_uno : t.portal_creditos) + (p.valor_credito_crc ? ` · ${colones(p.creditos * p.valor_credito_crc)}` : ''))),
+        h('p', { class: 'sub' }, t.portal_personas(p.personas)),
+        h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito))),
+        p.vencimiento_meses ? h('p', { class: 'sub' }, t.portal_vence(p.vencimiento_meses)) : null)
   const anfitrion: HTMLElement[] = !esAnfitrion ? [] : [
-    h('section', { class: 'tarjeta' },
-      h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)),
-        h('span', {}, (p.creditos === 1 ? t.portal_creditos_uno : t.portal_creditos) + (p.valor_credito_crc ? ` · ${colones(p.creditos * p.valor_credito_crc)}` : ''))),
-      h('p', { class: 'sub' }, t.portal_personas(p.personas)),
-      h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito))),
-      p.vencimiento_meses ? h('p', { class: 'sub' }, t.portal_vence(p.vencimiento_meses)) : null),
-    ...(p.creditos >= 1 ? [seccionCanje(token)] : []),
+    saldo,
+    ...(modo.canje ? [seccionCanje(token)] : []),
     h('section', { class: 'tarjeta portal-qr' },
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
-      h('p', {}, t.portal_indicaciones),
+      h('p', {}, modo.equipo ? t.equipo_indicaciones : t.portal_indicaciones),
       h('div', { class: 'fila' }, compartir, descargar),
     ),
     h('section', { class: 'tarjeta' },

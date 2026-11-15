@@ -19,7 +19,8 @@ import {
   type FacturaReciente,
 } from '../../shared/api/club'
 import { parsearQR, urlPortal } from './qrFormato'
-import { linkAltaWhatsApp, puedeMandarLinkPortal } from './altaWhatsApp'
+import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
+import { esCuentaSinCreditos, MSG_EQUIPO_SIN_CANJE } from './equipo'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -220,7 +221,8 @@ export default function Escanear() {
                     style={{ textAlign: 'left', background: C.paper, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.7rem 0.8rem', cursor: 'pointer', minHeight: 44 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <strong>{f.nombre}</strong>
-                      <span>{fmtCreditos(f.creditos)} cr.</span>
+                      {/* D7 A (mig 157): el equipo no tiene créditos (el saldo de antes quedó congelado) */}
+                      <span>{f.tipo === 'equipo' ? 'sin créditos' : `${fmtCreditos(f.creditos)} cr.`}</span>
                     </div>
                     <div style={{ fontSize: '0.78rem', color: C.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
                       {f.negocio ?? 'Sin negocio'} · {TIPO_MIEMBRO_LABEL[f.tipo] ?? f.tipo}
@@ -231,7 +233,7 @@ export default function Escanear() {
               </div>
             )}
           </Card>
-          <NuevoSocio mandaLink={puedeMandarLinkPortal(profile?.role)}
+          <NuevoSocio rol={profile?.role}
             onHecho={(t, href) => setMsg({ tono: 'ok', texto: t, ...(href ? { link: { href, texto: 'Mandarle su link por WhatsApp' } } : {}) })} />
           {cargando && <div style={{ textAlign: 'center', color: C.muted }}>Buscando…</div>}
         </>
@@ -453,8 +455,11 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
 }) {
   const d = a.r.datos
   const conCodigo = a.kind === 'canje'
-  const codigoMal = a.kind === 'canje' && a.r.datos.codigo_estado !== 'vigente' ? MSG_CODIGO[a.r.datos.codigo_estado] : null
-  const canjea = conCodigo || modo === 'aprobado'
+  // D7 A (mig 157): la cuenta del equipo registra personas con sus cupones, pero no tiene créditos ni canje.
+  const sinCreditos = esCuentaSinCreditos(d)
+  const codigoMal = conCodigo && sinCreditos ? MSG_EQUIPO_SIN_CANJE
+    : a.kind === 'canje' && a.r.datos.codigo_estado !== 'vigente' ? MSG_CODIGO[a.r.datos.codigo_estado] : null
+  const canjea = !sinCreditos && (conCodigo || modo === 'aprobado')
   const notaOk = nota.trim().length >= 5
   const opciones = opcionesCanje(d)
   const alcanza = (v: number) => d.personas >= v * d.personas_por_credito
@@ -483,6 +488,15 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
         </div>
       ) : (
         <>
+          {sinCreditos ? (
+            <div style={{ margin: '0.9rem 0' }}>
+              <div style={{ background: C.paper, borderRadius: 8, padding: '0.7rem', textAlign: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: '2rem', fontWeight: 800 }}>{Number(d.personas_mes ?? 0)}</div>
+                <div style={{ fontSize: '0.72rem', color: C.muted }}>personas registradas este mes</div>
+              </div>
+              <Aviso tono="info">{MSG_EQUIPO_SIN_CANJE}</Aviso>
+            </div>
+          ) : (<>
           <div style={{ display: 'flex', gap: 10, margin: '0.9rem 0' }}>
             <div style={{ flex: 1, background: C.paper, borderRadius: 8, padding: '0.7rem', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', fontWeight: 800 }}>{fmtCreditos(d.creditos)}</div>
@@ -500,18 +514,21 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
               Hoy ya canjeó {fmtCreditos(d.canjeado_hoy)} de {fmtCreditos(d.max_creditos_por_visita)}.
             </div>
           )}
+          </>)}
 
           {!conCodigo && (
             <>
-              <Aviso tono="info">
-                Para canjear, pedile al referente su <strong>código de canje</strong>: lo genera en su portal con el botón
-                «Canjear» y vale 10 minutos. Escanealo o escribí los 6 caracteres en «Código a mano».
-              </Aviso>
+              {!sinCreditos && (
+                <Aviso tono="info">
+                  Para canjear, pedile al referente su <strong>código de canje</strong>: lo genera en su portal con el botón
+                  «Canjear» y vale 10 minutos. Escanealo o escribí los 6 caracteres en «Código a mano».
+                </Aviso>
+              )}
               <div style={{ display: 'flex', gap: 6, margin: '12px 0' }}>
                 {d.tarjeta_manual_activa && (
                   <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
                 )}
-                {gestiona && (
+                {gestiona && !sinCreditos && (
                   <Btn variant={modo === 'aprobado' ? 'primary' : 'secondary'} onClick={() => setModo('aprobado')} style={{ flex: 1 }}>Canje sin celular</Btn>
                 )}
               </div>
@@ -695,8 +712,8 @@ function VisitaSocio({ miembro }: { miembro: string }) {
 }
 
 /** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia»; NUNCA un número de documento. */
-/** D1: al terminar, owner y manager ven «Mandarle su link por WhatsApp ↗» (el token del portal es solo para ellos en la base). */
-function NuevoSocio({ onHecho, mandaLink }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; mandaLink: boolean }) {
+/** D1 + mig 156: al terminar, «Mandarle su link por WhatsApp ↗» también para el cajero (el alta devuelve el token del socio nuevo). */
+function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; rol: string | null | undefined }) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState('')
   const [tel, setTel] = useState('')
@@ -712,13 +729,15 @@ function NuevoSocio({ onHecho, mandaLink }: { onHecho: (texto: string, linkWhats
     try {
       const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico)
       const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`
+      // Sin link no se frena nada: el alta ya quedó (el link sale después desde Miembros).
       let link: string | null = null
-      if (mandaLink) {
-        // Sin link no se frena nada: el alta ya quedó (el link se puede copiar después desde Miembros).
-        try { link = linkAltaWhatsApp(tel, nombre, urlPortal(await tokenPortal(r.miembro_id))) } catch { link = null }
-      }
-      const extra = !mandaLink ? ' El link de su portal se lo manda un manager desde Miembros.'
-        : !link ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).' : ''
+      try {
+        const tok = await tokenDelAlta(r, rol, tokenPortal)
+        link = tok ? linkAltaWhatsApp(tel, nombre, urlPortal(tok)) : null
+      } catch { link = null }
+      const extra = link ? ''
+        : puedeMandarLinkPortal(rol) ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).'
+        : ' El link de su portal se lo manda un manager desde Miembros.'
       onHecho(texto + extra, link)
       setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false)
     } catch (e) { setErr(aClubError(e).message) }

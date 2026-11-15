@@ -1,9 +1,11 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-14, 01:30 hora de Costa Rica.** `main` verificado contra `origin`; lo de prod fuera de `main` y lo de
-Cloudflare lo informó el dueño (en prod, Claude solo hizo lo que firmó el dueño). El bloque del 13/11 (Edge, `club-pase`,
-pases de octubre y noviembre) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
+**Al día: 2026-11-14, 18:05 hora de Costa Rica.** `main` = **`19bd953`** (merge del #189, 18:04:17 -06:00) tras **`342b94b`**
+(merge del #178, 18:03:57 -06:00). Ambos con OK del dueño y con **excepción de la ventana D1 autorizada por el dueño**
+(«nadie está trabajando con la app»). Deploy de GitHub Pages en success para los dos; Supabase Preview, build y
+Cloudflare en success; `version.json` no se pudo verificar desde la sesión (el proxy lo bloquea). El bloque anterior
+(01:30 del 14/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).**
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
@@ -12,30 +14,45 @@ pases de octubre y noviembre) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCH
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`93a5bf7`** (13/11 23:33 -06:00: merge del #166, fechas día/mes en las facturas). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **153**. |
+| `main` | **`19bd953`** (14/11 18:04 -06:00: merge del #189, TC del cierre con decimales; antes `342b94b`, merge del #178). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **155** (sin migraciones nuevas en estos dos merges). |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Desarrollo y proyecto Supabase de staging. Cloudflare Pages (`satori-staging.pages.dev`) publica esta rama. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
-- **Prod, dato (firma del dueño, 14/11 00:09):** `employees.pos_login` **041** quedó asignado a un salonero nuevo. Consta
-  en `club_pos_login_historial`. Sin nombres en el repo.
+- **Entró hoy (14/11):**
+  - **#178:** Empleados D8 A. Sin la lista «sin vincular» del XLS; el nombre de Excel queda como dato fijo.
+  - **#189:** TC del cierre con decimales (punto o coma, rango 300–900, aviso si se aleja más de 10 %).
+- **Validación física pendiente del dueño:** #178 (Admin → Empleados) y #189 (cierre con TC 503,45 y 503.45, en iPhone y
+  Android).
+- **PRs en borrador con veredicto LISTO** (ninguno mergeado), en orden de merge por migración. Todos necesitan firma del
+  dueño y batería SQL en staging con él:
+
+| Orden | PR | Migración | Nota |
+|---|---|---|---|
+| 1 | #174 | 156 | |
+| 2 | #176 | 157 | |
+| 3 | #177 | 158 | |
+| 4 | #140 | 159 | |
+| 5 | #179 | 160 | |
+| 6 | #180 | 161 | |
+| 7 | #181 | 162 | |
+| 8 | #182 | 163 | apilado sobre #140 |
+| 9 | #183 | 164 | |
+| 10 | #184 | 165 | |
+| 11 | #185 | 166 | |
+| 12 | #186 | 167 | apilado sobre #177 |
+| 13 | #187 | 168 | |
+| 14 | #188 | 169 | |
+| 15 | #190 | 170 | al final |
+
 - **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
   de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging**: la sesión no puede invocar la función (el proxy
   bloquea `*.supabase.co`), así que la hace el dueño con una foto o se habilita el dominio.
-- **PR en borrador (ninguno mergeado):**
-  - **#168:** migración **155**, alerta `ANFITRION_SOBRE_TOPE` sin la carga inicial. Verificador independiente: CAMBIOS
-    menores, corregidos en `70c00dc`.
-  - **#169:** UI: link del portal al socio, login del PoS en Empleados y tope sin monto fijo.
-  - **#170:** `club-web`: texto final del alta («puede ser hoy mismo»).
-  - **#169 y #170 tocan la guía 6.13:** el segundo en mergear tiene un conflicto chico.
-- **Decisión firmada, pendiente de construir: D6 A** (alta del Local Club): mayor de 18 obligatorio, cumpleaños día/mes
-  opcional con permiso, aviso de privacidad v1.2 junto con el #140. Numeración: **154** solo si entra antes que la 155; si
-  no, **156+**.
 - **Local Club sigue en 15 %** hasta el lanzamiento del Club.
 - **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
-  solo de merges.
+  solo de merges. (Hoy el dueño autorizó una excepción puntual; no cambia la regla.)
 - **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
   `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
-- **Gate de `main`:** `vitest run` **1998 tests** pasan (4 skipped; 161 archivos; 14/11, sobre `main` = `93a5bf7`). `tsc` y
+- **Gate de `main`:** `vitest run` **2068 tests** pasan (172 archivos; sobre `main` + #178 + #189, medido 14/11). `tsc` y
   lint: último dato en el archivo (13/11: lint 83 problemas); se vuelve a medir en cada PR de código.
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 
@@ -94,6 +111,12 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
 10. **Nunca revertir (ni borrar) el `.sql` de una migración que ya está en el ledger de prod.** Si se revierte el
     código de un PR, el archivo de su migración se queda en `supabase/migrations/`; si no, Branching falla en cada
     push a `main` (pasó con la 074 entre el 05 y el 06/11).
+11. **La fecha del movimiento de caja es el día en que se registró (el turno), nunca la fecha de la factura** (regla del
+    dueño, 14/11). La fecha de la factura es un dato aparte (va a la descripción, «· fact AAAA-MM-DD»): los proveedores
+    suelen facturar el día del pedido y entregar 1–3 días después. La fecha de factura se analiza por calendario
+    (`src/shared/utils/fechaFactura.ts`): la clave FE manda; sin clave, de las dos lecturas día/mes se toma la única
+    posible (no futura, ≤ 60 días) y, si las dos lo son, la pantalla pregunta y no deja guardar hasta elegir; una
+    factura de más de 7 días avisa «Factura de hace X días: revisá la fecha.» (no bloquea).
 
 ---
 
@@ -223,8 +246,8 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | 087, 088, 089, 090, 091, 092, 093, 094, 095, 096 | **097** |
-| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) · 101 la usa el #140 (→ 152) · 102 (`club_tope_sin_carga_inicial`; renumerada a 155) | **103** |
-| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; como prod ya tiene la 153, regla 3: el #140 usa la **154** solo si entra antes que la 155; si no, la siguiente libre del bloque PASE, 156+); **156** después de la 155 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) · 101 la usa el #140 (→ 152) · 102 (`club_tope_sin_carga_inicial`; renumerada a 155) · 103 (`club_alta_caja_link_portal`; renumerada a 156) | **104** |
+| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` · 153 (← 096): `claude/alias-proveedor-rpc` · 155 (← 102): `claude/club-tope-sin-carga-inicial` (en prod desde el merge del #168) · 156 (← 103): `claude/club-link-portal-cajero` (sin aplicar) | **152** la usa el #140 (borrador, aún no en `main`; prod ya va por la 155, así que el #140 toma la siguiente libre del bloque PASE: **157**, o la que siga si entra otra antes; la 154 queda sin usar); **157** después de la 156 (la 087, la 088 y cualquier migración de caja posterior al Club toman 152+ al armar su paquete) |
 | (fuera de bloque) | 086 | — | libre |
 
 **Asignadas en los bloques**
@@ -234,11 +257,15 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | 096 | `proveedor_agregar_alias` (RPC atómica para el alias del proveedor; sin firma) | caja | `claude/alias-proveedor-rpc` | **renumerada a 153** en el mismo PR (13-nov; regla 3: prod va por la 151). El número 096 no se reutiliza (regla 4) |
 | 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **renumerada a 151** en el pase del Club (`claude/pase-club`, 10-nov). El número 100 no se reutiliza (regla 4) |
 | 102 | `club_tope_sin_carga_inicial` (D5 A del dueño: ANFITRION_SOBRE_TOPE sin la carga inicial) | club | `claude/club-tope-sin-carga-inicial` | **renumerada a 155** en el mismo PR (14-nov; regla 3: prod va por la 153). El número 102 no se reutiliza (regla 4) |
+| 103 | `club_alta_caja_link_portal` (firma del dueño 14-nov 06:04: el cajero manda el link del portal al socio que acaba de dar de alta) | club | `claude/club-link-portal-cajero` | **renumerada a 156** en el mismo PR (14-nov; regla 3: prod va por la 155). El número 103 no se reutiliza (regla 4) |
+| 104 | `club_equipo_sin_creditos` (D7 A + saldos A, firma del dueño 14-nov: el equipo no canjea, no vence ni cuenta en el pasivo; saldos congelados) | club | `claude/club-equipo-sin-creditos` | **renumerada a 157** en el mismo PR (14-nov; regla 3: prod va por la 155 y la 156 es del #174). El número 104 no se reutiliza (regla 4) |
 | 105 | `club_resena_cupon` (ítem #13 de la spec del Club v2: reseña de Google tras el cupón; firma del dueño 14-nov) | club | `claude/club-resena-cupon` | **renumerada a 158** en el mismo PR (14-nov; regla 3: prod va por la 155; la 156 es del #174 y la 157 queda para D7). El número 105 no se reutiliza (regla 4) |
 | 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 153 | `proveedor_agregar_alias` | pase (origen **096**) | `claude/alias-proveedor-rpc` | **Sin aplicar** (13/11: PR en borrador a `main`, espera firma). RPC `proveedor_agregar_alias` (SECURITY INVOKER) para que dos cajas no se pisen los alias. La **152** la usa el #140 (aviso del Club). Rollback: `scripts/sql/153_rollback.sql` |
-| 155 | `club_tope_sin_carga_inicial` | pase (origen **102**) | `claude/club-tope-sin-carga-inicial` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK). `create or replace` de `club_excepciones`: ANFITRION_SOBRE_TOPE no cuenta `club_movimientos.origen = 'migracion'` (la carga inicial del 12/11), como el reporte del mes. Prueba en staging en transacción descartada: 9/9. Rollback: `scripts/sql/155_rollback.sql` |
+| 155 | `club_tope_sin_carga_inicial` | pase (origen **102**) | `claude/club-tope-sin-carga-inicial` | **En prod desde el 14/11 00:48 -06:00** (merge del #168, `dac805d`, vía Branching). `create or replace` de `club_excepciones`: ANFITRION_SOBRE_TOPE no cuenta `club_movimientos.origen = 'migracion'` (la carga inicial del 12/11), como el reporte del mes. Prueba en staging en transacción descartada: 9/9. Rollback: `scripts/sql/155_rollback.sql` |
+| 156 | `club_alta_caja_link_portal` | pase (origen **103**) | `claude/club-link-portal-cajero` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK; vía merge → Branching). `create or replace` de `club_socio_alta_caja`: devuelve `token_portal` solo si esa alta creó a la persona (número que no era de nadie), y lo audita como `ver_link_portal`. `club_miembro_token` sigue solo owner/manager. Además (verificador, 14/11) `club_rol_activar_anfitrion` regenera `token_portal` al activar a un socio como anfitrión (el link del alta deja de servir para canjes), y `club_miembro_guardar` hace lo mismo al pasar un socio a anfitrión desde «Editar» (y acepta editar a un socio como socio, sin reactivarlo si está de baja: LC-DES-01). Prueba en staging en transacción descartada: 20/20; mutaciones muerden. Rollback: `scripts/sql/156_rollback.sql` |
+| 157 | `club_equipo_sin_creditos` | pase (origen **104**) | `claude/club-equipo-sin-creditos` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK y verificador independiente; vía merge → Branching). D7 A: guarda del equipo en `club_canje_codigo_generar` y `club_canje_aplicar`; `club_saldo_canjeable` / `club_corte_equipo` (saldo congelado que no revive, foto en `club_auditoria`); portal, pase, ficha de caja, vencimiento, reporte del mes, baja (`club_miembro_guardar`), `club_ajuste` y `club_alertas_pendientes` con lo canjeable; `club_reporte_equipo` (ranking). Pruebas: `scripts/sql/157_pruebas.sql` (batería + 13 mutaciones en una transacción descartada; **pendiente de correr en staging**). Rollback: `scripts/sql/157_rollback.sql` |
 | 158 | `club_resena_cupon` | pase (origen **105**) | `claude/club-resena-cupon` | **Sin aplicar** (14/11: PR en borrador a `main`, espera OK). Columnas `club_config.resena_url` (CHECK: solo direcciones de Google) y `club_cupones.resena_clic_en`; `club_cupon_ver` devuelve `resena` solo con el cupón usado hace < 7 días; función pública nueva `club_cupon_resena_clic`. Prueba en staging en transacción descartada: 16/16; el caso 15 (rollback limpia todo, también el historial de `resena_url`) queda pendiente con el dueño (el conector cancela los `drop`). Rollback: `scripts/sql/158_rollback.sql` |
 
 

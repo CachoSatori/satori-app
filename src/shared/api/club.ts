@@ -69,7 +69,9 @@ export interface ResolverReferente {
            valor_credito_crc?: number
            canjeado_hoy: number; canje_min: number; canje_paso: number; max_creditos_por_visita: number
            /** CLUB-AUD-26: tarjeta física habilitada en este local (staging sí, prod no). */
-           tarjeta_manual_activa?: boolean }
+           tarjeta_manual_activa?: boolean
+           /** D7 A (mig 157): cuenta del equipo → sin créditos ni canje; `personas_mes` = personas registradas en el mes. */
+           sin_creditos?: boolean; personas_mes?: number }
 }
 /** R-01: el código de canje (/k/) del portal. Los mismos datos del referente, más el estado del código. */
 export interface ResolverCanje {
@@ -374,7 +376,10 @@ export interface ReporteMes {
   ranking: FilaReporte[]; subiendo: FilaReporte[]; bajando: FilaReporte[]; a_contactar: FilaReporte[]
   dormidos: { cuentas: number; creditos: number; lista: FilaReporte[] }
   nuevos: { cuentas: number; lista: FilaReporte[] }
-  equipo: { personas_mes: number; creditos: number; lista: FilaReporte[] }
+  /** D7 A (mig 157): el equipo suma personas, no créditos; su saldo de antes quedó congelado, fuera del pasivo.
+   *  Los meses cerrados antes de la 157 traen `creditos` (el saldo del equipo, de cuando acumulaba). */
+  equipo: { personas_mes: number; tarjetas_mes?: number; congelado_cuentas?: number; congelado_creditos?: number
+            congelado_valor_crc?: number; creditos?: number; lista: FilaReporte[] }
   antiguedad: Array<{ tramo: string; cuentas: number; creditos: number; valor_crc: number }>
   pm: { pausado: boolean; nota: string | null; pendiente_crc: number; cargos_mes_crc: number; pagos_mes_crc: number }
   calidad: { abiertas: number; resueltas: number; por_tipo: Record<string, number>; promo_activa: boolean }
@@ -440,7 +445,11 @@ export const activarAnfitrion = (miembro: string, rol: 'referente' | 'concierge_
   llamar<boolean>('club_rol_activar_anfitrion', { p_miembro: miembro, p_rol: rol, p_nota: nota })
 
 // ── LC-A2: socios del Local Club ──────────────────────────────────────────────
-export interface AltaSocio { miembro_id: string; estado: 'activo'; provisional_hasta: string }
+export interface AltaSocio {
+  miembro_id: string; estado: 'activo'; provisional_hasta: string
+  /** Mig 156: token del portal, SOLO si el alta creó a la persona (si el número ya era de alguien, null). */
+  token_portal?: string | null
+}
 /** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme. */
 export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean) =>
   llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_location: localClub })
@@ -542,3 +551,10 @@ export const getReporteVisitas = (desde: string, hasta: string, local: string | 
 export interface AltasPorCajero { usuario: string; altas_caja: number; validaciones: number; confirmo: number; sin_confirmar: number; vencidas: number }
 export const getReporteAltas = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<AltasPorCajero[]>('club_reporte_altas', { p_desde: desde, p_hasta: hasta, p_location: local })
+/** D7 · ranking del equipo por persona y mes (mig 157). Solo owner y manager; deja rastro. */
+export interface FilaEquipo {
+  miembro_id: string; nombre: string; estado: 'activo' | 'baja'; cupones_usados: number; personas: number; mesas: number
+  facturas: number; venta_respaldada_crc: number; altas_socios: number
+}
+export const getReporteEquipo = (mes: string, local: string | null = localClub) =>
+  llamar<FilaEquipo[]>('club_reporte_equipo', { p_mes: mes, p_location: local })

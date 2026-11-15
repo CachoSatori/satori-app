@@ -15,7 +15,7 @@ import { listDocsNeedingInventory } from '../../shared/api/inventoryIngest'
 import type { Supplier, CashMovement, UserRole } from '../../shared/types/database'
 import { fi, fd } from '../cash/cashUtils'
 import { tipShiftToCaja, todayCR, dateCR } from '../../shared/utils'
-import { avisoFechaFactura } from '../../shared/utils/fechaFactura'
+import { avisoFechaFactura, fechaLarga, preguntaFechaAmbigua } from '../../shared/utils/fechaFactura'
 import { PAGO_META, isLocalRole, type Pago } from '../../shared/utils/pagoMatrix'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 
@@ -293,7 +293,8 @@ function matchSupplierByName(name: string, suppliers: Supplier[]): Supplier | nu
   return suppliers.find(s => s.name.trim().toLowerCase() === key) ?? null
 }
 
-function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role, onClose, onDone, onDiscard }: {
+// Exportada para las pruebas de la fecha de factura (14-nov).
+export function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role, onClose, onDone, onDiscard }: {
   doc: DocumentRow
   accounts: FinanceAccount[]
   suppliers: Supplier[]
@@ -311,7 +312,11 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
   const isLocal = isLocalRole(role)   // cajero/manager están en caja → pueden efectivo
   const [tipo, setTipo]     = useState<DocExtract['tipo']>((ex?.tipo as DocExtract['tipo']) ?? 'factura')
   const [prov, setProv]     = useState(ex?.proveedor ?? '')
-  const [fecha, setFecha]   = useState(ex?.fecha ?? todayCR())
+  // (14-nov) Fecha ambigua (las dos lecturas día/mes son posibles): arranca vacía y no se confirma hasta elegir una de
+  // las dos opciones o escribir la fecha. Nunca se precarga «hoy» en ese caso. Si después vacían el campo, la pregunta vuelve.
+  const opcionesFecha = ex?.fecha_origen === 'ambigua' && ex.fecha_opciones ? ex.fecha_opciones : null
+  const [fecha, setFecha]   = useState(ex?.fecha ?? (opcionesFecha ? '' : todayCR()))
+  const dudaFecha = opcionesFecha && !fecha ? opcionesFecha : null
   // Aviso de la lectura mientras siga la fecha precargada; si la cambian, solo si queda en el futuro.
   const avisoFecha = ex?.aviso_fecha && fecha === ex.fecha ? ex.aviso_fecha : avisoFechaFactura(fecha, todayCR())
   const [total, setTotal]   = useState<number | ''>(ex?.total ? N2(ex.total) : '')
@@ -371,11 +376,14 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
     if (!total) { setErr('Ingresá el monto'); return }
     if (tipo === 'otro') { setErr('Elegí un tipo (factura / comprobante / propinas) o descartá el documento.'); return }
     if (revisar && !validado) { setErr('Revisá los montos contra la factura y marcá "Validé los datos" antes de confirmar.'); return }
+    if (dudaFecha && tipo !== 'propinas') { setErr('Elegí la fecha de la factura antes de confirmar.'); return }   // (14-nov)
     setSaving(true); setErr(null)
     try {
       // created_at de las altas nivel-día = día de REGISTRO (no se pasa `fecha` → now()),
       // así el pago cae en la Caja Diaria del día en que se registra. La fecha de la
       // factura (que puede ser de otro día) se conserva como referencia en la descripción.
+      // REGLA (dueño, 14-nov): la fecha del movimiento NUNCA es la del documento — tampoco en propinas (antes se pasaba
+      // `fecha` y el movimiento quedaba con el día del comprobante).
       const baseDesc = ref ? `${prov || 'Factura'} · ${ref}` : (prov || 'Factura')
       const descripcion = fecha ? `${baseDesc} · fact ${fecha}` : baseDesc
       let movementId: string
@@ -403,8 +411,9 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
         // Propinas: pass-through, NO es gasto del P&L (subcategoría 'Propinas' se excluye)
         movementId = await withTimeout(insertInboxMovement({
           created_by: createdBy, movement_type: 'egreso_personal', amount_crc: amountCRC, amount_usd: amountUSD,
-          description: prov ? `Propinas · ${prov}` : 'Propinas', subcategory: 'Propinas', supplier_name: prov || '',
-          method: 'Transferencia', caja_origen: 'Caja Fuerte', status: 'aprobado', account_id: null, fecha,
+          // la fecha del comprobante queda como dato en la descripción (como la de una factura), no como fecha del movimiento
+          description: `${prov ? `Propinas · ${prov}` : 'Propinas'}${fecha ? ` · fact ${fecha}` : ''}`, subcategory: 'Propinas', supplier_name: prov || '',
+          method: 'Transferencia', caja_origen: 'Caja Fuerte', status: 'aprobado', account_id: null,
         }))
       } else if (pago === 'efectivo') {
         // MATRIZ — Efectivo: descuenta la Caja Diaria. REQUIERE caja abierta.
@@ -491,7 +500,21 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
               </Field>
               <Field label="Fecha">
                 <input type="date" className="tips-input-dark" style={{ width: '100%' }} aria-label="Fecha" value={fecha} onChange={e => setFecha(e.target.value)} />
-                {avisoFecha && <div role="status" style={{ fontSize: '0.7rem', color: '#a07030', marginTop: 3, fontWeight: 600 }}>⚠️ {avisoFecha}</div>}
+                {dudaFecha && (
+                  <div role="group" aria-label="Elegí la fecha de la factura" data-testid="duda-fecha"
+                    style={{ fontSize: '0.7rem', color: '#a07030', marginTop: 3, fontWeight: 600 }}>
+                    ⚠️ No está clara la fecha: {preguntaFechaAmbigua(dudaFecha, todayCR())} Mirá el papel y elegí una.
+                    <div style={{ display: 'flex', gap: '0.4rem', marginTop: 4, flexWrap: 'wrap' }}>
+                      {dudaFecha.map(op => (
+                        <button key={op} type="button" className="tips-btn-ghost" style={{ padding: '2px 10px', fontSize: '0.7rem' }}
+                          onClick={() => setFecha(op)}>
+                          {fechaLarga(op, todayCR())}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!dudaFecha && avisoFecha && <div role="status" style={{ fontSize: '0.7rem', color: '#a07030', marginTop: 3, fontWeight: 600 }}>⚠️ {avisoFecha}</div>}
               </Field>
               <Field label={`Monto final ${moneda === 'USD' ? '$' : '₡'}`}>
                 <input type="number" step="any" className="tips-input-dark" style={{ width: '100%' }} value={total} onChange={e => setTotal(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />
@@ -552,10 +575,15 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
           </div>
         </div>
 
+        {dudaFecha && tipo !== 'propinas' && (
+          <div data-testid="falta-fecha" style={{ fontSize: '0.72rem', color: '#a07030', marginTop: '0.75rem', fontWeight: 600, textAlign: 'right' }}>
+            Elegí la fecha de la factura.
+          </div>
+        )}
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" style={{ color: '#c0392b', borderColor: '#f0b0b0' }} onClick={onDiscard} disabled={saving}>Descartar</button>
           <button className="tips-btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>
-          <button className="cd-btn-green" onClick={confirmar} disabled={saving || !total || tipo === 'otro' || (revisar && !validado)}>
+          <button className="cd-btn-green" onClick={confirmar} disabled={saving || !total || tipo === 'otro' || (revisar && !validado) || (!!dudaFecha && tipo !== 'propinas')}>
             {saving ? 'Guardando…' : '✓ Confirmar'}
           </button>
         </div>

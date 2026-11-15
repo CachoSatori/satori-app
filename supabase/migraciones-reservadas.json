@@ -105,11 +105,65 @@
       "rama": "claude/club-100-catalogo",
       "renumerada_a": "151"
     },
+    "101": {
+      "nombre": "club_aviso_v1_2",
+      "bloque": "club",
+      "rama": "claude/club-aviso-v1.2",
+      "renumerada_a": "159"
+    },
     "102": {
       "nombre": "club_tope_sin_carga_inicial",
       "bloque": "club",
       "rama": "claude/club-tope-sin-carga-inicial",
       "renumerada_a": "155"
+    },
+    "103": {
+      "nombre": "club_alta_caja_link_portal",
+      "bloque": "club",
+      "rama": "claude/club-link-portal-cajero",
+      "renumerada_a": "156"
+    },
+    "104": {
+      "nombre": "club_equipo_sin_creditos",
+      "bloque": "club",
+      "rama": "claude/club-equipo-sin-creditos",
+      "renumerada_a": "157"
+    },
+    "105": {
+      "nombre": "club_resena_cupon",
+      "bloque": "club",
+      "rama": "claude/club-resena-cupon",
+      "renumerada_a": "158"
+    },
+    "106": {
+      "nombre": "club_tablero_plata",
+      "bloque": "club",
+      "rama": "claude/club-tablero-plata",
+      "renumerada_a": "160"
+    },
+    "107": {
+      "nombre": "club_cohortes_ranking",
+      "bloque": "club",
+      "rama": "claude/club-cohortes-ranking",
+      "renumerada_a": "161"
+    },
+    "108": {
+      "nombre": "club_embudo_anfitrion",
+      "bloque": "club",
+      "rama": "claude/club-embudo-anfitrion",
+      "renumerada_a": "162"
+    },
+    "109": {
+      "nombre": "club_edad_validar_reactivar",
+      "bloque": "club",
+      "rama": "claude/club-edad-validar",
+      "renumerada_a": "163"
+    },
+    "110": {
+      "nombre": "club_alertas_umbral",
+      "bloque": "club",
+      "rama": "claude/club-alertas-umbral",
+      "renumerada_a": "164"
     },
     "111": {
       "nombre": "admin_bitacora_permisos",
@@ -140,6 +194,60 @@
       "bloque": "pase",
       "rama": "claude/club-tope-sin-carga-inicial",
       "origen": "102"
+    },
+    "156": {
+      "nombre": "club_alta_caja_link_portal",
+      "bloque": "pase",
+      "rama": "claude/club-link-portal-cajero",
+      "origen": "103"
+    },
+    "157": {
+      "nombre": "club_equipo_sin_creditos",
+      "bloque": "pase",
+      "rama": "claude/club-equipo-sin-creditos",
+      "origen": "104"
+    },
+    "158": {
+      "nombre": "club_resena_cupon",
+      "bloque": "pase",
+      "rama": "claude/club-resena-cupon",
+      "origen": "105"
+    },
+    "159": {
+      "nombre": "club_aviso_v1_2",
+      "bloque": "pase",
+      "rama": "claude/club-aviso-v1.2",
+      "origen": "101"
+    },
+    "160": {
+      "nombre": "club_tablero_plata",
+      "bloque": "pase",
+      "rama": "claude/club-tablero-plata",
+      "origen": "106"
+    },
+    "161": {
+      "nombre": "club_cohortes_ranking",
+      "bloque": "pase",
+      "rama": "claude/club-cohortes-ranking",
+      "origen": "107"
+    },
+    "162": {
+      "nombre": "club_embudo_anfitrion",
+      "bloque": "pase",
+      "rama": "claude/club-embudo-anfitrion",
+      "origen": "108"
+    },
+    "163": {
+      "nombre": "club_edad_validar_reactivar",
+      "bloque": "pase",
+      "rama": "claude/club-edad-validar",
+      "origen": "109"
+    },
+    "164": {
+      "nombre": "club_alertas_umbral",
+      "bloque": "pase",
+      "rama": "claude/club-alertas-umbral",
+      "origen": "110"
     },
     "165": {
       "nombre": "admin_bitacora_permisos",

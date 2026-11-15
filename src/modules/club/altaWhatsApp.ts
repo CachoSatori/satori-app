@@ -2,9 +2,12 @@
  * D1 (14-nov, el dueño) · Alta de socio en caja: al terminar, el enlace «Mandarle su link por WhatsApp ↗».
  *
  * Mismo mecanismo que el aviso de canje (`avisoCanje`: un `https://wa.me/<tel>?text=…` que abre WhatsApp con el
- * texto armado; lo manda el cajero a mano) y el mismo link que «⎘ Link del portal» de Miembros
- * (`urlPortal(await tokenPortal(id))`). `club_miembro_token` (mig 150) es solo para owner y manager: al cajero no
- * se le muestra el enlace (la base se lo negaría) y el link lo manda un manager desde Miembros.
+ * texto armado; lo manda el cajero a mano) y el mismo link que «⎘ Link del portal» de Miembros.
+ *
+ * Mig 156 (firma del dueño, 14-nov 06:04): `club_socio_alta_caja` devuelve `token_portal` del socio que ESA alta acaba
+ * de crear, también al cajero. Si el número ya era de alguien (socio dado de baja que vuelve, anfitrión), viene null:
+ * owner y manager lo piden con `club_miembro_token` (solo para ellos, mig 150); al cajero no se le muestra el enlace y
+ * el link lo manda un manager desde Miembros.
  *
  * El texto lo lee el CLIENTE: va de «usted» (lo cuida `altaWhatsApp.test.ts` con la misma expresión que el pase).
  */
@@ -28,5 +31,19 @@ export function linkAltaWhatsApp(tel: string, nombre: string, urlPortal: string)
   return `https://wa.me/${n}?text=${encodeURIComponent(textoAltaWhatsApp(nombre, urlPortal))}`
 }
 
-/** Solo owner y manager pueden pedir el token del portal (`club_miembro_token`, mig 150). */
+/** Solo owner y manager pueden pedir el token de CUALQUIER miembro (`club_miembro_token`, mig 150). */
 export const puedeMandarLinkPortal = (rol: string | null | undefined) => rol === 'owner' || rol === 'manager'
+
+/**
+ * Token para el link del alta: el que devolvió el alta (mig 156, también al cajero); si no vino, owner y manager lo
+ * piden con `pedirToken`; el resto, null (sin pedir nada: la base se lo negaría).
+ */
+export async function tokenDelAlta(
+  alta: { miembro_id: string; token_portal?: string | null },
+  rol: string | null | undefined,
+  pedirToken: (miembro: string) => Promise<string>,
+): Promise<string | null> {
+  if (alta.token_portal) return alta.token_portal
+  if (puedeMandarLinkPortal(rol)) return pedirToken(alta.miembro_id)
+  return null
+}

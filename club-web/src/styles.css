@@ -93,6 +93,9 @@ input[type=text], input[type=tel], input[type=email], select { width: 100%; min-
        color: var(--tinta); margin-top: 0.3rem; }
 .check { display: flex; gap: 0.65rem; align-items: flex-start; font-weight: 400; }
 .check input { width: 26px; height: 26px; flex: none; margin-top: 2px; accent-color: var(--tinta); }
+.cumple { border: 1px solid currentColor; border-radius: 10px; padding: 0.4rem 0.9rem 0.9rem; margin: 1rem 0 0; }
+.cumple legend { font-weight: 500; padding: 0 0.3rem; }
+.cumple .sub { margin: 0.2rem 0 0; }
 details summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; list-style: none; }
 details summary::-webkit-details-marker { display: none; }
 details summary::before { content: '›'; color: var(--oro-texto); font: 600 1.4rem/1 var(--sans); transition: transform 0.15s; }

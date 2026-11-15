@@ -453,6 +453,9 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
       <label><span style={labelStyle}>Tipo</span>
         <select value={tipo} onChange={e => setTipo(e.target.value as TipoMiembro)} style={inputStyle}>
+          {/* Mig 156: «Editar» sobre un socio lo deja como socio (antes la base lo rechazaba con «Tipo no válido»).
+              Pasarlo a anfitrión le cambia el link del portal: hay que mandarle el nuevo. */}
+          {inicial?.tipo === 'socio' && <option value="socio">Socio del Local Club</option>}
           <option value="referente">Referente</option>
           <option value="concierge_pm">Concierge PM</option>
           <option value="equipo">Equipo Satori</option>

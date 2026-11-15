@@ -33,6 +33,8 @@ Residente con beneficio de descuento propio. No es anfitrión.
 
 ## Cómo funcionaba la página vieja
 
+Detalle completo (canje, alta y pago de concierges, reporte mensual, cancelación de 12 meses): [historico/PROCEDIMIENTOS-sistema-viejo.md](historico/PROCEDIMIENTOS-sistema-viejo.md).
+
 Sistema externo de créditos, reemplazado por el Club en la app el 12-nov-2026; quedó en solo lectura.
 
 - El referente repartía tarjetas físicas; el cliente que llegaba con tarjeta tenía 10 %.

@@ -319,12 +319,17 @@ exception when others then
 end $$;
 
 -- 13. Caja: dentro de la ventana (cruzando el año) aplica, sin la fecha; fuera o apagado, no
-do $$ declare a jsonb; b jsonb; c jsonb; d jsonb;
+do $$ declare a jsonb; b jsonb; c jsonb; d jsonb; o jsonb; ob jsonb;
 begin
   perform pg_temp.alta(12, 30, 12, true);
   a := public.club_cumple_en_caja_dia(pg_temp.mid(12), 'prueba173a', date '2027-01-03');
   b := public.club_cumple_en_caja_dia(pg_temp.mid(12), 'prueba173a', date '2027-01-10');
   c := public.club_cumple_en_caja_dia(pg_temp.mid(2), 'prueba173a', date '2027-01-03');   -- sin cumpleaños
+  -- socio de OTRO local (prueba173b), con el beneficio encendido allá y dentro de su ventana: igual que «sin beneficio»
+  perform pg_temp.cfg('prueba173b', true);
+  perform pg_temp.alta(16, 30, 12, true, 'prueba173b');
+  o := public.club_cumple_en_caja_dia(pg_temp.mid(16), 'prueba173a', date '2027-01-03');
+  ob := public.club_cumple_en_caja_dia(pg_temp.mid(16), 'prueba173b', date '2027-01-03');   -- control: en su local, sí
   perform pg_temp.cfg('prueba173a', false);
   d := public.club_cumple_en_caja_dia(pg_temp.mid(12), 'prueba173a', date '2027-01-03');
   perform pg_temp.cfg('prueba173a', true);
@@ -334,6 +339,8 @@ begin
     and not (a ? 'cumple') and not (a ? 'desde') and not (a ? 'hasta') and a::text !~ '12-30|30/12'
     and b = '{"aplica": false}'::jsonb and c = '{"aplica": false}'::jsonb and d = '{"aplica": false}'::jsonb,
     concat_ws(' | ', a, b, d));
+  insert into _r173 (caso, ok, detalle) values ('13b caja: socio de otro local → lo mismo que «sin beneficio» (no revela si está cerca)',
+    o = '{"aplica": false}'::jsonb and (ob->>'aplica')::boolean, concat_ws(' | ', o, ob));
 exception when others then
   insert into _r173 (caso, ok, detalle) values ('13 (error sin atrapar)', false, sqlerrm);
 end $$;
@@ -438,7 +445,7 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r173 where ok is not true;   -- null = falla
   if v is not null then raise exception '173-FALLAN: %', v; end if;
-  if (select count(*) from _r173) <> 19 then raise exception '173-FALLAN: se esperaban 19 casos (NO PROBADO)'; end if;
+  if (select count(*) from _r173) <> 20 then raise exception '173-FALLAN: se esperaban 20 casos (NO PROBADO)'; end if;
 exception when others then
   insert into _r173 (caso, ok, detalle) values ('18 (error sin atrapar)', false, sqlerrm);
 end $$;

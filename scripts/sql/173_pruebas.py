@@ -76,6 +76,8 @@ MUTACIONES: dict[str, tuple] = {
                        "  return jsonb_build_object('aplica', true, 'cumple', public.club_cumple_en_ventana(v_c.cumple_dia, v_c.cumple_mes, p_hoy, v_cfg.dias_antes, v_cfg.dias_despues)) || (", {'13'}),
     # la caja aplica con el beneficio apagado
     'caja_apagado': ("  if not v_cfg.activo or v_c.cumple_dia is null", "  if v_c.cumple_dia is null", {'13'}),
+    # la caja no mira el local del socio (uno de otro local ve el beneficio y, con eso, que está cerca del cumpleaños)
+    'caja_otro_local': ("m.estado = 'activo' and m.location_id = p_location)\n", "m.estado = 'activo')\n", {'13b'}),
     # guardar config sin chequeo de local del manager
     'config_sin_local': ([("  perform public.club_exigir_local(p_location);\n  p_location := public.club_local(p_location, false);\n  if jsonb_typeof(p_datos)",
                            "  p_location := public.club_local(p_location, false);\n  if jsonb_typeof(p_datos)")], None, {'14'}),

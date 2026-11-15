@@ -566,7 +566,8 @@ declare
 begin
   select * into v_c from public.club_miembros_contacto c where c.miembro_id = p_miembro;
   if not v_cfg.activo or v_c.cumple_dia is null or v_c.cumple_permiso_en is null
-     or not exists (select 1 from public.club_miembros m where m.id = p_miembro and m.estado = 'activo')
+     -- socio de ESTE local (verificador, 15-nov): uno de otro local recibe lo mismo que «sin beneficio» (no revela nada)
+     or not exists (select 1 from public.club_miembros m where m.id = p_miembro and m.estado = 'activo' and m.location_id = p_location)
      or not exists (select 1 from public.club_miembro_roles r where r.miembro_id = p_miembro and r.rol = 'socio' and r.estado = 'activo')
      or public.club_cumple_en_ventana(v_c.cumple_dia, v_c.cumple_mes, p_hoy, v_cfg.dias_antes, v_cfg.dias_despues) is null then
     return jsonb_build_object('aplica', false);

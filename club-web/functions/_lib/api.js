@@ -67,6 +67,8 @@ function traducirError(msg) {
   // D7 A (mig 157): las cuentas del equipo registran personas pero no canjean créditos
   if (m === 'Las cuentas del equipo no canjean créditos') return [409, 'equipo_sin_canje']
   if (m === 'Demasiadas altas hoy') return [429, 'tope_altas']
+  // 173: el cumpleaños se agrega una sola vez desde el portal
+  if (m === 'Cumpleaños ya cargado') return [409, 'cumple_ya_cargado']
   // LC-ML: el local sale de datos; con dos o más encendidos, la persona elige
   if (/^Hay más de un local/.test(m)) return [400, 'elegir_local']
   if (/^El Club no está activo/.test(m) || m === 'Local no válido') return [409, 'local_no_disponible']
@@ -405,6 +407,27 @@ export async function manejar(request, env, path) {
     const accion = b && typeof b.accion === 'string' ? b.accion : ''
     if (!ACCIONES_RESENA.includes(accion)) return json(400, { error: 'datos_invalidos' })
     return rpc(env, 'club_portal_resena', { p_token: tok, p_accion: accion })
+  }
+
+  // 173 (D-cumple-1 A): /api/portal/:token/cumple
+  //   GET  → {socio, tiene, puede_agregar} (nunca la fecha). Tope de lectura con clave propia.
+  //   POST {dia, mes, permiso: true} → lo agrega UNA vez (la base rechaza la segunda: 409 cumple_ya_cargado). Tope de crear.
+  //   El día y el mes nunca van a los logs.
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'cumple') {
+    const tok = String(partes[1]).toLowerCase()
+    if (metodo === 'GET') {
+      { const ok = await limitar(env, 'leer', `cumple:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+      if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+      return rpc(env, 'club_portal_cumple', { p_token: tok })
+    }
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'crear', `cumple:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    const b = await leerCuerpo(request)
+    const dia = b && b.dia, mes = b && b.mes
+    if (!Number.isInteger(dia) || !Number.isInteger(mes) || b.permiso !== true) return json(400, { error: 'datos_invalidos' })
+    if (mes < 1 || mes > 12 || dia < 1 || dia > [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mes - 1]) return json(400, { error: 'datos_invalidos' })
+    return rpc(env, 'club_portal_cumple_agregar', { p_token: tok, p_dia: dia, p_mes: mes, p_permiso: true })
   }
 
   // GET /api/portal/:token

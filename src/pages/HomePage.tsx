@@ -12,6 +12,7 @@ import type { AlertaCierres } from '../modules/cash/diasSinCierre'
 import { alertaGuardada, leerAlertaInicio } from './alertaInicio'
 import type { AlertaInicio } from '../shared/api/club'
 import { avisoClub, canjesEnBloque } from '../modules/club/alertasInicio'
+import { CumplesInicio } from '../modules/club/CumplesInicio'
 
 // La lista de módulos vive en `shared/layout/modulos.ts`: es la misma fuente del menú global (B3).
 
@@ -382,6 +383,8 @@ export default function HomePage() {
           )}
 
           {gestionaClub && <ClubParaRevisar alertas={clubAlertas} onIr={path => navigate(path)} />}
+          {/* mig 173: cumpleaños de socios en los próximos días, con WhatsApp (owner y manager) */}
+          {gestionaClub && !mustLand && <CumplesInicio rol={rolClub} />}
 
           <section className="inicio-seccion" aria-labelledby="inicio-modulos">
             <h2 id="inicio-modulos" className="inicio-subtitulo">{isManager ? 'Módulos' : 'Tus módulos'}</h2>

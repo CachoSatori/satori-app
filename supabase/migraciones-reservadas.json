@@ -207,6 +207,12 @@
       "rama": "claude/hotfix-miembro-guardar",
       "renumerada_a": "171"
     },
+    "119": {
+      "nombre": "club_cumple_caja_portal_beneficio",
+      "bloque": "club",
+      "rama": "claude/club-cumple-promo",
+      "renumerada_a": "173"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -326,6 +332,12 @@
       "bloque": "pase",
       "rama": "claude/hotfix-miembro-guardar",
       "origen": "117"
+    },
+    "173": {
+      "nombre": "club_cumple_caja_portal_beneficio",
+      "bloque": "pase",
+      "rama": "claude/club-cumple-promo",
+      "origen": "119"
     }
   }
 }

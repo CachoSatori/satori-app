@@ -70,6 +70,19 @@ describe('Bandeja · fecha ambigua', () => {
     expect(m.insertInbox).not.toHaveBeenCalled()
   })
 
+  it('si se vacía el campo después de elegir, la pregunta vuelve y «✓ Confirmar» se apaga', async () => {
+    const { input, boton } = abrir(leido('2026-10-11'))
+    fireEvent.click(screen.getByRole('button', { name: '10 de noviembre' }))
+    expect(boton().disabled).toBe(false)
+    fireEvent.change(input, { target: { value: '' } })
+    expect(screen.getByRole('group', { name: 'Elegí la fecha de la factura' })).toBeTruthy()
+    expect(screen.getByTestId('falta-fecha').textContent).toContain('Elegí la fecha de la factura')
+    expect(boton().disabled).toBe(true)
+    fireEvent.click(boton())
+    await new Promise(r => setTimeout(r, 0))
+    expect(m.createCash).not.toHaveBeenCalled()
+  })
+
   it('al elegir, confirma y la fecha va solo a la descripción (el movimiento entra hoy, en el turno)', async () => {
     const { input, boton, onDone } = abrir(leido('2026-10-11'))
     fireEvent.click(screen.getByRole('button', { name: '10 de noviembre' }))

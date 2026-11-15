@@ -82,8 +82,10 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const [montoUSD, setMontoUSD] = useState<number | ''>('')
   const [fechaFactura, setFechaFactura] = useState('')   // opcional; la fecha de REGISTRO es hoy (RN-1)
   // (14-nov) Fecha ambigua (las dos lecturas día/mes son posibles): las dos opciones, la más cercana a hoy primero.
-  // Mientras haya duda no se registra: el usuario elige una o escribe la fecha a mano.
-  const [dudaFecha, setDudaFecha] = useState<[string, string] | null>(null)
+  // Mientras haya duda no se registra: el usuario elige una o escribe la fecha a mano. Si después vacía el campo, la
+  // pregunta vuelve (no se registra una factura ambigua sin fecha).
+  const [opcionesFecha, setOpcionesFecha] = useState<[string, string] | null>(null)
+  const dudaFecha = opcionesFecha && !fechaFactura ? opcionesFecha : null
   // Resolución de proveedor: pickedSupplierId = uno elegido/creado a mano (pisa el auto-match por nombre);
   // createdSuppliers = altas al vuelo en este flujo (aún no en el prop suppliers).
   const [pickedSupplierId, setPickedSupplierId] = useState<string | null>(null)
@@ -147,7 +149,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   // Borra los campos del formulario (no la foto). Lo usan «← Volver» y el paso a la próxima factura de la misma foto.
   const limpiarCampos = () => {
-    setDescripcion(''); setSupplierName(''); setMontoCRC(''); setMontoUSD(''); setFechaFactura(''); setDudaFecha(null)
+    setDescripcion(''); setSupplierName(''); setMontoCRC(''); setMontoUSD(''); setFechaFactura(''); setOpcionesFecha(null)
     setPickedSupplierId(null); setClasePicked(null); setAliasLeido(null)
     setIngresoCategoria(''); setIngresoMotivo('')
     setPago(formas[0]); setAccountId('')
@@ -219,7 +221,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       else setMontoCRC(ex.total)
     }
     if (ex.fecha) setFechaFactura(ex.fecha)
-    setDudaFecha(ex.fecha_origen === 'ambigua' && ex.fecha_opciones ? ex.fecha_opciones : null)
+    setOpcionesFecha(ex.fecha_origen === 'ambigua' && ex.fecha_opciones ? ex.fecha_opciones : null)
     setClasePicked(null)   // que la sugerencia se recalcule sobre lo recién precargado
   }
 
@@ -855,7 +857,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         <div className="tips-field" style={{ marginTop: '0.75rem' }}>
           <div className="tips-field-label">Fecha de la factura (opcional)</div>
           <input type="date" className="tips-input-dark" style={{ width: '100%' }} aria-label="Fecha de factura"
-            value={fechaFactura} onChange={e => { setFechaFactura(e.target.value); setDudaFecha(null) }} />
+            value={fechaFactura} onChange={e => setFechaFactura(e.target.value)} />
           {dudaFecha && (
             <div role="group" aria-label="Elegí la fecha de la factura" data-testid="duda-fecha"
               style={{ fontSize: '0.74rem', color: '#a07030', marginTop: 4, fontWeight: 600 }}>
@@ -863,7 +865,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
               <div style={{ display: 'flex', gap: '0.4rem', marginTop: 4, flexWrap: 'wrap' }}>
                 {dudaFecha.map(op => (
                   <button key={op} type="button" className="tips-btn-ghost" style={{ padding: '2px 10px', fontSize: '0.72rem' }}
-                    onClick={() => { setFechaFactura(op); setDudaFecha(null) }}>
+                    onClick={() => setFechaFactura(op)}>
                     {fechaLarga(op, todayCR())}
                   </button>
                 ))}
@@ -945,6 +947,11 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           <div style={{ fontSize: '0.78rem', color: 'var(--c-tinta)' }}>{preview}{montoOk ? ` · ${fi(amountCRC)}` : ''}</div>
         </div>
 
+        {faltaElegirFecha && (
+          <div data-testid="falta-fecha" style={{ fontSize: '0.72rem', color: '#a07030', marginTop: '0.75rem', fontWeight: 600, textAlign: 'right' }}>
+            Elegí la fecha de la factura.
+          </div>
+        )}
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" onClick={intentarCerrar} disabled={saving}>Cancelar</button>
           <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || montoNegativo || (clase === 'ingreso' && !ingresoCompleto) || (!!parecida && !esOtra) || faltaElegirFecha || saving}>

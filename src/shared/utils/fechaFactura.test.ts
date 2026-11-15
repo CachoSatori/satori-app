@@ -115,6 +115,15 @@ describe('fecha por calendario (hoy 14-nov-2026)', () => {
     expect(normalizarFechaFactura('2026-12-11', null, H))
       .toEqual({ fecha: '2026-11-12', origen: 'invertida', aviso: MSG_FECHA_INVERTIDA })
   })
+  it('una fecha de MAÑANA (CR) no es posible: hoy 9-dic, leída 10-dic, invertida 12-oct (58 días) → la invertida', () => {
+    expect(normalizarFechaFactura('2026-12-10', null, '2026-12-09'))
+      .toEqual({ fecha: '2026-10-12', origen: 'invertida', aviso: `${MSG_FECHA_INVERTIDA} ${msgFacturaVieja(58)}` })
+    // mañana tampoco gana contra una lectura vieja: hoy 1-oct, leída 2-oct (mañana), invertida 10-feb → la invertida
+    expect(normalizarFechaFactura('2026-10-02', null, '2026-10-01'))
+      .toEqual({ fecha: '2026-02-10', origen: 'invertida', aviso: `${MSG_FECHA_INVERTIDA} ${msgFacturaVieja(233)}` })
+    // un día después (hoy 10-dic) el 10-dic ya es posible: las dos lo son → pregunta
+    expect(normalizarFechaFactura('2026-12-10', null, '2026-12-10').origen).toBe('ambigua')
+  })
   it('la invertida futura nunca se elige: leída 2026-11-12 (inv 2026-12-11) queda', () => {
     expect(normalizarFechaFactura('2026-11-12', null, H)).toEqual({ fecha: '2026-11-12', origen: 'ia', aviso: null })
   })

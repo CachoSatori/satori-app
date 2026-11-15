@@ -143,6 +143,20 @@ describe('fecha ambigua: pide confirmación', () => {
     expect(Object.values(mov)).not.toContain('2026-10-11')
   })
 
+  it('si se vacía el campo después de elegir, la pregunta vuelve y no deja registrar sin fecha', async () => {
+    const input = await cargar(tiquete('2026-10-11'))
+    fireEvent.click(screen.getByRole('button', { name: '10 de noviembre' }))
+    expect(boton().disabled).toBe(false)
+    expect(screen.queryByTestId('falta-fecha')).toBeNull()
+    fireEvent.change(input, { target: { value: '' } })
+    expect(screen.getByRole('group', { name: 'Elegí la fecha de la factura' }).textContent).toContain('¿10 de noviembre o 11 de octubre?')
+    expect(screen.getByTestId('falta-fecha').textContent).toContain('Elegí la fecha de la factura')
+    expect(boton().disabled).toBe(true)
+    fireEvent.click(boton())
+    await new Promise(r => setTimeout(r, 0))
+    expect(m.crearMov).not.toHaveBeenCalled()
+  })
+
   it('escribir la fecha a mano también resuelve la duda', async () => {
     const input = await cargar(tiquete('2026-10-11'))
     fireEvent.change(input, { target: { value: '2026-11-10' } })

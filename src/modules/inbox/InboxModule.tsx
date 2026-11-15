@@ -313,10 +313,10 @@ export function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdB
   const [tipo, setTipo]     = useState<DocExtract['tipo']>((ex?.tipo as DocExtract['tipo']) ?? 'factura')
   const [prov, setProv]     = useState(ex?.proveedor ?? '')
   // (14-nov) Fecha ambigua (las dos lecturas día/mes son posibles): arranca vacía y no se confirma hasta elegir una de
-  // las dos opciones o escribir la fecha. Nunca se precarga «hoy» en ese caso.
-  const [dudaFecha, setDudaFecha] = useState<[string, string] | null>(
-    ex?.fecha_origen === 'ambigua' && ex.fecha_opciones ? ex.fecha_opciones : null)
-  const [fecha, setFecha]   = useState(ex?.fecha ?? (dudaFecha ? '' : todayCR()))
+  // las dos opciones o escribir la fecha. Nunca se precarga «hoy» en ese caso. Si después vacían el campo, la pregunta vuelve.
+  const opcionesFecha = ex?.fecha_origen === 'ambigua' && ex.fecha_opciones ? ex.fecha_opciones : null
+  const [fecha, setFecha]   = useState(ex?.fecha ?? (opcionesFecha ? '' : todayCR()))
+  const dudaFecha = opcionesFecha && !fecha ? opcionesFecha : null
   // Aviso de la lectura mientras siga la fecha precargada; si la cambian, solo si queda en el futuro.
   const avisoFecha = ex?.aviso_fecha && fecha === ex.fecha ? ex.aviso_fecha : avisoFechaFactura(fecha, todayCR())
   const [total, setTotal]   = useState<number | ''>(ex?.total ? N2(ex.total) : '')
@@ -499,7 +499,7 @@ export function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdB
                 )}
               </Field>
               <Field label="Fecha">
-                <input type="date" className="tips-input-dark" style={{ width: '100%' }} aria-label="Fecha" value={fecha} onChange={e => { setFecha(e.target.value); setDudaFecha(null) }} />
+                <input type="date" className="tips-input-dark" style={{ width: '100%' }} aria-label="Fecha" value={fecha} onChange={e => setFecha(e.target.value)} />
                 {dudaFecha && (
                   <div role="group" aria-label="Elegí la fecha de la factura" data-testid="duda-fecha"
                     style={{ fontSize: '0.7rem', color: '#a07030', marginTop: 3, fontWeight: 600 }}>
@@ -507,7 +507,7 @@ export function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdB
                     <div style={{ display: 'flex', gap: '0.4rem', marginTop: 4, flexWrap: 'wrap' }}>
                       {dudaFecha.map(op => (
                         <button key={op} type="button" className="tips-btn-ghost" style={{ padding: '2px 10px', fontSize: '0.7rem' }}
-                          onClick={() => { setFecha(op); setDudaFecha(null) }}>
+                          onClick={() => setFecha(op)}>
                           {fechaLarga(op, todayCR())}
                         </button>
                       ))}
@@ -575,6 +575,11 @@ export function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdB
           </div>
         </div>
 
+        {dudaFecha && tipo !== 'propinas' && (
+          <div data-testid="falta-fecha" style={{ fontSize: '0.72rem', color: '#a07030', marginTop: '0.75rem', fontWeight: 600, textAlign: 'right' }}>
+            Elegí la fecha de la factura.
+          </div>
+        )}
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" style={{ color: '#c0392b', borderColor: '#f0b0b0' }} onClick={onDiscard} disabled={saving}>Descartar</button>
           <button className="tips-btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>

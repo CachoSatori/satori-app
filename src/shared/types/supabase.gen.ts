@@ -802,6 +802,7 @@ export type Database = {
           lc_invitado_codigo: string
           location_id: string
           mapa_url: string | null
+          resena_url: string | null
           max_creditos_por_visita: number
           nombre: string | null
           personas_por_credito: number
@@ -850,6 +851,7 @@ export type Database = {
           lc_invitado_codigo?: string
           location_id: string
           mapa_url?: string | null
+          resena_url?: string | null
           max_creditos_por_visita?: number
           nombre?: string | null
           personas_por_credito?: number
@@ -898,6 +900,7 @@ export type Database = {
           lc_invitado_codigo?: string
           location_id?: string
           mapa_url?: string | null
+          resena_url?: string | null
           max_creditos_por_visita?: number
           nombre?: string | null
           personas_por_credito?: number
@@ -1082,6 +1085,7 @@ export type Database = {
           referente_id: string
           usado_en: string | null
           usado_por: string | null
+          resena_clic_en: string | null
           vence_en: string
         }
         Insert: {
@@ -1097,6 +1101,7 @@ export type Database = {
           referente_id: string
           usado_en?: string | null
           usado_por?: string | null
+          resena_clic_en?: string | null
           vence_en: string
         }
         Update: {
@@ -1112,6 +1117,7 @@ export type Database = {
           referente_id?: string
           usado_en?: string | null
           usado_por?: string | null
+          resena_clic_en?: string | null
           vence_en?: string
         }
         Relationships: [
@@ -5596,6 +5602,7 @@ export type Database = {
           personas: number
         }[]
       }
+      club_cupon_resena_clic: { Args: { p_codigo: string }; Returns: Json }
       club_cupon_ver: { Args: { p_codigo: string }; Returns: Json }
       club_descuento_tipo_guardar: {
         Args: {

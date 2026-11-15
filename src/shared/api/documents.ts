@@ -37,17 +37,22 @@ export interface DocExtract {
   // (13-nov) Puestos por el cliente, no por la IA (ver conFechaCR): la fecha tal como la leyó la IA, de dónde sale la
   // `fecha` final y el aviso para el usuario, si hay que revisarla.
   fecha_leida?: string | null
-  fecha_origen?: 'clave' | 'invertida' | 'ia' | 'ninguna'
+  fecha_origen?: 'clave' | 'invertida' | 'ia' | 'ninguna' | 'ambigua'
   aviso_fecha?: string | null
+  // (14-nov) Solo con fecha_origen 'ambigua' (las dos lecturas día/mes son posibles): `fecha` queda vacía y la pantalla
+  // pregunta cuál es, con estas dos opciones (la más cercana a hoy primero). No se guarda hasta que el usuario elija.
+  fecha_opciones?: [string, string] | null
 }
 
 // (13-nov) Costa Rica escribe DÍA/MES: la IA a veces lee «9/11/2026» como 2026-09-11. Toda lectura pasa por acá antes de
-// precargar nada: la clave FE manda; una fecha ambigua imposible (futura o vieja con la invertida reciente) se invierte
-// con aviso. `hoy` = fecha de Costa Rica.
+// precargar nada: la clave FE manda; sin clave, una fecha ambigua se resuelve por calendario (la única lectura posible,
+// con aviso) o queda 'ambigua' para que el usuario elija (ver fechaFactura.ts). `hoy` = fecha de Costa Rica.
+// La fecha de la factura nunca es la fecha del movimiento: el movimiento entra el día en que se registra.
 export function conFechaCR(ex: DocExtract, hoy: string = todayCR()): DocExtract {
   if (!ex || typeof ex !== 'object') return ex
   const n = normalizarFechaFactura(ex.fecha, ex.clave_fe, hoy)
-  return { ...ex, fecha: n.fecha, fecha_leida: ex.fecha ?? null, fecha_origen: n.origen, aviso_fecha: n.aviso }
+  return { ...ex, fecha: n.fecha, fecha_leida: ex.fecha ?? null, fecha_origen: n.origen, aviso_fecha: n.aviso,
+           fecha_opciones: n.opciones ?? null }
 }
 
 export interface DocumentRow {

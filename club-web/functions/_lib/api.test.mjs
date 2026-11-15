@@ -92,6 +92,10 @@ test('R-01: tope de códigos y sin saldo se traducen a códigos fijos', async ()
   globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Todavía no te alcanza para canjear' }), { status: 400 })
   r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
   assert.equal(r.status, 409); assert.equal((await r.json()).error, 'sin_saldo_canje')
+  // D7 A (mig 157): la cuenta del equipo no canjea → código propio, no «servicio»
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Las cuentas del equipo no canjean créditos' }), { status: 400 })
+  r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
+  assert.equal(r.status, 409); assert.equal((await r.json()).error, 'equipo_sin_canje')
 })
 
 test('14/24: un binding por endpoint: crear usa RL_CREAR (5/60 s) y leer usa RL_LEER (60/60 s); falta uno → 503 solo ahí', async () => {
@@ -359,4 +363,71 @@ test('(12-nov) /api/portal/:token/wallet/actualizar llama a la ruta «actualizar
     assert.equal((await manejar(pedido('portal/xyz/wallet/actualizar', 'POST'), conLimite(), 'portal/xyz/wallet/actualizar')).status, 404)
     assert.equal((await manejar(pedido(ruta), conLimite(), ruta)).status, 405)
   } finally { globalThis.fetch = fetchViejo }
+})
+
+// 158: POST /api/cupon/:codigo/resena → club_cupon_resena_clic (la marca de clic, sin datos personales)
+test('158: /api/cupon/:codigo/resena llama a club_cupon_resena_clic con el código y nada más', async () => {
+  llamadas = []
+  const r = await manejar(pedido('cupon/abcdefgh23/resena', 'POST'), conLimite(), 'cupon/abcdefgh23/resena')
+  assert.equal(r.status, 200)
+  assert.equal(llamadas.length, 1)
+  assert.ok(String(llamadas[0].url).endsWith('/rpc/club_cupon_resena_clic'))
+  assert.deepEqual(JSON.parse(llamadas[0].init.body), { p_codigo: 'ABCDEFGH23' })
+  assert.equal(llamadas[0].init.headers['x-club-web'], 'clave-de-prueba')
+})
+
+test('158: /resena solo con POST, con código válido y con el tope por IP (falla cerrada sin binding)', async () => {
+  llamadas = []
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena'), conLimite(), 'cupon/ABCDEFGH23/resena')).status, 405)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH1O/resena', 'POST'), conLimite(), 'cupon/ABCDEFGH1O/resena')).status, 404)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena', 'POST'), conLimite(false), 'cupon/ABCDEFGH23/resena')).status, 429)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena', 'POST'), base, 'cupon/ABCDEFGH23/resena')).status, 503)
+  assert.equal(llamadas.length, 0)
+})
+
+// Verificador, menor a: el sondeo de la página del cupón no comparte el tope de lectura con el portal
+test('158: GET /api/cupon/:codigo?sondeo=1 usa RL_LEER con la clave «sondeo:»; sin el parámetro, «leer:»', async () => {
+  const claves = []
+  const env = { ...base, RL_CREAR: lim(true), RL_LEER: { limit: async ({ key }) => { claves.push(key); return { success: true } } } }
+  globalThis.fetch = async () => new Response(JSON.stringify({ estado: 'vigente' }), { status: 200 })
+  const sondeo = new Request('https://club.ejemplo/api/cupon/ABCDEFGH23?sondeo=1', { headers: { 'CF-Connecting-IP': '203.0.113.7' } })
+  assert.equal((await manejar(sondeo, env, 'cupon/ABCDEFGH23')).status, 200)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23'), env, 'cupon/ABCDEFGH23')).status, 200)
+  assert.deepEqual(claves, ['sondeo:203.0.113.7', 'leer:203.0.113.7'])
+})
+
+test('158: con la lectura de la IP agotada (portal), el sondeo sigue pasando, y al revés', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({ estado: 'vigente' }), { status: 200 })
+  const env = { ...base, CLUB_DEV: '1', RL_LECTURA_MAX: '2', RL_LECTURA_VENTANA_S: '600' }
+  const ip = '198.51.100.158'
+  const leer = () => manejar(new Request('https://club.ejemplo/api/cupon/ABCDEFGH23', { headers: { 'CF-Connecting-IP': ip } }), env, 'cupon/ABCDEFGH23')
+  const sondear = () => manejar(new Request('https://club.ejemplo/api/cupon/ABCDEFGH23?sondeo=1', { headers: { 'CF-Connecting-IP': ip } }), env, 'cupon/ABCDEFGH23')
+  assert.equal((await leer()).status, 200); assert.equal((await leer()).status, 200)
+  assert.equal((await leer()).status, 429)                      // la lectura de esta IP, agotada
+  assert.equal((await sondear()).status, 200); assert.equal((await sondear()).status, 200)
+  assert.equal((await sondear()).status, 429)                   // el sondeo tiene su propio tope
+  assert.equal((await leer()).status, 429)                      // y no le devolvió nada a la lectura
+})
+
+// Verificador, menor b: la marca del clic usa el tope holgado de lectura, con clave propia, no el de crear (5/60 s)
+test('158: /resena cuenta en RL_LEER con «resena:»; RL_CREAR agotado no la frena', async () => {
+  llamadas = []
+  globalThis.fetch = async (url, init) => { llamadas.push({ url, init }); return new Response('{"ok":true}', { status: 200 }) }
+  const claves = []
+  const env = { ...base, RL_CREAR: lim(false), RL_LEER: { limit: async ({ key }) => { claves.push(key); return { success: true } } } }
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena', 'POST'), env, 'cupon/ABCDEFGH23/resena')).status, 200)
+  assert.deepEqual(claves, ['resena:203.0.113.7'])
+  assert.equal(llamadas.length, 1)
+})
+
+test('158: /resena con IP compartida: 6 clics seguidos de la misma IP se cuentan todos (antes, el 6.º daba 429)', async () => {
+  globalThis.fetch = async () => new Response('{"ok":true}', { status: 200 })
+  const env = { ...base, CLUB_DEV: '1' }   // topes por defecto: crear 5/60 s, leer 60/60 s
+  const ip = '192.0.2.158'
+  const estados = []
+  for (let i = 0; i < 6; i++) {
+    const r = await manejar(new Request('https://club.ejemplo/api/cupon/ABCDEFGH23/resena', { method: 'POST', headers: { 'CF-Connecting-IP': ip } }), env, 'cupon/ABCDEFGH23/resena')
+    estados.push(r.status)
+  }
+  assert.deepEqual(estados, [200, 200, 200, 200, 200, 200])
 })

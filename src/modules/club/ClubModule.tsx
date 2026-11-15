@@ -5,6 +5,7 @@
  * apaga el Club por local (pestaña Locales). Ninguna pantalla nombra un local.
  * Fase 1B (mig 160): pestaña Tablero (owner, manager y contador). El contador entra SOLO al Tablero (totales, sin nombres).
  * Fase 1C (mig 161): pestañas Cohortes y Ranking (owner, manager). El ranking tiene nombres: abrirlo queda auditado.
+ * Fase 1D (mig 162): pestaña Embudo (owner, manager): embudo del anfitrión. Tiene nombres: abrirla queda auditado.
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -24,8 +25,9 @@ const Tablero = lazy(() => import('./Tablero'))
 const ResenaLocales = lazy(() => import('./ResenaLocales'))
 const Cohortes = lazy(() => import('./Cohortes'))
 const Ranking = lazy(() => import('./Ranking'))
+const Embudo = lazy(() => import('./Embudo'))
 
-type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'tablero' | 'cohortes' | 'ranking' | 'promociones' | 'descuentos' | 'locales'
+type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'tablero' | 'cohortes' | 'ranking' | 'embudo' | 'promociones' | 'descuentos' | 'locales'
 
 
 export default function ClubModule() {
@@ -93,6 +95,7 @@ export default function ClubModule() {
           <div className={`vt-nav-tab ${vista === 'tablero' ? 'active' : ''}`} onClick={() => setVista('tablero')}>Tablero</div>
           <div className={`vt-nav-tab ${vista === 'cohortes' ? 'active' : ''}`} onClick={() => setVista('cohortes')}>Cohortes</div>
           <div className={`vt-nav-tab ${vista === 'ranking' ? 'active' : ''}`} onClick={() => setVista('ranking')}>Ranking</div>
+          <div className={`vt-nav-tab ${vista === 'embudo' ? 'active' : ''}`} onClick={() => setVista('embudo')}>Embudo</div>
           <div className={`vt-nav-tab ${vista === 'promociones' ? 'active' : ''}`} onClick={() => setVista('promociones')}>Promociones</div>
           <div className={`vt-nav-tab ${vista === 'descuentos' ? 'active' : ''}`} onClick={() => setVista('descuentos')}>Descuentos</div>
           {esOwner && <div className={`vt-nav-tab ${vista === 'locales' ? 'active' : ''}`} onClick={() => setVista('locales')}>Locales</div>}
@@ -109,6 +112,7 @@ export default function ClubModule() {
         {vista === 'reportes' && gestiona && <Reportes />}
         {vista === 'cohortes' && gestiona && <Cohortes />}
         {vista === 'ranking' && gestiona && <Ranking />}
+        {vista === 'embudo' && gestiona && <Embudo />}
         {vista === 'promociones' && gestiona && <Promociones />}
         {vista === 'descuentos' && gestiona && <Marcadores />}
       </Suspense>

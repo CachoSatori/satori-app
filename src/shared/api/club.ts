@@ -647,3 +647,36 @@ export interface FilaEquipo {
 }
 export const getReporteEquipo = (mes: string, local: string | null = localClub) =>
   llamar<FilaEquipo[]>('club_reporte_equipo', { p_mes: mes, p_location: local })
+
+// ── Club → Embudo del anfitrión (mig 162, SPEC Club v2 ítem 8) ───────────────────────────────
+/** Pasos de un anfitrión (o de un grupo). `clics_resena` y `pct_resena` son null si la base no tiene la 158. */
+export interface PasosEmbudo {
+  generados: number; usados: number; vigentes: number; vencidos: number; anulados: number
+  clics_resena: number | null; con_factura: number; personas: number
+  facturas: number; mesas?: number; venta_respaldada_crc: number; venta_neta_crc: number
+}
+export interface AnfitrionEmbudo extends PasosEmbudo {
+  id: string; nombre: string; tipo: string; grupo: 'equipo' | 'anfitrion'; estado: 'activo' | 'baja'; local: string
+  mesas: number; tiquete_promedio_crc: number | null
+  pct_uso: number | null; pct_resena: number | null; pct_con_factura: number | null; personas_por_cupon: number | null
+}
+export interface GrupoEmbudo extends PasosEmbudo { anfitriones: number; sin_cupones: number; mesas: number }
+export interface Embudo {
+  mes: string; mes_en_curso: boolean; local: string; locales: string[]; generado_en: string
+  /** Locales sin facturas del PoS en el mes (p. ej. Nosara, sin el puente): aviso, no error. */
+  locales_sin_pos: string[]
+  /** true si la base tiene el clic de reseña (mig 158). */
+  resena_disponible: boolean
+  /** true si la base tiene D7 (mig 157): el equipo no gana créditos. */
+  d7: boolean
+  anfitriones: AnfitrionEmbudo[]
+  grupos: { equipo: GrupoEmbudo; anfitrion: GrupoEmbudo }
+  totales: GrupoEmbudo
+}
+/**
+ * Solo owner y manager. `mes` = «AAAA-MM» (hora CR). `local` null = todos los locales que el usuario ve. Nombres, sin
+ * contactos. Rastro en club_auditoria: una fila por `apertura` de la pantalla (un id por vez que se abre; los cambios de
+ * filtro no suman filas); con `exporte`, una fila SIEMPRE: el CSV de la pantalla SOLO se arma con lo que devuelve esta llamada.
+ */
+export const getEmbudoAnfitrion = (mes: string, local: string | null, exporte = false, apertura: string | null = null) =>
+  llamar<Embudo>('club_embudo_anfitrion', { p_mes: `${mes}-01`, p_location: local, p_exporte: exporte, p_apertura: apertura })

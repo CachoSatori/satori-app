@@ -147,6 +147,12 @@
       "rama": "claude/club-cohortes-ranking",
       "renumerada_a": "161"
     },
+    "108": {
+      "nombre": "club_embudo_anfitrion",
+      "bloque": "club",
+      "rama": "claude/club-embudo-anfitrion",
+      "renumerada_a": "162"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -206,6 +212,12 @@
       "bloque": "pase",
       "rama": "claude/club-cohortes-ranking",
       "origen": "107"
+    },
+    "162": {
+      "nombre": "club_embudo_anfitrion",
+      "bloque": "pase",
+      "rama": "claude/club-embudo-anfitrion",
+      "origen": "108"
     }
   }
 }

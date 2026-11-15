@@ -15,6 +15,8 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/api/club', async orig => ({
   ...(await orig<typeof import('../../shared/api/club')>()),
   getLocalesClub: async () => { if (s.localesEnEspera) await s.localesEnEspera; return s.locales },
+  // 170: la pantalla pide los locales según el rol; en estas pruebas el manager tiene asignados todos.
+  getLocalesClubParaRol: async () => { if (s.localesEnEspera) await s.localesEnEspera; return s.locales },
   getClubUrl: async () => null,
   getUmbrales: async () => { s.lecturas++; if (s.umbralesFalla > 0) { s.umbralesFalla--; throw new Error('sin conexión') } return s.umbrales },
   guardarUmbrales: async (_l: string, u: unknown) => { s.guardado = u },

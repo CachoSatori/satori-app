@@ -305,7 +305,7 @@ export async function manejar(request, env, path) {
     return rpc(env, 'club_canje_codigo_generar', { p_token: tok })
   }
 
-  // POST /api/alta  {nombre, whatsapp, acepto, ref?, turnstile}  → autoalta de socio (pendiente), LC-DES-07
+  // POST /api/alta  {nombre, whatsapp, acepto, mayor_edad, cumple_dia?, cumple_mes?, cumple_permiso?, ref?, turnstile}  → autoalta de socio (pendiente), LC-DES-07
   if (partes.length === 1 && partes[0] === 'alta') {
     if (metodo !== 'POST') return json(405, { error: 'metodo' })
     { const ok = await limitar(env, 'crear', `alta:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
@@ -322,6 +322,16 @@ export async function manejar(request, env, path) {
     if (RE_LOCAL.test(local)) datos.local = local   // LC-ML: sin local válido, la base usa el único encendido
     if (datos.nombre.length < 2 || !datos.whatsapp || !RE_AVISO.test(datos.acepto)) return json(400, { error: 'datos_invalidos' })
     if (datos.ref && !RE_REF.test(datos.ref)) datos.ref = ''
+    // D6 A (14-nov): mayor de 18 obligatorio (solo `true` literal); cumpleaños opcional, día y mes enteros y con el permiso.
+    // La base valida lo mismo (159); acá solo se filtra la forma. Nunca se registra en logs.
+    if (b.mayor_edad !== true) return json(400, { error: 'datos_invalidos' })
+    datos.mayor_edad = true
+    const cd = b.cumple_dia, cm = b.cumple_mes, cp = b.cumple_permiso
+    if (cd !== undefined || cm !== undefined || cp !== undefined) {
+      if (!Number.isInteger(cd) || !Number.isInteger(cm) || cp !== true) return json(400, { error: 'datos_invalidos' })
+      if (cm < 1 || cm > 12 || cd < 1 || cd > [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][cm - 1]) return json(400, { error: 'datos_invalidos' })
+      datos.cumple_dia = cd; datos.cumple_mes = cm; datos.cumple_permiso = true
+    }
     return rpc(env, 'club_socio_autoalta', { p_datos: datos })
   }
 

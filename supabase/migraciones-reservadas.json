@@ -105,6 +105,12 @@
       "rama": "claude/club-100-catalogo",
       "renumerada_a": "151"
     },
+    "101": {
+      "nombre": "club_aviso_v1_2",
+      "bloque": "club",
+      "rama": "claude/club-aviso-v1.2",
+      "renumerada_a": "159"
+    },
     "102": {
       "nombre": "club_tope_sin_carga_inicial",
       "bloque": "club",
@@ -170,6 +176,12 @@
       "bloque": "pase",
       "rama": "claude/club-resena-cupon",
       "origen": "105"
+    },
+    "159": {
+      "nombre": "club_aviso_v1_2",
+      "bloque": "pase",
+      "rama": "claude/club-aviso-v1.2",
+      "origen": "101"
     }
   }
 }

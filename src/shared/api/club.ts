@@ -450,9 +450,11 @@ export interface AltaSocio {
   /** Mig 156: token del portal, SOLO si el alta creó a la persona (si el número ya era de alguien, null). */
   token_portal?: string | null
 }
-/** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme. */
-export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean) =>
-  llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_location: localClub })
+/** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme.
+ *  D6 A (159): la caja confirma «es mayor de 18»; sin eso la base rechaza el alta (club_socio_alta_caja_v2, que envuelve
+ *  a club_socio_alta_caja y devuelve su respuesta completa, incluido `token_portal` de la 156). */
+export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean, mayorEdad: boolean) =>
+  llamar<AltaSocio>('club_socio_alta_caja_v2', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad, p_location: localClub })
 /** Validar en caja una autoalta pendiente: pasa a activo provisional. */
 export const socioValidar = (miembro: string, verificoResidencia: boolean) =>
   llamar<AltaSocio>('club_socio_validar', { p_miembro: miembro, p_verifico_residencia: verificoResidencia, p_location: localClub })

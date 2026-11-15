@@ -711,7 +711,7 @@ function VisitaSocio({ miembro }: { miembro: string }) {
   )
 }
 
-/** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia»; NUNCA un número de documento. */
+/** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia» y «es mayor de 18» (D6 A); NUNCA un número de documento. */
 /** D1 + mig 156: al terminar, «Mandarle su link por WhatsApp ↗» también para el cajero (el alta devuelve el token del socio nuevo). */
 function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; rol: string | null | undefined }) {
   const [abierto, setAbierto] = useState(false)
@@ -719,6 +719,7 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
   const [tel, setTel] = useState('')
   const [email, setEmail] = useState('')
   const [verifico, setVerifico] = useState(false)
+  const [mayor, setMayor] = useState(false)   // D6 A: obligatorio; la base rechaza el alta sin él
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   if (!abierto) {
@@ -727,7 +728,7 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
   async function guardar() {
     setEnviando(true); setErr(null)
     try {
-      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico)
+      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico, mayor)
       const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`
       // Sin link no se frena nada: el alta ya quedó (el link sale después desde Miembros).
       let link: string | null = null
@@ -739,7 +740,7 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
         : puedeMandarLinkPortal(rol) ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).'
         : ' El link de su portal se lo manda un manager desde Miembros.'
       onHecho(texto + extra, link)
-      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false)
+      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false); setMayor(false)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }
   }
@@ -757,13 +758,17 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
           <input type="checkbox" checked={verifico} onChange={e => setVerifico(e.target.checked)} />
           <span>Verifiqué que es local (no anotes ningún número de documento)</span>
         </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+          <input type="checkbox" checked={mayor} onChange={e => setMayor(e.target.checked)} />
+          <span>Es mayor de 18 años (preguntale; el Local Club es solo para mayores)</span>
+        </label>
         <div style={{ fontSize: '0.8rem', color: C.muted }}>
           Contale el aviso de privacidad: guardamos nombre y WhatsApp solo para el Local Club y se puede dar de baja desde su portal.
-          Queda registrada la versión vigente del aviso.
+          Queda registrada la versión vigente del aviso. El cumpleaños no se carga en caja: solo en el alta por la web, con su permiso.
         </div>
         {err && <Aviso tono="error">{err}</Aviso>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
+          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico || !mayor}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
           <Btn type="button" variant="ghost" onClick={() => { setAbierto(false); setErr(null) }}>Cancelar</Btn>
         </div>
       </form>

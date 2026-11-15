@@ -5996,6 +5996,17 @@ export type Database = {
         }
         Returns: Json
       }
+      club_socio_alta_caja_v2: {
+        Args: {
+          p_email: string
+          p_location?: string
+          p_mayor_edad: boolean
+          p_nombre: string
+          p_verifico_residencia: boolean
+          p_whatsapp: string
+        }
+        Returns: Json
+      }
       club_socio_autoalta: { Args: { p_datos: Json }; Returns: Json }
       club_socio_baja_portal: { Args: { p_token: string }; Returns: boolean }
       club_socio_confirmar: {

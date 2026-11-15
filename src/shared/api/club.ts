@@ -434,7 +434,11 @@ export const activarAnfitrion = (miembro: string, rol: 'referente' | 'concierge_
   llamar<boolean>('club_rol_activar_anfitrion', { p_miembro: miembro, p_rol: rol, p_nota: nota })
 
 // ── LC-A2: socios del Local Club ──────────────────────────────────────────────
-export interface AltaSocio { miembro_id: string; estado: 'activo'; provisional_hasta: string }
+export interface AltaSocio {
+  miembro_id: string; estado: 'activo'; provisional_hasta: string
+  /** Mig 156: token del portal, SOLO si el alta creó a la persona (si el número ya era de alguien, null). */
+  token_portal?: string | null
+}
 /** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme. */
 export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean) =>
   llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_location: localClub })

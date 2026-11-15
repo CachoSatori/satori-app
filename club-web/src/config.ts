@@ -32,12 +32,16 @@ export const CLUB_URL: string = normalizarClubUrl(
  */
 // v1.1 (08-nov noche): «Qué datos guardamos» suma el email (el cupón y el alta en caja lo piden). Cambia lo aceptado
 // (una categoría de datos más): versión nueva, no aclaración. Quien aceptó v1 queda con v1 en su fila.
-export const AVISO_PRIVACIDAD_VERSION = 'v1.1'
+// v1.2 (12-nov, pedido del dueño): el texto en español pasa de «vos» a «usted», con el mismo sentido. Versión nueva porque
+// cambia el texto aceptado (y su huella). (14-nov, D6 A firmada) Suma edad (solo mayores de 18) y el cumpleaños opcional
+// con permiso, en ES y EN: cambian las dos huellas y sigue siendo v1.2 (todavía no salió a prod). Migración 159 (origen 101).
+// Quien aceptó v1.1 queda con v1.1 en su fila.
+export const AVISO_PRIVACIDAD_VERSION = 'v1.2'
 // (09-nov, B8) Huella sha256 del texto COMPLETO del aviso (alta_aviso, UTF-8) por idioma, para esta versión. La base
 // guarda las mismas en club_avisos_privacidad: cambiar una coma del texto sin subir la versión hace fallar aviso.test.ts.
 export const AVISO_PRIVACIDAD_SHA256 = {
-  es: 'ca95472eac34228dd41d49516cd1fef02f91c6dc8ad81f333928a10237a406d7',
-  en: '748b783881f21370e3238517996a2a47780b0c7a18c597ecc7528a56018fddf7',
+  es: '755d3ac1c19bf0d679f6e7844bcf950aec4803abd2098616d0c2b6b897e256dc',
+  en: 'a83ec65f5cc5eecb1a9d9a1c59c13af9b222110931c01d0b873c990404a306cf',
 } as const
 
 /** Turnstile: clave pública del sitio. Sin VITE_TURNSTILE_SITEKEY, la clave de PRUEBA de Cloudflare (siempre pasa). */

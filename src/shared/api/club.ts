@@ -69,7 +69,9 @@ export interface ResolverReferente {
            valor_credito_crc?: number
            canjeado_hoy: number; canje_min: number; canje_paso: number; max_creditos_por_visita: number
            /** CLUB-AUD-26: tarjeta física habilitada en este local (staging sí, prod no). */
-           tarjeta_manual_activa?: boolean }
+           tarjeta_manual_activa?: boolean
+           /** D7 A (mig 157): cuenta del equipo → sin créditos ni canje; `personas_mes` = personas registradas en el mes. */
+           sin_creditos?: boolean; personas_mes?: number }
 }
 /** R-01: el código de canje (/k/) del portal. Los mismos datos del referente, más el estado del código. */
 export interface ResolverCanje {
@@ -374,7 +376,10 @@ export interface ReporteMes {
   ranking: FilaReporte[]; subiendo: FilaReporte[]; bajando: FilaReporte[]; a_contactar: FilaReporte[]
   dormidos: { cuentas: number; creditos: number; lista: FilaReporte[] }
   nuevos: { cuentas: number; lista: FilaReporte[] }
-  equipo: { personas_mes: number; creditos: number; lista: FilaReporte[] }
+  /** D7 A (mig 157): el equipo suma personas, no créditos; su saldo de antes quedó congelado, fuera del pasivo.
+   *  Los meses cerrados antes de la 157 traen `creditos` (el saldo del equipo, de cuando acumulaba). */
+  equipo: { personas_mes: number; tarjetas_mes?: number; congelado_cuentas?: number; congelado_creditos?: number
+            congelado_valor_crc?: number; creditos?: number; lista: FilaReporte[] }
   antiguedad: Array<{ tramo: string; cuentas: number; creditos: number; valor_crc: number }>
   pm: { pausado: boolean; nota: string | null; pendiente_crc: number; cargos_mes_crc: number; pagos_mes_crc: number }
   calidad: { abiertas: number; resueltas: number; por_tipo: Record<string, number>; promo_activa: boolean }
@@ -400,6 +405,17 @@ export const getLocalesClub = async (): Promise<LocalClub[]> =>
   (await leer(from<{ location_id: string; nombre: string | null; club_activo: boolean }>('club_config')
     .select('location_id,nombre,club_activo').order('location_id')))
     .map(r => ({ id: r.location_id, nombre: r.nombre ?? r.location_id, activo: r.club_activo === true }))
+/** 158 · El link de reseña de Google de cada local (club-web lo muestra tras usar el cupón). Va aparte de getLocalesClub a
+ * propósito: si la app llega antes que la columna, solo falla esto (en «Locales»), no el selector de locales. */
+export const getResenasLocales = async (): Promise<Record<string, string | null>> =>
+  Object.fromEntries((await leer(from<{ location_id: string; resena_url: string | null }>('club_config')
+    .select('location_id,resena_url'))).map(r => [r.location_id, r.resena_url ?? null]))
+/** 158 · Solo owner (RLS de club_config; queda en club_config_historial). `null` borra el link. La base solo acepta
+ * direcciones de Google (CHECK club_config_resena_url_google); acá se valida antes con la misma expresión. */
+export async function setResenaUrl(id: string, url: string | null): Promise<void> {
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ resena_url: url }).eq('location_id', id).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner carga el link de reseña de un local', false)
+}
 /** Solo owner. Alta de un local: queda APAGADO; con `copiarDe`, arranca con la configuración de ese local. */
 export const crearLocal = (p: { id: string; nombre: string; direccion: string | null; mapa: string | null; copiarDe: string | null }) =>
   llamar<string>('club_local_crear', { p_id: p.id, p_nombre: p.nombre, p_direccion: p.direccion, p_mapa: p.mapa, p_copiar_de: p.copiarDe })
@@ -470,10 +486,16 @@ export const activarAnfitrion = (miembro: string, rol: 'referente' | 'concierge_
   llamar<boolean>('club_rol_activar_anfitrion', { p_miembro: miembro, p_rol: rol, p_nota: nota })
 
 // ── LC-A2: socios del Local Club ──────────────────────────────────────────────
-export interface AltaSocio { miembro_id: string; estado: 'activo'; provisional_hasta: string }
-/** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme. */
-export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean) =>
-  llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_location: localClub })
+export interface AltaSocio {
+  miembro_id: string; estado: 'activo'; provisional_hasta: string
+  /** Mig 156: token del portal, SOLO si el alta creó a la persona (si el número ya era de alguien, null). */
+  token_portal?: string | null
+}
+/** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme.
+ *  D6 A (159): la caja confirma «es mayor de 18»; sin eso la base rechaza el alta (club_socio_alta_caja_v2, que envuelve
+ *  a club_socio_alta_caja y devuelve su respuesta completa, incluido `token_portal` de la 156). */
+export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean, mayorEdad: boolean) =>
+  llamar<AltaSocio>('club_socio_alta_caja_v2', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad, p_location: localClub })
 /** Validar en caja una autoalta pendiente: pasa a activo provisional. */
 export const socioValidar = (miembro: string, verificoResidencia: boolean) =>
   llamar<AltaSocio>('club_socio_validar', { p_miembro: miembro, p_verifico_residencia: verificoResidencia, p_location: localClub })
@@ -572,3 +594,10 @@ export const getReporteVisitas = (desde: string, hasta: string, local: string | 
 export interface AltasPorCajero { usuario: string; altas_caja: number; validaciones: number; confirmo: number; sin_confirmar: number; vencidas: number }
 export const getReporteAltas = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<AltasPorCajero[]>('club_reporte_altas', { p_desde: desde, p_hasta: hasta, p_location: local })
+/** D7 · ranking del equipo por persona y mes (mig 157). Solo owner y manager; deja rastro. */
+export interface FilaEquipo {
+  miembro_id: string; nombre: string; estado: 'activo' | 'baja'; cupones_usados: number; personas: number; mesas: number
+  facturas: number; venta_respaldada_crc: number; altas_socios: number
+}
+export const getReporteEquipo = (mes: string, local: string | null = localClub) =>
+  llamar<FilaEquipo[]>('club_reporte_equipo', { p_mes: mes, p_location: local })

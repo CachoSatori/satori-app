@@ -20,6 +20,7 @@ const Reportes = lazy(() => import('./Reportes'))
 const Promociones = lazy(() => import('./Promociones'))
 const Marcadores = lazy(() => import('./Marcadores'))
 const Tablero = lazy(() => import('./Tablero'))
+const ResenaLocales = lazy(() => import('./ResenaLocales'))
 
 type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'tablero' | 'promociones' | 'descuentos' | 'locales'
 
@@ -132,6 +133,7 @@ function Locales({ locales, onCambio }: { locales: LocalClub[]; onCambio: () => 
         </div>
       ))}
       {msg && <p style={{ color: C.ink, fontSize: 13 }}>{msg}</p>}
+      <Suspense fallback={null}><ResenaLocales locales={locales} /></Suspense>
       <NuevoLocal locales={locales} onCreado={async (t) => { await onCambio(); setMsg(t) }} />
     </div>
   )

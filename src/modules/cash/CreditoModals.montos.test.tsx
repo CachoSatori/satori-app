@@ -45,6 +45,11 @@ describe('RegistrarCreditoModal — monto ₡', () => {
     await vi.waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1))
     expect(createSpy.mock.calls[0][0]).toMatchObject({ amount_crc: 12345.5 })
   })
+  it('«₡ 1250,50» pegado con símbolo y espacio guarda 1250.5', async () => {
+    fireEvent.click(llenarRegistrar('₡ 1250,50'))
+    await vi.waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1))
+    expect(createSpy.mock.calls[0][0]).toMatchObject({ amount_crc: 1250.5 })
+  })
   it('«12,345» NO se guarda como 12345: avisa y bloquea', () => {
     const btn = llenarRegistrar('12,345')
     expect(btn.disabled).toBe(true)

@@ -7,6 +7,9 @@
 //  · hasta `maxDecimales` (2 por defecto: las columnas de plata son numeric(12,2) y redondearían en silencio). Con eso
 //    «12.345» o «12,345» (¿miles o decimales?) no pasan: se pide escribir el monto sin separador de miles;
 //  · sin signo: un monto negativo o con letras es un error con mensaje, nunca un número recortado;
+//  · (15-nov, verificador) el símbolo ₡ y los espacios —normales, duros (U+00A0) o finos (U+202F), que trae un monto
+//    pegado— se ELIMINAN antes de leer: «₡ 1250,50» → 1250.5 y «12 345» → 12345. Un espacio nunca es separador
+//    decimal, así que quitarlo no cambia el valor; el punto y la coma siguen con la regla de arriba;
 //  · vacío → valor null y sin error (el formulario decide si es obligatorio).
 import { parseTipoCambio } from './tipoCambio'
 
@@ -24,7 +27,7 @@ export const msgMontoDecimales = (n: number) =>
     : `Hasta ${n} decimales y sin separador de miles (por ejemplo 12345 o 12345,50).`
 
 export function parseMonto(txt: string | null | undefined, maxDecimales = 2): MontoLeido {
-  const t = String(txt ?? '').trim()
+  const t = String(txt ?? '').replace(/[₡\s\u00A0\u202F]/g, '')
   if (!t) return { valor: null, error: null }
   if (t.includes('-')) return { valor: null, error: MSG_MONTO_NEGATIVO }
   const n = parseTipoCambio(t)

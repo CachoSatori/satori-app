@@ -26,10 +26,21 @@ describe('parseMonto — un solo separador decimal, sin miles, sin signo', () =>
     expect(parseMonto('-500')).toEqual({ valor: null, error: MSG_MONTO_NEGATIVO })
     expect(parseMonto('-12,50')).toEqual({ valor: null, error: MSG_MONTO_NEGATIVO })
   })
-  it('letras, símbolos o espacios internos → error', () => {
-    expect(parseMonto('₡500')).toEqual({ valor: null, error: MSG_MONTO_INVALIDO })
-    expect(parseMonto('12 345')).toEqual({ valor: null, error: MSG_MONTO_INVALIDO })
+  it('₡ y espacios (pegados de otro lado) se eliminan; el espacio nunca es separador decimal', () => {
+    expect(parseMonto('₡500')).toEqual({ valor: 500, error: null })
+    expect(parseMonto(' 500 ')).toEqual({ valor: 500, error: null })
+    expect(parseMonto('₡ 1250,50')).toEqual({ valor: 1250.5, error: null })
+    expect(parseMonto('12 345')).toEqual({ valor: 12345, error: null })
+    expect(parseMonto('12\u00A0345')).toEqual({ valor: 12345, error: null })     // espacio duro
+    expect(parseMonto('₡\u202F12\u202F345,50')).toEqual({ valor: 12345.5, error: null })   // espacio fino
+    // quitar espacios no habilita miles con punto o coma
+    expect(parseMonto('₡ 12.345')).toEqual({ valor: null, error: msgMontoDecimales(2) })
+    expect(parseMonto('₡')).toEqual({ valor: null, error: null })
+  })
+  it('letras u otros símbolos → error', () => {
+    expect(parseMonto('$500')).toEqual({ valor: null, error: MSG_MONTO_INVALIDO })
     expect(parseMonto('abc')).toEqual({ valor: null, error: MSG_MONTO_INVALIDO })
+    expect(parseMonto('12a')).toEqual({ valor: null, error: MSG_MONTO_INVALIDO })
   })
   it('vacío → sin valor y sin error (lo decide el formulario)', () => {
     expect(parseMonto('')).toEqual({ valor: null, error: null })

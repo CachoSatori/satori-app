@@ -24,6 +24,8 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 |---|---|---|
 | `POST /api/cupon` `{referente}` | `club_cupon_crear` | 5 cada 10 min |
 | `GET /api/cupon/{codigo}` | `club_cupon_ver` | 60 por minuto |
+| `GET /api/cupon/{codigo}?sondeo=1` (158: la página del cupón abierta se fija si ya se usó) | `club_cupon_ver` | 60 por minuto, clave propia (`sondeo:`): no gasta la lectura del portal |
+| `POST /api/cupon/{codigo}/resena` (158: marca del clic en la reseña, mejor esfuerzo) | `club_cupon_resena_clic` | 60 por minuto, clave propia (`resena:`) en `RL_LEER` |
 | `POST /api/cupon/{codigo}/contacto` `{contacto}` | `club_cupon_contacto` | 5 cada 10 min |
 | `POST /api/baja/{llave32}` (136: la llave de baja del contacto, nunca el código del cupón) | `club_cupon_contacto_baja` | 5 por minuto |
 | `GET /api/portal/{token}` | `club_portal` | 60 por minuto |
@@ -36,7 +38,7 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 
 - **Cómo cuenta el tope (CLUB-AUD-14 y 24):** un binding de Rate Limiting por endpoint, por IP:
   - `RL_CREAR`: crear cupón, opt-in y código de canje, **5 por 60 s**;
-  - `RL_LEER`: ver cupón y portal, **60 por 60 s**.
+  - `RL_LEER`: ver cupón y portal, **60 por 60 s**. El sondeo del cupón y la marca del clic de la reseña (158) usan este binding con su propia clave, así una IP compartida (hotel, wifi del local) no se queda sin lectura ni pierde clics.
 
   **Si falta alguno, ese endpoint responde 503**: falla cerrada. Al turista le aparece «Demasiados intentos seguidos. Esperá unos minutos…». Cada tope que salta deja una línea `{"alerta":"club-web-tope",…}` en los logs de la función, y sobre ese texto se puede armar una notificación. No hay respaldo en KV ni en memoria; la memoria queda solo para `dev-server.mjs` (`CLUB_DEV=1`).
 - **Una sola puerta (CLUB-AUD-06):** cada llamada lleva el header `x-club-web` con el secreto `CLUB_WEB_KEY`. La base solo responde a las funciones públicas si el sha256 de ese header es el de la clave vigente. Llamar directo con la anon key ya no funciona. **Sin `CLUB_WEB_KEY`, la API responde 503.**

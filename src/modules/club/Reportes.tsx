@@ -8,6 +8,8 @@ import { getReporteMes, getLocalesClubParaRol, localActual, type LocalClub, cerr
 import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
+import RankingEquipo from './RankingEquipo'
+import { notaEquipoMes } from './equipo'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha, mesActualCR } from './estilos'
 import { esParcial } from './reporteSaldo'
@@ -26,6 +28,8 @@ export default function Reportes() {
   const [error, setError] = useState<string | null>(null)
   const [motivo, setMotivo] = useState('')
   const [cerrando, setCerrando] = useState(false)
+  // D7 (#2, mig 157): pestaña «Equipo» con el ranking del equipo (owner y manager, como todo Reportes)
+  const [pestana, setPestana] = useState<'mes' | 'equipo'>('mes')
   const { profile } = useAuth()
   const esOwner = profile?.role === 'owner'
 
@@ -104,6 +108,11 @@ export default function Reportes() {
         <Btn variant="secondary" onClick={exportarCsv} disabled={!rep}>Exportar CSV</Btn>
         {esOwner && <Btn variant="secondary" onClick={exportarContactos}>Contactos para ofertas (CSV)</Btn>}
       </Card>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Btn variant={pestana === 'mes' ? 'primary' : 'secondary'} onClick={() => setPestana('mes')} style={{ flex: 1 }}>Mes</Btn>
+        <Btn variant={pestana === 'equipo' ? 'primary' : 'secondary'} onClick={() => setPestana('equipo')} style={{ flex: 1 }}>Equipo</Btn>
+      </div>
+      {pestana === 'equipo' ? <RankingEquipo mes={mes} local={local} /> : (<>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
       {esOwner && <Vencimiento />}
       <Comparacion />
@@ -140,7 +149,9 @@ export default function Reportes() {
           <Seccion t="A contactar (vencen en 30 días)" filas={rep.a_contactar} col={f => `${fmtCreditos(f.creditos ?? 0)} cr. · vence ${fmtFecha(f.vence_en)}`} vacio="Nadie vence en los próximos 30 días." />
           <Seccion t={`Dormidos: ${n0(rep.dormidos.cuentas)} cuentas, ${fmtCreditos(rep.dormidos.creditos)} créditos`} filas={rep.dormidos.lista.slice(0, 10)} col={f => `${fmtCreditos(f.creditos ?? 0)} cr. · ${fmtFecha(f.ultima_actividad)}`} vacio="No hay cuentas dormidas." />
           <Seccion t={`Nuevos: ${n0(rep.nuevos.cuentas)}`} filas={rep.nuevos.lista} col={f => `${n0(f.personas ?? 0)} p.`} vacio="Ningún referente nuevo." />
-          <Seccion t={`Equipo Satori: ${n0(rep.equipo.personas_mes)} personas en el mes`} filas={rep.equipo.lista} col={f => `${fmtCreditos(f.creditos ?? 0)} cr.`} vacio="Sin movimientos del equipo." />
+          {/* D7 A (mig 157): el equipo suma personas; su saldo de antes quedó congelado, fuera del pasivo (línea aparte) */}
+          <Seccion t="Equipo Satori" nota={notaEquipoMes(rep.equipo)} filas={rep.equipo.lista}
+            col={f => rep.equipo.congelado_creditos === undefined ? `${fmtCreditos(f.creditos ?? 0)} cr.` : `${n0(f.personas ?? 0)} p.`} vacio="Sin movimientos del equipo." />
           <Card>
             <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Saldos por antigüedad</h3>
             {rep.antiguedad.map(b => (
@@ -172,6 +183,7 @@ export default function Reportes() {
           </Card>
         </>
       )}
+      </>)}
     </div>
   )
 }
@@ -186,10 +198,11 @@ function Kpi({ v, e, a }: { v: string; e: string; a: string }) {
   )
 }
 
-function Seccion({ t, filas, col, vacio }: { t: string; filas: FilaReporte[]; col: (f: FilaReporte) => string; vacio: string }) {
+function Seccion({ t, nota, filas, col, vacio }: { t: string; nota?: string; filas: FilaReporte[]; col: (f: FilaReporte) => string; vacio: string }) {
   return (
     <Card>
       <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>{t}</h3>
+      {nota && <div style={{ fontSize: '0.85rem', color: C.muted, marginBottom: 6 }}>{nota}</div>}
       {filas.length === 0 ? <div style={{ color: C.muted }}>{vacio}</div> : filas.map((f, i) => (
         <div key={`${f.nombre}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '4px 0', borderBottom: `1px solid ${C.panel}` }}>
           <span><strong>{f.nombre}</strong>{f.negocio ? <span style={{ color: C.muted }}> · {f.negocio}</span> : null}</span>

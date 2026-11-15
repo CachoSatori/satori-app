@@ -4,7 +4,7 @@
 // La base está simulada (solo lecturas); los datos son ficticios.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, cleanup, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 
 let role = 'owner'
 vi.mock('../shared/hooks/useAuth', () => ({
@@ -54,9 +54,19 @@ vi.mock('../shared/api/jornadasConVentas', () => ({
 
 let clubFalla = false
 let clubExcepciones = 0
+let clubAlertas: unknown[] = []
+let clubAlertasFalla = false
+let clubAlertasLecturas = 0
+let clubAlertasLocalPedido: unknown = 'sin llamar'
+let clubLocalActual: string | null = null
 vi.mock('../shared/api/club', () => ({
   asegurarLocalParaRol: async () => {},   // 170: el manager lee solo un local suyo
   getExcepcionesAbiertas: async () => { if (clubFalla) throw new Error('sin conexión'); return clubExcepciones },
+  getAlertasInicio: async (local?: string | null) => {
+    clubAlertasLecturas++; clubAlertasLocalPedido = local
+    if (clubAlertasFalla) throw new Error('sin conexión'); return clubAlertas
+  },
+  localActual: () => clubLocalActual,
 }))
 
 import HomePage from './HomePage'
@@ -78,6 +88,11 @@ beforeEach(() => {
   cierresEnEspera = null
   clubFalla = false
   clubExcepciones = 0
+  clubAlertas = []
+  clubAlertasFalla = false
+  clubAlertasLecturas = 0
+  clubAlertasLocalPedido = 'sin llamar'
+  clubLocalActual = null
   olvidarAlertaInicio()
   sessionStorage.clear()
 })
@@ -269,5 +284,115 @@ describe('Inicio · Club (pase a producción)', () => {
     clubFalla = true
     montar()
     await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
+  })
+})
+
+// 164 (SPEC-club-v2 ítem 10, B6): «Club · Para revisar hoy». Datos ficticios.
+function Destino() {
+  const l = useLocation()
+  return <p>destino {l.pathname}{l.search}</p>
+}
+function montarConRutas() {
+  return render(
+    <MemoryRouter initialEntries={['/']}>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/club" element={<Destino />} />
+      </Routes>
+    </MemoryRouter>)
+}
+const bloque = () => screen.getByRole('region', { name: 'Club · Para revisar hoy' })
+
+describe('Inicio · Club · Para revisar hoy (164)', () => {
+  it('owner con cero datos: «Nada para revisar», sin lista', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByText('Nada para revisar en el Club (ayer y hoy).')).toBeTruthy())
+    expect(within(bloque()).queryByRole('list')).toBeNull()
+  })
+  it('manager ve los 4 avisos, cada uno con qué pasó, el umbral y adónde ir', async () => {
+    role = 'manager'
+    clubAlertas = [
+      { tipo: 'ANFITRION_24H', ref: 'a1', cantidad: 7, umbral: 5, fecha: '2001-03-01T12:00:00Z',
+        detalle: { miembro_id: 'm-1', miembro: 'Anfitrion Ficticio', tipo_miembro: 'referente' } },
+      { tipo: 'MISMO_USUARIO', ref: 'b1', cantidad: 3, umbral: 2, fecha: '2001-03-01T12:00:00Z',
+        detalle: { miembro_id: 'm-2', miembro: 'Socio Ficticio', que: 'socio', usuario: 'Cajero Ficticio', dias: 3 } },
+      { tipo: 'VISITAS_SIN_FACTURA', ref: 'c1', cantidad: 2, umbral: 0, fecha: '2001-03-01T12:00:00Z', detalle: {} },
+      { tipo: 'CANJE_SIN_CODIGO', ref: 'd1', cantidad: 1, umbral: 0, fecha: '2001-03-01T12:00:00Z', detalle: { dias: 30 } },
+    ]
+    montar()
+    await waitFor(() => expect(within(bloque()).getAllByRole('listitem')).toHaveLength(4))
+    const b = within(bloque())
+    expect(b.getByText('Anfitrion Ficticio sumó 7 visitas con cupón o tarjeta en 24 horas')).toBeTruthy()
+    expect(b.getByText(/el aviso salta con más de 5/)).toBeTruthy()
+    expect(b.getByText('Cajero Ficticio registró al socio Socio Ficticio 3 veces en 3 días')).toBeTruthy()
+    expect(b.getByText('2 visitas de socio sin factura (ayer y hoy)')).toBeTruthy()
+    expect(b.getByText('1 canje sin código sin resolver')).toBeTruthy()
+    expect(b.getByText('7 en 24 h')).toBeTruthy()
+  })
+  it('tocar un aviso lleva a la pantalla donde se revisa (ficha del anfitrión; Excepciones filtradas)', async () => {
+    clubAlertas = [
+      { tipo: 'ANFITRION_24H', ref: 'a1', cantidad: 6, umbral: 5, fecha: '2001-03-01T12:00:00Z',
+        detalle: { miembro_id: 'm-1', miembro: 'Anfitrion Ficticio', tipo_miembro: 'equipo' } },
+    ]
+    montarConRutas()
+    await waitFor(() => expect(screen.getByText(/Anfitrion Ficticio \(equipo\) sumó 6 visitas/)).toBeTruthy())
+    screen.getByText(/Anfitrion Ficticio \(equipo\) sumó 6 visitas/).closest('button')!.click()
+    await waitFor(() => expect(screen.getByText('destino /club?vista=miembros&miembro=m-1')).toBeTruthy())
+  })
+  it('canjes sin código → Excepciones con el tipo elegido', async () => {
+    clubAlertas = [{ tipo: 'CANJE_SIN_CODIGO', ref: 'd1', cantidad: 2, umbral: 0, fecha: '2001-03-01T12:00:00Z', detalle: {} }]
+    montarConRutas()
+    await waitFor(() => expect(screen.getByText('2 canjes sin código sin resolver')).toBeTruthy())
+    screen.getByText('2 canjes sin código sin resolver').closest('button')!.click()
+    await waitFor(() => expect(screen.getByText('destino /club?vista=excepciones&tipo=CANJE_SIN_CODIGO')).toBeTruthy())
+  })
+  it('si falla la lectura: «sin comprobar», nunca «Nada para revisar»', async () => {
+    clubAlertasFalla = true
+    montar()
+    await waitFor(() => expect(within(bloque()).getByText('sin comprobar')).toBeTruthy())
+    expect(screen.queryByText('Nada para revisar en el Club (ayer y hoy).')).toBeNull()
+  })
+  it('contador, cajero y salonero: no ven el bloque ni lo leen', async () => {
+    for (const r of ['contador', 'cajero', 'salonero']) {
+      cleanup(); sessionStorage.clear(); role = r; clubAlertasLecturas = 0
+      montar()
+      await new Promise(res => setTimeout(res, 20))
+      expect(screen.queryByRole('region', { name: 'Club · Para revisar hoy' })).toBeNull()
+      expect(clubAlertasLecturas).toBe(0)
+    }
+  })
+})
+
+// Verificador #183: varios locales y el canje sin código que no sale dos veces.
+describe('Inicio · Club · Para revisar hoy · locales y duplicados (164)', () => {
+  const canje = (cantidad: number, local: string) => ({ tipo: 'CANJE_SIN_CODIGO', ref: `d:${local}`, cantidad, umbral: 0,
+    fecha: '2001-03-01T12:00:00Z', detalle: { local, local_nombre: `Local ${local}`, multilocal: false } })
+  it('pide las alertas SIN local (todos los encendidos que ve), no el elegido en el aparato', async () => {
+    clubLocalActual = 'local-a'
+    montar()
+    await waitFor(() => expect(screen.getByText('Nada para revisar en el Club (ayer y hoy).')).toBeTruthy())
+    expect(clubAlertasLocalPedido).toBeNull()
+  })
+  it('dos locales: cada aviso dice su local', async () => {
+    clubAlertas = [{ tipo: 'VISITAS_SIN_FACTURA', ref: 'c:b', cantidad: 1, umbral: 0, fecha: '2001-03-01T12:00:00Z',
+      detalle: { local: 'local-b', local_nombre: 'Local Bee', multilocal: true } }]
+    montar()
+    await waitFor(() => expect(screen.getByText('Local Bee · 1 visita de socio sin factura (ayer y hoy)')).toBeTruthy())
+  })
+  it('el canje sin código del bloque no se cuenta otra vez en «Revisar las excepciones del Club»', async () => {
+    clubExcepciones = 1
+    clubAlertas = [canje(1, 'local-a')]
+    montar()
+    await waitFor(() => expect(screen.getByText('1 canje sin código sin resolver')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Todo en orden.')).toBeTruthy())
+    expect(screen.queryByText('Revisar las excepciones del Club')).toBeNull()
+  })
+  it('las demás excepciones siguen: 3 abiertas − 1 canje del bloque = «2 excepciones»', async () => {
+    clubExcepciones = 3
+    clubLocalActual = 'local-a'
+    clubAlertas = [canje(1, 'local-a'), canje(5, 'local-b')]   // el de otro local no se descuenta
+    montar()
+    await waitFor(() => expect(screen.getByText('Revisar las excepciones del Club')).toBeTruthy())
+    expect(screen.getByText('2 excepciones')).toBeTruthy()
   })
 })

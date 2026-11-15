@@ -621,6 +621,7 @@ html, body, #root {
 .inicio-pendiente:hover .inicio-pendiente-texto { text-decoration: underline; text-underline-offset: 3px; }
 .inicio-pendiente:focus-visible { outline: 2px solid var(--c-oro); outline-offset: 2px; }
 .inicio-pendiente-texto { flex: 1; font-size: 0.95rem; line-height: 1.35; }
+.inicio-pendiente-detalle { display: block; font-size: 0.8rem; color: var(--c-gris); margin-top: 0.15rem; }
 .inicio-pendiente-ir { color: var(--c-gris-medio); font-size: 1.25rem; line-height: 1; }
 
 /* Píldoras de estado: laca = malo, oro = pendiente, musgo = bueno. */

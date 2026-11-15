@@ -89,3 +89,24 @@ describe('fmtCreditosCrc (08-nov noche): créditos y colones juntos, como el pas
     expect(fmtCreditosCrc(2, undefined)).toBe('2 créditos')
   })
 })
+
+// D7 A (firma del dueño, 14-nov; mig 157): el equipo suma personas, no créditos; su saldo de antes quedó congelado y va
+// en una línea aparte, fuera del pasivo. Un mes cerrado antes de la 157 sigue mostrando lo que tenía.
+describe('reporte · Equipo Satori con la 157', () => {
+  const con157: ReporteMes = { ...rep, equipo: { personas_mes: 7, tarjetas_mes: 3, congelado_cuentas: 10, congelado_creditos: 22.5,
+    congelado_valor_crc: 405000, lista: [fila(1, { tipo: 'equipo', personas: 5, creditos: undefined })] } }
+  it('PDF: personas del equipo y el saldo congelado aparte, sin «créditos en saldo»', () => {
+    const html = reporteHtml(con157)
+    expect(html).toContain('Saldo congelado, fuera del pasivo: 22,5 créditos (₡405.000) en 10 cuentas.')
+    expect(html).toContain('7 personas en el mes. El equipo no acumula créditos.')
+    expect(html).not.toMatch(/créditos en saldo\./)
+  })
+  it('CSV: el congelado va en su propia línea, separado del saldo al cierre', () => {
+    const csv = reporteCsv(con157)
+    expect(csv).toContain('"kpi";"equipo_congelado_creditos";"";"";"";"";"22.5";""')
+    expect(csv).toContain('"kpi";"saldo_creditos_al_cierre";"";"";"";"";"148";""')
+  })
+  it('mes cerrado antes de la 157: dice lo que tenía y por qué', () => {
+    expect(reporteHtml(rep)).toContain('27,5 créditos en saldo (mes cerrado antes de que el equipo dejara de acumular créditos).')
+  })
+})

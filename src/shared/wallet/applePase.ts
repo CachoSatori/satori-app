@@ -14,7 +14,7 @@
  * certificado y su clave (el dueño los carga cuando haya cuenta de Apple Developer). Este módulo no lee ningún flag:
  * solo arma. Las pruebas usan un certificado FALSO generado en memoria y verifican la firma con `openssl cms`.
  */
-import { colones, validarDatos, type PaseDatos } from './googlePase.ts'
+import { colones, sinCreditos, textoAvance, validarDatos, type PaseDatos } from './googlePase.ts'
 
 export interface ConfigApple {
   passTypeIdentifier: string          // pass.<dominio invertido>.club
@@ -56,8 +56,15 @@ export function armarPassJson(d: PaseDatos, cfg: ConfigApple, tokenWs: string | 
     secundarios.push({ key: 'socio', label: 'Local Club', value: 'Vale en todos los Satori' })
     const sorpresas = soc.cortesias.filter(c => c.sorpresa).reduce((s, c) => s + c.cantidad, 0)
     if (sorpresas > 0) secundarios.push({ key: 'cortesia', label: 'Su próxima visita', value: sorpresas === 1 ? '1 cortesía sorpresa' : `${sorpresas} cortesías sorpresa` })
+    const av = textoAvance(soc.avance)   // mig 168: primeros 90 días
+    if (av) secundarios.push({ key: 'avance', label: av.header.es, value: av.body.es })
   }
-  if (anf && anf.activo) {
+  if (anf && anf.activo && sinCreditos(anf)) {
+    // D7 A (mig 157): el equipo ve las personas que registró, sin créditos ni «Canjear»
+    primarios.push({ key: 'registradas', label: 'Personas registradas',
+                     value: `${anf.referidos_mes} ${anf.referidos_mes === 1 ? 'persona' : 'personas'} este mes` })
+    if (d.codigo_barras?.tipo === 'socio') reverso.push({ key: 'cupones', label: 'Sus cupones para compartir', value: anf.qr_url })
+  } else if (anf && anf.activo) {
     primarios.push({ key: 'creditos', label: 'Créditos', value: `${colones(anf.creditos * anf.valor_credito_crc, '.')} disponibles` })
     if (anf.referidos_mes > 0) {
       secundarios.push({ key: 'referidos', label: 'Referidos',

@@ -92,6 +92,10 @@ test('R-01: tope de códigos y sin saldo se traducen a códigos fijos', async ()
   globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Todavía no te alcanza para canjear' }), { status: 400 })
   r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
   assert.equal(r.status, 409); assert.equal((await r.json()).error, 'sin_saldo_canje')
+  // D7 A (mig 157): la cuenta del equipo no canjea → código propio, no «servicio»
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Las cuentas del equipo no canjean créditos' }), { status: 400 })
+  r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
+  assert.equal(r.status, 409); assert.equal((await r.json()).error, 'equipo_sin_canje')
 })
 
 test('14/24: un binding por endpoint: crear usa RL_CREAR (5/60 s) y leer usa RL_LEER (60/60 s); falta uno → 503 solo ahí', async () => {
@@ -145,13 +149,13 @@ test('LC-DES-07: /api/alta con Turnstile OK llama a club_socio_autoalta con dato
   }
   try {
     const env = { ...conLimite(), TURNSTILE_SECRET: 's' }
-    const cuerpo = JSON.stringify({ nombre: ' Ana ', whatsapp: '60000000', acepto: 'v1', ref: 'abcdefgh', turnstile: 'token-de-prueba-123', cedula: '1' })
+    const cuerpo = JSON.stringify({ nombre: ' Ana ', whatsapp: '60000000', acepto: 'v1', ref: 'abcdefgh', turnstile: 'token-de-prueba-123', cedula: '1', mayor_edad: true })
     const r = await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')
     assert.equal(r.status, 200)
     const base = llamadas.find(l => String(l.url).endsWith('/rest/v1/rpc/club_socio_autoalta'))
     assert.ok(base)
     assert.equal(base.init.headers['x-club-web'], 'clave-de-prueba')
-    assert.deepEqual(JSON.parse(base.init.body), { p_datos: { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1', ref: 'ABCDEFGH' } })
+    assert.deepEqual(JSON.parse(base.init.body), { p_datos: { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1', ref: 'ABCDEFGH', mayor_edad: true } })
     // LC-ML: el local viaja solo si es un id válido; con dos encendidos y sin local, la base pide elegir
     llamadas = []
     await manejar(pedido('alta', 'POST', JSON.stringify({ ...JSON.parse(cuerpo), local: 'local-prueba' })), env, 'alta')
@@ -165,6 +169,45 @@ test('LC-DES-07: /api/alta con Turnstile OK llama a club_socio_autoalta con dato
     assert.equal((await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')).status, 409)
     respuestaBase = { status: 400, body: { message: 'Demasiadas altas hoy' } }
     assert.equal((await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')).status, 429)
+  } finally { globalThis.fetch = fetchViejo }
+})
+
+test('D6 A: /api/alta exige mayor_edad === true y filtra el cumpleaños (día/mes enteros válidos + permiso); si no, 400 sin llamar a la base', async () => {
+  const fetchViejo = globalThis.fetch
+  llamadas = []
+  globalThis.fetch = async (url, init) => {
+    llamadas.push({ url, init })
+    if (String(url).includes('turnstile')) return new Response(JSON.stringify({ success: true }), { status: 200 })
+    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+  }
+  const datosBase = l => l.filter(x => String(x.url).endsWith('/rest/v1/rpc/club_socio_autoalta'))
+  try {
+    const env = { ...conLimite(), TURNSTILE_SECRET: 's' }
+    const b0 = { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1.2', turnstile: 'token-de-prueba-123' }
+    const enviar = async extra => (await manejar(pedido('alta', 'POST', JSON.stringify({ ...b0, ...extra })), env, 'alta')).status
+    // sin mayor de 18, o con algo que no es `true` literal → 400
+    for (const extra of [{}, { mayor_edad: false }, { mayor_edad: 'true' }, { mayor_edad: 1 }]) {
+      llamadas = []
+      assert.equal(await enviar(extra), 400, JSON.stringify(extra))
+      assert.equal(datosBase(llamadas).length, 0)
+    }
+    // cumpleaños mal formado → 400 (sin permiso, solo uno de los dos, fecha inexistente, texto)
+    for (const extra of [{ cumple_dia: 3, cumple_mes: 4 }, { cumple_dia: 3, cumple_permiso: true }, { cumple_permiso: true },
+      { cumple_dia: 31, cumple_mes: 4, cumple_permiso: true }, { cumple_dia: 30, cumple_mes: 2, cumple_permiso: true },
+      { cumple_dia: '3', cumple_mes: 4, cumple_permiso: true }, { cumple_dia: 3, cumple_mes: 13, cumple_permiso: true }]) {
+      llamadas = []
+      assert.equal(await enviar({ mayor_edad: true, ...extra }), 400, JSON.stringify(extra))
+      assert.equal(datosBase(llamadas).length, 0)
+    }
+    // 29-feb vale; viaja a la base tal cual
+    llamadas = []
+    assert.equal(await enviar({ mayor_edad: true, cumple_dia: 29, cumple_mes: 2, cumple_permiso: true }), 200)
+    assert.deepEqual(JSON.parse(datosBase(llamadas)[0].init.body).p_datos,
+      { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1.2', ref: '', mayor_edad: true, cumple_dia: 29, cumple_mes: 2, cumple_permiso: true })
+    // sin cumpleaños: no viaja ninguna clave de cumpleaños
+    llamadas = []
+    assert.equal(await enviar({ mayor_edad: true }), 200)
+    assert.ok(!('cumple_dia' in JSON.parse(datosBase(llamadas)[0].init.body).p_datos))
   } finally { globalThis.fetch = fetchViejo }
 })
 
@@ -320,4 +363,71 @@ test('(12-nov) /api/portal/:token/wallet/actualizar llama a la ruta «actualizar
     assert.equal((await manejar(pedido('portal/xyz/wallet/actualizar', 'POST'), conLimite(), 'portal/xyz/wallet/actualizar')).status, 404)
     assert.equal((await manejar(pedido(ruta), conLimite(), ruta)).status, 405)
   } finally { globalThis.fetch = fetchViejo }
+})
+
+// 158: POST /api/cupon/:codigo/resena → club_cupon_resena_clic (la marca de clic, sin datos personales)
+test('158: /api/cupon/:codigo/resena llama a club_cupon_resena_clic con el código y nada más', async () => {
+  llamadas = []
+  const r = await manejar(pedido('cupon/abcdefgh23/resena', 'POST'), conLimite(), 'cupon/abcdefgh23/resena')
+  assert.equal(r.status, 200)
+  assert.equal(llamadas.length, 1)
+  assert.ok(String(llamadas[0].url).endsWith('/rpc/club_cupon_resena_clic'))
+  assert.deepEqual(JSON.parse(llamadas[0].init.body), { p_codigo: 'ABCDEFGH23' })
+  assert.equal(llamadas[0].init.headers['x-club-web'], 'clave-de-prueba')
+})
+
+test('158: /resena solo con POST, con código válido y con el tope por IP (falla cerrada sin binding)', async () => {
+  llamadas = []
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena'), conLimite(), 'cupon/ABCDEFGH23/resena')).status, 405)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH1O/resena', 'POST'), conLimite(), 'cupon/ABCDEFGH1O/resena')).status, 404)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena', 'POST'), conLimite(false), 'cupon/ABCDEFGH23/resena')).status, 429)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena', 'POST'), base, 'cupon/ABCDEFGH23/resena')).status, 503)
+  assert.equal(llamadas.length, 0)
+})
+
+// Verificador, menor a: el sondeo de la página del cupón no comparte el tope de lectura con el portal
+test('158: GET /api/cupon/:codigo?sondeo=1 usa RL_LEER con la clave «sondeo:»; sin el parámetro, «leer:»', async () => {
+  const claves = []
+  const env = { ...base, RL_CREAR: lim(true), RL_LEER: { limit: async ({ key }) => { claves.push(key); return { success: true } } } }
+  globalThis.fetch = async () => new Response(JSON.stringify({ estado: 'vigente' }), { status: 200 })
+  const sondeo = new Request('https://club.ejemplo/api/cupon/ABCDEFGH23?sondeo=1', { headers: { 'CF-Connecting-IP': '203.0.113.7' } })
+  assert.equal((await manejar(sondeo, env, 'cupon/ABCDEFGH23')).status, 200)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23'), env, 'cupon/ABCDEFGH23')).status, 200)
+  assert.deepEqual(claves, ['sondeo:203.0.113.7', 'leer:203.0.113.7'])
+})
+
+test('158: con la lectura de la IP agotada (portal), el sondeo sigue pasando, y al revés', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({ estado: 'vigente' }), { status: 200 })
+  const env = { ...base, CLUB_DEV: '1', RL_LECTURA_MAX: '2', RL_LECTURA_VENTANA_S: '600' }
+  const ip = '198.51.100.158'
+  const leer = () => manejar(new Request('https://club.ejemplo/api/cupon/ABCDEFGH23', { headers: { 'CF-Connecting-IP': ip } }), env, 'cupon/ABCDEFGH23')
+  const sondear = () => manejar(new Request('https://club.ejemplo/api/cupon/ABCDEFGH23?sondeo=1', { headers: { 'CF-Connecting-IP': ip } }), env, 'cupon/ABCDEFGH23')
+  assert.equal((await leer()).status, 200); assert.equal((await leer()).status, 200)
+  assert.equal((await leer()).status, 429)                      // la lectura de esta IP, agotada
+  assert.equal((await sondear()).status, 200); assert.equal((await sondear()).status, 200)
+  assert.equal((await sondear()).status, 429)                   // el sondeo tiene su propio tope
+  assert.equal((await leer()).status, 429)                      // y no le devolvió nada a la lectura
+})
+
+// Verificador, menor b: la marca del clic usa el tope holgado de lectura, con clave propia, no el de crear (5/60 s)
+test('158: /resena cuenta en RL_LEER con «resena:»; RL_CREAR agotado no la frena', async () => {
+  llamadas = []
+  globalThis.fetch = async (url, init) => { llamadas.push({ url, init }); return new Response('{"ok":true}', { status: 200 }) }
+  const claves = []
+  const env = { ...base, RL_CREAR: lim(false), RL_LEER: { limit: async ({ key }) => { claves.push(key); return { success: true } } } }
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23/resena', 'POST'), env, 'cupon/ABCDEFGH23/resena')).status, 200)
+  assert.deepEqual(claves, ['resena:203.0.113.7'])
+  assert.equal(llamadas.length, 1)
+})
+
+test('158: /resena con IP compartida: 6 clics seguidos de la misma IP se cuentan todos (antes, el 6.º daba 429)', async () => {
+  globalThis.fetch = async () => new Response('{"ok":true}', { status: 200 })
+  const env = { ...base, CLUB_DEV: '1' }   // topes por defecto: crear 5/60 s, leer 60/60 s
+  const ip = '192.0.2.158'
+  const estados = []
+  for (let i = 0; i < 6; i++) {
+    const r = await manejar(new Request('https://club.ejemplo/api/cupon/ABCDEFGH23/resena', { method: 'POST', headers: { 'CF-Connecting-IP': ip } }), env, 'cupon/ABCDEFGH23/resena')
+    estados.push(r.status)
+  }
+  assert.deepEqual(estados, [200, 200, 200, 200, 200, 200])
 })

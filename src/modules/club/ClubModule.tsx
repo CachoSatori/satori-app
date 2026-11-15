@@ -3,6 +3,9 @@
  * F1f: Excepciones del puente y Reportes (owner, manager). LC-A3: Promociones y cortesías (owner edita, manager lee).
  * LC-ML: multilocal. Los locales salen de club_config; el selector aparece solo si hay más de uno, y el owner enciende o
  * apaga el Club por local (pestaña Locales). Ninguna pantalla nombra un local.
+ * Fase 1B (mig 160): pestaña Tablero (owner, manager y contador). El contador entra SOLO al Tablero (totales, sin nombres).
+ * Fase 1C (mig 161): pestañas Cohortes y Ranking (owner, manager). El ranking tiene nombres: abrirlo queda auditado.
+ * Fase 1D (mig 162): pestaña Embudo (owner, manager): embudo del anfitrión. Tiene nombres: abrirla queda auditado.
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -19,8 +22,14 @@ const Excepciones = lazy(() => import('./Excepciones'))
 const Reportes = lazy(() => import('./Reportes'))
 const Promociones = lazy(() => import('./Promociones'))
 const Marcadores = lazy(() => import('./Marcadores'))
+const Tablero = lazy(() => import('./Tablero'))
+const ResenaLocales = lazy(() => import('./ResenaLocales'))
+const Cohortes = lazy(() => import('./Cohortes'))
+const Ranking = lazy(() => import('./Ranking'))
+const Embudo = lazy(() => import('./Embudo'))
 
-type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'promociones' | 'descuentos' | 'locales'
+type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'tablero' | 'cohortes' | 'ranking' | 'embudo' | 'promociones' | 'descuentos' | 'locales'
+
 const VISTAS_GESTION: Vista[] = ['miembros', 'negocios', 'excepciones', 'reportes', 'promociones', 'descuentos']
 
 export default function ClubModule() {
@@ -29,9 +38,11 @@ export default function ClubModule() {
   const gestiona = profile?.role === 'owner' || profile?.role === 'manager'
   const [params] = useSearchParams()
   const esOwner = profile?.role === 'owner'
+  // El contador solo ve el Tablero (totales del Club): ni Escanear, ni miembros, ni nombres.
+  const esContador = profile?.role === 'contador'
   // 164: los avisos del Inicio llegan con ?vista=…(&miembro=… | &tipo=…). Solo owner y manager entran a otra pestaña.
   const pedida = params.get('vista') as Vista | null
-  const [vista, setVista] = useState<Vista>(() => (gestiona && pedida && VISTAS_GESTION.includes(pedida) ? pedida : 'escanear'))
+  const [vista, setVista] = useState<Vista>(() => (esContador ? 'tablero' : gestiona && pedida && VISTAS_GESTION.includes(pedida) ? pedida : 'escanear'))
   const abrirMiembro = params.get('miembro')
   const tipoExcepcion = params.get('tipo')
   const [locales, setLocales] = useState<LocalClub[] | null>(null)
@@ -93,6 +104,10 @@ export default function ClubModule() {
           <div className={`vt-nav-tab ${vista === 'negocios' ? 'active' : ''}`} onClick={() => setVista('negocios')}>Negocios</div>
           <div className={`vt-nav-tab ${vista === 'excepciones' ? 'active' : ''}`} onClick={() => setVista('excepciones')}>Excepciones</div>
           <div className={`vt-nav-tab ${vista === 'reportes' ? 'active' : ''}`} onClick={() => setVista('reportes')}>Reportes</div>
+          <div className={`vt-nav-tab ${vista === 'tablero' ? 'active' : ''}`} onClick={() => setVista('tablero')}>Tablero</div>
+          <div className={`vt-nav-tab ${vista === 'cohortes' ? 'active' : ''}`} onClick={() => setVista('cohortes')}>Cohortes</div>
+          <div className={`vt-nav-tab ${vista === 'ranking' ? 'active' : ''}`} onClick={() => setVista('ranking')}>Ranking</div>
+          <div className={`vt-nav-tab ${vista === 'embudo' ? 'active' : ''}`} onClick={() => setVista('embudo')}>Embudo</div>
           <div className={`vt-nav-tab ${vista === 'promociones' ? 'active' : ''}`} onClick={() => setVista('promociones')}>Promociones</div>
           <div className={`vt-nav-tab ${vista === 'descuentos' ? 'active' : ''}`} onClick={() => setVista('descuentos')}>Descuentos</div>
           {esOwner && <div className={`vt-nav-tab ${vista === 'locales' ? 'active' : ''}`} onClick={() => setVista('locales')}>Locales</div>}
@@ -101,11 +116,15 @@ export default function ClubModule() {
 
       <Suspense key={local ?? 'sin-local'} fallback={<div className="module-loading"><span className="loading-mark">縁</span></div>}>
         {vista === 'locales' && esOwner && <Locales locales={locales ?? []} onCambio={cargarLocales} />}
-        {vista === 'escanear' && <Escanear />}
+        {vista === 'escanear' && !esContador && <Escanear />}
+        {vista === 'tablero' && (gestiona || esContador) && <Tablero />}
         {vista === 'miembros' && gestiona && <Miembros abrirId={abrirMiembro} />}
         {vista === 'negocios' && gestiona && <Negocios />}
         {vista === 'excepciones' && gestiona && <Excepciones tipoInicial={tipoExcepcion} />}
         {vista === 'reportes' && gestiona && <Reportes />}
+        {vista === 'cohortes' && gestiona && <Cohortes />}
+        {vista === 'ranking' && gestiona && <Ranking />}
+        {vista === 'embudo' && gestiona && <Embudo />}
         {vista === 'promociones' && gestiona && <Promociones />}
         {vista === 'descuentos' && gestiona && <Marcadores />}
       </Suspense>
@@ -138,6 +157,7 @@ function Locales({ locales, onCambio }: { locales: LocalClub[]; onCambio: () => 
         </div>
       ))}
       {msg && <p style={{ color: C.ink, fontSize: 13 }}>{msg}</p>}
+      <Suspense fallback={null}><ResenaLocales locales={locales} /></Suspense>
       <Umbrales locales={locales} />
       <NuevoLocal locales={locales} onCreado={async (t) => { await onCambio(); setMsg(t) }} />
     </div>

@@ -141,6 +141,12 @@
       "rama": "claude/club-tablero-plata",
       "renumerada_a": "160"
     },
+    "107": {
+      "nombre": "club_cohortes_ranking",
+      "bloque": "club",
+      "rama": "claude/club-cohortes-ranking",
+      "renumerada_a": "161"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -194,6 +200,12 @@
       "bloque": "pase",
       "rama": "claude/club-tablero-plata",
       "origen": "106"
+    },
+    "161": {
+      "nombre": "club_cohortes_ranking",
+      "bloque": "pase",
+      "rama": "claude/club-cohortes-ranking",
+      "origen": "107"
     }
   }
 }

@@ -466,6 +466,52 @@ export async function setCortesiaCostoPct(local: string, pct: number): Promise<v
   if (filas.length !== 1) throw new ClubError('Solo el owner cambia el % de costo de las cortesías', false)
 }
 
+// ── Club → Cohortes y Ranking de socios (mig 161, SPEC Club v2 ítems 6 y 7) ──────────────────
+/** null en activos_* = «aún no»: la ventana no se cerró para todos los socios de la cohorte. */
+export interface CohorteMes {
+  mes: string; socios: number; bajas: number; con_2: number; con_4: number
+  activos_30: number | null; activos_60: number | null; activos_90: number | null
+  visitas: number; visitas_por_socio: number
+}
+export interface Cohortes {
+  local: string; locales: string[]; hoy: string; generado_en: string
+  cohortes: CohorteMes[]
+  totales: { socios: number; bajas: number; con_2: number; con_4: number; visitas: number; visitas_por_socio: number | null }
+}
+/**
+ * owner, manager y contador. Solo conteos (sin nombres). `local` null = todos los locales que el usuario ve.
+ * Rastro: una fila por `apertura` (un id por vez que se abre la pantalla), no por cada cambio de filtro.
+ */
+export const getCohortes = (local: string | null, apertura: string | null = null) =>
+  llamar<Cohortes>('club_cohortes_socios', { p_location: local, p_apertura: apertura })
+
+export interface SocioRanking {
+  id: string; nombre: string; local_alta: string; estado: 'activo' | 'baja'; alta: string
+  visitas: number; mesas: number; facturas: number; venta_respaldada_crc: number; tiquete_promedio_crc: number | null
+  personas: number; invitados: number; descuento_estimado_crc: number; ultima_visita: string | null
+}
+export interface Ranking {
+  desde: string; hasta: string; local: string; locales: string[]; generado_en: string
+  /** Locales sin facturas del PoS en el período (p. ej. sin el puente): aviso, no error. */
+  locales_sin_pos: string[]
+  socios: SocioRanking[]
+  totales: {
+    socios: number; socios_con_visita: number; visitas: number; facturas: number; venta_respaldada_crc: number
+    invitados: number; descuento_estimado_crc: number; lineas_sin_referencia: number
+  }
+}
+/**
+ * Solo owner y manager. Nombres, sin teléfonos ni correos. Rastro en club_auditoria: una fila por `apertura` de la
+ * pantalla (no por cada cambio de filtro) y una por cada exporte. El CSV de la pantalla SOLO se arma con lo que devuelve
+ * la llamada con `exporte`.
+ */
+export const getRanking = (desde: string, hasta: string, local: string | null, exporte = false, apertura: string | null = null) =>
+  llamar<Ranking>('club_ranking_socios', { p_desde: desde, p_hasta: hasta, p_location: local, p_exporte: exporte, p_apertura: apertura })
+/** Un id por apertura de una pantalla auditada (Cohortes, Ranking). */
+export const nuevaApertura = (): string =>
+  typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16))
+
 // ── Piloto en paralelo: comparación con la página vieja ──────────────────────
 export interface FilaComparacion {
   semana: string; miembro_id: string; referente: string; negocio: string | null

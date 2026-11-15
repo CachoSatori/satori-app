@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { Employee, Profile, UserRole } from '../types/database'
+import type { CambioPermiso } from '../../modules/admin/bitacoraPermisos'
 
 // ── Empleados ───────────────────────────────────────────────
 
@@ -91,6 +92,19 @@ export async function setProfileActive(id: string, is_active: boolean): Promise<
     .update({ is_active })
     .eq('id', id)
   if (error) throw new Error(error.message)
+}
+
+// B10 (mig 165): bitácora de permisos de un usuario, más reciente primero. Solo owner (RLS); solo lectura.
+export async function getCambiosPermisos(profileId: string, limite = 50): Promise<CambioPermiso[]> {
+  const { data, error } = await supabase
+    .from('bitacora_permisos')
+    .select('id, profile_id, campo, antes, despues, cambiado_por, origen, cambiado_en')
+    .eq('profile_id', profileId)
+    .order('cambiado_en', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limite)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as CambioPermiso[]
 }
 
 // ── Vincular perfil a empleado ──────────────────────────────

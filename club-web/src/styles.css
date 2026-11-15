@@ -93,6 +93,9 @@ input[type=text], input[type=tel], input[type=email], select { width: 100%; min-
        color: var(--tinta); margin-top: 0.3rem; }
 .check { display: flex; gap: 0.65rem; align-items: flex-start; font-weight: 400; }
 .check input { width: 26px; height: 26px; flex: none; margin-top: 2px; accent-color: var(--tinta); }
+.cumple { border: 1px solid currentColor; border-radius: 10px; padding: 0.4rem 0.9rem 0.9rem; margin: 1rem 0 0; }
+.cumple legend { font-weight: 500; padding: 0 0.3rem; }
+.cumple .sub { margin: 0.2rem 0 0; }
 details summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; list-style: none; }
 details summary::-webkit-details-marker { display: none; }
 details summary::before { content: '›'; color: var(--oro-texto); font: 600 1.4rem/1 var(--sans); transition: transform 0.15s; }
@@ -132,6 +135,14 @@ h1, h2, .nombre, .cupon .etq, .saldo .num, .cuenta, .codigo, .btn, .tab, details
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+/* 167: tarjeta «¿Nos cuenta cómo le fue?» (reseña de Google cada N visitas) en «Mi Club» */
+.resena-socio-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.resena-socio-cab h2 { margin: 0; }
+.resena-socio .cerrar { flex: none; min-width: 44px; min-height: 44px; border: 1px solid var(--linea); border-radius: 4px;
+  background: transparent; color: var(--tinta); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+.resena-socio .cerrar:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+/* mig 168: avance de los primeros 90 días en «Mi Club» */
 /* mig 169: retos de temporada baja en «Mi Club» (misma barra que el avance de la 168) */
 .avance { border: 1px dashed currentColor; border-radius: 10px; padding: .6rem .8rem; margin: .6rem 0; }
 .avance h3 { margin: 0 0 .2rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; opacity: .7; }

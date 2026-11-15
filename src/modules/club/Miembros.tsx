@@ -24,7 +24,8 @@ type Pestana = 'referentes' | 'equipo' | 'socios'
 type Fila = ClubMiembro & { saldo: ClubSaldo | null; negocio: string | null; roles: ClubRol[] }
 const SEIS_MESES_MS = 182 * 24 * 3600 * 1000
 
-export default function Miembros() {
+/** `abrirId` (164): llega desde un aviso del Inicio y abre esa ficha (si el miembro está en la lista). */
+export default function Miembros({ abrirId = null }: { abrirId?: string | null } = {}) {
   const [pestana, setPestana] = useState<Pestana>('referentes')
   const [miembros, setMiembros] = useState<ClubMiembro[]>([])
   const [saldos, setSaldos] = useState<ClubSaldo[]>([])
@@ -33,7 +34,7 @@ export default function Miembros() {
   const [cargando, setCargando] = useState(true)
   const [ahora, setAhora] = useState(0)   // momento de la última carga (filtro «sin actividad»)
   const [error, setError] = useState<string | null>(null)
-  const [sel, setSel] = useState<string | null>(null)
+  const [sel, setSel] = useState<string | null>(abrirId)
   const [editando, setEditando] = useState<ClubMiembro | 'nuevo' | null>(null)
 
   // filtros

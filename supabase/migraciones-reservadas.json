@@ -159,6 +159,12 @@
       "rama": "claude/club-edad-validar",
       "renumerada_a": "163"
     },
+    "110": {
+      "nombre": "club_alertas_umbral",
+      "bloque": "club",
+      "rama": "claude/club-alertas-umbral",
+      "renumerada_a": "164"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -230,6 +236,12 @@
       "bloque": "pase",
       "rama": "claude/club-edad-validar",
       "origen": "109"
+    },
+    "164": {
+      "nombre": "club_alertas_umbral",
+      "bloque": "pase",
+      "rama": "claude/club-alertas-umbral",
+      "origen": "110"
     }
   }
 }

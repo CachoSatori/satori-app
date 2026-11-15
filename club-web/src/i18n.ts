@@ -31,6 +31,9 @@ const ES = {
   optin_falta: 'Escriba un WhatsApp o un email y marque la casilla.',
   cupon_usado: 'Este cupón ya se usó. ¡Gracias por visitarnos!',
   cupon_vencido: 'Este cupón ya no es válido.',
+  // 158 (14-nov, firmado por el dueño): reseña de Google después de usar el cupón. A todos, sin premio, sin filtrar.
+  resena_txt: 'Gracias por su visita. ¿Nos cuenta cómo le fue? Su reseña en Google ayuda a otros viajeros.',
+  resena_boton: 'Escribir una reseña en Google',
   cupon_invalido: 'No encontramos este cupón.',
   ref_invalido: 'Este código no está activo. Pídale uno nuevo a quien se lo compartió.',
   tope_ref: 'Por hoy no se pueden generar más cupones con este código. Pruebe mañana.',
@@ -170,6 +173,8 @@ const EN: Textos = {
   optin_falta: 'Enter a WhatsApp number or an email and tick the box.',
   cupon_usado: 'This coupon has already been used. Thanks for visiting!',
   cupon_vencido: 'This coupon is no longer valid.',
+  resena_txt: 'Thank you for visiting. How was it? Your Google review helps other travelers.',
+  resena_boton: 'Write a Google review',
   cupon_invalido: 'We could not find this coupon.',
   ref_invalido: 'This code is not active. Ask the person who shared it for a new one.',
   tope_ref: 'No more coupons can be created with this code today. Please try tomorrow.',

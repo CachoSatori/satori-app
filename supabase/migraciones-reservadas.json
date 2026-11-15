@@ -123,6 +123,12 @@
       "rama": "claude/club-equipo-sin-creditos",
       "renumerada_a": "157"
     },
+    "105": {
+      "nombre": "club_resena_cupon",
+      "bloque": "club",
+      "rama": "claude/club-resena-cupon",
+      "renumerada_a": "158"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -158,6 +164,12 @@
       "bloque": "pase",
       "rama": "claude/club-equipo-sin-creditos",
       "origen": "104"
+    },
+    "158": {
+      "nombre": "club_resena_cupon",
+      "bloque": "pase",
+      "rama": "claude/club-resena-cupon",
+      "origen": "105"
     }
   }
 }

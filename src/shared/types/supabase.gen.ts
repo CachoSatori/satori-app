@@ -121,6 +121,39 @@ export type Database = {
           },
         ]
       }
+      bitacora_permisos: {
+        Row: {
+          antes: string | null
+          cambiado_en: string
+          cambiado_por: string | null
+          campo: string
+          despues: string | null
+          id: number
+          origen: string
+          profile_id: string
+        }
+        Insert: {
+          antes?: string | null
+          cambiado_en?: string
+          cambiado_por?: string | null
+          campo: string
+          despues?: string | null
+          id?: never
+          origen: string
+          profile_id: string
+        }
+        Update: {
+          antes?: string | null
+          cambiado_en?: string
+          cambiado_por?: string | null
+          campo?: string
+          despues?: string | null
+          id?: never
+          origen?: string
+          profile_id?: string
+        }
+        Relationships: []
+      }
       cash_cierres_dia: {
         Row: {
           ajuste_motivo: string | null

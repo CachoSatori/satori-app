@@ -165,6 +165,12 @@
       "rama": "claude/club-alertas-umbral",
       "renumerada_a": "164"
     },
+    "111": {
+      "nombre": "admin_bitacora_permisos",
+      "bloque": "club",
+      "rama": "claude/admin-bitacora-permisos",
+      "renumerada_a": "165"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -242,6 +248,12 @@
       "bloque": "pase",
       "rama": "claude/club-alertas-umbral",
       "origen": "110"
+    },
+    "165": {
+      "nombre": "admin_bitacora_permisos",
+      "bloque": "pase",
+      "rama": "claude/admin-bitacora-permisos",
+      "origen": "111"
     }
   }
 }

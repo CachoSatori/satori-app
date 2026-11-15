@@ -74,8 +74,15 @@ describe('fecha de factura día/mes (Costa Rica)', () => {
     expect(desc).not.toContain('2026-09-11')
   })
 
-  it('la clave FE manda sobre la fecha de la IA, sin aviso', async () => {
+  it('la clave FE manda sobre la fecha de la IA, pero si difieren avisa con las dos (hallazgo 228, 15-nov)', async () => {
     const input = await cargar(tiquete('2026-10-25', clave('091126')))
+    expect(input.value).toBe('2026-11-09')
+    expect(screen.getByRole('status').textContent)
+      .toContain('La clave dice 9 de noviembre y la factura dice 25 de octubre: revisá la fecha.')
+  })
+
+  it('clave FE igual a la fecha impresa → sin aviso', async () => {
+    const input = await cargar(tiquete('2026-11-09', clave('091126')))
     expect(input.value).toBe('2026-11-09')
     expect(screen.queryByRole('status')).toBeNull()
   })

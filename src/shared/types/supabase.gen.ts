@@ -121,6 +121,39 @@ export type Database = {
           },
         ]
       }
+      bitacora_permisos: {
+        Row: {
+          antes: string | null
+          cambiado_en: string
+          cambiado_por: string | null
+          campo: string
+          despues: string | null
+          id: number
+          origen: string
+          profile_id: string
+        }
+        Insert: {
+          antes?: string | null
+          cambiado_en?: string
+          cambiado_por?: string | null
+          campo: string
+          despues?: string | null
+          id?: never
+          origen: string
+          profile_id: string
+        }
+        Update: {
+          antes?: string | null
+          cambiado_en?: string
+          cambiado_por?: string | null
+          campo?: string
+          despues?: string | null
+          id?: never
+          origen?: string
+          profile_id?: string
+        }
+        Relationships: []
+      }
       cash_cierres_dia: {
         Row: {
           ajuste_motivo: string | null
@@ -802,6 +835,7 @@ export type Database = {
           lc_invitado_codigo: string
           location_id: string
           mapa_url: string | null
+          resena_url: string | null
           max_creditos_por_visita: number
           nombre: string | null
           personas_por_credito: number
@@ -850,6 +884,7 @@ export type Database = {
           lc_invitado_codigo?: string
           location_id: string
           mapa_url?: string | null
+          resena_url?: string | null
           max_creditos_por_visita?: number
           nombre?: string | null
           personas_por_credito?: number
@@ -898,6 +933,7 @@ export type Database = {
           lc_invitado_codigo?: string
           location_id?: string
           mapa_url?: string | null
+          resena_url?: string | null
           max_creditos_por_visita?: number
           nombre?: string | null
           personas_por_credito?: number
@@ -1082,6 +1118,7 @@ export type Database = {
           referente_id: string
           usado_en: string | null
           usado_por: string | null
+          resena_clic_en: string | null
           vence_en: string
         }
         Insert: {
@@ -1097,6 +1134,7 @@ export type Database = {
           referente_id: string
           usado_en?: string | null
           usado_por?: string | null
+          resena_clic_en?: string | null
           vence_en: string
         }
         Update: {
@@ -1112,6 +1150,7 @@ export type Database = {
           referente_id?: string
           usado_en?: string | null
           usado_por?: string | null
+          resena_clic_en?: string | null
           vence_en?: string
         }
         Relationships: [
@@ -5596,6 +5635,7 @@ export type Database = {
           personas: number
         }[]
       }
+      club_cupon_resena_clic: { Args: { p_codigo: string }; Returns: Json }
       club_cupon_ver: { Args: { p_codigo: string }; Returns: Json }
       club_descuento_tipo_guardar: {
         Args: {
@@ -5718,6 +5758,19 @@ export type Database = {
           p_estado: string
           p_id: string
           p_location?: string
+          p_negocio_id: string
+          p_nombre: string
+          p_tipo: string
+        }
+        Returns: string
+      }
+      club_miembro_guardar_v2: {
+        Args: {
+          p_contacto: Json
+          p_estado: string
+          p_id: string
+          p_location?: string
+          p_mayor_edad: boolean
           p_negocio_id: string
           p_nombre: string
           p_tipo: string
@@ -5989,6 +6042,17 @@ export type Database = {
         }
         Returns: Json
       }
+      club_socio_alta_caja_v2: {
+        Args: {
+          p_email: string
+          p_location?: string
+          p_mayor_edad: boolean
+          p_nombre: string
+          p_verifico_residencia: boolean
+          p_whatsapp: string
+        }
+        Returns: Json
+      }
       club_socio_autoalta: { Args: { p_datos: Json }; Returns: Json }
       club_socio_baja_portal: { Args: { p_token: string }; Returns: boolean }
       club_socio_confirmar: {
@@ -6024,6 +6088,15 @@ export type Database = {
       club_socio_validar: {
         Args: {
           p_location?: string
+          p_miembro: string
+          p_verifico_residencia: boolean
+        }
+        Returns: Json
+      }
+      club_socio_validar_v2: {
+        Args: {
+          p_location?: string
+          p_mayor_edad: boolean
           p_miembro: string
           p_verifico_residencia: boolean
         }

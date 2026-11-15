@@ -10,6 +10,8 @@ import { modulosPara } from '../shared/layout/modulos'
 import { calcularPendientes, fraseEstado, TODAS_LAS_SENALES, type Pendiente, type Senal } from '../shared/layout/pendientes'
 import type { AlertaCierres } from '../modules/cash/diasSinCierre'
 import { alertaGuardada, leerAlertaInicio } from './alertaInicio'
+import type { AlertaInicio } from '../shared/api/club'
+import { avisoClub, canjesEnBloque } from '../modules/club/alertasInicio'
 
 // La lista de módulos vive en `shared/layout/modulos.ts`: es la misma fuente del menú global (B3).
 
@@ -251,6 +253,9 @@ export default function HomePage() {
   const [status, setStatus] = useState<HomeStatus | null>(null)
   const [clubAbiertas, setClubAbiertas] = useState(0)   // excepciones del puente abiertas (owner, manager)
   const [clubFallo, setClubFallo] = useState(false)    // la lectura de excepciones del Club falló (208)
+  // 164 (B6): «Club · Para revisar hoy» — alertas con umbral (owner y manager). null = cargando.
+  const [clubAlertas, setClubAlertas] = useState<AlertaInicio[] | 'fallo' | null>(null)
+  const [clubLocal, setClubLocal] = useState<string | null>(null)   // el local con que se contaron las excepciones abiertas
   // B5: si `fetchHomeStatus` falla entero, se dice — no «Revisando el día…» para siempre.
   const [statusFallo, setStatusFallo] = useState(false)
 
@@ -277,9 +282,15 @@ export default function HomePage() {
   useEffect(() => {
     if (mustLand || !gestionaClub) return
     // Auditoría 208: si la lectura del Club falla, el Inicio dice «sin comprobar» (nunca «Todo en orden»).
-    import('../shared/api/club').then(m => m.getExcepcionesAbiertas(30))
+    // Un solo import del módulo para las dos lecturas (excepciones abiertas y alertas con umbral).
+    const club = import('../shared/api/club')
+    club.then(m => { setClubLocal(m.localActual()); return m.getExcepcionesAbiertas(30) })
       .then(n => { setClubAbiertas(n); setClubFallo(false) })
       .catch(() => setClubFallo(true))
+    // 164: si falla, el bloque dice «sin comprobar» (nunca «nada para revisar»).
+    club.then(m => m.getAlertasInicio(null))   // todos los locales encendidos que ve (cada aviso con su local)
+      .then(a => setClubAlertas(a ?? []))
+      .catch(() => setClubAlertas('fallo'))
   }, [mustLand, gestionaClub])
 
   const role = profile?.role ?? ''
@@ -330,9 +341,11 @@ export default function HomePage() {
       diasSinCierre: alertaOk ? alertaOk.dias.length : null,
       turnosViejos:  alertaOk ? alertaOk.turnos.length : null,
       sinComprobar,
-      clubExcepciones: gestionaClub && !clubFallo ? clubAbiertas : null,
+      // 164: un canje sin código no sale dos veces. Si el bloque «Club · Para revisar hoy» ya lo muestra, se descuenta
+      // de las excepciones abiertas (mismas filas, mismos 30 días) del local que leyó ese conteo.
+      clubExcepciones: gestionaClub && !clubFallo ? Math.max(0, clubAbiertas - canjesEnBloque(clubAlertas, clubLocal)) : null,
     }, visibles)
-  }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas, clubFallo])
+  }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas, clubFallo, clubAlertas, clubLocal])
 
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol
@@ -365,6 +378,8 @@ export default function HomePage() {
               onIr={path => navigate(path)}
             />
           )}
+
+          {gestionaClub && <ClubParaRevisar alertas={clubAlertas} onIr={path => navigate(path)} />}
 
           <section className="inicio-seccion" aria-labelledby="inicio-modulos">
             <h2 id="inicio-modulos" className="inicio-subtitulo">{isManager ? 'Módulos' : 'Tus módulos'}</h2>
@@ -481,5 +496,46 @@ function ResumenDelDia({ status, statusFallo, alertaCargando, pendientes, onIr }
         )}
       </section>
     </>
+  )
+}
+
+// ── 164 (SPEC-club-v2 ítem 10, B6): «Club · Para revisar hoy» (owner y manager) ──
+// Alertas con umbral por local (club_config, solo el owner las cambia). Cada aviso dice qué pasó, con qué umbral y dónde
+// se revisa, y lleva a esa pantalla. Con cero datos: «Nada para revisar». Si la lectura falla: «sin comprobar».
+export function ClubParaRevisar({ alertas, onIr }: {
+  alertas: AlertaInicio[] | 'fallo' | null
+  onIr:    (path: string) => void
+}) {
+  return (
+    <section className="inicio-seccion" aria-labelledby="inicio-club-revisar">
+      <h2 id="inicio-club-revisar" className="inicio-subtitulo">Club · Para revisar hoy</h2>
+      {alertas === null ? (
+        <p className="inicio-vacio">Cargando…</p>
+      ) : alertas === 'fallo' ? (
+        <p className="inicio-vacio">
+          <span className="pildora pildora-pendiente">sin comprobar</span> No se pudieron leer las alertas del Club.
+        </p>
+      ) : alertas.length === 0 ? (
+        <p className="inicio-vacio">Nada para revisar en el Club (ayer y hoy).</p>
+      ) : (
+        <ul className="inicio-pendientes">
+          {alertas.map(a => {
+            const v = avisoClub(a)
+            return (
+              <li key={v.id}>
+                <button type="button" className="inicio-pendiente" onClick={() => onIr(v.path)}>
+                  <span className="inicio-pendiente-texto">
+                    {v.titulo}
+                    <span className="inicio-pendiente-detalle">{v.texto}</span>
+                  </span>
+                  <span className="pildora pildora-pendiente">{v.estado}</span>
+                  <span className="inicio-pendiente-ir" aria-hidden="true">›</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }

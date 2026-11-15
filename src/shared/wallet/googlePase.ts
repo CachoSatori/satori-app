@@ -43,6 +43,8 @@ export interface PaseDatos {
     valor_credito_crc: number
     referidos_mes: number
     creditos_ganados_mes: number
+    /** D7 A (mig 157): false = cuenta del equipo (registra personas, sin créditos ni «Canjear»). Ausente = base vieja. */
+    con_creditos?: boolean
   }
   promociones: Array<{
     id: string; nombre: string; nombre_en: string | null; beneficio: string; para: string[]
@@ -133,6 +135,9 @@ export function fechaCR(iso: string | null | undefined): Txt | null {
   return { es: `${d.getUTCDate()}-${MESES_ES[d.getUTCMonth()]} ${hh}:${mm}`, en: `${MESES_EN[d.getUTCMonth()]} ${d.getUTCDate()}, ${hh}:${mm}` }
 }
 
+/** D7 A (mig 157): cuenta del equipo, sin créditos. */
+export const sinCreditos = (anf: NonNullable<PaseDatos['anfitrion']>): boolean => anf.con_creditos === false || anf.tipo === 'equipo'
+
 /** (12-nov, el dueño) Sin ningún rol vigente (socio pendiente o activo, o anfitrión activo) el pase queda vencido. */
 export function sinRolVigente(d: PaseDatos): boolean {
   const soc = d.socio && (d.socio.estado === 'activo' || d.socio.estado === 'pendiente')
@@ -220,7 +225,15 @@ export function armarObjeto(issuerId: string, entorno: Entorno, d: PaseDatos, di
     }
   }
 
-  if (anf && anf.activo) {
+  if (anf && anf.activo && sinCreditos(anf)) {
+    // D7 A (mig 157): el equipo ve las personas que registró, sin créditos, sin «próximo medio crédito» ni «Canjear»
+    textos.push(modulo('registradas', al ? { es: `Personas registradas al ${al.es}`, en: `Registered guests as of ${al.en}` } : { es: 'Personas registradas', en: 'Registered guests' },
+      { es: `${anf.referidos_mes} ${anf.referidos_mes === 1 ? 'persona' : 'personas'} este mes`,
+        en: `${anf.referidos_mes} ${anf.referidos_mes === 1 ? 'guest' : 'guests'} this month` }))
+    if (d.codigo_barras?.tipo === 'socio') {
+      links.push(link('cupones', anf.qr_url, { es: 'Sus cupones para compartir', en: 'Your coupons to share' }))
+    }
+  } else if (anf && anf.activo) {
     // (el dueño, 08-nov) «2 · 14 personas» no se entendía: el saldo en colones y, si suma, las personas del mes aparte
     textos.push(modulo('creditos', al ? { es: `Créditos al ${al.es}`, en: `Credits as of ${al.en}` } : { es: 'Créditos', en: 'Credits' },
       { es: `${colones(anf.creditos * anf.valor_credito_crc, '.')} disponibles`,

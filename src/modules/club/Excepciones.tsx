@@ -54,10 +54,11 @@ function queEs(e: Pick<Excepcion, 'tipo' | 'detalle'>): string {
 const hoyCR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' })
 const haceDias = (d: number) => { const t = new Date(); t.setDate(t.getDate() - d); return t.toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }) }
 
-export default function Excepciones() {
+/** `tipoInicial` (164): llega desde un aviso del Inicio (p. ej. CANJE_SIN_CODIGO) y deja la lista filtrada por ese tipo. */
+export default function Excepciones({ tipoInicial = null }: { tipoInicial?: string | null } = {}) {
   const [desde, setDesde] = useState(haceDias(30))
   const [hasta, setHasta] = useState(hoyCR())
-  const [tipo, setTipo] = useState<'' | TipoExcepcion>('')
+  const [tipo, setTipo] = useState<'' | TipoExcepcion>(() => (tipoInicial && tipoInicial in TIPO_EXC ? tipoInicial as TipoExcepcion : ''))
   const [verResueltas, setVerResueltas] = useState(false)
   const [verClasificados, setVerClasificados] = useState(false)
   const [lista, setLista] = useState<Excepcion[] | null>(null)

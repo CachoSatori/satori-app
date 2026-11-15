@@ -134,3 +134,10 @@ details.tarjeta > summary { font: 600 1.25rem/1.25 var(--serif); }
 h1, h2, .nombre, .cupon .etq, .saldo .num, .cuenta, .codigo, .btn, .tab, details.tarjeta > summary, label, input, select {
   font-variant-numeric: lining-nums tabular-nums;
 }
+
+/* 167: tarjeta «¿Nos cuenta cómo le fue?» (reseña de Google cada N visitas) en «Mi Club» */
+.resena-socio-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.resena-socio-cab h2 { margin: 0; }
+.resena-socio .cerrar { flex: none; min-width: 44px; min-height: 44px; border: 1px solid var(--linea); border-radius: 4px;
+  background: transparent; color: var(--tinta); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+.resena-socio .cerrar:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }

@@ -5875,6 +5875,7 @@ export type Database = {
         Returns: number
       }
       club_portal: { Args: { p_token: string }; Returns: Json }
+      club_portal_resena: { Args: { p_accion: string; p_token: string }; Returns: Json }
       club_pos_ref: { Args: { p: Json; p_location: string }; Returns: Json }
       club_premios_generar: { Args: { p_location?: string }; Returns: number }
       club_productos: {

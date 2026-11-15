@@ -1,7 +1,8 @@
 /**
  * Club Satori — páginas públicas (sin login, sin el bundle de la app):
  *   /r/{codigo8}  turista: obtiene su cupón 10 % (o ve el que ya tiene en este teléfono)
- *   /c/{codigo10} cupón: vigente → lo muestra; usado o vencido → aviso
+ *   /c/{codigo10} cupón: vigente → lo muestra (y se fija cada ~20 s si ya se usó); usado hace < 7 días → «Gracias por su
+ *                 visita» con la reseña de Google del local (158); si no, el aviso de siempre
  *   /p/{token}    portal del referente: saldo, QR para compartir, «Canjear» (código de 10 min) e historial
  *   /k/{codigo6}  código de canje: lo lee la caja; abierto en un navegador, solo un aviso
  *   /s/{codigo9}  QR fijo del socio del Local Club: lo lee la caja; abierto en un navegador, solo un aviso
@@ -17,6 +18,8 @@ import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrF
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 import { validarCumple } from './cumple'
+import { esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon } from './resena'
+import { modoPortal } from './portalEquipo'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -57,7 +60,8 @@ const msgError = (e: string) =>
   ({ referente_invalido: t.ref_invalido, cupon_invalido: t.cupon_invalido, portal_invalido: t.portal_invalido,
      tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red, tope_canje: t.tope_canje,
      sin_saldo_canje: t.sin_saldo_canje, tope_altas: t.tope_altas, verificacion: t.alta_verificacion,
-     datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible } as Record<string, string>)[e] ?? t.servicio
+     datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible,
+     equipo_sin_canje: t.equipo_sin_canje } as Record<string, string>)[e] ?? t.servicio
 
 // ── Formatos ─────────────────────────────────────────────────────────────────
 const fecha = (iso: string, conHora = true) =>
@@ -95,7 +99,9 @@ const marcarOptin = (c: string) => { try { localStorage.setItem(`club.optin.${c}
 
 // ── Vistas ───────────────────────────────────────────────────────────────────
 interface LocalPub { id: string; nombre: string; direccion: string | null; mapa: string | null }
-interface CuponVer { estado: 'vigente' | 'usado' | 'vencido'; vence_en: string; referente: string | null; local?: LocalPub | null }
+interface CuponVer { estado: 'vigente' | 'usado' | 'vencido'; vence_en: string; referente: string | null; local?: LocalPub | null
+  /** 158: link de reseña de Google del local, solo con el cupón usado hace menos de 7 días */
+  resena?: string | null }
 
 async function vistaCupon(codigo: string, venceEn: string, referente: string | null, titulo = true, local: LocalPub | null = null) {
   const canvas = await qr(urlCupon(codigo), `QR ${codigo}`)
@@ -113,6 +119,37 @@ async function vistaCupon(codigo: string, venceEn: string, referente: string | n
         local?.mapa?.startsWith('https://') ? ' · ' : '',
         local?.mapa?.startsWith('https://') ? h('a', { href: local.mapa, target: '_blank', rel: 'noopener' }, t.ver_mapa) : '')),
     optinHecho(codigo) ? avisoEl('ok', t.optin_gracias) : formOptin(codigo),
+  )
+  // 158: mientras el cupón está vigente y la página abierta, se fija cada ~20 s (máx. 10 min) si la caja ya lo usó
+  pararSondeo?.()
+  pararSondeo = sondearCupon<CuponVer>({
+    consultar: async () => { const r = await api<CuponVer>(rutaSondeo(codigo)); return r.ok ? r.data : null },
+    alCambiar: c => { pararSondeo = null; trasUso(codigo, c) },
+    visible: () => document.visibilityState !== 'hidden',
+  })
+}
+
+let pararSondeo: (() => void) | null = null
+
+/** 158: el cupón ya no está vigente: agradecimiento con la reseña (usado < 7 días y local con link) o el aviso corto. */
+function trasUso(codigo: string, c: CuponVer) {
+  const v = vistaDelCupon(c)
+  if (v === 'gracias') { vistaGracias(codigo, c.resena as string, c.local ?? null); anunciar(t.resena_txt); return }
+  pintar(h('h1', {}, t.cupon_titulo), avisoEl('err', v === 'usado' ? t.cupon_usado : t.cupon_vencido))
+}
+
+/** 158 · «Gracias por su visita» + «Escribir una reseña en Google». Sin pedir datos; el clic se marca en el cupón (sin datos
+ * personales) y la reseña se abre en Google. Se le muestra a todos: sin premio y sin filtrar por satisfacción. */
+function vistaGracias(codigo: string, resena: string, local: LocalPub | null) {
+  if (!esUrlResena(resena)) return pintar(h('h1', {}, t.cupon_titulo), avisoEl('ok', t.cupon_usado))
+  const boton = h('a', { class: 'btn', href: resena, target: '_blank', rel: 'noopener noreferrer' }, t.resena_boton)
+  // sin esperar la respuesta: el link se abre igual aunque la marca no llegue (sin señal, tope o error)
+  boton.addEventListener('click', () => marcarClicResena(codigo))
+  pintar(
+    h('h1', {}, local?.nombre ? `${LOCAL.nombre} · ${local.nombre}` : LOCAL.nombre),
+    h('section', { class: 'tarjeta', 'aria-label': t.resena_boton },
+      h('p', {}, t.resena_txt),
+      boton),
   )
 }
 
@@ -187,10 +224,12 @@ function paginaBajaTurista(llave: string) {
 
 async function paginaReferente(ref: string) {
   const guardado = leerCupon(ref)
-  if (guardado && new Date(guardado.vence_en) > new Date()) {
+  // 158: el cupón guardado se consulta aunque ya haya pasado su fecha: si se usó hace < 7 días, toca el agradecimiento
+  if (guardado) {
     const r = await api<CuponVer>(`cupon/${guardado.codigo}`)
     if (r.ok && r.data.estado === 'vigente') return vistaCupon(guardado.codigo, r.data.vence_en, r.data.referente, true, r.data.local ?? null)
-    if (!r.ok && r.error === 'red') return vistaCupon(guardado.codigo, guardado.vence_en, null)   // sin señal: el guardado sirve igual
+    if (r.ok && vistaDelCupon(r.data) === 'gracias') return vistaGracias(guardado.codigo, r.data.resena as string, r.data.local ?? null)   // 158
+    if (!r.ok && r.error === 'red' && new Date(guardado.vence_en) > new Date()) return vistaCupon(guardado.codigo, guardado.vence_en, null)   // sin señal: el guardado sirve igual
     borrarCupon(ref)
   }
   const err = h('div')
@@ -229,7 +268,7 @@ async function paginaCupon(codigo: string) {
   const r = await api<CuponVer>(`cupon/${codigo}`)
   if (!r.ok) return pintar(h('h1', {}, t.cupon_titulo), avisoEl('err', msgError(r.error)))
   if (r.data.estado === 'vigente') return vistaCupon(codigo, r.data.vence_en, r.data.referente, false, r.data.local ?? null)
-  pintar(h('h1', {}, t.cupon_titulo), avisoEl('err', r.data.estado === 'usado' ? t.cupon_usado : t.cupon_vencido))
+  trasUso(codigo, r.data)   // 158: usado hace < 7 días → «Gracias por su visita» con la reseña; si no, el aviso de siempre
 }
 
 interface Portal {
@@ -244,6 +283,8 @@ interface Portal {
     cortesias: Array<{ sorpresa: boolean; cantidad: number; motivo: string; vence_en: string | null }> | null
   } | null
   movimientos: Array<{ tipo: string; personas: number; creditos: number | null; fecha: string }>
+  /** D7 A (mig 157): cuenta del equipo → personas registradas, sin créditos ni «Canjear». */
+  equipo?: boolean; personas_registradas?: number | null; personas_registradas_mes?: number | null
 }
 
 // R-01: código de canje de un solo uso (10 min). El QR del portal (/r/) ya no sirve para canjear.
@@ -308,17 +349,24 @@ async function paginaPortal(token: string) {
   }, 'image/png'))
   const descargar = h('a', { class: 'btn sec', href: canvas.toDataURL('image/png'), download: `satori-${p.codigo}.png` }, t.descargar)
   const esAnfitrion = p.anfitrion !== false
+  const modo = modoPortal(p)   // D7 A (mig 157): el equipo ve personas registradas; nunca «Canjear»
+  const saldo = modo.equipo
+    ? h('section', { class: 'tarjeta' },
+        h('h2', {}, t.equipo_titulo),
+        h('p', {}, h('strong', {}, t.equipo_mes(Number(p.personas_registradas_mes ?? 0)))),
+        h('p', { class: 'sub' }, t.equipo_total(Number(p.personas_registradas ?? 0))))
+    : h('section', { class: 'tarjeta' },
+        h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)),
+          h('span', {}, (p.creditos === 1 ? t.portal_creditos_uno : t.portal_creditos) + (p.valor_credito_crc ? ` · ${colones(p.creditos * p.valor_credito_crc)}` : ''))),
+        h('p', { class: 'sub' }, t.portal_personas(p.personas)),
+        h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito))),
+        p.vencimiento_meses ? h('p', { class: 'sub' }, t.portal_vence(p.vencimiento_meses)) : null)
   const anfitrion: HTMLElement[] = !esAnfitrion ? [] : [
-    h('section', { class: 'tarjeta' },
-      h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)),
-        h('span', {}, (p.creditos === 1 ? t.portal_creditos_uno : t.portal_creditos) + (p.valor_credito_crc ? ` · ${colones(p.creditos * p.valor_credito_crc)}` : ''))),
-      h('p', { class: 'sub' }, t.portal_personas(p.personas)),
-      h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito))),
-      p.vencimiento_meses ? h('p', { class: 'sub' }, t.portal_vence(p.vencimiento_meses)) : null),
-    ...(p.creditos >= 1 ? [seccionCanje(token)] : []),
+    saldo,
+    ...(modo.canje ? [seccionCanje(token)] : []),
     h('section', { class: 'tarjeta portal-qr' },
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
-      h('p', {}, t.portal_indicaciones),
+      h('p', {}, modo.equipo ? t.equipo_indicaciones : t.portal_indicaciones),
       h('div', { class: 'fila' }, compartir, descargar),
     ),
     h('section', { class: 'tarjeta' },

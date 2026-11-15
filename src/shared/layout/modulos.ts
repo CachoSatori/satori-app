@@ -77,7 +77,7 @@ export const MODULES: Module[] = [
   {
     id: 'club', path: '/club', label: 'Club', kanji: '縁',
     description: 'Referentes · cupones · canjes', ready: true,
-    roles: ['owner', 'manager', 'cajero'], grupo: 'operacion',
+    roles: ['owner', 'manager', 'cajero', 'contador'], grupo: 'operacion',
   },
   {
     id: 'finanzas', path: '/finanzas', label: 'Finanzas', kanji: '財',

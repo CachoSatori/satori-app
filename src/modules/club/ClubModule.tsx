@@ -12,7 +12,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { C, inputStyle } from './estilos'
-import { getLocalesClub, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, getClubUrl, getUmbrales, guardarUmbrales,
+import { getLocalesClubParaRol, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, getClubUrl, getUmbrales, guardarUmbrales,
   type LocalClub, type UmbralesAlerta } from '../../shared/api/club'
 import { configurarClubUrl } from './qrFormato'
 
@@ -40,6 +40,7 @@ export default function ClubModule() {
   const gestiona = profile?.role === 'owner' || profile?.role === 'manager'
   const [params] = useSearchParams()
   const esOwner = profile?.role === 'owner'
+  const rol = profile?.role
   // El contador solo ve el Tablero (totales del Club): ni Escanear, ni miembros, ni nombres.
   const esContador = profile?.role === 'contador'
   // 164: los avisos del Inicio llegan con ?vista=…(&miembro=… | &tipo=…). Solo owner y manager entran a otra pestaña.
@@ -59,13 +60,14 @@ export default function ClubModule() {
   const visibles = (locales ?? []).filter(l => l.activo || esOwner)
   const cargarLocales = useCallback(async () => {
     try {
-      const l = await getLocalesClub()
+      // 170: el manager solo ve sus locales (mis_locales); el owner, todos (también los apagados)
+      const l = await getLocalesClubParaRol(rol)
       setLocales(l)
       const vis = l.filter(x => x.activo || esOwner)
       const elegido = vis.find(x => x.id === localActual()) ?? vis.find(x => x.activo) ?? vis[0] ?? null
       elegirLocal(elegido?.id ?? null); setLocal(elegido?.id ?? null)
     } catch { setLocales([]) }
-  }, [esOwner])
+  }, [esOwner, rol])
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void cargarLocales() }, [cargarLocales])
   // (08-nov noche) el dominio de los QR y links sale de la configuración, no del código

@@ -279,19 +279,21 @@ export default function HomePage() {
   }, [mustLand])
 
   const gestionaClub = profile?.role === 'owner' || profile?.role === 'manager'
+  const rolClub = profile?.role
   useEffect(() => {
     if (mustLand || !gestionaClub) return
     // Auditoría 208: si la lectura del Club falla, el Inicio dice «sin comprobar» (nunca «Todo en orden»).
     // Un solo import del módulo para las dos lecturas (excepciones abiertas y alertas con umbral).
     const club = import('../shared/api/club')
-    club.then(m => { setClubLocal(m.localActual()); return m.getExcepcionesAbiertas(30) })
+    // 170: el manager lee solo un local suyo (el recordado en el navegador puede ser de otro)
+    club.then(async m => { await m.asegurarLocalParaRol(rolClub); setClubLocal(m.localActual()); return m.getExcepcionesAbiertas(30) })
       .then(n => { setClubAbiertas(n); setClubFallo(false) })
       .catch(() => setClubFallo(true))
     // 164: si falla, el bloque dice «sin comprobar» (nunca «nada para revisar»).
     club.then(m => m.getAlertasInicio(null))   // todos los locales encendidos que ve (cada aviso con su local)
       .then(a => setClubAlertas(a ?? []))
       .catch(() => setClubAlertas('fallo'))
-  }, [mustLand, gestionaClub])
+  }, [mustLand, gestionaClub, rolClub])
 
   const role = profile?.role ?? ''
   const isManager = ['owner', 'manager', 'contador'].includes(role)

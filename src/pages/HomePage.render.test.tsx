@@ -60,6 +60,7 @@ let clubAlertasLecturas = 0
 let clubAlertasLocalPedido: unknown = 'sin llamar'
 let clubLocalActual: string | null = null
 vi.mock('../shared/api/club', () => ({
+  asegurarLocalParaRol: async () => {},   // 170: el manager lee solo un local suyo
   getExcepcionesAbiertas: async () => { if (clubFalla) throw new Error('sin conexión'); return clubExcepciones },
   getAlertasInicio: async (local?: string | null) => {
     clubAlertasLecturas++; clubAlertasLocalPedido = local

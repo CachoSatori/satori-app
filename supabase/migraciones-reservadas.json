@@ -195,6 +195,12 @@
       "rama": "claude/club-retos",
       "renumerada_a": "169"
     },
+    "116": {
+      "nombre": "club_local_manager",
+      "bloque": "club",
+      "rama": "claude/club-local-manager",
+      "renumerada_a": "170"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -302,6 +308,12 @@
       "bloque": "pase",
       "rama": "claude/club-retos",
       "origen": "115"
+    },
+    "170": {
+      "nombre": "club_local_manager",
+      "bloque": "pase",
+      "rama": "claude/club-local-manager",
+      "origen": "116"
     }
   }
 }

@@ -80,10 +80,18 @@ describe('fecha de factura día/mes (Costa Rica)', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('fecha no ambigua (25/10) queda igual, sin aviso', async () => {
+  it('fecha no ambigua reciente (13/11) queda igual, sin aviso', async () => {
+    const input = await cargar(tiquete('2026-11-13'))
+    expect(input.value).toBe('2026-11-13')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('(14-nov) factura vieja (25/10, 19 días) → aviso «Factura de hace 19 días», no bloquea', async () => {
     const input = await cargar(tiquete('2026-10-25'))
     expect(input.value).toBe('2026-10-25')
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status').textContent).toContain('Factura de hace 19 días: revisá la fecha.')
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar y registrar/ }))
+    await waitFor(() => expect(m.crearMov).toHaveBeenCalledTimes(1))
   })
 
   it('ambigua leída en el futuro (2026-12-03) → 2026-03-12 con aviso D/M', async () => {
@@ -100,5 +108,45 @@ describe('fecha de factura día/mes (Costa Rica)', () => {
     expect(screen.queryByRole('status')).toBeNull()
     fireEvent.change(input, { target: { value: '2026-11-14' } })   // mañana en CR (aunque en UTC ya sea 14)
     expect(screen.getByRole('status').textContent).toContain(FUTURO)
+  })
+})
+
+// (14-nov) Regla del dueño: si las dos lecturas día/mes son posibles, la app pregunta y no deja guardar sin elegir.
+// Hoy = 13-nov CR (de noche). «11/10»: 11-oct (33 días) y 10-nov (3 días) son posibles.
+describe('fecha ambigua: pide confirmación', () => {
+  const boton = () => screen.getByRole('button', { name: /Confirmar y registrar/ }) as HTMLButtonElement
+
+  it('muestra «¿10 de noviembre o 11 de octubre?», el campo vacío y NO deja registrar', async () => {
+    const input = await cargar(tiquete('2026-10-11'))
+    expect(input.value).toBe('')
+    const grupo = screen.getByRole('group', { name: 'Elegí la fecha de la factura' })
+    expect(grupo.textContent).toContain('¿10 de noviembre o 11 de octubre?')
+    expect(boton().disabled).toBe(true)
+    fireEvent.click(boton())
+    await new Promise(r => setTimeout(r, 0))
+    expect(m.crearMov).not.toHaveBeenCalled()
+  })
+
+  it('al elegir una opción se habilita y la descripción lleva esa fecha', async () => {
+    const input = await cargar(tiquete('2026-11-10'))
+    fireEvent.click(screen.getByRole('button', { name: '11 de octubre' }))
+    expect(input.value).toBe('2026-10-11')
+    expect(screen.queryByRole('group', { name: 'Elegí la fecha de la factura' })).toBeNull()
+    expect(screen.getByRole('status').textContent).toContain('Factura de hace 33 días')
+    expect(boton().disabled).toBe(false)
+    fireEvent.click(boton())
+    await waitFor(() => expect(m.crearMov).toHaveBeenCalledTimes(1))
+    const mov = m.crearMov.mock.calls[0][0]
+    expect(String(mov.description)).toContain('fact 2026-10-11')
+    // la fecha del movimiento es la del turno: no se manda ninguna fecha, solo el turno abierto
+    expect(mov.session_id).toBe('s1')
+    expect(Object.values(mov)).not.toContain('2026-10-11')
+  })
+
+  it('escribir la fecha a mano también resuelve la duda', async () => {
+    const input = await cargar(tiquete('2026-10-11'))
+    fireEvent.change(input, { target: { value: '2026-11-10' } })
+    expect(screen.queryByRole('group', { name: 'Elegí la fecha de la factura' })).toBeNull()
+    expect(boton().disabled).toBe(false)
   })
 })

@@ -94,6 +94,12 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
 10. **Nunca revertir (ni borrar) el `.sql` de una migración que ya está en el ledger de prod.** Si se revierte el
     código de un PR, el archivo de su migración se queda en `supabase/migrations/`; si no, Branching falla en cada
     push a `main` (pasó con la 074 entre el 05 y el 06/11).
+11. **La fecha del movimiento de caja es el día en que se registró (el turno), nunca la fecha de la factura** (regla del
+    dueño, 14/11). La fecha de la factura es un dato aparte (va a la descripción, «· fact AAAA-MM-DD»): los proveedores
+    suelen facturar el día del pedido y entregar 1–3 días después. La fecha de factura se analiza por calendario
+    (`src/shared/utils/fechaFactura.ts`): la clave FE manda; sin clave, de las dos lecturas día/mes se toma la única
+    posible (no futura, ≤ 60 días) y, si las dos lo son, la pantalla pregunta y no deja guardar hasta elegir; una
+    factura de más de 7 días avisa «Factura de hace X días: revisá la fecha.» (no bloquea).
 
 ---
 

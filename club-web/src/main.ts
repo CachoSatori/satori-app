@@ -22,6 +22,7 @@ import { esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon 
 import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 import { leerAvance, textosAvance } from './avance'
+import { leerRetos, textosReto } from './retos'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -452,6 +453,21 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     void qr(urlSocio(cod), `QR ${cod}`).then(c => qrBox.replaceChildren(
       h('h2', {}, t.socio_qr), c, h('p', { class: 'codigo', style: 'text-align:center' }, cod), h('p', { class: 'sub' }, t.socio_qr_txt)))
   }
+  // mig 169: retos de temporada baja («3 almuerzos este mes»); se piden aparte y, si fallan o no hay, no se muestra nada
+  const retosBox = h('div')
+  if (activo) {
+    void api<unknown>(`portal/${token}/retos`).then(r => {
+      const lista = r.ok ? leerRetos(r.data) : []
+      const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date())   // YYYY-MM-DD en CR
+      retosBox.replaceChildren(...lista.map(reto => {
+        const x = textosReto(reto, t, idioma, d => fecha(d + 'T12:00:00-06:00', false), hoy)
+        const barra = h('div', { class: 'avance-barra', role: 'img', 'aria-label': x.principal },
+          ...Array.from({ length: x.meta }, (_, i) => h('span', { class: i < x.avance ? 'lleno' : '' })))
+        return h('div', { class: 'avance reto' + (x.ganada ? ' ganada' : '') },
+          h('h3', {}, t.reto_titulo + ': ' + x.titulo), h('p', {}, h('strong', {}, x.principal)), barra, h('p', { class: 'sub' }, x.detalle))
+      }))
+    })
+  }
   const sec = h('section', { class: 'tarjeta', 'aria-label': t.socio_titulo },
     h('h2', {}, t.socio_titulo),
     h('p', {}, activo ? t.socio_activo : t.socio_pendiente),
@@ -462,6 +478,7 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),
     activo && avanceBox,
     qrBox,
+    activo && retosBox,
     err, baja)
   baja.addEventListener('click', async () => {
     if (!window.confirm(t.socio_baja_confirmar)) return

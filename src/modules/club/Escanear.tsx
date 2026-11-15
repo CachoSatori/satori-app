@@ -16,7 +16,7 @@ import {
   opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, getEdadSocio, type EdadSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
-  type FacturaReciente,
+  type FacturaReciente, conPremioDeReto, type RetoEnCaja,
 } from '../../shared/api/club'
 import { parsearQR, urlPortal } from './qrFormato'
 import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
@@ -694,13 +694,14 @@ function PanelSocio({ d, onCerrar, onValidado }: {
 function VisitaSocio({ miembro }: { miembro: string }) {
   const [pos, setPos] = useState<PosRef | null>(null)
   const [enviando, setEnviando] = useState(false)
-  const [res, setRes] = useState<QueAplicar | null>(null)
+  const [res, setRes] = useState<(QueAplicar & { reto?: RetoEnCaja }) | null>(null)
   const [err, setErr] = useState<ClubError | null>(null)
   const op = useRef(nuevoOp())
   async function registrar() {
     if (!pos) return
     setEnviando(true); setErr(null)
-    try { setRes(await registrarVisitaSocio(miembro, pos, op.current)) }
+    // mig 169: después de registrar, el paso del premio del reto (si falla, sigue lo de antes; el premio queda guardado)
+    try { setRes(await conPremioDeReto(await registrarVisitaSocio(miembro, pos, op.current))) }
     catch (e) { const ce = aClubError(e); if (!ce.esRed) op.current = nuevoOp(); setErr(ce) }   // red: mismo op en el reintento
     finally { setEnviando(false) }
   }
@@ -712,6 +713,9 @@ function VisitaSocio({ miembro }: { miembro: string }) {
         <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           Qué aplicar{res.repetida ? ' · visita ya registrada hoy' : ''}
         </div>
+        {res.reto?.estado === 'ofrecida' && (
+          <div style={{ marginTop: 4 }}><Chip color={C.teal}>Premio del reto «{res.reto.nombre}»: {res.reto.cortesia} · una sola vez</Chip></div>
+        )}
         <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: 2 }}>{res.texto}</div>
         {res.avisos.length > 0 && (
           <ul style={{ margin: '6px 0 0', paddingLeft: '1.1rem', fontSize: '0.88rem' }}>

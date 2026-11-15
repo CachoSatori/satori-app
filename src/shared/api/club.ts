@@ -793,3 +793,61 @@ export const exportarListaCampana = (campana: string) =>
   llamar<ListaCampana>('club_campana_lista', { p_campana: campana, p_exporte: true, p_apertura: null })
 export const getReporteCampana = (campana: string, apertura: string) =>
   llamar<ReporteCampana>('club_campana_reporte', { p_campana: campana, p_apertura: apertura })
+
+// ── Mig 169: retos de temporada baja («3 almuerzos este mes») ─────────────────
+export type EstadoReto = 'borrador' | 'vigente' | 'terminada'
+export interface Reto {
+  id: string; nombre: string; nombre_en: string; locales: string[]; estado: EstadoReto
+  desde: string; hasta: string; dias: number[]; hora_desde: string | null; hora_hasta: string | null
+  meta: number; vence_dias: number; control_pct: 0 | 15; armado: boolean; en_curso: boolean
+  /** Premio de cada local del reto: {location_id: cortesía}. */
+  cortesias: Record<string, { id: string; codigo: string; nombre: string; activa: boolean }>
+  ganados: number; usados: number; disponibles: number
+}
+export interface RetoDatos {
+  nombre: string; nombre_en: string; locales: string[]; desde: string; hasta: string; dias: number[]
+  hora_desde: string | null; hora_hasta: string | null; meta: number; vence_dias: number; control_pct: 0 | 15
+  /** {location_id: id de la cortesía de ese local} */
+  cortesias: Record<string, string>
+}
+/** Lista de retos + la exigencia de factura (opción B) del Club. */
+export interface RetosLista { exige_factura: boolean; retos: Reto[] }
+/** Owner y manager. Todos los retos (todos los locales). */
+export const getRetos = () => llamar<RetosLista>('club_retos_listar', {})
+/**
+ * Solo owner (RLS de club_config_global; auditado por trigger). Opción B: con `true`, los días anteriores cuentan para el
+ * reto solo si la visita cruza con una factura cerrada con el 856/857; con la exigencia prendida no se arma un reto en
+ * un local sin facturas del PoS en la base.
+ */
+export async function setRetosExigeFactura(v: boolean): Promise<void> {
+  const filas = await leer(from<{ id: boolean }>('club_config_global').update({ retos_exige_factura: v }).eq('id', true).select('id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner cambia esta regla', false)
+}
+/** Solo owner. `id` null = nuevo. Solo un borrador se edita. */
+export const guardarReto = (id: string | null, datos: RetoDatos) => llamar<string>('club_reto_guardar', { p_id: id, p_datos: datos })
+/** Solo owner. Borrador → vigente: la base rechaza el 4.º del año y la superposición en un local. */
+export const armarReto = (id: string) => llamar<RetosLista>('club_reto_armar', { p_id: id })
+export const terminarReto = (id: string) => llamar<RetosLista>('club_reto_terminar', { p_id: id })
+export const borrarReto = (id: string) => llamar<RetosLista>('club_reto_borrar', { p_id: id })
+/** Cortesías de OTRO local (el premio del reto se elige por local). Owner y manager. */
+export const getCortesiasDe = (local: string) => llamar<Cortesia[]>('club_cortesias_listar', { p_location: local })
+
+/** Mig 169: qué pasó con el premio del reto en esta visita. `ofrecida` = va en esta factura (una sola vez). */
+export type RetoEnCaja =
+  | { estado: 'ofrecida'; nombre: string; cortesia: string; codigo: string }
+  | { estado: 'guardada' | 'sin_configurar'; nombre: string }
+/**
+ * Mig 169: paso aparte DESPUÉS de registrar la visita: si el socio tiene un premio de reto, lo suma a «qué aplicar» (una
+ * sola vez). Si la visita no es nueva y ya trae el reto, o no hay visita, no llama. Si falla (sin la 169, sin red), la
+ * caja sigue con lo que ya tenía: el premio queda guardado para la próxima visita.
+ */
+export async function conPremioDeReto(r: QueAplicar & { reto?: RetoEnCaja }): Promise<QueAplicar & { reto?: RetoEnCaja }> {
+  if (!r.visita_id || r.reto) return r
+  try {
+    const x = await llamar<QueAplicar & { reto?: RetoEnCaja }>('club_reto_en_visita', { p_visita: r.visita_id, p_location: localClub })
+    if (!x || typeof x !== 'object' || !Array.isArray(x.avisos)) return r
+    return { ...x, repetida: r.repetida, avisos: [...r.avisos, ...x.avisos.filter(a => !r.avisos.includes(a))] }
+  } catch {
+    return r
+  }
+}

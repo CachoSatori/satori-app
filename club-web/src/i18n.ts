@@ -163,6 +163,20 @@ const ES = {
   wallet_actualizar_error: 'No pudimos actualizar el pase. Pruebe de nuevo en un rato.',
   w_titulo: 'Canjear créditos',
   w_txt: 'Este botón es del pase de su Wallet. Genera un código que vale 10 minutos: muéstrelo en caja.',
+  // mig 169: retos de temporada baja en «Mi Club»
+  reto_titulo: 'Reto del Club',
+  reto_avance: (n: number, de: number) => `Visita ${n} de ${de}`,
+  reto_txt: (de: number, cuando: string, f: string) => `Visítenos en ${de} días distintos ${cuando} a más tardar el ${f} y le regalamos una cortesía. Muestre su QR de socio en caja en cada visita.`,
+  reto_empieza: (f: string) => `Empieza el ${f}.`,
+  reto_ganado: 'Cumplió el reto: ganó una cortesía.',
+  reto_ganado_txt: (f: string) => `Muestre su QR de socio en caja en su próxima visita (vale hasta el ${f}).`,
+  reto_dias_todos: 'cualquier día',
+  reto_dias_semana: 'de lunes a viernes',
+  reto_dias: ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados', 'domingos'],
+  reto_los: (dias: string) => `los ${dias}`,
+  reto_franja: (de: string, a: string) => `de ${de} a ${a}`,
+  reto_y: ' y ',
+  reto_en: (locales: string) => `en ${locales}`,
 }
 type Textos = typeof ES
 
@@ -314,6 +328,19 @@ const EN: Textos = {
   wallet_actualizar_error: 'We could not update your pass. Please try again later.',
   w_titulo: 'Redeem credits',
   w_txt: 'This button comes from your Wallet pass. It creates a code valid for 10 minutes: show it at the register.',
+  reto_titulo: 'Club challenge',
+  reto_avance: (n: number, de: number) => `Visit ${n} of ${de}`,
+  reto_txt: (de: number, cuando: string, f: string) => `Visit us on ${de} different days ${cuando} by ${f} and we will give you a treat. Show your member QR at the register on each visit.`,
+  reto_empieza: (f: string) => `Starts ${f}.`,
+  reto_ganado: 'Challenge completed: you earned a treat.',
+  reto_ganado_txt: (f: string) => `Show your member QR at the register on your next visit (valid until ${f}).`,
+  reto_dias_todos: 'any day',
+  reto_dias_semana: 'Monday to Friday',
+  reto_dias: ['Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays', 'Sundays'],
+  reto_los: (dias: string) => `on ${dias}`,
+  reto_franja: (de: string, a: string) => `from ${de} to ${a}`,
+  reto_y: ' and ',
+  reto_en: (locales: string) => `at ${locales}`,
 }
 
 export const TEXTOS: Record<Idioma, Textos> = { es: ES, en: EN }

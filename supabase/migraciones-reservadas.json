@@ -189,6 +189,12 @@
       "rama": "claude/club-primeros-90",
       "renumerada_a": "168"
     },
+    "115": {
+      "nombre": "club_retos",
+      "bloque": "club",
+      "rama": "claude/club-retos",
+      "renumerada_a": "169"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -290,6 +296,12 @@
       "bloque": "pase",
       "rama": "claude/club-primeros-90",
       "origen": "114"
+    },
+    "169": {
+      "nombre": "club_retos",
+      "bloque": "pase",
+      "rama": "claude/club-retos",
+      "origen": "115"
     }
   }
 }

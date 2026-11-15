@@ -171,6 +171,12 @@
       "rama": "claude/admin-bitacora-permisos",
       "renumerada_a": "165"
     },
+    "112": {
+      "nombre": "club_grupo_control",
+      "bloque": "club",
+      "rama": "claude/club-grupo-control",
+      "renumerada_a": "166"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -254,6 +260,12 @@
       "bloque": "pase",
       "rama": "claude/admin-bitacora-permisos",
       "origen": "111"
+    },
+    "166": {
+      "nombre": "club_grupo_control",
+      "bloque": "pase",
+      "rama": "claude/club-grupo-control",
+      "origen": "112"
     }
   }
 }

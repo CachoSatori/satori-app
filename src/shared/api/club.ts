@@ -723,3 +723,51 @@ export async function guardarUmbrales(local: string, u: UmbralesAlerta): Promise
   const filas = await leer(from<{ location_id: string }>('club_config').update({ ...u }).eq('location_id', local).select('location_id'))
   if (filas.length !== 1) throw new ClubError('Solo el owner cambia los umbrales de las alertas', false)
 }
+
+// ── 166 · Campañas con grupo de control (SPEC Club v2 ítem 12, B8). Solo owner. ──────────────────────────────────────
+// El grupo de cada miembro lo pone un sorteo fijo en la base (semilla guardada): la app no elige ni reasigna a nadie.
+// Al grupo reservado nunca se le quita el beneficio base (10 %/15 %, cortesía, créditos): solo no recibe el extra.
+export type FuenteCampana = 'a_contactar' | 'reto' | 'primeros_90'
+export interface Campana {
+  id: string; nombre: string; local: string; fuente: FuenteCampana; control_pct: number
+  inicio: string; creada_en: string; oferta: number; control: number
+  /** Cierre explícito (con motivo). Una abierta por local y fuente: para armar otra, se cierra la anterior. */
+  cerrada_en: string | null; cierre_motivo: string | null
+}
+export interface FilaCampana {
+  miembro_id: string; nombre: string; negocio: string | null; tipo: TipoMiembro; estado: 'activo' | 'baja'
+  creditos: number; vence_en: string | null
+  /** Solo en el exporte, y solo si la persona lo autorizó. */
+  whatsapp?: string | null; email?: string | null
+}
+/** La lista de la campaña: SOLO el grupo con oferta; el reservado viene como número. */
+export interface ListaCampana {
+  id: string; nombre: string; local: string; control_pct: number; oferta: number; control: number; cerrada_en?: string | null
+  /** En el exporte, solo los que HOY siguen activos (la base filtra al exportar). */
+  filas: FilaCampana[]
+}
+export interface GrupoReporte {
+  miembros: number; con_visita: number; con_visita_pct: number | null; visitas: number; visitas_por_miembro: number | null
+  facturas: number; venta_respaldada_crc: number; venta_por_miembro_crc: number | null
+}
+export interface ReporteCampana {
+  id: string; nombre: string; local: string; fuente: FuenteCampana; control_pct: number; inicio: string; generado_en: string
+  ventana_dias: number; ventana_hasta: string | null; cerrado: boolean; umbral_minimo: number; no_concluyente: boolean
+  pos_sin_datos: boolean; oferta: GrupoReporte; control: GrupoReporte
+}
+export const crearCampana = (nombre: string, location: string | null, controlPct: number) =>
+  llamar<Campana>('club_campana_crear', { p_nombre: nombre, p_location: location, p_control_pct: controlPct, p_fuente: 'a_contactar' })
+export const sumarNuevosCampana = (campana: string) =>
+  llamar<{ id: string; nuevos: number; oferta: number; control: number }>('club_campana_sumar_nuevos', { p_campana: campana })
+/** Cierre explícito y auditado (con motivo). Una cerrada no suma a nadie y no se reabre. */
+export const cerrarCampana = (campana: string, motivo: string) =>
+  llamar<{ id: string; cerrada_en: string; cierre_motivo: string }>('club_campana_cerrar', { p_campana: campana, p_motivo: motivo })
+export const getCampanas = (location: string | null) => llamar<Campana[]>('club_campanas_listar', { p_location: location })
+/** `apertura`: un id por apertura de la pantalla (la base deja UNA fila de rastro por apertura). */
+export const getListaCampana = (campana: string, apertura: string) =>
+  llamar<ListaCampana>('club_campana_lista', { p_campana: campana, p_exporte: false, p_apertura: apertura })
+/** El CSV de la campaña: la base lo entrega (con rastro, cuántas filas) y nunca trae al grupo reservado. */
+export const exportarListaCampana = (campana: string) =>
+  llamar<ListaCampana>('club_campana_lista', { p_campana: campana, p_exporte: true, p_apertura: null })
+export const getReporteCampana = (campana: string, apertura: string) =>
+  llamar<ReporteCampana>('club_campana_reporte', { p_campana: campana, p_apertura: apertura })

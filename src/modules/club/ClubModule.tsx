@@ -6,6 +6,7 @@
  * Fase 1B (mig 160): pestaña Tablero (owner, manager y contador). El contador entra SOLO al Tablero (totales, sin nombres).
  * Fase 1C (mig 161): pestañas Cohortes y Ranking (owner, manager). El ranking tiene nombres: abrirlo queda auditado.
  * Fase 1D (mig 162): pestaña Embudo (owner, manager): embudo del anfitrión. Tiene nombres: abrirla queda auditado.
+ * 166: Campañas (solo owner) — grupo de control: reservar un % sin la oferta y comparar los dos grupos.
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -27,8 +28,9 @@ const ResenaLocales = lazy(() => import('./ResenaLocales'))
 const Cohortes = lazy(() => import('./Cohortes'))
 const Ranking = lazy(() => import('./Ranking'))
 const Embudo = lazy(() => import('./Embudo'))
+const Campanas = lazy(() => import('./Campanas'))
 
-type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'tablero' | 'cohortes' | 'ranking' | 'embudo' | 'promociones' | 'descuentos' | 'locales'
+type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'tablero' | 'cohortes' | 'ranking' | 'embudo' | 'promociones' | 'descuentos' | 'campanas' | 'locales'
 
 const VISTAS_GESTION: Vista[] = ['miembros', 'negocios', 'excepciones', 'reportes', 'promociones', 'descuentos']
 
@@ -110,6 +112,7 @@ export default function ClubModule() {
           <div className={`vt-nav-tab ${vista === 'embudo' ? 'active' : ''}`} onClick={() => setVista('embudo')}>Embudo</div>
           <div className={`vt-nav-tab ${vista === 'promociones' ? 'active' : ''}`} onClick={() => setVista('promociones')}>Promociones</div>
           <div className={`vt-nav-tab ${vista === 'descuentos' ? 'active' : ''}`} onClick={() => setVista('descuentos')}>Descuentos</div>
+          {esOwner && <div className={`vt-nav-tab ${vista === 'campanas' ? 'active' : ''}`} onClick={() => setVista('campanas')}>Campañas</div>}
           {esOwner && <div className={`vt-nav-tab ${vista === 'locales' ? 'active' : ''}`} onClick={() => setVista('locales')}>Locales</div>}
         </div>
       )}
@@ -127,6 +130,7 @@ export default function ClubModule() {
         {vista === 'embudo' && gestiona && <Embudo />}
         {vista === 'promociones' && gestiona && <Promociones />}
         {vista === 'descuentos' && gestiona && <Marcadores />}
+        {vista === 'campanas' && esOwner && <Campanas />}
       </Suspense>
     </div>
   )

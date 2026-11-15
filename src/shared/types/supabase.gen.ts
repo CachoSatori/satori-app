@@ -121,6 +121,39 @@ export type Database = {
           },
         ]
       }
+      bitacora_permisos: {
+        Row: {
+          antes: string | null
+          cambiado_en: string
+          cambiado_por: string | null
+          campo: string
+          despues: string | null
+          id: number
+          origen: string
+          profile_id: string
+        }
+        Insert: {
+          antes?: string | null
+          cambiado_en?: string
+          cambiado_por?: string | null
+          campo: string
+          despues?: string | null
+          id?: never
+          origen: string
+          profile_id: string
+        }
+        Update: {
+          antes?: string | null
+          cambiado_en?: string
+          cambiado_por?: string | null
+          campo?: string
+          despues?: string | null
+          id?: never
+          origen?: string
+          profile_id?: string
+        }
+        Relationships: []
+      }
       cash_cierres_dia: {
         Row: {
           ajuste_motivo: string | null
@@ -5731,6 +5764,19 @@ export type Database = {
         }
         Returns: string
       }
+      club_miembro_guardar_v2: {
+        Args: {
+          p_contacto: Json
+          p_estado: string
+          p_id: string
+          p_location?: string
+          p_mayor_edad: boolean
+          p_negocio_id: string
+          p_nombre: string
+          p_tipo: string
+        }
+        Returns: string
+      }
       club_miembro_por_telefono: { Args: { p_tel: string }; Returns: string }
       club_miembro_regenerar_codigo: {
         Args: { p_id: string }
@@ -5997,6 +6043,17 @@ export type Database = {
         }
         Returns: Json
       }
+      club_socio_alta_caja_v2: {
+        Args: {
+          p_email: string
+          p_location?: string
+          p_mayor_edad: boolean
+          p_nombre: string
+          p_verifico_residencia: boolean
+          p_whatsapp: string
+        }
+        Returns: Json
+      }
       club_socio_autoalta: { Args: { p_datos: Json }; Returns: Json }
       club_socio_baja_portal: { Args: { p_token: string }; Returns: boolean }
       club_socio_confirmar: {
@@ -6032,6 +6089,15 @@ export type Database = {
       club_socio_validar: {
         Args: {
           p_location?: string
+          p_miembro: string
+          p_verifico_residencia: boolean
+        }
+        Returns: Json
+      }
+      club_socio_validar_v2: {
+        Args: {
+          p_location?: string
+          p_mayor_edad: boolean
           p_miembro: string
           p_verifico_residencia: boolean
         }

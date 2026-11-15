@@ -18,6 +18,14 @@ export function dateCR(d: Date | string | number | null | undefined): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: CR_TZ }).format(dt)
 }
 
+// Hora local de Costa Rica («23:30», 24 h) de un instante cualquiera — misma zona que todayCR()/dateCR().
+export function horaCR(d: Date | string | number | null | undefined): string {
+  if (d == null || d === '') return ''
+  const dt = new Date(d)
+  if (isNaN(dt.getTime())) return ''
+  return new Intl.DateTimeFormat('en-GB', { timeZone: CR_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(dt)
+}
+
 // ── Currency formatters ────────────────────────────────────────
 export function fi(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return '—'

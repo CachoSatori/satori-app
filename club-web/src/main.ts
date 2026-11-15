@@ -6,7 +6,8 @@
  *   /p/{token}    portal del referente: saldo, QR para compartir, «Canjear» (código de 10 min) e historial
  *   /k/{codigo6}  código de canje: lo lee la caja; abierto en un navegador, solo un aviso
  *   /s/{codigo9}  QR fijo del socio del Local Club: lo lee la caja; abierto en un navegador, solo un aviso
- *   /alta         autoalta del socio (LC-DES-07): nombre + WhatsApp + aviso de privacidad + Turnstile → pendiente
+ *   /alta         autoalta del socio (LC-DES-07): nombre + WhatsApp + mayor de 18 + cumpleaños opcional (D6 A) + aviso
+ *                 de privacidad + Turnstile → pendiente
  *   /w/{token}    botón «Canjear» del pase de Wallet (token de pase, CLUB-AUD-69): solo genera el código de canje
  *   /b/{llave32}  baja del turista (LC-PRIV + 136): borra su contacto con la llave de baja que trae cada mensaje
  *   /privacidad   aviso de privacidad completo (la versión vigente)
@@ -16,7 +17,9 @@ import './styles.css'
 import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
+import { validarCumple } from './cumple'
 import { esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon } from './resena'
+import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 
 let idioma: Idioma = idiomaInicial()
@@ -58,7 +61,8 @@ const msgError = (e: string) =>
   ({ referente_invalido: t.ref_invalido, cupon_invalido: t.cupon_invalido, portal_invalido: t.portal_invalido,
      tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red, tope_canje: t.tope_canje,
      sin_saldo_canje: t.sin_saldo_canje, tope_altas: t.tope_altas, verificacion: t.alta_verificacion,
-     datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible } as Record<string, string>)[e] ?? t.servicio
+     datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible,
+     equipo_sin_canje: t.equipo_sin_canje } as Record<string, string>)[e] ?? t.servicio
 
 // ── Formatos ─────────────────────────────────────────────────────────────────
 const fecha = (iso: string, conHora = true) =>
@@ -282,6 +286,8 @@ interface Portal {
   /** 167: reseña de Google cada N visitas (la base decide si toca y de qué local); null si no toca */
   resena?: ResenaSocio | null
   movimientos: Array<{ tipo: string; personas: number; creditos: number | null; fecha: string }>
+  /** D7 A (mig 157): cuenta del equipo → personas registradas, sin créditos ni «Canjear». */
+  equipo?: boolean; personas_registradas?: number | null; personas_registradas_mes?: number | null
 }
 
 // R-01: código de canje de un solo uso (10 min). El QR del portal (/r/) ya no sirve para canjear.
@@ -346,17 +352,24 @@ async function paginaPortal(token: string) {
   }, 'image/png'))
   const descargar = h('a', { class: 'btn sec', href: canvas.toDataURL('image/png'), download: `satori-${p.codigo}.png` }, t.descargar)
   const esAnfitrion = p.anfitrion !== false
+  const modo = modoPortal(p)   // D7 A (mig 157): el equipo ve personas registradas; nunca «Canjear»
+  const saldo = modo.equipo
+    ? h('section', { class: 'tarjeta' },
+        h('h2', {}, t.equipo_titulo),
+        h('p', {}, h('strong', {}, t.equipo_mes(Number(p.personas_registradas_mes ?? 0)))),
+        h('p', { class: 'sub' }, t.equipo_total(Number(p.personas_registradas ?? 0))))
+    : h('section', { class: 'tarjeta' },
+        h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)),
+          h('span', {}, (p.creditos === 1 ? t.portal_creditos_uno : t.portal_creditos) + (p.valor_credito_crc ? ` · ${colones(p.creditos * p.valor_credito_crc)}` : ''))),
+        h('p', { class: 'sub' }, t.portal_personas(p.personas)),
+        h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito))),
+        p.vencimiento_meses ? h('p', { class: 'sub' }, t.portal_vence(p.vencimiento_meses)) : null)
   const anfitrion: HTMLElement[] = !esAnfitrion ? [] : [
-    h('section', { class: 'tarjeta' },
-      h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)),
-        h('span', {}, (p.creditos === 1 ? t.portal_creditos_uno : t.portal_creditos) + (p.valor_credito_crc ? ` · ${colones(p.creditos * p.valor_credito_crc)}` : ''))),
-      h('p', { class: 'sub' }, t.portal_personas(p.personas)),
-      h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito))),
-      p.vencimiento_meses ? h('p', { class: 'sub' }, t.portal_vence(p.vencimiento_meses)) : null),
-    ...(p.creditos >= 1 ? [seccionCanje(token)] : []),
+    saldo,
+    ...(modo.canje ? [seccionCanje(token)] : []),
     h('section', { class: 'tarjeta portal-qr' },
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
-      h('p', {}, t.portal_indicaciones),
+      h('p', {}, modo.equipo ? t.equipo_indicaciones : t.portal_indicaciones),
       h('div', { class: 'fila' }, compartir, descargar),
     ),
     h('section', { class: 'tarjeta' },
@@ -487,6 +500,13 @@ async function paginaAlta() {
   const nombre = h('input', { type: 'text', id: 'a-nombre', autocomplete: 'name', maxlength: '80' }) as HTMLInputElement
   const wa = h('input', { type: 'tel', id: 'a-wa', autocomplete: 'tel', inputmode: 'tel', maxlength: '32' }) as HTMLInputElement
   const ok = h('input', { type: 'checkbox', id: 'a-ok' }) as HTMLInputElement
+  // D6 A (14-nov): mayor de 18 obligatorio; cumpleaños opcional (día y mes, sin año) con permiso explícito
+  const mayor = h('input', { type: 'checkbox', id: 'a-mayor' }) as HTMLInputElement
+  const cDia = h('select', { id: 'a-cdia' }, h('option', { value: '' }, '—'),
+    ...Array.from({ length: 31 }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1)))) as HTMLSelectElement
+  const cMes = h('select', { id: 'a-cmes' }, h('option', { value: '' }, '—'),
+    ...t.meses.map((m, i) => h('option', { value: String(i + 1) }, m))) as HTMLSelectElement
+  const cPermiso = h('input', { type: 'checkbox', id: 'a-cpermiso' }) as HTMLInputElement
   const caja = h('div', { class: 'turnstile' })
   const enviar = h('button', { type: 'submit', class: 'btn' }, t.alta_enviar) as HTMLButtonElement
   let token = ''
@@ -495,11 +515,16 @@ async function paginaAlta() {
     onsubmit: async (e: Event) => {
       e.preventDefault(); err.replaceChildren()
       if (nombre.value.trim().length < 2 || !wa.value.trim() || !ok.checked || !token) { err.append(avisoEl('err', t.alta_falta)); return }
+      if (!mayor.checked) { err.append(avisoEl('err', t.alta_mayor_falta)); return }
+      const cumple = validarCumple(cDia.value, cMes.value, cPermiso.checked)
+      if (!cumple.ok) { err.append(avisoEl('err', cumple.error === 'falta' ? t.alta_cumple_falta : t.alta_cumple_invalido)); return }
       if (filaLocal.childElementCount > 0) localElegido = selLocal.value
       if (filaLocal.childElementCount > 0 && !localElegido) { err.append(avisoEl('err', t.alta_local_falta)); return }
       enviar.disabled = true; enviar.textContent = t.alta_enviando
       const r = await api<{ ok: boolean; portal?: string }>('alta', { method: 'POST', body: JSON.stringify({
         nombre: nombre.value, whatsapp: wa.value, acepto: AVISO_PRIVACIDAD_VERSION, ref: /^[A-HJ-NP-Z2-9]{8}$/.test(ref) ? ref : '', turnstile: token,
+        mayor_edad: true,
+        ...(cumple.cumple ? { cumple_dia: cumple.cumple.dia, cumple_mes: cumple.cumple.mes, cumple_permiso: true } : {}),
         ...(localElegido ? { local: localElegido } : {}) }) })
       if (r.ok) {
         const portal = r.data?.portal
@@ -519,6 +544,12 @@ async function paginaAlta() {
     h('label', { for: 'a-nombre' }, t.alta_nombre), nombre,
     h('label', { for: 'a-wa' }, t.alta_whatsapp), wa,
     filaLocal,
+    h('label', { class: 'check', for: 'a-mayor' }, mayor, h('span', {}, t.alta_mayor)),
+    h('fieldset', { class: 'cumple' }, h('legend', {}, t.alta_cumple),
+      h('p', { class: 'sub' }, t.alta_cumple_ayuda),
+      h('label', { for: 'a-cdia' }, t.alta_cumple_dia), cDia,
+      h('label', { for: 'a-cmes' }, t.alta_cumple_mes), cMes,
+      h('label', { class: 'check', for: 'a-cpermiso' }, cPermiso, h('span', {}, t.alta_cumple_permiso))),
     h('details', { class: 'aviso-priv', open: true }, h('summary', {}, t.alta_aviso_titulo), ...t.alta_aviso.split('\n').map((p) => h('p', {}, p)),
       h('p', { class: 'sub' }, `(${AVISO_PRIVACIDAD_VERSION})`)),
     h('label', { class: 'check', for: 'a-ok' }, ok, h('span', {}, t.alta_acepto)),

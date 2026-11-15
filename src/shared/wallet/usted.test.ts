@@ -33,6 +33,11 @@ const CASOS: Record<string, PaseDatos> = {
   'socio pendiente': base({ pestanas: ['mi_club'], anfitrion: null, canjear_url: null, socio: { ...socio, estado: 'pendiente', cortesias: [] } }),
   'solo anfitrión': base({ pestanas: ['anfitrion'], socio: null, codigo_barras: { tipo: 'cupones', valor: anfitrion.qr_url } }),
   'de baja': base({ estado: 'baja' }),
+  // mig 168: primeros 90 días, en curso y con la cortesía ganada
+  'socio nuevo con avance': base({ pestanas: ['mi_club'], anfitrion: null, canjear_url: null,
+    socio: { ...socio, avance: { visita: 2, de: 4, ganada: false, hasta: '2027-02-11' } } }),
+  'socio nuevo con la cortesía ganada': base({ pestanas: ['mi_club'], anfitrion: null, canjear_url: null,
+    socio: { ...socio, avance: { visita: 4, de: 4, ganada: true, vence_en: '2026-12-20' } } }),
 }
 
 /** Todos los textos en español de un objeto de Google: valores por defecto, encabezados, cuerpos y descripciones. */

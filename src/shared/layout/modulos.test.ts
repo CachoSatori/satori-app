@@ -8,7 +8,7 @@ import { entradasVisibles } from '../../modules/ventas/ventasTabs'
 const GRILLA_DE_HOY: Record<string, string[]> = {
   owner:     ['resumen', 'semana', 'reporte-mensual', 'mi-rendimiento', 'cash', 'tips', 'dashboard', 'inventario', 'clientes', 'club', 'finanzas', 'sops', 'admin', 'prueba'],
   manager:   ['resumen', 'semana', 'reporte-mensual', 'mi-rendimiento', 'cash', 'tips', 'dashboard', 'inventario', 'clientes', 'club', 'finanzas', 'sops'],
-  contador:  ['resumen', 'semana', 'reporte-mensual', 'cash', 'tips', 'dashboard', 'inventario', 'finanzas'],
+  contador:  ['resumen', 'semana', 'reporte-mensual', 'cash', 'tips', 'dashboard', 'inventario', 'club', 'finanzas'],
   cajero:    ['cash', 'tips', 'clientes', 'club', 'sops'],
   salonero:  ['mi-rendimiento', 'sops'],
   barman:    ['mi-rendimiento', 'sops'],

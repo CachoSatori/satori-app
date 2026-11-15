@@ -74,6 +74,7 @@ async function darDeAlta() {
   fireEvent.change(campo(/Nombre y apellido/), { target: { value: 'Ana Prueba' } })
   fireEvent.change(campo(/^WhatsApp$/), { target: { value: '88880000' } })
   fireEvent.click(screen.getByText(/Verifiqué que es local/).parentElement!.querySelector('input')!)
+  fireEvent.click(screen.getByText(/Es mayor de 18 años/).parentElement!.querySelector('input')!)
   fireEvent.click(screen.getByText('Dar de alta'))
   await screen.findByText(/es socio \(activo provisional/)
 }
@@ -131,5 +132,32 @@ describe('Escanear → Nuevo socio: enlace de WhatsApp al terminar', () => {
     await darDeAlta()
     await waitFor(() => expect(screen.getByText(/No se pudo armar el link de WhatsApp/)).toBeTruthy())
     expect(screen.queryByText(/Mandarle su link por WhatsApp/)).toBeNull()
+  })
+})
+
+describe('Escanear → Nuevo socio: «Es mayor de 18 años» (D6 A)', () => {
+  beforeEach(() => {
+    rol.v = 'cajero'
+    api.socioAltaCaja.mockReset().mockResolvedValue({ miembro_id: 'm1', estado: 'activo', provisional_hasta: '2026-11-20T12:00:00Z' })
+  })
+
+  it('sin la casilla de edad, «Dar de alta» queda deshabilitado y no llama a la base', () => {
+    render(<Escanear />)
+    fireEvent.click(screen.getByText(/Nuevo socio del Local Club/))
+    const campo = (l: RegExp) => screen.getByText(l).parentElement!.querySelector('input') as HTMLInputElement
+    fireEvent.change(campo(/Nombre y apellido/), { target: { value: 'Ana Prueba' } })
+    fireEvent.change(campo(/^WhatsApp$/), { target: { value: '88880000' } })
+    fireEvent.click(campo(/Verifiqué que es local/))
+    const boton = screen.getByText('Dar de alta').closest('button') as HTMLButtonElement
+    expect(boton.disabled).toBe(true)
+    fireEvent.click(boton)
+    expect(api.socioAltaCaja).not.toHaveBeenCalled()
+    fireEvent.click(campo(/Es mayor de 18 años/))
+    expect(boton.disabled).toBe(false)
+  })
+
+  it('con la casilla, manda mayorEdad = true a la base', async () => {
+    await darDeAlta()
+    expect(api.socioAltaCaja).toHaveBeenCalledWith('Ana Prueba', '88880000', null, true, true)
   })
 })

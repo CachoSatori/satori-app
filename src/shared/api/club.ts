@@ -236,12 +236,15 @@ export const buscar = (q: string) => llamar<BusquedaFila[]>('club_buscar', { p_q
 export const guardarNegocio = (p: { id: string | null; nombre: string; tipo: TipoNegocio; activo: boolean }) =>
   llamar<string>('club_negocio_guardar', { p_id: p.id, p_nombre: p.nombre, p_tipo: p.tipo, p_activo: p.activo, p_location: localClub })
 
+/** D6 A (163): `mayor_edad` solo cuenta al REACTIVAR a alguien cuyo rol de socio vuelve a activo sin la edad registrada
+ *  (club_miembro_guardar_v2 la pide y la registra); en cualquier otro caso la base lo ignora. */
 export const guardarMiembro = (p: {
   id: string | null; tipo: TipoMiembro; nombre: string; negocio_id: string | null; estado: 'activo' | 'baja'
   contacto: { telefono: string; email: string; optin_whatsapp: boolean; optin_email: boolean } | null
-}) => llamar<string>('club_miembro_guardar', {
+  mayor_edad?: boolean | null
+}) => llamar<string>('club_miembro_guardar_v2', {
   p_id: p.id, p_tipo: p.tipo, p_nombre: p.nombre, p_negocio_id: p.negocio_id, p_estado: p.estado, p_contacto: p.contacto,
-  p_location: localClub,
+  p_mayor_edad: p.mayor_edad ?? null, p_location: localClub,
 })
 
 export const regenerarCodigo = async (id: string) =>
@@ -405,6 +408,37 @@ export const getLocalesClub = async (): Promise<LocalClub[]> =>
   (await leer(from<{ location_id: string; nombre: string | null; club_activo: boolean }>('club_config')
     .select('location_id,nombre,club_activo').order('location_id')))
     .map(r => ({ id: r.location_id, nombre: r.nombre ?? r.location_id, activo: r.club_activo === true }))
+/** 170: el manager solo ve y opera sus locales (`mis_locales()`, 091); el resto de los roles, igual que antes. */
+export function localesParaRol(locales: LocalClub[], rol: string | null | undefined, mios: string[] | null): LocalClub[] {
+  if (rol !== 'manager') return locales
+  const set = new Set(mios ?? [])
+  return locales.filter(l => set.has(l.id))
+}
+/** Los locales del Club que la pantalla le ofrece al usuario: para el manager, solo los suyos. */
+export async function getLocalesClubParaRol(rol: string | null | undefined): Promise<LocalClub[]> {
+  const locales = await getLocalesClub()
+  if (rol !== 'manager') return locales
+  return localesParaRol(locales, rol, await llamar<string[] | null>('mis_locales', {}))
+}
+/** 170: si el local recordado en el navegador no es uno de los que el usuario puede usar (p. ej. una tablet compartida
+ *  donde el owner dejó otro), elige uno suyo (el primero encendido) antes de leer. Para los demás roles no cambia nada. */
+export async function asegurarLocalParaRol(rol: string | null | undefined): Promise<void> {
+  if (rol !== 'manager') return
+  const l = await getLocalesClubParaRol(rol)
+  if (localClub && l.some(x => x.id === localClub)) return
+  elegirLocal(l.find(x => x.activo)?.id ?? l[0]?.id ?? null)
+}
+/** 158 · El link de reseña de Google de cada local (club-web lo muestra tras usar el cupón). Va aparte de getLocalesClub a
+ * propósito: si la app llega antes que la columna, solo falla esto (en «Locales»), no el selector de locales. */
+export const getResenasLocales = async (): Promise<Record<string, string | null>> =>
+  Object.fromEntries((await leer(from<{ location_id: string; resena_url: string | null }>('club_config')
+    .select('location_id,resena_url'))).map(r => [r.location_id, r.resena_url ?? null]))
+/** 158 · Solo owner (RLS de club_config; queda en club_config_historial). `null` borra el link. La base solo acepta
+ * direcciones de Google (CHECK club_config_resena_url_google); acá se valida antes con la misma expresión. */
+export async function setResenaUrl(id: string, url: string | null): Promise<void> {
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ resena_url: url }).eq('location_id', id).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner carga el link de reseña de un local', false)
+}
 /** Solo owner. Alta de un local: queda APAGADO; con `copiarDe`, arranca con la configuración de ese local. */
 export const crearLocal = (p: { id: string; nombre: string; direccion: string | null; mapa: string | null; copiarDe: string | null }) =>
   llamar<string>('club_local_crear', { p_id: p.id, p_nombre: p.nombre, p_direccion: p.direccion, p_mapa: p.mapa, p_copiar_de: p.copiarDe })
@@ -413,6 +447,93 @@ export async function setClubActivo(id: string, activo: boolean): Promise<void> 
   const filas = await leer(from<{ location_id: string }>('club_config').update({ club_activo: activo }).eq('location_id', id).select('location_id'))
   if (filas.length !== 1) throw new ClubError('Solo el owner enciende o apaga el Club en un local', false)
 }
+
+// ── Club → Tablero (mig 160): «¿El Club deja plata?» y pasivo de créditos. Solo totales (owner, manager, contador). ──
+export interface TableroLinea { personas: number; creditos: number; crc: number }
+export interface TableroGrupo {
+  facturas: number; venta_crc: number; personas: number
+  tiquete_crc: number | null; personas_por_factura: number | null; por_persona_crc: number | null
+}
+export interface TableroMes {
+  mes: string; local: string; local_nombre: string; parcial: boolean; generado_en: string
+  /** El local no tiene facturas del PoS en el mes (p. ej. un local sin el puente): aviso, no error. */
+  pos_sin_datos: boolean
+  config: { cortesia_costo_pct: number; valor_credito_crc: number; personas_por_credito: number }
+  plata: {
+    /** Venta COBRADA (neta − regalía): base de la tasa. La neta (incluye lo regalado) va de referencia. */
+    venta_respaldada_crc: number; venta_respaldada_neta_crc: number; facturas_club: number; facturas_mes: number
+    venta_mes_crc: number; venta_mes_neta_crc: number
+    descuento_estimado_crc: number; descuento_lineas: number; descuento_facturas: number; lineas_sin_referencia: number
+    cortesias_lineas: number; cortesias_unidades: number; cortesias_lista_crc: number; cortesias_costo_crc: number; cortesias_sin_precio: number
+    canjes: number; creditos_canjeados: number; canjes_crc: number
+    costo_total_crc: number; tasa_efectiva_pct: number | null
+    por_motivo: Record<'socio' | 'cupon' | 'canje', { facturas: number; venta_crc: number }>
+  }
+  regalia: { facturas: number; crc: number; en_canjes_crc: number }
+  comparacion: { con_socio: TableroGrupo; sin_socio: TableroGrupo; con_cupon: TableroGrupo }
+  pasivo: {
+    saldo_inicial: TableroLinea; emitidos: TableroLinea; carga_inicial: TableroLinea; canjeados: TableroLinea
+    vencidos: TableroLinea; ajustes: TableroLinea; saldo_final: TableroLinea
+    canjeable_creditos: number; cuentas_con_saldo: number
+    congelado: TableroLinea & { cuentas: number }
+  }
+}
+/** Cada lectura deja rastro en club_auditoria (quién, mes y local). */
+export const getTablero = (mes: string, local: string | null = localClub) =>
+  llamar<TableroMes>('club_tablero_mes', { p_mes: mes, p_location: local })
+/** Solo owner (RLS de club_config). Queda en club_config_historial, como el resto de la configuración. */
+export async function setCortesiaCostoPct(local: string, pct: number): Promise<void> {
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) throw new ClubError('El % va de 0 a 100', false)
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ cortesia_costo_pct: Math.round(pct * 100) / 100 })
+    .eq('location_id', local).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner cambia el % de costo de las cortesías', false)
+}
+
+// ── Club → Cohortes y Ranking de socios (mig 161, SPEC Club v2 ítems 6 y 7) ──────────────────
+/** null en activos_* = «aún no»: la ventana no se cerró para todos los socios de la cohorte. */
+export interface CohorteMes {
+  mes: string; socios: number; bajas: number; con_2: number; con_4: number
+  activos_30: number | null; activos_60: number | null; activos_90: number | null
+  visitas: number; visitas_por_socio: number
+}
+export interface Cohortes {
+  local: string; locales: string[]; hoy: string; generado_en: string
+  cohortes: CohorteMes[]
+  totales: { socios: number; bajas: number; con_2: number; con_4: number; visitas: number; visitas_por_socio: number | null }
+}
+/**
+ * owner, manager y contador. Solo conteos (sin nombres). `local` null = todos los locales que el usuario ve.
+ * Rastro: una fila por `apertura` (un id por vez que se abre la pantalla), no por cada cambio de filtro.
+ */
+export const getCohortes = (local: string | null, apertura: string | null = null) =>
+  llamar<Cohortes>('club_cohortes_socios', { p_location: local, p_apertura: apertura })
+
+export interface SocioRanking {
+  id: string; nombre: string; local_alta: string; estado: 'activo' | 'baja'; alta: string
+  visitas: number; mesas: number; facturas: number; venta_respaldada_crc: number; tiquete_promedio_crc: number | null
+  personas: number; invitados: number; descuento_estimado_crc: number; ultima_visita: string | null
+}
+export interface Ranking {
+  desde: string; hasta: string; local: string; locales: string[]; generado_en: string
+  /** Locales sin facturas del PoS en el período (p. ej. sin el puente): aviso, no error. */
+  locales_sin_pos: string[]
+  socios: SocioRanking[]
+  totales: {
+    socios: number; socios_con_visita: number; visitas: number; facturas: number; venta_respaldada_crc: number
+    invitados: number; descuento_estimado_crc: number; lineas_sin_referencia: number
+  }
+}
+/**
+ * Solo owner y manager. Nombres, sin teléfonos ni correos. Rastro en club_auditoria: una fila por `apertura` de la
+ * pantalla (no por cada cambio de filtro) y una por cada exporte. El CSV de la pantalla SOLO se arma con lo que devuelve
+ * la llamada con `exporte`.
+ */
+export const getRanking = (desde: string, hasta: string, local: string | null, exporte = false, apertura: string | null = null) =>
+  llamar<Ranking>('club_ranking_socios', { p_desde: desde, p_hasta: hasta, p_location: local, p_exporte: exporte, p_apertura: apertura })
+/** Un id por apertura de una pantalla auditada (Cohortes, Ranking). */
+export const nuevaApertura = (): string =>
+  typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16))
 
 // ── Piloto en paralelo: comparación con la página vieja ──────────────────────
 export interface FilaComparacion {
@@ -439,12 +560,26 @@ export interface AltaSocio {
   /** Mig 156: token del portal, SOLO si el alta creó a la persona (si el número ya era de alguien, null). */
   token_portal?: string | null
 }
-/** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme. */
-export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean) =>
-  llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_location: localClub })
-/** Validar en caja una autoalta pendiente: pasa a activo provisional. */
-export const socioValidar = (miembro: string, verificoResidencia: boolean) =>
-  llamar<AltaSocio>('club_socio_validar', { p_miembro: miembro, p_verifico_residencia: verificoResidencia, p_location: localClub })
+/** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme.
+ *  D6 A (159): la caja confirma «es mayor de 18»; sin eso la base rechaza el alta (club_socio_alta_caja_v2, que envuelve
+ *  a club_socio_alta_caja y devuelve su respuesta completa, incluido `token_portal` de la 156). */
+export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean, mayorEdad: boolean) =>
+  llamar<AltaSocio>('club_socio_alta_caja_v2', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad, p_location: localClub })
+/** Validar en caja una autoalta pendiente: pasa a activo provisional.
+ *  D6 A (163): si la persona no tiene la edad registrada (autoaltas de antes de la 159), la caja confirma «es mayor de
+ *  18» en esta misma llamada; sin eso la base rechaza (club_socio_validar_v2). `null` = no hizo falta preguntar. */
+export const socioValidar = (miembro: string, verificoResidencia: boolean, mayorEdad: boolean | null) =>
+  llamar<AltaSocio>('club_socio_validar_v2', { p_miembro: miembro, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad, p_location: localClub })
+
+/** D6 A (163): lo que hace falta del rol de socio para saber si hay que preguntar la edad. */
+export interface EdadSocio {
+  estado: 'pendiente' | 'activo' | 'baja'; baja_por: 'socio' | 'gerencia' | null; alta_por: string
+  validado_en: string | null; mayor_edad_en: string | null
+}
+/** Rol de socio de una persona (null si no es socio). Lectura directa: la RLS deja leer los roles a owner, manager y cajero. */
+export const getEdadSocio = async (miembro: string): Promise<EdadSocio | null> =>
+  (await leer(from<EdadSocio>('club_miembro_roles').select('estado,baja_por,alta_por,validado_en,mayor_edad_en')
+    .eq('miembro_id', miembro).eq('rol', 'socio').limit(1)))[0] ?? null
 /** Confirmar un alta provisional (owner o manager distinto de quien la cargó). */
 export const socioConfirmar = (miembro: string, nota: string) =>
   llamar<boolean>('club_socio_confirmar', { p_miembro: miembro, p_nota: nota })
@@ -488,12 +623,28 @@ export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('cl
 export const guardarCortesia = (id: string | null, codigo: string | null, nombre: string | null, activa: boolean | null) =>
   llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa, p_location: localClub })
 
+// ── Mig 168: primeros 90 días · cortesía especial de bienvenida (4.ª visita) ──
+export interface Primeros90Config {
+  activo: boolean; visitas: number; dias: number; vence_dias: number
+  /** Opción B: los días anteriores cuentan solo con factura cerrada con el 856/857 (config del Club). */
+  exige_factura: boolean
+  cortesia: { id: string; codigo: string; nombre: string; activa: boolean } | null
+  /** El salón la puede dar: hay artículo cargado en ESTE local y está activo. */
+  lista_para_caja: boolean
+  disponibles: number; usadas: number
+}
+/** Owner y manager. */
+export const getPrimeros90Config = () => llamar<Primeros90Config>('club_primeros90_config_ver', { p_location: localClub })
+/** Solo owner. `activo` null = no cambia el encendido (es del Club entero); `cortesia` es la de ESTE local (null = ninguna). */
+export const guardarPrimeros90Config = (activo: boolean | null, cortesia: string | null) =>
+  llamar<Primeros90Config>('club_primeros90_config_guardar', { p_activo: activo, p_cortesia: cortesia, p_location: localClub })
+
 // ── LC-MD: marcadores de descuento (configurables por local) ─────────────────
 export interface MarcadorDescuento {
   id: string; codigo_producto: string; nombre: string; pct_esperado: number | null; activo: boolean
   visto_en_facturas: boolean; actualizado_en: string
 }
-/** Owner y manager (en la base también el contador, pero no entra a /club). */
+/** Owner y manager (en la base también el contador, pero en /club solo ve el Tablero). */
 export const getMarcadores = () => llamar<MarcadorDescuento[]>('club_marcadores_listar', { p_location: localClub })
 /** Solo owner. Alta: `id` null + código del PoS. Edición: nombre, % esperado (null = cualquier descuento) y activo. */
 export const guardarMarcador = (id: string | null, codigo: string | null, nombre: string | null, pct: number | null, activo: boolean | null) =>
@@ -515,7 +666,13 @@ export interface QueAplicar {
   estado: 'aplica' | 'paga_con_creditos' | 'sin_promocion' | 'pendiente_configuracion' | 'como_invitado' | 'ya_uso_hoy'
   porcentaje: number; cortesias: Array<{ id: string; codigo: string; nombre: string; motivo: string }>
   texto: string; avisos: string[]; articulo_lc: string; repetida: boolean; promo: string | null
+  /** Mig 168 (primeros 90 días): la cortesía especial de bienvenida. Sin la 168 (o sin nada que decir) no viene. */
+  primeros90?: Primeros90EnCaja
 }
+/** Mig 168: qué pasó con la cortesía especial en esta visita. `ofrecida` = va en esta factura (una sola vez). */
+export type Primeros90EnCaja =
+  | { estado: 'ofrecida'; nombre: string; codigo: string }
+  | { estado: 'guardada' | 'sin_configurar' }
 /** Registra la visita del día del socio (con el pedido) y devuelve qué aplicar. Idempotente con `op`. */
 export const registrarVisitaSocio = (miembro: string, pos: PosRef, op: string) =>
   llamar<QueAplicar>('club_socio_visita', { p_miembro: miembro, p_pos: posParaServidor(pos), p_op: op, p_location: localClub })
@@ -547,3 +704,170 @@ export interface FilaEquipo {
 }
 export const getReporteEquipo = (mes: string, local: string | null = localClub) =>
   llamar<FilaEquipo[]>('club_reporte_equipo', { p_mes: mes, p_location: local })
+
+// ── Club → Embudo del anfitrión (mig 162, SPEC Club v2 ítem 8) ───────────────────────────────
+/** Pasos de un anfitrión (o de un grupo). `clics_resena` y `pct_resena` son null si la base no tiene la 158. */
+export interface PasosEmbudo {
+  generados: number; usados: number; vigentes: number; vencidos: number; anulados: number
+  clics_resena: number | null; con_factura: number; personas: number
+  facturas: number; mesas?: number; venta_respaldada_crc: number; venta_neta_crc: number
+}
+export interface AnfitrionEmbudo extends PasosEmbudo {
+  id: string; nombre: string; tipo: string; grupo: 'equipo' | 'anfitrion'; estado: 'activo' | 'baja'; local: string
+  mesas: number; tiquete_promedio_crc: number | null
+  pct_uso: number | null; pct_resena: number | null; pct_con_factura: number | null; personas_por_cupon: number | null
+}
+export interface GrupoEmbudo extends PasosEmbudo { anfitriones: number; sin_cupones: number; mesas: number }
+export interface Embudo {
+  mes: string; mes_en_curso: boolean; local: string; locales: string[]; generado_en: string
+  /** Locales sin facturas del PoS en el mes (p. ej. Nosara, sin el puente): aviso, no error. */
+  locales_sin_pos: string[]
+  /** true si la base tiene el clic de reseña (mig 158). */
+  resena_disponible: boolean
+  /** true si la base tiene D7 (mig 157): el equipo no gana créditos. */
+  d7: boolean
+  anfitriones: AnfitrionEmbudo[]
+  grupos: { equipo: GrupoEmbudo; anfitrion: GrupoEmbudo }
+  totales: GrupoEmbudo
+}
+/**
+ * Solo owner y manager. `mes` = «AAAA-MM» (hora CR). `local` null = todos los locales que el usuario ve. Nombres, sin
+ * contactos. Rastro en club_auditoria: una fila por `apertura` de la pantalla (un id por vez que se abre; los cambios de
+ * filtro no suman filas); con `exporte`, una fila SIEMPRE: el CSV de la pantalla SOLO se arma con lo que devuelve esta llamada.
+ */
+export const getEmbudoAnfitrion = (mes: string, local: string | null, exporte = false, apertura: string | null = null) =>
+  llamar<Embudo>('club_embudo_anfitrion', { p_mes: `${mes}-01`, p_location: local, p_exporte: exporte, p_apertura: apertura })
+
+// ── 164 (SPEC-club-v2 ítem 10, B6): alertas con umbral del Inicio («Club · Para revisar hoy») ─────────────────────
+export type TipoAlertaInicio = 'ANFITRION_24H' | 'MISMO_USUARIO' | 'VISITAS_SIN_FACTURA' | 'CANJE_SIN_CODIGO'
+/** Una fila de `club_alertas_inicio`: solo lo que pasó el umbral del local (cero filas = nada para revisar). */
+export interface AlertaInicio {
+  tipo: TipoAlertaInicio; ref: string; cantidad: number; umbral: number; fecha: string
+  detalle: { miembro_id?: string; miembro?: string; tipo_miembro?: string; que?: 'socio' | 'equipo'; usuario?: string; dias?: number
+             /** El local del aviso; `multilocal` = el usuario ve más de un local con el Club encendido. */
+             local?: string; local_nombre?: string; multilocal?: boolean }
+}
+/** Owner y manager (rol activo; el manager, en sus locales). Club apagado en el local: lista vacía.
+ *  Sin local (`null`, lo que usa el Inicio): todos los locales encendidos que el usuario ve, cada aviso con su local. */
+export const getAlertasInicio = (local: string | null = null) =>
+  llamar<AlertaInicio[]>('club_alertas_inicio', { p_location: local })
+
+/** Umbrales por local (club_config). Los lee el staff; los cambia solo el owner (RLS) y quedan en club_config_historial. */
+export interface UmbralesAlerta {
+  alerta_anfitrion_24h_max: number; alerta_mismo_usuario_max: number; alerta_mismo_usuario_dias: number
+  alerta_visitas_sin_factura_max: number; alerta_canjes_sin_codigo_max: number
+}
+export const CAMPOS_UMBRAL = ['alerta_anfitrion_24h_max', 'alerta_mismo_usuario_max', 'alerta_mismo_usuario_dias',
+  'alerta_visitas_sin_factura_max', 'alerta_canjes_sin_codigo_max'] as const
+export const getUmbrales = async (local: string): Promise<UmbralesAlerta | null> =>
+  (await leer(from<UmbralesAlerta>('club_config').select(CAMPOS_UMBRAL.join(',')).eq('location_id', local)))[0] ?? null
+export async function guardarUmbrales(local: string, u: UmbralesAlerta): Promise<void> {
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ ...u }).eq('location_id', local).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner cambia los umbrales de las alertas', false)
+}
+
+// ── 166 · Campañas con grupo de control (SPEC Club v2 ítem 12, B8). Solo owner. ──────────────────────────────────────
+// El grupo de cada miembro lo pone un sorteo fijo en la base (semilla guardada): la app no elige ni reasigna a nadie.
+// Al grupo reservado nunca se le quita el beneficio base (10 %/15 %, cortesía, créditos): solo no recibe el extra.
+export type FuenteCampana = 'a_contactar' | 'reto' | 'primeros_90'
+export interface Campana {
+  id: string; nombre: string; local: string; fuente: FuenteCampana; control_pct: number
+  inicio: string; creada_en: string; oferta: number; control: number
+  /** Cierre explícito (con motivo). Una abierta por local y fuente: para armar otra, se cierra la anterior. */
+  cerrada_en: string | null; cierre_motivo: string | null
+}
+export interface FilaCampana {
+  miembro_id: string; nombre: string; negocio: string | null; tipo: TipoMiembro; estado: 'activo' | 'baja'
+  creditos: number; vence_en: string | null
+  /** Solo en el exporte, y solo si la persona lo autorizó. */
+  whatsapp?: string | null; email?: string | null
+}
+/** La lista de la campaña: SOLO el grupo con oferta; el reservado viene como número. */
+export interface ListaCampana {
+  id: string; nombre: string; local: string; control_pct: number; oferta: number; control: number; cerrada_en?: string | null
+  /** En el exporte, solo los que HOY siguen activos (la base filtra al exportar). */
+  filas: FilaCampana[]
+}
+export interface GrupoReporte {
+  miembros: number; con_visita: number; con_visita_pct: number | null; visitas: number; visitas_por_miembro: number | null
+  facturas: number; venta_respaldada_crc: number; venta_por_miembro_crc: number | null
+}
+export interface ReporteCampana {
+  id: string; nombre: string; local: string; fuente: FuenteCampana; control_pct: number; inicio: string; generado_en: string
+  ventana_dias: number; ventana_hasta: string | null; cerrado: boolean; umbral_minimo: number; no_concluyente: boolean
+  pos_sin_datos: boolean; oferta: GrupoReporte; control: GrupoReporte
+}
+export const crearCampana = (nombre: string, location: string | null, controlPct: number) =>
+  llamar<Campana>('club_campana_crear', { p_nombre: nombre, p_location: location, p_control_pct: controlPct, p_fuente: 'a_contactar' })
+export const sumarNuevosCampana = (campana: string) =>
+  llamar<{ id: string; nuevos: number; oferta: number; control: number }>('club_campana_sumar_nuevos', { p_campana: campana })
+/** Cierre explícito y auditado (con motivo). Una cerrada no suma a nadie y no se reabre. */
+export const cerrarCampana = (campana: string, motivo: string) =>
+  llamar<{ id: string; cerrada_en: string; cierre_motivo: string }>('club_campana_cerrar', { p_campana: campana, p_motivo: motivo })
+export const getCampanas = (location: string | null) => llamar<Campana[]>('club_campanas_listar', { p_location: location })
+/** `apertura`: un id por apertura de la pantalla (la base deja UNA fila de rastro por apertura). */
+export const getListaCampana = (campana: string, apertura: string) =>
+  llamar<ListaCampana>('club_campana_lista', { p_campana: campana, p_exporte: false, p_apertura: apertura })
+/** El CSV de la campaña: la base lo entrega (con rastro, cuántas filas) y nunca trae al grupo reservado. */
+export const exportarListaCampana = (campana: string) =>
+  llamar<ListaCampana>('club_campana_lista', { p_campana: campana, p_exporte: true, p_apertura: null })
+export const getReporteCampana = (campana: string, apertura: string) =>
+  llamar<ReporteCampana>('club_campana_reporte', { p_campana: campana, p_apertura: apertura })
+
+// ── Mig 169: retos de temporada baja («3 almuerzos este mes») ─────────────────
+export type EstadoReto = 'borrador' | 'vigente' | 'terminada'
+export interface Reto {
+  id: string; nombre: string; nombre_en: string; locales: string[]; estado: EstadoReto
+  desde: string; hasta: string; dias: number[]; hora_desde: string | null; hora_hasta: string | null
+  meta: number; vence_dias: number; control_pct: 0 | 15; armado: boolean; en_curso: boolean
+  /** Premio de cada local del reto: {location_id: cortesía}. */
+  cortesias: Record<string, { id: string; codigo: string; nombre: string; activa: boolean }>
+  ganados: number; usados: number; disponibles: number
+}
+export interface RetoDatos {
+  nombre: string; nombre_en: string; locales: string[]; desde: string; hasta: string; dias: number[]
+  hora_desde: string | null; hora_hasta: string | null; meta: number; vence_dias: number; control_pct: 0 | 15
+  /** {location_id: id de la cortesía de ese local} */
+  cortesias: Record<string, string>
+}
+/** Lista de retos + la exigencia de factura (opción B) del Club. */
+export interface RetosLista { exige_factura: boolean; retos: Reto[] }
+/** Owner y manager. Todos los retos (todos los locales). */
+export const getRetos = () => llamar<RetosLista>('club_retos_listar', {})
+/**
+ * Solo owner (RLS de club_config_global; auditado por trigger). Opción B: con `true`, los días anteriores cuentan para el
+ * reto solo si la visita cruza con una factura cerrada con el 856/857; con la exigencia prendida no se arma un reto en
+ * un local sin facturas del PoS en la base.
+ */
+export async function setRetosExigeFactura(v: boolean): Promise<void> {
+  const filas = await leer(from<{ id: boolean }>('club_config_global').update({ retos_exige_factura: v }).eq('id', true).select('id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner cambia esta regla', false)
+}
+/** Solo owner. `id` null = nuevo. Solo un borrador se edita. */
+export const guardarReto = (id: string | null, datos: RetoDatos) => llamar<string>('club_reto_guardar', { p_id: id, p_datos: datos })
+/** Solo owner. Borrador → vigente: la base rechaza el 4.º del año y la superposición en un local. */
+export const armarReto = (id: string) => llamar<RetosLista>('club_reto_armar', { p_id: id })
+export const terminarReto = (id: string) => llamar<RetosLista>('club_reto_terminar', { p_id: id })
+export const borrarReto = (id: string) => llamar<RetosLista>('club_reto_borrar', { p_id: id })
+/** Cortesías de OTRO local (el premio del reto se elige por local). Owner y manager. */
+export const getCortesiasDe = (local: string) => llamar<Cortesia[]>('club_cortesias_listar', { p_location: local })
+
+/** Mig 169: qué pasó con el premio del reto en esta visita. `ofrecida` = va en esta factura (una sola vez). */
+export type RetoEnCaja =
+  | { estado: 'ofrecida'; nombre: string; cortesia: string; codigo: string }
+  | { estado: 'guardada' | 'sin_configurar'; nombre: string }
+/**
+ * Mig 169: paso aparte DESPUÉS de registrar la visita: si el socio tiene un premio de reto, lo suma a «qué aplicar» (una
+ * sola vez). Si la visita no es nueva y ya trae el reto, o no hay visita, no llama. Si falla (sin la 169, sin red), la
+ * caja sigue con lo que ya tenía: el premio queda guardado para la próxima visita.
+ */
+export async function conPremioDeReto(r: QueAplicar & { reto?: RetoEnCaja }): Promise<QueAplicar & { reto?: RetoEnCaja }> {
+  if (!r.visita_id || r.reto) return r
+  try {
+    const x = await llamar<QueAplicar & { reto?: RetoEnCaja }>('club_reto_en_visita', { p_visita: r.visita_id, p_location: localClub })
+    if (!x || typeof x !== 'object' || !Array.isArray(x.avisos)) return r
+    return { ...x, repetida: r.repetida, avisos: [...r.avisos, ...x.avisos.filter(a => !r.avisos.includes(a))] }
+  } catch {
+    return r
+  }
+}

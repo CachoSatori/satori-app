@@ -5,7 +5,7 @@ import { render, screen, fireEvent, within, waitFor } from '@testing-library/rea
 import type { ReporteMes } from '../../shared/api/club'
 
 const api = vi.hoisted(() => ({
-  getReporteEquipo: vi.fn(), getReporteMes: vi.fn(), getLocalesClub: vi.fn(), getReporteAltas: vi.fn(), getReporteVisitas: vi.fn(),
+  getReporteEquipo: vi.fn(), getReporteMes: vi.fn(), getLocalesClub: vi.fn(), getLocalesClubParaRol: vi.fn(), getReporteAltas: vi.fn(), getReporteVisitas: vi.fn(),
 }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: 'manager', full_name: 'Prueba' } }) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
@@ -32,6 +32,8 @@ const repMes = {
 describe('Reportes · pestaña Equipo', () => {
   beforeEach(() => {
     api.getLocalesClub.mockReset().mockResolvedValue([{ id: 'local-prueba', nombre: 'Local Prueba', activo: true }])
+    // 170: la pantalla pide los locales según el rol
+    api.getLocalesClubParaRol.mockReset().mockResolvedValue([{ id: 'local-prueba', nombre: 'Local Prueba', activo: true }])
     api.getReporteMes.mockReset().mockResolvedValue(repMes)
     api.getReporteAltas.mockReset().mockResolvedValue([])
     api.getReporteVisitas.mockReset().mockResolvedValue([])

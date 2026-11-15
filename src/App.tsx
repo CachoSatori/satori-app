@@ -170,7 +170,7 @@ function AppRoutes() {
         <Route path="/mis-propinas"  element={<Navigate to="/mi-rendimiento?tab=propinas" replace />} />
         <Route path="/inventario"    element={<PrivateRoute roles={['owner','manager','contador']}><InventarioModule /></PrivateRoute>} />
         <Route path="/clientes"      element={<PrivateRoute roles={['owner','manager','cajero']}><ClientesModule /></PrivateRoute>} />
-        <Route path="/club"          element={<PrivateRoute roles={['owner','manager','cajero']}><ClubModule /></PrivateRoute>} />
+        <Route path="/club"          element={<PrivateRoute roles={['owner','manager','cajero','contador']}><ClubModule /></PrivateRoute>} />
         <Route path="/finanzas"      element={<PrivateRoute roles={['owner','manager','contador']}><FinanzasModule /></PrivateRoute>} />
         <Route path="/inbox"         element={<PrivateRoute roles={['owner','manager','contador','cajero']}><InboxModule /></PrivateRoute>} />
         <Route path="/inbox/share"   element={<Navigate to="/inbox" replace />} />

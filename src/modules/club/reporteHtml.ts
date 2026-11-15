@@ -12,6 +12,7 @@ import dm500 from '@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff2?inli
 import dm600 from '@fontsource/dm-sans/files/dm-sans-latin-600-normal.woff2?inline'
 import type { ReporteMes, FilaReporte, ContactoOferta } from '../../shared/api/club'
 import { esParcial } from './reporteSaldo'
+import { notaEquipoMes } from './equipo'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -149,8 +150,10 @@ export function reporteHtml(r: ReporteMes): string {
     <div class="dos">
       <div><h2>Nuevos</h2><p class="nota">${num(r.nuevos.cuentas)} referentes mandaron gente por primera vez.</p>
         ${tabla([{ t: 'referente', w: '70%' }, { t: 'personas', w: '30%', der: true }], r.nuevos.lista.slice(0, 3).map(f => [quien(f), num(f.personas ?? 0)]), 'Ningún referente nuevo.')}</div>
-      <div><h2>Equipo Satori</h2><p class="nota">Aparte: ${num(r.equipo.personas_mes)} personas en el mes y ${cred(r.equipo.creditos)} créditos en saldo.</p>
-        ${tabla([{ t: 'persona', w: '70%' }, { t: 'créditos', w: '30%', der: true }], r.equipo.lista.slice(0, 3).map(f => [quien(f), cred(f.creditos ?? 0)]), 'Sin movimientos del equipo.')}</div>
+      <div><h2>Equipo Satori</h2><p class="nota">Aparte: ${esc(notaEquipoMes(r.equipo))}</p>
+        ${r.equipo.congelado_creditos === undefined
+          ? tabla([{ t: 'persona', w: '70%' }, { t: 'créditos', w: '30%', der: true }], r.equipo.lista.slice(0, 3).map(f => [quien(f), cred(f.creditos ?? 0)]), 'Sin movimientos del equipo.')
+          : tabla([{ t: 'persona', w: '70%' }, { t: 'personas', w: '30%', der: true }], r.equipo.lista.slice(0, 3).map(f => [quien(f), num(f.personas ?? 0)]), 'Sin movimientos del equipo.')}</div>
     </div>
     ${pie(2)}</section>`
 
@@ -207,7 +210,9 @@ export function reporteCsv(r: ReporteMes): string {
   const k = r.kpis
   for (const [n, v] of Object.entries({ tarjetas: k.tarjetas, personas: k.personas, canjes: k.canjes, creditos_canjeados: k.creditos_canjeados,
     valor_canjeado_crc: k.valor_canjeado_crc, saldo_creditos_al_cierre: k.saldo_creditos_al_cierre, pm_pendiente_crc: r.pm.pendiente_crc,
-    excepciones_abiertas: r.calidad.abiertas }))
+    excepciones_abiertas: r.calidad.abiertas,
+    // D7 A (mig 157): el saldo congelado del equipo va aparte, fuera del pasivo
+    ...(r.equipo.congelado_creditos !== undefined ? { equipo_congelado_creditos: r.equipo.congelado_creditos, equipo_congelado_crc: r.equipo.congelado_valor_crc ?? 0 } : {}) }))
     L.push(['kpi', n, '', '', '', '', v, ''].map(q).join(';'))
   return '﻿' + L.join('\r\n')
 }

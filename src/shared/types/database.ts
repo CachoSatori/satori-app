@@ -47,6 +47,7 @@ export interface Employee {
   profile_id: string | null
   is_active: boolean
   pos_name: string | null   // nombre exacto en el XLS de ventas/POS (clave de dias.saloneros); null = sin vincular
+  pos_login?: string | null // login del PoS (mig 062, 3 dígitos); solo el owner lo cambia (trigger club_employees_pos_login_guardia)
   created_at: string
   updated_at: string
 }

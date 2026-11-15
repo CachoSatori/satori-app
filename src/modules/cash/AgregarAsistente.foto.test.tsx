@@ -23,7 +23,11 @@ vi.mock('../../shared/api/cash', () => ({ createCashMovement: createSpy }))
 // Pipeline mockeado, pero `cuadra` REAL (importActual) para ejercitar el cruce ítems↔total del cartel.
 vi.mock('../../shared/api/documents', async (orig) => {
   const actual = await orig<typeof import('../../shared/api/documents')>()
-  return { ...actual, uploadImage: uploadSpy, extractImage: extractSpy, createDocumentRow: createDocSpy }
+  // (13-nov) el asistente lee con extractImageDetalle y revisa duplicados: sin duplicados ni fallas en estas pruebas
+  return { ...actual, uploadImage: uploadSpy, extractImage: extractSpy, createDocumentRow: createDocSpy,
+           extractImageDetalle: async (p: string) => ({ documentos: await (extractSpy as unknown as (x: string) => Promise<DocExtract[]>)(p), fallo: false }),
+           sha256File: async () => 'sha-foto', findDuplicate: async () => null, findDuplicateClave: async () => null,
+           findFacturaParecida: async () => null }
 })
 vi.mock('../../shared/utils/imageNormalize', () => ({ normalizeInvoiceImage: normalizeSpy }))
 vi.mock('../../shared/api/finance', () => ({ getFinanceAccounts: vi.fn(async () => []) }))

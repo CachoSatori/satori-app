@@ -29,6 +29,7 @@ import {
   hayMontosNegativos, mensajeDiasPendientes, ventaSospechosaDeSerNeta,
 } from './cierrePozo'
 import { shiftLabel } from '../../shared/utils'
+import { avisoTipoCambio, errorTipoCambio, parseTipoCambio } from './tipoCambio'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -120,13 +121,21 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
 
   // Tipo de cambio configurado (último de exchange_rates). Editable por el
   // manager en el cierre. Default 640 hasta que cargue.
+  // El campo es de TEXTO (tcTxt, acepta punto o coma); `tc` es el último valor válido y es el que usan
+  // las cuentas. Al confirmar la Fase 1 se valida el TEXTO: vacío o fuera de rango frena (no se usa el
+  // último valor en silencio). `tcRef` = TC de Admin, solo para avisar si el cargado se aleja.
   const [tc, setTc] = useState<number>(640)
+  const [tcTxt, setTcTxt] = useState<string>('640')
+  const [tcRef, setTcRef] = useState<number | null>(null)
+  const ponerTc = (n: number) => { setTc(n); setTcTxt(String(n)) }
   useEffect(() => {
     const saved = parcial?.tipo_cambio
-    if (saved && saved > 0) { setTc(saved); return }
-    getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {})
+    getCurrentRate().then(r => { if (r > 0) { setTcRef(r); if (!(saved && saved > 0)) ponerTc(r) } }).catch(() => {})
+    if (saved && saved > 0) ponerTc(saved)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parcial?.tipo_cambio])
+  const tcErrorCampo = parcial ? null : errorTipoCambio(parseTipoCambio(tcTxt))
+  const tcAviso      = parcial || tcErrorCampo ? null : avisoTipoCambio(tc, tcRef)
 
   // ── Propinas del día — VÍA REAL (FIRMADO: una sola fuente de verdad) ─────────
   // Los turnos de propinas pendientes se PAGAN desde acá (misma vía que Caja Diaria:
@@ -284,6 +293,8 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   const handleConfirmParcial = async () => {
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     if (ventasMVacias) { setError('Ingresá las ventas de mediodía'); return }
+    // El TC se sella con la Fase 1 (la Fase 2 usa el sellado): acá se valida una sola vez, sin redondear.
+    { const errTc = errorTipoCambio(parseTipoCambio(tcTxt)); if (errTc) { setError(errTc); return } }
     // Post-corte únicamente: pre-corte el cierre queda EXACTAMENTE como estaba.
     if (postCorte && hayMontosNegativos([vmCRC, vmUSD])) {
       setError('Las ventas no pueden ser negativas — corregí el monto'); return
@@ -542,13 +553,22 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           <div style={{ fontSize:'0.95rem', fontWeight:700, letterSpacing:'0.03em' }}>Cierre del día</div>
           <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', marginTop:4, display:'flex', alignItems:'center', gap:'0.4rem' }}>
             <span>TC ₡/$</span>
-            <input type="number" min={300} max={900} step={5} value={tc}
+            {/* TC con decimales (decisión del dueño, 14-nov): texto con punto o coma, 300–900, hasta 2 decimales. */}
+            <input type="text" inputMode="decimal" autoComplete="off" value={tcTxt}
               disabled={!!parcial}
-              onChange={e => setTc(Number(e.target.value) || tc)}
+              aria-invalid={!!tcErrorCampo}
+              onChange={e => {
+                const txt = e.target.value
+                setTcTxt(txt)
+                const n = parseTipoCambio(txt)
+                if (!errorTipoCambio(n)) setTc(n)
+              }}
               title={parcial ? 'Sellado en Fase 1' : 'Tipo de cambio del día'}
               className="cierre-input"
-              style={{ width:64, color:'var(--c-oro-texto)', padding:'2px 6px', fontSize:'0.74rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', opacity: parcial ? 0.6 : 1 }} />
+              style={{ width:80, color:'var(--c-oro-texto)', padding:'2px 6px', fontSize:'0.74rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', opacity: parcial ? 0.6 : 1, borderColor: tcErrorCampo ? 'var(--c-laca)' : undefined }} />
           </div>
+          {tcErrorCampo && <div role="alert" style={{ fontSize:'0.7rem', color:'var(--c-laca)', marginTop:4 }}>{tcErrorCampo}</div>}
+          {tcAviso && <div style={{ fontSize:'0.7rem', color:'var(--c-oro-texto)', marginTop:4 }}>{tcAviso}</div>}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
           {(parcial || completo) && (
@@ -1178,7 +1198,7 @@ function MontoInput({ prefix, value, onChange, compact }: {
     <div className="cierre-monto" style={{ height: compact ? 34 : 38 }}>
       <span className="pfx" style={{ fontSize: compact ? '0.72rem' : '0.82rem' }}>{prefix}</span>
       <input
-        type="number" min={0} step={100} value={value}
+        type="number" min={0} step="any" value={value}
         onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))}
         style={{ fontSize: compact ? '0.82rem' : '0.9rem' }}
         placeholder="0"

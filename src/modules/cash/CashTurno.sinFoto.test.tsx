@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import type { CashSession, Supplier, CashMovement } from '../../shared/types/database'
 
 // T3-B — nota "⚠ sin foto" en la lista de "Pagos a proveedores" del día: un pago de mercadería
@@ -41,6 +41,13 @@ vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn
 vi.mock('./deletionNote', () => ({ useDeletionNote: () => vi.fn(async () => 'nota') }))
 vi.mock('../../shared/FacturaThumbs', () => ({ default: () => null }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
+// (#154) El asistente ➕ Agregar real no hace falta: un doble que llama onCreated con el movimiento recién creado
+// (en la app real, onCreated llega DESPUÉS de createDocumentRow, con el documento ya enlazado).
+vi.mock('./AgregarAsistente', () => ({
+  default: ({ onCreated }: { onCreated: (m: CashMovement) => void }) => (
+    <button onClick={() => onCreated({ id: 'mov-existing' } as unknown as CashMovement)}>doble: registrar</button>
+  ),
+}))
 
 import CashTurno from './CashTurno'
 
@@ -107,5 +114,17 @@ describe('CashTurno — nota "⚠ sin foto" en pagos de mercadería (T3-B)', () 
     await waitFor(() => expect(screen.getByText('Pescaderia Test')).toBeTruthy())
     await act(async () => { await Promise.resolve() })   // docsLoaded seteado (ver test anterior)
     expect(screen.queryByText(/⚠ sin foto/)).toBeNull()
+  })
+
+  // (#154, prueba física 13-nov) El pago del asistente se pintaba con «⚠ sin foto» porque los documentos enlazados se
+  // consultaban solo al montar. Mutación: volver a `onCreated={mov => onMovAdded(mov)}` (sin recargarDocs) → cae esta.
+  it('alta desde el asistente con foto → se vuelve a consultar y la nota «⚠ sin foto» se va', async () => {
+    renderTurno()
+    await waitFor(() => expect(screen.getByText(/⚠ sin foto/)).toBeTruthy())   // al montar, el documento todavía no está
+    listLinkedDocsSpy.mockResolvedValue([{ linked_movement_id: 'mov-existing' }])   // createDocumentRow ya lo enlazó
+    fireEvent.click(screen.getByRole('button', { name: /Agregar factura \/ movimiento/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'doble: registrar' }))
+    await waitFor(() => expect(listLinkedDocsSpy).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByText(/⚠ sin foto/)).toBeNull())
   })
 })

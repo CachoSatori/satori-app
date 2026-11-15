@@ -11,6 +11,8 @@ const RE_REF = /^[A-HJ-NP-Z2-9]{8}$/
 const RE_LOCAL = /^[a-z0-9-]{2,40}$/   // LC-ML: id de local de club_config
 const RE_CUPON = /^[A-HJ-NP-Z2-9]{10}$/
 const RE_TOKEN = /^[0-9a-f]{64}$/
+/** 167: marcas de la tarjeta de reseña del socio (portal, «Mi Club») */
+const ACCIONES_RESENA = ['mostrada', 'cerrada', 'clic']
 const RE_BAJA = /^[0-9a-f]{32}$/   // 136: la llave de baja del turista (128 bits), no el código del cupón
 const RE_SUPABASE = /^https:\/\/[a-z0-9]{20}\.supabase\.co$/
 
@@ -20,7 +22,9 @@ const memoria = new Map() // SOLO para el servidor local (CLUB_DEV=1)
  * Tope por endpoint y por IP (CLUB-AUD-14 y 24, ronda 3). Un binding de Rate Limiting por tipo de pedido:
  *   · RL_CREAR: crear cupón, opt-in, baja del turista, alta y código de canje → 5 por 60 s por IP (cupón y alta, también
  *     por prefijo de red /24 o /64).
- *   · RL_LEER:  ver cupón y portal → 60 por 60 s por IP.
+ *   · RL_LEER:  ver cupón y portal → 60 por 60 s por IP. 158: el sondeo de la página del cupón (`sondeo:`) y la marca
+ *     de clic de la reseña (`resena:`) usan este binding con su propia clave (60 por 60 s por IP cada una). 167: las
+ *     marcas de la tarjeta de reseña del socio (`resena-socio:`), igual.
  * Si el binding no está, devuelve `null` y la API responde 503 (falla cerrada). El contador en memoria existe
  * solo en el servidor local (`CLUB_DEV=1`). `RATE_LIMITER` (un solo binding de antes) ya no se usa.
  * @param {'crear'|'leer'} tipo
@@ -60,6 +64,8 @@ function traducirError(msg) {
   if (m === 'Enlace no válido') return [404, 'portal_invalido']
   if (m === 'Demasiados códigos de canje') return [429, 'tope_canje']
   if (m === 'Todavía no te alcanza para canjear') return [409, 'sin_saldo_canje']
+  // D7 A (mig 157): las cuentas del equipo registran personas pero no canjean créditos
+  if (m === 'Las cuentas del equipo no canjean créditos') return [409, 'equipo_sin_canje']
   if (m === 'Demasiadas altas hoy') return [429, 'tope_altas']
   // LC-ML: el local sale de datos; con dos o más encendidos, la persona elige
   if (/^Hay más de un local/.test(m)) return [400, 'elegir_local']
@@ -253,7 +259,11 @@ export async function manejar(request, env, path) {
     if (!RE_CUPON.test(cod)) return json(404, { error: 'cupon_invalido' })
     if (partes.length === 2) {
       if (metodo !== 'GET') return json(405, { error: 'metodo' })
-      { const ok = await limitar(env, 'leer', `leer:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+      // 158 (verificador, menor a): el sondeo de la página del cupón abierta (`?sondeo=1`, ~3 por minuto y por pestaña) va
+      // con su propia clave en RL_LEER: no le gasta el tope de lectura al portal ni a la primera carga de la misma IP
+      // (hotel, wifi del local). Mismo binding y mismo tope (60/60 s) por clave: no hace falta tocar el Worker.
+      const clave = new URL(request.url).searchParams.get('sondeo') === '1' ? `sondeo:${ip}` : `leer:${ip}`
+      { const ok = await limitar(env, 'leer', clave, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
       return rpc(env, 'club_cupon_ver', { p_codigo: cod })
     }
     if (partes.length === 3 && partes[2] === 'contacto') {
@@ -263,6 +273,17 @@ export async function manejar(request, env, path) {
       const c = limpiarContacto(b?.contacto)
       if (!c || !c.optin || !RE_AVISO.test(c.acepto)) return json(400, { error: 'datos_invalidos' })
       return rpc(env, 'club_cupon_contacto', { p_codigo: cod, p_contacto: c })
+    }
+    // 158: POST /api/cupon/:codigo/resena → marca (una sola vez, sin datos personales) que el turista tocó «Escribir una
+    // reseña en Google». No lleva cuerpo. La base solo marca un cupón usado hace < 7 días de un local con link cargado.
+    // Verificador, menor b: la marca es de mejor esfuerzo. El link a Google se abre en el navegador sin esperar esta
+    // respuesta (un 429 acá no frena a nadie), y el tope va con el de lectura (60/60 s por IP, clave propia) y no con
+    // el de crear (5/60 s): con IP compartida (hotel, wifi del local) no se pierden clics. Cada cupón se marca una sola
+    // vez en la base, así que el tope holgado no abre nada.
+    if (partes.length === 3 && partes[2] === 'resena') {
+      if (metodo !== 'POST') return json(405, { error: 'metodo' })
+      { const ok = await limitar(env, 'leer', `resena:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+      return rpc(env, 'club_cupon_resena_clic', { p_codigo: cod })
     }
   }
 
@@ -287,7 +308,7 @@ export async function manejar(request, env, path) {
     return rpc(env, 'club_canje_codigo_generar', { p_token: tok })
   }
 
-  // POST /api/alta  {nombre, whatsapp, acepto, ref?, turnstile}  → autoalta de socio (pendiente), LC-DES-07
+  // POST /api/alta  {nombre, whatsapp, acepto, mayor_edad, cumple_dia?, cumple_mes?, cumple_permiso?, ref?, turnstile}  → autoalta de socio (pendiente), LC-DES-07
   if (partes.length === 1 && partes[0] === 'alta') {
     if (metodo !== 'POST') return json(405, { error: 'metodo' })
     { const ok = await limitar(env, 'crear', `alta:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
@@ -304,6 +325,16 @@ export async function manejar(request, env, path) {
     if (RE_LOCAL.test(local)) datos.local = local   // LC-ML: sin local válido, la base usa el único encendido
     if (datos.nombre.length < 2 || !datos.whatsapp || !RE_AVISO.test(datos.acepto)) return json(400, { error: 'datos_invalidos' })
     if (datos.ref && !RE_REF.test(datos.ref)) datos.ref = ''
+    // D6 A (14-nov): mayor de 18 obligatorio (solo `true` literal); cumpleaños opcional, día y mes enteros y con el permiso.
+    // La base valida lo mismo (159); acá solo se filtra la forma. Nunca se registra en logs.
+    if (b.mayor_edad !== true) return json(400, { error: 'datos_invalidos' })
+    datos.mayor_edad = true
+    const cd = b.cumple_dia, cm = b.cumple_mes, cp = b.cumple_permiso
+    if (cd !== undefined || cm !== undefined || cp !== undefined) {
+      if (!Number.isInteger(cd) || !Number.isInteger(cm) || cp !== true) return json(400, { error: 'datos_invalidos' })
+      if (cm < 1 || cm > 12 || cd < 1 || cd > [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][cm - 1]) return json(400, { error: 'datos_invalidos' })
+      datos.cumple_dia = cd; datos.cumple_mes = cm; datos.cumple_permiso = true
+    }
     return rpc(env, 'club_socio_autoalta', { p_datos: datos })
   }
 
@@ -314,6 +345,15 @@ export async function manejar(request, env, path) {
     const tok = String(partes[1]).toLowerCase()
     if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
     return rpc(env, 'club_canje_codigo_generar_pase', { p_token_pase: tok })
+  }
+
+  // GET /api/portal/:token/retos  → retos de temporada baja con el avance del socio (mig 169). Mismo tope que leer el portal.
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'retos') {
+    if (metodo !== 'GET') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'leer', `retos:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return rpc(env, 'club_portal_retos', { p_token: tok })
   }
 
   // POST /api/portal/:token/baja  → baja del Local Club (link del aviso de privacidad)
@@ -341,6 +381,30 @@ export async function manejar(request, env, path) {
     const tok = String(partes[1]).toLowerCase()
     if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
     return walletActualizar(env, tok)
+  }
+
+  // GET /api/portal/:token/avance  → «Visita 2 de 4» de los primeros 90 días (mig 168). Mismo tope que leer el portal.
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'avance') {
+    if (metodo !== 'GET') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'leer', `avance:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return rpc(env, 'club_portal_avance', { p_token: tok })
+  }
+
+  // 167: POST /api/portal/:token/resena {accion}  → marca de la tarjeta «¿Nos cuenta cómo le fue?» del socio:
+  // 'mostrada' | 'cerrada' | 'clic'. Sin datos personales (solo la hora en el pedido). La base solo marca el pedido que
+  // toca (cada N visitas, máx. 1 cada X días) y responde {ok:true} siempre. De mejor esfuerzo, como el clic del cupón
+  // (158): tope de lectura (60/60 s por IP) con clave propia, para no perder marcas con IP compartida.
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'resena') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'leer', `resena-socio:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    const b = await leerCuerpo(request)
+    const accion = b && typeof b.accion === 'string' ? b.accion : ''
+    if (!ACCIONES_RESENA.includes(accion)) return json(400, { error: 'datos_invalidos' })
+    return rpc(env, 'club_portal_resena', { p_token: tok, p_accion: accion })
   }
 
   // GET /api/portal/:token

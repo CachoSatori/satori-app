@@ -1,6 +1,9 @@
 import { supabase } from './supabase'
 import { createDayMovement } from './cash'
 import type { Json } from '../types/database'
+import { documentoVigente, mismaFactura, normNumero, MSG_NO_VERIFICA } from '../utils/facturaDuplicada'
+import { normalizarFechaFactura } from '../utils/fechaFactura'
+import { todayCR } from '../utils'
 
 export interface DocItem {
   codigo?: string | null; descripcion: string; cantidad?: number | null; unidad?: string | null
@@ -31,6 +34,25 @@ export interface DocExtract {
   confianza: number
   requiere_revision?: boolean
   error?: string
+  // (13-nov) Puestos por el cliente, no por la IA (ver conFechaCR): la fecha tal como la leyó la IA, de dónde sale la
+  // `fecha` final y el aviso para el usuario, si hay que revisarla.
+  fecha_leida?: string | null
+  fecha_origen?: 'clave' | 'invertida' | 'ia' | 'ninguna' | 'ambigua'
+  aviso_fecha?: string | null
+  // (14-nov) Solo con fecha_origen 'ambigua' (las dos lecturas día/mes son posibles): `fecha` queda vacía y la pantalla
+  // pregunta cuál es, con estas dos opciones (la más cercana a hoy primero). No se guarda hasta que el usuario elija.
+  fecha_opciones?: [string, string] | null
+}
+
+// (13-nov) Costa Rica escribe DÍA/MES: la IA a veces lee «9/11/2026» como 2026-09-11. Toda lectura pasa por acá antes de
+// precargar nada: la clave FE manda; sin clave, una fecha ambigua se resuelve por calendario (la única lectura posible,
+// con aviso) o queda 'ambigua' para que el usuario elija (ver fechaFactura.ts). `hoy` = fecha de Costa Rica.
+// La fecha de la factura nunca es la fecha del movimiento: el movimiento entra el día en que se registra.
+export function conFechaCR(ex: DocExtract, hoy: string = todayCR()): DocExtract {
+  if (!ex || typeof ex !== 'object') return ex
+  const n = normalizarFechaFactura(ex.fecha, ex.clave_fe, hoy)
+  return { ...ex, fecha: n.fecha, fecha_leida: ex.fecha ?? null, fecha_origen: n.origen, aviso_fecha: n.aviso,
+           fecha_opciones: n.opciones ?? null }
 }
 
 export interface DocumentRow {
@@ -54,11 +76,36 @@ export async function sha256File(file: Blob): Promise<string> {
 }
 
 // ¿Ya se procesó un documento igual? (sha256 o clave_fe). Devuelve el doc si existe.
+// (13-nov) Solo cuentan los documentos VIGENTES (`documentoVigente`): un huérfano —su movimiento se borró— o un
+// descartado no bloquean la recarga de la misma foto. La base ya excluye los descartados; los huérfanos se filtran acá
+// (por eso trae hasta 20 candidatos y no 1).
+// (13-nov, verificación) «Falla cerrada», igual que findDuplicateClave y findFacturaParecida: si la consulta falla (error
+// de la base o sin red) se LANZA MSG_NO_VERIFICA y la pantalla no registra nada. Antes un error dejaba pasar la foto.
 export async function findDuplicate(sha: string, claveFe: string | null): Promise<DocumentRow | null> {
-  let q = supabase.from('documents').select('*').neq('estado', 'descartado').limit(1)
-  q = claveFe ? q.or(`sha256.eq.${sha},clave_fe.eq.${claveFe}`) : q.eq('sha256', sha)
-  const { data } = await q
-  return (data?.[0] as DocumentRow | undefined) ?? null
+  const data = await consultarVerificacion(() => {
+    let q = supabase.from('documents').select('*').neq('estado', 'descartado')
+    q = claveFe ? q.or(`sha256.eq.${sha},clave_fe.eq.${claveFe}`) : q.eq('sha256', sha)
+    return q.order('created_at', { ascending: false }).limit(20)
+  })
+  return data.find(documentoVigente) ?? null
+}
+
+// (D11 = B) Todos los documentos VIGENTES de una misma foto (sha), para saber cuáles de sus facturas ya se cargaron.
+// Falla cerrada como findDuplicate.
+export async function findDocsPorSha(sha: string): Promise<DocumentRow[]> {
+  const data = await consultarVerificacion(() => supabase.from('documents').select('*').neq('estado', 'descartado')
+    .eq('sha256', sha).order('created_at', { ascending: true }).limit(50))
+  return data.filter(documentoVigente)
+}
+
+// Corre una consulta de duplicados: error devuelto o excepción (red) → Error(MSG_NO_VERIFICA). Nunca «no hay duplicado».
+async function consultarVerificacion(
+  consulta: () => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+): Promise<DocumentRow[]> {
+  let res: { data: unknown; error: { message: string } | null }
+  try { res = await consulta() } catch { throw new Error(MSG_NO_VERIFICA) }
+  if (res.error) throw new Error(MSG_NO_VERIFICA)
+  return (res.data ?? []) as DocumentRow[]
 }
 
 // Sube SOLO la imagen al bucket privado (sin crear fila todavía).
@@ -79,10 +126,42 @@ export async function extractImage(imagePath: string): Promise<DocExtract[]> {
     const { data, error } = await supabase.functions.invoke('extract-document', { body: { image_path: imagePath } })
     if (error) throw error
     const docs = (data as { documentos?: DocExtract[] })?.documentos
-    return Array.isArray(docs) ? docs : []
+    return Array.isArray(docs) ? docs.map(d => conFechaCR(d)) : []
   } catch {
     return []  // función no desplegada o sin key → se crea 1 fila vacía para carga manual
   }
+}
+
+// (13-nov) Como extractImage, pero distingue «la lectura FALLÓ» (la función dio error, no está desplegada o no hubo red)
+// de «la IA no vio documentos» (respondió bien con una lista vacía). extractImage queda igual para las otras pantallas.
+export async function extractImageDetalle(imagePath: string): Promise<{ documentos: DocExtract[]; fallo: boolean }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('extract-document', { body: { image_path: imagePath } })
+    if (error) return { documentos: [], fallo: true }
+    const docs = (data as { documentos?: DocExtract[] })?.documentos
+    return Array.isArray(docs) ? { documentos: docs.map(d => conFechaCR(d)), fallo: false } : { documentos: [], fallo: true }
+  } catch {
+    return { documentos: [], fallo: true }
+  }
+}
+
+// (13-nov) ¿Ya hay un documento vigente (no descartado) con esta clave FE? Bloquea, como la misma foto.
+export async function findDuplicateClave(claveFe: string | null | undefined): Promise<DocumentRow | null> {
+  const clave = String(claveFe ?? '').replace(/\D/g, '')
+  if (clave.length < 20) return null   // sin una clave FE de verdad (50 dígitos) no se compara
+  const data = await consultarVerificacion(() => supabase.from('documents').select('*').neq('estado', 'descartado')
+    .eq('clave_fe', claveFe as string).order('created_at', { ascending: false }).limit(20))
+  return data.find(documentoVigente) ?? null   // huérfanos fuera (ver findDuplicate)
+}
+
+// (13-nov) ¿Ya hay una factura vigente del mismo proveedor, con el mismo número y el mismo total (otra foto)? Solo avisa.
+// Trae candidatos por número (ilike, para tolerar ceros a la izquierda y espacios) y decide con `mismaFactura`.
+export async function findFacturaParecida(ex: DocExtract | null): Promise<DocumentRow | null> {
+  const num = normNumero(ex?.numero_documento)
+  if (!ex || !num) return null
+  const filas = await consultarVerificacion(() => supabase.from('documents').select('*').neq('estado', 'descartado')
+    .ilike('raw_json->>numero_documento', `%${num}%`).order('created_at', { ascending: false }).limit(20))
+  return filas.find(d => documentoVigente(d) && d.raw_json && mismaFactura(ex, d.raw_json)) ?? null
 }
 
 // Crea una fila en documents para un documento detectado (o vacía si ex es null).

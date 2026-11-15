@@ -1,6 +1,6 @@
 # Continuación — backlog priorizado (al día: 2026-11-11)
 
-> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-11.md](docs/handoffs/HANDOFF-2026-11-11.md)** (11/11). El handoff
+> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md)** (13/11). El handoff
 > anterior es el del [06/11](docs/handoffs/HANDOFF-2026-11-06.md). Lo de abajo es el backlog detallado.
 
 > **Foto al 11/11:** `main` = **`66b3b85`** (PROD; merges de docs #96 y #108 sobre `c41e18b`). **Ledger de prod: 65 · 095.**

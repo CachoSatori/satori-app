@@ -102,7 +102,7 @@ export default function ExchangeRateWidget() {
                 value={input}
                 min={400}
                 max={900}
-                step={1}
+                step="any"
                 onChange={e => setInput(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="640"
               />

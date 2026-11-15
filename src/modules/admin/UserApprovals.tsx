@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import type { Profile, Employee, UserRole } from '../../shared/types/database'
 import { getAllProfiles, updateProfileRole, setProfileActive } from '../../shared/api/admin'
 
 import { ROLE_LABELS } from '../../shared/constants'
 import NuevoEmpleado from './NuevoEmpleado'
+import CambiosPermisos from './CambiosPermisos'
 
 const ROLES: UserRole[] = ['owner', 'contador', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina', 'proveedor']
 
@@ -20,6 +21,7 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [verCambios, setVerCambios] = useState<string | null>(null)   // B10: usuario con «Cambios» abierto
 
   const load = useCallback(async () => {
     try {
@@ -33,6 +35,7 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
   useEffect(() => { load() }, [load])
 
   const empOf = (profileId: string) => employees.find(e => e.profile_id === profileId)
+  const nombres = useMemo(() => new Map(profiles.map(p => [p.id, p.full_name])), [profiles])
 
   const handleRole = async (id: string, role: UserRole) => {
     setSavingId(id); setError(null)
@@ -56,8 +59,10 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
   const renderRow = (p: Profile) => {
     const emp = empOf(p.id)
     const isMe = p.id === currentUserId
+    const abierto = verCambios === p.id
     return (
-      <tr key={p.id} className="admin-row">
+      <Fragment key={p.id}>
+      <tr className="admin-row">
         <td className="admin-emp-name">
           {p.full_name}{isMe && <span style={{ color: 'var(--c-gris)', fontWeight: 400 }}> (vos)</span>}
           <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)', marginTop: 1 }}>
@@ -85,8 +90,16 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
               ✓ Habilitar
             </button>
           )}
+          <button className="tips-btn-ghost" style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem', marginLeft: '0.4rem' }}
+            aria-expanded={abierto} onClick={() => setVerCambios(abierto ? null : p.id)}>
+            {abierto ? 'Ocultar cambios' : 'Cambios'}
+          </button>
         </td>
       </tr>
+      {abierto && (
+        <tr><td colSpan={3} style={{ padding: 0 }}><CambiosPermisos key={`${p.id}-${p.updated_at}`} profileId={p.id} nombres={nombres} /></td></tr>
+      )}
+      </Fragment>
     )
   }
 

@@ -14,12 +14,16 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
-  describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, type QueAplicar,
+  describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, getEdadSocio, type EdadSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
-  type FacturaReciente,
+  type FacturaReciente, conPremioDeReto, type RetoEnCaja,
 } from '../../shared/api/club'
-import { parsearQR } from './qrFormato'
+import { parsearQR, urlPortal } from './qrFormato'
+import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
+import { esCuentaSinCreditos, MSG_EQUIPO_SIN_CANJE } from './equipo'
+import { pideEdadAlValidar } from './edadSocio'
 import { Aviso, Btn, Card, Chip } from './ui'
+import { AvisoPrimeros90 } from './Primeros90'
 import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
 
@@ -219,7 +223,8 @@ export default function Escanear() {
                     style={{ textAlign: 'left', background: C.paper, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.7rem 0.8rem', cursor: 'pointer', minHeight: 44 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <strong>{f.nombre}</strong>
-                      <span>{fmtCreditos(f.creditos)} cr.</span>
+                      {/* D7 A (mig 157): el equipo no tiene créditos (el saldo de antes quedó congelado) */}
+                      <span>{f.tipo === 'equipo' ? 'sin créditos' : `${fmtCreditos(f.creditos)} cr.`}</span>
                     </div>
                     <div style={{ fontSize: '0.78rem', color: C.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
                       {f.negocio ?? 'Sin negocio'} · {TIPO_MIEMBRO_LABEL[f.tipo] ?? f.tipo}
@@ -230,7 +235,8 @@ export default function Escanear() {
               </div>
             )}
           </Card>
-          <NuevoSocio onHecho={t => setMsg({ tono: 'ok', texto: t })} />
+          <NuevoSocio rol={profile?.role}
+            onHecho={(t, href) => setMsg({ tono: 'ok', texto: t, ...(href ? { link: { href, texto: 'Mandarle su link por WhatsApp' } } : {}) })} />
           {cargando && <div style={{ textAlign: 'center', color: C.muted }}>Buscando…</div>}
         </>
       )}
@@ -451,8 +457,11 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
 }) {
   const d = a.r.datos
   const conCodigo = a.kind === 'canje'
-  const codigoMal = a.kind === 'canje' && a.r.datos.codigo_estado !== 'vigente' ? MSG_CODIGO[a.r.datos.codigo_estado] : null
-  const canjea = conCodigo || modo === 'aprobado'
+  // D7 A (mig 157): la cuenta del equipo registra personas con sus cupones, pero no tiene créditos ni canje.
+  const sinCreditos = esCuentaSinCreditos(d)
+  const codigoMal = conCodigo && sinCreditos ? MSG_EQUIPO_SIN_CANJE
+    : a.kind === 'canje' && a.r.datos.codigo_estado !== 'vigente' ? MSG_CODIGO[a.r.datos.codigo_estado] : null
+  const canjea = !sinCreditos && (conCodigo || modo === 'aprobado')
   const notaOk = nota.trim().length >= 5
   const opciones = opcionesCanje(d)
   const alcanza = (v: number) => d.personas >= v * d.personas_por_credito
@@ -481,6 +490,15 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
         </div>
       ) : (
         <>
+          {sinCreditos ? (
+            <div style={{ margin: '0.9rem 0' }}>
+              <div style={{ background: C.paper, borderRadius: 8, padding: '0.7rem', textAlign: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: '2rem', fontWeight: 800 }}>{Number(d.personas_mes ?? 0)}</div>
+                <div style={{ fontSize: '0.72rem', color: C.muted }}>personas registradas este mes</div>
+              </div>
+              <Aviso tono="info">{MSG_EQUIPO_SIN_CANJE}</Aviso>
+            </div>
+          ) : (<>
           <div style={{ display: 'flex', gap: 10, margin: '0.9rem 0' }}>
             <div style={{ flex: 1, background: C.paper, borderRadius: 8, padding: '0.7rem', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', fontWeight: 800 }}>{fmtCreditos(d.creditos)}</div>
@@ -498,18 +516,21 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
               Hoy ya canjeó {fmtCreditos(d.canjeado_hoy)} de {fmtCreditos(d.max_creditos_por_visita)}.
             </div>
           )}
+          </>)}
 
           {!conCodigo && (
             <>
-              <Aviso tono="info">
-                Para canjear, pedile al referente su <strong>código de canje</strong>: lo genera en su portal con el botón
-                «Canjear» y vale 10 minutos. Escanealo o escribí los 6 caracteres en «Código a mano».
-              </Aviso>
+              {!sinCreditos && (
+                <Aviso tono="info">
+                  Para canjear, pedile al referente su <strong>código de canje</strong>: lo genera en su portal con el botón
+                  «Canjear» y vale 10 minutos. Escanealo o escribí los 6 caracteres en «Código a mano».
+                </Aviso>
+              )}
               <div style={{ display: 'flex', gap: 6, margin: '12px 0' }}>
                 {d.tarjeta_manual_activa && (
                   <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
                 )}
-                {gestiona && (
+                {gestiona && !sinCreditos && (
                   <Btn variant={modo === 'aprobado' ? 'primary' : 'secondary'} onClick={() => setModo('aprobado')} style={{ flex: 1 }}>Canje sin celular</Btn>
                 )}
               </div>
@@ -590,20 +611,31 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
 /**
  * LC-A1/A2: QR fijo del socio del Local Club. Solo identifica (10 % y cortesía); NUNCA da créditos.
  * Pendiente (autoalta) → «Validar socio» con «verifiqué residencia» → activo provisional (LC-DES-01).
+ * D6 A (163): si no tiene la edad registrada (autoaltas de antes de la 159), también «Es mayor de 18 años».
  * «Qué aplicar» (10 % + cortesía, visita por factura con el 856) llega en la etapa A4.
  */
 function PanelSocio({ d, onCerrar, onValidado }: {
   d: ResolverSocio['datos']; onCerrar: () => void; onValidado: (texto: string) => Promise<void>
 }) {
   const [verifico, setVerifico] = useState(false)
+  const [mayor, setMayor] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const baja = d.persona_estado !== 'activo' || d.estado === 'baja'
   const pendiente = !baja && d.estado === 'pendiente'
+  // D6 A (163): rol de socio para saber si hay que preguntar la edad. undefined = no se pudo leer (se pregunta igual)
+  const [edad, setEdad] = useState<EdadSocio | null | undefined | 'cargando'>('cargando')
+  useEffect(() => {
+    if (!pendiente) return
+    let vivo = true
+    getEdadSocio(d.id).then(r => { if (vivo) setEdad(r) }).catch(() => { if (vivo) setEdad(undefined) })
+    return () => { vivo = false }
+  }, [d.id, pendiente])
+  const pideEdad = edad !== 'cargando' && pideEdadAlValidar(edad)
   async function validar() {
     setEnviando(true); setErr(null)
     try {
-      const r = await socioValidar(d.id, verifico)
+      const r = await socioValidar(d.id, verifico, pideEdad ? mayor : null)
       await onValidado(`${d.nombre} quedó activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}: ya tiene el beneficio; un manager confirma el alta.`)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }
@@ -628,8 +660,14 @@ function PanelSocio({ d, onCerrar, onValidado }: {
             <input type="checkbox" checked={verifico} onChange={e => setVerifico(e.target.checked)} />
             <span>Verifiqué que es local (no anotes ningún número de documento)</span>
           </label>
+          {pideEdad && (
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+              <input type="checkbox" checked={mayor} onChange={e => setMayor(e.target.checked)} />
+              <span>Es mayor de 18 años (preguntale; el Local Club es solo para mayores)</span>
+            </label>
+          )}
           {err && <Aviso tono="error">{err}</Aviso>}
-          <Btn onClick={validar} disabled={!verifico || enviando}>{enviando ? 'Validando…' : 'Validar socio'}</Btn>
+          <Btn onClick={validar} disabled={!verifico || edad === 'cargando' || (pideEdad && !mayor) || enviando}>{enviando ? 'Validando…' : 'Validar socio'}</Btn>
         </div>
       )}
       {!baja && !pendiente && (
@@ -656,13 +694,14 @@ function PanelSocio({ d, onCerrar, onValidado }: {
 function VisitaSocio({ miembro }: { miembro: string }) {
   const [pos, setPos] = useState<PosRef | null>(null)
   const [enviando, setEnviando] = useState(false)
-  const [res, setRes] = useState<QueAplicar | null>(null)
+  const [res, setRes] = useState<(QueAplicar & { reto?: RetoEnCaja }) | null>(null)
   const [err, setErr] = useState<ClubError | null>(null)
   const op = useRef(nuevoOp())
   async function registrar() {
     if (!pos) return
     setEnviando(true); setErr(null)
-    try { setRes(await registrarVisitaSocio(miembro, pos, op.current)) }
+    // mig 169: después de registrar, el paso del premio del reto (si falla, sigue lo de antes; el premio queda guardado)
+    try { setRes(await conPremioDeReto(await registrarVisitaSocio(miembro, pos, op.current))) }
     catch (e) { const ce = aClubError(e); if (!ce.esRed) op.current = nuevoOp(); setErr(ce) }   // red: mismo op en el reintento
     finally { setEnviando(false) }
   }
@@ -674,12 +713,17 @@ function VisitaSocio({ miembro }: { miembro: string }) {
         <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           Qué aplicar{res.repetida ? ' · visita ya registrada hoy' : ''}
         </div>
+        {res.reto?.estado === 'ofrecida' && (
+          <div style={{ marginTop: 4 }}><Chip color={C.teal}>Premio del reto «{res.reto.nombre}»: {res.reto.cortesia} · una sola vez</Chip></div>
+        )}
         <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: 2 }}>{res.texto}</div>
         {res.avisos.length > 0 && (
           <ul style={{ margin: '6px 0 0', paddingLeft: '1.1rem', fontSize: '0.88rem' }}>
             {res.avisos.map(a => <li key={a}>{a}</li>)}
           </ul>
         )}
+        {/* mig 168: la cortesía especial de bienvenida (primeros 90 días), aparte para que no se pierda */}
+        <AvisoPrimeros90 p={res.primeros90} />
       </div>
     )
   }
@@ -692,13 +736,15 @@ function VisitaSocio({ miembro }: { miembro: string }) {
   )
 }
 
-/** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia»; NUNCA un número de documento. */
-function NuevoSocio({ onHecho }: { onHecho: (texto: string) => void }) {
+/** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia» y «es mayor de 18» (D6 A); NUNCA un número de documento. */
+/** D1 + mig 156: al terminar, «Mandarle su link por WhatsApp ↗» también para el cajero (el alta devuelve el token del socio nuevo). */
+function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; rol: string | null | undefined }) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState('')
   const [tel, setTel] = useState('')
   const [email, setEmail] = useState('')
   const [verifico, setVerifico] = useState(false)
+  const [mayor, setMayor] = useState(false)   // D6 A: obligatorio; la base rechaza el alta sin él
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   if (!abierto) {
@@ -707,9 +753,19 @@ function NuevoSocio({ onHecho }: { onHecho: (texto: string) => void }) {
   async function guardar() {
     setEnviando(true); setErr(null)
     try {
-      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico)
-      onHecho(`${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`)
-      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false)
+      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico, mayor)
+      const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`
+      // Sin link no se frena nada: el alta ya quedó (el link sale después desde Miembros).
+      let link: string | null = null
+      try {
+        const tok = await tokenDelAlta(r, rol, tokenPortal)
+        link = tok ? linkAltaWhatsApp(tel, nombre, urlPortal(tok)) : null
+      } catch { link = null }
+      const extra = link ? ''
+        : puedeMandarLinkPortal(rol) ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).'
+        : ' El link de su portal se lo manda un manager desde Miembros.'
+      onHecho(texto + extra, link)
+      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false); setMayor(false)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }
   }
@@ -727,13 +783,17 @@ function NuevoSocio({ onHecho }: { onHecho: (texto: string) => void }) {
           <input type="checkbox" checked={verifico} onChange={e => setVerifico(e.target.checked)} />
           <span>Verifiqué que es local (no anotes ningún número de documento)</span>
         </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+          <input type="checkbox" checked={mayor} onChange={e => setMayor(e.target.checked)} />
+          <span>Es mayor de 18 años (preguntale; el Local Club es solo para mayores)</span>
+        </label>
         <div style={{ fontSize: '0.8rem', color: C.muted }}>
           Contale el aviso de privacidad: guardamos nombre y WhatsApp solo para el Local Club y se puede dar de baja desde su portal.
-          Queda registrada la versión vigente del aviso.
+          Queda registrada la versión vigente del aviso. El cumpleaños no se carga en caja: solo en el alta por la web, con su permiso.
         </div>
         {err && <Aviso tono="error">{err}</Aviso>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
+          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico || !mayor}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
           <Btn type="button" variant="ghost" onClick={() => { setAbierto(false); setErr(null) }}>Cancelar</Btn>
         </div>
       </form>

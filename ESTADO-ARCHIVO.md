@@ -1,5 +1,52 @@
 # Satori App — Estado del proyecto
 
+## 🗄️ 2026-11-14 (01:30) — bloque ⚡ARRANQUE archivado al reemplazarlo (tarde del 14/11)
+
+Historia: sus hashes, conteos y pendientes **no** valen como estado actual. Títulos bajados un nivel.
+
+### ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
+**Al día: 2026-11-14, 01:30 hora de Costa Rica.** `main` verificado contra `origin`; lo de prod fuera de `main` y lo de
+Cloudflare lo informó el dueño (en prod, Claude solo hizo lo que firmó el dueño). El bloque del 13/11 (Edge, `club-pase`,
+pases de octubre y noviembre) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
+**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).**
+
+> **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
+> en un PR de docs inmediato después del merge. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se
+> corrige el archivo.
+
+| Puntero | Hash | Qué es |
+|---|---|---|
+| `main` | **`93a5bf7`** (13/11 23:33 -06:00: merge del #166, fechas día/mes en las facturas). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **153**. |
+| `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Desarrollo y proyecto Supabase de staging. Cloudflare Pages (`satori-staging.pages.dev`) publica esta rama. |
+| `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
+
+- **Prod, dato (firma del dueño, 14/11 00:09):** `employees.pos_login` **041** quedó asignado a un salonero nuevo. Consta
+  en `club_pos_login_historial`. Sin nombres en el repo.
+- **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
+  de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging**: la sesión no puede invocar la función (el proxy
+  bloquea `*.supabase.co`), así que la hace el dueño con una foto o se habilita el dominio.
+- **PR en borrador (ninguno mergeado):**
+  - **#168:** migración **155**, alerta `ANFITRION_SOBRE_TOPE` sin la carga inicial. Verificador independiente: CAMBIOS
+    menores, corregidos en `70c00dc`.
+  - **#169:** UI: link del portal al socio, login del PoS en Empleados y tope sin monto fijo.
+  - **#170:** `club-web`: texto final del alta («puede ser hoy mismo»).
+  - **#169 y #170 tocan la guía 6.13:** el segundo en mergear tiene un conflicto chico.
+- **Decisión firmada, pendiente de construir: D6 A** (alta del Local Club): mayor de 18 obligatorio, cumpleaños día/mes
+  opcional con permiso, aviso de privacidad v1.2 junto con el #140. Numeración: **154** solo si entra antes que la 155; si
+  no, **156+**.
+- **Local Club sigue en 15 %** hasta el lanzamiento del Club.
+- **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
+  solo de merges.
+- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
+  `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
+- **Gate de `main`:** `vitest run` **1998 tests** pasan (4 skipped; 161 archivos; 14/11, sobre `main` = `93a5bf7`). `tsc` y
+  lint: último dato en el archivo (13/11: lint 83 problemas); se vuelve a medir en cada PR de código.
+- **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
+
+Documentos: fases → [ROADMAP.md](ROADMAP.md) · backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) ·
+hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · historial → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) ·
+pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs → [docs/README.md](docs/README.md).
+
 ## 🗄️ 2026-10-30 — ESTADO.md archivados al rehacer el handoff
 
 El 30/10 se rehízo [ESTADO.md](ESTADO.md) desde cero contra la realidad de ese día. Las dos versiones

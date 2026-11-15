@@ -1,5 +1,66 @@
 # Satori App — Estado del proyecto
 
+## 🗄️ 2026-11-15 (05:45) — bloque ⚡ARRANQUE archivado al reemplazarlo (02:10 del 15/11)
+
+Historia: sus hashes, conteos y pendientes **no** valen como estado actual. Títulos bajados un nivel.
+
+### ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
+**Al día: 2026-11-15, 02:10 hora de Costa Rica.** `main` = **`b6b79e0`** (merge del #188). **Ledger de prod = 169.** Todos los
+merges con firma del dueño; staging opción B del dueño (evidencia local + verificadores independientes). El bloque anterior
+(18:05 del 14/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
+**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).**
+
+> **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
+> en un PR de docs inmediato después del merge. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se
+> corrige el archivo.
+
+| Puntero | Hash | Qué es |
+|---|---|---|
+| `main` | **`b6b79e0`** (15/11 02:08 -06:00: merge del #188, mig 169). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **169**. |
+| `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Desarrollo y proyecto Supabase de staging. Cloudflare Pages (`satori-staging.pages.dev`) publica esta rama. |
+| `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
+
+- **Entraron (hora CR, merge SHA).** Rebases con la regla del dueño (ESTADO, registro, guías y uniones de código; el #140 con
+  firma nueva sobre `b4a14df`):
+
+| Día | PR | Mig. | Merge | Hora CR | Nota |
+|---|---|---|---|---|---|
+| 14/11 | #174 | 156 | `78e3d73` | 22:19 | |
+| 14/11 | #176 | 157 | `55aaecf` | 22:33 | |
+| 14/11 | #177 | 158 | `0fb8796` | 23:35 | |
+| 15/11 | #140 | 159 | `df5fbc1` | 01:15 | |
+| 15/11 | #179 | 160 | `85fdd97` | 01:20 | |
+| 15/11 | #180 | 161 | `3c84c3d` | 01:24 | |
+| 15/11 | #181 | 162 | `b91572c` | 01:31 | |
+| 15/11 | #182 | 163 | `553dfcd` | 01:36 | |
+| 15/11 | #183 | 164 | `f4fdc94` | 01:41 | |
+| 15/11 | #184 | 165 | `9c6da47` | 01:46 | |
+| 15/11 | #185 | 166 | `23f5cff` | 01:51 | |
+| 15/11 | #186 | 167 | `3dc4803` | 01:55 | |
+| 15/11 | #187 | 168 | `b056327` | 02:02 | primeros 90 días **APAGADO** |
+| 15/11 | #188 | 169 | `b6b79e0` | 02:08 | **sin retos armados** |
+
+- **Regresión abierta:** la 157 pisó `club_miembro_guardar` de la 156 → «Editar» un socio da «Tipo no válido» y no regenera el
+  link al pasar socio → anfitrión. Arreglo: **#193** (mig **171**, `d66cd18`, verificador LISTO, firmado). Entra **después de #190**.
+- **Pendiente del dueño:** **#190** (170, el manager solo ve sus locales): los 2 managers activos de prod no tienen filas en
+  `profile_locations` → con la 170 quedarían solo con Santa Teresa (default de `mis_locales()`). Decidir: asignarles locales
+  antes, o aceptar Santa Teresa. Después: #190 y #193.
+- **Edge `club-pase`:** redeploy manual pendiente (D7 en el pase y avance de la 168).
+- **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
+  de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging** (la sesión no puede invocar la función: el proxy
+  bloquea `*.supabase.co`).
+- **Local Club sigue en 15 %** hasta el lanzamiento del Club.
+- **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
+  solo de merges.
+- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
+  `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`). (Medidos el 14/11; no se re-midieron en este PR de docs.)
+- **Gate de `main`:** último dato medido (14/11): `vitest run` 2068 tests; se vuelve a medir en cada PR de código.
+- **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
+
+Documentos: fases → [ROADMAP.md](ROADMAP.md) · backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) ·
+hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · historial → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) ·
+pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs → [docs/README.md](docs/README.md).
+
 ## 🗄️ 2026-11-15 (02:10) — bloque ⚡ARRANQUE archivado al reemplazarlo (tarde del 14/11, 18:05)
 
 Historia: sus hashes, conteos y pendientes **no** valen como estado actual. Títulos bajados un nivel.

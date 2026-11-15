@@ -1,9 +1,8 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-15, 02:10 hora de Costa Rica.** `main` = **`b6b79e0`** (merge del #188). **Ledger de prod = 169.** Todos los
-merges con firma del dueño; staging opción B del dueño (evidencia local + verificadores independientes). El bloque anterior
-(18:05 del 14/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
+**Al día: 2026-11-15, 05:45 hora de Costa Rica.** `main` = **`8ddf79d`** (merge del #193). **Ledger de prod = 171.** Todos los
+merges con firma del dueño. El bloque anterior (02:10 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).**
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
@@ -12,39 +11,29 @@ merges con firma del dueño; staging opción B del dueño (evidencia local + ver
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`b6b79e0`** (15/11 02:08 -06:00: merge del #188, mig 169). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **169**. |
+| `main` | **`8ddf79d`** (15/11 05:44 -06:00: merge del #193, mig 171). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **171**. |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Desarrollo y proyecto Supabase de staging. Cloudflare Pages (`satori-staging.pages.dev`) publica esta rama. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
-- **Entraron (hora CR, merge SHA).** Rebases con la regla del dueño (ESTADO, registro, guías y uniones de código; el #140 con
-  firma nueva sobre `b4a14df`):
+- **Entraron el 15/11 después de la tanda 156–169** (hora CR, merge SHA):
 
-| Día | PR | Mig. | Merge | Hora CR | Nota |
-|---|---|---|---|---|---|
-| 14/11 | #174 | 156 | `78e3d73` | 22:19 | |
-| 14/11 | #176 | 157 | `55aaecf` | 22:33 | |
-| 14/11 | #177 | 158 | `0fb8796` | 23:35 | |
-| 15/11 | #140 | 159 | `df5fbc1` | 01:15 | |
-| 15/11 | #179 | 160 | `85fdd97` | 01:20 | |
-| 15/11 | #180 | 161 | `3c84c3d` | 01:24 | |
-| 15/11 | #181 | 162 | `b91572c` | 01:31 | |
-| 15/11 | #182 | 163 | `553dfcd` | 01:36 | |
-| 15/11 | #183 | 164 | `f4fdc94` | 01:41 | |
-| 15/11 | #184 | 165 | `9c6da47` | 01:46 | |
-| 15/11 | #185 | 166 | `23f5cff` | 01:51 | |
-| 15/11 | #186 | 167 | `3dc4803` | 01:55 | |
-| 15/11 | #187 | 168 | `b056327` | 02:02 | primeros 90 días **APAGADO** |
-| 15/11 | #188 | 169 | `b6b79e0` | 02:08 | **sin retos armados** |
+| PR | Mig. | Merge | Hora CR | Nota |
+|---|---|---|---|---|
+| #194 | | `cb9f155` | 04:47 | docs (ESTADO tras la tanda nocturna) |
+| #190 | 170 | `a200b2c` | 05:34 | el manager solo ve y opera sus locales. Antes, con firma del dueño (05:27), se asignó en prod el local Santa Teresa a la única manager activa; **Nosara queda sin manager** |
+| #195 | | `591d8d3` | 05:37 | pruebas de #190 que quedaron fuera de su merge; el deploy de Pages de `a200b2c` falló en Tests y quedó resuelto con #195 |
+| #193 | 171 | `8ddf79d` | 05:44 | hotfix `club_miembro_guardar` = 156 + 157 sobre el núcleo de la 170 |
 
-- **Regresión abierta:** la 157 pisó `club_miembro_guardar` de la 156 → «Editar» un socio da «Tipo no válido» y no regenera el
-  link al pasar socio → anfitrión. Arreglo: **#193** (mig **171**, `d66cd18`, verificador LISTO, firmado). Entra **después de #190**.
-- **Pendiente del dueño:** **#190** (170, el manager solo ve sus locales): los 2 managers activos de prod no tienen filas en
-  `profile_locations` → con la 170 quedarían solo con Santa Teresa (default de `mis_locales()`). Decidir: asignarles locales
-  antes, o aceptar Santa Teresa. Después: #190 y #193.
-- **Edge `club-pase`:** redeploy manual pendiente (D7 en el pase y avance de la 168).
-- **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
-  de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging** (la sesión no puede invocar la función: el proxy
-  bloquea `*.supabase.co`).
+- **Regresión de «Editar» socio: cerrada** con la 171 (ya no da «Tipo no válido» y vuelve a generar el link al pasar socio → anfitrión).
+- **Pendiente del dueño / de la sesión:**
+  - **Edge `club-pase`:** redeploy manual pendiente (D7 en el pase y avance de la 168).
+  - **Validación física** de lo que entró (manager con la 170, «Editar» socio con la 171, tanda 156–169).
+  - **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
+    de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging** (la sesión no puede invocar la función: el proxy
+    bloquea `*.supabase.co`).
+- **Seguimientos (backlog, sin fecha):** el contador ve «Cohortes» · funciones por id del manager · funciones nuevas con local
+  (159, 163, 166, 168, 169) sin `club_exigir_local` · OpenTable · buscador de Escanear con socios · botón anfitrión → socio ·
+  fecha elegida en Bandeja · unificar la auditoría de la 161 y la 162 · pasar a SQL fijo el de la 162.
 - **Local Club sigue en 15 %** hasta el lanzamiento del Club.
 - **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
   solo de merges.
@@ -296,13 +285,13 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | 167 | `club_resena_socios` | pase (origen **113**) | `claude/club-resena-socios` (apilada sobre #177: necesita la 158) | **Aplicada en prod el 15/11 01:55 -06:00** (merge → Branching; era: 14/11: PR en borrador, espera OK). `club_config_global.resena_socio_cada` (5) y `resena_socio_espera_dias` (90); tabla `club_resena_socio` (pedidos sin datos personales); `club_portal` pasa a envolver a `club_portal_datos` (la de antes, 150 o 157) y suma `resena`; función pública nueva `club_portal_resena` (marcas mostrada/cerrada/clic). Va DESPUÉS de la 157 y aborta si falta la 158; vuelta atrás: primero 167, después 157 y 158 (sus rollbacks abortan si la 167 sigue). Prueba local (Postgres 16, con y sin la 157): 21/21 y 14 mutaciones muerden; staging pendiente con el dueño. Rollback: `scripts/sql/167_rollback.sql` |
 | 168 | `club_primeros_90` | pase (origen **114**) | `claude/club-primeros-90` | **Aplicada en prod el 15/11 02:02 -06:00** (merge → Branching; era: 14/11: PR en borrador a `main`, **toca plata: espera firma**). Apagado por defecto (`club_config_global.primeros90_activo = false`). Envuelve `club_socio_visita` (→ `club_socio_visita_base`) y `club_pase_datos` (→ `club_pase_datos_base`; necesita la 157 ANTES si entra); `club_portal_avance` nueva (club-web); tabla `club_primeros90` (una por socio). Conteo opción B (`primeros90_exige_factura`, true; **firma del dueño**): días anteriores solo con factura C con 856/857. Vence al final del día CR mostrado. **Orden: #176 (157) antes que #187 (168). PASE al mergear** (`docs/pases/`). Pruebas: `scripts/sql/168_pruebas.py` (22/22 local, con y sin la 157) y `168_concurrencia.sh`. Rollback: `scripts/sql/168_rollback.sql` (aborta si hay cortesías ganadas) |
 | 169 | `club_retos` | pase (origen **115**) | `claude/club-retos` | **Aplicada en prod el 15/11 02:08 -06:00** (merge → Branching; era: 14/11: PR en borrador a `main`, **toca plata: espera firma**). Sin ningún reto armado (los arma el owner). Tablas `club_retos` (tope 3 armados por año y sin superposición por local, en un trigger) y `club_retos_ganados` (uno por reto y socio); gana con un trigger AFTER INSERT en `club_visitas_socio` y la caja ofrece con `club_reto_en_visita` (paso aparte): **no toca `club_socio_visita` ni `club_pase_datos`** (convive con la 168 en cualquier orden). `club_portal_retos` nueva (club-web). Opción B (`club_config_global.retos_exige_factura`, true: los días anteriores cuentan solo con factura C con 856/857; no se arma un reto en un local sin PoS), jornada de servicio, vence al final del día CR, una cortesía de premio por factura. Pase: `docs/pases/PASE-169-club-retos.md` (orden con la 168: da igual). Pruebas: `scripts/sql/169_pruebas.py` (24/24 local, con y sin la 168; 24 mutaciones muerden) y `169_concurrencia.sh`. Rollback: `scripts/sql/169_rollback.sql` (aborta si hay premios ganados) |
-| 170 | `club_local_manager` | pase (origen **116**) | `claude/club-local-manager` | **Sin aplicar** (14/11: PR en borrador a `main`, espera firma). Helpers `club_puede_ver_local(text)` y `club_exigir_local(text)`; 26 funciones `club_*` con `p_location` quedan como envoltorio (la original pasa a `<nombre>__nucleo`, mismo cuerpo, sin EXECUTE para la API): el manager solo en `mis_locales()` (091); owner, contador, cajero, salonero y anon igual que hoy. Batería en Postgres 16 local en transacción descartada: 19/19, 9/9 mutaciones muerden; staging pendiente con el dueño. Guardia en el gate (`supabase/club_local_manager.test.ts`): después de la 170 se cambia el `__nucleo`, no el envoltorio. Rollback: `scripts/sql/170_rollback.sql` |
-| 171 | `club_miembro_guardar_reune_156_157` | pase (origen **117**) | `claude/hotfix-miembro-guardar` | **Sin aplicar** (14/11: PR en borrador a `main`, espera firma; vía merge → Branching, DESPUÉS de la 158–170). HOTFIX: la 157 redefinió `club_miembro_guardar` desde la versión de la 150 y se perdió lo de la 156 (en prod «Editar» un socio da «Tipo no válido»; socio → anfitrión sin link nuevo). Cuerpo = fusión de tres vías 150/156/157 (md5 `e004268d…`); con la 170 cambia el `__nucleo` (no el envoltorio). Pruebas: `scripts/sql/171_pruebas.sql` (Postgres 16 local con 155→157 y con 158–170: verde + 11 mutaciones; **staging pendiente**). Rollback: `scripts/sql/171_rollback.sql` |
+| 170 | `club_local_manager` | pase (origen **116**) | `claude/club-local-manager` | **Aplicada en prod el 15/11 05:34 -06:00** (merge del #190 → Branching; era: 14/11: PR en borrador a `main`, espera firma). Helpers `club_puede_ver_local(text)` y `club_exigir_local(text)`; 26 funciones `club_*` con `p_location` quedan como envoltorio (la original pasa a `<nombre>__nucleo`, mismo cuerpo, sin EXECUTE para la API): el manager solo en `mis_locales()` (091); owner, contador, cajero, salonero y anon igual que hoy. Batería en Postgres 16 local en transacción descartada: 19/19, 9/9 mutaciones muerden; staging pendiente con el dueño. Guardia en el gate (`supabase/club_local_manager.test.ts`): después de la 170 se cambia el `__nucleo`, no el envoltorio. Rollback: `scripts/sql/170_rollback.sql` |
+| 171 | `club_miembro_guardar_reune_156_157` | pase (origen **117**) | `claude/hotfix-miembro-guardar` | **Aplicada en prod el 15/11 05:44 -06:00** (merge del #193 → Branching; era: 14/11: PR en borrador a `main`, espera firma, DESPUÉS de la 158–170). HOTFIX: la 157 redefinió `club_miembro_guardar` desde la versión de la 150 y se perdió lo de la 156 (en prod «Editar» un socio da «Tipo no válido»; socio → anfitrión sin link nuevo). Cuerpo = fusión de tres vías 150/156/157 (md5 `e004268d…`); con la 170 cambia el `__nucleo` (no el envoltorio). Pruebas: `scripts/sql/171_pruebas.sql` (Postgres 16 local con 155→157 y con 158–170: verde + 11 mutaciones; **staging pendiente**). Rollback: `scripts/sql/171_rollback.sql` |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
-| **PROD** | **67 filas** (11/11, según el pase del Club; antes 65 con la tanda 092–095) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085 · 089 · 090 · 091 · 092 · 093 · 094 · 095 · 150 · 151` (**092, 093, 094 y 095 el 10/11 22:57:17 -06:00, en UN merge del #107 (`c41e18b`), Branching las aplicó en orden: 12, 7, 3 y 9 statements; pase de la tanda cerrado**; **091 el 10/11 22:44:57 -06:00, Branching al mergear el #103 (`b8cb74d`), 31 statements; pase cerrado 22:51**; **090 el 10/11 11:33:38 -06:00, Branching al mergear el #97 (`7543347`), 4 statements; pase cerrado**; **089 el 10/11 10:22:11 -06:00, Branching al mergear el #90 (`fa1cbef`), 3 statements; pase cerrado**; **085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
+| **PROD** | **a revisar contra la base.** Deducido del repo: última fila **171** (15/11 05:44 -06:00); `supabase/migrations/` tiene 85 archivos (67 filas al 11/11 + 153 y 155–171 = 85), pero **no se leyó `schema_migrations` de prod** desde esta sesión. La lista de abajo llega solo hasta la 151 (11/11) | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–082 · 085 · 089 · 090 · 091 · 092 · 093 · 094 · 095 · 150 · 151` (**092, 093, 094 y 095 el 10/11 22:57:17 -06:00, en UN merge del #107 (`c41e18b`), Branching las aplicó en orden: 12, 7, 3 y 9 statements; pase de la tanda cerrado**; **091 el 10/11 22:44:57 -06:00, Branching al mergear el #103 (`b8cb74d`), 31 statements; pase cerrado 22:51**; **090 el 10/11 11:33:38 -06:00, Branching al mergear el #97 (`7543347`), 4 statements; pase cerrado**; **089 el 10/11 10:22:11 -06:00, Branching al mergear el #90 (`fa1cbef`), 3 statements; pase cerrado**; **085 el 10/11 08:24:48 -06:00, Branching al mergear el #80 (`bb12652`), 9 statements**; **081 y 082 v3 el 09/11, a mano en el pase del puente, antes del merge del #71**; 068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
 | **STAGING** | **91 filas, última 151** (leído el 11/11; el 10/11 a las 11:03 CR entraron la 091–095, y después la sesión del Club renumeró la 075 a 150 y aplicó la 151) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5); la 082 del puente está aplicada **sin su fila**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). **10/11 tarde:** la 150 nueva (auditoría A/B, md5 `919bcd54…`) aplicada encima con su fila, con el OK del dueño; batería 613/613 y paridad 992 = 992 sin `--antes`. **10/11 18:10 CR:** la 150 de la segunda vuelta (Grok 162–164, md5 `04681f41…`) con su fila, mismo procedimiento; batería 623/623, paridad 992 = 992. La 082 del puente está aplicada **con su fila**: la v3 (09/11), md5 `edb7ffc58976804e55968f75df530a05`, igual al archivo de `main`. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
 - **Próximo número libre: por bloque** (08/11; caja al 13/11): **CAJA / operación 097**, **CLUB SATORI + puente 100**. Ver «Numeración de migraciones» abajo. Antes de crear una migración, leer esa sección **en `main`** y registrar el número en el mismo PR.

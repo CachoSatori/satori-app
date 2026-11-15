@@ -66,7 +66,7 @@ reciben un **postre de cortesía**.
   subtotal y 10 % automático). Ambas sumas tienen que coincidir.
 
 > Diferencia entre fuentes: el protocolo interno dice 10 % del **subtotal**; la invitación al concierge dice 10 % del
-> **ticket total**. La app nueva tiene que fijar una sola base (ver decisión abierta en el handoff).
+> **ticket total**. **Resuelto (dueño, 15-nov-2026): la base es el subtotal**, sin impuestos ni servicio.
 
 ### Pago de la comisión
 - **A comienzo de cada mes**, informe a cada concierge (captura de su saldo) avisando que puede pasar a cobrar.

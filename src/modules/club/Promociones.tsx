@@ -4,6 +4,7 @@
  *    Estado borrador → vigente → terminada (una terminada no se edita: se crea otra). Solo el owner edita.
  *  · Cortesías del sorteo: hasta 10, activables. Cada una es un artículo de la sección «CORTESÍA CLUB» del PoS (₡0).
  *    En caja se sortea una entre las activas (A4); el socio ve «1 cortesía sorpresa».
+ *  · (mig 168) Cortesía especial de bienvenida (primeros 90 días): encendido del Club y cortesía de cada local.
  *  · La app no toca el PoS: el cajero aplica lo que dice la pantalla y el puente lo verifica después.
  */
 import { useEffect, useState } from 'react'
@@ -12,6 +13,7 @@ import {
   type Promocion, type PromocionDatos, type ParaPromo, type EstadoPromo, type Cortesia, type ProductoPos,
 } from '../../shared/api/club'
 import { Aviso, Btn, Card, Chip } from './ui'
+import { ConfigPrimeros90 } from './Primeros90'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
 
@@ -27,6 +29,7 @@ export default function Promociones() {
       {!owner && <Aviso tono="info">Las promociones y las cortesías las edita el owner. Acá las ves.</Aviso>}
       <ListaPromociones owner={owner} />
       <ListaCortesias owner={owner} />
+      <ConfigPrimeros90 owner={owner} />
     </div>
   )
 }

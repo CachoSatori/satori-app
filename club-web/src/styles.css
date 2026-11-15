@@ -141,3 +141,10 @@ h1, h2, .nombre, .cupon .etq, .saldo .num, .cuenta, .codigo, .btn, .tab, details
 .resena-socio .cerrar { flex: none; min-width: 44px; min-height: 44px; border: 1px solid var(--linea); border-radius: 4px;
   background: transparent; color: var(--tinta); font-size: 1.4rem; line-height: 1; cursor: pointer; }
 .resena-socio .cerrar:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+/* mig 168: avance de los primeros 90 días en «Mi Club» */
+.avance { border: 1px dashed currentColor; border-radius: 10px; padding: .6rem .8rem; margin: .6rem 0; }
+.avance h3 { margin: 0 0 .2rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
+.avance-barra { display: flex; gap: 6px; margin: .4rem 0; }
+.avance-barra span { flex: 1; height: 8px; border-radius: 4px; background: rgba(127, 127, 127, .25); }
+.avance-barra span.lleno { background: currentColor; }

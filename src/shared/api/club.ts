@@ -603,6 +603,22 @@ export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('cl
 export const guardarCortesia = (id: string | null, codigo: string | null, nombre: string | null, activa: boolean | null) =>
   llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa, p_location: localClub })
 
+// ── Mig 168: primeros 90 días · cortesía especial de bienvenida (4.ª visita) ──
+export interface Primeros90Config {
+  activo: boolean; visitas: number; dias: number; vence_dias: number
+  /** Opción B: los días anteriores cuentan solo con factura cerrada con el 856/857 (config del Club). */
+  exige_factura: boolean
+  cortesia: { id: string; codigo: string; nombre: string; activa: boolean } | null
+  /** El salón la puede dar: hay artículo cargado en ESTE local y está activo. */
+  lista_para_caja: boolean
+  disponibles: number; usadas: number
+}
+/** Owner y manager. */
+export const getPrimeros90Config = () => llamar<Primeros90Config>('club_primeros90_config_ver', { p_location: localClub })
+/** Solo owner. `activo` null = no cambia el encendido (es del Club entero); `cortesia` es la de ESTE local (null = ninguna). */
+export const guardarPrimeros90Config = (activo: boolean | null, cortesia: string | null) =>
+  llamar<Primeros90Config>('club_primeros90_config_guardar', { p_activo: activo, p_cortesia: cortesia, p_location: localClub })
+
 // ── LC-MD: marcadores de descuento (configurables por local) ─────────────────
 export interface MarcadorDescuento {
   id: string; codigo_producto: string; nombre: string; pct_esperado: number | null; activo: boolean
@@ -630,7 +646,13 @@ export interface QueAplicar {
   estado: 'aplica' | 'paga_con_creditos' | 'sin_promocion' | 'pendiente_configuracion' | 'como_invitado' | 'ya_uso_hoy'
   porcentaje: number; cortesias: Array<{ id: string; codigo: string; nombre: string; motivo: string }>
   texto: string; avisos: string[]; articulo_lc: string; repetida: boolean; promo: string | null
+  /** Mig 168 (primeros 90 días): la cortesía especial de bienvenida. Sin la 168 (o sin nada que decir) no viene. */
+  primeros90?: Primeros90EnCaja
 }
+/** Mig 168: qué pasó con la cortesía especial en esta visita. `ofrecida` = va en esta factura (una sola vez). */
+export type Primeros90EnCaja =
+  | { estado: 'ofrecida'; nombre: string; codigo: string }
+  | { estado: 'guardada' | 'sin_configurar' }
 /** Registra la visita del día del socio (con el pedido) y devuelve qué aplicar. Idempotente con `op`. */
 export const registrarVisitaSocio = (miembro: string, pos: PosRef, op: string) =>
   llamar<QueAplicar>('club_socio_visita', { p_miembro: miembro, p_pos: posParaServidor(pos), p_op: op, p_location: localClub })

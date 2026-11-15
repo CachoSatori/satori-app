@@ -31,6 +31,8 @@ export interface PaseDatos {
     beneficio: string | null
     visitas_mes: number
     cortesias: Array<{ sorpresa: boolean; cantidad: number; motivo: string; vence_en: string | null }>
+    /** Mig 168 (primeros 90 días; opcional: sin la 168 no viene). null = no se muestra. */
+    avance?: AvancePase | null
   }
   anfitrion: null | {
     activo: boolean
@@ -82,6 +84,9 @@ export function validarDatos(d: unknown): string | null {
   return null
 }
 
+/** Mig 168: «Visita 2 de 4» (el alta cuenta como la 1.ª) o la cortesía especial ganada. Días de Costa Rica. */
+export interface AvancePase { visita: number; de: number; ganada: boolean; hasta?: string | null; vence_en?: string | null }
+
 // ── Textos (ES por defecto, EN traducido) ─────────────────────────────────────────
 type Txt = { es: string; en: string }
 export interface LocalizedString {
@@ -94,6 +99,30 @@ const loc = (t: Txt): LocalizedString => ({
 })
 /** ₡ con separador de miles fijo (no depende del locale del Edge): «₡36.000» en español, «₡36,000» en inglés. */
 export const colones = (n: number, sep: '.' | ',') => '₡' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, sep)
+
+const diaTxt = (d: string | null | undefined): Txt | null => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d ?? ''))
+  if (!m || +m[2] < 1 || +m[2] > 12) return null
+  return { es: `${+m[3]}-${MESES_ES[+m[2] - 1]}`, en: `${MESES_EN[+m[2] - 1]} ${+m[3]}` }
+}
+/**
+ * Mig 168: el renglón del avance de los primeros 90 días (mismo texto en Google y Apple). Datos raros o sin avance → null
+ * (el pase sale sin el renglón; no falla).
+ */
+export function textoAvance(a: AvancePase | null | undefined): { header: Txt; body: Txt } | null {
+  if (!a || !Number.isInteger(a.de) || !Number.isInteger(a.visita) || a.de < 2 || a.visita < 1 || a.visita > a.de) return null
+  if (a.ganada) {
+    const f = diaTxt(a.vence_en)
+    if (!f) return null
+    return { header: { es: 'Cortesía de bienvenida', en: 'Welcome treat' },
+             body: { es: `Ganada: muéstrela en caja (vale hasta el ${f.es})`, en: `Earned: show it at the register (valid until ${f.en})` } }
+  }
+  const f = diaTxt(a.hasta)
+  if (!f) return null
+  return { header: { es: 'Sus primeras visitas', en: 'Your first visits' },
+           body: { es: `Visita ${a.visita} de ${a.de} · cortesía especial al llegar a ${a.de}, a más tardar el ${f.es}`,
+                   en: `Visit ${a.visita} of ${a.de} · special treat at ${a.de} visits, by ${f.en}` } }
+}
 
 /** El beneficio viene de la base en español («10 % + 1 cortesía»): el inglés se arma con los mismos números. */
 export function beneficioEn(es: string): string {
@@ -223,6 +252,8 @@ export function armarObjeto(issuerId: string, entorno: Entorno, d: PaseDatos, di
         { es: sorpresas === 1 ? '1 cortesía sorpresa' : `${sorpresas} cortesías sorpresa`,
           en: sorpresas === 1 ? '1 surprise treat' : `${sorpresas} surprise treats` }))
     }
+    const av = textoAvance(soc.avance)   // mig 168: primeros 90 días
+    if (av) textos.push(modulo('avance', av.header, av.body))
   }
 
   if (anf && anf.activo && sinCreditos(anf)) {

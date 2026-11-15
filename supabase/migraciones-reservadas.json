@@ -183,6 +183,12 @@
       "rama": "claude/club-resena-socios",
       "renumerada_a": "167"
     },
+    "114": {
+      "nombre": "club_primeros_90",
+      "bloque": "club",
+      "rama": "claude/club-primeros-90",
+      "renumerada_a": "168"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -278,6 +284,12 @@
       "bloque": "pase",
       "rama": "claude/club-resena-socios",
       "origen": "113"
+    },
+    "168": {
+      "nombre": "club_primeros_90",
+      "bloque": "pase",
+      "rama": "claude/club-primeros-90",
+      "origen": "114"
     }
   }
 }

@@ -23,6 +23,7 @@ import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 import { leerAvance, textosAvance } from './avance'
 import { leerRetos, textosReto } from './retos'
+import { tarjetaReservar } from './reservar'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -480,6 +481,8 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),
     activo && avanceBox,
     qrBox,
+    // D 16-nov (el dueño): «Reservar» → OpenTable (rid por defecto de config.ts hasta que el portal devuelva el del local)
+    tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton }),
     activo && retosBox,
     cumpleBox,
     err, baja)

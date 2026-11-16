@@ -24,10 +24,26 @@ export function textoAltaWhatsApp(nombre: string, urlPortal: string): string {
     'Guárdelo y muéstrelo en caja en cada visita.'
 }
 
-/** `https://wa.me/<número internacional>?text=…`, o `null` si el WhatsApp cargado no tiene dígitos. */
-export function linkAltaWhatsApp(tel: string, nombre: string, urlPortal: string): string | null {
+/**
+ * Hallazgo 230 (D 16-nov, el dueño): el número como se lo lee el cajero al cliente antes de mandarle el link del portal.
+ * CR (8 dígitos o 506 + 8): «+506 8888 0000». Otro país: «+<dígitos>» tal cual (no adivinamos su formato). Sin dígitos: ''.
+ */
+export function formatoWhatsApp(tel: string): string {
   const n = waNumber(tel)
-  if (!n) return null
+  if (!n) return ''
+  if (n.startsWith('506') && n.length === 11) return `+506 ${n.slice(3, 7)} ${n.slice(7)}`
+  return `+${n}`
+}
+
+/**
+ * `https://wa.me/<número internacional>?text=…`, o `null` si el WhatsApp cargado no tiene dígitos.
+ * Hallazgo 230: el link del portal da acceso a la cuenta del socio, así que solo sale con el número CONFIRMADO con el
+ * cliente («¿Este es su WhatsApp?» → «Sí, es este»). `telConfirmado` es el número que el cajero confirmó; si no hay
+ * confirmación o no es el mismo número que se va a usar, no hay link.
+ */
+export function linkAltaWhatsApp(tel: string, nombre: string, urlPortal: string, telConfirmado: string | null): string | null {
+  const n = waNumber(tel)
+  if (!n || telConfirmado == null || waNumber(telConfirmado) !== n) return null
   return `https://wa.me/${n}?text=${encodeURIComponent(textoAltaWhatsApp(nombre, urlPortal))}`
 }
 

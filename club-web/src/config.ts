@@ -55,3 +55,10 @@ export const TURNSTILE_SITEKEY: string = import.meta.env.VITE_TURNSTILE_SITEKEY 
  * `club-pase` esté desplegado con sus secretos).
  */
 export const WALLET_GOOGLE_ACTIVO: boolean = import.meta.env.VITE_WALLET_GOOGLE === '1'
+
+/**
+ * D 16-nov (el dueño): «Reservar» en el portal del socio abre OpenTable. El link por local vive en la base
+ * (`club_cumple_config.reserva_url`, mig 173, editable en Club → Promociones), pero el portal por token todavía no lo
+ * devuelve: exponerlo es un cambio de base (pendiente). Mientras tanto, el rid público por defecto de la 173.
+ */
+export const OPENTABLE_RID = '1347736'

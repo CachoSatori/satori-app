@@ -31,3 +31,14 @@ describe('A01 — orden entre la cola y las escrituras con red', () => {
     expect(await estadoFila(deps([insM], []), cashKey('X'))).toBeNull()
   })
 })
+
+describe('verificador #234 — tope a las lecturas de IndexedDB', () => {
+  const colgado = { pendientes: () => new Promise<never>(() => {}), rechazadas: () => new Promise<never>(() => {}) }
+  it('si IndexedDB no responde, la escritura con red sigue directo (no se traba)', async () => {
+    expect(await debeEncolar(colgado, 'k', 20)).toBe(false)
+    expect(await estadoFila(colgado, 'k', 20)).toBeNull()
+  })
+  it('si responde a tiempo, decide igual que siempre', async () => {
+    expect(await debeEncolar(deps([insM], []), undefined, 20)).toBe(true)
+  })
+})

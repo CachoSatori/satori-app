@@ -73,7 +73,7 @@ describe('A01 — classifyServerError: cada clase de error', () => {
     ['401 sin sesión (anon choca con RLS)', { status: 401, code: '42501', message: 'new row violates row-level security policy' }, 'sesion'],
     ['PGRST301 sin status', { code: 'PGRST301', message: 'JWT expired' }, 'sesion'],
     ['403 por JWT', { status: 403, message: 'invalid JWT' }, 'sesion'],
-    ['408', { status: 408 }, 'red'],
+    ['408', { status: 408 }, 'lento'],
     ['425', { status: 425 }, 'red'],
     ['429', { status: 429 }, 'servidor'],
     ['500', { status: 500, code: 'XX000' }, 'servidor'],
@@ -455,5 +455,30 @@ describe('verificador #234 — un executor que LANZA', () => {
     const res = await flushOutbox(store, async () => { called = true; return 'ok' }, noAudit, rej)
     expect(called).toBe(false)
     expect(res).toMatchObject({ stopped: true, remaining: 1 })
+  })
+})
+
+// ── Verificador #234, 2ª pasada: op que vence los 15 s con la red andando ──
+describe('verificador #234 — timeout con red andando = «lento», no «sin conexión»', () => {
+  afterEach(() => { vi.useRealTimers() })
+  it('el executor marca «lento» el timeout con navigator.onLine=true', async () => {
+    Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true, writable: true })
+    const never = new Promise<never>(() => {})
+    const b: Record<string, unknown> = {}
+    for (const m of ['insert', 'upsert', 'update', 'delete', 'select', 'match', 'abortSignal']) b[m] = () => b
+    b.then = (res: unknown, rej: unknown) => never.then(res as never, rej as never)
+    ;(supabase as unknown as Record<string, unknown>).from = () => b
+    vi.useFakeTimers()
+    const r = supabaseExecutor(op(1))
+    await vi.advanceTimersByTimeAsync(15000)
+    await expect(r).resolves.toMatchObject({ result: 'retry', kind: 'lento' })
+  })
+  it(`la MISMA op lenta ${STUCK_AFTER} veces seguidas habilita «Pasar a rechazadas»`, () => {
+    const fr: FlushResult = { applied: 0, duplicates: 0, fatals: 0, stopped: true, remaining: 1, retryKind: 'lento', retryReason: 'r', stoppedAt: 'a' }
+    let s: StuckState = { attempts: 0 }
+    for (let i = 0; i < STUCK_AFTER - 1; i++) s = nextStuck(s, fr)
+    expect(puedePasarARechazadas(s)).toBe(false)
+    s = nextStuck(s, fr)
+    expect(puedePasarARechazadas(s)).toBe(true)
   })
 })

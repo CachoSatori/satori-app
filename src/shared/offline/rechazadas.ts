@@ -13,6 +13,7 @@ const MOTIVO_TRABA: Record<RetryKind, string> = {
   sesion: 'la sesión venció. Volvé a iniciar sesión (lo pendiente no se pierde)',
   red: 'no hay conexión estable con el servidor',
   servidor: 'el servidor no está respondiendo bien; se sigue reintentando',
+  lento: 'el servidor tarda en responder esta operación; se sigue reintentando',
   desconocido: 'error inesperado; se sigue reintentando. Avisá al manager',
 }
 
@@ -58,3 +59,5 @@ export function motivoTexto(r: RejectedOp): string {
   const cod = [r.status ? `HTTP ${r.status}` : '', r.code ?? ''].filter(Boolean).join(' · ')
   return cod ? `${r.reason} (${cod})` : r.reason
 }
+
+export const NO_SE_PUDO_PASAR = 'No se pudo pasar a rechazadas: la operación sigue en la cola, no se perdió nada. Probá de nuevo.'

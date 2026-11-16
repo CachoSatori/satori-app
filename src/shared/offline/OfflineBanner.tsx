@@ -5,7 +5,7 @@ import {
 } from './outbox'
 import type { RejectedOp, StuckState } from './outbox'
 import { getStaleTs } from './cache'
-import { avisoRechazadas, avisoTrabada, cuandoCR, queEra, motivoTexto, CONFIRMAR_PASAR, CONFIRMAR_RESUELTA, motivoTraba } from './rechazadas'
+import { avisoRechazadas, avisoTrabada, cuandoCR, queEra, motivoTexto, CONFIRMAR_PASAR, CONFIRMAR_RESUELTA, motivoTraba, NO_SE_PUDO_PASAR } from './rechazadas'
 import { useAuth } from '../hooks/useAuth'
 
 /**
@@ -72,7 +72,10 @@ export default function OfflineBanner() {
   }
   const pasarARechazadas = async () => {
     if (!stuck.head || !window.confirm(CONFIRMAR_PASAR)) return
-    const ok = await forceRejectHeadNow(stuck.head, stuck.attempts, motivoTraba(stuck))
+    let ok: boolean
+    try { ok = await forceRejectHeadNow(stuck.head, stuck.attempts, motivoTraba(stuck)) } catch {
+      window.alert(NO_SE_PUDO_PASAR); return
+    }
     if (!ok) window.alert('La cola cambió mientras tanto: no se movió nada. Mirá el aviso de nuevo.')
   }
 

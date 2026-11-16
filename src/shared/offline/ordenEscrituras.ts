@@ -36,19 +36,38 @@ export interface OrdenDeps {
  * (orden global de la cola) o si la fila tiene algo en rechazadas. Si no se puede leer el aparato,
  * no hay cola que respetar → false.
  */
-export async function debeEncolar(deps: OrdenDeps, key?: string): Promise<boolean> {
+// Tope a las lecturas del aparato: un IndexedDB colgado no puede trabar una escritura con red.
+// Si vence, se sigue directo (el comportamiento de antes de A01).
+export const LECTURA_IDB_MS = 1500
+const VENCIO = Symbol('vencio')
+function conTope<T>(p: Promise<T>, ms: number): Promise<T | typeof VENCIO> {
+  let t: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    p.finally(() => clearTimeout(t)),
+    new Promise<typeof VENCIO>(res => { t = setTimeout(() => res(VENCIO), ms) }),
+  ])
+}
+
+export async function debeEncolar(deps: OrdenDeps, key?: string, ms = LECTURA_IDB_MS): Promise<boolean> {
   try {
-    if ((await deps.pendientes()).length > 0) return true
-    if (key && (await deps.rechazadas()).some(r => r.target === key)) return true
+    const r = await conTope((async () => {
+      if ((await deps.pendientes()).length > 0) return true
+      return !!key && (await deps.rechazadas()).some(r => r.target === key)
+    })(), ms)
+    return r === true
   } catch { /* sin IndexedDB */ }
   return false
 }
 
 /** Estado de una fila en el aparato: para frenar un borrado online que sería un no-op silencioso. */
-export async function estadoFila(deps: OrdenDeps, key: string): Promise<'pendiente' | 'rechazada' | null> {
+export async function estadoFila(deps: OrdenDeps, key: string, ms = LECTURA_IDB_MS): Promise<'pendiente' | 'rechazada' | null> {
   try {
-    if ((await deps.pendientes()).some(o => targetKey(o) === key)) return 'pendiente'
-    if ((await deps.rechazadas()).some(r => r.target === key)) return 'rechazada'
+    const r = await conTope((async () => {
+      if ((await deps.pendientes()).some(o => targetKey(o) === key)) return 'pendiente' as const
+      if ((await deps.rechazadas()).some(r => r.target === key)) return 'rechazada' as const
+      return null
+    })(), ms)
+    return r === VENCIO ? null : r
   } catch { /* sin IndexedDB */ }
   return null
 }

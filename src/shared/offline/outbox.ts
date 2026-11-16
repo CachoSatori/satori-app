@@ -36,7 +36,8 @@ export type ExecResult =
   | 'fatal'      // rechazo DEFINITIVO del servidor (regla, constraint, validación) → cola de rechazadas
 
 /** Por qué se frenó el flush (para el aviso de «no se pudo sincronizar»). */
-export type RetryKind = 'red' | 'sesion' | 'servidor' | 'desconocido'
+// 'lento': la op vence el tiempo con la red andando (p. ej. un trigger lento). No es «sin conexión».
+export type RetryKind = 'red' | 'sesion' | 'servidor' | 'lento' | 'desconocido'
 
 /** Resultado con detalle: el ejecutor real lo devuelve para que el motivo llegue a la pantalla. */
 export interface ExecDetail {
@@ -223,7 +224,8 @@ export function classifyServerError(e: ServerError, offline = false): ExecDetail
   if (status === 403 && JWT_ERR.test(msg)) return ok({ result: 'retry', kind: 'sesion', reason: 'la sesión venció', ...base })
   if (code && PGRST_CONN.has(code)) return ok({ result: 'retry', kind: 'servidor', reason: 'el servidor no pudo conectarse a la base', ...base })
   if (code && SQL_TRANSIENT.test(code)) return ok({ result: 'retry', kind: 'servidor', reason: 'la base estaba ocupada o se reinició', ...base })
-  if (status === 408 || status === 425) return ok({ result: 'retry', kind: 'red', reason: 'el servidor tardó demasiado', ...base })
+  if (status === 408) return ok({ result: 'retry', kind: 'lento', reason: 'el servidor tardó demasiado', ...base })
+  if (status === 425) return ok({ result: 'retry', kind: 'red', reason: 'el servidor pidió reintentar', ...base })
   if (status === 429) return ok({ result: 'retry', kind: 'servidor', reason: 'demasiados pedidos al servidor', ...base })
   if (status !== undefined && status >= 500) return ok({ result: 'retry', kind: 'servidor', reason: 'el servidor falló', ...base })
   if (status === 0 || NETWORK_ERR.test(msg) || NETWORK_ERR.test(e.name ?? '')) return ok({ result: 'retry', kind: 'red', reason: 'falló la conexión', ...base })
@@ -262,7 +264,7 @@ export function nextStuck(prev: StuckState, r: FlushResult | null): StuckState {
 }
 /** «Pasar a rechazadas» solo cuando el freno es del servidor o desconocido (no red ni sesión). */
 export const puedePasarARechazadas = (s: StuckState) =>
-  isStuck(s) && s.head !== undefined && (s.kind === 'servidor' || s.kind === 'desconocido')
+  isStuck(s) && s.head !== undefined && (s.kind === 'servidor' || s.kind === 'lento' || s.kind === 'desconocido')
 export const isStuck = (s: StuckState) => s.attempts >= STUCK_AFTER
 
 // ── Implementación browser (IndexedDB + supabase) ─────────────────────────────
@@ -354,7 +356,7 @@ async function runOnce(op: OutboxOp): Promise<ExecOutcome> {
       supabase.from(op.table).delete().match(match).abortSignal(signal)))
   } catch (e) {
     if ((e as { isTimeout?: boolean })?.isTimeout === true)   // timeout → retry, NUNCA fatal
-      return { result: 'retry', kind: 'red', reason: 'el servidor tardó demasiado' }
+      return { result: 'retry', kind: isOfflineNow() ? 'red' : 'lento', reason: 'el servidor tardó demasiado' }
     return classifyServerError(toServerError(e), isOfflineNow())
   }
 }

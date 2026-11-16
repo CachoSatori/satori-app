@@ -144,3 +144,26 @@ describe('verificador #234 — «Pasar a rechazadas»', () => {
     expect(screen.queryByText('Pasar a rechazadas')).toBeNull()
   })
 })
+
+describe('verificador #234, 2ª pasada', () => {
+  it('op lenta con red andando: el aviso dice que el servidor tarda (no «sin conexión») y el manager ve el botón', async () => {
+    state.pending = 2; state.role = 'manager'; state.stuck = { attempts: 5, kind: 'lento', head: 'op-h' }
+    render(<OfflineBanner />)
+    await flush()
+    const t = screen.getByRole('status').textContent ?? ''
+    expect(t).toContain('el servidor tarda en responder esta operación')
+    expect(t).not.toContain('conexión')
+    expect(screen.getByText('Pasar a rechazadas')).toBeTruthy()
+  })
+  it('si falla el guardado al «Pasar a rechazadas», avisa y no rompe', async () => {
+    state.pending = 2; state.role = 'owner'; state.stuck = { attempts: 5, kind: 'servidor', head: 'op-h' }
+    force.mockImplementationOnce(async () => { throw new Error('IDB') })
+    render(<OfflineBanner />)
+    await flush()
+    ;(window as unknown as { confirm: unknown }).confirm = vi.fn().mockReturnValue(true)
+    const alert = vi.fn()
+    ;(window as unknown as { alert: unknown }).alert = alert
+    fireEvent.click(screen.getByText('Pasar a rechazadas')); await flush()
+    expect(alert.mock.calls[0][0]).toContain('No se pudo pasar a rechazadas')
+  })
+})

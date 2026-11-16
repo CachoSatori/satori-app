@@ -146,7 +146,8 @@ export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_res
  * Referencia al PoS para el piloto (decisiones de Ismael, 06 y 07-nov): la clave de cruce es el PEDIDO.
  * La caja elige el pedido abierto del puente; el servidor guarda el pedido y la hora del escaneo, y el
  * cruce es la primera factura con ese pedido cerrada después del escaneo (tope 18 h).
- * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto).
+ * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto). Solo en la tarjeta
+ * física (mig 174): las cobradas HOY (día CR) o buscarla por los últimos dígitos del tiquete, hasta 3 días CR atrás.
  */
 export type PosRef =
   | { modo: 'pedido'; pedido: string; clave?: string | null; area?: string | null; mesa: string | null; total: number | null }
@@ -163,12 +164,27 @@ export interface FacturaReciente {
   consecutivo_fe?: string | null
   /** S0b: 'C' cerrada; 'R' cobrada, falta el cierre de caja (vale igual para registrar). */
   estado?: string | null
+  /** Mig 174: la factura ya tiene una tarjeta o un cupón cargado (no se puede usar otra vez para eso). */
+  usada?: boolean | null
 }
 /** S0b: la marca de una factura del plan B que todavía no pasó el cierre de caja (null si está cerrada). */
 export const marcaFactura = (f: Pick<FacturaReciente, 'estado'>) =>
   f.estado === 'R' ? 'Cobrada, falta el cierre de caja: vale igual' : null
 export const getPedidosAbiertos = (local: string | null = localClub) => llamar<PedidoAbierto[]>('club_pedidos_abiertos', { p_location: local })
 export const getFacturasRecientes = (local: string | null = localClub) => llamar<FacturaReciente[]>('club_facturas_recientes', { p_location: local })
+/** Mig 174: búsqueda mínima por tiquete (los últimos dígitos del consecutivo FE). */
+export const MIN_DIGITOS_TIQUETE = 4
+/** Solo los dígitos de lo que tipeó la caja («…12345», «1 2345» → «12345»). */
+export const digitosTiquete = (s: string) => s.replace(/\D/g, '').slice(0, 20)
+/**
+ * Mig 174 (plan B): sin búsqueda, las facturas cobradas HOY (día CR) del local, más recientes primero; con búsqueda
+ * (4 a 20 dígitos del final del tiquete), las de hoy y los 3 días CR anteriores. Cada una trae `usada`.
+ */
+export const buscarFacturas = (buscar: string | null, local: string | null = localClub) =>
+  llamar<FacturaReciente[]>('club_facturas_buscar', { p_buscar: buscar ? digitosTiquete(buscar) : null, p_location: local })
+/** Mig 174: qué decirle a la caja si la búsqueda no trae nada. */
+export const MSG_TIQUETE_NO_APARECE =
+  'No aparece ninguna factura con ese número. Revisá: ¿es de otro local? ¿la anularon? ¿tiene más de 3 días? Si es así, pedile al owner un ajuste.'
 
 const colones = (n: number | null | undefined) => `₡${Math.round(Number(n ?? 0)).toLocaleString('de-DE')}`
 const horaCR = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })
@@ -673,10 +689,34 @@ export const getCumpleProximos = () => llamar<CumpleProximos>('club_cumple_proxi
 /** Marca «enviado» (una por socio y año del cumpleaños) y devuelve lo necesario para armar el WhatsApp. Queda auditado. */
 export type CumpleEnvio = CumpleConfig & { nombre: string; whatsapp: string; cumple: string; desde: string; hasta: string }
 export const enviarCumple = (miembro: string) => llamar<CumpleEnvio>('club_cumple_enviar', { p_miembro: miembro, p_location: localClub })
-/** Caja: ¿hoy cae en la ventana de su cumpleaños? Nunca devuelve la fecha. */
-export type CumpleEnCaja = { aplica: false } | ({ aplica: true } & Pick<CumpleConfig,
+/** Caja: ¿hoy cae en la ventana de su cumpleaños? Nunca devuelve la fecha. Mig 175: `ya_uso` = ya usó el beneficio del
+ *  año de este cumpleaños (en cualquier local); sin la 175 no viene. */
+export type CumpleEnCaja = { aplica: false } | ({ aplica: true; ya_uso?: boolean } & Pick<CumpleConfig,
   'beneficio' | 'min_personas' | 'dias_antes' | 'dias_despues' | 'uno_por_mesa' | 'solo_reserva' | 'cortesia' | 'lista_para_caja'>)
 export const getCumpleEnCaja = (miembro: string) => llamar<CumpleEnCaja>('club_cumple_en_caja', { p_miembro: miembro, p_location: localClub })
+
+// ── Mig 175: el beneficio de cumpleaños se usa UNA vez por año por socio ─────
+/** Caja (owner, manager, cajero): marca el uso sobre la visita de HOY del socio. La base rechaza un segundo uso del año. */
+export interface CumpleUsado { ok: true; uso_id: string; cortesia: { codigo: string; nombre: string } }
+export const usarCumple = (visita: string) => llamar<CumpleUsado>('club_cumple_usar', { p_visita: visita, p_location: localClub })
+/** Owner y manager (de su local): las marcas del período (días CR). */
+export interface UsoCumple {
+  id: string; usado_en: string; anio: number; socio: string; operador: string; visita_clave: string | null
+  cortesia_codigo: string | null; deshecho_en: string | null; deshecho_nota: string | null; deshecho_por: string | null
+}
+export const getUsosCumple = (desde: string, hasta: string, local: string | null = localClub) =>
+  llamar<UsoCumple[]>('club_cumple_usos_listar', { p_desde: desde, p_hasta: hasta, p_location: local })
+/** Solo owner: deshace una marca hecha por error (nota de 5 a 300 letras; queda en la auditoría). */
+export const deshacerUsoCumple = (id: string, nota: string) =>
+  llamar<{ ok: true }>('club_cumple_uso_deshacer', { p_uso: id, p_nota: nota })
+/** Tablero y Excepciones (owner, manager de su local, contador): solo totales. */
+export interface ResumenCumple {
+  desde: string; hasta: string; local: string; usos: number; deshechos: number; con_cortesia: number
+  sin_articulo_en_factura: number; sin_factura: number; sin_precio: number
+  cortesia_costo_pct: number | null; cortesias_lista_crc: number; cortesias_costo_crc: number
+}
+export const getResumenCumple = (desde: string, hasta: string, local: string | null = localClub) =>
+  llamar<ResumenCumple>('club_cumple_usos_resumen', { p_desde: desde, p_hasta: hasta, p_location: local })
 
 // ── LC-MD: marcadores de descuento (configurables por local) ─────────────────
 export interface MarcadorDescuento {

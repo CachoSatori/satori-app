@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { DiasMap, ProductMap, Comp } from '../../shared/types/ventas'
 import { aggSalonero, allSaloneros, datesInRange, allDates } from './ventasUtils'
+import { todayCR } from '../../shared/utils'
+import { estadoCompetencia, progresoCompetencia } from './rangosPorDefecto'
 import { saveComp, deleteComp } from '../../shared/api/ventas'
 
 interface Props {
@@ -10,7 +12,9 @@ interface Props {
   onRefresh: () => void
 }
 
-function todayISO(): string { return new Date().toISOString().slice(0, 10) }
+// «Hoy» en hora de Costa Rica: con la fecha UTC, desde las 18:00 CR una competencia que termina
+// hoy figuraba «Finalizada» en pleno servicio.
+const todayISO = (): string => todayCR()
 
 export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props) {
   const [tab, setTab] = useState<'active'|'new'>('active')
@@ -48,12 +52,7 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
     onRefresh()
   }
 
-  const getStatus = (c: Comp): 'active' | 'upcoming' | 'ended' => {
-    const today = todayISO()
-    if (today < c.inicio) return 'upcoming'
-    if (today > c.fin)    return 'ended'
-    return 'active'
-  }
+  const getStatus = (c: Comp): 'active' | 'upcoming' | 'ended' => estadoCompetencia(c, todayISO())
 
   const getRanking = (c: Comp) => {
     const dates = datesInRange(allDates(dias), c.inicio, c.fin)
@@ -96,8 +95,7 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
             .map(c => {
               const status  = getStatus(c)
               const ranking = expandedComp === c.id ? getRanking(c) : []
-              const total   = Math.max(1, Math.ceil((new Date(c.fin).getTime() - new Date(c.inicio).getTime()) / 86400000))
-              const elapsed = Math.min(total, Math.max(0, Math.ceil((new Date().getTime() - new Date(c.inicio).getTime()) / 86400000)))
+              const { total, elapsed } = progresoCompetencia(c, todayISO())
 
               return (
                 <div key={c.id} className="vt-comp-card">

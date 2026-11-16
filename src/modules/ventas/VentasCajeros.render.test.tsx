@@ -18,6 +18,7 @@ import VentasCajeros from './VentasCajeros'
 import type { CajeroDay, DiaData, DiasMap, SaloneroDay } from '../../shared/types/ventas'
 import { fi } from './ventasUtils'
 import { calcularLentes } from './saloneroLentes'
+import { todayCR } from '../../shared/utils'
 
 /**
  * El texto de la pantalla con los espacios unificados. `fi()` formatea con
@@ -41,9 +42,8 @@ const caj = (o: Partial<CajeroDay>): CajeroDay => ({
 const dia = (saloneros: Record<string, SaloneroDay | CajeroDay>): DiaData =>
   ({ fileName: 'x', uploadedAt: '2026-09-08', saloneros })
 
-/** El preset por defecto es «Mes», así que el día tiene que caer en el mes en curso. */
-const HOY   = new Date()
-const DIA_1 = `${HOY.getFullYear()}-${String(HOY.getMonth() + 1).padStart(2, '0')}-01`
+/** El preset por defecto es «Mes» (de Costa Rica), así que el día tiene que caer en el mes en curso CR. */
+const DIA_1 = `${todayCR().slice(0, 7)}-01`
 
 // Los baldes que produce `claveNoMesero`: dos turnos + los tres que NO suman al total.
 const DIAS_POS: DiasMap = {

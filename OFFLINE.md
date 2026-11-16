@@ -65,10 +65,22 @@ extremo puede clasificar mal un conflicto (solo afecta el warning, no el dato).
   cuándo, motivo). Owner/manager pueden «↻ Reintentar» (vuelve a la cola con el mismo `client_op_id`:
   si ya estaba aplicada rebota como duplicado) o «✓ Ya lo resolví» (queda en el store `audit` del
   aparato y sale de la lista). La consola solo registra tabla, tipo, id de la op y código: nunca la fila.
+- **Cadenas (verificador #234):** cada op apunta a una fila (`targetKey`: el id del movimiento; en
+  propinas, `(session_id, employee_id)`). Si la fila tiene algo en rechazadas, las ops siguientes de esa
+  fila **no se mandan** (un update/delete de una fila que no existe responde «ok» sin efecto): van a
+  rechazadas con `depends_on` = la raíz. «Reintentar» y «Ya lo resolví» operan sobre la cadena entera en
+  el orden original (`orig_seq`); «Reintentar» se niega si hay algo de esa fila en la cola. Reintentar,
+  resolver y «Pasar a rechazadas» corren con el lock del flush. Si una op está a la vez en la cola y en
+  rechazadas (reintento a medias), se manda y, si entra, sale de rechazadas.
+- **Escrituras con red (cash.ts, tips.ts):** si hay cola pendiente o la fila está en rechazadas, se
+  encolan detrás (y se dispara el flush). Borrar un movimiento pendiente o rechazado se frena con aviso
+  (la RPC de borrado sería un no-op y la cola lo haría aparecer después).
 - **Cola trabada:** tras 5 flushes seguidos frenados (backoff 5 s → 60 s, unos 75 s), aparece
   «No se pudo sincronizar después de N intentos: <motivo>. Lo pendiente sigue guardado en este aparato.»
   Un error del servidor que no se arregla solo (un 5xx fijo) traba la cola a propósito, en orden y
-  visible: es preferible a saltear o perder un pago.
+  visible: es preferible a saltear o perder un pago. El contador es por la **misma** primera op. Si el
+  freno es del servidor o desconocido (no red ni sesión), owner/manager tienen «Pasar a rechazadas»: la
+  primera op va a rechazadas (sin borrar) y sus dependientes la siguen en el próximo flush.
 - **Multi-pestaña**: el flush corre dentro de `navigator.locks`
   (`satori-outbox-flush`, `ifAvailable`) → dos pestañas nunca replyan a la vez.
 

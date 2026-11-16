@@ -83,6 +83,12 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
 - **[../SPEC-COMANDERO-UX.md](../SPEC-COMANDERO-UX.md)** — UX del display del salonero, auditoría de
   callejones sin salida y backlog P0/P1/P2.
 
+## 🔎 Auditorías
+
+- **[auditorias/AUDITORIA-2026-11-16.md](auditorias/AUDITORIA-2026-11-16.md)** — auditoría de solo lectura del 16-nov-2026
+  (seguridad, plata, esquema, calidad, documentación y piloto del Club): hallazgos A01–A22 con evidencia y plan de dos
+  semanas. Insumo para decidir: **no autoriza código por sí sola**.
+
 ## 🔧 RCAs y diagnósticos
 
 | RCA | Estado |

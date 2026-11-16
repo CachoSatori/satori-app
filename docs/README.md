@@ -69,6 +69,10 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
 - **[SPEC-COMPETIDORES-PoS.md](./SPEC-COMPETIDORES-PoS.md)** — Toast / Square / TouchBistro paso a
   paso: firing Hold/Stay/Send, coursing, fire-by-prep-time, expediter, 86, revenue centers, Comp vs
   Void, split check vs split payment, daypart, offline híbrido. Cada feature con encaje 🟢/🟡/🔵 + fuente.
+- **[club-satori/SPEC-clics-embudo.md](./club-satori/SPEC-clics-embudo.md)** — ⏳ **16-nov-2026, espera decisiones del
+  dueño.** Registro de clics en «Reservar», «Cómo llegar» y «Reseña» del Club (portal, cupón, cumpleaños) y embudo
+  clic → reserva de OpenTable (import de CSV) → llegada → reseña. Detalle ligado a persona 13 meses, totales para
+  siempre (año contra año); sin IP; aviso de privacidad v1.4 propuesto; plan en 5 PRs y 9 decisiones abiertas.
 - **[SPEC-COMANDA-GAPS.md](./SPEC-COMANDA-GAPS.md)** — 3 gaps priorizados para decidir: **Comp vs
   Void** (P&L), **fire-by-prep-time** (el campo prep ya existe), **revenue centers**.
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
 import {
@@ -46,12 +46,20 @@ function getTabs(role: string): { id: Tab; label: string }[] {
   ]
 }
 
+/** La pestaña con que abre Caja: la pedida por `?vista=` si el rol la ve; si no, la primera de su lista. */
+function vistaInicial(tabs: { id: Tab }[], pedida: string | null): Tab {
+  return tabs.find(t => t.id === pedida)?.id ?? tabs[0].id
+}
+
 export default function CashModule() {
   const { profile } = useAuth()
   const navigate    = useNavigate()
 
   const tabs    = getTabs(profile?.role ?? 'cajero')
-  const [tab, setTab]           = useState<Tab>(tabs[0].id)
+  // 15-nov: los avisos del Inicio llegan con ?vista=… (p. ej. «pendientes»). Solo abre una pestaña que el rol ya ve;
+  // si no, la de siempre. El parámetro nunca da permisos.
+  const [params] = useSearchParams()
+  const [tab, setTab]           = useState<Tab>(() => vistaInicial(tabs, params.get('vista')))
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
 

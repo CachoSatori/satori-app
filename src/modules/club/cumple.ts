@@ -10,6 +10,7 @@
  */
 import { waNumber } from '../cash/comprobante'
 import type { CumpleConfig, CumpleEnvio } from '../../shared/api/club'
+import { conCampanaOpenTable } from './reservaUrl'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre']
 
@@ -48,7 +49,8 @@ export function textoCumpleWhatsApp(e: CumpleEnvio, hoy: string): string {
     `${pila ? `Hola, ${pila}.` : 'Hola.'} ¡Feliz cumpleaños de parte de Satori!`,
     `Como socio del Local Club, le invitamos a celebrarlo con nosotros: ${e.beneficio}${cond ? ` ${cond}` : ''}. Vale ${vigencia}.`,
   ]
-  if (e.reserva_url) lineas.push(`${e.solo_reserva ? 'Reserve aquí' : 'Puede reservar aquí'}: ${e.reserva_url}`)
+  // opción B (16-nov): en OpenTable esta reserva cae en la campaña «cumpleanos» (solo si el link trae ot_source)
+  if (e.reserva_url) lineas.push(`${e.solo_reserva ? 'Reserve aquí' : 'Puede reservar aquí'}: ${conCampanaOpenTable(e.reserva_url, 'cumpleanos')}`)
   lineas.push('Muestre su QR de socio en caja.')
   return lineas.join('\n')
 }

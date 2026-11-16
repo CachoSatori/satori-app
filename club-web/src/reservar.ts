@@ -28,9 +28,58 @@ export function urlReservaLocal(url: unknown): string | null {
   return url
 }
 
-/** El link del botón: el del local del socio si vino y es de OpenTable; si no, el rid por defecto (config.ts). */
-export function urlReservaSocio(reservaUrl: unknown): string | null {
-  return urlReservaLocal(reservaUrl) ?? urlReservaOpenTable()
+/**
+ * D 16-nov (el dueño, opción B): las reservas del Club se separan en OpenTable por CAMPAÑA según desde dónde se reserva.
+ * `ot_source` («Origen RestRef») queda como venga en el link; `ot_campaign` («Nombre de la campaña RestRef») se reemplaza
+ * (o se agrega si falta) por la etiqueta del grupo. Solo la etiqueta: nada del socio (ni nombre, ni id, ni teléfono).
+ *   local      → portal del socio de Local Club («Mi Club»)
+ *   turista    → página del cupón del turista (QR del anfitrión)
+ *   referente  → portal de un referente/anfitrión (hoy sin botón de reservar: queda lista)
+ *   cumpleanos → aviso de cumpleaños (el WhatsApp del Inicio usa la copia de src/modules/club/reservaUrl.ts)
+ */
+export type GrupoReserva = 'local' | 'turista' | 'referente' | 'cumpleanos'
+export const GRUPOS_RESERVA: readonly GrupoReserva[] = ['local', 'turista', 'referente', 'cumpleanos']
+
+function claveParam(par: string): string {
+  const k = par.split('=')[0]
+  try { return decodeURIComponent(k.replace(/\+/g, ' ')) } catch { return k }
+}
+
+/**
+ * El link con `ot_campaign=<grupo>`. Se toca SOLO ese parámetro: el resto del link (orden, codificación, `#`) queda igual.
+ * Devuelve el link sin cambios si no es https de OpenTable válido (urlReservaLocal), si no trae `ot_source` con valor
+ * (no se inventa el origen) o si el grupo no es uno de los cuatro. Un `ot_campaign` repetido queda uno solo.
+ */
+export function conCampanaOpenTable(url: string, grupo: GrupoReserva): string {
+  if (!GRUPOS_RESERVA.includes(grupo) || urlReservaLocal(url) === null) return url
+  const iHash = url.indexOf('#')
+  const sinHash = iHash < 0 ? url : url.slice(0, iHash)
+  const hash = iHash < 0 ? '' : url.slice(iHash)
+  const iQ = sinHash.indexOf('?')
+  if (iQ < 0) return url
+  const pares = sinHash.slice(iQ + 1).split('&')
+  if (!pares.some(p => claveParam(p) === 'ot_source' && p.includes('=') && p.slice(p.indexOf('=') + 1) !== '')) return url
+  const nuevo = `ot_campaign=${grupo}`
+  const salida: string[] = []
+  let puesto = false
+  for (const p of pares) {
+    if (claveParam(p) !== 'ot_campaign') { salida.push(p); continue }
+    if (!puesto) { salida.push(nuevo); puesto = true }
+  }
+  if (!puesto) {
+    if (salida.length > 0 && salida[salida.length - 1] === '') salida[salida.length - 1] = nuevo
+    else salida.push(nuevo)
+  }
+  return `${sinHash.slice(0, iQ)}?${salida.join('&')}${hash}`
+}
+
+/**
+ * El link del botón: el del local del socio si vino y es de OpenTable (con la campaña del grupo); si no, el rid por
+ * defecto (config.ts), que no trae `ot_source` y queda igual.
+ */
+export function urlReservaSocio(reservaUrl: unknown, grupo: GrupoReserva): string | null {
+  const local = urlReservaLocal(reservaUrl)
+  return local ? conCampanaOpenTable(local, grupo) : urlReservaOpenTable()
 }
 
 /**
@@ -38,7 +87,8 @@ export function urlReservaSocio(reservaUrl: unknown): string | null {
  * UN dato por local, el LINK (Promociones); el widget se arma a partir de él:
  * - rid = `restref` (links /r/…?restref=) o `rid` (links /restref/client/?rid=) del link; solo dígitos.
  * - otSource / otCampaign = `ot_source` / `ot_campaign` del link (así OpenTable registra el origen «Club Satori»); si
- *   faltan o traen algo raro, «Club Satori».
+ *   faltan o traen algo raro, «Club Satori». Opción B (16-nov): si el link trae `ot_source`, otCampaign = el grupo
+ *   (conCampanaOpenTable), igual que el link directo.
  * - lang = el idioma que eligió el socio en el portal (es → es-MX, en → en-US).
  * - El resto fijo, como lo arma el loader de OpenTable para el script que generó el dueño (type standard, tema 1).
  * Sin link del local (o uno que no es de OpenTable) → el rid por defecto (config.ts) con origen «Club Satori». Con link
@@ -64,13 +114,14 @@ function origen(v: string | null): string {
   return ORIGEN_OK.test(x) ? x : OT_ORIGEN_DEFECTO
 }
 
-export function urlWidgetOpenTable(reservaUrl: unknown, idioma: 'es' | 'en'): string | null {
+export function urlWidgetOpenTable(reservaUrl: unknown, idioma: 'es' | 'en', grupo: GrupoReserva): string | null {
   const local = urlReservaLocal(reservaUrl)
   let rid: string = OPENTABLE_RID
   let src = OT_ORIGEN_DEFECTO
   let camp = OT_ORIGEN_DEFECTO
   if (local) {
-    const q = new URL(local).searchParams
+    // opción B (16-nov): la campaña del grupo, con la misma regla que el link (solo si el link trae ot_source)
+    const q = new URL(conCampanaOpenTable(local, grupo)).searchParams
     rid = (q.get('restref') ?? q.get('rid') ?? '').trim()
     src = origen(q.get('ot_source'))
     camp = origen(q.get('ot_campaign'))

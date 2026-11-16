@@ -18,6 +18,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { poolTotalSesion, type PoolEntry } from './pool.ts'
+import { rangoMes, mesAnterior, mesActualCR, mesPorDefectoCR } from './fechas.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
@@ -74,6 +75,13 @@ async function send(subject: string, html: string): Promise<void> {
 }
 
 // ── Data fetching ─────────────────────────────────────────────
+// supabase-js NO tira cuando PostgREST responde 400/500: devuelve { data: null, error }. Antes el error se
+// ignoraba y un rango inválido («2026-09-31») se leía como «mes sin datos» → no salía el correo, sin aviso.
+// Ahora cualquier error de lectura corta el reporte: 500 con ref y la etapa en el log (sin montos ni nombres).
+function exigirLectura(etapa: string, error: { message?: string } | null | undefined): void {
+  if (error) throw new Error(`lectura ${etapa}: ${error.message ?? 'error'}`)
+}
+
 interface SaloneroData {
   nombre: string; ventas: number; pax: number; iCom: number; iBeb: number
   servicios: number; ticketProm: number; paxProm: number; constancia: number; irs: number
@@ -99,20 +107,25 @@ interface PropinasCalc {
 }
 
 async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string): Promise<VentasCalc> {
-  const [year, month] = ym.split('-').map(Number)
-  const prevYm = month === 1 ? `${year-1}-12` : `${year}-${String(month-1).padStart(2,'0')}`
+  // Rangos con el último día REAL de cada mes (30, 31, 28 o 29): ver fechas.ts.
+  const r = rangoMes(ym)
+  const rPrev = rangoMes(mesAnterior(ym))
 
   // Fetch ventas_dias for current and previous month
-  const { data: dias } = await supabase.from('ventas_dias' as never)
+  const { data: dias, error: eDias } = await supabase.from('ventas_dias' as never)
     .select('session_date, data')
-    .gte('session_date', `${ym}-01`)
-    .lte('session_date', `${ym}-31`) as { data: Array<{session_date: string; data: {saloneros: Record<string, {total?:number;iva?:number;serv?:number;pax?:number;iCom?:number;iBeb?:number;esCajero?:boolean;delivery?:number;prods?:[string,number,number][]}>}}> | null }
+    .gte('session_date', r.desde)
+    .lte('session_date', r.hasta) as { error: { message?: string } | null; data: Array<{session_date: string; data: {saloneros: Record<string, {total?:number;iva?:number;serv?:number;pax?:number;iCom?:number;iBeb?:number;esCajero?:boolean;delivery?:number;prods?:[string,number,number][]}>}}> | null }
 
-  const { data: prevDias } = await supabase.from('ventas_dias' as never)
-    .select('data').gte('session_date', `${prevYm}-01`).lte('session_date', `${prevYm}-31`)
+  exigirLectura('ventas_mes', eDias)
+
+  const { data: prevDias, error: ePrev } = await supabase.from('ventas_dias' as never)
+    .select('data').gte('session_date', rPrev.desde).lte('session_date', rPrev.hasta)
+  exigirLectura('ventas_mes_anterior', ePrev)
 
   // Product classifications
-  const { data: prodMap_ } = await supabase.from('product_map' as never).select('nombre, tipo')
+  const { data: prodMap_, error: eProd } = await supabase.from('product_map' as never).select('nombre, tipo')
+  exigirLectura('product_map', eProd)
   const tipoMap: Record<string, string> = {}
   for (const p of (prodMap_ ?? []) as {nombre: string; tipo: string}[]) tipoMap[p.nombre.toUpperCase().trim()] = p.tipo
 
@@ -201,24 +214,29 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string)
 }
 
 async function calcPropinas(supabase: ReturnType<typeof createClient>, ym: string): Promise<PropinasCalc> {
-  const { data: sessions } = await supabase.from('tip_sessions')
+  const r = rangoMes(ym)
+  const { data: sessions, error: eSes } = await supabase.from('tip_sessions')
     .select('id, shift_type, session_date').eq('status','closed')
-    .gte('session_date',`${ym}-01`).lte('session_date',`${ym}-31`)
+    .gte('session_date', r.desde).lte('session_date', r.hasta)
+  exigirLectura('tip_sessions', eSes)
   const sids = (sessions ?? []).map((s: {id:string}) => s.id)
 
   if (!sids.length) return {pool:0,barra:0,turnos:0,amCount:0,pmCount:0,amPool:0,pmPool:0,topProp:[],sectores:[],semanas:[],diasSem:[]}
 
   // Pool totals from sessions
-  const { data: sessData } = await supabase.from('tip_sessions')
+  const { data: sessData, error: eSesData } = await supabase.from('tip_sessions')
     .select('id,pool_efectivo_crc,pool_efectivo_usd,pool_barra_crc,pool_barra_electronico_crc,exchange_rate,shift_type,session_date')
     .in('id', sids)
+  exigirLectura('tip_sessions_pool', eSesData)
 
   // Entries + empleados PRIMERO: el pool de cada sesión = calcTurno.totalPool (sagrado) necesita la
   // propinaSala — las propinas INDIVIDUALES de sala, que viven en tip_entries.tip_amount_crc/usd, NO en
   // las columnas de la sesión. El correo viejo sumaba solo las columnas → perdía propinaSala.
-  const { data: entries } = await supabase.from('tip_entries')
+  const { data: entries, error: eEnt } = await supabase.from('tip_entries')
     .select('employee_id, payout_crc, session_id, tip_amount_crc, tip_amount_usd, covered_role').in('session_id', sids)
-  const { data: emps } = await supabase.from('employees').select('id, full_name, role')
+  exigirLectura('tip_entries', eEnt)
+  const { data: emps, error: eEmp } = await supabase.from('employees').select('id, full_name, role')
+  exigirLectura('employees', eEmp)
   const empInfo: Record<string,{name:string;role:string}> = {}
   for (const e of (emps ?? []) as Array<{id:string;full_name:string;role:string}>) empInfo[e.id] = {name:e.full_name, role:e.role}
 
@@ -469,9 +487,7 @@ function igualConstante(a: string, b: string): boolean {
 function mesValido(ym: string): boolean {
   const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(ym)
   if (!m) return false
-  const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Costa_Rica' }))
-  const actual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
-  return ym >= '2024-01' && ym <= actual
+  return ym >= '2024-01' && ym <= mesActualCR(new Date())
 }
 
 // ── Main handler ─────────────────────────────────────────────
@@ -523,9 +539,8 @@ Deno.serve(async (req) => {
       if (typeof body.month !== 'string' || !mesValido(body.month)) return falla(400, 'mes', 'Mes inválido (YYYY-MM)')
       ym = body.month
     } else {
-      const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Costa_Rica' }))
-      now.setMonth(now.getMonth() - 1)
-      ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      // Mes anterior al mes en curso en CR, sin Date#setMonth (desbordaba los días 29–31): ver fechas.ts.
+      ym = mesPorDefectoCR(new Date())
     }
     const tipo = body.tipo === undefined || body.tipo === null || body.tipo === '' ? 'ambos' : body.tipo
     if (tipo !== 'ventas' && tipo !== 'propinas' && tipo !== 'ambos') return falla(400, 'tipo', 'Tipo inválido (ventas, propinas o ambos)')

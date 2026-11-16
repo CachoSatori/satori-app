@@ -350,7 +350,7 @@ No los pide el T0, pero mandan: **ninguna reconciliación por `session_date` los
 | `egreso_mercaderia` | `Caja Proveedores` | Tarjeta | SUPER SANTA TERESA | aprobado | 1 | ₡ 19.355,00 |
 | `egreso_personal` | `Caja Fuerte` | Efectivo | (null) | aprobado | 1 | ₡ 25.200,00 |
 | `egreso_mercaderia` | `Caja Proveedores` | Efectivo | (null) | aprobado | 1 | ₡ 23.423,00 |
-| `egreso_mercaderia` | `Banco` | TRANSFERENCIA | Distribuidora Isleña de Alimentos, S.A. | pendiente | 1 | ₡ 74.126,92 |
+| `egreso_mercaderia` | `Banco` | TRANSFERENCIA | <proveedor-A> | pendiente | 1 | ₡ 74.126,92 |
 | `egreso_personal` | `Caja Fuerte` | Efectivo | Propinas por turno | aprobado | 1 | ₡ 57.480,00 |
 
 Total: **61** movimiento(s), Σ ₡ 15.962.848,21.

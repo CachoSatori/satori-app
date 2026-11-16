@@ -1,6 +1,6 @@
 # SPEC v1 — Análisis de ventas integrado: Mediodía · Local Club · Delivery · Productos · 2026-11-03
 
-> **Qué es este documento:** junta en un solo módulo todo lo analizado el 03/11 y le suma la regla de comparación de períodos que pidió Ismael.
+> **Qué es este documento:** junta en un solo módulo todo lo analizado el 03/11 y le suma la regla de comparación de períodos que pidió el dueño.
 > **Absorbe** a `claude/SPEC-reporte-mediodia.md` (v2, queda como anexo de la pestaña Mediodía). **Se apoya** en `claude/SPEC-prompax-explicado.md` (descomposición, temporadas, RPC).
 > **EN ESPERA:** necesita el arreglo de roles (SEC-01, P0) y las firmas de datos de §6. Mientras tanto se pueden avanzar en rama aparte los módulos puros y sus tests (§7, Fase 1), porque no tocan base ni UI.
 > **Reportes de la investigación:**

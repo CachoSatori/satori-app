@@ -33,7 +33,7 @@ export type RegistradoPor = 'salonero' | 'cajero' | 'sistema' | 'sin_pedido'
 
 /**
  * De dónde sale el total del ticket. Hoy solo hay una fuente: la suma de los medios
- * de pago en colones. Cuando Ismael cuadre una factura con efectivo + dólares se
+ * de pago en colones. Cuando el dueño cuadre una factura con efectivo + dólares se
  * podrá agregar `'fiscal'` sin tocar a los consumidores del tipo.
  */
 export type TotalFuente = 'provisorio'
@@ -69,7 +69,7 @@ export const LOGIN_CAJERO_TARDE_SIN_CONFIRMAR = '022'
  *   · 002 = cocina express · 02 = login compartido / bajas
  *
  * El `01` NO es sistema: es ROSAURA (salonera), unificada con su login de manager `235` en
- * `personasNdf.ts`. Firmado por Ismael el 2026-10-29. Ojo: esto decide `registrado_por` al
+ * `personasNdf.ts`. Firmado por el dueño el 2026-10-29. Ojo: esto decide `registrado_por` al
  * INGESTAR; los tickets del `01` ya guardados como `sistema` no cambian solos (hace falta
  * re-ingestarlos con el backfill).
  */
@@ -104,7 +104,7 @@ export const SALONEROS_CONOCIDOS: Record<string, string> = {
   '235': 'ROSAURA M',
   '266': 'NACHO',
   '444': 'MAXI',
-  // Alta 2026-10-29 (Ismael): barmen nuevos, el login nuevo de NACHO (el 266 se borró del PoS)
+  // Alta 2026-10-29 (el dueño): barmen nuevos, el login nuevo de NACHO (el 266 se borró del PoS)
   // y el `01`, que es ROSAURA (antes se trataba como login de sistema).
   '01':  'ROSAURA M',
   '036': 'FRANCO',

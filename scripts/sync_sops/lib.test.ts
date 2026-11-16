@@ -37,10 +37,10 @@ describe('front matter', () => {
 describe('datos sensibles', () => {
   it('detecta correo, teléfono, cédulas y contraseñas', () => {
     const t = [
-      'Escribí a alguien@gmail.com',
-      'SINPE al 8774 2257',
-      'WhatsApp +506 8774-2257',
-      'Cédula Jurídica 3102864433',
+      'Escribí a alguien@ejemplo.test',
+      'SINPE al 8000 0001',
+      'WhatsApp +506 8000-0001',
+      'Cédula Jurídica 3101000000',
       'cédula 1-1234-5678',
       'contraseña: Satori2026',
     ].join('\n')

@@ -213,6 +213,12 @@
       "rama": "claude/club-local-manager-2",
       "renumerada_a": "172"
     },
+    "119": {
+      "nombre": "club_cumple_caja_portal_beneficio",
+      "bloque": "club",
+      "rama": "claude/club-cumple-promo",
+      "renumerada_a": "173"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -338,6 +344,12 @@
       "bloque": "pase",
       "rama": "claude/club-local-manager-2",
       "origen": "118"
+    },
+    "173": {
+      "nombre": "club_cumple_caja_portal_beneficio",
+      "bloque": "pase",
+      "rama": "claude/club-cumple-promo",
+      "origen": "119"
     }
   }
 }

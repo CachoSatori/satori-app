@@ -72,7 +72,7 @@ test('con edad y sin cumpleaños: manda mayor_edad true y ninguna clave de cumpl
   await vi.waitFor(() => expect(altas()).toHaveLength(1))
   const b = altas()[0].body!
   expect(b.mayor_edad).toBe(true)
-  expect(b.acepto).toBe('v1.2')
+  expect(b.acepto).toBe('v1.3')
   expect(Object.keys(b).filter(k => k.startsWith('cumple'))).toEqual([])
 })
 

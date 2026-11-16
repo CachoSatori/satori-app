@@ -16,9 +16,11 @@ import {
   opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, buscarFacturas, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, getEdadSocio, type EdadSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
-  type FacturaReciente, conPremioDeReto, type RetoEnCaja, digitosTiquete, MIN_DIGITOS_TIQUETE, MSG_TIQUETE_NO_APARECE,
+  type FacturaReciente, conPremioDeReto, type RetoEnCaja, getCumpleEnCaja, type CumpleEnCaja,
+  digitosTiquete, MIN_DIGITOS_TIQUETE, MSG_TIQUETE_NO_APARECE,
 } from '../../shared/api/club'
 import { dateCR, todayCR } from '../../shared/utils'
+import { cumpleDelFormulario, MESES_CORTOS, textoCumpleCaja } from './cumple'
 import { parsearQR, urlPortal } from './qrFormato'
 import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
 import { esCuentaSinCreditos, MSG_EQUIPO_SIN_CANJE } from './equipo'
@@ -29,6 +31,9 @@ import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './e
 import { useAuth } from '../../shared/hooks/useAuth'
 
 const LectorQR = lazy(() => import('./LectorQR'))
+
+export const MSG_CUMPLE_FALTA = 'Cumpleaños: elegí día y mes y marcá el permiso, o dejalo todo vacío.'
+export const MSG_CUMPLE_INVALIDO = 'Cumpleaños: esa fecha no existe (revisá día y mes).'
 
 /** Mig 174: la marca de una factura del plan B que ya tiene una tarjeta o un cupón cargado. */
 export const MSG_FACTURA_USADA = 'Ya tiene una tarjeta o un cupón cargado: no se puede usar otra vez'
@@ -714,6 +719,7 @@ function PanelSocio({ d, onCerrar, onValidado }: {
           {d.provisional_hasta && (
             <Aviso tono="info">Alta provisional hasta el {fmtFechaHora(d.provisional_hasta)}: tiene el beneficio; falta que la confirme un manager.</Aviso>
           )}
+          <AvisoCumple miembro={d.id} />
           <VisitaSocio miembro={d.id} />
           <div style={{ fontSize: '0.8rem', color: C.muted }}>
             Este QR identifica al socio (descuento y cortesía). No sirve para créditos: para canjear, el anfitrión muestra el
@@ -723,6 +729,29 @@ function PanelSocio({ d, onCerrar, onValidado }: {
       )}
       <Btn variant="secondary" onClick={onCerrar} style={{ marginTop: 10, width: '100%' }}>Escanear otro</Btn>
     </Card>
+  )
+}
+
+/**
+ * Mig 173 (D-cumple-2): si hoy cae en la ventana de su cumpleaños y el beneficio está encendido en este local, un
+ * recuadro con el beneficio, sus condiciones y el artículo de «CORTESÍA CLUB» (₡0; el tablero lo cuenta a costo). La
+ * base nunca devuelve la fecha. Si falla la lectura, no se muestra nada (la visita sigue igual).
+ */
+function AvisoCumple({ miembro }: { miembro: string }) {
+  const [c, setC] = useState<CumpleEnCaja | null>(null)
+  useEffect(() => {
+    let vivo = true
+    getCumpleEnCaja(miembro).then(r => { if (vivo) setC(r) }).catch(() => { if (vivo) setC(null) })
+    return () => { vivo = false }
+  }, [miembro])
+  if (!c || !c.aplica) return null
+  const x = textoCumpleCaja(c)
+  return (
+    <div role="status" style={{ border: `2px dashed ${x.ofrecer ? C.gold : C.red}`, borderRadius: 8, padding: '0.6rem 0.7rem', background: C.paper }}>
+      <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Beneficio de cumpleaños</div>
+      <div style={{ fontSize: '1.05rem', fontWeight: 800 }}>{x.titulo}</div>
+      <div style={{ fontSize: '0.85rem' }}>{x.detalle}</div>
+    </div>
   )
 }
 
@@ -784,16 +813,23 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
   const [email, setEmail] = useState('')
   const [verifico, setVerifico] = useState(false)
   const [mayor, setMayor] = useState(false)   // D6 A: obligatorio; la base rechaza el alta sin él
+  // 173 (D-cumple-1 A): cumpleaños opcional, solo si la persona da permiso
+  const [cDia, setCDia] = useState('')
+  const [cMes, setCMes] = useState('')
+  const [cPermiso, setCPermiso] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const cumple = cumpleDelFormulario(cDia, cMes, cPermiso)
   if (!abierto) {
     return <Btn variant="secondary" onClick={() => setAbierto(true)}>＋ Nuevo socio del Local Club</Btn>
   }
   async function guardar() {
     setEnviando(true); setErr(null)
     try {
-      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico, mayor)
-      const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`
+      if (!cumple.ok) { setErr(cumple.error === 'falta' ? MSG_CUMPLE_FALTA : MSG_CUMPLE_INVALIDO); return }
+      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico, mayor, cumple.cumple)
+      const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.` +
+        (r.cumple === 'guardado' ? ' Cumpleaños guardado.' : r.cumple === 'ya_tenia' ? ' Ya tenía el cumpleaños cargado: no se cambió.' : '')
       // Sin link no se frena nada: el alta ya quedó (el link sale después desde Miembros).
       let link: string | null = null
       try {
@@ -804,7 +840,7 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
         : puedeMandarLinkPortal(rol) ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).'
         : ' El link de su portal se lo manda un manager desde Miembros.'
       onHecho(texto + extra, link)
-      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false); setMayor(false)
+      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false); setMayor(false); setCDia(''); setCMes(''); setCPermiso(false)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }
   }
@@ -826,13 +862,33 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
           <input type="checkbox" checked={mayor} onChange={e => setMayor(e.target.checked)} />
           <span>Es mayor de 18 años (preguntale; el Local Club es solo para mayores)</span>
         </label>
+        {/* 173 (D-cumple-1 A): cumpleaños opcional, día y mes sin año, solo con su permiso */}
+        <fieldset style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.5rem 0.6rem' }}>
+          <legend style={labelStyle}>Cumpleaños (opcional)</legend>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <label style={{ flex: 1 }}><span style={labelStyle}>Día</span>
+              <select value={cDia} onChange={e => setCDia(e.target.value)} style={inputStyle} aria-label="Día del cumpleaños">
+                <option value="">—</option>
+                {Array.from({ length: 31 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1}</option>)}
+              </select></label>
+            <label style={{ flex: 2 }}><span style={labelStyle}>Mes</span>
+              <select value={cMes} onChange={e => setCMes(e.target.value)} style={inputStyle} aria-label="Mes del cumpleaños">
+                <option value="">—</option>
+                {MESES_CORTOS.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
+              </select></label>
+          </div>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+            <input type="checkbox" checked={cPermiso} onChange={e => setCPermiso(e.target.checked)} />
+            <span>Dio permiso para usar su cumpleaños en un beneficio (preguntale; si dice que no, dejalo vacío)</span>
+          </label>
+        </fieldset>
         <div style={{ fontSize: '0.8rem', color: C.muted }}>
           Contale el aviso de privacidad: guardamos nombre y WhatsApp solo para el Local Club y se puede dar de baja desde su portal.
-          Queda registrada la versión vigente del aviso. El cumpleaños no se carga en caja: solo en el alta por la web, con su permiso.
+          Queda registrada la versión vigente del aviso. El cumpleaños (sin el año) se guarda solo si te dio permiso; después no se cambia en caja.
         </div>
         {err && <Aviso tono="error">{err}</Aviso>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico || !mayor}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
+          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico || !mayor || !cumple.ok}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
           <Btn type="button" variant="ghost" onClick={() => { setAbierto(false); setErr(null) }}>Cancelar</Btn>
         </div>
       </form>

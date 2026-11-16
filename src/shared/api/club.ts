@@ -575,12 +575,21 @@ export interface AltaSocio {
   miembro_id: string; estado: 'activo'; provisional_hasta: string
   /** Mig 156: token del portal, SOLO si el alta creó a la persona (si el número ya era de alguien, null). */
   token_portal?: string | null
+  /** Mig 173: qué pasó con el cumpleaños. 'ya_tenia' = la persona ya existía y lo tenía (no se cambia en caja). */
+  cumple?: 'guardado' | 'no_dio' | 'ya_tenia' | 'sin_contacto'
 }
+/** Mig 173 (D-cumple-1 A): día y mes del cumpleaños, sin año. Solo se manda si la persona dio permiso. */
+export interface CumpleDiaMes { dia: number; mes: number }
 /** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme.
  *  D6 A (159): la caja confirma «es mayor de 18»; sin eso la base rechaza el alta (club_socio_alta_caja_v2, que envuelve
  *  a club_socio_alta_caja y devuelve su respuesta completa, incluido `token_portal` de la 156). */
-export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean, mayorEdad: boolean) =>
-  llamar<AltaSocio>('club_socio_alta_caja_v2', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad, p_location: localClub })
+/*  Mig 173 (D-cumple-1 A): club_socio_alta_caja_v3 = la v2 + cumpleaños opcional. `cumple` va SOLO si la persona dijo que sí
+ *  (el permiso viaja en true junto con el día y el mes); sin cumpleaños, los tres en null. La base valida antes del alta. */
+export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean, mayorEdad: boolean,
+                              cumple: CumpleDiaMes | null = null) =>
+  llamar<AltaSocio>('club_socio_alta_caja_v3', {
+    p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad,
+    p_cumple_dia: cumple?.dia ?? null, p_cumple_mes: cumple?.mes ?? null, p_cumple_permiso: cumple ? true : null, p_location: localClub })
 /** Validar en caja una autoalta pendiente: pasa a activo provisional.
  *  D6 A (163): si la persona no tiene la edad registrada (autoaltas de antes de la 159), la caja confirma «es mayor de
  *  18» en esta misma llamada; sin eso la base rechaza (club_socio_validar_v2). `null` = no hizo falta preguntar. */
@@ -654,6 +663,33 @@ export const getPrimeros90Config = () => llamar<Primeros90Config>('club_primeros
 /** Solo owner. `activo` null = no cambia el encendido (es del Club entero); `cortesia` es la de ESTE local (null = ninguna). */
 export const guardarPrimeros90Config = (activo: boolean | null, cortesia: string | null) =>
   llamar<Primeros90Config>('club_primeros90_config_guardar', { p_activo: activo, p_cortesia: cortesia, p_location: localClub })
+
+// ── Mig 173 (D-cumple-2): beneficio de cumpleaños por local ──────────────────
+export interface CumpleConfig {
+  location_id: string; activo: boolean; beneficio: string; min_personas: number; dias_antes: number; dias_despues: number
+  uno_por_mesa: boolean; solo_reserva: boolean; reserva_url: string | null
+  cortesia: { id: string; codigo: string; nombre: string; activa: boolean } | null
+  lista_para_caja: boolean; actualizado_en?: string
+}
+export interface CumpleConfigDatos {
+  activo: boolean; beneficio: string; min_personas: number; dias_antes: number; dias_despues: number
+  uno_por_mesa: boolean; solo_reserva: boolean; reserva_url: string | null; cortesia_id: string | null
+}
+/** Owner y manager (el manager, solo su local). */
+export const getCumpleConfig = () => llamar<CumpleConfig>('club_cumple_config_ver', { p_location: localClub })
+export const guardarCumpleConfig = (d: CumpleConfigDatos) =>
+  llamar<CumpleConfig>('club_cumple_config_guardar', { p_datos: d, p_location: localClub })
+/** Inicio (owner y manager): socios activos con permiso y cumpleaños en los próximos `dias_antes` días, sin los ya avisados este año. */
+export interface CumpleProximo { miembro_id: string; nombre: string; faltan: number; con_whatsapp: boolean }
+export type CumpleProximos = CumpleConfig & { hoy: string; socios: CumpleProximo[] }
+export const getCumpleProximos = () => llamar<CumpleProximos>('club_cumple_proximos', { p_location: localClub })
+/** Marca «enviado» (una por socio y año del cumpleaños) y devuelve lo necesario para armar el WhatsApp. Queda auditado. */
+export type CumpleEnvio = CumpleConfig & { nombre: string; whatsapp: string; cumple: string; desde: string; hasta: string }
+export const enviarCumple = (miembro: string) => llamar<CumpleEnvio>('club_cumple_enviar', { p_miembro: miembro, p_location: localClub })
+/** Caja: ¿hoy cae en la ventana de su cumpleaños? Nunca devuelve la fecha. */
+export type CumpleEnCaja = { aplica: false } | ({ aplica: true } & Pick<CumpleConfig,
+  'beneficio' | 'min_personas' | 'dias_antes' | 'dias_despues' | 'uno_por_mesa' | 'solo_reserva' | 'cortesia' | 'lista_para_caja'>)
+export const getCumpleEnCaja = (miembro: string) => llamar<CumpleEnCaja>('club_cumple_en_caja', { p_miembro: miembro, p_location: localClub })
 
 // ── LC-MD: marcadores de descuento (configurables por local) ─────────────────
 export interface MarcadorDescuento {

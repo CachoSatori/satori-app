@@ -5,6 +5,7 @@
  *  · Cortesías del sorteo: hasta 10, activables. Cada una es un artículo de la sección «CORTESÍA CLUB» del PoS (₡0).
  *    En caja se sortea una entre las activas (A4); el socio ve «1 cortesía sorpresa».
  *  · (mig 168) Cortesía especial de bienvenida (primeros 90 días): encendido del Club y cortesía de cada local.
+ *  · (mig 173) Beneficio de cumpleaños del local: lo editan el owner y el manager de su local.
  *  · La app no toca el PoS: el cajero aplica lo que dice la pantalla y el puente lo verifica después.
  */
 import { useEffect, useState } from 'react'
@@ -17,6 +18,7 @@ import { ConfigPrimeros90 } from './Primeros90'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Retos from './Retos'
+import { ConfigCumple } from './CumpleConfig'
 
 const PARA: Array<[ParaPromo, string]> = [['socio', 'Socios'], ['referente', 'Referentes'], ['turista_cupon', 'Turistas con cupón'], ['todos', 'Todos']]
 const DIAS: Array<[number, string]> = [[1, 'Lu'], [2, 'Ma'], [3, 'Mi'], [4, 'Ju'], [5, 'Vi'], [6, 'Sá'], [7, 'Do']]
@@ -25,12 +27,14 @@ const ESTADO_COLOR: Record<EstadoPromo, string> = { vigente: C.teal, borrador: C
 export default function Promociones() {
   const { profile } = useAuth()
   const owner = profile?.role === 'owner'
+  const gestiona = owner || profile?.role === 'manager'   // mig 173: el beneficio de cumpleaños lo edita también el manager
   return (
     <div className="tips-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-      {!owner && <Aviso tono="info">Las promociones y las cortesías las edita el owner. Acá las ves.</Aviso>}
+      {!owner && <Aviso tono="info">Las promociones y las cortesías las edita el owner. Acá las ves (el beneficio de cumpleaños lo edita también el manager).</Aviso>}
       <ListaPromociones owner={owner} />
       <ListaCortesias owner={owner} />
       <ConfigPrimeros90 owner={owner} />
+      <ConfigCumple edita={gestiona} />{/* mig 173: beneficio de cumpleaños del local */}
       <Retos owner={owner} />{/* mig 169: retos de temporada baja */}
     </div>
   )

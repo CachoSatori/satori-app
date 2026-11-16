@@ -6,9 +6,8 @@
 >
 > - **Vía: merge → Branching** (la usada desde la 085). No se aplica nada a mano. Si el día del pase aparece una razón
 >   para hacerlo a mano, se para y se rehace el paquete.
-> - **Orden:** **después de la 172 (#202) y la 173 (#203)**, que todavía no están mergeadas (Branching rechaza una versión
->   menor que la última aplicada). La 174 no toca nada de ellas: probada en base local con y sin la 172/173. Si alguna de
->   las dos se cae, la 174 entra igual después de la 171 (sin renumerar: el número ya es mayor).
+> - **Orden:** **después de la 172 (#202) y la 173 (#203)**, ya en `main` (`4ba922e`) y en prod (ledger 173). La 174 no
+>   toca nada de ellas: probada en base local armada con `main` (incluye 172 y 173).
 > - **Regla del ledger (Grok 122):** Branching guarda las migraciones partidas en statements. Verificación: **exactamente
 >   1 fila 174 con su `name`** + el catálogo (§5). No se compara md5.
 > - **Repo público:** en la bitácora (§9) solo conteos, nunca montos, números de tiquete reales ni nombres.
@@ -29,12 +28,12 @@
   factura usada).
 
 ## 2. Prerrequisitos
-- La 172 (#202) y la 173 (#203) mergeadas y verificadas (o decisión del dueño de pasar la 174 antes, sin ellas).
+- La 172 (#202) y la 173 (#203) en prod (hecho: ledger 173).
 - PR con revisión, verificador independiente (esquema) y **firma del dueño sobre el SHA exacto**.
 - Ventana de merge (regla D1): libre de 23:30 a 15:50; nunca de 15:50 a 19:00; de 19:00 a 23:30 solo con OK del dueño.
 
 ## 3. Lecturas previas en prod (solo lectura, `begin read only` … `rollback`)
-- Ledger: última versión = 173 (o 171/172 si alguna no entró) y **sin** fila 174.
+- Ledger: última versión = 173 y **sin** fila 174.
 - `to_regprocedure('public.club_facturas_buscar(text,text)') is null`.
 - `md5(prosrc)` de `club_facturas_recientes`, `club_facturas_recientes__nucleo`, `club_pos_ref` y `club_visita_control`
   (anotar: el envoltorio de recientes tiene que quedar igual; los otros tres cambian).

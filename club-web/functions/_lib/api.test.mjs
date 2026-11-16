@@ -499,3 +499,39 @@ test('167: /resena del portal cuenta en RL_LEER con «resena-socio:»; RL_CREAR 
   assert.deepEqual(claves, ['resena-socio:203.0.113.7'])
   assert.equal(llamadas.length, 1)
 })
+
+// 173 (D-cumple-1 A): el socio agrega su cumpleaños UNA vez desde el portal
+test('173: GET /api/portal/:token/cumple → club_portal_cumple; POST con día/mes/permiso → club_portal_cumple_agregar; datos malos → 400 sin llamar', async () => {
+  llamadas = []
+  const tok = 'b'.repeat(64)
+  const ruta = `portal/${tok}/cumple`
+  assert.equal((await manejar(pedido(ruta), conLimite(), ruta)).status, 200)
+  assert.ok(String(llamadas.at(-1).url).endsWith('/rpc/club_portal_cumple'))
+  assert.deepEqual(JSON.parse(llamadas.at(-1).init.body), { p_token: tok })
+  assert.equal(llamadas.at(-1).init.headers['x-club-web'], 'clave-de-prueba')
+  const r = await manejar(pedido(ruta, 'POST', JSON.stringify({ dia: 29, mes: 2, permiso: true })), conLimite(), ruta)
+  assert.equal(r.status, 200)
+  assert.ok(String(llamadas.at(-1).url).endsWith('/rpc/club_portal_cumple_agregar'))
+  assert.deepEqual(JSON.parse(llamadas.at(-1).init.body), { p_token: tok, p_dia: 29, p_mes: 2, p_permiso: true })
+  const n = llamadas.length
+  for (const malo of [{ dia: 3, mes: 4 }, { dia: 3, mes: 4, permiso: 'true' }, { dia: 31, mes: 4, permiso: true },
+                      { dia: '3', mes: 4, permiso: true }, { dia: 1, mes: 13, permiso: true }, {}]) {
+    assert.equal((await manejar(pedido(ruta, 'POST', JSON.stringify(malo)), conLimite(), ruta)).status, 400)
+  }
+  assert.equal(llamadas.length, n)
+  assert.equal((await manejar(pedido(ruta, 'PUT'), conLimite(), ruta)).status, 405)
+  assert.equal((await manejar(pedido('portal/xyz/cumple'), conLimite(), 'portal/xyz/cumple')).status, 404)
+  assert.equal((await manejar(pedido(ruta), conLimite(false), ruta)).status, 429)
+  assert.equal((await manejar(pedido(ruta, 'POST', '{}'), base, ruta)).status, 503)
+})
+
+test('173: «Cumpleaños ya cargado» de la base → 409 cumple_ya_cargado (sin el mensaje crudo)', async () => {
+  const antes = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Cumpleaños ya cargado' }), { status: 400 })
+  try {
+    const tok = 'c'.repeat(64)
+    const r = await manejar(pedido(`portal/${tok}/cumple`, 'POST', JSON.stringify({ dia: 1, mes: 1, permiso: true })), conLimite(), `portal/${tok}/cumple`)
+    assert.equal(r.status, 409)
+    assert.deepEqual(await r.json(), { error: 'cumple_ya_cargado' })
+  } finally { globalThis.fetch = antes }
+})

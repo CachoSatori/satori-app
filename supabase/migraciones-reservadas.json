@@ -207,6 +207,18 @@
       "rama": "claude/hotfix-miembro-guardar",
       "renumerada_a": "171"
     },
+    "118": {
+      "nombre": "club_local_manager_2",
+      "bloque": "club",
+      "rama": "claude/club-local-manager-2",
+      "renumerada_a": "172"
+    },
+    "119": {
+      "nombre": "club_cumple_caja_portal_beneficio",
+      "bloque": "club",
+      "rama": "claude/club-cumple-promo",
+      "renumerada_a": "173"
+    },
     "120": {
       "nombre": "club_facturas_dia_busqueda",
       "bloque": "club",
@@ -332,6 +344,18 @@
       "bloque": "pase",
       "rama": "claude/hotfix-miembro-guardar",
       "origen": "117"
+    },
+    "172": {
+      "nombre": "club_local_manager_2",
+      "bloque": "pase",
+      "rama": "claude/club-local-manager-2",
+      "origen": "118"
+    },
+    "173": {
+      "nombre": "club_cumple_caja_portal_beneficio",
+      "bloque": "pase",
+      "rama": "claude/club-cumple-promo",
+      "origen": "119"
     },
     "174": {
       "nombre": "club_facturas_dia_busqueda",

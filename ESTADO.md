@@ -4,6 +4,8 @@
 **Al día: 2026-11-16, 14:15 hora de Costa Rica.** `main` = merge del #223 (`e40ffd4`, 14:08; antes #227 `872c212` 14:02, #222 `2a07cdf` 13:49 y #221 `8f8ec54` 13:46). **Ledger de prod = 180. Staging = 180**
 (verificado el 16/11 11:30 con list_migrations). Todos los merges con firma u OK del dueño. El bloque anterior (06:45 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md)** (el handoff del 15/16-nov está en el proyecto privado).
+- **16-nov 15:20–15:30:** prueba de Google Wallet en prod OK (pase de producción sin marca de prueba, QR escaneado en caja abre la ficha, actualización automática OK tras validar socio); falta prueba de baja (opcional). **15:32:** el dueño firmó encender `VITE_WALLET_GOOGLE` (lo hace su sesión de CC, §7 del PASE #230).
+- **#229/181, #226/182 y #225 firmados:** entran en la ventana de las 23:30 CR, en ese orden.
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
 > en un PR de docs inmediato después del merge. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se

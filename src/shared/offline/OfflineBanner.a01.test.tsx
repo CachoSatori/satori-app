@@ -167,3 +167,25 @@ describe('verificador #234, 2ª pasada', () => {
     expect(alert.mock.calls[0][0]).toContain('No se pudo pasar a rechazadas')
   })
 })
+
+describe('verificador #234, 3ª pasada — op incierta en el detalle', () => {
+  it('muestra «Estado desconocido…» y no afirma que no se guardó; resolver pide confirmar con el aviso fuerte', async () => {
+    state.rejected = 1; state.role = 'manager'
+    const orig = rej.incierta
+    rej.incierta = true
+    try {
+      render(<OfflineBanner />)
+      await flush()
+      fireEvent.click(screen.getByText('Ver detalle')); await flush()
+      const d = screen.getByRole('dialog').textContent ?? ''
+      expect(d).toContain('Estado desconocido: puede que ya haya entrado. Tocá «↻ Reintentar» antes de cargarla a mano')
+      expect(d).not.toContain('No quedó guardada')
+      expect(d).not.toContain('NO quedaron guardadas')
+      const confirm = vi.fn().mockReturnValue(false)
+      ;(window as unknown as { confirm: unknown }).confirm = confirm
+      fireEvent.click(screen.getByText('✓ Ya lo resolví')); await flush()
+      expect(confirm.mock.calls[0][0]).toContain('puede que ya haya entrado')
+      expect(resolve).not.toHaveBeenCalled()
+    } finally { rej.incierta = orig }
+  })
+})

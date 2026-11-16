@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const state = vi.hoisted(() => ({
   encolar: false,
-  fila: null as null | 'pendiente' | 'rechazada',
+  fila: null as null | 'pendiente' | 'rechazada' | 'desconocido',
   writes: [] as string[],
   keys: [] as Array<string | undefined>,
 }))
@@ -45,7 +45,7 @@ vi.mock('../offline/ordenEscrituras', async () => {
 
 import { createCashMovement, createDayMovement, updateCashMovement, deleteCashMovement } from './cash'
 import { upsertTipEntry, deleteTipEntry } from './tips'
-import { BORRAR_PENDIENTE, BORRAR_RECHAZADA, cashKey, tipKey } from '../offline/ordenEscrituras'
+import { BORRAR_PENDIENTE, BORRAR_RECHAZADA, BORRAR_SIN_ORDEN, cashKey, tipKey } from '../offline/ordenEscrituras'
 import type { CashMovement } from '../types/database'
 
 const mov = {
@@ -95,6 +95,11 @@ describe('A01 — escrituras con red respetan la cola', () => {
   it('deleteCashMovement de un movimiento rechazado → se frena con aviso, sin RPC', async () => {
     state.fila = 'rechazada'
     await expect(deleteCashMovement('M', 'motivo')).rejects.toThrow(BORRAR_RECHAZADA)
+    expect(state.writes).toEqual([])
+  })
+  it('deleteCashMovement sin poder confirmar el orden (IndexedDB no respondió) → se frena, sin RPC', async () => {
+    state.fila = 'desconocido'
+    await expect(deleteCashMovement('M', 'motivo')).rejects.toThrow(BORRAR_SIN_ORDEN)
     expect(state.writes).toEqual([])
   })
   it('deleteCashMovement normal → RPC', async () => {

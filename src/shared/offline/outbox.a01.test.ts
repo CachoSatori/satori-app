@@ -9,8 +9,9 @@ vi.mock('../api/supabase', () => ({ supabase: {} }))
 
 import {
   flushOutbox, supabaseExecutor, classifyServerError, nextStuck, isStuck, STUCK_AFTER,
-  requeueRejected, resolveRejected, forceRejectHead, chainOf, puedePasarARechazadas, PENDIENTE_MISMA_FILA,
+  requeueRejected, resolveRejected, forceRejectHead, chainOf, puedePasarARechazadas, PENDIENTE_MISMA_FILA, salud,
 } from './outbox'
+import { estadoTexto, ESTADO_INCIERTA } from './rechazadas'
 import type { OutboxOp, OutboxStore, RejectedOp, RejectedStore, FlushResult, StuckState } from './outbox'
 import { supabase } from '../api/supabase'
 
@@ -461,17 +462,38 @@ describe('verificador #234 — un executor que LANZA', () => {
 // ── Verificador #234, 2ª pasada: op que vence los 15 s con la red andando ──
 describe('verificador #234 — timeout con red andando = «lento», no «sin conexión»', () => {
   afterEach(() => { vi.useRealTimers() })
-  it('el executor marca «lento» el timeout con navigator.onLine=true', async () => {
-    Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true, writable: true })
+  const colgarSupabase = () => {
     const never = new Promise<never>(() => {})
     const b: Record<string, unknown> = {}
     for (const m of ['insert', 'upsert', 'update', 'delete', 'select', 'match', 'abortSignal']) b[m] = () => b
     b.then = (res: unknown, rej: unknown) => never.then(res as never, rej as never)
     ;(supabase as unknown as Record<string, unknown>).from = () => b
+  }
+  const pingReal = salud.ping
+  afterEach(() => { salud.ping = pingReal })
+  const timeoutCon = async (onLineDespues: boolean, ping: boolean) => {
+    const nav = { onLine: true }
+    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true, writable: true })
+    salud.ping = async () => ping
+    colgarSupabase()
     vi.useFakeTimers()
     const r = supabaseExecutor(op(1))
+    nav.onLine = onLineDespues
     await vi.advanceTimersByTimeAsync(15000)
-    await expect(r).resolves.toMatchObject({ result: 'retry', kind: 'lento' })
+    return r
+  }
+  it('timeout con red andando y el servidor responde al ping → «lento»', async () => {
+    await expect(timeoutCon(true, true)).resolves.toMatchObject({ result: 'retry', kind: 'lento' })
+  })
+  it('timeout con wifi conectado pero sin internet (el ping no responde) → «red»', async () => {
+    await expect(timeoutCon(true, false)).resolves.toMatchObject({ result: 'retry', kind: 'red' })
+  })
+  it('timeout y la red se cayó mientras tanto (onLine=false) → «red», sin ping', async () => {
+    let pingueado = false
+    const p = timeoutCon(false, true)
+    salud.ping = async () => { pingueado = true; return true }
+    await expect(p).resolves.toMatchObject({ result: 'retry', kind: 'red' })
+    expect(pingueado).toBe(false)
   })
   it(`la MISMA op lenta ${STUCK_AFTER} veces seguidas habilita «Pasar a rechazadas»`, () => {
     const fr: FlushResult = { applied: 0, duplicates: 0, fatals: 0, stopped: true, remaining: 1, retryKind: 'lento', retryReason: 'r', stoppedAt: 'a' }
@@ -480,5 +502,32 @@ describe('verificador #234 — timeout con red andando = «lento», no «sin con
     expect(puedePasarARechazadas(s)).toBe(false)
     s = nextStuck(s, fr)
     expect(puedePasarARechazadas(s)).toBe(true)
+  })
+})
+
+describe('verificador #234, 3ª pasada — nunca afirmar «no se guardó» sin rechazo explícito', () => {
+  it('lo que pasa la gerencia a mano queda «incierta» y el texto pide Reintentar antes de cargar a mano', async () => {
+    const store = memStore(); const rej = memRejected()
+    await store.add(op(1))
+    await forceRejectHead(store, rej, noAudit, 'op-1', 'tras 5 intentos (lento)')
+    expect(rej.items[0].incierta).toBe(true)
+    expect(estadoTexto(rej.items[0])).toBe(ESTADO_INCIERTA)
+    expect(estadoTexto(rej.items[0])).not.toContain('No quedó guardada')
+  })
+  it('un rechazo explícito del servidor sí dice «No quedó guardada» (y no es incierta)', async () => {
+    const store = memStore(); const rej = memRejected()
+    await store.add(op(1))
+    await flushOutbox(store, async () => ({ result: 'fatal', reason: 'regla', code: 'P0001', status: 400 }), noAudit, rej)
+    expect(rej.items[0].incierta).toBeFalsy()
+    expect(estadoTexto(rej.items[0])).toContain('No quedó guardada')
+  })
+  it('Reintentar una incierta que ya había entrado rebota como duplicado (no duplica plata)', async () => {
+    const store = memStore(); const rej = memRejected()
+    await store.add(op(1))
+    await forceRejectHead(store, rej, noAudit, 'op-1', 'x')
+    await requeueRejected(rej, store, 'op-1')
+    const res = await flushOutbox(store, async () => 'duplicate', noAudit, rej)
+    expect(res).toMatchObject({ duplicates: 1, applied: 0, remaining: 0 })
+    expect(rej.items).toHaveLength(0)
   })
 })

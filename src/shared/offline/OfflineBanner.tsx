@@ -5,7 +5,7 @@ import {
 } from './outbox'
 import type { RejectedOp, StuckState } from './outbox'
 import { getStaleTs } from './cache'
-import { avisoRechazadas, avisoTrabada, cuandoCR, queEra, motivoTexto, CONFIRMAR_PASAR, CONFIRMAR_RESUELTA, motivoTraba, NO_SE_PUDO_PASAR } from './rechazadas'
+import { avisoRechazadas, avisoTrabada, cuandoCR, queEra, motivoTexto, CONFIRMAR_PASAR, CONFIRMAR_RESUELTA, motivoTraba, NO_SE_PUDO_PASAR, estadoTexto, CONFIRMAR_RESUELTA_INCIERTA } from './rechazadas'
 import { useAuth } from '../hooks/useAuth'
 
 /**
@@ -67,7 +67,10 @@ export default function OfflineBanner() {
     await recargarDetalle()
   }
   const resolver = async (id: string) => {
-    if (!window.confirm(CONFIRMAR_RESUELTA)) return
+    // Si en la cadena hay una incierta (pudo haber entrado), se avisa antes: cargarla a mano duplicaría plata.
+    const raiz = detalle?.find(x => x.client_op_id === id)
+    const cadenaIncierta = !!detalle?.some(x => x.incierta && (x.client_op_id === id || x.client_op_id === raiz?.depends_on))
+    if (!window.confirm(cadenaIncierta ? CONFIRMAR_RESUELTA_INCIERTA : CONFIRMAR_RESUELTA)) return
     await resolveRejectedNow(id, user?.id ?? null); await recargarDetalle()
   }
   const pasarARechazadas = async () => {
@@ -128,7 +131,7 @@ export default function OfflineBanner() {
               <button onClick={() => setDetalle(null)} style={{ ...btn, color: '#333' }}>Cerrar</button>
             </div>
             <p style={{ margin: '0 0 0.75rem', color: '#bbb' }}>
-              Estas operaciones NO quedaron guardadas en el sistema. Siguen en este aparato hasta que la gerencia las resuelva.
+              El servidor no confirmó estas operaciones. Siguen en este aparato hasta que la gerencia las resuelva.
               {!esGerencia && ' Solo un encargado o el dueño puede resolverlas.'}
             </p>
             {detalle.length === 0 && <p>No hay operaciones rechazadas.</p>}
@@ -137,7 +140,7 @@ export default function OfflineBanner() {
                 <div><strong>Qué:</strong> {queEra(r)}</div>
                 <div><strong>Cuándo:</strong> registrada {cuandoCR(r.created_at)} · rechazada {cuandoCR(r.rejected_at)}</div>
                 <div><strong>Motivo:</strong> {motivoTexto(r)}</div>
-                {r.depends_on && <div style={{ color: '#bbb' }}>Va junto con la operación rechazada de la misma fila: se reintenta o se resuelve todo junto, en orden.</div>}
+                <div style={{ color: r.incierta ? '#f0c060' : '#bbb' }}><strong>Estado:</strong> {estadoTexto(r)}</div>
                 {esGerencia && (
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.35rem' }}>
                     <button onClick={() => reintentar(r.client_op_id)} style={{ ...btn, color: '#333' }}>↻ Reintentar</button>

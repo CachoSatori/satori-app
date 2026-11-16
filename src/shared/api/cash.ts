@@ -3,7 +3,7 @@ import type { CashSession, CashMovement, Supplier, MovementType } from '../types
 import type { Database } from '../types/supabase.gen'
 import { cachedFetch } from '../offline/cache'
 import { enqueue, pendingOps } from '../offline/outbox'
-import { debeEncolarAhora, estadoFilaAhora, cashKey, BORRAR_PENDIENTE, BORRAR_RECHAZADA } from '../offline/ordenEscrituras'
+import { debeEncolarAhora, estadoFilaAhora, cashKey, BORRAR_PENDIENTE, BORRAR_RECHAZADA, BORRAR_SIN_ORDEN } from '../offline/ordenEscrituras'
 import { parseTraspaso } from '../../modules/cash/pozo'
 import { planBorradoDia, type MovimientoBorrable, type PlanBorradoDia } from '../../modules/cash/borrarDia'
 
@@ -539,6 +539,7 @@ export async function deleteCashMovement(id: string, note: string, managerEmail?
   const enAparato = await estadoFilaAhora(cashKey(id))
   if (enAparato === 'pendiente') throw new Error(BORRAR_PENDIENTE)
   if (enAparato === 'rechazada') throw new Error(BORRAR_RECHAZADA)
+  if (enAparato === 'desconocido') throw new Error(BORRAR_SIN_ORDEN)
   // Credenciales de gerencia (mig 044): el cajero las valida en el modal y la RPC las re-verifica
   // server-side. owner/manager logueado no las pasa (la RPC autoriza por su rol). NO se persisten.
   const args: Record<string, unknown> = { p_movement_id: id, p_note: note }

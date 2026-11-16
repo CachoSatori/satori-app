@@ -65,6 +65,7 @@ export interface RejectedOp {
   status?: number
   target?: string             // fila a la que apunta (ver targetKey)
   depends_on?: string         // client_op_id de la rechazada que la arrastró (cadena)
+  incierta?: boolean          // no hubo rechazo explícito (la pasó la gerencia): puede que YA haya entrado
   orig_seq?: number           // seq original en la cola → orden de la cadena
 }
 
@@ -186,7 +187,8 @@ export async function forceRejectHead(
   const head = (await store.all())[0]
   if (!head || head.client_op_id !== expectedId) return false
   const now = new Date().toISOString()
-  await rejected.add(toRejected(head, now, { result: 'fatal', reason }))
+  // Sin rechazo explícito del servidor (timeout, 5xx): puede que YA haya entrado → «incierta».
+  await rejected.add({ ...toRejected(head, now, { result: 'fatal', reason }), incierta: true })
   try { await audit({ op: head, reason: `pasada a rechazadas a mano: ${reason}`, at: now }) } catch { /* best-effort */ }
   await store.remove(head.seq!)
   return true
@@ -320,6 +322,31 @@ function withWriteTimeout<T>(run: (signal: AbortSignal) => PromiseLike<T>, ms = 
 
 type Resp = { error: unknown; status?: number }
 
+/**
+ * ¿Hay camino al servidor? Pide el /auth/v1/health de Supabase (liviano, sin tocar la base) con un
+ * tope corto. Cualquier respuesta HTTP = hay red; si no responde, no hay. Objeto mutable para pruebas.
+ */
+export const salud = {
+  ping: async (ms = 4000): Promise<boolean> => {
+    const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+    if (!url || typeof fetch === 'undefined') return false
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), ms)
+    try {
+      await fetch(`${url}/auth/v1/health`, {
+        headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string }, signal: ctrl.signal, cache: 'no-store',
+      })
+      return true
+    } catch { return false } finally { clearTimeout(t) }
+  },
+}
+
+/** Un timeout es «lento» SOLO si hay red de verdad (wifi conectado sin internet = «red»). */
+async function tipoDeTimeout(): Promise<RetryKind> {
+  if (isOfflineNow()) return 'red'
+  return (await salud.ping()) ? 'lento' : 'red'
+}
+
 /** UNA pasada de la op contra Supabase. Devuelve 'ok' / 'duplicate' / detalle clasificado. */
 async function runOnce(op: OutboxOp): Promise<ExecOutcome> {
   const judge = ({ error, status }: Resp): ExecOutcome =>
@@ -356,7 +383,7 @@ async function runOnce(op: OutboxOp): Promise<ExecOutcome> {
       supabase.from(op.table).delete().match(match).abortSignal(signal)))
   } catch (e) {
     if ((e as { isTimeout?: boolean })?.isTimeout === true)   // timeout → retry, NUNCA fatal
-      return { result: 'retry', kind: isOfflineNow() ? 'red' : 'lento', reason: 'el servidor tardó demasiado' }
+      return { result: 'retry', kind: await tipoDeTimeout(), reason: 'el servidor tardó demasiado' }
     return classifyServerError(toServerError(e), isOfflineNow())
   }
 }

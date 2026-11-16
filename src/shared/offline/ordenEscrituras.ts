@@ -48,26 +48,33 @@ function conTope<T>(p: Promise<T>, ms: number): Promise<T | typeof VENCIO> {
   ])
 }
 
+/**
+ * Si el tope vence no se sabe si hay cola: un ALTA nueva (sin fila objetivo) sigue directo; una
+ * escritura sobre una fila que ya existe (edición, propinas por turno/persona) va a la cola, porque
+ * directa podría adelantarse a su creación y tocar 0 filas diciendo «ok».
+ */
 export async function debeEncolar(deps: OrdenDeps, key?: string, ms = LECTURA_IDB_MS): Promise<boolean> {
   try {
     const r = await conTope((async () => {
       if ((await deps.pendientes()).length > 0) return true
       return !!key && (await deps.rechazadas()).some(r => r.target === key)
     })(), ms)
+    if (r === VENCIO) return !!key
     return r === true
   } catch { /* sin IndexedDB */ }
   return false
 }
 
 /** Estado de una fila en el aparato: para frenar un borrado online que sería un no-op silencioso. */
-export async function estadoFila(deps: OrdenDeps, key: string, ms = LECTURA_IDB_MS): Promise<'pendiente' | 'rechazada' | null> {
+/** 'desconocido' = venció el tope: no se puede confirmar el orden (el borrado se frena). */
+export async function estadoFila(deps: OrdenDeps, key: string, ms = LECTURA_IDB_MS): Promise<'pendiente' | 'rechazada' | 'desconocido' | null> {
   try {
     const r = await conTope((async () => {
       if ((await deps.pendientes()).some(o => targetKey(o) === key)) return 'pendiente' as const
       if ((await deps.rechazadas()).some(r => r.target === key)) return 'rechazada' as const
       return null
     })(), ms)
-    return r === VENCIO ? null : r
+    return r === VENCIO ? 'desconocido' : r
   } catch { /* sin IndexedDB */ }
   return null
 }
@@ -80,4 +87,5 @@ export const debeEncolarAhora = (key?: string) => debeEncolar(idbDeps, key)
 export const estadoFilaAhora = (key: string) => estadoFila(idbDeps, key)
 
 export const BORRAR_PENDIENTE = 'Este movimiento todavía no se sincronizó. Esperá a que se sincronice (o tocá «⟳ Sincronizar ahora») y después borralo.'
+export const BORRAR_SIN_ORDEN = 'No se pudo confirmar el orden: probá de nuevo en un momento.'
 export const BORRAR_RECHAZADA = 'El servidor rechazó este movimiento y no está guardado. Resolvelo desde el aviso rojo, en «Ver detalle».'

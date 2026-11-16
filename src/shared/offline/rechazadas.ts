@@ -55,6 +55,20 @@ export function queEra(r: RejectedOp): string {
   return partes.join(' · ')
 }
 
+/**
+ * Qué se sabe de la operación. Nunca se afirma «no se guardó» sin un rechazo explícito del servidor:
+ * una op que se pasó a mano (timeout, 5xx) puede haber entrado.
+ */
+export function estadoTexto(r: RejectedOp): string {
+  if (r.incierta) return ESTADO_INCIERTA
+  if (r.depends_on) return 'No se envió: va junto con la operación rechazada de la misma fila. Se reintenta o se resuelve todo junto, en orden.'
+  return 'No quedó guardada: el servidor la rechazó.'
+}
+export const ESTADO_INCIERTA =
+  'Estado desconocido: puede que ya haya entrado. Tocá «↻ Reintentar» antes de cargarla a mano (si ya estaba, no se duplica).'
+export const CONFIRMAR_RESUELTA_INCIERTA =
+  'Hay una operación en estado desconocido: puede que ya haya entrado. Tocá «↻ Reintentar» primero (si ya estaba, no se duplica). ¿Igual la marcás como resuelta?'
+
 export function motivoTexto(r: RejectedOp): string {
   const cod = [r.status ? `HTTP ${r.status}` : '', r.code ?? ''].filter(Boolean).join(' · ')
   return cod ? `${r.reason} (${cod})` : r.reason

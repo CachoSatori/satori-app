@@ -34,9 +34,14 @@ describe('A01 — orden entre la cola y las escrituras con red', () => {
 
 describe('verificador #234 — tope a las lecturas de IndexedDB', () => {
   const colgado = { pendientes: () => new Promise<never>(() => {}), rechazadas: () => new Promise<never>(() => {}) }
-  it('si IndexedDB no responde, la escritura con red sigue directo (no se traba)', async () => {
-    expect(await debeEncolar(colgado, 'k', 20)).toBe(false)
-    expect(await estadoFila(colgado, 'k', 20)).toBeNull()
+  it('si IndexedDB no responde: un ALTA nueva (sin fila) sigue directo', async () => {
+    expect(await debeEncolar(colgado, undefined, 20)).toBe(false)
+  })
+  it('si IndexedDB no responde: una escritura sobre una fila existente va a la cola', async () => {
+    expect(await debeEncolar(colgado, 'k', 20)).toBe(true)
+  })
+  it('si IndexedDB no responde: el estado de la fila es «desconocido» (el borrado se frena)', async () => {
+    expect(await estadoFila(colgado, 'k', 20)).toBe('desconocido')
   })
   it('si responde a tiempo, decide igual que siempre', async () => {
     expect(await debeEncolar(deps([insM], []), undefined, 20)).toBe(true)

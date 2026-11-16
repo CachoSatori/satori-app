@@ -38,6 +38,10 @@ export const ENVUELTAS_172 = [
   'club_canje', 'club_canje_aprobado', 'club_tarjeta_manual', 'club_cupon_usar',
   'club_canje_aviso', 'club_sin_cruce_candidatas', 'club_sin_cruce_elegir', 'club_pendiente_resolver', 'club_alerta_revisar',
 ]
+/** 176: listas sin local que el manager recorre. El envoltorio llama al núcleo y FILTRA (no hay chequeo antes). */
+export const ENVUELTAS_176 = [
+  'club_buscar', 'club_resolver', 'club_socios_por_confirmar', 'club_socio_solicitudes_abiertas', 'club_retos_listar',
+]
 /** Funciones con p_location sin chequeo propio que llaman primero, con p_location, a una envuelta (que chequea). */
 export const DELEGAN: Record<string, string> = {
   club_excepciones_abiertas: 'club_excepciones',
@@ -199,6 +203,37 @@ export function sinChequeoDeLocal(archivos: { archivo: string; sql: string }[], 
   return malas.sort()
 }
 
+/**
+ * 176: un envoltorio de lista redefinido después tiene que repetir su cuerpo de la 176 (llama al núcleo y filtra); no se
+ * renombra ni se borra sin rehacerlo. Y toda política nueva o cambiada de una tabla club_* que deje entrar al manager
+ * tiene que mirar el local (mis_locales / club_puede_ver_local / club_ve_ficha).
+ */
+export function violaciones176(archivos: { archivo: string; sql: string }[], cuerpos: Map<string, string>): string[] {
+  const malas: string[] = []
+  for (const { archivo, sql } of archivos) {
+    const rehechas = new Set<string>()
+    for (const d of definiciones(sql)) {
+      const c = cuerpos.get(d.nombre)
+      if (!c) continue
+      if (!norm(d.cuerpo).includes(norm(c))) malas.push(`${archivo}: redefine el envoltorio ${d.nombre} (cambiá ${d.nombre}__nucleo, no el envoltorio)`)
+      else rehechas.add(d.nombre)
+    }
+    for (const m of sql.matchAll(new RegExp(String.raw`alter\s+function\s+${ID}\s*\([^)]*\)\s*rename`, 'gi'))) {
+      if (cuerpos.has(m[1].toLowerCase())) malas.push(`${archivo}: renombra el envoltorio ${m[1].toLowerCase()}`)
+    }
+    for (const m of sql.matchAll(new RegExp(String.raw`drop\s+function\s+(?:if\s+exists\s+)?${ID}\s*\(`, 'gi'))) {
+      const n = m[1].toLowerCase()
+      if (cuerpos.has(n) && !rehechas.has(n)) malas.push(`${archivo}: borra el envoltorio ${n} sin rehacerlo`)
+    }
+    for (const m of sql.matchAll(/(?:create|alter)\s+policy\s+"?(\w+)"?\s+on\s+(?:"?public"?\s*\.\s*)?"?(club_\w+)"?([^;]*);/gi)) {
+      if (/'manager'/i.test(m[3]) && !/\b(mis_locales|club_puede_ver_local|club_ve_ficha)\s*\(/i.test(m[3])) {
+        malas.push(`${archivo}: la política ${m[1]} de ${m[2]} deja entrar al manager sin mirar el local`)
+      }
+    }
+  }
+  return malas
+}
+
 describe('170 y 172 · el manager solo en sus locales', () => {
   const CHEQUEOS = chequeosDeLa170(leer('170_club_local_manager.sql'))
   const CHEQUEOS_172 = chequeosDeLa170(leer('172_club_local_manager_2.sql'))
@@ -233,6 +268,43 @@ describe('170 y 172 · el manager solo en sus locales', () => {
   it('ninguna migración posterior rompe un envoltorio (170 desde la 171; 172 desde la 173)', () => {
     expect(violaciones(migraciones().filter(m => Number(m.archivo.split('_')[0]) > 170), CHEQUEOS)).toEqual([])
     expect(violaciones(migraciones().filter(m => Number(m.archivo.split('_')[0]) > 172), CHEQUEOS_172)).toEqual([])
+  })
+
+  it('176: envuelve exactamente sus 5 listas, cada una llama a su núcleo y filtra; ninguna posterior las rompe', () => {
+    const CUERPOS_176 = chequeosDeLa170(leer('176_club_local_manager_listas.sql'))
+    expect([...CUERPOS_176.keys()].sort()).toEqual([...ENVUELTAS_176].sort())
+    for (const [n, c] of CUERPOS_176) {
+      expect(c, n).toContain(`public.${n}__nucleo(`)
+      expect(c, n).toMatch(/club_ve_ficha|club_exigir_local_de/)
+    }
+    expect(CUERPOS_176.get('club_resolver')).not.toMatch(/'socio'/)   // el QR del socio no se corta (Club compartido)
+    // club_buscar: el filtro va DENTRO del núcleo, antes del «limit 20» (si no, el manager ve vacío con >20 ajenas)
+    const nucleoBuscar = leer('176_club_local_manager_listas.sql').split('create or replace function public.club_buscar__nucleo(')[1] ?? ''
+    const iFiltro = nucleoBuscar.indexOf('public.club_ve_ficha(m.location_id)')
+    expect(iFiltro).toBeGreaterThan(0)
+    expect(iFiltro).toBeLessThan(nucleoBuscar.indexOf('limit 20'))
+    expect(ENVUELTAS_176.filter(n => [...ENVUELTAS_170, ...ENVUELTAS_172].includes(n))).toEqual([])
+    expect(violaciones176(migraciones().filter(m => Number(m.archivo.split('_')[0]) > 176), CUERPOS_176)).toEqual([])
+    // y la guardia muerde
+    const v = (sql: string) => violaciones176([{ archivo: '177_x.sql', sql }], CUERPOS_176)
+    expect(v('create or replace function public.club_buscar(p_q text) returns setof int as $$ select 1 $$;')).toHaveLength(1)
+    expect(v('drop function public.club_retos_listar();')).toHaveLength(1)
+    expect(v('alter function public.club_resolver(text) rename to x;')).toHaveLength(1)
+    expect(v("alter policy club_staff_select on public.club_miembros using (get_my_role() in ('owner','manager'));")).toHaveLength(1)
+    expect(v("create policy p on public.club_negocios for select using (get_my_role() = 'manager' and location_id = any (public.mis_locales()));")).toEqual([])
+    expect(v('create or replace function public.club_buscar__nucleo(p_q text) returns setof int as $$ select 1 $$;')).toEqual([])
+  })
+
+  it('176: la RLS del Club que deja entrar al manager mira el local en la 176', () => {
+    const sql = leer('176_club_local_manager_listas.sql')
+    const pols = [...sql.matchAll(/alter\s+policy\s+(\w+)\s+on\s+public\.(club_\w+)([^;]*);/gi)]
+    expect(pols.map(m => m[2]).sort()).toEqual([
+      'club_alertas', 'club_comparacion_vieja', 'club_cruces_manuales', 'club_cruces_manuales_historial', 'club_cupones',
+      'club_cupones_contactos', 'club_excepciones_resueltas', 'club_miembro_roles', 'club_miembros', 'club_miembros_contacto',
+      'club_movimientos', 'club_negocios', 'club_pases', 'club_primeros90', 'club_resena_socio', 'club_retos_ganados',
+      'club_visitas'])
+    for (const m of pols) expect(m[3], m[2]).toMatch(/mis_locales\(\)/)
+    expect(violaciones176([{ archivo: '176_club_local_manager_listas.sql', sql }], new Map())).toEqual([])
   })
 
   it('ninguna función SECURITY DEFINER con p_location y EXECUTE para authenticated queda sin chequear el local', () => {

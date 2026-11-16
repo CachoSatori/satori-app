@@ -9,7 +9,7 @@ import { AvisoPrimeros90, ConfigPrimeros90, MSG_P90_GUARDADA, MSG_P90_SIN_CONFIG
 
 const rol = vi.hoisted(() => ({ v: 'cajero' }))
 const api = vi.hoisted(() => ({
-  resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), getFacturasRecientes: vi.fn(), registrarVisitaSocio: vi.fn(),
+  resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), getFacturasRecientes: vi.fn(), buscarFacturas: vi.fn(), registrarVisitaSocio: vi.fn(),
   getPrimeros90Config: vi.fn(), guardarPrimeros90Config: vi.fn(), getCortesias: vi.fn(),
 }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: rol.v, full_name: 'Prueba' } }) }))
@@ -42,6 +42,7 @@ describe('Caja · cortesía especial de bienvenida (mig 168)', () => {
     rol.v = 'cajero'
     for (const f of Object.values(api)) f.mockReset()
     api.getFacturasRecientes.mockResolvedValue([])
+    api.buscarFacturas.mockResolvedValue([])
   })
 
   it('ofrecida: recuadro aparte con el artículo y «una sola vez»', async () => {

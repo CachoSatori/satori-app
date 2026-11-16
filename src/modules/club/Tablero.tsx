@@ -9,6 +9,8 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, mesActualCR } from './estilos'
 import { avisos, creditosTxt, crcTxt, filasPasivo, pctTxt, tableroCsv, titular } from './tableroFormato'
+import { ResumenCumpleTarjeta } from './CumpleConfig'
+import { rangoMes } from './cumple'
 
 const n0 = (n: number | null | undefined) => Number(n ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 1 })
 
@@ -93,6 +95,9 @@ export default function Tablero() {
             </div>
             {esOwner && <EditarPct local={t.local} pct={t.config.cortesia_costo_pct} onGuardado={() => setRecarga(x => x + 1)} />}
           </Card>
+
+          {/* mig 175: usos del beneficio de cumpleaños del mes y su cortesía a costo */}
+          <ResumenCumpleTarjeta desde={rangoMes(t.mes)[0]} hasta={rangoMes(t.mes)[1]} local={t.local} />
 
           <Card>
             <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Regalía en el PoS</h3>

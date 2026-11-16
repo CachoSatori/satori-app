@@ -225,6 +225,24 @@
       "rama": "claude/club-cumple-promo",
       "renumerada_a": "173"
     },
+    "120": {
+      "nombre": "club_facturas_dia_busqueda",
+      "bloque": "club",
+      "rama": "claude/club-facturas-dia-busqueda",
+      "renumerada_a": "174"
+    },
+    "121": {
+      "nombre": "club_cumple_uso_anual",
+      "bloque": "club",
+      "rama": "claude/club-cumple-uso-anual",
+      "renumerada_a": "175"
+    },
+    "122": {
+      "nombre": "club_local_manager_listas",
+      "bloque": "club",
+      "rama": "claude/club-local-manager-3",
+      "renumerada_a": "176"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -356,6 +374,24 @@
       "bloque": "pase",
       "rama": "claude/club-cumple-promo",
       "origen": "119"
+    },
+    "174": {
+      "nombre": "club_facturas_dia_busqueda",
+      "bloque": "pase",
+      "rama": "claude/club-facturas-dia-busqueda",
+      "origen": "120"
+    },
+    "175": {
+      "nombre": "club_cumple_uso_anual",
+      "bloque": "pase",
+      "rama": "claude/club-cumple-uso-anual",
+      "origen": "121"
+    },
+    "176": {
+      "nombre": "club_local_manager_listas",
+      "bloque": "pase",
+      "rama": "claude/club-local-manager-3",
+      "origen": "122"
     },
     "177": {
       "nombre": "esquema_centimos_como_prod",

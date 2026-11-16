@@ -11,6 +11,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { DiasMap, ProductMap } from '../../shared/types/ventas'
 import { saveProductMapItems } from '../../shared/api/ventas'
+import { todayCR } from '../../shared/utils'
 
 const PAGE_SIZE = 50
 
@@ -212,7 +213,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
     const url  = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `satori-costos-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `satori-costos-${todayCR()}.csv`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

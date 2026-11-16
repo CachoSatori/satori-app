@@ -249,6 +249,12 @@
       "rama": "claude/club-local-manager-3",
       "renumerada_a": "176"
     },
+    "124": {
+      "nombre": "club_portal_reserva_local",
+      "bloque": "club",
+      "rama": "claude/club-portal-reserva-local",
+      "renumerada_a": "179"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -410,6 +416,12 @@
       "bloque": "pase",
       "rama": "claude/esquema-columnas-caja-faltantes",
       "origen": "098"
+    },
+    "179": {
+      "nombre": "club_portal_reserva_local",
+      "bloque": "pase",
+      "rama": "claude/club-portal-reserva-local",
+      "origen": "124"
     }
   }
 }

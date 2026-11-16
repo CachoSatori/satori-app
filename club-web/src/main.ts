@@ -23,7 +23,7 @@ import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 import { leerAvance, textosAvance } from './avance'
 import { leerRetos, textosReto } from './retos'
-import { tarjetaReservar } from './reservar'
+import { tarjetaReservar, urlReservaSocio } from './reservar'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -285,6 +285,8 @@ interface Portal {
   socio?: {
     estado: 'pendiente' | 'activo'; desde: string; codigo_socio: string | null; beneficio: string | null; visitas_mes: number | null
     cortesias: Array<{ sorpresa: boolean; cantidad: number; motivo: string; vence_en: string | null }> | null
+    /** mig 179: el link de reserva (OpenTable) del local del socio, tal cual; null si el local no tiene */
+    reserva_url?: string | null
   } | null
   /** 167: reseña de Google cada N visitas (la base decide si toca y de qué local); null si no toca */
   resena?: ResenaSocio | null
@@ -481,8 +483,8 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),
     activo && avanceBox,
     qrBox,
-    // D 16-nov (el dueño): «Reservar» → OpenTable (rid por defecto de config.ts hasta que el portal devuelva el del local)
-    tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton }),
+    // D 16-nov (el dueño, opción A; mig 179): «Reservar» → el OpenTable del local del socio tal cual; sin él, el rid por defecto
+    tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton }, urlReservaSocio(socio.reserva_url)),
     activo && retosBox,
     cumpleBox,
     err, baja)

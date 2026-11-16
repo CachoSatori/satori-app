@@ -83,8 +83,14 @@ extremo puede clasificar mal un conflicto (solo afecta el warning, no el dato).
   primera op va a rechazadas (sin borrar) y sus dependientes la siguen en el próximo flush.
   Un timeout de 15 s con `navigator.onLine=true` (o un 408) es «lento», no «red»: el aviso dice «el
   servidor tarda en responder esta operación» y también habilita el botón. Las lecturas de IndexedDB que
-  deciden si una escritura con red va a la cola tienen un tope de 1,5 s: si vence, la escritura sigue
-  directo.
+  deciden si una escritura con red va a la cola tienen un tope de 1,5 s: si vence, solo un ALTA nueva
+  sigue directo; ediciones y propinas (fila existente) van a la cola, y el borrado se frena con «No se
+  pudo confirmar el orden». Antes de clasificar «lento» se hace un ping corto a `/auth/v1/health`: sin
+  respuesta es «red» (wifi sin internet).
+- **Incierta:** lo que la gerencia pasa a rechazadas no tuvo un rechazo explícito (timeout, 5xx) y puede
+  haber entrado. Queda marcado `incierta` y la app dice «Estado desconocido: puede que ya haya entrado.
+  Tocá «↻ Reintentar» antes de cargarla a mano». Reintentar es idempotente (23505 = ya estaba). La app
+  nunca afirma «no se guardó» sin un rechazo explícito del servidor.
 - **Multi-pestaña**: el flush corre dentro de `navigator.locks`
   (`satori-outbox-flush`, `ifAvailable`) → dos pestañas nunca replyan a la vez.
 

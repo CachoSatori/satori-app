@@ -24,11 +24,44 @@ export function textoAltaWhatsApp(nombre: string, urlPortal: string): string {
     'Guárdelo y muéstrelo en caja en cada visita.'
 }
 
-/** `https://wa.me/<número internacional>?text=…`, o `null` si el WhatsApp cargado no tiene dígitos. */
-export function linkAltaWhatsApp(tel: string, nombre: string, urlPortal: string): string | null {
+/**
+ * Hallazgo 230 (D 16-nov, el dueño): el número como se lo lee el cajero al cliente antes de mandarle el link del portal.
+ * CR (8 dígitos o 506 + 8): «+506 8888 0000». Otro país: «+<dígitos>» tal cual (no adivinamos su formato). Sin dígitos: ''.
+ */
+export function formatoWhatsApp(tel: string): string {
   const n = waNumber(tel)
-  if (!n) return null
+  if (!n) return ''
+  if (n.startsWith('506') && n.length === 11) return `+506 ${n.slice(3, 7)} ${n.slice(7)}`
+  return `+${n}`
+}
+
+/**
+ * `https://wa.me/<número internacional>?text=…`, o `null` si el WhatsApp cargado no tiene dígitos.
+ * Hallazgo 230: el link del portal da acceso a la cuenta del socio, así que solo sale con el número CONFIRMADO con el
+ * cliente («¿Este es su WhatsApp?» → «Sí, es este»). `telConfirmado` es el número que el cajero confirmó; si no hay
+ * confirmación o no es el mismo número que se va a usar, no hay link.
+ */
+export function linkAltaWhatsApp(tel: string, nombre: string, urlPortal: string, telConfirmado: string | null): string | null {
+  const n = waNumber(tel)
+  if (!n || telConfirmado == null || waNumber(telConfirmado) !== n) return null
   return `https://wa.me/${n}?text=${encodeURIComponent(textoAltaWhatsApp(nombre, urlPortal))}`
+}
+
+/**
+ * Ficha del socio en Miembros («Portal del socio» → «Mandar por WhatsApp»): el link del portal a un socio que ya existe
+ * (dado de alta antes del WhatsApp con link, o al que no le llegó). Lo lee el CLIENTE: «usted».
+ */
+export function textoLinkPortalWhatsApp(nombre: string, urlPortal: string): string {
+  const pila = nombrePila(nombre)
+  return `${pila ? `Hola, ${pila}. ` : 'Hola. '}Este es el link de su portal del Local Club de Satori, con su QR de socio: ${urlPortal}\n` +
+    'Guárdelo y muéstrelo en caja en cada visita.'
+}
+
+/** Igual que `linkAltaWhatsApp` (hallazgo 230): sin el número confirmado, o con otro número, no hay link. */
+export function linkPortalWhatsApp(tel: string, nombre: string, urlPortal: string, telConfirmado: string | null): string | null {
+  const n = waNumber(tel)
+  if (!n || telConfirmado == null || waNumber(telConfirmado) !== n) return null
+  return `https://wa.me/${n}?text=${encodeURIComponent(textoLinkPortalWhatsApp(nombre, urlPortal))}`
 }
 
 /** Solo owner y manager pueden pedir el token de CUALQUIER miembro (`club_miembro_token`, mig 150). */
@@ -46,4 +79,15 @@ export async function tokenDelAlta(
   if (alta.token_portal) return alta.token_portal
   if (puedeMandarLinkPortal(rol)) return pedirToken(alta.miembro_id)
   return null
+}
+
+/**
+ * «Portal del socio» en la ficha: owner siempre; manager solo si el socio es de uno de sus locales (`mis_locales`, la
+ * misma regla que la base aplica en `club_miembro_token` desde la 172). `misLocales` null = todavía no se sabe o no se
+ * pudo leer: no se muestra. Socio sin local (`locationId` null): la base no lo frena, se muestra.
+ */
+export function puedeLinkPortalDe(rol: string | null | undefined, locationId: string | null | undefined, misLocales: string[] | null): boolean {
+  if (rol === 'owner') return true
+  if (rol !== 'manager' || misLocales == null) return false
+  return locationId == null || misLocales.includes(locationId)
 }

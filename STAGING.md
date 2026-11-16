@@ -28,13 +28,41 @@ riesgoso (cirugía de auth, tiempo real, offline) sin tocar plata real.
   (aborta ante cualquier sentencia no-SELECT) y la escritura va **únicamente** a
   `hwiatgicyyqyezqwldia` (aborta si el destino no es ese ref). Hace backup corto previo en
   `.staging-backups/`, trunca public, copia todo + `auth.users`/`auth.identities`, restaura el
-  owner (`satorisushibar@gmail.com` = owner activo), re-sincroniza secuencias y **verifica**
+  owner (`<correo-del-negocio>` = owner activo), re-sincroniza secuencias y **verifica**
   (conteos por tabla + 3 spot-checks financieros idénticos).
 - **Logins en staging = credenciales de PROD** (los usuarios se clonan con su hash de contraseña).
 - El banner "DATOS DE PRUEBA" **sigue siendo correcto**: es una copia desechable, no el original —
   nada de lo que se haga en staging toca producción.
 - **No se clona**: Storage (las fotos de la Bandeja no se ven en staging) ni la config de Auth
   (staging usa autoconfirm + site_url propio, a propósito).
+
+## 👤 Manager de prueba (16-nov-2026)
+Prod no tiene por qué tener un manager activo, y staging (copia de prod) tampoco: las baterías que buscan uno
+(«owner y manager activos») caían en el caso 00. Para eso staging tiene un usuario **100 % ficticio**:
+
+| Dato | Valor |
+|---|---|
+| Nombre | Manager Prueba |
+| Correo (login) | `manager.prueba@example.com` (dominio reservado para ejemplos) |
+| UUID | `00000000-0000-4000-8000-0000000e0001` |
+| Rol / estado | `manager`, activo |
+| Local | `santa-teresa` (principal). No tiene Nosara: sirve también para probar «Sin permiso en ese local». |
+
+- **Recrearlo** (después de re-clonar staging, o si alguien lo tocó): correr
+  [`scripts/sql/staging_manager_prueba.sql`](scripts/sql/staging_manager_prueba.sql) en **staging** (ref
+  `hwiatgicyyqyezqwldia`; leer el ref antes, regla 7). Es idempotente, aborta si la base no está marcada como staging
+  (`club_entorno`) y no cambia la contraseña de un usuario que ya existe. Los cambios de rol, activo y local quedan en la
+  bitácora de permisos (165) con origen `sistema`.
+- **Contraseña:** el repo **no tiene** un lugar para credenciales de staging, así que el script le pone una contraseña
+  aleatoria que **nadie conoce** (se genera y se hashea dentro de la base; no sale en ninguna salida). Para entrar con
+  este usuario a la app de staging, primero hay que **resetearla**: el dueño, en el panel de Supabase de staging →
+  Authentication → Users → `manager.prueba@example.com` → poner una contraseña nueva, y guardarla **fuera del repo**
+  (nunca en el repo, el chat ni un PR).
+- **Para baterías y permisos no hace falta la contraseña:** se prueba con su JWT simulado dentro de una transacción
+  descartada (regla 4), p. ej.
+  `select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-0000000e0001","role":"authenticated"}', true); set local role authenticated;`
+- **No se crea en prod.** Las baterías que necesitan **dos** managers de locales distintos (la 171 con la 170) siguen
+  necesitando el segundo dentro de su propia transacción.
 
 ---
 

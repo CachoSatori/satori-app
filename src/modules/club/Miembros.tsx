@@ -10,12 +10,14 @@ import {
   regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp, getRoles, activarAnfitrion,
   getSociosPorConfirmar, socioConfirmar, paseToken, getSolicitudesSocio, type SocioPorConfirmar, type SolicitudSocio,
   getEdadSocio, type EdadSocio,
-  getPendientesAprobacion, resolverPendiente, type PendienteAprobacion, getLocalesClub,
+  getPendientesAprobacion, resolverPendiente, type PendienteAprobacion, getLocalesClub, getMisLocales,
   type ClubRol,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
 import { pideEdadAlReactivar } from './edadSocio'
 import { urlPortal, urlReferente } from './qrFormato'
+import { linkPortalWhatsApp, puedeLinkPortalDe } from './altaWhatsApp'
+import { ConfirmarWhatsApp } from './ConfirmarWhatsApp'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha, fmtFechaHora, TIPO_MIEMBRO_LABEL, TIPO_NEGOCIO_LABEL, TIPO_MOV_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -185,6 +187,15 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
   const [aviso, setAviso] = useState<{ tono: 'ok' | 'error'; t: string } | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [localAlta, setLocalAlta] = useState<string | null>(null)
+  // «Portal del socio»: el manager solo con socios de sus locales (la base lo exige igual desde la 172)
+  const [misLocales, setMisLocales] = useState<string[] | null>(null)
+  const rol = profile?.role
+  useEffect(() => {
+    if (rol !== 'manager') return
+    let vivo = true
+    getMisLocales().then(l => { if (vivo) setMisLocales(l ?? []) }).catch(() => { if (vivo) setMisLocales(null) })
+    return () => { vivo = false }
+  }, [rol])
   // Club compartido: el local donde se dio de alta (dato de club_config); con un solo local no hace falta mostrarlo
   useEffect(() => {
     let vivo = true
@@ -267,6 +278,11 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
             <Btn variant="danger" onClick={regenerar} disabled={ocupado}>Regenerar QR</Btn>
           </div>
         </Card>
+      )}
+
+      {/* Un socio (sin el QR del anfitrión) también necesita su link: alta anterior al WhatsApp con link, o no le llegó. */}
+      {f.tipo === 'socio' && f.estado === 'activo' && puedeLinkPortalDe(rol, f.location_id, misLocales) && (
+        <PortalSocio f={f} tel={contacto?.telefono ?? null} onEditar={onEditar} onAviso={setAviso} />
       )}
 
       {(profile?.role === 'owner' || profile?.role === 'manager') && f.estado === 'activo'
@@ -352,6 +368,58 @@ function AjusteOwner({ f, onHecho }: { f: Fila; onHecho: (texto: string) => Prom
         <input value={nota} onChange={e => setNota(e.target.value)} maxLength={300} placeholder="Por qué" style={inputStyle} />
       </label>
       <Btn onClick={guardar} disabled={!ok || enviando} style={{ marginTop: 8, width: '100%' }}>{enviando ? 'Guardando…' : 'Guardar'}</Btn>
+    </Card>
+  )
+}
+
+/**
+ * «Portal del socio» (16-nov, lo vio el dueño): copiar el link del portal o mandarlo por WhatsApp. El link es el de
+ * siempre (`club_miembro_token` solo lo LEE, no lo regenera; queda en la auditoría como «ver_link_portal»). Abrir la
+ * ficha no pide nada: el token se pide recién al tocar un botón. «Mandar por WhatsApp» exige confirmar el número
+ * (hallazgo 230): sin «Sí, es este» no se abre WhatsApp.
+ */
+function PortalSocio({ f, tel, onEditar, onAviso }: {
+  f: Fila; tel: string | null; onEditar: () => void; onAviso: (a: { tono: 'ok' | 'error'; t: string }) => void
+}) {
+  const [ocupado, setOcupado] = useState(false)
+  const [url, setUrl] = useState<string | null>(null)   // con url: mostrando «¿Este es su WhatsApp?»
+  async function copiar() {
+    setOcupado(true)
+    try {
+      await navigator.clipboard?.writeText(urlPortal(await tokenPortal(f.id)))
+      onAviso({ tono: 'ok', t: 'Link del portal copiado.' })
+    } catch (e) { onAviso({ tono: 'error', t: aClubError(e).message }) }
+    finally { setOcupado(false) }
+  }
+  async function pedirConfirmacion() {
+    if (!tel?.trim()) { onAviso({ tono: 'error', t: 'No tiene WhatsApp cargado: agregalo con «Editar» o copiá el link.' }); return }
+    setOcupado(true)
+    try { setUrl(urlPortal(await tokenPortal(f.id))) }
+    catch (e) { onAviso({ tono: 'error', t: aClubError(e).message }) }
+    finally { setOcupado(false) }
+  }
+  function mandar() {
+    // Sincrónico dentro del toque de «Sí, es este»: el navegador no bloquea la ventana nueva.
+    const link = url && tel ? linkPortalWhatsApp(tel, f.nombre, url, tel) : null
+    setUrl(null)
+    if (!link) { onAviso({ tono: 'error', t: 'No se pudo armar el link de WhatsApp: copiá el link del portal.' }); return }
+    window.open(link, '_blank', 'noopener')
+    onAviso({ tono: 'ok', t: 'Se abrió WhatsApp: revisá el mensaje y mandalo.' })
+  }
+  return (
+    <Card>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Portal del socio</div>
+      <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
+        Su «Mi Club», con su QR de socio. Es el mismo link de siempre: copiarlo o mandarlo no lo cambia. Queda en la auditoría.
+      </div>
+      {url ? (
+        <ConfirmarWhatsApp tel={tel ?? ''} enviando={false} onSi={mandar} onCorregir={() => { setUrl(null); onEditar() }} />
+      ) : (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Btn variant="secondary" onClick={copiar} disabled={ocupado}>⎘ Link del portal</Btn>
+          <Btn onClick={pedirConfirmacion} disabled={ocupado}>Mandar por WhatsApp</Btn>
+        </div>
+      )}
     </Card>
   )
 }
@@ -449,7 +517,7 @@ export function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, 
   }
 
   async function guardar() {
-    // La baja vence el saldo en el momento (decisión de Ismael); volver a activo no lo restituye.
+    // La baja vence el saldo en el momento (decisión del dueño); volver a activo no lo restituye.
     if (inicial?.estado === 'activo' && estado === 'baja' && saldoPersonas > 0 &&
         !window.confirm(`Dar de baja a ${inicial.nombre} vence su saldo (${saldoPersonas} personas). Volver a activarlo no lo restituye: eso solo lo hace el owner con un ajuste. ¿Seguir?`)) return
     setGuardando(true); setError(null)

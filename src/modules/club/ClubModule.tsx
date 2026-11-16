@@ -25,6 +25,7 @@ const Promociones = lazy(() => import('./Promociones'))
 const Marcadores = lazy(() => import('./Marcadores'))
 const Tablero = lazy(() => import('./Tablero'))
 const ResenaLocales = lazy(() => import('./ResenaLocales'))
+const ReservaLocales = lazy(() => import('./ReservaLocales'))
 const Cohortes = lazy(() => import('./Cohortes'))
 const Ranking = lazy(() => import('./Ranking'))
 const Embudo = lazy(() => import('./Embudo'))
@@ -164,6 +165,7 @@ function Locales({ locales, onCambio }: { locales: LocalClub[]; onCambio: () => 
       ))}
       {msg && <p style={{ color: C.ink, fontSize: 13 }}>{msg}</p>}
       <Suspense fallback={null}><ResenaLocales locales={locales} /></Suspense>
+      <Suspense fallback={null}><ReservaLocales locales={locales} /></Suspense>
       <Umbrales locales={locales} />
       <NuevoLocal locales={locales} onCreado={async (t) => { await onCambio(); setMsg(t) }} />
     </div>

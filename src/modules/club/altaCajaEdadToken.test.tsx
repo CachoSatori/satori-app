@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// #140 sobre main (156–158): el alta en caja pasa por `club_socio_alta_caja_v2` con `p_mayor_edad` (D6 A, mig 159)
+// #140 sobre main (156–158): el alta en caja pasa por `club_socio_alta_caja_v3` con `p_mayor_edad` (D6 A, mig 159)
 // Y usa el `token_portal` que devuelve (mig 156; la v2 devuelve la respuesta completa de la interna) para que el CAJERO
 // vea «Mandarle su link por WhatsApp ↗». Acá NO se simula la capa de API: se simula solo `supabase.rpc`, así la prueba
 // cae si la app vuelve a llamar a la de 5 argumentos, si no manda la edad o si la API descarta el token.
@@ -21,17 +21,22 @@ beforeEach(() => {
   configurarClubUrl('https://club.ejemplo.test')
   H.rol = 'cajero'
   H.rpc.mockReset().mockImplementation(async (fn: string) =>
-    fn === 'club_socio_alta_caja_v2' ? { data: RESP, error: null } : { data: null, error: { message: `no simulada: ${fn}` } })
+    fn === 'club_socio_alta_caja_v3' ? { data: RESP, error: null } : { data: null, error: { message: `no simulada: ${fn}` } })
 })
 
-describe('socioAltaCaja → club_socio_alta_caja_v2 (159) con token_portal (156)', () => {
+describe('socioAltaCaja → club_socio_alta_caja_v3 (173; la v2 de la 159 + cumpleaños) con token_portal (156)', () => {
   it('llama a la v2 con p_mayor_edad y devuelve el token del alta', async () => {
     const r = await socioAltaCaja('Ana Prueba', '88880000', null, true, true)
     expect(H.rpc).toHaveBeenCalledTimes(1)
     const [fn, args] = H.rpc.mock.calls[0]
-    expect(fn).toBe('club_socio_alta_caja_v2')
-    expect(args).toMatchObject({ p_nombre: 'Ana Prueba', p_whatsapp: '88880000', p_email: null, p_verifico_residencia: true, p_mayor_edad: true })
+    expect(fn).toBe('club_socio_alta_caja_v3')
+    expect(args).toMatchObject({ p_nombre: 'Ana Prueba', p_whatsapp: '88880000', p_email: null, p_verifico_residencia: true, p_mayor_edad: true,
+                                 p_cumple_dia: null, p_cumple_mes: null, p_cumple_permiso: null })
     expect(r.token_portal).toBe(TOK)
+  })
+  it('173: con cumpleaños manda día, mes y el permiso en true', async () => {
+    await socioAltaCaja('Ana Prueba', '88880000', null, true, true, { dia: 29, mes: 2 })
+    expect(H.rpc.mock.calls[0][1]).toMatchObject({ p_cumple_dia: 29, p_cumple_mes: 2, p_cumple_permiso: true })
   })
 })
 
@@ -45,13 +50,15 @@ describe('Escanear → alta en caja con edad: el cajero ve el botón del link', 
     fireEvent.click(campo(/Verifiqué que es local/))
     fireEvent.click(campo(/Es mayor de 18 años/))
     fireEvent.click(screen.getByText('Dar de alta'))
+    fireEvent.click(screen.getByText('Sí, es este'))   // hallazgo 230: confirma el WhatsApp
     const a = await screen.findByText(/Mandarle su link por WhatsApp/)
     expect(decodeURIComponent(a.closest('a')!.getAttribute('href')!)).toContain('https://club.ejemplo.test/p/' + TOK)
     const fns = H.rpc.mock.calls.map(c => c[0])
-    expect(fns).toContain('club_socio_alta_caja_v2')
+    expect(fns).toContain('club_socio_alta_caja_v3')
     expect(fns).not.toContain('club_socio_alta_caja')      // la de 5 argumentos queda interna (159)
+    expect(fns).not.toContain('club_socio_alta_caja_v2')   // la app usa la v3 (173)
     expect(fns).not.toContain('club_miembro_token')        // el cajero no pide el token general
-    expect(H.rpc.mock.calls.find(c => c[0] === 'club_socio_alta_caja_v2')![1]).toMatchObject({ p_mayor_edad: true })
+    expect(H.rpc.mock.calls.find(c => c[0] === 'club_socio_alta_caja_v3')![1]).toMatchObject({ p_mayor_edad: true })
     expect(screen.queryByText(/se lo manda un manager/)).toBeNull()
   })
 })

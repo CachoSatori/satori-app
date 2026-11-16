@@ -38,7 +38,7 @@ begin
     select t.id, t.numero_factura, ltrim(t.numero_factura, '0') as clave,
            coalesce(t.fecha_registra, t.fecha_cierra) as f, coalesce(t.cxc_crc, 0) as cxc, t.total_crc, t.estado,
            coalesce(t.mesa_factura, t.mesa) as mesa,
-           -- LC-A5 (Ismael, 08-nov): quién cobró la factura en el PoS, para la segregación de las que salen solo del PoS
+           -- LC-A5 (el dueño, 08-nov): quién cobró la factura en el PoS, para la segregación de las que salen solo del PoS
            array_remove(array[nullif(btrim(t.cajero_login), ''), nullif(btrim(t.salonero_login), '')], null) as pos_logins,
            -- (08-nov) turno de la factura (corte del local) y los logins fijos de caja que aparecen en ella
            case when (coalesce(t.fecha_registra, t.fecha_cierra) at time zone 'America/Costa_Rica')::time < v_cfg.turno_corte

@@ -95,6 +95,8 @@ export interface Saldo { personas: number; creditos: number }
 
 // ── Errores ──────────────────────────────────────────────────────────────────
 export const MSG_REFERENTE_INACTIVO = 'Referente dado de baja: seguí con la cuenta sin crédito'
+/** 176: el manager con una ficha (miembro, cupón, canje…) de un local que no es suyo. La base dice «Ficha de otro local». */
+export const MSG_FICHA_OTRO_LOCAL = 'Esta ficha es de otro local: la atiende el manager de ese local o el owner.'
 
 /** Error de la API con bandera de red: si es de red, el p_op se reusa en el reintento. */
 export class ClubError extends Error {
@@ -112,6 +114,7 @@ export function aClubError(e: unknown): ClubError {
   const msg = e instanceof Error ? e.message : (e as { message?: string } | null)?.message ?? String(e)
   if (msg === 'REFERENTE_INACTIVO') return new ClubError(MSG_REFERENTE_INACTIVO, false, 'REFERENTE_INACTIVO')
   if (RE_RED.test(msg)) return new ClubError('Sin conexión. Reintentá: no se va a duplicar.', true)
+  if (/ficha de otro local/i.test(msg)) return new ClubError(MSG_FICHA_OTRO_LOCAL, false, 'FICHA_OTRO_LOCAL')
   if (/permission denied|sin permiso/i.test(msg)) return new ClubError('Tu usuario no tiene permiso para esto: pedile a un manager.', false)
   return new ClubError(msg, false)
 }
@@ -140,10 +143,11 @@ const primero = <T>(d: T | T[]): T => (Array.isArray(d) ? d[0] : d)
 export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_resolver', { p_texto: texto })
 
 /**
- * Referencia al PoS para el piloto (decisiones de Ismael, 06 y 07-nov): la clave de cruce es el PEDIDO.
+ * Referencia al PoS para el piloto (decisiones del dueño, 06 y 07-nov): la clave de cruce es el PEDIDO.
  * La caja elige el pedido abierto del puente; el servidor guarda el pedido y la hora del escaneo, y el
  * cruce es la primera factura con ese pedido cerrada después del escaneo (tope 18 h).
- * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto).
+ * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto). Solo en la tarjeta
+ * física (mig 174): las cobradas HOY (día CR) o buscarla por los últimos dígitos del tiquete, hasta 3 días CR atrás.
  */
 export type PosRef =
   | { modo: 'pedido'; pedido: string; clave?: string | null; area?: string | null; mesa: string | null; total: number | null }
@@ -160,12 +164,27 @@ export interface FacturaReciente {
   consecutivo_fe?: string | null
   /** S0b: 'C' cerrada; 'R' cobrada, falta el cierre de caja (vale igual para registrar). */
   estado?: string | null
+  /** Mig 174: la factura ya tiene una tarjeta o un cupón cargado (no se puede usar otra vez para eso). */
+  usada?: boolean | null
 }
 /** S0b: la marca de una factura del plan B que todavía no pasó el cierre de caja (null si está cerrada). */
 export const marcaFactura = (f: Pick<FacturaReciente, 'estado'>) =>
   f.estado === 'R' ? 'Cobrada, falta el cierre de caja: vale igual' : null
 export const getPedidosAbiertos = (local: string | null = localClub) => llamar<PedidoAbierto[]>('club_pedidos_abiertos', { p_location: local })
 export const getFacturasRecientes = (local: string | null = localClub) => llamar<FacturaReciente[]>('club_facturas_recientes', { p_location: local })
+/** Mig 174: búsqueda mínima por tiquete (los últimos dígitos del consecutivo FE). */
+export const MIN_DIGITOS_TIQUETE = 4
+/** Solo los dígitos de lo que tipeó la caja («…12345», «1 2345» → «12345»). */
+export const digitosTiquete = (s: string) => s.replace(/\D/g, '').slice(0, 20)
+/**
+ * Mig 174 (plan B): sin búsqueda, las facturas cobradas HOY (día CR) del local, más recientes primero; con búsqueda
+ * (4 a 20 dígitos del final del tiquete), las de hoy y los 3 días CR anteriores. Cada una trae `usada`.
+ */
+export const buscarFacturas = (buscar: string | null, local: string | null = localClub) =>
+  llamar<FacturaReciente[]>('club_facturas_buscar', { p_buscar: buscar ? digitosTiquete(buscar) : null, p_location: local })
+/** Mig 174: qué decirle a la caja si la búsqueda no trae nada. */
+export const MSG_TIQUETE_NO_APARECE =
+  'No aparece ninguna factura con ese número. Revisá: ¿es de otro local? ¿la anularon? ¿tiene más de 3 días? Si es así, pedile al owner un ajuste.'
 
 const colones = (n: number | null | undefined) => `₡${Math.round(Number(n ?? 0)).toLocaleString('de-DE')}`
 const horaCR = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })
@@ -414,6 +433,8 @@ export function localesParaRol(locales: LocalClub[], rol: string | null | undefi
   const set = new Set(mios ?? [])
   return locales.filter(l => set.has(l.id))
 }
+/** Los ids de los locales del usuario (`mis_locales()`, 091). */
+export const getMisLocales = () => llamar<string[] | null>('mis_locales', {})
 /** Los locales del Club que la pantalla le ofrece al usuario: para el manager, solo los suyos. */
 export async function getLocalesClubParaRol(rol: string | null | undefined): Promise<LocalClub[]> {
   const locales = await getLocalesClub()
@@ -438,6 +459,17 @@ export const getResenasLocales = async (): Promise<Record<string, string | null>
 export async function setResenaUrl(id: string, url: string | null): Promise<void> {
   const filas = await leer(from<{ location_id: string }>('club_config').update({ resena_url: url }).eq('location_id', id).select('location_id'))
   if (filas.length !== 1) throw new ClubError('Solo el owner carga el link de reseña de un local', false)
+}
+/** 180 · El link de reservas (OpenTable) de cada local: «Reservar» del portal, botón de la página del cupón y WhatsApp de
+ * cumpleaños. Aparte de getLocalesClub, como la reseña: si la app llega antes que la columna, solo falla esto. */
+export const getReservasLocales = async (): Promise<Record<string, string | null>> =>
+  Object.fromEntries((await leer(from<{ location_id: string; reserva_url: string | null }>('club_config')
+    .select('location_id,reserva_url'))).map(r => [r.location_id, r.reserva_url ?? null]))
+/** 180 · Solo owner (RLS de club_config; queda en club_config_historial). `null` borra el link. La base solo acepta https
+ * de OpenTable (trigger club_config_reserva_url_trg); acá se valida antes con la misma expresión. */
+export async function setReservaUrl(id: string, url: string | null): Promise<void> {
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ reserva_url: url }).eq('location_id', id).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner carga el link de reservas de un local', false)
 }
 /** Solo owner. Alta de un local: queda APAGADO; con `copiarDe`, arranca con la configuración de ese local. */
 export const crearLocal = (p: { id: string; nombre: string; direccion: string | null; mapa: string | null; copiarDe: string | null }) =>
@@ -559,12 +591,21 @@ export interface AltaSocio {
   miembro_id: string; estado: 'activo'; provisional_hasta: string
   /** Mig 156: token del portal, SOLO si el alta creó a la persona (si el número ya era de alguien, null). */
   token_portal?: string | null
+  /** Mig 173: qué pasó con el cumpleaños. 'ya_tenia' = la persona ya existía y lo tenía (no se cambia en caja). */
+  cumple?: 'guardado' | 'no_dio' | 'ya_tenia' | 'sin_contacto'
 }
+/** Mig 173 (D-cumple-1 A): día y mes del cumpleaños, sin año. Solo se manda si la persona dio permiso. */
+export interface CumpleDiaMes { dia: number; mes: number }
 /** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme.
  *  D6 A (159): la caja confirma «es mayor de 18»; sin eso la base rechaza el alta (club_socio_alta_caja_v2, que envuelve
  *  a club_socio_alta_caja y devuelve su respuesta completa, incluido `token_portal` de la 156). */
-export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean, mayorEdad: boolean) =>
-  llamar<AltaSocio>('club_socio_alta_caja_v2', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad, p_location: localClub })
+/*  Mig 173 (D-cumple-1 A): club_socio_alta_caja_v3 = la v2 + cumpleaños opcional. `cumple` va SOLO si la persona dijo que sí
+ *  (el permiso viaja en true junto con el día y el mes); sin cumpleaños, los tres en null. La base valida antes del alta. */
+export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean, mayorEdad: boolean,
+                              cumple: CumpleDiaMes | null = null) =>
+  llamar<AltaSocio>('club_socio_alta_caja_v3', {
+    p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_mayor_edad: mayorEdad,
+    p_cumple_dia: cumple?.dia ?? null, p_cumple_mes: cumple?.mes ?? null, p_cumple_permiso: cumple ? true : null, p_location: localClub })
 /** Validar en caja una autoalta pendiente: pasa a activo provisional.
  *  D6 A (163): si la persona no tiene la edad registrada (autoaltas de antes de la 159), la caja confirma «es mayor de
  *  18» en esta misma llamada; sin eso la base rechaza (club_socio_validar_v2). `null` = no hizo falta preguntar. */
@@ -638,6 +679,57 @@ export const getPrimeros90Config = () => llamar<Primeros90Config>('club_primeros
 /** Solo owner. `activo` null = no cambia el encendido (es del Club entero); `cortesia` es la de ESTE local (null = ninguna). */
 export const guardarPrimeros90Config = (activo: boolean | null, cortesia: string | null) =>
   llamar<Primeros90Config>('club_primeros90_config_guardar', { p_activo: activo, p_cortesia: cortesia, p_location: localClub })
+
+// ── Mig 173 (D-cumple-2): beneficio de cumpleaños por local ──────────────────
+export interface CumpleConfig {
+  location_id: string; activo: boolean; beneficio: string; min_personas: number; dias_antes: number; dias_despues: number
+  uno_por_mesa: boolean; solo_reserva: boolean; reserva_url: string | null
+  cortesia: { id: string; codigo: string; nombre: string; activa: boolean } | null
+  lista_para_caja: boolean; actualizado_en?: string
+}
+export interface CumpleConfigDatos {
+  activo: boolean; beneficio: string; min_personas: number; dias_antes: number; dias_despues: number
+  uno_por_mesa: boolean; solo_reserva: boolean; reserva_url: string | null; cortesia_id: string | null
+}
+/** Owner y manager (el manager, solo su local). */
+export const getCumpleConfig = () => llamar<CumpleConfig>('club_cumple_config_ver', { p_location: localClub })
+export const guardarCumpleConfig = (d: CumpleConfigDatos) =>
+  llamar<CumpleConfig>('club_cumple_config_guardar', { p_datos: d, p_location: localClub })
+/** Inicio (owner y manager): socios activos con permiso y cumpleaños en los próximos `dias_antes` días, sin los ya avisados este año. */
+export interface CumpleProximo { miembro_id: string; nombre: string; faltan: number; con_whatsapp: boolean }
+export type CumpleProximos = CumpleConfig & { hoy: string; socios: CumpleProximo[] }
+export const getCumpleProximos = () => llamar<CumpleProximos>('club_cumple_proximos', { p_location: localClub })
+/** Marca «enviado» (una por socio y año del cumpleaños) y devuelve lo necesario para armar el WhatsApp. Queda auditado. */
+export type CumpleEnvio = CumpleConfig & { nombre: string; whatsapp: string; cumple: string; desde: string; hasta: string }
+export const enviarCumple = (miembro: string) => llamar<CumpleEnvio>('club_cumple_enviar', { p_miembro: miembro, p_location: localClub })
+/** Caja: ¿hoy cae en la ventana de su cumpleaños? Nunca devuelve la fecha. Mig 175: `ya_uso` = ya usó el beneficio del
+ *  año de este cumpleaños (en cualquier local); sin la 175 no viene. */
+export type CumpleEnCaja = { aplica: false } | ({ aplica: true; ya_uso?: boolean } & Pick<CumpleConfig,
+  'beneficio' | 'min_personas' | 'dias_antes' | 'dias_despues' | 'uno_por_mesa' | 'solo_reserva' | 'cortesia' | 'lista_para_caja'>)
+export const getCumpleEnCaja = (miembro: string) => llamar<CumpleEnCaja>('club_cumple_en_caja', { p_miembro: miembro, p_location: localClub })
+
+// ── Mig 175: el beneficio de cumpleaños se usa UNA vez por año por socio ─────
+/** Caja (owner, manager, cajero): marca el uso sobre la visita de HOY del socio. La base rechaza un segundo uso del año. */
+export interface CumpleUsado { ok: true; uso_id: string; cortesia: { codigo: string; nombre: string } }
+export const usarCumple = (visita: string) => llamar<CumpleUsado>('club_cumple_usar', { p_visita: visita, p_location: localClub })
+/** Owner y manager (de su local): las marcas del período (días CR). */
+export interface UsoCumple {
+  id: string; usado_en: string; anio: number; socio: string; operador: string; visita_clave: string | null
+  cortesia_codigo: string | null; deshecho_en: string | null; deshecho_nota: string | null; deshecho_por: string | null
+}
+export const getUsosCumple = (desde: string, hasta: string, local: string | null = localClub) =>
+  llamar<UsoCumple[]>('club_cumple_usos_listar', { p_desde: desde, p_hasta: hasta, p_location: local })
+/** Solo owner: deshace una marca hecha por error (nota de 5 a 300 letras; queda en la auditoría). */
+export const deshacerUsoCumple = (id: string, nota: string) =>
+  llamar<{ ok: true }>('club_cumple_uso_deshacer', { p_uso: id, p_nota: nota })
+/** Tablero y Excepciones (owner, manager de su local, contador): solo totales. */
+export interface ResumenCumple {
+  desde: string; hasta: string; local: string; usos: number; deshechos: number; con_cortesia: number
+  sin_articulo_en_factura: number; sin_factura: number; sin_precio: number
+  cortesia_costo_pct: number | null; cortesias_lista_crc: number; cortesias_costo_crc: number
+}
+export const getResumenCumple = (desde: string, hasta: string, local: string | null = localClub) =>
+  llamar<ResumenCumple>('club_cumple_usos_resumen', { p_desde: desde, p_hasta: hasta, p_location: local })
 
 // ── LC-MD: marcadores de descuento (configurables por local) ─────────────────
 export interface MarcadorDescuento {

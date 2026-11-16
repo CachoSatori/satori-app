@@ -85,7 +85,7 @@ describe('computeSupplierStatus — agenda de ciclo', () => {
 })
 
 describe('deuda del proveedor en su tarjeta — los huérfanos (supplier_id NULL) no son de nadie', () => {
-  // Los pendientes huérfanos existen en prod (Isleña ₡74.126,92 · GRUPO PAMPA ₡75.916,60) y se
+  // Los pendientes huérfanos existen en prod (dos facturas reales de proveedores) y se
   // gestionan en la pestaña Pendientes. Acá importa que NO se le imputen a ningún proveedor.
   const ms: CashMovement[] = [
     mov({ id: 'a', status: 'pendiente', amount_crc: 43374 }),                                         // del proveedor s1

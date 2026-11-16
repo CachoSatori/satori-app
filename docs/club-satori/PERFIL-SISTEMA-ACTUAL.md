@@ -25,7 +25,7 @@
 | Auth | Email/password (`signInWithPassword`) | pantalla `/login` |
 | Quién entra | Usuarios Firebase Auth cuyo `uid` está en `businesses.membersId` | query `array-contains` |
 | Roles | Custom claim `role` (cuenta dueño: `"root"`). **No** hay roles gestor/cajero/dueño en el front: cualquier member del business ve las mismas pantallas | Auth lookup; bundle sin checks de rol de UI |
-| Negocios | 2: **Satori Terrace Sushi Bar** (`uPberDoE9w19ydF6bZSA`, 2 members) y **Burger House** (`nueOeYoaWKJhYZavomUe`, 1 member) | lectura fresca `businesses` |
+| Negocios | 2: **Satori Terrace Sushi Bar** (`uPberDoE9w19ydF6bZSA`, 2 members) y **otro negocio (no Satori)** (`nueOeYoaWKJhYZavomUe`, 1 member) | lectura fresca `businesses` |
 | Cloud Functions | **NO VERIFICADO** (no hay `httpsCallable` / `cloudfunctions` en el bundle) | bundle |
 | Reglas seguridad | **NO VERIFICADO** texto de rules (hace falta admin). Inferido por REST: ver tabla abajo | pruebas REST |
 | Analytics | `measurementId` en config | `fire_config.js` |
@@ -40,7 +40,7 @@
 | `runQuery` `referrals`/`referrals_club` con `businessId ==` negocio donde `uid ∈ membersId` | OK |
 | `get` doc `referrals/{id}` | OK (probado) |
 | `listCollectionIds` | 403 |
-| Lectura referrals de Burger House con cuenta Satori | 403 |
+| Lectura referrals de otro negocio (no Satori) con cuenta Satori | 403 |
 
 **NO VERIFICADO:** si `role=root` cambia permisos; reglas de write; existencia de otras colecciones no listables.
 
@@ -316,10 +316,10 @@ Fragmentos clave (`main.aaffacf4.js`):
 | Nombre vacío | 1 |
 | `amountPointsRate` | string `"1"` en Firestore (código asume número) |
 | Drift saldo | 2 activos `peopleBalance` ≠ suma referrals |
-| Segunda business | Burger House en mismo proyecto; no migrar salvo pedido |
+| Segunda business | otro negocio (no Satori) en mismo proyecto; no migrar salvo pedido |
 | Cancelación | 136 débitos 05-nov 11:09–11:42 CR; marcar en migración |
 
-**Limpiar antes de migrar:** unificar teléfonos E.164; decidir duplicados nombre+negocio; reconciliar 2 drifts; tipar `amountPointsRate`; filtrar `deleted`; excluir o marcar cancelación 12m; no importar Burger House sin revisión; normalizar `None` en phones.
+**Limpiar antes de migrar:** unificar teléfonos E.164; decidir duplicados nombre+negocio; reconciliar 2 drifts; tipar `amountPointsRate`; filtrar `deleted`; excluir o marcar cancelación 12m; no importar otro negocio (no Satori) sin revisión; normalizar `None` en phones.
 
 ---
 
@@ -385,7 +385,7 @@ Respaldo pre-cancelación (09:19 CR, sin contacto): `/workspace/creditos/bot/res
 - Uso real de Storage / Analytics  
 - Unidad club vs colones PoS (UI formatea USD `/100`)  
 - Máximo por visita u otras reglas solo en procesos humanos  
-- Contenido/historial de Burger House  
+- Contenido/historial de otro negocio (no Satori)  
 - Identidad de los 2 members (uids) más allá de conteo  
 
 ---

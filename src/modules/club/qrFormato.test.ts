@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { parsearQR, urlCupon, urlReferente, urlPortal, urlCanje, urlSocio, configurarClubUrl, clubUrl, MSG_SIN_DOMINIO } from './qrFormato'
-import { aClubError, opcionesCanje, MSG_REFERENTE_INACTIVO } from '../../shared/api/club'
+import { aClubError, opcionesCanje, MSG_REFERENTE_INACTIVO, MSG_FICHA_OTRO_LOCAL } from '../../shared/api/club'
 
 describe('parsearQR', () => {
   beforeEach(() => configurarClubUrl('https://club.ejemplo.test'))
@@ -60,6 +60,16 @@ describe('errores y opciones de canje', () => {
     expect(e.message).toBe(MSG_REFERENTE_INACTIVO)
     expect(e.codigo).toBe('REFERENTE_INACTIVO')
     expect(e.esRed).toBe(false)
+  })
+  it('176: ficha de otro local (manager) → mensaje propio, no «pedile a un manager»', () => {
+    const e = aClubError({ message: 'Ficha de otro local', code: '42501' })
+    expect(e.message).toBe(MSG_FICHA_OTRO_LOCAL)
+    expect(e.message).toMatch(/^Esta ficha es de otro local/)
+    expect(e.message).not.toMatch(/pedile a un manager/)
+    expect(e.codigo).toBe('FICHA_OTRO_LOCAL')
+    // el resto de los 42501 sigue igual
+    expect(aClubError({ message: 'Sin permiso en ese local' }).message).toMatch(/pedile a un manager/)
+    expect(aClubError({ message: 'permission denied for function x' }).message).toMatch(/pedile a un manager/)
   })
   it('error de red → esRed (el p_op se reusa)', () => {
     expect(aClubError(new TypeError('Failed to fetch')).esRed).toBe(true)

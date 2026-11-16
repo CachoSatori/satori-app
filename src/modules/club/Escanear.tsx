@@ -1,7 +1,8 @@
 /**
  * Escanear — un solo botón en caja (SPEC §2.4).
  *  · Cupón vigente → personas + PEDIDO (de los abiertos en el PoS) → confirmar → «+N personas a {referente}».
- *    Plan B si el pedido ya se cerró o la lista no carga: elegir la factura de las últimas 2 h.
+ *    Plan B si el pedido ya se cerró o la lista no carga: elegir la factura de las últimas 2 h (en la tarjeta física, mig
+ *    174: las cobradas hoy o buscarla por tiquete hasta 3 días atrás).
  *  · Pase de referente (/r/) → saldo y «Tarjeta física». NO habilita el canje (R-01): cualquiera puede
  *    tener una foto del QR de la recepción.
  *  · Código de canje (/k/, 6 caracteres, lo genera el referente en su portal y vence a los 10 min) →
@@ -13,13 +14,17 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
-  opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
+  opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, buscarFacturas, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, getEdadSocio, type EdadSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
-  type FacturaReciente, conPremioDeReto, type RetoEnCaja,
+  type FacturaReciente, conPremioDeReto, type RetoEnCaja, getCumpleEnCaja, type CumpleEnCaja, usarCumple,
+  digitosTiquete, MIN_DIGITOS_TIQUETE, MSG_TIQUETE_NO_APARECE,
 } from '../../shared/api/club'
+import { dateCR, todayCR } from '../../shared/utils'
+import { cumpleDelFormulario, MESES_CORTOS, textoCumpleCaja } from './cumple'
 import { parsearQR, urlPortal } from './qrFormato'
 import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
+import { ConfirmarWhatsApp } from './ConfirmarWhatsApp'
 import { esCuentaSinCreditos, MSG_EQUIPO_SIN_CANJE } from './equipo'
 import { pideEdadAlValidar } from './edadSocio'
 import { Aviso, Btn, Card, Chip } from './ui'
@@ -28,6 +33,12 @@ import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './e
 import { useAuth } from '../../shared/hooks/useAuth'
 
 const LectorQR = lazy(() => import('./LectorQR'))
+
+export const MSG_CUMPLE_FALTA = 'Cumpleaños: elegí día y mes y marcá el permiso, o dejalo todo vacío.'
+export const MSG_CUMPLE_INVALIDO = 'Cumpleaños: esa fecha no existe (revisá día y mes).'
+
+/** Mig 174: la marca de una factura del plan B que ya tiene una tarjeta o un cupón cargado. */
+export const MSG_FACTURA_USADA = 'Ya tiene una tarjeta o un cupón cargado: no se puede usar otra vez'
 
 type Actual =
   | { kind: 'cupon'; r: ResolverCupon; codigo: string }
@@ -285,13 +296,19 @@ function CampoPersonas({ v, set }: { v: string; set: (s: string) => void }) {
  * Pedido del PoS: lista de pedidos abiertos del local (puente, ~75 s). Un toque elige; el servidor guarda
  * el pedido y la hora del escaneo. Plan B si el pedido ya se cerró o la lista no carga: la lista de
  * facturas cobradas de las últimas 2 h (hora, total, mesa si tiene; S0b: también las que esperan el cierre de caja, marcadas).
- * No se tipea nada.
+ * `modoTarjeta` (SOLO la tarjeta física del referente, mig 174, decisión del dueño 15-nov): la lista trae las cobradas
+ * HOY (día CR), se busca por los últimos dígitos del tiquete hasta 3 días CR atrás (para cargar al día siguiente una
+ * tarjeta de anoche) y una factura que ya tiene tarjeta o cupón se muestra marcada y no se elige (la base también la
+ * frena). Cupón, canje y visita de socio siguen igual que antes.
  */
-function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) => void }) {
+function SelectorPedido({ v, set, modoTarjeta = false }: { v: PosRef | null; set: (p: PosRef | null) => void; modoTarjeta?: boolean }) {
   const [pedidos, setPedidos] = useState<PedidoAbierto[] | null>(null)
   const [facturas, setFacturas] = useState<FacturaReciente[] | null>(null)
   const [err, setErr] = useState<string | false>(false)
-  const [errB, setErrB] = useState(false)
+  const [errB, setErrB] = useState<string | false>(false)
+  const [tiquete, setTiquete] = useState('')
+  /** null = la lista de hoy; si no, los dígitos buscados */
+  const [buscado, setBuscado] = useState<string | null>(null)
   const [planB, setPlanB] = useState(v?.modo === 'factura')
   const cargar = useCallback(() => {
     setErr(false); setPedidos(null)
@@ -302,10 +319,14 @@ function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) 
         setErr(/puente sin datos/i.test(m) ? 'Puente sin datos.' : 'No se pudo cargar la lista de pedidos.'); setPedidos([]); setPlanB(true)
       })
   }, [])
-  const cargarB = useCallback(() => {
-    setErrB(false); setFacturas(null)
-    getFacturasRecientes().then(setFacturas).catch(() => { setErrB(true); setFacturas([]) })
-  }, [])
+  const cargarB = useCallback((q: string | null = null) => {
+    setErrB(false); setFacturas(null); setBuscado(q)
+    ;(modoTarjeta ? buscarFacturas(q) : getFacturasRecientes()).then(setFacturas).catch(e => {
+      setErrB(q ? aClubError(e).message : 'No se pudo cargar la lista de facturas. Probá «Actualizar».'); setFacturas([])
+    })
+  }, [modoTarjeta])
+  const digitos = digitosTiquete(tiquete)
+  const buscarTiquete = () => { if (digitos.length >= MIN_DIGITOS_TIQUETE) cargarB(digitos) }
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargar() }, [cargar])
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -342,22 +363,49 @@ function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: '0.85rem', color: C.muted }}>
             {err ? `${err} Elegí` : pedidos?.length === 0 ? 'No hay pedidos abiertos en el PoS. Elegí' : 'Pedido ya cerrado: elegí'}{' '}
-            la factura de la lista (cobradas en las últimas 2 horas).
+            {modoTarjeta ? 'la factura de la lista (cobradas hoy) o buscala por número de tiquete.' : 'la factura de la lista (cobradas en las últimas 2 horas).'}
           </div>
+          {modoTarjeta && <form onSubmit={e => { e.preventDefault(); buscarTiquete() }} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+            <label style={{ flex: 1 }}>
+              <span style={labelStyle}>Buscar por número de tiquete</span>
+              <input value={tiquete} onChange={e => setTiquete(e.target.value)} inputMode="numeric" autoComplete="off"
+                placeholder={`Últimos dígitos (mínimo ${MIN_DIGITOS_TIQUETE})`} style={inputStyle} />
+            </label>
+            <Btn type="submit" variant="secondary" disabled={digitos.length < MIN_DIGITOS_TIQUETE}>Buscar</Btn>
+          </form>}
+          {buscado && (
+            <div style={{ fontSize: '0.85rem', color: C.muted }}>
+              Tiquetes que terminan en {buscado} (hoy y los 3 días anteriores).
+            </div>
+          )}
           {facturas === null && <div style={{ color: C.muted }}>Cargando facturas…</div>}
-          {errB && <div style={{ color: C.red, fontSize: '0.85rem' }}>No se pudo cargar la lista de facturas. Probá «Actualizar».</div>}
-          {facturas?.length === 0 && !errB && <div style={{ color: C.muted, fontSize: '0.85rem' }}>No hay facturas cobradas en las últimas 2 horas. Cobrá la cuenta en el PoS y tocá «Actualizar».</div>}
+          {errB && <div style={{ color: C.red, fontSize: '0.85rem' }}>{errB}</div>}
+          {facturas?.length === 0 && !errB && (
+            <div style={{ color: C.muted, fontSize: '0.85rem' }}>
+              {buscado ? MSG_TIQUETE_NO_APARECE
+                : modoTarjeta ? 'No hay facturas cobradas hoy en este local. Cobrá la cuenta en el PoS y tocá «Actualizar»; si es de otro día, buscala por número de tiquete.'
+                : 'No hay facturas cobradas en las últimas 2 horas. Cobrá la cuenta en el PoS y tocá «Actualizar».'}
+            </div>
+          )}
           {facturas?.map(f => {
             const sel = v?.modo === 'factura' && v.numero_factura === f.numero_factura
+            const bloqueada = modoTarjeta && !!f.usada
+            const dia = modoTarjeta ? dateCR(f.hora) : ''
             return (
-              <button key={f.numero_factura} onClick={() => set(posDeFactura(f))} aria-pressed={sel} style={opcion(sel)}>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{describirFactura(f)}</div>
+              <button key={f.numero_factura} onClick={() => { if (!bloqueada) set(posDeFactura(f)) }} aria-pressed={sel}
+                disabled={bloqueada} style={{ ...opcion(sel), ...(bloqueada ? { cursor: 'not-allowed', opacity: 0.6 } : {}) }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>
+                  {dia && dia !== todayCR() ? `${dia.slice(8, 10)}/${dia.slice(5, 7)} · ` : ''}{describirFactura(f)}
+                </div>
+                {bloqueada && <div style={{ fontSize: '0.8rem', color: C.red, fontWeight: 600 }}>{MSG_FACTURA_USADA}</div>}
                 {marcaFactura(f) && <div style={{ fontSize: '0.8rem', color: C.muted }}>{marcaFactura(f)}</div>}
               </button>
             )
           })}
           <div style={{ display: 'flex', gap: 6 }}>
-            <Btn variant="secondary" onClick={cargarB} style={{ flex: 1 }}>Actualizar</Btn>
+            {buscado
+              ? <Btn variant="secondary" onClick={() => { setTiquete(''); cargarB(null) }} style={{ flex: 1 }}>Ver las de hoy</Btn>
+              : <Btn variant="secondary" onClick={() => cargarB(null)} style={{ flex: 1 }}>Actualizar</Btn>}
             {!err && <Btn variant="ghost" onClick={() => { setPlanB(false); set(null); cargar() }} style={{ flex: 2 }}>Volver a los pedidos abiertos</Btn>}
           </div>
         </div>
@@ -591,7 +639,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                   excepción «Tarjeta física» para que la revise otra persona.
                 </div>
                 <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
-                <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
+                <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} modoTarjeta />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando ? (
                   <Confirmacion texto={`Tarjeta física: +${p.personas} personas a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
@@ -623,6 +671,8 @@ function PanelSocio({ d, onCerrar, onValidado }: {
   const [err, setErr] = useState<string | null>(null)
   const baja = d.persona_estado !== 'activo' || d.estado === 'baja'
   const pendiente = !baja && d.estado === 'pendiente'
+  // 173/175: el cumpleaños se lee solo para el socio activo (como antes, cuando el recuadro se montaba solo ahí)
+  const [cumple, recargarCumple] = useCumpleEnCaja(d.id, !baja && !pendiente)
   // D6 A (163): rol de socio para saber si hay que preguntar la edad. undefined = no se pudo leer (se pregunta igual)
   const [edad, setEdad] = useState<EdadSocio | null | undefined | 'cargando'>('cargando')
   useEffect(() => {
@@ -675,7 +725,8 @@ function PanelSocio({ d, onCerrar, onValidado }: {
           {d.provisional_hasta && (
             <Aviso tono="info">Alta provisional hasta el {fmtFechaHora(d.provisional_hasta)}: tiene el beneficio; falta que la confirme un manager.</Aviso>
           )}
-          <VisitaSocio miembro={d.id} />
+          <AvisoCumple c={cumple} />
+          <VisitaSocio miembro={d.id} cumple={cumple} onCumpleUsado={recargarCumple} />
           <div style={{ fontSize: '0.8rem', color: C.muted }}>
             Este QR identifica al socio (descuento y cortesía). No sirve para créditos: para canjear, el anfitrión muestra el
             código de «Canjear».
@@ -688,10 +739,42 @@ function PanelSocio({ d, onCerrar, onValidado }: {
 }
 
 /**
+ * Mig 173 (D-cumple-2): ¿hoy cae en la ventana de su cumpleaños? (la base nunca devuelve la fecha). Si falla la lectura,
+ * null: no se muestra nada y la visita sigue igual. Mig 175: `recargar` después de marcar el uso (pasa a «ya lo usó»).
+ */
+function useCumpleEnCaja(miembro: string, leer: boolean): [CumpleEnCaja | null, () => void] {
+  const [c, setC] = useState<CumpleEnCaja | null>(null)
+  const [vuelta, setVuelta] = useState(0)
+  useEffect(() => {
+    if (!leer) return
+    let vivo = true
+    getCumpleEnCaja(miembro).then(r => { if (vivo) setC(r) }).catch(() => { if (vivo) setC(null) })
+    return () => { vivo = false }
+  }, [miembro, leer, vuelta])
+  return [c, useCallback(() => setVuelta(v => v + 1), [])]
+}
+
+/**
+ * Mig 173: el recuadro con el beneficio, sus condiciones y el artículo de «CORTESÍA CLUB» (₡0; el tablero lo cuenta a
+ * costo). Mig 175: si ya lo usó este año (en cualquier local), dice «Ya usó su beneficio de cumpleaños este año».
+ */
+function AvisoCumple({ c }: { c: CumpleEnCaja | null }) {
+  if (!c || !c.aplica) return null
+  const x = textoCumpleCaja(c)
+  return (
+    <div role="status" style={{ border: `2px dashed ${x.ofrecer ? C.gold : C.red}`, borderRadius: 8, padding: '0.6rem 0.7rem', background: C.paper }}>
+      <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Beneficio de cumpleaños</div>
+      <div style={{ fontSize: '1.05rem', fontWeight: 800 }}>{x.titulo}</div>
+      <div style={{ fontSize: '0.85rem' }}>{x.detalle}</div>
+    </div>
+  )
+}
+
+/**
  * LC-A4: visita del socio. La caja elige el pedido y registra la visita; la base dice QUÉ APLICAR (descuento de la promo
  * vigente y la cortesía sorteada). Reescanear el mismo día devuelve la misma (no se re-sortea). La app no toca el PoS.
  */
-function VisitaSocio({ miembro }: { miembro: string }) {
+function VisitaSocio({ miembro, cumple = null, onCumpleUsado }: { miembro: string; cumple?: CumpleEnCaja | null; onCumpleUsado?: () => void }) {
   const [pos, setPos] = useState<PosRef | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [res, setRes] = useState<(QueAplicar & { reto?: RetoEnCaja }) | null>(null)
@@ -724,6 +807,8 @@ function VisitaSocio({ miembro }: { miembro: string }) {
         )}
         {/* mig 168: la cortesía especial de bienvenida (primeros 90 días), aparte para que no se pierda */}
         <AvisoPrimeros90 p={res.primeros90} />
+        {/* mig 175: el beneficio de cumpleaños se marca sobre ESTA visita (una vez por año; la base lo frena) */}
+        {res.visita_id && <UsoCumple visita={res.visita_id} c={cumple} onUsado={onCumpleUsado} />}
       </div>
     )
   }
@@ -736,8 +821,43 @@ function VisitaSocio({ miembro }: { miembro: string }) {
   )
 }
 
+/**
+ * Mig 175 (decisión del dueño 15-nov): con la visita registrada y el socio en la ventana de su cumpleaños, la caja marca
+ * «usó el beneficio de cumpleaños» (queda con la visita/factura, quién y el local). Una vez por año por socio, en cualquier
+ * Satori: si ya lo usó, no aparece el botón y la base rechaza otra marca. Deshacer una marca: solo el owner (Promociones).
+ */
+export function UsoCumple({ visita, c, onUsado }: { visita: string; c: CumpleEnCaja | null; onUsado?: () => void }) {
+  const [enviando, setEnviando] = useState(false)
+  const [hecho, setHecho] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  if (hecho) return <div style={{ marginTop: 8 }}><Aviso tono="ok">{hecho}</Aviso></div>
+  if (!c || !c.aplica || c.ya_uso || !textoCumpleCaja(c).ofrecer) return null
+  async function marcar() {
+    setEnviando(true); setErr(null)
+    try {
+      const r = await usarCumple(visita)
+      setHecho(`Beneficio de cumpleaños registrado (una vez por año). Marcá el artículo ${r.cortesia.codigo} (${r.cortesia.nombre}) de «CORTESÍA CLUB».`)
+      onUsado?.()
+    } catch (e) { setErr(aClubError(e).message); onUsado?.() }
+    finally { setEnviando(false) }
+  }
+  return (
+    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {err && <Aviso tono="error">{err}</Aviso>}
+      <Btn variant="secondary" onClick={marcar} disabled={enviando}>
+        {enviando ? 'Registrando…' : `Usó el beneficio de cumpleaños (${c.beneficio})`}
+      </Btn>
+    </div>
+  )
+}
+
 /** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia» y «es mayor de 18» (D6 A); NUNCA un número de documento. */
 /** D1 + mig 156: al terminar, «Mandarle su link por WhatsApp ↗» también para el cajero (el alta devuelve el token del socio nuevo). */
+/**
+ * Hallazgo 230 (D 16-nov): antes del alta (y del link del portal), «¿Este es su WhatsApp? +506 xxxx xxxx»: el cajero se
+ * lo lee al cliente y confirma («Sí, es este») o vuelve al campo («Corregir»). Sin confirmar no hay alta ni link: el
+ * link del portal abre la cuenta del socio, y a un número equivocado le llegaría a otra persona.
+ */
 function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; rol: string | null | undefined }) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState('')
@@ -745,38 +865,58 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
   const [email, setEmail] = useState('')
   const [verifico, setVerifico] = useState(false)
   const [mayor, setMayor] = useState(false)   // D6 A: obligatorio; la base rechaza el alta sin él
+  // 173 (D-cumple-1 A): cumpleaños opcional, solo si la persona da permiso
+  const [cDia, setCDia] = useState('')
+  const [cMes, setCMes] = useState('')
+  const [cPermiso, setCPermiso] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [confirmando, setConfirmando] = useState(false)   // hallazgo 230: mostrando «¿Este es su WhatsApp?»
+  const telRef = useRef<HTMLInputElement>(null)
+  const cumple = cumpleDelFormulario(cDia, cMes, cPermiso)
   if (!abierto) {
     return <Btn variant="secondary" onClick={() => setAbierto(true)}>＋ Nuevo socio del Local Club</Btn>
   }
-  async function guardar() {
+  /** «Dar de alta»: primero la confirmación del WhatsApp (hallazgo 230); el alta sale recién con «Sí, es este». */
+  function pedirConfirmacion() {
+    setErr(null)
+    if (!cumple.ok) { setErr(cumple.error === 'falta' ? MSG_CUMPLE_FALTA : MSG_CUMPLE_INVALIDO); return }
+    setConfirmando(true)
+  }
+  function corregir() {
+    setConfirmando(false)
+    telRef.current?.focus(); telRef.current?.select()
+  }
+  /** `telOk`: el número que el cajero confirmó con el cliente. El alta y el link usan ese y solo ese. */
+  async function guardar(telOk: string) {
     setEnviando(true); setErr(null)
     try {
-      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico, mayor)
-      const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`
+      if (!cumple.ok) { setErr(cumple.error === 'falta' ? MSG_CUMPLE_FALTA : MSG_CUMPLE_INVALIDO); return }
+      const r = await socioAltaCaja(nombre.trim(), telOk.trim(), email.trim() || null, verifico, mayor, cumple.cumple)
+      const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.` +
+        (r.cumple === 'guardado' ? ' Cumpleaños guardado.' : r.cumple === 'ya_tenia' ? ' Ya tenía el cumpleaños cargado: no se cambió.' : '')
       // Sin link no se frena nada: el alta ya quedó (el link sale después desde Miembros).
       let link: string | null = null
       try {
         const tok = await tokenDelAlta(r, rol, tokenPortal)
-        link = tok ? linkAltaWhatsApp(tel, nombre, urlPortal(tok)) : null
+        link = tok ? linkAltaWhatsApp(telOk, nombre, urlPortal(tok), telOk) : null
       } catch { link = null }
       const extra = link ? ''
         : puedeMandarLinkPortal(rol) ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).'
         : ' El link de su portal se lo manda un manager desde Miembros.'
       onHecho(texto + extra, link)
-      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false); setMayor(false)
+      setAbierto(false); setConfirmando(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false); setMayor(false); setCDia(''); setCMes(''); setCPermiso(false)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }
   }
   return (
     <Card>
-      <form onSubmit={e => { e.preventDefault(); guardar() }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <form onSubmit={e => { e.preventDefault(); if (!confirmando) pedirConfirmacion() }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong>Nuevo socio del Local Club</strong>
         <label><span style={labelStyle}>Nombre y apellido</span>
           <input value={nombre} onChange={e => setNombre(e.target.value)} autoComplete="off" style={inputStyle} /></label>
         <label><span style={labelStyle}>WhatsApp</span>
-          <input value={tel} onChange={e => setTel(e.target.value)} inputMode="tel" autoComplete="off" placeholder="8 dígitos o con código de país" style={inputStyle} /></label>
+          <input ref={telRef} value={tel} onChange={e => { setTel(e.target.value); setConfirmando(false) }} inputMode="tel" autoComplete="off" placeholder="8 dígitos o con código de país" style={inputStyle} /></label>
         <label><span style={labelStyle}>Email (opcional)</span>
           <input value={email} onChange={e => setEmail(e.target.value)} inputMode="email" autoComplete="off" style={inputStyle} /></label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
@@ -787,16 +927,39 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
           <input type="checkbox" checked={mayor} onChange={e => setMayor(e.target.checked)} />
           <span>Es mayor de 18 años (preguntale; el Local Club es solo para mayores)</span>
         </label>
+        {/* 173 (D-cumple-1 A): cumpleaños opcional, día y mes sin año, solo con su permiso */}
+        <fieldset style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.5rem 0.6rem' }}>
+          <legend style={labelStyle}>Cumpleaños (opcional)</legend>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <label style={{ flex: 1 }}><span style={labelStyle}>Día</span>
+              <select value={cDia} onChange={e => setCDia(e.target.value)} style={inputStyle} aria-label="Día del cumpleaños">
+                <option value="">—</option>
+                {Array.from({ length: 31 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1}</option>)}
+              </select></label>
+            <label style={{ flex: 2 }}><span style={labelStyle}>Mes</span>
+              <select value={cMes} onChange={e => setCMes(e.target.value)} style={inputStyle} aria-label="Mes del cumpleaños">
+                <option value="">—</option>
+                {MESES_CORTOS.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
+              </select></label>
+          </div>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+            <input type="checkbox" checked={cPermiso} onChange={e => setCPermiso(e.target.checked)} />
+            <span>Dio permiso para usar su cumpleaños en un beneficio (preguntale; si dice que no, dejalo vacío)</span>
+          </label>
+        </fieldset>
         <div style={{ fontSize: '0.8rem', color: C.muted }}>
           Contale el aviso de privacidad: guardamos nombre y WhatsApp solo para el Local Club y se puede dar de baja desde su portal.
-          Queda registrada la versión vigente del aviso. El cumpleaños no se carga en caja: solo en el alta por la web, con su permiso.
+          Queda registrada la versión vigente del aviso. El cumpleaños (sin el año) se guarda solo si te dio permiso; después no se cambia en caja.
         </div>
         {err && <Aviso tono="error">{err}</Aviso>}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico || !mayor}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
-          <Btn type="button" variant="ghost" onClick={() => { setAbierto(false); setErr(null) }}>Cancelar</Btn>
-        </div>
+        {confirmando ? <ConfirmarWhatsApp tel={tel} enviando={enviando} onSi={() => guardar(tel)} onCorregir={corregir} /> : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico || !mayor || !cumple.ok}>Dar de alta</Btn>
+            <Btn type="button" variant="ghost" onClick={() => { setAbierto(false); setConfirmando(false); setErr(null) }}>Cancelar</Btn>
+          </div>
+        )}
       </form>
     </Card>
   )
 }
+

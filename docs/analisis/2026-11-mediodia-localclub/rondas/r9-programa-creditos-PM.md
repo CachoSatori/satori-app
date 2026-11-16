@@ -2,7 +2,7 @@
 
 Reporte: https://claude.ai/artifact/9Ad3sbMcV4q2gMLfJbNXcq
 
-## Fuentes entregadas por Ismael (no se guardan en el repo)
+## Fuentes entregadas por el dueño (no se guardan en el repo)
 
 Las planillas tienen teléfonos, correos y cédulas: quedan fuera del repo.
 
@@ -84,7 +84,7 @@ Las planillas tienen teléfonos, correos y cédulas: quedan fuera del repo.
   - Hay que cruzar el Excel de comisiones contra el PoS antes de pagar los ₡301k pendientes.
 - **Regalía PM:** solo hubo una (feb-2025).
 - **El canal casi desapareció en 2026.**
-- **Valor del crédito:** confirmado por Ismael en ₡18.000.
+- **Valor del crédito:** confirmado por el dueño en ₡18.000.
 
 ### SQL
 

@@ -5012,24 +5012,35 @@ html, body, #root {
   z-index: 100;
 }
 
-/* ── VentasModule tabs — compact on mobile ───────────────────── */
+/* ── Barra de pestañas (.vt-nav-tabs) en el celular ──────────────
+   Admin, Club, Clientes, Inventario, Propinas y Ventas.
+   Grilla de 4 columnas que crece en filas: se ven TODAS las pestañas que el rol puede
+   ver, sin deslizar ni menú «Más» (antes se escondía toda pestaña después de la 8.ª y en
+   Club no aparecían Embudo, Promociones, Descuentos, Campañas ni Locales).
+   Con 3–4 filas la barra deja de ser sticky en el celular: se queda arriba y se va con
+   el scroll, para no tapar un cuarto de la pantalla. Nunca esconder una pestaña acá:
+   lo cuida src/navTabsMovil.test.ts. */
 @media (max-width: 760px) {
   .vt-nav-tabs {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     padding: 0;
     overflow-x: visible;
-    flex-wrap: wrap;
+    position: static;
   }
   .vt-nav-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 0.6rem 0.4rem;
     font-size: 0.72rem;
+    line-height: 1.2;
     text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
     border-bottom: 2px solid transparent;
     border-right: 1px solid rgba(0,0,0,0.06);
   }
-  /* Show only first 8 tabs, others in overflow */
-  .vt-nav-tab:nth-child(n+9) { display: none; }
 }
 
 /* ── Module card status badge ────────────────────────────────── */

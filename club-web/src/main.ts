@@ -17,12 +17,15 @@ import './styles.css'
 import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
-import { validarCumple } from './cumple'
+import { validarCumple, leerEstadoCumple, vistaCumple } from './cumple'
 import { esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon } from './resena'
 import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 import { leerAvance, textosAvance } from './avance'
 import { leerRetos, textosReto } from './retos'
+import { crearTokenPortal } from './portalToken'
+import { tarjetaReservar, urlReservaSocio, urlWidgetOpenTable } from './reservar'
+import { botonReservaCupon } from './reservaCupon'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -64,7 +67,7 @@ const msgError = (e: string) =>
      tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red, tope_canje: t.tope_canje,
      sin_saldo_canje: t.sin_saldo_canje, tope_altas: t.tope_altas, verificacion: t.alta_verificacion,
      datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible,
-     equipo_sin_canje: t.equipo_sin_canje } as Record<string, string>)[e] ?? t.servicio
+     equipo_sin_canje: t.equipo_sin_canje, cumple_ya_cargado: t.cumple_ya_cargado } as Record<string, string>)[e] ?? t.servicio
 
 // ── Formatos ─────────────────────────────────────────────────────────────────
 const fecha = (iso: string, conHora = true) =>
@@ -101,7 +104,9 @@ const optinHecho = (c: string) => { try { return localStorage.getItem(`club.opti
 const marcarOptin = (c: string) => { try { localStorage.setItem(`club.optin.${c}`, '1') } catch { /* nada */ } }
 
 // ── Vistas ───────────────────────────────────────────────────────────────────
-interface LocalPub { id: string; nombre: string; direccion: string | null; mapa: string | null }
+interface LocalPub { id: string; nombre: string; direccion: string | null; mapa: string | null
+  /** mig 180: link de reservas (OpenTable) del local del cupón, tal cual; null si el local no tiene */
+  reserva?: string | null }
 interface CuponVer { estado: 'vigente' | 'usado' | 'vencido'; vence_en: string; referente: string | null; local?: LocalPub | null
   /** 158: link de reseña de Google del local, solo con el cupón usado hace menos de 7 días */
   resena?: string | null }
@@ -120,7 +125,9 @@ async function vistaCupon(codigo: string, venceEn: string, referente: string | n
       // LC-ML: el local del cupón viene de la base; sin señal, solo la marca
       h('p', { class: 'local' }, [local?.nombre ? `${LOCAL.nombre} · ${local.nombre}` : LOCAL.nombre, local?.direccion].filter(Boolean).join(' · '),
         local?.mapa?.startsWith('https://') ? ' · ' : '',
-        local?.mapa?.startsWith('https://') ? h('a', { href: local.mapa, target: '_blank', rel: 'noopener' }, t.ver_mapa) : '')),
+        local?.mapa?.startsWith('https://') ? h('a', { href: local.mapa, target: '_blank', rel: 'noopener' }, t.ver_mapa) : ''),
+      // 180: «Reservar una mesa» con el OpenTable del local del cupón (Club → Locales); sin link, no aparece
+      botonReservaCupon(local, t.reservar_titulo) ?? ''),
     optinHecho(codigo) ? avisoEl('ok', t.optin_gracias) : formOptin(codigo),
   )
   // 158: mientras el cupón está vigente y la página abierta, se fija cada ~20 s (máx. 10 min) si la caja ya lo usó
@@ -284,6 +291,8 @@ interface Portal {
   socio?: {
     estado: 'pendiente' | 'activo'; desde: string; codigo_socio: string | null; beneficio: string | null; visitas_mes: number | null
     cortesias: Array<{ sorpresa: boolean; cantidad: number; motivo: string; vence_en: string | null }> | null
+    /** mig 179: el link de reserva (OpenTable) del local del socio, tal cual; null si el local no tiene */
+    reserva_url?: string | null
   } | null
   /** 167: reseña de Google cada N visitas (la base decide si toca y de qué local); null si no toca */
   resena?: ResenaSocio | null
@@ -468,6 +477,8 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
       }))
     })
   }
+  // 173 (D-cumple-1 A): el cumpleaños se agrega UNA vez desde acá si no lo dio en el alta; la base no devuelve la fecha
+  const cumpleBox = seccionCumple(token)
   const sec = h('section', { class: 'tarjeta', 'aria-label': t.socio_titulo },
     h('h2', {}, t.socio_titulo),
     h('p', {}, activo ? t.socio_activo : t.socio_pendiente),
@@ -478,7 +489,13 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),
     activo && avanceBox,
     qrBox,
+    // D 16-nov (el dueño): «Reservar» con el widget de OpenTable armado desde el link del local del socio (mig 179), en el
+    // idioma del portal; debajo, el link tal cual. Sin link del local, el rid por defecto. Nada del socio va a OpenTable.
+    // Opción B (16-nov): campaña «local» (esta tarjeta vive solo en «Mi Club», que existe solo si hay socio de Local Club).
+    tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton, abrir: t.reservar_abrir, falla: t.reservar_falla, marco: t.reservar_marco },
+      urlReservaSocio(socio.reserva_url, 'local'), urlWidgetOpenTable(socio.reserva_url, idioma, 'local')),
     activo && retosBox,
+    cumpleBox,
     err, baja)
   baja.addEventListener('click', async () => {
     if (!window.confirm(t.socio_baja_confirmar)) return
@@ -488,6 +505,44 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     baja.disabled = false; err.append(avisoEl('err', msgError(r.error)))
   })
   return sec
+}
+
+/** 173: «Su cumpleaños» en «Mi Club». Se pide aparte; si falla o no corresponde, no se muestra nada. */
+function seccionCumple(token: string): HTMLElement {
+  const box = h('div')
+  void api<unknown>(`portal/${token}/cumple`).then(r => {
+    const vista = vistaCumple(r.ok ? leerEstadoCumple(r.data) : null)
+    if (vista === 'ya') { box.replaceChildren(h('div', { class: 'avance' }, h('h3', {}, t.cumple_titulo), h('p', { class: 'sub' }, t.cumple_ya))); return }
+    if (vista !== 'form') return
+    const err = h('div')
+    const cDia = h('select', { id: 'p-cdia' }, h('option', { value: '' }, '—'),
+      ...Array.from({ length: 31 }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1)))) as HTMLSelectElement
+    const cMes = h('select', { id: 'p-cmes' }, h('option', { value: '' }, '—'),
+      ...t.meses.map((m, i) => h('option', { value: String(i + 1) }, m))) as HTMLSelectElement
+    const cPermiso = h('input', { type: 'checkbox', id: 'p-cpermiso' }) as HTMLInputElement
+    const boton = h('button', { type: 'submit', class: 'btn' }, t.cumple_guardar) as HTMLButtonElement
+    const form = h('form', {
+      onsubmit: async (e: Event) => {
+        e.preventDefault(); err.replaceChildren()
+        const c = validarCumple(cDia.value, cMes.value, cPermiso.checked)
+        if (!c.ok || !c.cumple) { err.append(avisoEl('err', c.ok || c.error === 'falta' ? t.alta_cumple_falta : t.alta_cumple_invalido)); return }
+        boton.disabled = true
+        const x = await api<{ ok: boolean }>(`portal/${token}/cumple`, { method: 'POST',
+          body: JSON.stringify({ dia: c.cumple.dia, mes: c.cumple.mes, permiso: true }) })
+        if (x.ok) { box.replaceChildren(h('div', { class: 'avance' }, h('h3', {}, t.cumple_titulo), avisoEl('ok', t.cumple_listo))); anunciar(t.cumple_listo); return }
+        boton.disabled = false
+        err.append(avisoEl('err', x.error === 'datos_invalidos' ? t.alta_cumple_falta : msgError(x.error)))
+      },
+    },
+      h('fieldset', { class: 'cumple' }, h('legend', {}, t.cumple_titulo),
+        h('p', { class: 'sub' }, t.cumple_txt),
+        h('label', { for: 'p-cdia' }, t.alta_cumple_dia), cDia,
+        h('label', { for: 'p-cmes' }, t.alta_cumple_mes), cMes,
+        h('label', { class: 'check', for: 'p-cpermiso' }, cPermiso, h('span', {}, t.alta_cumple_permiso))),
+      err, boton)
+    box.replaceChildren(form)
+  })
+  return box
 }
 
 /** A4.5: con los dos roles, dos pestañas («Mi Club» y «Anfitrión»); con uno, una sola sección. */
@@ -606,12 +661,17 @@ function paginaPase(token: string) {
 }
 
 // ── Router ───────────────────────────────────────────────────────────────────
+const tokenPortal = crearTokenPortal(() => { try { return sessionStorage } catch { return null } })
+
 function ruta() {
   pararReloj()
   document.documentElement.lang = idioma
   document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === idioma)))
   if (/^\/alta\/?$/.test(location.pathname)) return paginaAlta()
   if (/^\/privacidad\/?$/.test(location.pathname)) return paginaPrivacidad()
+  // #214 hallazgo 2: /p/{token} → /p/ en la barra; el token sigue en memoria y en sessionStorage de esta pestaña
+  const tokP = tokenPortal(location.pathname, history)
+  if (tokP) return paginaPortal(tokP)
   const m = location.pathname.match(/^\/([rcpkswb])\/([^/]+)\/?$/)
   if (!m) return pintar(h('h1', {}, t.inicio), h('p', { class: 'sub' }, t.inicio_txt))
   const [, tipo, cod] = m

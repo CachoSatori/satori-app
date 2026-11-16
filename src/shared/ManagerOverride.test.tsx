@@ -55,7 +55,7 @@ describe('ManagerOverride — autorización por solo contraseña (mig 045)', () 
   })
 
   it('cajero + contraseña válida: resuelve con la identidad del SERVER + la contraseña para re-validar', async () => {
-    rpcSpy.mockResolvedValue({ data: { user_id: 'u-boss', email: 'boss@satori.cr', role: 'manager' }, error: null })
+    rpcSpy.mockResolvedValue({ data: { user_id: 'u-boss', email: 'boss@ejemplo.test', role: 'manager' }, error: null })
     const results = setup()
 
     await act(async () => { fireEvent.click(screen.getByText('pedir')) })
@@ -63,7 +63,7 @@ describe('ManagerOverride — autorización por solo contraseña (mig 045)', () 
     await act(async () => { fireEvent.submit(document.querySelector('form.cd-modal')!) })
 
     expect(rpcSpy).toHaveBeenCalledWith('verify_manager_password', { p_password: 'clave-boss' })
-    expect(results).toEqual([{ ok: true, managerEmail: 'boss@satori.cr', managerId: 'u-boss', managerPassword: 'clave-boss' }])
+    expect(results).toEqual([{ ok: true, managerEmail: 'boss@ejemplo.test', managerId: 'u-boss', managerPassword: 'clave-boss' }])
   })
 
   it('colisión: el error explícito del server se muestra tal cual y NO autoriza', async () => {

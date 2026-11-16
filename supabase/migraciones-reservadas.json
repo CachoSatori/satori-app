@@ -1,5 +1,5 @@
 {
-  "_que_es": "Registro de numeración de migraciones (decisión de Ismael, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
+  "_que_es": "Registro de numeración de migraciones (decisión del dueño, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
   "bloques": {
     "caja": {
       "tipo": "creacion",
@@ -98,6 +98,18 @@
       "bloque": "caja",
       "rama": "claude/alias-proveedor-rpc",
       "renumerada_a": "153"
+    },
+    "097": {
+      "nombre": "esquema_centimos_como_prod",
+      "bloque": "caja",
+      "rama": "claude/esquema-centimos-alinear",
+      "renumerada_a": "177"
+    },
+    "098": {
+      "nombre": "esquema_columnas_caja_como_prod",
+      "bloque": "caja",
+      "rama": "claude/esquema-columnas-caja-faltantes",
+      "renumerada_a": "178"
     },
     "100": {
       "nombre": "club_catalogo_locales",
@@ -206,6 +218,48 @@
       "bloque": "club",
       "rama": "claude/hotfix-miembro-guardar",
       "renumerada_a": "171"
+    },
+    "118": {
+      "nombre": "club_local_manager_2",
+      "bloque": "club",
+      "rama": "claude/club-local-manager-2",
+      "renumerada_a": "172"
+    },
+    "119": {
+      "nombre": "club_cumple_caja_portal_beneficio",
+      "bloque": "club",
+      "rama": "claude/club-cumple-promo",
+      "renumerada_a": "173"
+    },
+    "120": {
+      "nombre": "club_facturas_dia_busqueda",
+      "bloque": "club",
+      "rama": "claude/club-facturas-dia-busqueda",
+      "renumerada_a": "174"
+    },
+    "121": {
+      "nombre": "club_cumple_uso_anual",
+      "bloque": "club",
+      "rama": "claude/club-cumple-uso-anual",
+      "renumerada_a": "175"
+    },
+    "122": {
+      "nombre": "club_local_manager_listas",
+      "bloque": "club",
+      "rama": "claude/club-local-manager-3",
+      "renumerada_a": "176"
+    },
+    "124": {
+      "nombre": "club_portal_reserva_local",
+      "bloque": "club",
+      "rama": "claude/club-portal-reserva-local",
+      "renumerada_a": "179"
+    },
+    "125": {
+      "nombre": "club_reserva_url_por_local",
+      "bloque": "club",
+      "rama": "claude/club-link-reserva-local",
+      "renumerada_a": "180"
     },
     "150": {
       "nombre": "club_satori_esquema",
@@ -326,6 +380,60 @@
       "bloque": "pase",
       "rama": "claude/hotfix-miembro-guardar",
       "origen": "117"
+    },
+    "172": {
+      "nombre": "club_local_manager_2",
+      "bloque": "pase",
+      "rama": "claude/club-local-manager-2",
+      "origen": "118"
+    },
+    "173": {
+      "nombre": "club_cumple_caja_portal_beneficio",
+      "bloque": "pase",
+      "rama": "claude/club-cumple-promo",
+      "origen": "119"
+    },
+    "174": {
+      "nombre": "club_facturas_dia_busqueda",
+      "bloque": "pase",
+      "rama": "claude/club-facturas-dia-busqueda",
+      "origen": "120"
+    },
+    "175": {
+      "nombre": "club_cumple_uso_anual",
+      "bloque": "pase",
+      "rama": "claude/club-cumple-uso-anual",
+      "origen": "121"
+    },
+    "176": {
+      "nombre": "club_local_manager_listas",
+      "bloque": "pase",
+      "rama": "claude/club-local-manager-3",
+      "origen": "122"
+    },
+    "177": {
+      "nombre": "esquema_centimos_como_prod",
+      "bloque": "pase",
+      "rama": "claude/esquema-centimos-alinear",
+      "origen": "097"
+    },
+    "178": {
+      "nombre": "esquema_columnas_caja_como_prod",
+      "bloque": "pase",
+      "rama": "claude/esquema-columnas-caja-faltantes",
+      "origen": "098"
+    },
+    "179": {
+      "nombre": "club_portal_reserva_local",
+      "bloque": "pase",
+      "rama": "claude/club-portal-reserva-local",
+      "origen": "124"
+    },
+    "180": {
+      "nombre": "club_reserva_url_por_local",
+      "bloque": "pase",
+      "rama": "claude/club-link-reserva-local",
+      "origen": "125"
     }
   }
 }

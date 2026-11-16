@@ -35,20 +35,25 @@ export function urlReservaSocio(reservaUrl: unknown): string | null {
 
 /**
  * D 16-nov (el dueño): «Reservar» se hace con el WIDGET de OpenTable dentro del portal (sin salir del Club). El dueño carga
- * UN dato por local, el LINK (Promociones); el script del widget se arma a partir de él:
+ * UN dato por local, el LINK (Promociones); el widget se arma a partir de él:
  * - rid = `restref` (links /r/…?restref=) o `rid` (links /restref/client/?rid=) del link; solo dígitos.
- * - ot_source / ot_campaign = los del link (así OpenTable registra el origen «Club Satori»); si faltan o traen algo raro,
- *   «Club Satori».
+ * - otSource / otCampaign = `ot_source` / `ot_campaign` del link (así OpenTable registra el origen «Club Satori»); si
+ *   faltan o traen algo raro, «Club Satori».
  * - lang = el idioma que eligió el socio en el portal (es → es-MX, en → en-US).
- * - El resto fijo, como el script que generó el dueño en OpenTable.
+ * - El resto fijo, como lo arma el loader de OpenTable para el script que generó el dueño (type standard, tema 1).
  * Sin link del local (o uno que no es de OpenTable) → el rid por defecto (config.ts) con origen «Club Satori». Con link
- * válido pero sin rid reconocible → null: no hay widget y queda solo «Abrir en OpenTable» (nunca el widget de otro local).
- * El script se pide SIEMPRE a https://www.opentable.com (lo único que permite la CSP de _headers) y los parámetros van con
- * URLSearchParams: nada del socio (ni su token, ni su nombre, ni su teléfono) entra en la URL.
+ * válido pero sin rid reconocible → null: no hay widget y queda el botón (nunca el widget de otro local).
+ *
+ * Revisión de seguridad (#214): NINGÚN script de OpenTable corre en nuestro origen (el loader veía el DOM, la ruta con el
+ * token y el localStorage, y su log mandaba location.href). En su lugar, un <iframe> directo a la página «mural» que arma
+ * el loader, aislado con sandbox y sin Referer. isNewTab=true a propósito: sin el loader no hay ventana encima del
+ * portal, así que «reservar» abre la disponibilidad de OpenTable en otra pestaña.
+ * Siempre https://www.opentable.com (lo único que permite frame-src en _headers); parámetros con URLSearchParams: nada
+ * del socio (ni su token, ni su nombre, ni su teléfono) entra en la URL.
  */
 export const OT_ORIGEN_DEFECTO = 'Club Satori'
 export const OT_WIDGET_ORIGEN = 'https://www.opentable.com'
-const OT_WIDGET_RUTA = '/widget/reservation/loader'
+const OT_WIDGET_RUTA = '/widget/reservation/mural'
 const OT_LANG = { es: 'es-MX', en: 'en-US' } as const
 const RID_OK = /^\d{1,12}$/
 // el origen que ve el dueño en OpenTable: letras, números, espacio, punto, guion y guion bajo (≤ 60)
@@ -72,25 +77,29 @@ export function urlWidgetOpenTable(reservaUrl: unknown, idioma: 'es' | 'en'): st
   }
   if (!RID_OK.test(rid)) return null
   const p = new URLSearchParams([
-    ['rid', rid], ['type', 'standard'], ['theme', 'standard'], ['color', '1'], ['dark', 'false'], ['iframe', 'true'],
-    ['domain', 'com'], ['lang', OT_LANG[idioma] ?? OT_LANG.es], ['newtab', 'false'],
-    ['ot_source', src], ['ot_campaign', camp], ['cfe', 'true'],
+    ['colorThemeId', '1'], ['isDarkMode', 'false'], ['domain', 'com'], ['isIframe', 'true'],
+    ['lang', OT_LANG[idioma] ?? OT_LANG.es], ['isNewTab', 'true'], ['otCampaign', camp], ['otSource', src],
+    ['restaurantIds', rid], ['type', 'standard'], ['font', 'BrandonText'], ['primaryColor', 'ffffff'],
+    ['primaryFontColor', '333333'], ['buttonColor', 'da3743'], ['buttonFontColor', 'ffffff'], ['logoPid', '0'],
+    ['backgroundPid', '0'], ['demo', 'false'], ['otLogo', 'standard'], ['loadAllWidgets', 'false'], ['theme', 'standard'],
   ])
   // URLSearchParams escribe el espacio como «+»; OpenTable lo genera como %20 («Club%20Satori»). Un «+» real ya viene %2B.
   const url = `${OT_WIDGET_ORIGEN}${OT_WIDGET_RUTA}?${p.toString().replace(/\+/g, '%20')}`
   return new URL(url).origin === OT_WIDGET_ORIGEN ? url : null
 }
 
-export interface TextosReservar { titulo: string; txt: string; boton: string; abrir: string; falla: string }
+export interface TextosReservar { titulo: string; txt: string; boton: string; abrir: string; falla: string; marco: string }
 
-/** Cuánto se espera a que el widget pinte su iframe antes de avisar que use el link. */
+/** Cuánto se espera a que cargue el iframe del widget antes de avisar que use el link. */
 export const WIDGET_ESPERA_MS = 10000
+/** El sandbox del iframe: scripts y formularios de OpenTable en SU origen; popups para «reservar» (isNewTab). Sin top-navigation. */
+export const WIDGET_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
 
 /**
- * La tarjeta «Reservar una mesa» de «Mi Club». Con `widgetSrc`: el widget de OpenTable incrustado (el script se inserta
- * dentro de la tarjeta y OpenTable pinta su iframe ahí mismo) y debajo un link chico «Abrir en OpenTable» con el link tal
- * cual, por si el widget no carga; si el script falla o tarda más de WIDGET_ESPERA_MS, aparece el aviso para usar el link.
- * Sin `widgetSrc`: el link con forma de botón, como antes. Sin link válido, no hay tarjeta (null). DOM sin innerHTML.
+ * La tarjeta «Reservar una mesa» de «Mi Club». Con `widgetSrc`: el widget de OpenTable en un <iframe> (224×301, el tamaño
+ * del widget «standard») y debajo un link chico «Abrir en OpenTable» con el link tal cual, por si el widget no carga; si
+ * el iframe no termina de cargar en WIDGET_ESPERA_MS, aparece el aviso para usar el link. Sin `widgetSrc`: el link con
+ * forma de botón. Sin link válido, no hay tarjeta (null). DOM sin innerHTML.
  */
 export function tarjetaReservar(x: TextosReservar, url: string | null = urlReservaOpenTable(), widgetSrc: string | null = null): HTMLElement | null {
   if (!url) return null
@@ -102,7 +111,7 @@ export function tarjetaReservar(x: TextosReservar, url: string | null = urlReser
   a.href = url
   a.target = '_blank'
   a.rel = 'noopener noreferrer'
-  if (!widgetSrc || !widgetSrc.startsWith(OT_WIDGET_ORIGEN + '/')) {
+  if (!widgetSrc || !widgetSrc.startsWith(OT_WIDGET_ORIGEN + OT_WIDGET_RUTA + '?')) {
     a.className = 'btn'
     a.textContent = x.boton
     box.append(h3, p, a)
@@ -116,14 +125,20 @@ export function tarjetaReservar(x: TextosReservar, url: string | null = urlReser
   aviso.className = 'sub reservar-falla'
   aviso.textContent = x.falla
   aviso.hidden = true
-  const fallo = () => { aviso.hidden = false }
-  const s = document.createElement('script')
-  s.src = widgetSrc
-  s.async = true
-  s.referrerPolicy = 'no-referrer'
-  s.addEventListener('error', fallo)
-  widget.append(s)
-  setTimeout(() => { if (!widget.querySelector('iframe')) fallo() }, WIDGET_ESPERA_MS)
+  const f = document.createElement('iframe')
+  f.src = widgetSrc
+  f.title = x.marco
+  f.width = '224'
+  f.height = '301'
+  f.setAttribute('loading', 'lazy')
+  f.setAttribute('referrerpolicy', 'no-referrer')
+  f.setAttribute('sandbox', WIDGET_SANDBOX)
+  f.setAttribute('scrolling', 'no')
+  let cargo = false
+  f.addEventListener('load', () => { cargo = true; aviso.hidden = true })
+  f.addEventListener('error', () => { aviso.hidden = false })
+  widget.append(f)
+  setTimeout(() => { if (!cargo) aviso.hidden = false }, WIDGET_ESPERA_MS)
   const pie = document.createElement('p'); pie.className = 'sub'; pie.append(a)
   box.append(h3, p, widget, aviso, pie)
   return box

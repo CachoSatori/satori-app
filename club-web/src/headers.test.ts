@@ -31,18 +31,15 @@ function csp(): Record<string, string[]> {
   return out
 }
 
-test('CSP: OpenTable solo en script-src y frame-src, con el host exacto www.opentable.com (sin comodines)', () => {
+test('CSP (#214): OpenTable SOLO en frame-src, host exacto; NUNCA en script-src ni en ningún otro', () => {
   const c = csp()
-  expect(c['script-src']).toEqual(["'self'", 'https://challenges.cloudflare.com', 'https://www.opentable.com'])
+  expect(c['script-src']).toEqual(["'self'", 'https://challenges.cloudflare.com'])
   expect(c['frame-src']).toEqual(['https://challenges.cloudflare.com', 'https://www.opentable.com'])
-  for (const [k, v] of Object.entries(c)) {
-    if (k === 'script-src' || k === 'frame-src') continue
-    expect(v.join(' ')).not.toMatch(/opentable/i)
-  }
-  expect(Object.values(c).flat().filter(v => /opentable/i.test(v))).toEqual(['https://www.opentable.com', 'https://www.opentable.com'])
+  for (const [k, v] of Object.entries(c)) if (k !== 'frame-src') expect(v.join(' ')).not.toMatch(/opentable/i)
+  expect(Object.values(c).flat().filter(v => /opentable/i.test(v))).toEqual(['https://www.opentable.com'])
 })
 
-test('CSP: connect-src sigue en self (el registro de errores del widget, que manda la URL de la página, queda bloqueado)', () => {
+test('CSP: connect-src sigue en self, sin comodines', () => {
   const c = csp()
   expect(c['connect-src']).toEqual(["'self'"])
   expect(c['default-src']).toEqual(["'self'"])

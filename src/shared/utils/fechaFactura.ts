@@ -5,7 +5,9 @@
 //
 // (13-nov) Fecha de factura leída por la IA: Costa Rica escribe DÍA/MES/AÑO, y la IA a veces la lee al revés
 // («9/11/2026» → 2026-09-11 en vez de 2026-11-09). Esta capa es determinística y corre en el cliente, después de la IA:
-//  a) si hay clave FE de 50 dígitos, la fecha de emisión está en la clave (posiciones 4–9 = DDMMAA) y manda;
+//  a) si hay clave FE de 50 dígitos, la fecha de emisión está en la clave (posiciones 4–9 = DDMMAA) y manda; (15-nov)
+//     si la fecha impresa difiere, se avisa con las dos («La clave dice … y la factura dice …») y el usuario la
+//     puede corregir: nunca se pisa una con otra en silencio;
 //  b) (14-nov) sin clave, una fecha ambigua (día y mes ≤ 12 y distintos) se analiza con el calendario: una lectura es
 //     POSIBLE si no queda en el futuro y tiene a lo sumo VENTANA_DIAS. Si solo una es posible, se toma esa (con aviso
 //     si es la invertida). Si las dos son posibles —o ninguna, pero las dos quedan en el pasado— la app no adivina:
@@ -27,6 +29,9 @@ export const VENTANA_DIAS = 60
 export const DIAS_FACTURA_VIEJA = 7
 export const MSG_FECHA_INVERTIDA = 'Revisá la fecha: la leímos como D/M.'
 export const MSG_FECHA_FUTURA = 'Revisá la fecha: queda en el futuro.'
+// (15-nov) La fecha de emisión de la clave FE y la impresa (leída por la IA) no coinciden.
+export const msgClaveDistinta = (deClave: string, leida: string, hoy: string) =>
+  `La clave dice ${fechaLarga(deClave, hoy)} y la factura dice ${fechaLarga(leida, hoy)}: revisá la fecha.`
 export const msgFacturaVieja = (n: number) => `Factura de hace ${n} días: revisá la fecha.`
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/
@@ -91,9 +96,17 @@ export function normalizarFechaFactura(
   fechaIA: string | null | undefined, claveFe: string | null | undefined, hoy: string,
 ): FechaNormalizada {
   const deClave = fechaDeClaveFE(claveFe)
-  if (deClave) return { fecha: deClave, origen: 'clave', aviso: avisoFechaFactura(deClave, hoy) }
-
   const leida = esFechaValida(fechaIA) ? fechaIA : null
+  if (deClave) {
+    // (15-nov, hallazgo 228) La clave manda, pero no pisa en silencio la fecha impresa: si difieren, se avisa con las
+    // dos. Si es la misma con día y mes al revés, es la lectura D/M de siempre (aviso corto de fecha invertida).
+    let difiere: string | null = null
+    if (leida && leida !== deClave) {
+      difiere = invertirDiaMes(leida) === deClave ? MSG_FECHA_INVERTIDA : msgClaveDistinta(deClave, leida, hoy)
+    }
+    return { fecha: deClave, origen: 'clave', aviso: unirONull(difiere, avisoFechaFactura(deClave, hoy)) }
+  }
+
   if (!leida) return { fecha: null, origen: 'ninguna', aviso: null }
 
   const inv = invertirDiaMes(leida)
@@ -124,6 +137,10 @@ export function normalizarFechaFactura(
 
 function unir(...avisos: (string | null)[]): string {
   return avisos.filter(Boolean).join(' ')
+}
+
+function unirONull(...avisos: (string | null)[]): string | null {
+  return unir(...avisos) || null
 }
 
 // Aviso para una fecha de factura cualquiera (también la que escribe el usuario): si queda en el futuro, o si tiene más

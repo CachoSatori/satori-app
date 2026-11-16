@@ -3,7 +3,7 @@
 // Rediseño B4, en el DOM: frase, 3 números, «Para hacer hoy» y el estado «todo en orden».
 // La base está simulada (solo lecturas); los datos son ficticios.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, cleanup, waitFor, within } from '@testing-library/react'
+import { render, screen, cleanup, waitFor, within, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 
 let role = 'owner'
@@ -394,5 +394,32 @@ describe('Inicio · Club · Para revisar hoy · locales y duplicados (164)', () 
     montar()
     await waitFor(() => expect(screen.getByText('Revisar las excepciones del Club')).toBeTruthy())
     expect(screen.getByText('2 excepciones')).toBeTruthy()
+  })
+})
+
+// 15-nov (validación del dueño): cada aviso de «Para hacer hoy» lleva directo a la vista donde está lo que avisa.
+describe('Inicio · los avisos llevan directo a su vista (15-nov)', () => {
+  function montarDestinos() {
+    return render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/club" element={<Destino />} />
+          <Route path="/caja" element={<Destino />} />
+        </Routes>
+      </MemoryRouter>)
+  }
+  it('«Revisar las excepciones del Club» abre Excepciones en el local con que se contaron', async () => {
+    clubExcepciones = 2
+    clubLocalActual = 'local-a'
+    montarDestinos()
+    fireEvent.click(await screen.findByText('Revisar las excepciones del Club'))
+    await waitFor(() => expect(screen.getByText('destino /club?vista=excepciones&local=local-a')).toBeTruthy())
+  })
+  it('«Revisar los movimientos de Caja pendientes» abre Caja en «Pendientes»', async () => {
+    tablas.cash_movements = { data: [], count: 3 }
+    montarDestinos()
+    fireEvent.click(await screen.findByText('Revisar los movimientos de Caja pendientes'))
+    await waitFor(() => expect(screen.getByText('destino /caja?vista=pendientes')).toBeTruthy())
   })
 })

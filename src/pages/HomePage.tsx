@@ -346,6 +346,8 @@ export default function HomePage() {
       // 164: un canje sin código no sale dos veces. Si el bloque «Club · Para revisar hoy» ya lo muestra, se descuenta
       // de las excepciones abiertas (mismas filas, mismos 30 días) del local que leyó ese conteo.
       clubExcepciones: gestionaClub && !clubFallo ? Math.max(0, clubAbiertas - canjesEnBloque(clubAlertas, clubLocal)) : null,
+      // 15-nov: el aviso abre Excepciones en el mismo local con que se contó.
+      clubLocal,
     }, visibles)
   }, [status, statusFallo, alerta, isManager, role, gestionaClub, clubAbiertas, clubFallo, clubAlertas, clubLocal])
 

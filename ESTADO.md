@@ -1,7 +1,7 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-16, 12:45 hora de Costa Rica.** `main` = merge del #219 (el #218 entró a las 12:36). **Ledger de prod = 180. Staging = 180**
+**Al día: 2026-11-16, 13:05 hora de Costa Rica.** `main` = merge del #220 (`5396649`, 12:57; el #219 entró a las 12:43 y el #218 a las 12:36). **Ledger de prod = 180. Staging = 180**
 (verificado el 16/11 11:30 con list_migrations). Todos los merges con firma u OK del dueño. El bloque anterior (06:45 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md)** (el handoff del 15/16-nov está en el proyecto privado).
 
@@ -11,7 +11,7 @@
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`5395d41`** antes del #219 (merge del #218, 16/11 12:36 -06:00). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **180** (staging también 180, verificado 16/11 11:30 CR). |
+| `main` | **`5396649`** (merge del #220, 16/11 12:57 -06:00; antes `9225d87` = #219, 12:43). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **180** (staging también 180, verificado 16/11 11:30 CR). |
 | `staging` | rama sin cambios desde el 13/11 (`4726b7f`); **base de staging con ledger 180** (16/11 08:49: 153 y 155–180 aplicadas de `main`, mismas 29 versiones y nombres que prod) | Proyecto Supabase de staging. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
@@ -40,7 +40,8 @@
 | #216 | | `3791496` | 09:06 | link del portal (copiar y WhatsApp con confirmación) también en la ficha del socio |
 | #217 | | `2f54b19` | ~09:15 | docs ESTADO 16-nov 09:15 |
 | #218 | | `5395d41` | 12:36 | docs ESTADO (foto de las 11:45; ledger prod y staging 180) |
-| #219 | | este PR | ~12:45 | batería 173 que no se traga el error + manager de prueba en staging (`scripts/sql/`, `STAGING.md`; sin efecto en prod) |
+| #219 | | `9225d87` | 12:43 | batería 173 que no se traga el error + manager de prueba en staging (`scripts/sql/`, `STAGING.md`; sin efecto en prod) |
+| #220 | | `5396649` | 12:57 | campañas de OpenTable por grupo (club-web; OK del dueño 16/11 12:47, Decisión 2 opción A) |
 
 - **Pendiente del dueño / de la sesión:**
   - **Staging (16/11):** las 27 migraciones aplicaron sin error. Las baterías corridas DESPUÉS de aplicar (como se hizo) no son
@@ -56,6 +57,7 @@
   - **Beneficio de cumpleaños:** prendido por el dueño (16/11).
   - **Links de Santa Teresa en Club → Locales (16/11):** ubicación (Maps), reseña de Google y reservas de OpenTable con origen
     «Club Satori», cargados. Nosara se completa cuando abra (decisión del dueño: no volver a preguntar; pensar todo multi-local).
+  - **Validación física pendiente del dueño (#220):** 2 reservas de prueba (portal del socio → campaña `local`; cupón del turista → `turista`). La campaña `referente` queda lista sin punto de uso hasta el rebase del #117.
   - **Validación física:** #210, #213, #214, #215 y #216 ya validados por el dueño el 16/11 (incluidas la reserva por el
     widget y el QR de turista). **«Origen Club Satori en OpenTable»: CONFIRMADA por el dueño (16/11 12:15).** No queda validación física pendiente de estos PRs.
   - **5 columnas de Caja que existen en prod y en ninguna migración** (`cash_movements.amount_usd`,

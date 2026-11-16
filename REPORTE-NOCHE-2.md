@@ -14,17 +14,17 @@ conocido de launchd con expansión de subshell en el string del plist. **Los des
 
 **→ T2 y T3 se ejecutaron MANUALMENTE en esta sesión (ver abajo). T4 queda lista para correr a mano:**
 ```
-cd /Users/ismaelgutierrezpechemiel/Downloads/satori-app
-/Users/ismaelgutierrezpechemiel/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T4.md)" 2>&1 | tee /tmp/satori-T4.log
+cd ~/Downloads/satori-app
+~/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T4.md)" 2>&1 | tee /tmp/satori-T4.log
 ```
 (Nota: buena parte de T4 ya está en staging — alérgenos + EmptyState estética Satori — ver §T4.)
 
 ### Respaldo manual (si launchd no dispara — ya pasó antes), correr EN ORDEN en el repo:
 ```
-cd /Users/ismaelgutierrezpechemiel/Downloads/satori-app
-/Users/ismaelgutierrezpechemiel/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T2.md)" 2>&1 | tee /tmp/satori-T2.log
-/Users/ismaelgutierrezpechemiel/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T3.md)" 2>&1 | tee /tmp/satori-T3.log
-/Users/ismaelgutierrezpechemiel/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T4.md)" 2>&1 | tee /tmp/satori-T4.log
+cd ~/Downloads/satori-app
+~/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T2.md)" 2>&1 | tee /tmp/satori-T2.log
+~/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T3.md)" 2>&1 | tee /tmp/satori-T3.log
+~/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T4.md)" 2>&1 | tee /tmp/satori-T4.log
 ```
 
 ---

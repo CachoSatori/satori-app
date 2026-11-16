@@ -46,7 +46,7 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 - **Turnstile (LC-DES-07):** `/api/alta` verifica el token con Cloudflare (`TURNSTILE_SECRET`, Secret de Pages) antes de
   llamar a la base. **Sin el secreto, responde 503.** En staging se usan las claves de prueba de Cloudflare (siempre
   pasan): la del sitio por defecto en `src/config.ts` y la secreta `1x0000000000000000000000000000000AA`. En prod,
-  `VITE_TURNSTILE_SITEKEY` (variable de build) y `TURNSTILE_SECRET` las carga Ismael.
+  `VITE_TURNSTILE_SITEKEY` (variable de build) y `TURNSTILE_SECRET` las carga el dueño.
 - **Google Wallet (B2):** el botón «Agregar a Google Wallet» (portal y final de la autoalta) y, en el portal,
   «Actualizar mi pase» aparecen solo si el build tiene `VITE_WALLET_GOOGLE=1`. Van **apagados** hasta que el Edge
   `club-pase` esté desplegado con sus secretos y Google apruebe la publicación (en modo demo solo las cuentas de prueba
@@ -72,7 +72,7 @@ SUPABASE_URL=https://<ref-staging>.supabase.co SUPABASE_ANON_KEY=<anon> CLUB_WEB
 npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_KEY=… --binding CLUB_WEB_KEY=…
 ```
 
-## Despliegue en Cloudflare Pages (lo hace Ismael)
+## Despliegue en Cloudflare Pages (lo hace el dueño)
 1. En Cloudflare, ir a Workers & Pages → Create → Pages → Connect to Git y elegir este repo.
    - Nombre del proyecto: `satori-club`.
    - **Root directory:** `club-web`.
@@ -82,7 +82,7 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    - `SUPABASE_URL` = la URL del proyecto de **staging** (para la prueba).
    - `SUPABASE_ANON_KEY` = la anon key de ese mismo proyecto.
    - Opcionales: `RL_CREAR_MAX`, `RL_CREAR_VENTANA_S`, `RL_LECTURA_MAX`, `RL_LECTURA_VENTANA_S`.
-3. **Clave de club-web** (`CLUB_WEB_KEY`). La carga Ismael; nunca va por chat, ni al repo, ni a un mensaje:
+3. **Clave de club-web** (`CLUB_WEB_KEY`). La carga el dueño; nunca va por chat, ni al repo, ni a un mensaje:
    1. Generar una clave larga al azar en la propia computadora, por ejemplo `openssl rand -hex 32`.
    2. En Pages → `satori-club` → Settings → Variables and Secrets → **Add** → Type: **Secret** → nombre **`CLUB_WEB_KEY`** → pegar la clave. Va en Production; para probar en preview, también en Preview.
    3. Calcular su sha256 en la misma computadora: `printf %s '<la clave>' | shasum -a 256`, o `sha256sum` en Linux.
@@ -135,9 +135,9 @@ le pide al Edge `club-pase` que venza en Google Wallet los pases de las personas
 Worker (la misma clave que el secreto del Edge); sin él, no hace nada. Al log va un resumen con conteos («club-pase-vencer»).
 Detalle: `docs/club-satori/WALLET-GOOGLE-ACTIVACION.md`.
 
-## DNS: apuntar el dominio del Club (lo hace Ismael)
+## DNS: apuntar el dominio del Club (lo hace el dueño)
 1. En el proyecto de Pages, ir a **Custom domains → Set up a custom domain** y escribir el dominio del Club (`<dominio>`, el mismo de `VITE_CLUB_URL`).
 2. **Si el DNS del dominio está en Cloudflare**, Cloudflare crea solo el registro CNAME. Hay que confirmar.
 3. **Si el DNS está en otro proveedor**, crear allá el registro: tipo **CNAME**, nombre **el subdominio del Club**, destino **`satori-club.pages.dev`**. Después, volver a Pages y verificar.
 4. Esperar a que el certificado SSL quede en «Active» (suele tardar unos minutos). Probar `https://<dominio>/r/<código de prueba>`.
-5. **Recién para el piloto:** cambiar `SUPABASE_URL` y `SUPABASE_ANON_KEY` a los de prod, con la 075 ya aplicada en prod y la firma de Ismael.
+5. **Recién para el piloto:** cambiar `SUPABASE_URL` y `SUPABASE_ANON_KEY` a los de prod, con la 075 ya aplicada en prod y la firma del dueño.

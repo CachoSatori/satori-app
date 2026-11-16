@@ -76,10 +76,10 @@ describe('cash.ts — cerrarDiaCompleto / deshacerCierreDia (RPC atómica, mig 0
     rpcSpy.mockReturnValue(resultado({ cierre_id: 'c1' }))
     const { deshacerCierreDia } = await import('./cash')
     await deshacerCierreDia('2026-11-02')
-    await deshacerCierreDia('2026-11-02', 'jefe@satori.cr', 'secreta')
+    await deshacerCierreDia('2026-11-02', 'jefe@ejemplo.test', 'secreta')
     expect(rpcSpy.mock.calls).toEqual([
       ['deshacer_cierre_dia', { p_fecha: '2026-11-02' }],
-      ['deshacer_cierre_dia', { p_fecha: '2026-11-02', p_manager_email: 'jefe@satori.cr', p_manager_password: 'secreta' }],
+      ['deshacer_cierre_dia', { p_fecha: '2026-11-02', p_manager_email: 'jefe@ejemplo.test', p_manager_password: 'secreta' }],
     ])
   })
 

@@ -1,5 +1,5 @@
 /**
- * Comparación con la página vieja (piloto interno en paralelo, decisión de Ismael 07-nov).
+ * Comparación con la página vieja (piloto interno en paralelo, decisión del dueño 07-nov).
  * Por referente y por semana (lunes, hora CR): personas cargadas en staging al lado de las de la página vieja,
  * que se pegan acá (referente;semana;personas) o llegan de un export. Sin datos de contacto. owner y manager.
  */

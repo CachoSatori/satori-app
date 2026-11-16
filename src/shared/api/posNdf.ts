@@ -164,7 +164,7 @@ const COLS_TICKET =
  * I/O, y lo que sale de estas funciones vuelve a estar tipado con las interfaces de arriba.
  *
  * El arreglo de fondo es regenerar `supabase.gen.ts` con las migs 062/063 ya aplicadas — hace
- * falta acceso a la base, así que se hace del lado de Ismael.
+ * falta acceso a la base, así que se hace del lado del dueño.
  */
 const sb = supabase as unknown as SupabaseClient
 

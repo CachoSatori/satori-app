@@ -55,7 +55,7 @@ Además, fuera de esta rama: **`831b3ee`** en `claude/puente-item11` (puente, si
 
 Arreglos en la integración: **ninguno** (no hubo nada roto).
 
-## Necesita a Ismael (todo junto)
+## Necesita al dueño (todo junto)
 **Datos y decisiones**
 1. El **código de «PROMO CLUB 10%»**. Apaga las dos filas «pendiente de configuración» y enciende `CUPON_SIN_PROMO` y
    `PROMO_SIN_CUPON`.
@@ -70,7 +70,7 @@ Arreglos en la integración: **ninguno** (no hubo nada roto).
 6. La **lista W1–W14** de la auditoría de Grok, para cerrar CLUB-AUD-43.
 7. ~~Qué marca el artículo **857 «INVITADO»** (aparece junto al 856 en 90 facturas). Viene de antes; sigue abierto.~~
    **REEMPLAZADO** (08-nov): el 857 es el beneficio para quien viene con un socio, sin límite de acompañantes (decisión de
-   Ismael; `bd6786e`).
+   el dueño; `bd6786e`).
 
 **Cuentas y secretos (nunca por chat ni en el repo)**
 
@@ -90,7 +90,7 @@ Arreglos en la integración: **ninguno** (no hubo nada roto).
 12. Pasar CLUB-AUD-46/47/48 del puente a `claude/puente-item11-prod` y actualizar la PC del agente; la PC sigue en
     `0cf4d87`.
 
-**Para la próxima sesión A (no es de Ismael)**
+**Para la próxima sesión A (no es del dueño)**
 - `club_pases_emitidos()`, solo de service_role: la necesita B3 para los eventos globales de promociones.
 - CLUB-AUD-44/45 (ingesta transaccional por local en el puente): sigue primera en la cola.
 - Después, A4: motor «qué aplicar», sorteo, visita por factura y premio por referir.

@@ -94,14 +94,14 @@ describe('CashTurno — editar un pago guardado exige autorización de gerencia'
   })
 
   it('AUTORIZADA: el borrado-reemplazo viaja con las credenciales del modal y el pago se re-crea', async () => {
-    requireManagerSpy.mockResolvedValue({ ok: true, managerEmail: 'boss@satori.cr', managerPassword: 'clave-boss' })
+    requireManagerSpy.mockResolvedValue({ ok: true, managerEmail: 'boss@ejemplo.test', managerPassword: 'clave-boss' })
     renderTurno()
     await editarYGuardar()
 
     expect(requireManagerSpy).toHaveBeenCalledTimes(1)
     // La RPC re-valida el par server-side (mig 044) → las credenciales DEBEN viajar.
     expect(deleteCashMovementSpy).toHaveBeenCalledWith(
-      'mov-existing', 'Reemplazo por edición de pago a proveedor', 'boss@satori.cr', 'clave-boss')
+      'mov-existing', 'Reemplazo por edición de pago a proveedor', 'boss@ejemplo.test', 'clave-boss')
     expect(createCashMovementSpy).toHaveBeenCalledTimes(1)
   })
 

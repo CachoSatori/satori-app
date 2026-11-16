@@ -35,7 +35,7 @@ const sup = (over: Partial<Supplier>): Supplier => ({
 const provA = mov({ id: 'a1', supplier_id: 'A', supplier_name: 'Alfa', description: 'Fact A', amount_crc: 50000 })
 const provB = mov({ id: 'b1', supplier_id: 'B', supplier_name: 'Beta', description: 'Fact B', amount_crc: 30000 })
 const suppliers = [
-  sup({ id: 'A', name: 'Alfa', email: 'alfa@x.com', notificar_pago: 'email' }),  // recibe email
+  sup({ id: 'A', name: 'Alfa', email: 'alfa@ejemplo.test', notificar_pago: 'email' }),  // recibe email
   sup({ id: 'B', name: 'Beta', notificar_pago: 'no' }),                          // no
 ]
 
@@ -52,7 +52,7 @@ describe('CashPendientes · notificación de pago al proveedor (mig 047)', () =>
     pagarFila('Fact A')
     await waitFor(() => expect(updateMovementStatus).toHaveBeenCalledWith('a1', 'aprobado'))
     expect(window.confirm).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(window.confirm).mock.calls[0][0]).toContain('alfa@x.com')
+    expect(vi.mocked(window.confirm).mock.calls[0][0]).toContain('alfa@ejemplo.test')
     expect(sendPagoProveedorEmail).toHaveBeenCalledTimes(1)
     expect(sendPagoProveedorEmail).toHaveBeenCalledWith('a1')
   })

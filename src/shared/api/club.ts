@@ -143,7 +143,8 @@ export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_res
  * Referencia al PoS para el piloto (decisiones de Ismael, 06 y 07-nov): la clave de cruce es el PEDIDO.
  * La caja elige el pedido abierto del puente; el servidor guarda el pedido y la hora del escaneo, y el
  * cruce es la primera factura con ese pedido cerrada después del escaneo (tope 18 h).
- * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto).
+ * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las cobradas HOY (día CR) o buscarla por los
+ * últimos dígitos del tiquete, hasta 3 días CR atrás (mig 174; cruce exacto).
  */
 export type PosRef =
   | { modo: 'pedido'; pedido: string; clave?: string | null; area?: string | null; mesa: string | null; total: number | null }
@@ -160,12 +161,27 @@ export interface FacturaReciente {
   consecutivo_fe?: string | null
   /** S0b: 'C' cerrada; 'R' cobrada, falta el cierre de caja (vale igual para registrar). */
   estado?: string | null
+  /** Mig 174: la factura ya tiene una tarjeta o un cupón cargado (no se puede usar otra vez para eso). */
+  usada?: boolean | null
 }
 /** S0b: la marca de una factura del plan B que todavía no pasó el cierre de caja (null si está cerrada). */
 export const marcaFactura = (f: Pick<FacturaReciente, 'estado'>) =>
   f.estado === 'R' ? 'Cobrada, falta el cierre de caja: vale igual' : null
 export const getPedidosAbiertos = (local: string | null = localClub) => llamar<PedidoAbierto[]>('club_pedidos_abiertos', { p_location: local })
 export const getFacturasRecientes = (local: string | null = localClub) => llamar<FacturaReciente[]>('club_facturas_recientes', { p_location: local })
+/** Mig 174: búsqueda mínima por tiquete (los últimos dígitos del consecutivo FE). */
+export const MIN_DIGITOS_TIQUETE = 4
+/** Solo los dígitos de lo que tipeó la caja («…12345», «1 2345» → «12345»). */
+export const digitosTiquete = (s: string) => s.replace(/\D/g, '').slice(0, 20)
+/**
+ * Mig 174 (plan B): sin búsqueda, las facturas cobradas HOY (día CR) del local, más recientes primero; con búsqueda
+ * (4 a 20 dígitos del final del tiquete), las de hoy y los 3 días CR anteriores. Cada una trae `usada`.
+ */
+export const buscarFacturas = (buscar: string | null, local: string | null = localClub) =>
+  llamar<FacturaReciente[]>('club_facturas_buscar', { p_buscar: buscar ? digitosTiquete(buscar) : null, p_location: local })
+/** Mig 174: qué decirle a la caja si la búsqueda no trae nada. */
+export const MSG_TIQUETE_NO_APARECE =
+  'No aparece ninguna factura con ese número. Revisá: ¿es de otro local? ¿la anularon? ¿tiene más de 3 días? Si es así, pedile al owner un ajuste.'
 
 const colones = (n: number | null | undefined) => `₡${Math.round(Number(n ?? 0)).toLocaleString('de-DE')}`
 const horaCR = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })

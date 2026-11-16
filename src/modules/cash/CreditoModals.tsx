@@ -6,6 +6,8 @@ import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '
 import { createSupplierCredit, applySupplierCredit } from '../../shared/api/cash'
 import { fi } from './cashUtils'
 import { saldoCredito, saldoResidual, distribuirCreditoFIFO } from './supplierCredits'
+import { parseMonto } from './montos'
+import { todayCR, dateCR } from '../../shared/utils'
 import { descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
 
 const uuid = (): string =>
@@ -21,7 +23,7 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
 }) {
   const [origin, setOrigin] = useState('sobrepago')
   const [monto, setMonto] = useState('')
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(todayCR())   // hora CR, no UTC
   const [motivo, setMotivo] = useState('')
   const [referencia, setReferencia] = useState('')
   const [source, setSource] = useState('')
@@ -32,8 +34,11 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
     .filter(m => m.supplier_id === supplier.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 20), [movements, supplier.id])
 
+  // (15-nov, hallazgo 225) amount_crc es numeric(12,2): céntimos con UN separador (punto o coma), sin miles.
+  const leido = parseMonto(monto)
   const guardar = async () => {
-    const amount = Number(monto)
+    if (leido.error) { setError(leido.error); return }
+    const amount = leido.valor ?? 0
     if (!(amount > 0)) { setError('El monto ₡ debe ser > 0'); return }
     if (!motivo.trim()) { setError('El motivo es obligatorio'); return }
     if (!referencia.trim()) { setError('La referencia (nº de transferencia) es obligatoria'); return }
@@ -67,7 +72,9 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
           </div>
           <div className="tips-field">
             <div className="tips-field-label">Monto ₡ (CRC)</div>
-            <input className="tips-input-dark" inputMode="decimal" value={monto} onChange={e => setMonto(e.target.value.replace(/[^\d.]/g, ''))} placeholder="0" />
+            <input className="tips-input-dark" inputMode="decimal" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0"
+              aria-invalid={!!leido.error} style={{ borderColor: leido.error ? 'var(--c-laca)' : undefined }} />
+            {leido.error && <div role="alert" style={{ fontSize: '0.7rem', color: 'var(--c-laca)', marginTop: 3 }}>{leido.error}</div>}
           </div>
           <div className="tips-field">
             <div className="tips-field-label">Monto $ (USD)</div>
@@ -89,13 +96,13 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
             <div className="tips-field-label">Movimiento origen (opcional)</div>
             <select className="tips-input-dark" value={source} onChange={e => setSource(e.target.value)}>
               <option value="">— ninguno —</option>
-              {supMovs.map(m => <option key={m.id} value={m.id}>{m.created_at.slice(0, 10)} · {fi(m.amount_crc)} · {(m.description || m.subcategory || '').slice(0, 30)}</option>)}
+              {supMovs.map(m => <option key={m.id} value={m.id}>{dateCR(m.created_at)} · {fi(m.amount_crc)} · {(m.description || m.subcategory || '').slice(0, 30)}</option>)}
             </select>
           </div>
         </div>
         <div className="cd-modal-actions">
           <button className="tips-btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="tips-btn-teal" onClick={guardar} disabled={saving}>{saving ? 'Guardando…' : 'Registrar saldo a favor'}</button>
+          <button className="tips-btn-teal" onClick={guardar} disabled={saving || !!leido.error}>{saving ? 'Guardando…' : 'Registrar saldo a favor'}</button>
         </div>
       </div>
     </div>
@@ -125,7 +132,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
     const saldo = c ? saldoCredito(c, applications) : 0
     const dist = distribuirCreditoFIFO(saldo, ordered.map(m => saldoResidual(m, applications)))
     const next: Record<string, string> = {}
-    ordered.forEach((m, i) => { if (dist[i] > 0) next[m.id] = String(dist[i]) })
+    ordered.forEach((m, i) => { if (dist[i] > 0) next[m.id] = String(Math.round(dist[i] * 100) / 100) })
     return next
   }
 
@@ -139,18 +146,22 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
 
   const credito   = misCreditos.find(c => c.id === creditId) ?? null
   const saldoCred = credito ? saldoCredito(credito, applications) : 0
-  const montoOf     = (id: string): number => { const n = Number(montos[id]); return Number.isFinite(n) && n > 0 ? n : 0 }
+  // (15-nov, hallazgo 226) amount_applied es numeric(12,2): un monto mal escrito NO cuenta como 0 en silencio, bloquea.
+  const errorOf     = (id: string): string | null => parseMonto(montos[id]).error
+  const montoOf     = (id: string): number => { const n = parseMonto(montos[id]).valor; return n !== null && n > 0 ? n : 0 }
   const residualOf  = (m: CashMovement): number => saldoResidual(m, applications)
   const sumMontos   = ordered.reduce((s, m) => s + montoOf(m.id), 0)
   const credRestante = saldoCred - sumMontos                                    // TIEMPO REAL
   const anyOver     = ordered.some(m => montoOf(m.id) > residualOf(m) + 0.001)  // algún monto > su residual
   const overCredit  = sumMontos > saldoCred + 0.001                             // Σ > crédito disponible
-  const canApply    = sumMontos > 0 && !anyOver && !overCredit && !saving
+  const errorMonto  = ordered.map(m => errorOf(m.id)).find(Boolean) ?? null   // primer monto mal escrito
+  const canApply    = sumMontos > 0 && !anyOver && !overCredit && !errorMonto && !saving
 
   const cambiarCredito = (id: string) => { setCreditId(id); setMontos(buildFIFO(id)); setError(null) }
 
   const aplicar = async () => {
     const items = ordered.map(m => ({ id: m.id, monto: montoOf(m.id) })).filter(x => x.monto > 0)
+    if (errorMonto)    { setError(errorMonto); return }
     if (!items.length) { setError('Ingresá al menos un monto > 0'); return }
     if (overCredit)    { setError(`El total (${fi(sumMontos)}) supera el crédito disponible (${fi(saldoCred)})`); return }
     if (anyOver)       { setError('Algún monto supera el residual de su factura'); return }
@@ -175,7 +186,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
       const resItems = items.map(it => {
         const m = ordered.find(x => x.id === it.id)!
         const residualPrev = residualOf(m)
-        return { fecha: m.created_at.slice(0, 10), desc: (m.description || m.subcategory || '').slice(0, 26), monto: it.monto, residual: Math.max(0, r2(residualPrev - it.monto)) }
+        return { fecha: dateCR(m.created_at), desc: (m.description || m.subcategory || '').slice(0, 26), monto: it.monto, residual: Math.max(0, r2(residualPrev - it.monto)) }
       })
       const totalAplicado = items.reduce((s, it) => s + it.monto, 0)
       setResultado({ items: resItems, creditoRef: credito?.referencia ?? '', totalAplicado, saldoRestante: Math.max(0, r2(saldoCred - totalAplicado)) })
@@ -266,7 +277,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
         <div className="tips-field">
           <div className="tips-field-label">Crédito</div>
           <select className="tips-input-dark" value={creditId} onChange={e => cambiarCredito(e.target.value)}>
-            {misCreditos.map(c => <option key={c.id} value={c.id}>{(c.fecha_origen ?? c.created_at.slice(0, 10))} · saldo {fi(saldoCredito(c, applications))} · {c.referencia ?? ''}</option>)}
+            {misCreditos.map(c => <option key={c.id} value={c.id}>{(c.fecha_origen ?? dateCR(c.created_at))} · saldo {fi(saldoCredito(c, applications))} · {c.referencia ?? ''}</option>)}
           </select>
         </div>
 
@@ -282,12 +293,12 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
               const r = residualOf(m)
               const v = montoOf(m.id)
               const resultante = r - v
-              const over = v > r + 0.001
+              const over = v > r + 0.001 || !!errorOf(m.id)
               return (
                 <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center', padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
                   <div style={{ fontSize: '0.75rem', minWidth: 0 }}>
                     <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {m.created_at.slice(0, 10)} · <span style={{ color: 'var(--c-gris)' }}>{(m.description || m.subcategory || '').slice(0, 26)}</span>
+                      {dateCR(m.created_at)} · <span style={{ color: 'var(--c-gris)' }}>{(m.description || m.subcategory || '').slice(0, 26)}</span>
                     </div>
                     <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)' }}>
                       residual {fi(r)}
@@ -296,8 +307,8 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
                   </div>
                   <input className="tips-input-dark" inputMode="decimal" placeholder="0"
                     style={{ width: 108, textAlign: 'right', borderColor: over ? 'var(--c-laca)' : undefined }}
-                    value={montos[m.id] ?? ''}
-                    onChange={e => { const val = e.target.value.replace(/[^\d.]/g, ''); setMontos(prev => ({ ...prev, [m.id]: val })) }} />
+                    value={montos[m.id] ?? ''} aria-invalid={over}
+                    onChange={e => { const val = e.target.value; setMontos(prev => ({ ...prev, [m.id]: val })) }} />
                 </div>
               )
             })}
@@ -310,6 +321,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
           <div>Restante: <strong style={{ color: credRestante < -0.001 ? 'var(--c-laca)' : 'var(--c-teal)' }}>{fi(Math.max(0, credRestante))}</strong></div>
         </div>
         {overCredit && <div style={{ fontSize: '0.78rem', color: 'var(--c-laca)', marginBottom: '0.5rem' }}>El total repartido supera el crédito disponible.</div>}
+        {errorMonto && <div role="alert" style={{ fontSize: '0.78rem', color: 'var(--c-laca)', marginBottom: '0.5rem' }}>{errorMonto}</div>}
         {anyOver && !overCredit && <div style={{ fontSize: '0.78rem', color: 'var(--c-laca)', marginBottom: '0.5rem' }}>Algún monto supera el residual de su factura.</div>}
 
         <div className="cd-modal-actions">

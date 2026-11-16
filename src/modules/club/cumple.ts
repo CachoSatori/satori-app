@@ -60,8 +60,17 @@ export function linkCumpleWhatsApp(e: CumpleEnvio, hoy: string): string | null {
   return `https://wa.me/${n}?text=${encodeURIComponent(textoCumpleWhatsApp(e, hoy))}`
 }
 
-/** Escanear: la línea para el cajero (voseo, como el resto de la caja). Sin artículo cargado, que no lo ofrezca. */
-export function textoCumpleCaja(c: Condiciones & Pick<CumpleConfig, 'beneficio' | 'cortesia' | 'lista_para_caja'>): { titulo: string; detalle: string; ofrecer: boolean } {
+export const MSG_CUMPLE_YA_USO = 'Ya usó su beneficio de cumpleaños este año'
+
+/**
+ * Escanear: la línea para el cajero (voseo, como el resto de la caja). Sin artículo cargado, que no lo ofrezca.
+ * Mig 175: si ya lo usó este año (en cualquier local), tampoco: es una vez por año.
+ */
+export function textoCumpleCaja(c: Condiciones & Pick<CumpleConfig, 'beneficio' | 'cortesia' | 'lista_para_caja'> & { ya_uso?: boolean }): { titulo: string; detalle: string; ofrecer: boolean } {
+  if (c.ya_uso) {
+    return { titulo: MSG_CUMPLE_YA_USO, ofrecer: false,
+      detalle: 'NO lo ofrezcas otra vez: el beneficio de cumpleaños es una vez por año (en cualquier Satori).' }
+  }
   const reglas: string[] = []
   if (c.min_personas > 1) reglas.push(`mesa de ${c.min_personas} o más`)
   if (c.solo_reserva) reglas.push('con reserva')
@@ -90,4 +99,20 @@ export function cumpleDelFormulario(dia: string, mes: string, permiso: boolean):
   const d = Number(dia), m = Number(mes)
   if (!Number.isInteger(d) || !Number.isInteger(m) || m < 1 || m > 12 || d < 1 || d > MAX_DIA[m - 1]) return { ok: false, error: 'invalido' }
   return { ok: true, cumple: { dia: d, mes: m } }
+}
+
+/** Mig 175 · Tablero y Excepciones: el renglón de los usos de cumpleaños del período (solo totales). */
+export function resumenCumpleTexto(r: { usos: number; deshechos: number; sin_articulo_en_factura: number; sin_factura: number }): string {
+  const partes = [`${r.usos} ${r.usos === 1 ? 'uso' : 'usos'} del beneficio de cumpleaños`]
+  if (r.sin_articulo_en_factura > 0) partes.push(`${r.sin_articulo_en_factura} sin el artículo de cortesía en su factura`)
+  if (r.sin_factura > 0) partes.push(`${r.sin_factura} todavía sin factura cruzada`)
+  if (r.deshechos > 0) partes.push(`${r.deshechos} ${r.deshechos === 1 ? 'deshecho' : 'deshechos'} por el owner`)
+  return partes.join(' · ')
+}
+
+/** 'YYYY-MM' → ['YYYY-MM-01', 'YYYY-MM-<último>'] (días CR; aritmética de calendario, sin leer el reloj). */
+export function rangoMes(mes: string): [string, string] {
+  const [y, m] = mes.split('-').map(Number)
+  const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return [`${mes}-01`, `${mes}-${String(ultimo).padStart(2, '0')}`]
 }

@@ -13,6 +13,7 @@ import {
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { ResumenCumpleTarjeta } from './CumpleConfig'
 
 const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   SIN_CRUCE:            { titulo: 'Sin cruce: posible cuenta dividida', que: 'Registro con pedido que no encontró la factura de su pedido (anulada, refacturada o cobrada solo en facturas sin pedido). Elegí la factura de la lista o buscala por los últimos dígitos del tiquete.' },
@@ -94,6 +95,7 @@ export default function Excepciones({ tipoInicial = null }: { tipoInicial?: stri
     <div className="tips-body" style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
       <AlertasPrioritarias />
+      {desde && hasta && desde <= hasta && <ResumenCumpleTarjeta desde={desde} hasta={hasta} />}{/* mig 175 */}
       <Card style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
         <label><span style={labelStyle}>Desde</span><input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={inputStyle} /></label>
         <label><span style={labelStyle}>Hasta</span><input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={inputStyle} /></label>

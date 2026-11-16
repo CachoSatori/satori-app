@@ -8,12 +8,12 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  getCumpleConfig, guardarCumpleConfig, getCortesias, aClubError,
-  type CumpleConfig as Cfg, type CumpleConfigDatos, type Cortesia,
+  getCumpleConfig, guardarCumpleConfig, getCortesias, aClubError, getUsosCumple, deshacerUsoCumple, getResumenCumple,
+  type CumpleConfig as Cfg, type CumpleConfigDatos, type Cortesia, type UsoCumple, type ResumenCumple as Resumen,
 } from '../../shared/api/club'
 import { Aviso, Btn, Card, Chip } from './ui'
-import { C, inputStyle, labelStyle } from './estilos'
-import { condicionesCumple } from './cumple'
+import { C, inputStyle, labelStyle, mesActualCR, fmtFechaHora } from './estilos'
+import { condicionesCumple, rangoMes, resumenCumpleTexto } from './cumple'
 
 const aDatos = (c: Cfg): CumpleConfigDatos => ({
   activo: c.activo, beneficio: c.beneficio, min_personas: c.min_personas, dias_antes: c.dias_antes, dias_despues: c.dias_despues,
@@ -106,6 +106,110 @@ export function ConfigCumple({ edita }: { edita: boolean }) {
           )}
         </div>
       )}
+    </Card>
+  )
+}
+
+/**
+ * Mig 175 · Club → Promociones → «Usos del beneficio de cumpleaños» (owner y manager de su local): las marcas del mes
+ * (día CR) con socio, quién la hizo y el pedido/factura. Solo el owner deshace una marca hecha por error, con nota (queda
+ * en la auditoría); deshecha, la caja puede volver a marcarlo ese año.
+ */
+export function UsosCumple({ owner }: { owner: boolean }) {
+  const [mes, setMes] = useState(mesActualCR())
+  const [lista, setLista] = useState<UsoCumple[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [abierta, setAbierta] = useState<string | null>(null)
+  const [nota, setNota] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [vuelta, setVuelta] = useState(0)
+  useEffect(() => {
+    let vivo = true
+    const [desde, hasta] = rangoMes(mes)
+    getUsosCumple(desde, hasta)
+      .then(l => { if (vivo) setLista(l) })
+      .catch(e => { if (vivo) { setLista([]); setError(aClubError(e).message) } })
+    return () => { vivo = false }
+  }, [mes, vuelta])
+  async function deshacer(id: string) {
+    setEnviando(true); setError(null)
+    try { await deshacerUsoCumple(id, nota.trim()); setAbierta(null); setNota(''); setVuelta(v => v + 1) }
+    catch (e) { setError(aClubError(e).message) }
+    finally { setEnviando(false) }
+  }
+  return (
+    <Card>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+        <strong style={{ flex: 1 }}>Usos del beneficio de cumpleaños</strong>
+        <label><span style={labelStyle}>Mes</span>
+          <input type="month" aria-label="Mes de los usos de cumpleaños" value={mes} onChange={e => e.target.value && setMes(e.target.value)} style={inputStyle} /></label>
+      </div>
+      <div style={{ fontSize: '0.82rem', color: C.muted, margin: '4px 0 8px' }}>
+        Una vez por año por socio, en cualquier Satori: lo marca la caja al registrar la visita. {owner
+          ? 'Si una marca fue un error, deshacela con una nota (queda en la auditoría).'
+          : 'Si una marca fue un error, pedile al owner que la deshaga.'}
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      {lista === null ? <div style={{ color: C.muted }}>Cargando…</div>
+        : lista.length === 0 ? <div style={{ color: C.muted }}>Sin usos en el mes.</div>
+        : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {lista.map(u => (
+              <li key={u.id} style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, opacity: u.deshecho_en ? 0.6 : 1 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ flex: 1 }}><strong>{u.socio}</strong> · {fmtFechaHora(u.usado_en)} · marcó {u.operador}
+                    {u.visita_clave ? ` · ${u.visita_clave}` : ''}</span>
+                  {u.deshecho_en ? <Chip color={C.muted}>deshecha</Chip>
+                    : owner && abierta !== u.id && <Btn variant="ghost" onClick={() => { setAbierta(u.id); setNota('') }}>Deshacer</Btn>}
+                </div>
+                {u.deshecho_en && (
+                  <div style={{ fontSize: '0.8rem', color: C.muted }}>
+                    Deshecha el {fmtFechaHora(u.deshecho_en)}{u.deshecho_por ? ` por ${u.deshecho_por}` : ''}: {u.deshecho_nota}
+                  </div>
+                )}
+                {owner && abierta === u.id && !u.deshecho_en && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                    <input value={nota} onChange={e => setNota(e.target.value)} maxLength={300} placeholder="Por qué se deshace (5 a 300 letras)"
+                      aria-label="Nota para deshacer" style={{ ...inputStyle, flex: 1, minWidth: 200 }} />
+                    <Btn onClick={() => deshacer(u.id)} disabled={enviando || nota.trim().length < 5}>{enviando ? 'Deshaciendo…' : 'Deshacer marca'}</Btn>
+                    <Btn variant="ghost" onClick={() => setAbierta(null)}>Cancelar</Btn>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+    </Card>
+  )
+}
+
+const crcTxt = (n: number) => `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}`
+
+/**
+ * Mig 175 · Tablero y Excepciones: los usos del beneficio de cumpleaños del período (solo totales) y sus cortesías a
+ * costo, con el mismo % del Tablero (club_config.cortesia_costo_pct). Esas cortesías ya están dentro de «Cortesías a
+ * costo» del Tablero: acá se ve cuánto es de cumpleaños. Si la lectura falla (p. ej. sin la 175), no se muestra.
+ */
+export function ResumenCumpleTarjeta({ desde, hasta, local }: { desde: string; hasta: string; local?: string | null }) {
+  const [r, setR] = useState<Resumen | null>(null)
+  useEffect(() => {
+    let vivo = true
+    ;(local === undefined ? getResumenCumple(desde, hasta) : getResumenCumple(desde, hasta, local))
+      .then(x => { if (vivo) setR(x) }).catch(() => { if (vivo) setR(null) })
+    return () => { vivo = false }
+  }, [desde, hasta, local])
+  if (!r) return null
+  return (
+    <Card>
+      <h3 style={{ margin: '0 0 6px', fontSize: '1rem' }}>Beneficio de cumpleaños</h3>
+      <div data-testid="resumen-cumple" style={{ fontSize: '0.9rem' }}>{resumenCumpleTexto(r)}</div>
+      <div style={{ fontSize: '0.9rem', marginTop: 4 }}>
+        Cortesías de cumpleaños a costo ({r.cortesia_costo_pct ?? 0} %): <strong>{crcTxt(r.cortesias_costo_crc)}</strong>
+        <span style={{ color: C.muted }}> · precio de lista {crcTxt(r.cortesias_lista_crc)} · {r.con_cortesia} con el artículo en la factura</span>
+      </div>
+      <div style={{ color: C.muted, fontSize: '0.8rem', marginTop: 4 }}>
+        Una vez por año por socio. Estas cortesías ya están dentro de las cortesías del Club; acá se ve la parte de cumpleaños.
+      </div>
     </Card>
   )
 }

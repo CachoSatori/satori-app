@@ -225,6 +225,12 @@
       "rama": "claude/club-facturas-dia-busqueda",
       "renumerada_a": "174"
     },
+    "121": {
+      "nombre": "club_cumple_uso_anual",
+      "bloque": "club",
+      "rama": "claude/club-cumple-uso-anual",
+      "renumerada_a": "175"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -362,6 +368,12 @@
       "bloque": "pase",
       "rama": "claude/club-facturas-dia-busqueda",
       "origen": "120"
+    },
+    "175": {
+      "nombre": "club_cumple_uso_anual",
+      "bloque": "pase",
+      "rama": "claude/club-cumple-uso-anual",
+      "origen": "121"
     }
   }
 }

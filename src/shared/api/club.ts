@@ -686,10 +686,34 @@ export const getCumpleProximos = () => llamar<CumpleProximos>('club_cumple_proxi
 /** Marca «enviado» (una por socio y año del cumpleaños) y devuelve lo necesario para armar el WhatsApp. Queda auditado. */
 export type CumpleEnvio = CumpleConfig & { nombre: string; whatsapp: string; cumple: string; desde: string; hasta: string }
 export const enviarCumple = (miembro: string) => llamar<CumpleEnvio>('club_cumple_enviar', { p_miembro: miembro, p_location: localClub })
-/** Caja: ¿hoy cae en la ventana de su cumpleaños? Nunca devuelve la fecha. */
-export type CumpleEnCaja = { aplica: false } | ({ aplica: true } & Pick<CumpleConfig,
+/** Caja: ¿hoy cae en la ventana de su cumpleaños? Nunca devuelve la fecha. Mig 175: `ya_uso` = ya usó el beneficio del
+ *  año de este cumpleaños (en cualquier local); sin la 175 no viene. */
+export type CumpleEnCaja = { aplica: false } | ({ aplica: true; ya_uso?: boolean } & Pick<CumpleConfig,
   'beneficio' | 'min_personas' | 'dias_antes' | 'dias_despues' | 'uno_por_mesa' | 'solo_reserva' | 'cortesia' | 'lista_para_caja'>)
 export const getCumpleEnCaja = (miembro: string) => llamar<CumpleEnCaja>('club_cumple_en_caja', { p_miembro: miembro, p_location: localClub })
+
+// ── Mig 175: el beneficio de cumpleaños se usa UNA vez por año por socio ─────
+/** Caja (owner, manager, cajero): marca el uso sobre la visita de HOY del socio. La base rechaza un segundo uso del año. */
+export interface CumpleUsado { ok: true; uso_id: string; cortesia: { codigo: string; nombre: string } }
+export const usarCumple = (visita: string) => llamar<CumpleUsado>('club_cumple_usar', { p_visita: visita, p_location: localClub })
+/** Owner y manager (de su local): las marcas del período (días CR). */
+export interface UsoCumple {
+  id: string; usado_en: string; anio: number; socio: string; operador: string; visita_clave: string | null
+  cortesia_codigo: string | null; deshecho_en: string | null; deshecho_nota: string | null; deshecho_por: string | null
+}
+export const getUsosCumple = (desde: string, hasta: string, local: string | null = localClub) =>
+  llamar<UsoCumple[]>('club_cumple_usos_listar', { p_desde: desde, p_hasta: hasta, p_location: local })
+/** Solo owner: deshace una marca hecha por error (nota de 5 a 300 letras; queda en la auditoría). */
+export const deshacerUsoCumple = (id: string, nota: string) =>
+  llamar<{ ok: true }>('club_cumple_uso_deshacer', { p_uso: id, p_nota: nota })
+/** Tablero y Excepciones (owner, manager de su local, contador): solo totales. */
+export interface ResumenCumple {
+  desde: string; hasta: string; local: string; usos: number; deshechos: number; con_cortesia: number
+  sin_articulo_en_factura: number; sin_factura: number; sin_precio: number
+  cortesia_costo_pct: number | null; cortesias_lista_crc: number; cortesias_costo_crc: number
+}
+export const getResumenCumple = (desde: string, hasta: string, local: string | null = localClub) =>
+  llamar<ResumenCumple>('club_cumple_usos_resumen', { p_desde: desde, p_hasta: hasta, p_location: local })
 
 // ── LC-MD: marcadores de descuento (configurables por local) ─────────────────
 export interface MarcadorDescuento {

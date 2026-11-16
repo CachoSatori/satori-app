@@ -10,10 +10,11 @@ import { TEXTOS } from './i18n'
 
 const LINK_NO = 'https://www.opentable.com/restref/client/?rid=9990102&lang=en-US&ot_source=Club&ot_campaign=cupon'
 
-test('con link de OpenTable del local: botón con el link TAL CUAL, en pestaña nueva y con noopener noreferrer', () => {
+test('con link de OpenTable del local: botón con el link (campaña «turista»), en pestaña nueva y con noopener noreferrer', () => {
   const a = botonReservaCupon({ reserva: LINK_NO }, TEXTOS.es.reservar_titulo)!
   expect(a.tagName).toBe('A')
-  expect(a.getAttribute('href')).toBe(LINK_NO)
+  // opción B (16-nov): solo ot_campaign cambia (cupon → turista); ot_source y el resto, tal cual
+  expect(a.getAttribute('href')).toBe(LINK_NO.replace('ot_campaign=cupon', 'ot_campaign=turista'))
   expect(a.target).toBe('_blank')
   expect(a.rel).toBe('noopener noreferrer')
   expect(a.textContent).toBe('Reservar una mesa')

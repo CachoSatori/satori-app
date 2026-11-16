@@ -43,7 +43,8 @@ const LINK_LOCAL = 'https://www.opentable.com/restref/client/?rid=9990002&lang=e
 
 test('el link del local se usa tal cual: mismos parámetros, mismo orden, nada reconstruido', () => {
   expect(urlReservaLocal(LINK_LOCAL)).toBe(LINK_LOCAL)
-  expect(urlReservaSocio(LINK_LOCAL)).toBe(LINK_LOCAL)
+  // opción B (16-nov): el botón cambia SOLO ot_campaign por el grupo; el resto, tal cual
+  expect(urlReservaSocio(LINK_LOCAL, 'local')).toBe(LINK_LOCAL.replace('ot_campaign=socio', 'ot_campaign=local'))
   for (const ok of ['https://www.opentable.com.mx/r/local-ficticio?ref=club', 'https://restref.opentable.co.uk/client/?rid=9990003#x',
     'https://opentable.com/r?x=1%20y', 'https://WWW.OPENTABLE.COM/booking/r?rid=9990004']) expect(urlReservaLocal(ok)).toBe(ok)
 })
@@ -55,19 +56,19 @@ test('sin link del local (null, ausente o no OpenTable) → el rid por defecto',
     'https://otroopentable.com/r', 'javascript:alert(1)//opentable.com', 'https://www.opentable.com/r?x=a b',
     'https://www.opentable.com/r?x=' + 'a'.repeat(300)]) {
     expect(urlReservaLocal(malo)).toBeNull()
-    expect(urlReservaSocio(malo)).toBe(porDefecto)
+    expect(urlReservaSocio(malo, 'local')).toBe(porDefecto)
   }
 })
 
-test('la tarjeta abre el link del local tal cual', () => {
-  const el = tarjetaReservar({ titulo: 'x', txt: 'x', boton: 'Reservar', abrir: 'x', falla: 'x', marco: 'x' }, urlReservaSocio(LINK_LOCAL))!
-  expect(el.querySelector('a')!.getAttribute('href')).toBe(LINK_LOCAL)
+test('la tarjeta abre el link del local (con la campaña «local»)', () => {
+  const el = tarjetaReservar({ titulo: 'x', txt: 'x', boton: 'Reservar', abrir: 'x', falla: 'x', marco: 'x' }, urlReservaSocio(LINK_LOCAL, 'local'))!
+  expect(el.querySelector('a')!.getAttribute('href')).toBe(LINK_LOCAL.replace('ot_campaign=socio', 'ot_campaign=local'))
 })
 
 test('el portal del socio pinta «Reservar» en «Mi Club» con el link de SU local (socio.reserva_url)', () => {
   const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'main.ts'), 'utf8')   // happy-dom cambia URL
   const socio = main.slice(main.indexOf('function seccionSocio('), main.indexOf('function seccionCumple('))
-  expect(socio).toMatch(/tarjetaReservar\(\{ titulo: t\.reservar_titulo, txt: t\.reservar_txt, boton: t\.reservar_boton, abrir: t\.reservar_abrir, falla: t\.reservar_falla, marco: t\.reservar_marco \},\s*urlReservaSocio\(socio\.reserva_url\), urlWidgetOpenTable\(socio\.reserva_url, idioma\)\)/)
+  expect(socio).toMatch(/tarjetaReservar\(\{ titulo: t\.reservar_titulo, txt: t\.reservar_txt, boton: t\.reservar_boton, abrir: t\.reservar_abrir, falla: t\.reservar_falla, marco: t\.reservar_marco \},\s*urlReservaSocio\(socio\.reserva_url, 'local'\), urlWidgetOpenTable\(socio\.reserva_url, idioma, 'local'\)\)/)
 })
 
 // ── D 16-nov (el dueño) + revisión de seguridad #214: el widget de OpenTable en un IFRAME (ningún script de terceros) ──
@@ -81,23 +82,24 @@ const W = (rid: string, lang: string, src = 'Club%20Satori', camp = src) =>
   '&demo=false&otLogo=standard&loadAllWidgets=false&theme=standard'
 
 test('widget: desde el link del dueño (/r/…?restref=) sale el mural de Santa Teresa con origen «Club Satori»; lang según el portal', () => {
-  expect(urlWidgetOpenTable(LINK_DUENO, 'en')).toBe(W('1347736', 'en-US'))
-  expect(urlWidgetOpenTable(LINK_DUENO, 'es')).toBe(W('1347736', 'es-MX'))
+  // opción B (16-nov): el link trae ot_source → otCampaign = el grupo; otSource tal cual
+  expect(urlWidgetOpenTable(LINK_DUENO, 'en', 'local')).toBe(W('1347736', 'en-US', 'Club%20Satori', 'local'))
+  expect(urlWidgetOpenTable(LINK_DUENO, 'es', 'local')).toBe(W('1347736', 'es-MX', 'Club%20Satori', 'local'))
 })
 
 test('widget: link /restref/client/?rid= (el formato de fábrica de la 173) → ese rid, origen «Club Satori» si falta', () => {
-  expect(urlWidgetOpenTable('https://www.opentable.com/restref/client/?rid=9990002', 'es')).toBe(W('9990002', 'es-MX'))
-  expect(urlWidgetOpenTable('https://www.opentable.com/restref/client/?rid=9990002&lang=en-US', 'en')).toBe(W('9990002', 'en-US'))
+  expect(urlWidgetOpenTable('https://www.opentable.com/restref/client/?rid=9990002', 'es', 'local')).toBe(W('9990002', 'es-MX'))
+  expect(urlWidgetOpenTable('https://www.opentable.com/restref/client/?rid=9990002&lang=en-US', 'en', 'local')).toBe(W('9990002', 'en-US'))
   // si trae los dos, manda restref (el de los links /r/ que genera OpenTable)
-  expect(urlWidgetOpenTable('https://www.opentable.com/r/x?restref=9990005&rid=1', 'es')).toBe(W('9990005', 'es-MX'))
+  expect(urlWidgetOpenTable('https://www.opentable.com/r/x?restref=9990005&rid=1', 'es', 'local')).toBe(W('9990005', 'es-MX'))
 })
 
 test('widget: ot_source y ot_campaign salen del link (multi-local: cada local con su origen); raros → «Club Satori»', () => {
-  expect(urlWidgetOpenTable('https://www.opentable.com/r/local-ficticio?restref=9990003&ot_source=Club%20Satori%20Nosara&ot_campaign=Socios', 'es'))
-    .toBe(W('9990003', 'es-MX', 'Club%20Satori%20Nosara', 'Socios'))
-  expect(urlWidgetOpenTable('https://www.opentable.com/r/x?restref=9990003&ot_source=Portal+Club', 'en')).toBe(W('9990003', 'en-US', 'Portal%20Club', 'Club%20Satori'))
+  expect(urlWidgetOpenTable('https://www.opentable.com/r/local-ficticio?restref=9990003&ot_source=Club%20Satori%20Nosara&ot_campaign=Socios', 'es', 'local'))
+    .toBe(W('9990003', 'es-MX', 'Club%20Satori%20Nosara', 'local'))
+  expect(urlWidgetOpenTable('https://www.opentable.com/r/x?restref=9990003&ot_source=Portal+Club', 'en', 'local')).toBe(W('9990003', 'en-US', 'Portal%20Club', 'local'))
   for (const raro of ['a%26restaurantIds%3D1', '%3Cscript%3E', 'x%22y', 'a'.repeat(61), '%20%20', 'https%3A%2F%2Fotro.test'])
-    expect(urlWidgetOpenTable(`https://www.opentable.com/r/x?restref=9990003&ot_source=${raro}&ot_campaign=${raro}`, 'es')).toBe(W('9990003', 'es-MX'))
+    expect(urlWidgetOpenTable(`https://www.opentable.com/r/x?restref=9990003&ot_source=${raro}&ot_campaign=${raro}`, 'es', 'local')).toBe(W('9990003', 'es-MX', 'Club%20Satori', 'local'))
 })
 
 test('widget: sin link del local, o link malicioso / no OpenTable → el rid por defecto (config.ts) con origen «Club Satori»', () => {
@@ -105,33 +107,33 @@ test('widget: sin link del local, o link malicioso / no OpenTable → el rid por
   for (const malo of [null, undefined, '', 42, 'http://www.opentable.com/r?restref=9990002', 'https://reservas.ejemplo.test/r?restref=9990002',
     'https://www.opentable.com.otro.test/r?restref=9990002', 'https://www.opentable.com@otro.test/r?restref=9990002',
     'javascript:alert(1)//opentable.com?restref=9990002', 'https://www.opentable.com/r?restref=99"><script>'])
-    expect(urlWidgetOpenTable(malo, 'es')).toBe(porDefecto)
+    expect(urlWidgetOpenTable(malo, 'es', 'local')).toBe(porDefecto)
 })
 
 test('widget: link de OpenTable válido pero sin rid de dígitos → SIN widget (nunca el de otro local); queda el botón', () => {
   for (const sinRid of ['https://www.opentable.com/r/local-ficticio', 'https://www.opentable.com/r/x?restref=12a4',
     'https://www.opentable.com/r/x?restref=1%26rid%3D2', 'https://www.opentable.com/r/x?rid=1234567890123'])
-    expect(urlWidgetOpenTable(sinRid, 'es')).toBeNull()
+    expect(urlWidgetOpenTable(sinRid, 'es', 'local')).toBeNull()
 })
 
 test('widget: siempre https://www.opentable.com/widget/reservation/mural y sin nada del socio', () => {
   for (const l of [LINK_DUENO, null, 'https://www.opentable.com.mx/r/x?restref=9990004', 'https://restref.opentable.co.uk/client/?rid=9990006']) {
-    const u = new URL(urlWidgetOpenTable(l, 'es')!)
+    const u = new URL(urlWidgetOpenTable(l, 'es', 'local')!)
     expect(u.origin).toBe('https://www.opentable.com')
     expect(u.pathname).toBe('/widget/reservation/mural')
     expect(u.searchParams.get('isNewTab')).toBe('true')
     expect([...u.searchParams.keys()].length).toBe(21)
   }
   const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'main.ts'), 'utf8')
-  expect([...main.matchAll(/urlWidgetOpenTable\(([^)]*)\)/g)].map(m => m[1])).toEqual(['socio.reserva_url, idioma'])
+  expect([...main.matchAll(/urlWidgetOpenTable\(([^)]*)\)/g)].map(m => m[1])).toEqual(["socio.reserva_url, idioma, 'local'"])
 })
 
 const TX = { titulo: 'Reservar una mesa', txt: 'x', boton: 'Reservar', abrir: 'Abrir en OpenTable', falla: 'No cargó', marco: 'Reservas de OpenTable' }
 
 test('tarjeta con widget: iframe aislado (sandbox sin top-navigation, sin Referer, lazy, con título) y debajo el link tal cual', () => {
-  const el = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es'))!
+  const el = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es', 'local'))!
   const f = el.querySelector('.reservar-widget > iframe') as HTMLIFrameElement
-  expect(f.getAttribute('src')).toBe(W('1347736', 'es-MX'))
+  expect(f.getAttribute('src')).toBe(W('1347736', 'es-MX', 'Club%20Satori', 'local'))
   expect(f.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox')
   expect(WIDGET_SANDBOX).not.toMatch(/top-navigation|allow-modals|allow-downloads/)
   expect(f.getAttribute('referrerpolicy')).toBe('no-referrer')
@@ -154,7 +156,7 @@ test('tarjeta con widget: iframe aislado (sandbox sin top-navigation, sin Refere
 })
 
 test('seguridad #214: ningún <script> de OpenTable — ni en la tarjeta ni en el código del portal', () => {
-  const el = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es'))!
+  const el = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es', 'local'))!
   expect(el.querySelector('script')).toBeNull()
   const dir = dirname(fileURLToPath(import.meta.url))
   // el módulo del widget no crea scripts ni nombra el loader; en el resto del código del Club no aparece ningún host de OpenTable
@@ -168,18 +170,18 @@ test('seguridad #214: ningún <script> de OpenTable — ni en la tarjeta ni en e
 test('tarjeta con widget: si el iframe no carga en WIDGET_ESPERA_MS (o falla), se ve el aviso para usar el link', () => {
   vi.useFakeTimers()
   try {
-    const b = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es'))!
+    const b = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es', 'local'))!
     vi.advanceTimersByTime(WIDGET_ESPERA_MS - 1)
     expect((b.querySelector('.reservar-falla') as HTMLElement).hidden).toBe(true)
     vi.advanceTimersByTime(1)
     expect((b.querySelector('.reservar-falla') as HTMLElement).hidden).toBe(false)
 
-    const c = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es'))!
+    const c = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es', 'local'))!
     c.querySelector('iframe')!.dispatchEvent(new Event('load'))
     vi.advanceTimersByTime(WIDGET_ESPERA_MS)
     expect((c.querySelector('.reservar-falla') as HTMLElement).hidden).toBe(true)
 
-    const d = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es'))!
+    const d = tarjetaReservar(TX, LINK_DUENO, urlWidgetOpenTable(LINK_DUENO, 'es', 'local'))!
     d.querySelector('iframe')!.dispatchEvent(new Event('error'))
     expect((d.querySelector('.reservar-falla') as HTMLElement).hidden).toBe(false)
   } finally { vi.useRealTimers() }

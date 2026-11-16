@@ -19,6 +19,7 @@ están en la guía [6.13 Club Satori](../sop-app/6.13%20Club%20Satori.md).
 - Casi exclusivo de hotelería, en todos sus formatos.
 - Prefiere referir al cliente directo y recibe una **comisión del 10 % del consumo** de sus clientes en el restaurante (en
   efectivo o consumido). El cliente recibe un postre de cortesía.
+- **Base del 10 % = subtotal** de la cuenta, sin impuestos ni servicio (decisión del dueño, 15-nov-2026, opción A). La invitación a concierges decía «ticket total»: se corrige cuando el programa se reactive.
 - **Estado (decisión del dueño): en pausa** (`pm_pausado` en `club_config`). No hay una forma clara de registrar ese gasto
   ante Hacienda: la mayoría de los concierges no puede emitir factura. Por eso hubo poco movimiento últimamente.
   **Pendiente:** definición contable con el contador antes de reactivarlo.

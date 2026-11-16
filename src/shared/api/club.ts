@@ -433,6 +433,8 @@ export function localesParaRol(locales: LocalClub[], rol: string | null | undefi
   const set = new Set(mios ?? [])
   return locales.filter(l => set.has(l.id))
 }
+/** Los ids de los locales del usuario (`mis_locales()`, 091). */
+export const getMisLocales = () => llamar<string[] | null>('mis_locales', {})
 /** Los locales del Club que la pantalla le ofrece al usuario: para el manager, solo los suyos. */
 export async function getLocalesClubParaRol(rol: string | null | undefined): Promise<LocalClub[]> {
   const locales = await getLocalesClub()

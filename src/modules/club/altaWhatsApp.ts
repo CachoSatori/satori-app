@@ -47,6 +47,23 @@ export function linkAltaWhatsApp(tel: string, nombre: string, urlPortal: string,
   return `https://wa.me/${n}?text=${encodeURIComponent(textoAltaWhatsApp(nombre, urlPortal))}`
 }
 
+/**
+ * Ficha del socio en Miembros («Portal del socio» → «Mandar por WhatsApp»): el link del portal a un socio que ya existe
+ * (dado de alta antes del WhatsApp con link, o al que no le llegó). Lo lee el CLIENTE: «usted».
+ */
+export function textoLinkPortalWhatsApp(nombre: string, urlPortal: string): string {
+  const pila = nombrePila(nombre)
+  return `${pila ? `Hola, ${pila}. ` : 'Hola. '}Este es el link de su portal del Local Club de Satori, con su QR de socio: ${urlPortal}\n` +
+    'Guárdelo y muéstrelo en caja en cada visita.'
+}
+
+/** Igual que `linkAltaWhatsApp` (hallazgo 230): sin el número confirmado, o con otro número, no hay link. */
+export function linkPortalWhatsApp(tel: string, nombre: string, urlPortal: string, telConfirmado: string | null): string | null {
+  const n = waNumber(tel)
+  if (!n || telConfirmado == null || waNumber(telConfirmado) !== n) return null
+  return `https://wa.me/${n}?text=${encodeURIComponent(textoLinkPortalWhatsApp(nombre, urlPortal))}`
+}
+
 /** Solo owner y manager pueden pedir el token de CUALQUIER miembro (`club_miembro_token`, mig 150). */
 export const puedeMandarLinkPortal = (rol: string | null | undefined) => rol === 'owner' || rol === 'manager'
 
@@ -62,4 +79,15 @@ export async function tokenDelAlta(
   if (alta.token_portal) return alta.token_portal
   if (puedeMandarLinkPortal(rol)) return pedirToken(alta.miembro_id)
   return null
+}
+
+/**
+ * «Portal del socio» en la ficha: owner siempre; manager solo si el socio es de uno de sus locales (`mis_locales`, la
+ * misma regla que la base aplica en `club_miembro_token` desde la 172). `misLocales` null = todavía no se sabe o no se
+ * pudo leer: no se muestra. Socio sin local (`locationId` null): la base no lo frena, se muestra.
+ */
+export function puedeLinkPortalDe(rol: string | null | undefined, locationId: string | null | undefined, misLocales: string[] | null): boolean {
+  if (rol === 'owner') return true
+  if (rol !== 'manager' || misLocales == null) return false
+  return locationId == null || misLocales.includes(locationId)
 }

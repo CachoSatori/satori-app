@@ -16,7 +16,7 @@ import {
   opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, getEdadSocio, type EdadSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
-  type FacturaReciente, conPremioDeReto, type RetoEnCaja, getCumpleEnCaja, type CumpleEnCaja,
+  type FacturaReciente, conPremioDeReto, type RetoEnCaja, getCumpleEnCaja, type CumpleEnCaja, usarCumple,
 } from '../../shared/api/club'
 import { cumpleDelFormulario, MESES_CORTOS, textoCumpleCaja } from './cumple'
 import { parsearQR, urlPortal } from './qrFormato'
@@ -627,6 +627,8 @@ function PanelSocio({ d, onCerrar, onValidado }: {
   const [err, setErr] = useState<string | null>(null)
   const baja = d.persona_estado !== 'activo' || d.estado === 'baja'
   const pendiente = !baja && d.estado === 'pendiente'
+  // 173/175: el cumpleaños se lee solo para el socio activo (como antes, cuando el recuadro se montaba solo ahí)
+  const [cumple, recargarCumple] = useCumpleEnCaja(d.id, !baja && !pendiente)
   // D6 A (163): rol de socio para saber si hay que preguntar la edad. undefined = no se pudo leer (se pregunta igual)
   const [edad, setEdad] = useState<EdadSocio | null | undefined | 'cargando'>('cargando')
   useEffect(() => {
@@ -679,8 +681,8 @@ function PanelSocio({ d, onCerrar, onValidado }: {
           {d.provisional_hasta && (
             <Aviso tono="info">Alta provisional hasta el {fmtFechaHora(d.provisional_hasta)}: tiene el beneficio; falta que la confirme un manager.</Aviso>
           )}
-          <AvisoCumple miembro={d.id} />
-          <VisitaSocio miembro={d.id} />
+          <AvisoCumple c={cumple} />
+          <VisitaSocio miembro={d.id} cumple={cumple} onCumpleUsado={recargarCumple} />
           <div style={{ fontSize: '0.8rem', color: C.muted }}>
             Este QR identifica al socio (descuento y cortesía). No sirve para créditos: para canjear, el anfitrión muestra el
             código de «Canjear».
@@ -693,17 +695,26 @@ function PanelSocio({ d, onCerrar, onValidado }: {
 }
 
 /**
- * Mig 173 (D-cumple-2): si hoy cae en la ventana de su cumpleaños y el beneficio está encendido en este local, un
- * recuadro con el beneficio, sus condiciones y el artículo de «CORTESÍA CLUB» (₡0; el tablero lo cuenta a costo). La
- * base nunca devuelve la fecha. Si falla la lectura, no se muestra nada (la visita sigue igual).
+ * Mig 173 (D-cumple-2): ¿hoy cae en la ventana de su cumpleaños? (la base nunca devuelve la fecha). Si falla la lectura,
+ * null: no se muestra nada y la visita sigue igual. Mig 175: `recargar` después de marcar el uso (pasa a «ya lo usó»).
  */
-function AvisoCumple({ miembro }: { miembro: string }) {
+function useCumpleEnCaja(miembro: string, leer: boolean): [CumpleEnCaja | null, () => void] {
   const [c, setC] = useState<CumpleEnCaja | null>(null)
+  const [vuelta, setVuelta] = useState(0)
   useEffect(() => {
+    if (!leer) return
     let vivo = true
     getCumpleEnCaja(miembro).then(r => { if (vivo) setC(r) }).catch(() => { if (vivo) setC(null) })
     return () => { vivo = false }
-  }, [miembro])
+  }, [miembro, leer, vuelta])
+  return [c, useCallback(() => setVuelta(v => v + 1), [])]
+}
+
+/**
+ * Mig 173: el recuadro con el beneficio, sus condiciones y el artículo de «CORTESÍA CLUB» (₡0; el tablero lo cuenta a
+ * costo). Mig 175: si ya lo usó este año (en cualquier local), dice «Ya usó su beneficio de cumpleaños este año».
+ */
+function AvisoCumple({ c }: { c: CumpleEnCaja | null }) {
   if (!c || !c.aplica) return null
   const x = textoCumpleCaja(c)
   return (
@@ -719,7 +730,7 @@ function AvisoCumple({ miembro }: { miembro: string }) {
  * LC-A4: visita del socio. La caja elige el pedido y registra la visita; la base dice QUÉ APLICAR (descuento de la promo
  * vigente y la cortesía sorteada). Reescanear el mismo día devuelve la misma (no se re-sortea). La app no toca el PoS.
  */
-function VisitaSocio({ miembro }: { miembro: string }) {
+function VisitaSocio({ miembro, cumple = null, onCumpleUsado }: { miembro: string; cumple?: CumpleEnCaja | null; onCumpleUsado?: () => void }) {
   const [pos, setPos] = useState<PosRef | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [res, setRes] = useState<(QueAplicar & { reto?: RetoEnCaja }) | null>(null)
@@ -752,6 +763,8 @@ function VisitaSocio({ miembro }: { miembro: string }) {
         )}
         {/* mig 168: la cortesía especial de bienvenida (primeros 90 días), aparte para que no se pierda */}
         <AvisoPrimeros90 p={res.primeros90} />
+        {/* mig 175: el beneficio de cumpleaños se marca sobre ESTA visita (una vez por año; la base lo frena) */}
+        {res.visita_id && <UsoCumple visita={res.visita_id} c={cumple} onUsado={onCumpleUsado} />}
       </div>
     )
   }
@@ -760,6 +773,36 @@ function VisitaSocio({ miembro }: { miembro: string }) {
       <SelectorPedido v={pos} set={setPos} />
       {err && <ErrorAccion err={err} onReintentar={registrar} />}
       <Btn onClick={registrar} disabled={!pos || enviando}>{enviando ? 'Registrando…' : 'Registrar visita y ver qué aplicar'}</Btn>
+    </div>
+  )
+}
+
+/**
+ * Mig 175 (decisión del dueño 15-nov): con la visita registrada y el socio en la ventana de su cumpleaños, la caja marca
+ * «usó el beneficio de cumpleaños» (queda con la visita/factura, quién y el local). Una vez por año por socio, en cualquier
+ * Satori: si ya lo usó, no aparece el botón y la base rechaza otra marca. Deshacer una marca: solo el owner (Promociones).
+ */
+export function UsoCumple({ visita, c, onUsado }: { visita: string; c: CumpleEnCaja | null; onUsado?: () => void }) {
+  const [enviando, setEnviando] = useState(false)
+  const [hecho, setHecho] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  if (hecho) return <div style={{ marginTop: 8 }}><Aviso tono="ok">{hecho}</Aviso></div>
+  if (!c || !c.aplica || c.ya_uso || !textoCumpleCaja(c).ofrecer) return null
+  async function marcar() {
+    setEnviando(true); setErr(null)
+    try {
+      const r = await usarCumple(visita)
+      setHecho(`Beneficio de cumpleaños registrado (una vez por año). Marcá el artículo ${r.cortesia.codigo} (${r.cortesia.nombre}) de «CORTESÍA CLUB».`)
+      onUsado?.()
+    } catch (e) { setErr(aClubError(e).message); onUsado?.() }
+    finally { setEnviando(false) }
+  }
+  return (
+    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {err && <Aviso tono="error">{err}</Aviso>}
+      <Btn variant="secondary" onClick={marcar} disabled={enviando}>
+        {enviando ? 'Registrando…' : `Usó el beneficio de cumpleaños (${c.beneficio})`}
+      </Btn>
     </div>
   )
 }

@@ -18,7 +18,7 @@ import { ConfigPrimeros90 } from './Primeros90'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Retos from './Retos'
-import { ConfigCumple } from './CumpleConfig'
+import { ConfigCumple, UsosCumple } from './CumpleConfig'
 
 const PARA: Array<[ParaPromo, string]> = [['socio', 'Socios'], ['referente', 'Referentes'], ['turista_cupon', 'Turistas con cupón'], ['todos', 'Todos']]
 const DIAS: Array<[number, string]> = [[1, 'Lu'], [2, 'Ma'], [3, 'Mi'], [4, 'Ju'], [5, 'Vi'], [6, 'Sá'], [7, 'Do']]
@@ -35,6 +35,7 @@ export default function Promociones() {
       <ListaCortesias owner={owner} />
       <ConfigPrimeros90 owner={owner} />
       <ConfigCumple edita={gestiona} />{/* mig 173: beneficio de cumpleaños del local */}
+      {gestiona && <UsosCumple owner={owner} />}{/* mig 175: usos (una vez por año) y deshacer (owner) */}
       <Retos owner={owner} />{/* mig 169: retos de temporada baja */}
     </div>
   )

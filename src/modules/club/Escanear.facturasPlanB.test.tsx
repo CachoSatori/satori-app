@@ -4,10 +4,10 @@
 // que ya tiene tarjeta o cupón se ve marcada y no se puede elegir. Datos ficticios.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import type { FacturaReciente, ResolverReferente } from '../../shared/api/club'
+import type { FacturaReciente, ResolverCupon, ResolverReferente } from '../../shared/api/club'
 import { MSG_TIQUETE_NO_APARECE, digitosTiquete } from '../../shared/api/club'
 
-const api = vi.hoisted(() => ({ resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), buscarFacturas: vi.fn() }))
+const api = vi.hoisted(() => ({ resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), buscarFacturas: vi.fn(), getFacturasRecientes: vi.fn() }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: 'cajero', full_name: 'Prueba' } }) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/api/club', async orig => ({ ...(await orig<typeof import('../../shared/api/club')>()), ...api }))
@@ -32,6 +32,12 @@ const HOY_19 = fac('9001', '2026-11-16T01:03:00Z')                    // 15-nov 
 const HOY_USADA = fac('9002', '2026-11-16T00:10:00Z', { usada: true }) // 15-nov 18:10 CR, ya con tarjeta
 const AYER = fac('9003', '2026-11-15T05:40:00Z')                       // 14-nov 23:40 CR
 
+const cupon: ResolverCupon = {
+  tipo: 'cupon',
+  datos: { codigo: 'PRBACDEF', estado: 'vigente', vence_en: '2026-11-20T06:00:00Z', usado_en: null, referente_id: 'm1',
+           referente: 'Persona Prueba', referente_estado: 'activo' },
+}
+
 async function abrirPlanB() {
   render(<Escanear />)
   fireEvent.change(screen.getByPlaceholderText('Cupón, canje, socio o pase'), { target: { value: 'ABCDEFGH' } })
@@ -47,6 +53,7 @@ describe('Escanear · plan B con facturas del día y búsqueda por tiquete (mig 
     vi.setSystemTime(AHORA)
     api.resolverQR.mockReset().mockResolvedValue(ficha)
     api.getPedidosAbiertos.mockReset().mockResolvedValue([])
+    api.getFacturasRecientes.mockReset().mockResolvedValue([HOY_19, HOY_USADA])
     api.buscarFacturas.mockReset().mockImplementation(async (q: string | null) =>
       q == null ? [HOY_19, HOY_USADA] : q === '0003' || q === '90003' ? [AYER] : [])
   })
@@ -101,5 +108,21 @@ describe('Escanear · plan B con facturas del día y búsqueda por tiquete (mig 
   it('digitosTiquete: solo dígitos, como mucho 20', () => {
     expect(digitosTiquete(' …12 345 ')).toBe('12345')
     expect(digitosTiquete('1'.repeat(25))).toHaveLength(20)
+  })
+
+  // Verificador del #206: los 3 días, la búsqueda y la marca de «usada» son SOLO de la tarjeta física. El cupón (y el
+  // canje y la visita de socio, que usan el mismo selector sin modoTarjeta) siguen con la lista de las últimas 2 h.
+  it('cupón: el plan B sigue igual que antes (últimas 2 h, sin búsqueda por tiquete, sin pedir las de hoy)', async () => {
+    api.resolverQR.mockResolvedValue(cupon)
+    render(<Escanear />)
+    fireEvent.change(screen.getByPlaceholderText('Cupón, canje, socio o pase'), { target: { value: 'PRBACDEF' } })
+    fireEvent.click(screen.getByText('Ver'))
+    await screen.findByText('Factura (plan B)')
+    expect(await screen.findByText(/cobradas en las últimas 2 horas/)).toBeTruthy()
+    await screen.findByText(/19:03/)
+    expect(api.getFacturasRecientes).toHaveBeenCalled()
+    expect(api.buscarFacturas).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Buscar por número de tiquete')).toBeNull()
+    expect(screen.queryByText(MSG_FACTURA_USADA)).toBeNull()
   })
 })

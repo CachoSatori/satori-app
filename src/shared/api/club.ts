@@ -143,8 +143,8 @@ export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_res
  * Referencia al PoS para el piloto (decisiones de Ismael, 06 y 07-nov): la clave de cruce es el PEDIDO.
  * La caja elige el pedido abierto del puente; el servidor guarda el pedido y la hora del escaneo, y el
  * cruce es la primera factura con ese pedido cerrada después del escaneo (tope 18 h).
- * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las cobradas HOY (día CR) o buscarla por los
- * últimos dígitos del tiquete, hasta 3 días CR atrás (mig 174; cruce exacto).
+ * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto). Solo en la tarjeta
+ * física (mig 174): las cobradas HOY (día CR) o buscarla por los últimos dígitos del tiquete, hasta 3 días CR atrás.
  */
 export type PosRef =
   | { modo: 'pedido'; pedido: string; clave?: string | null; area?: string | null; mesa: string | null; total: number | null }

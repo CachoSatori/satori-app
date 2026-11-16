@@ -1,7 +1,8 @@
 /**
  * Escanear — un solo botón en caja (SPEC §2.4).
  *  · Cupón vigente → personas + PEDIDO (de los abiertos en el PoS) → confirmar → «+N personas a {referente}».
- *    Plan B si el pedido ya se cerró o la lista no carga: elegir la factura cobrada hoy o buscarla por tiquete (mig 174).
+ *    Plan B si el pedido ya se cerró o la lista no carga: elegir la factura de las últimas 2 h (en la tarjeta física, mig
+ *    174: las cobradas hoy o buscarla por tiquete hasta 3 días atrás).
  *  · Pase de referente (/r/) → saldo y «Tarjeta física». NO habilita el canje (R-01): cualquiera puede
  *    tener una foto del QR de la recepción.
  *  · Código de canje (/k/, 6 caracteres, lo genera el referente en su portal y vence a los 10 min) →
@@ -13,7 +14,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
-  opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, buscarFacturas, posDePedido, posDeFactura,
+  opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, buscarFacturas, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, getEdadSocio, type EdadSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente, conPremioDeReto, type RetoEnCaja, getCumpleEnCaja, type CumpleEnCaja,
@@ -293,12 +294,13 @@ function CampoPersonas({ v, set }: { v: string; set: (s: string) => void }) {
 /**
  * Pedido del PoS: lista de pedidos abiertos del local (puente, ~75 s). Un toque elige; el servidor guarda
  * el pedido y la hora del escaneo. Plan B si el pedido ya se cerró o la lista no carga: la lista de
- * facturas cobradas HOY, día CR (hora, total, mesa si tiene; S0b: también las que esperan el cierre de caja, marcadas),
- * y la búsqueda por los últimos dígitos del tiquete, hasta 3 días CR atrás (mig 174: para cargar al día siguiente una
- * tarjeta de anoche). `bloquearUsadas` (cupón y tarjeta física): una factura que ya tiene tarjeta o cupón se muestra
- * marcada y no se elige (la base también la frena).
+ * facturas cobradas de las últimas 2 h (hora, total, mesa si tiene; S0b: también las que esperan el cierre de caja, marcadas).
+ * `modoTarjeta` (SOLO la tarjeta física del referente, mig 174, decisión del dueño 15-nov): la lista trae las cobradas
+ * HOY (día CR), se busca por los últimos dígitos del tiquete hasta 3 días CR atrás (para cargar al día siguiente una
+ * tarjeta de anoche) y una factura que ya tiene tarjeta o cupón se muestra marcada y no se elige (la base también la
+ * frena). Cupón, canje y visita de socio siguen igual que antes.
  */
-function SelectorPedido({ v, set, bloquearUsadas = false }: { v: PosRef | null; set: (p: PosRef | null) => void; bloquearUsadas?: boolean }) {
+function SelectorPedido({ v, set, modoTarjeta = false }: { v: PosRef | null; set: (p: PosRef | null) => void; modoTarjeta?: boolean }) {
   const [pedidos, setPedidos] = useState<PedidoAbierto[] | null>(null)
   const [facturas, setFacturas] = useState<FacturaReciente[] | null>(null)
   const [err, setErr] = useState<string | false>(false)
@@ -318,10 +320,10 @@ function SelectorPedido({ v, set, bloquearUsadas = false }: { v: PosRef | null; 
   }, [])
   const cargarB = useCallback((q: string | null = null) => {
     setErrB(false); setFacturas(null); setBuscado(q)
-    buscarFacturas(q).then(setFacturas).catch(e => {
+    ;(modoTarjeta ? buscarFacturas(q) : getFacturasRecientes()).then(setFacturas).catch(e => {
       setErrB(q ? aClubError(e).message : 'No se pudo cargar la lista de facturas. Probá «Actualizar».'); setFacturas([])
     })
-  }, [])
+  }, [modoTarjeta])
   const digitos = digitosTiquete(tiquete)
   const buscarTiquete = () => { if (digitos.length >= MIN_DIGITOS_TIQUETE) cargarB(digitos) }
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -360,16 +362,16 @@ function SelectorPedido({ v, set, bloquearUsadas = false }: { v: PosRef | null; 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: '0.85rem', color: C.muted }}>
             {err ? `${err} Elegí` : pedidos?.length === 0 ? 'No hay pedidos abiertos en el PoS. Elegí' : 'Pedido ya cerrado: elegí'}{' '}
-            la factura de la lista (cobradas hoy) o buscala por número de tiquete.
+            {modoTarjeta ? 'la factura de la lista (cobradas hoy) o buscala por número de tiquete.' : 'la factura de la lista (cobradas en las últimas 2 horas).'}
           </div>
-          <form onSubmit={e => { e.preventDefault(); buscarTiquete() }} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+          {modoTarjeta && <form onSubmit={e => { e.preventDefault(); buscarTiquete() }} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
             <label style={{ flex: 1 }}>
               <span style={labelStyle}>Buscar por número de tiquete</span>
               <input value={tiquete} onChange={e => setTiquete(e.target.value)} inputMode="numeric" autoComplete="off"
                 placeholder={`Últimos dígitos (mínimo ${MIN_DIGITOS_TIQUETE})`} style={inputStyle} />
             </label>
             <Btn type="submit" variant="secondary" disabled={digitos.length < MIN_DIGITOS_TIQUETE}>Buscar</Btn>
-          </form>
+          </form>}
           {buscado && (
             <div style={{ fontSize: '0.85rem', color: C.muted }}>
               Tiquetes que terminan en {buscado} (hoy y los 3 días anteriores).
@@ -380,13 +382,14 @@ function SelectorPedido({ v, set, bloquearUsadas = false }: { v: PosRef | null; 
           {facturas?.length === 0 && !errB && (
             <div style={{ color: C.muted, fontSize: '0.85rem' }}>
               {buscado ? MSG_TIQUETE_NO_APARECE
-                : 'No hay facturas cobradas hoy en este local. Cobrá la cuenta en el PoS y tocá «Actualizar»; si es de otro día, buscala por número de tiquete.'}
+                : modoTarjeta ? 'No hay facturas cobradas hoy en este local. Cobrá la cuenta en el PoS y tocá «Actualizar»; si es de otro día, buscala por número de tiquete.'
+                : 'No hay facturas cobradas en las últimas 2 horas. Cobrá la cuenta en el PoS y tocá «Actualizar».'}
             </div>
           )}
           {facturas?.map(f => {
             const sel = v?.modo === 'factura' && v.numero_factura === f.numero_factura
-            const bloqueada = bloquearUsadas && !!f.usada
-            const dia = dateCR(f.hora)
+            const bloqueada = modoTarjeta && !!f.usada
+            const dia = modoTarjeta ? dateCR(f.hora) : ''
             return (
               <button key={f.numero_factura} onClick={() => { if (!bloqueada) set(posDeFactura(f)) }} aria-pressed={sel}
                 disabled={bloqueada} style={{ ...opcion(sel), ...(bloqueada ? { cursor: 'not-allowed', opacity: 0.6 } : {}) }}>
@@ -465,7 +468,7 @@ function PanelCupon({ a, ...p }: PanelBase & { a: Extract<Actual, { kind: 'cupon
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
-          <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} bloquearUsadas />
+          <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
           {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
           {p.confirmando ? (
             <Confirmacion texto={`+${p.personas} personas a ${d.referente} · ${p.pos ? describirPos(p.pos) : ''}`}
@@ -635,7 +638,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                   excepción «Tarjeta física» para que la revise otra persona.
                 </div>
                 <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
-                <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} bloquearUsadas />
+                <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} modoTarjeta />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando ? (
                   <Confirmacion texto={`Tarjeta física: +${p.personas} personas a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}

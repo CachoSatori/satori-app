@@ -13,19 +13,21 @@
 > - **Repo público:** en la bitácora (§9) solo conteos, nunca montos, números de tiquete reales ni nombres.
 
 ## 1. Qué pasa y qué no
-- **Pasa:** en Club → Escanear, «Factura (plan B)» muestra las facturas **cobradas hoy** (día CR) y se busca por los
-  últimos dígitos del tiquete hasta **3 días CR** atrás. Funciones nuevas: `club_facturas_buscar` (envoltorio con
-  `club_exigir_local`, EXECUTE para `authenticated`) y su `club_facturas_buscar__nucleo`; internas (sin EXECUTE para la
-  API): `club_facturas_lista`, `club_factura_usada`, `club_visita_con_tarjeta`, `club_facturas_desde`,
-  `club_facturas_dias_busqueda`. Cambian de cuerpo: `club_facturas_recientes__nucleo` (hoy en vez de 2 h; misma firma),
-  `club_pos_ref` (acepta la factura de hasta 3 días CR; antes 2 h 15 min) y `club_visita_control` (con la factura del plan
-  B, si ya tiene tarjeta o cupón, corta).
-- **No pasa:** ni tablas, ni datos, ni plata (los movimientos se guardan igual; `fecha_visita` sigue siendo la hora del
-  registro). No cambia el envoltorio de `club_facturas_recientes`, ni el cruce, ni sagrados, ni Edge Functions ni
-  secretos. Con el pedido abierto sigue CLUB-AUD-02.
-- **El código de la app va en el mismo merge** (Escanear llama a `club_facturas_buscar`). Una PWA en caché vieja sigue
-  llamando a `club_facturas_recientes`: ve la lista de hoy, sin búsqueda ni marca de usada (la base igual frena la
-  factura usada).
+- **Pasa (solo la TARJETA FÍSICA del referente):** en Club → Escanear → «Tarjeta física» → «Factura (plan B)» se ven las
+  facturas **cobradas hoy** (día CR) y se busca por los últimos dígitos del tiquete hasta **3 días CR** atrás. Funciones
+  nuevas: `club_facturas_buscar` (envoltorio con `club_exigir_local`, EXECUTE para `authenticated`) y su
+  `club_facturas_buscar__nucleo`; internas (sin EXECUTE para la API): `club_pos_ref_tarjeta`, `club_facturas_lista`,
+  `club_factura_usada`, `club_visita_con_tarjeta`, `club_facturas_desde`, `club_facturas_dias_busqueda`. Cambia de cuerpo
+  **solo** `club_tarjeta_manual__nucleo` (receta 170/172: el envoltorio de la 172 queda; misma firma y permisos): usa
+  `club_pos_ref_tarjeta` (la factura del plan B vale hasta 3 días CR) y, con esa factura, si la visita ya tiene tarjeta,
+  cupón o personas pendientes, corta.
+- **No pasa:** cupón, canje (con y sin celular) y visita de socio quedan **exactamente como en `main`**: `club_pos_ref`
+  (2 h 15 min), `club_visita_control`, `club_facturas_recientes` (envoltorio y núcleo), `club_cupon_usar__nucleo`,
+  `club_canje_aplicar` y `club_socio_visita_base` sin cambios (la batería lo comprueba por md5 de TODAS las funciones de
+  `public`). Ni tablas, ni datos, ni plata (`fecha_visita` sigue siendo la hora del registro). Ni el cruce, ni sagrados, ni
+  Edge Functions ni secretos. Con el pedido abierto sigue CLUB-AUD-02.
+- **El código de la app va en el mismo merge** (la tarjeta física llama a `club_facturas_buscar`). Una PWA en caché vieja
+  sigue con la lista de 2 h en la tarjeta (sin búsqueda ni marca de usada); la base igual frena la factura usada.
 
 ## 2. Prerrequisitos
 - La 172 (#202) y la 173 (#203) en prod (hecho: ledger 173).
@@ -35,29 +37,32 @@
 ## 3. Lecturas previas en prod (solo lectura, `begin read only` … `rollback`)
 - Ledger: última versión = 173 y **sin** fila 174.
 - `to_regprocedure('public.club_facturas_buscar(text,text)') is null`.
-- `md5(prosrc)` de `club_facturas_recientes`, `club_facturas_recientes__nucleo`, `club_pos_ref` y `club_visita_control`
-  (anotar: el envoltorio de recientes tiene que quedar igual; los otros tres cambian).
+- `md5(prosrc)` de `club_tarjeta_manual` (envoltorio), `club_tarjeta_manual__nucleo`, `club_pos_ref`, `club_visita_control`,
+  `club_facturas_recientes`, `club_facturas_recientes__nucleo`, `club_cupon_usar__nucleo`, `club_canje_aplicar` y
+  `club_socio_visita_base` (anotar: solo `club_tarjeta_manual__nucleo` cambia).
 
 ## 4. Prueba en staging (pendiente con el dueño)
 `python3 scripts/sql/174_pruebas.py --armar` y correr el SQL en staging (ref `hwiatgic…`, nunca prod): transacción
-descartada, no deja nada. Esperado: 26/26. En Postgres 16 local (15-nov): 26/26 con y sin la 172/173; 12/12 mutaciones
-muerden.
+descartada, no deja nada. Esperado: 31/31. En Postgres 16 local (15-nov, base nueva armada con `main` = `4ba922e`):
+31/31 y 15/15 mutaciones muerden (entre ellas: reabrir los 3 días para canje y visita de socio, o para el cupón, hace caer
+5a/5b/5c).
 
 ## 5. Humo después (solo lectura)
 - Ledger: exactamente 1 fila `174` con `name = club_facturas_dia_busqueda`; check «Supabase Preview» en success con «All
   migrations are up to date».
 - `has_function_privilege('authenticated','public.club_facturas_buscar(text,text)','EXECUTE')` = true y `= false` para
   `anon`; `= false` para `authenticated` en `club_facturas_buscar__nucleo(text,text)` y `club_facturas_lista(text,text,timestamptz)`.
-- `md5(prosrc)` del envoltorio `club_facturas_recientes` = el de §3.
-- En el local (validación física): «Factura (plan B)» muestra las cobradas hoy; buscar un tiquete de ayer lo trae con la
-  fecha; una factura con tarjeta ya cargada aparece marcada y no se puede elegir.
+- `md5(prosrc)` de todas las de §3 = las de antes, salvo `club_tarjeta_manual__nucleo`.
+- En el local (validación física): en la tarjeta física, «Factura (plan B)» muestra las cobradas hoy; buscar un tiquete de
+  ayer lo trae con la fecha; una factura con tarjeta ya cargada aparece marcada y no se puede elegir. En un cupón, el plan
+  B sigue mostrando las de las últimas 2 horas, sin búsqueda.
 
 ## 6. Criterios de parada
 Cualquier diferencia con §5, un error de Branching o una caja que no puede registrar un cupón o una tarjeta con el pedido
 abierto después del merge → se para, se avisa y se evalúa el §7.
 
 ## 7. Vuelta atrás
-- Primero el revert del código de la app (Escanear vuelve a `club_facturas_recientes`), después
+- Primero el revert del código de la app (la tarjeta física vuelve a `club_facturas_recientes`), después
   `scripts/sql/174_rollback.sql` y, **en el mismo momento**, un PR que saca el `.sql` de `main` (skill §6). Vuelve la
   regla de 2 h. No toca datos: las tarjetas cargadas con facturas de más de 2 h quedan.
 - Orden: antes de revertir la 172, la 173 o la 170.

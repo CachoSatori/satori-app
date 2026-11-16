@@ -1,5 +1,6 @@
--- 174_pruebas (origen club 120) · plan B de Escanear: facturas cobradas HOY + búsqueda por tiquete (3 días CR) + una
--- factura con tarjeta o cupón ya cargado no se usa otra vez. Aplica la 174 dentro de una transacción, arma datos
+-- 174_pruebas (origen club 120) · plan B de la TARJETA FÍSICA en Escanear: facturas cobradas HOY + búsqueda por tiquete
+-- (3 días CR) + una factura con tarjeta o cupón ya cargado no se usa otra vez. Cupón, canje y visita de socio: igual que
+-- antes (2 h 15 min), y ninguna otra función cambia. Aplica la 174 dentro de una transacción, arma datos
 -- ficticios, prueba y termina en ROLLBACK: no deja nada. Al final un ASSERT: si algún caso falla, aborta con
 -- «174-FALLAN: <casos>». Se corre con scripts/sql/174_pruebas.py (--local: Postgres 16 local; --armar: imprime el SQL
 -- para staging, con el OK del dueño).
@@ -15,14 +16,12 @@
 --     usa now()).
 begin;
 
--- huellas ANTES de la 174 (lo que tiene que quedar igual o volver igual con el rollback)
+-- huellas ANTES de la 174: TODAS las funciones del esquema public (solo puede cambiar club_tarjeta_manual__nucleo, y el
+-- rollback las deja a todas como estaban)
 create temp table _antes174 on commit drop as
 select p.oid::regprocedure::text as fn, md5(p.prosrc) as md5, pg_get_function_result(p.oid) as res,
-       pg_get_function_arguments(p.oid) as args
-  from pg_proc p
- where p.oid in ('public.club_facturas_recientes(text)'::regprocedure, 'public.club_facturas_recientes__nucleo(text)'::regprocedure,
-                 'public.club_pos_ref(jsonb,text)'::regprocedure,
-                 'public.club_visita_control(text,text,jsonb,text,uuid,integer)'::regprocedure);
+       pg_get_function_arguments(p.oid) as args, p.proacl::text as acl
+  from pg_proc p where p.pronamespace = 'public'::regnamespace;
 
 -- @@174@@   (aquí va el cuerpo de la 174 sin begin/commit)
 
@@ -78,6 +77,24 @@ select pg_temp.tk('p174-a', '9174205', now() - interval '2 minutes', 'X', '00100
 select pg_temp.tk('p174-b', '9174206', now() - interval '1 minute', 'C', '00100001040000092006');                             -- otro local
 select pg_temp.tk('p174-a', '9174207', now() - interval '3 minutes', 'C', '00100001040000092007');                             -- con pendiente
 select pg_temp.tk('p174-a', '9174208', public.club_facturas_desde(now(), 1) + interval '2 hours', 'C', '00100001040000092008'); -- ayer, para el rollback
+select pg_temp.tk('p174-a', '9174209', now() - interval '3 hours', 'C', '00100001040000092009');                             -- hace 3 h
+-- 3 h o más antes de las 00:00 CR de hoy: siempre «de ayer» y siempre más de 2 h 15 min atrás (no depende de la hora)
+select pg_temp.tk('p174-a', '9174211', public.club_facturas_desde(now(), 0) - interval '3 hours', 'C', '00100001040000092011');
+select pg_temp.tk('p174-a', '9174212', public.club_facturas_desde(now(), 0) - interval '4 hours', 'C', '00100001040000092012');
+select pg_temp.tk('p174-a', '9174213', public.club_facturas_desde(now(), 0) - interval '5 hours', 'C', '00100001040000092013');
+select pg_temp.tk('p174-a', '9174214', now() - interval '1 minute', 'C', '00100001040000092014');                             -- control
+-- socio, saldo para un canje y un cupón vigente (ficticios)
+insert into public.club_miembros (id, location_id, tipo, nombre) values
+  ('00000000-0000-4000-8000-000000174b04', 'p174-a', 'socio', 'Prueba Socio P174');
+insert into public.club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, origen, client_op_id)
+values ('p174-a', '00000000-0000-4000-8000-000000174b01', 'tarjeta', 12, 6, 1000, 'app', gen_random_uuid());
+insert into public.club_cupones (location_id, referente_id, codigo, vence_en) values
+  ('p174-a', '00000000-0000-4000-8000-000000174b02', 'PRBACDEFGH', now() + interval '1 day');
+-- un pedido abierto con el puente al día (para la tarjeta con el PEDIDO: CLUB-AUD-02)
+insert into public.pos_ndf_cursor (local, last_poll_at, last_error) values ('p174-a', now(), null)
+  on conflict (local) do update set last_poll_at = excluded.last_poll_at, last_error = null;
+insert into public.pos_ndf_open (local, clave, id_pedido, updated_at, pedido_abierto_en, pax, mesa)
+values ('p174-a', 'pedido:20010315:91', '91', now(), now() - interval '20 minutes', 6, '7');
 
 -- Llama como el usuario dado y devuelve 'ok' o 'SQLSTATE mensaje'. Sin usuario = sin sesión. `deshacer`: lo que escribe
 -- se deshace (subtransacción con un error propio); si no, queda (para armar el caso siguiente).
@@ -114,15 +131,14 @@ $f$;
 
 -- 0. catálogo y permisos ───────────────────────────────────────────────────────────────────────────────────────────
 insert into _r174 (caso, ok, detalle)
-select '0a club_facturas_recientes: el envoltorio de la 170 queda igual (md5, argumentos y resultado); el núcleo cambia de cuerpo con el mismo resultado',
-       (select md5(prosrc) from pg_proc where oid = 'public.club_facturas_recientes(text)'::regprocedure)
-         = (select md5 from _antes174 where fn = 'club_facturas_recientes(text)')
-       and (select md5(prosrc) from pg_proc where oid = 'public.club_facturas_recientes__nucleo(text)'::regprocedure)
-         <> (select md5 from _antes174 where fn = 'club_facturas_recientes__nucleo(text)')
-       and (select pg_get_function_result(oid) from pg_proc where oid = 'public.club_facturas_recientes__nucleo(text)'::regprocedure)
-         = (select res from _antes174 where fn = 'club_facturas_recientes__nucleo(text)')
-       and (select pg_get_function_arguments(oid) from pg_proc where oid = 'public.club_facturas_recientes(text)'::regprocedure)
-         = (select args from _antes174 where fn = 'club_facturas_recientes(text)'), null;
+select '0a de las funciones que ya existían, SOLO cambia club_tarjeta_manual__nucleo (cuerpo); su firma, resultado y permisos, iguales. club_pos_ref, club_visita_control, recientes, canje, cupón y visita de socio: byte a byte',
+       coalesce(string_agg(a.fn, ',' order by a.fn), '') = 'club_tarjeta_manual__nucleo(uuid,integer,text,uuid,jsonb)'
+       and (select bool_and(pg_get_function_result(p.oid) = a.res and pg_get_function_arguments(p.oid) = a.args
+                            and p.proacl::text is not distinct from a.acl)
+              from _antes174 a join pg_proc p on p.oid = a.fn::regprocedure),
+       string_agg(a.fn, ',' order by a.fn)
+  from _antes174 a join pg_proc p on p.oid = a.fn::regprocedure
+ where md5(p.prosrc) <> a.md5;
 insert into _r174 (caso, ok, detalle)
 select '0b permisos: club_facturas_buscar con EXECUTE para authenticated (no anon ni PUBLIC); su núcleo y las internas sin EXECUTE para la API',
        has_function_privilege('authenticated', 'public.club_facturas_buscar(text,text)', 'EXECUTE')
@@ -133,9 +149,16 @@ select '0b permisos: club_facturas_buscar con EXECUTE para authenticated (no ano
               from unnest(array['public.club_facturas_buscar__nucleo(text,text)', 'public.club_facturas_lista(text,text,timestamptz)',
                                 'public.club_factura_usada(text,text)', 'public.club_visita_con_tarjeta(text,text)',
                                 'public.club_facturas_desde(timestamptz,integer)', 'public.club_facturas_dias_busqueda()',
-                                'public.club_facturas_recientes__nucleo(text)', 'public.club_pos_ref(jsonb,text)',
-                                'public.club_visita_control(text,text,jsonb,text,uuid,integer)']) f)
+                                'public.club_pos_ref_tarjeta(jsonb,text)',
+                                'public.club_tarjeta_manual__nucleo(uuid,integer,text,uuid,jsonb)']) f)
        and (select prosecdef from pg_proc where oid = 'public.club_facturas_buscar(text,text)'::regprocedure), null;
+insert into _r174 (caso, ok, detalle)
+select '0c solo el núcleo de la tarjeta usa club_pos_ref_tarjeta; canje, canje sin celular, cupón y visita de socio siguen con club_pos_ref',
+       (select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+         where p.pronamespace = 'public'::regnamespace and p.prosrc like '%club_pos_ref_tarjeta(%' and p.proname <> 'club_pos_ref_tarjeta')
+         = 'club_tarjeta_manual__nucleo',
+       (select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+         where p.pronamespace = 'public'::regnamespace and p.prosrc like '%club_pos_ref_tarjeta(%' and p.proname <> 'club_pos_ref_tarjeta');
 
 -- 1. lista y búsqueda con «ahora» fijo (2001-03-15 21:33 CR) ──────────────────────────────────────────────────────
 insert into _r174 (caso, ok, detalle)
@@ -183,10 +206,10 @@ select '1g corte en hora CR (UTC−6), no UTC: 05:59:59 UTC del 16 = 23:59:59 CR
 
 -- 2. funciones públicas (now()) ────────────────────────────────────────────────────────────────────────────────────
 insert into _r174 (caso, ok, detalle)
-select '2a cajero de A: club_facturas_recientes y club_facturas_buscar(null) traen la de hace 1 min y NO la de ayer 23:00 CR',
+select '2a cajero de A: club_facturas_recientes (cupón, canje, socio) sigue con las últimas 2 h (hace 1 min sí, hace 3 h no); club_facturas_buscar(null) trae la de hace 1 min y NO la de ayer',
        pg_temp.como(pg_temp.uid('CA'), $q$do $d$ begin
          if not exists (select 1 from public.club_facturas_recientes('p174-a') where numero_factura = '9174201')
-            or exists (select 1 from public.club_facturas_recientes('p174-a') where numero_factura = '9174202')
+            or exists (select 1 from public.club_facturas_recientes('p174-a') where numero_factura = '9174209')
             or not exists (select 1 from public.club_facturas_buscar(null, 'p174-a') where numero_factura = '9174201')
             or exists (select 1 from public.club_facturas_buscar(null, 'p174-a') where numero_factura = '9174202') then
            raise exception 'NO'; end if; end $d$$q$) = 'ok', null;
@@ -224,8 +247,8 @@ select '2e como authenticated (rol de la API), el núcleo da 42501 (permission d
 
 -- 3. el servidor: club_pos_ref y club_visita_control, por club_tarjeta_manual ──────────────────────────────────────
 insert into _r174 (caso, ok, detalle)
-select '3a tarjeta física con la factura de AYER 23:00 CR (antes: «más de 2 horas») → se registra', r = 'ok', r
-  from (select pg_temp.tarjeta(1, '9174202', false) as r) x;
+select '3a tarjeta física con una factura de AYER (3 h antes de las 00:00 CR; antes: «más de 2 horas») → se registra', r = 'ok', r
+  from (select pg_temp.tarjeta(1, '9174211', false) as r) x;
 insert into _r174 (caso, ok, detalle)
 select '3b tarjeta con la factura de hoy − 4 días → «más de 3 días: pedile al owner un ajuste»',
        r = 'P0001 Esa factura tiene más de 3 días: pedile al owner un ajuste', r
@@ -233,11 +256,11 @@ select '3b tarjeta con la factura de hoy − 4 días → «más de 3 días: pedi
 insert into _r174 (caso, ok, detalle)
 select '3c la misma factura (ya con tarjeta) para OTRO referente → «ya tiene una tarjeta o un cupón cargado»',
        r = 'P0001 Esa factura ya tiene una tarjeta o un cupón cargado: no se puede usar otra vez. Si falta algo, pedile al owner un ajuste', r
-  from (select pg_temp.tarjeta(2, '9174202') as r) x;
+  from (select pg_temp.tarjeta(2, '9174211') as r) x;
 insert into _r174 (caso, ok, detalle)
 select '3d la misma factura para el MISMO referente → el error de siempre (una por mesa)',
        r like 'P0001 Este referente ya tiene una tarjeta en esta visita%', r
-  from (select pg_temp.tarjeta(1, '9174202') as r) x;
+  from (select pg_temp.tarjeta(1, '9174211') as r) x;
 insert into _r174 (caso, ok, detalle)
 select '3e factura de OTRO local (aunque sea de hace 1 min) → «no está en el PoS de este local»',
        r = 'P0001 Esa factura no está en el PoS de este local (o está anulada): tocá «Actualizar» o buscala por número de tiquete. Si no aparece, pedile al owner un ajuste', r
@@ -259,34 +282,60 @@ select '3h factura con personas PENDIENTES de aprobación → tampoco se usa otr
        r like 'P0001 Esa factura ya tiene una tarjeta o un cupón cargado%', r
   from (select pg_temp.tarjeta(1, '9174207') as r) x;
 insert into _r174 (caso, ok, detalle)
-select '3i con el PEDIDO abierto sigue CLUB-AUD-02: otro referente en la misma visita pasa el control (Σ ≤ pax)',
-       pg_temp.como(null, format($q$select public.club_visita_control('p174-a', %L, '{"modo":"pedido","pedido":"14"}'::jsonb, null, %L::uuid, 1)$q$,
-                                 public.club_visita_canonica('p174-a', '{"modo":"factura","numero_factura":"9174202"}'::jsonb, null),
-                                 pg_temp.ref(2))) = 'ok', null;
+select '3i tarjeta con el PEDIDO abierto: sigue CLUB-AUD-02 (un segundo referente en la misma mesa entra, Σ ≤ pax)',
+       pg_temp.como(pg_temp.uid('CA'), format('select * from public.club_tarjeta_manual(%L::uuid, 2, null, gen_random_uuid(), %L::jsonb)',
+                    pg_temp.ref(1), '{"modo":"pedido","pedido":"91","clave":"pedido:20010315:91"}'), false) = 'ok'
+       and pg_temp.como(pg_temp.uid('CA'), format('select * from public.club_tarjeta_manual(%L::uuid, 2, null, gen_random_uuid(), %L::jsonb)',
+                    pg_temp.ref(2), '{"modo":"pedido","pedido":"91","clave":"pedido:20010315:91"}')) = 'ok',
+       pg_temp.como(pg_temp.uid('CA'), format('select * from public.club_tarjeta_manual(%L::uuid, 2, null, gen_random_uuid(), %L::jsonb)',
+                    pg_temp.ref(2), '{"modo":"pedido","pedido":"91","clave":"pedido:20010315:91"}'));
 insert into _r174 (caso, ok, detalle)
 select '3j la lista marca: la factura con tarjeta (ayer) y la con pendientes salen usada = true; la de hace 1 min, false',
        pg_temp.como(pg_temp.uid('CA'), $q$do $d$ begin
-         if not (select usada from public.club_facturas_buscar('92002', 'p174-a'))
+         if not (select usada from public.club_facturas_buscar('92011', 'p174-a'))
             or not (select usada from public.club_facturas_buscar(null, 'p174-a') where numero_factura = '9174207')
             or (select usada from public.club_facturas_buscar(null, 'p174-a') where numero_factura = '9174201') then
            raise exception 'NO'; end if; end $d$$q$) = 'ok', null;
 
+-- 5. cupón, canje y visita de socio: IGUAL QUE ANTES (verificador del #206) ────────────────────────────────────────
+insert into _r174 (caso, ok, detalle)
+select '5a visita de socio con una factura de ayer → rechazada como antes («más de 2 horas»)',
+       r = 'P0001 Esa factura tiene más de 2 horas: la resuelve el manager en Excepciones', r
+  from (select pg_temp.como(pg_temp.uid('CA'), format('select * from public.club_socio_visita(%L::uuid, %L::jsonb, gen_random_uuid(), %L)',
+          pg_temp.ref(4), '{"modo":"factura","numero_factura":"9174212"}', 'p174-a')) as r) x;
+insert into _r174 (caso, ok, detalle)
+select '5b canje (sin celular) con una factura de ayer → rechazado como antes («más de 2 horas»)',
+       r = 'P0001 Esa factura tiene más de 2 horas: la resuelve el manager en Excepciones', r
+  from (select pg_temp.como(pg_temp.uid('OW'), format('select * from public.club_canje_aprobado(%L::uuid, 1, null, gen_random_uuid(), %L::jsonb, %L)',
+          pg_temp.ref(1), '{"modo":"factura","numero_factura":"9174212"}', 'nota de prueba P174')) as r) x;
+insert into _r174 (caso, ok, detalle)
+select '5c cupón con una factura de ayer → rechazado como antes; con la de hace 1 min pasa ese control',
+       r1 = 'P0001 Esa factura tiene más de 2 horas: la resuelve el manager en Excepciones' and r2 not like '%más de 2 horas%',
+       r1 || ' / ' || r2
+  from (select pg_temp.como(pg_temp.uid('CA'), format('select * from public.club_cupon_usar(%L, 2, null, gen_random_uuid(), %L::jsonb)',
+                 'PRBACDEFGH', '{"modo":"factura","numero_factura":"9174213"}')) as r1,
+               pg_temp.como(pg_temp.uid('CA'), format('select * from public.club_cupon_usar(%L, 2, null, gen_random_uuid(), %L::jsonb)',
+                 'PRBACDEFGH', '{"modo":"factura","numero_factura":"9174214"}')) as r2) x;
+insert into _r174 (caso, ok, detalle)
+select '5d cupón con la factura del plan B que ya tiene tarjeta (de otro referente): igual que antes, CLUB-AUD-02 (no lo frena la 174)',
+       pg_temp.como(null, format($q$select public.club_visita_control('p174-a', %L, '{"modo":"factura","numero_factura":"9174211"}'::jsonb, null, %L::uuid, 1)$q$,
+                                 public.club_visita_canonica('p174-a', '{"modo":"factura","numero_factura":"9174211"}'::jsonb, null),
+                                 pg_temp.ref(2))) = 'ok', null;
+
 -- 4. vuelta atrás (en esta misma transacción descartada) ───────────────────────────────────────────────────────────
 -- @@174R@@   (aquí va el cuerpo de scripts/sql/174_rollback.sql sin begin/commit)
 insert into _r174 (caso, ok, detalle)
-select '4a rollback: sin club_facturas_buscar ni internas; recientes (envoltorio y núcleo), club_pos_ref y club_visita_control vuelven byte a byte, sin EXECUTE nuevo',
+select '4a rollback: sin club_facturas_buscar ni internas; TODAS las funciones de public como antes de la 174 (cuerpo, firma y permisos)',
        to_regprocedure('public.club_facturas_buscar(text,text)') is null
-       and to_regprocedure('public.club_facturas_buscar__nucleo(text,text)') is null
+       and to_regprocedure('public.club_pos_ref_tarjeta(jsonb,text)') is null
        and to_regprocedure('public.club_facturas_lista(text,text,timestamptz)') is null
-       and to_regprocedure('public.club_factura_usada(text,text)') is null
        and to_regprocedure('public.club_visita_con_tarjeta(text,text)') is null
        and to_regprocedure('public.club_facturas_desde(timestamptz,integer)') is null
-       and to_regprocedure('public.club_facturas_dias_busqueda()') is null
-       and (select count(*) from _antes174 a join pg_proc p on p.oid = a.fn::regprocedure where md5(p.prosrc) = a.md5) = 4
-       and has_function_privilege('authenticated', 'public.club_facturas_recientes(text)', 'EXECUTE')
-       and not has_function_privilege('authenticated', 'public.club_facturas_recientes__nucleo(text)', 'EXECUTE')
-       and not has_function_privilege('authenticated', 'public.club_pos_ref(jsonb,text)', 'EXECUTE'),
-       (select string_agg(a.fn, ',') from _antes174 a join pg_proc p on p.oid = a.fn::regprocedure where md5(p.prosrc) <> a.md5);
+       and (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace) = (select count(*) from _antes174)
+       and not exists (select 1 from _antes174 a left join pg_proc p on p.oid = to_regprocedure('public.' || a.fn)
+                        where p.oid is null or md5(p.prosrc) <> a.md5 or p.proacl::text is distinct from a.acl),
+       (select string_agg(a.fn, ',') from _antes174 a left join pg_proc p on p.oid = to_regprocedure('public.' || a.fn)
+         where p.oid is null or md5(p.prosrc) <> a.md5 or p.proacl::text is distinct from a.acl);
 insert into _r174 (caso, ok, detalle)
 select '4b rollback: vuelve la regla de 2 h (la factura de ayer otra vez se rechaza): la prueba distingue',
        r = 'P0001 Esa factura tiene más de 2 horas: la resuelve el manager en Excepciones', r
@@ -299,7 +348,7 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r174 where not ok or ok is null;
   if v is not null then raise exception '174-FALLAN: %', v; end if;
-  if (select count(*) from _r174) < 25 then raise exception '174-FALLAN: faltan casos (NO PROBADO)'; end if;
+  if (select count(*) from _r174) < 31 then raise exception '174-FALLAN: faltan casos (NO PROBADO)'; end if;
 end $$;
 
 rollback;

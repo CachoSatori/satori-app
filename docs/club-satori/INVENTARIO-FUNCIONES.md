@@ -46,9 +46,10 @@ En el «Inicio» de la app, la tarjeta «Club» muestra cuántas excepciones hay
 - **Buscar a un anfitrión sin código** (plan B): por nombre, negocio o los últimos 4 del teléfono. Cada búsqueda queda
   registrada y hay un tope por minuto.
 - **Elegir el pedido de la mesa:** la lista de pedidos abiertos del PoS, que llega por el puente.
-  - Si el pedido ya se cerró o el puente está caído: «Factura (plan B)», la lista de facturas cobradas hoy (día CR) y la
-    búsqueda por los últimos dígitos del tiquete, hasta 3 días atrás (mig 174). Una factura que ya tiene tarjeta o cupón
-    se ve marcada y no se elige para otro cupón o tarjeta.
+  - Si el pedido ya se cerró o el puente está caído: «Factura (plan B)», la lista de facturas cobradas de las últimas 2
+    horas (cupón, canje y visita de socio).
+  - En la **tarjeta física** del referente (mig 174): la lista de las cobradas hoy (día CR) y la búsqueda por los
+    últimos dígitos del tiquete, hasta 3 días atrás. Una factura que ya tiene tarjeta o cupón se ve marcada y no se elige.
   - Una factura cobrada que todavía no pasó el cierre de caja aparece con la nota «Cobrada, falta el cierre de caja:
     vale igual».
 - **Cupón del turista:** elegir cuántas personas hay en la mesa (1 a 30) y el pedido, y confirmar. Suma personas al

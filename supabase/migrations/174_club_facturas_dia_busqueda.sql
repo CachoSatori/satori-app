@@ -1,4 +1,4 @@
--- 174 (origen club 120) · Club → Escanear, plan B: facturas cobradas HOY + búsqueda por número de tiquete (3 días).
+-- 174 (origen club 120) · Club → Escanear → Tarjeta física, plan B: facturas cobradas HOY + búsqueda por tiquete (3 días).
 --
 -- ⚠ Lleva firma: esquema. Decisión del dueño (15-nov, opción A), tras un caso real: una mesa cobrada a las 19:03 no se
 -- pudo elegir a las 21:33 para cargar la tarjeta física del referente («Factura (plan B)» solo listaba las últimas 2 h) y
@@ -14,30 +14,31 @@
 --     anuladas), más recientes primero; con `buscar` (4 a 20 dígitos: los últimos del consecutivo FE, el número del
 --     tiquete), las de hoy y los 3 días CR anteriores cuyo consecutivo termina así. Cada fila trae `usada`.
 --  4. club_facturas_buscar(p_buscar, p_location): NUEVA, con la receta de la 170 (envoltorio con club_exigir_local +
---     club_facturas_buscar__nucleo sin EXECUTE para la API). owner, manager y cajero, como la lista de siempre.
---  5. club_facturas_recientes__nucleo (receta de la 170: se cambia el NÚCLEO, no el envoltorio): misma firma y mismo
---     resultado; ahora devuelve las cobradas HOY (antes: las últimas 2 h). Queda para las PWA en caché.
---  6. club_pos_ref (interna, cuerpo de la 150): la factura elegida se acepta si se cobró desde las 00:00 CR de hace 3
---     días (antes: 2 h 15 min). Mensajes nuevos: «no está en el PoS de este local (o está anulada)» y «tiene más de 3
---     días: pedile al owner un ajuste».
---  7. club_visita_control (interna, cuerpo de la 150): con la factura del plan B, si la visita ya tiene una tarjeta o un
---     cupón cargado, corta («ya tiene una tarjeta o un cupón cargado: no se puede usar otra vez»). Con el pedido abierto
---     sigue CLUB-AUD-02 (dos referentes en la misma mesa, Σ personas ≤ pax).
+--     club_facturas_buscar__nucleo sin EXECUTE para la API). owner, manager y cajero. La usa SOLO la tarjeta física.
+--  5. club_pos_ref_tarjeta (interna): la referencia al PoS de la tarjeta física. La factura del plan B se acepta si se
+--     cobró desde las 00:00 CR de hace 3 días; pedido abierto y lo demás → club_pos_ref, igual que siempre.
+--  6. club_tarjeta_manual__nucleo (receta de la 170/172: se cambia el NÚCLEO, no el envoltorio de la 172): cuerpo de la
+--     150 con dos cambios marcados «174»: usa club_pos_ref_tarjeta y, con la factura del plan B, si la visita ya tiene
+--     una tarjeta o un cupón cargado (de cualquier referente), corta («ya tiene una tarjeta o un cupón cargado»).
+--
+-- SOLO TARJETA FÍSICA (verificador del #206, 15-nov): cupón, canje y visita de socio NO cambian. club_pos_ref,
+-- club_visita_control, club_facturas_recientes (envoltorio y núcleo) y todos los demás núcleos quedan como en main: la
+-- factura del plan B de esos flujos sigue siendo la de las últimas 2 h 15 min, y su lista la de las últimas 2 h.
 --
 -- ── LO QUE NO TOCA ───────────────────────────────────────────────────────────────────────────────────────────────
 --  · Ni plata ni movimientos: no cambia cómo se calcula ni qué se guarda (fecha_visita sigue siendo la hora del registro).
---  · Ni sagrados, ni envoltorios de la 170/172 (el de club_facturas_recientes queda igual; cambia su núcleo).
+--  · Ni sagrados, ni envoltorios de la 170/172 (el de club_tarjeta_manual queda igual; cambia su núcleo).
 --  · Ni el cruce: con la factura elegida el cruce ya era por número de factura, sin ventana de horas.
 --
--- ⚠ ORDEN: va DESPUÉS de la 172 (#202) y la 173 (#203). No toca nada de las dos (probado en base local con y sin ellas).
--- Usa club_exigir_local (170): aborta si falta.
+-- ⚠ ORDEN: va DESPUÉS de la 172 y la 173 (en prod desde el 15-nov). Usa club_exigir_local (170) y el núcleo de
+-- club_tarjeta_manual (172): aborta si faltan.
 -- Pruebas: scripts/sql/174_pruebas.sql (+ 174_pruebas.py; transacción descartada). Rollback: scripts/sql/174_rollback.sql.
 begin;
 
 do $pre$ begin
   if to_regprocedure('public.club_exigir_local(text)') is null
-     or to_regprocedure('public.club_facturas_recientes__nucleo(text)') is null then
-    raise exception '174: falta la 170 (club_exigir_local / club_facturas_recientes__nucleo)';
+     or to_regprocedure('public.club_tarjeta_manual__nucleo(uuid,integer,text,uuid,jsonb)') is null then
+    raise exception '174: falta la 170 o la 172 (club_exigir_local / club_tarjeta_manual__nucleo)';
   end if;
 end $pre$;
 
@@ -56,7 +57,7 @@ revoke all on function public.club_facturas_desde(timestamptz, int) from public,
 comment on function public.club_facturas_desde(timestamptz, int) is
   '174: las 00:00 de Costa Rica del día de p_ahora menos p_dias_atras días (corte de la lista y la búsqueda del plan B).';
 
--- Hasta cuántos días CR hacia atrás llega la búsqueda por tiquete (y el control de club_pos_ref): hoy y los 3 anteriores.
+-- Hasta cuántos días CR hacia atrás llega la búsqueda por tiquete (y el control de club_pos_ref_tarjeta): hoy y los 3 anteriores.
 create or replace function public.club_facturas_dias_busqueda()
 returns int
 language sql
@@ -177,31 +178,11 @@ comment on function public.club_facturas_buscar(text, text) is
   '174: envoltorio. Chequea el local (club_exigir_local: el manager, solo sus locales) y llama a club_facturas_buscar__nucleo. '
   'Sin p_buscar: las facturas cobradas HOY (CR); con p_buscar (últimos 4 a 20 dígitos del tiquete): hasta 3 días CR atrás.';
 
--- ── 5. La lista de siempre: se cambia el NÚCLEO (misma firma y resultado), ahora «cobradas hoy» ────────────────────
-create or replace function public.club_facturas_recientes__nucleo(p_location text default null)
-returns table (numero_factura text, hora timestamptz, total_crc numeric, area text, mesa text, pedido text, consecutivo_fe text,
-               estado text)
-language plpgsql
-stable
-security definer
-set search_path = public, pg_temp
-as $$
-declare v_rol public.user_role := public.get_my_role();
-begin
-  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
-  if v_rol is null or v_rol not in ('owner','manager','cajero') then
-    raise exception 'Sin permiso' using errcode = '42501';
-  end if;
-  -- 174: las cobradas HOY (día CR), más recientes primero. Antes: las últimas 2 h.
-  return query
-    select l.numero_factura, l.hora, l.total_crc, l.area, l.mesa, l.pedido, l.consecutivo_fe, l.estado
-      from public.club_facturas_lista(p_location, null, now()) l;
-end;
-$$;
-revoke all on function public.club_facturas_recientes__nucleo(text) from public, anon, authenticated;
-
--- ── 6. club_pos_ref: la factura elegida vale si se cobró desde las 00:00 CR de hace 3 días ─────────────────────────
-create or replace function public.club_pos_ref(p jsonb, p_location text)
+-- ── 5. La referencia al PoS SOLO para la tarjeta física: la factura vale hasta 3 días CR ───────────────────────────
+-- club_pos_ref (150) NO cambia: cupón, canje y visita de socio siguen con la factura de las últimas 2 h 15 min.
+-- Esta es la misma regla para la factura del plan B, con la ventana de la tarjeta física (decisión del dueño, 15-nov).
+-- Pedido abierto, vacío o algo que no es una factura: lo resuelve club_pos_ref, igual que siempre.
+create or replace function public.club_pos_ref_tarjeta(p jsonb, p_location text)
 returns jsonb
 language plpgsql
 stable
@@ -209,131 +190,139 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_modo  text;
-  v_local text;
-  v_ped   text;
-  v_clave text;
-  v_nf    text;
-  o       public.pos_ndf_open%rowtype;
-  t       public.pos_ndf_tickets%rowtype;
-  r       jsonb;
+  v_nf text;
+  t    public.pos_ndf_tickets%rowtype;
+  r    jsonb;
 begin
-  if p is null or p = '{}'::jsonb or jsonb_typeof(p) = 'null' then
-    return null;
+  if p is null or jsonb_typeof(p) <> 'object' or coalesce(p->>'modo', '') <> 'factura' then
+    return public.club_pos_ref(p, p_location);
   end if;
-  if jsonb_typeof(p) <> 'object' then
-    raise exception 'Pedido no válido: elegilo de la lista' using errcode = 'P0001';
-  end if;
-  v_modo  := p->>'modo';
-  v_local := p_location;
-  if v_local is null or (nullif(btrim(p->>'local'), '') is not null and btrim(p->>'local') <> v_local) then
+  if p_location is null or (nullif(btrim(p->>'local'), '') is not null and btrim(p->>'local') <> p_location) then
     raise exception 'Pedido no válido: elegilo de la lista' using errcode = 'P0001';   -- CLUB-AUD-18
   end if;
-  if v_modo = 'pedido' then
-    v_ped := btrim(coalesce(p->>'pedido', ''));
-    v_clave := nullif(btrim(coalesce(p->>'clave', '')), '');
-    if v_ped !~ '^[0-9A-Za-z]{1,20}$' or (v_clave is not null and v_clave !~ '^pedido:[0-9A-Za-z:_-]{1,60}$') then
-      raise exception 'Pedido no válido: elegilo de la lista' using errcode = 'P0001';
-    end if;
-    if not public.club_puente_fresco(v_local) then   -- CLUB-AUD-27
-      raise exception 'Puente sin datos: elegí la factura' using errcode = 'P0001';
-    end if;
-    -- CLUB-AUD-31: la clave trae la fecha del pedido (pedido:<fecha>:<n>); el número solo se reinicia cada día.
-    -- Sin clave (app vieja), el número tiene que ser único entre los abiertos.
-    if v_clave is not null then
-      select * into o from public.pos_ndf_open x where x.local = v_local and x.clave = v_clave and x.id_pedido = v_ped;
-    else
-      if (select count(*) from public.pos_ndf_open x where x.local = v_local and x.id_pedido = v_ped) > 1 then
-        raise exception 'Hay más de un pedido abierto con el número %: elegilo de la lista', v_ped using errcode = 'P0001';
-      end if;
-      select * into o from public.pos_ndf_open x where x.local = v_local and x.id_pedido = v_ped;
-    end if;
-    if not found then
-      raise exception 'El pedido % ya no está abierto: elegí la factura de la lista', v_ped using errcode = 'P0001';
-    end if;
-    -- `abierto_en` = FAC_Pedidos.FechaRegistra (mig 081). Antes de la 081 el agente ya mandaba esa
-    -- misma hora en `updated_at`, por eso es el respaldo.
-    r := jsonb_build_object('modo', 'pedido', 'local', v_local, 'pedido', v_ped,
-                            'area', nullif(upper(btrim(coalesce(o.area, ''))), ''),
-                            'mesa', nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
-                            'total', o.monto_estimado_crc, 'visto', o.updated_at,
-                            'pax', coalesce(nullif(o.pax, 0), nullif(o.pax_pedido, 0)),
-                            'abierto_en', coalesce(o.pedido_abierto_en, o.updated_at), 'hora', now());
-    return r || jsonb_build_object('visita', public.club_visita_canonica(v_local, r, null));
-  elsif v_modo = 'factura' then
-    v_nf := btrim(coalesce(p->>'numero_factura', ''));
-    if v_nf !~ '^[0-9]{1,30}$' then
-      raise exception 'Factura no válida: elegila de la lista' using errcode = 'P0001';
-    end if;
-    -- S0b (09-nov): en este PoS la factura queda en R (cobrada) hasta el cierre de caja; la caja la puede elegir igual.
-    -- Una anulada (X) no.
-    select * into t from public.pos_ndf_tickets x where x.local = v_local and x.numero_factura = v_nf and x.estado in ('C', 'R');
-    if not found then
-      raise exception 'Esa factura no está en el PoS de este local (o está anulada): tocá «Actualizar» o buscala por número de tiquete. Si no aparece, pedile al owner un ajuste' using errcode = 'P0001';
-    end if;
-    -- 174: la lista muestra las cobradas HOY (día CR) y la búsqueda por tiquete llega a los 3 días CR anteriores: es
-    -- el mismo tope (club_facturas_desde). Antes: 2 h 15 min.
-    if t.fecha_registra < public.club_facturas_desde(now(), public.club_facturas_dias_busqueda()) then
-      raise exception 'Esa factura tiene más de % días: pedile al owner un ajuste', public.club_facturas_dias_busqueda() using errcode = 'P0001';
-    end if;
-    r := jsonb_build_object('modo', 'factura', 'local', v_local, 'numero_factura', v_nf,
-                            'area', nullif(upper(btrim(coalesce(t.area_factura, t.area, ''))), ''),
-                            'mesa', nullif(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), ''), 'total', t.total_crc,
-                            'pax', nullif(t.pax, 0),
-                            'hora_factura', t.fecha_registra, 'hora', now());
-    return r || jsonb_build_object('visita', public.club_visita_canonica(v_local, r, null));
+  v_nf := btrim(coalesce(p->>'numero_factura', ''));
+  if v_nf !~ '^[0-9]{1,30}$' then
+    raise exception 'Factura no válida: elegila de la lista' using errcode = 'P0001';
   end if;
-  raise exception 'Pedido no válido: elegilo de la lista' using errcode = 'P0001';
+  -- Cobrada (C o R); una anulada (X) no.
+  select * into t from public.pos_ndf_tickets x where x.local = p_location and x.numero_factura = v_nf and x.estado in ('C', 'R');
+  if not found then
+    raise exception 'Esa factura no está en el PoS de este local (o está anulada): tocá «Actualizar» o buscala por número de tiquete. Si no aparece, pedile al owner un ajuste' using errcode = 'P0001';
+  end if;
+  -- La lista muestra las de HOY y la búsqueda llega a los 3 días CR anteriores: el mismo tope (club_facturas_desde).
+  if t.fecha_registra < public.club_facturas_desde(now(), public.club_facturas_dias_busqueda()) then
+    raise exception 'Esa factura tiene más de % días: pedile al owner un ajuste', public.club_facturas_dias_busqueda() using errcode = 'P0001';
+  end if;
+  -- Lo que se guarda: lo mismo que club_pos_ref (150) para la factura.
+  r := jsonb_build_object('modo', 'factura', 'local', p_location, 'numero_factura', v_nf,
+                          'area', nullif(upper(btrim(coalesce(t.area_factura, t.area, ''))), ''),
+                          'mesa', nullif(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), ''), 'total', t.total_crc,
+                          'pax', nullif(t.pax, 0),
+                          'hora_factura', t.fecha_registra, 'hora', now());
+  return r || jsonb_build_object('visita', public.club_visita_canonica(p_location, r, null));
 end;
 $$;
-revoke all on function public.club_pos_ref(jsonb, text) from public, anon, authenticated;
+revoke all on function public.club_pos_ref_tarjeta(jsonb, text) from public, anon, authenticated;
+comment on function public.club_pos_ref_tarjeta(jsonb, text) is
+  '174 (interna): club_pos_ref para la TARJETA FÍSICA: la factura del plan B vale hasta 3 días CR (club_pos_ref: 2 h 15 min).';
 
--- ── 7. club_visita_control: la factura del plan B con tarjeta o cupón ya cargado no se usa otra vez ────────────────
-create or replace function public.club_visita_control(p_location text, p_visita text, p_pos jsonb, p_factura text,
-                                                      p_miembro uuid, p_personas int)
-returns void
+-- ── 6. Tarjeta física: se cambia el NÚCLEO (receta de la 170/172), cuerpo de la 150 con dos cambios marcados «174» ──
+create or replace function public.club_tarjeta_manual__nucleo(p_miembro uuid, p_personas int, p_factura text, p_op uuid, p_pos jsonb default null)
+returns table (personas int, creditos numeric)
 language plpgsql
 volatile
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_pax int;
-  v_ya  int;
+  v_rol   public.user_role := public.get_my_role();
+  v_fac   text := public.club_norm_factura(p_factura);
+  v_pos   jsonb;
+  v_loc   text;
+  v_sin_pos boolean := p_pos is null or p_pos = '{}'::jsonb or jsonb_typeof(p_pos) = 'null';
+  v_m     public.club_miembros%rowtype;
+  v_cfg   public.club_config%rowtype;
+  v_prev  public.club_movimientos%rowtype;
+  v_saldo int;
 begin
-  if p_visita is null or p_visita = '' then
-    return;
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
   end if;
-  perform pg_advisory_xact_lock(hashtextextended('club_visita:' || p_location || ':' || p_visita, 0));
-  if exists (select 1 from public.club_movimientos mv
-              where mv.miembro_id = p_miembro and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita)
-     or exists (select 1 from public.club_personas_pendientes pp   -- LC-A4.4: lo pendiente también es «su tarjeta»
-                 where pp.miembro_id = p_miembro and pp.estado = 'pendiente' and pp.visita_clave = p_visita) then
-    raise exception 'Este referente ya tiene una tarjeta en esta visita: vale una por mesa. Si faltaron personas, pedile al manager que lo corrija' using errcode = 'P0001';
+  if p_op is null then
+    raise exception 'Falta el id de la operación: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
   end if;
-  -- 174 (decisión del dueño, 15-nov): con la factura del plan B (elegida de la lista o buscada por tiquete), si esa
-  -- visita ya tiene una tarjeta o un cupón cargado (de cualquier referente), no se carga otra vez. Con el pedido abierto
-  -- sigue CLUB-AUD-02 (dos referentes en la misma mesa, Σ personas ≤ pax).
-  if p_pos is not null and p_pos->>'modo' = 'factura' and public.club_visita_con_tarjeta(p_location, p_visita) then
+
+  perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));   -- CLUB-AUD-08
+  select * into v_prev from public.club_movimientos where client_op_id = p_op;
+  if found then
+    -- Grok 159 (10-nov): el replay exige también las mismas personas (si no, la caja creería que registró otra cantidad)
+    if v_prev.tipo <> 'tarjeta' or v_prev.miembro_id is distinct from p_miembro or v_prev.cupon_id is not null
+       or v_prev.personas is distinct from p_personas then
+      raise exception 'Esta operación ya se usó para otro registro: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
+    end if;
+    select * into v_cfg from public.club_config where location_id = v_prev.location_id;
+    v_saldo := public.club_saldo_personas(p_miembro);
+    personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+    return next; return;
+  end if;
+
+  if p_personas is null or p_personas < 1 or p_personas > 30 then
+    raise exception 'Personas fuera de rango (1 a 30): corregí el número' using errcode = 'P0001';
+  end if;
+  if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
+    raise exception 'Falta el pedido o la factura: elegí el pedido de la lista' using errcode = 'P0001';
+  end if;
+  -- CLUB-AUD-26: apagada (prod) → nadie; prendida (staging, piloto en paralelo) → tope diario por miembro.
+  select c.* into v_cfg from public.club_config c
+   where c.location_id = (select m.location_id from public.club_miembros m where m.id = p_miembro);
+  if not coalesce(v_cfg.tarjeta_manual_activa, false) then
+    raise exception 'La tarjeta física está desactivada en este local: registrá la visita con el cupón del turista' using errcode = 'P0001';
+  end if;
+
+  -- CLUB-AUD-18: el local es el del miembro. CLUB-AUD-02: control de la visita ANTES del lock del
+  -- miembro (orden visita → miembro).
+  v_loc := (select m.location_id from public.club_miembros m where m.id = p_miembro);
+  if v_loc is null then raise exception 'No se encontró al miembro: escaneá su QR o buscalo de nuevo' using errcode = 'P0001'; end if;
+  perform public.club_local(v_loc, true);   -- LC-ML: Club activo en el local del miembro
+  v_pos := public.club_pos_ref_tarjeta(p_pos, v_loc);   -- 174: la factura del plan B vale hasta 3 días CR
+  perform public.club_visita_control(v_loc, coalesce(v_pos->>'visita', public.club_visita_canonica(v_loc, null, v_fac)),
+                                     v_pos, v_fac, p_miembro, p_personas);
+  -- 174 (decisión del dueño, 15-nov, opción A): con la factura del plan B, si esa visita ya tiene una tarjeta o un cupón
+  -- cargado (de cualquier referente, o personas pendientes), no se carga otra vez. Va DESPUÉS de club_visita_control,
+  -- que ya tomó el lock de la visita. Con el pedido abierto sigue CLUB-AUD-02.
+  if v_pos->>'modo' = 'factura' and public.club_visita_con_tarjeta(v_loc, v_pos->>'visita') then
     raise exception 'Esa factura ya tiene una tarjeta o un cupón cargado: no se puede usar otra vez. Si falta algo, pedile al owner un ajuste' using errcode = 'P0001';
   end if;
-  v_pax := nullif((p_pos->>'pax')::int, 0);
-  if v_pax is null and p_pos is null and public.club_factura_clave(p_factura) is not null then
-    select nullif(t.pax, 0) into v_pax from public.pos_ndf_tickets t
-     where t.local = p_location and ltrim(t.numero_factura, '0') = public.club_factura_clave(p_factura) and t.estado = 'C' limit 1;   -- CLUB-AUD-68
+  select * into v_m from public.club_miembros m where m.id = p_miembro for update;
+  if not found or v_m.tipo not in ('referente','concierge_pm','equipo') then
+    raise exception 'No se encontró la cuenta del referente: escaneá de nuevo o buscalo por nombre' using errcode = 'P0001';
   end if;
-  if v_pax is not null then
-    select coalesce(sum(mv.personas), 0)
-           + (select coalesce(sum(pp.personas), 0) from public.club_personas_pendientes pp
-               where pp.location_id = p_location and pp.estado = 'pendiente' and pp.visita_clave = p_visita)
-      into v_ya from public.club_movimientos mv
-     where mv.location_id = p_location and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita;
-    if v_ya + p_personas > v_pax then
-      raise exception 'Supera las personas de la mesa (% pax; ya registradas %). Revisá cuántas personas vinieron con el referente o pedile al manager', v_pax, v_ya using errcode = 'P0001';
-    end if;
+  if v_m.estado <> 'activo' then
+    raise exception 'REFERENTE_INACTIVO' using errcode = 'P0001',
+      hint = 'Referente dado de baja: seguí con la cuenta sin crédito';
   end if;
+  select * into v_cfg from public.club_config where location_id = v_m.location_id;
+  if (select coalesce(sum(mv.personas), 0) from public.club_movimientos mv
+       where mv.miembro_id = p_miembro and mv.tipo = 'tarjeta' and mv.cupon_id is null and mv.origen = 'app'
+         and mv.fecha_visita >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
+     + p_personas > v_cfg.tarjeta_manual_tope_dia then
+    raise exception 'Supera el tope diario de tarjeta física (% personas por miembro): cargá el resto mañana o avisale al manager', v_cfg.tarjeta_manual_tope_dia
+      using errcode = 'P0001';
+  end if;
+
+  insert into public.club_movimientos
+    (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+     factura_pos, fecha_visita, registrado_por, origen, client_op_id, nota, pos_ref, visita_clave)
+  values
+    (v_m.location_id, p_miembro, 'tarjeta', p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
+     nullif(v_fac, ''), now(), auth.uid(), 'app', p_op, 'manual', v_pos,
+     coalesce(v_pos->>'visita', public.club_visita_canonica(v_loc, null, v_fac)));
+
+  v_saldo := public.club_saldo_personas(p_miembro);
+  personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+  return next;
 end;
 $$;
-revoke all on function public.club_visita_control(text, text, jsonb, text, uuid, int) from public, anon, authenticated;
+revoke all on function public.club_tarjeta_manual__nucleo(uuid, int, text, uuid, jsonb) from public, anon, authenticated;
 
 commit;

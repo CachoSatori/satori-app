@@ -21,16 +21,29 @@ MIG = RAIZ / 'supabase/migrations/174_club_facturas_dia_busqueda.sql'
 ROLLBACK = RAIZ / 'scripts/sql/174_rollback.sql'
 BATERIA = RAIZ / 'scripts/sql/174_pruebas.sql'
 
-FRENO = "  if p_pos is not null and p_pos->>'modo' = 'factura' and public.club_visita_con_tarjeta(p_location, p_visita) then\n"
+FRENO = "  if v_pos->>'modo' = 'factura' and public.club_visita_con_tarjeta(v_loc, v_pos->>'visita') then\n"
+# Regresión que el verificador del #206 encontró: la ventana de 3 días llega a otro flujo (canje, socio, cupón).
+def _abrir(*funciones: str) -> str:
+    # Cada función tiene que llamar a club_pos_ref: si no, la mutación no cambiaría nada y el caso no probaría (aborta).
+    return '\n'.join(
+        "do $m$ declare d text := pg_get_functiondef('public.%s'::regproc); begin "
+        "if position('public.club_pos_ref(' in d) = 0 then raise exception 'mutación: %s no llama a club_pos_ref'; end if; "
+        "execute replace(d, 'public.club_pos_ref(', 'public.club_pos_ref_tarjeta('); end $m$;" % (n, n) for n in funciones) + '\ncommit;\n'
 # nombre → (texto de la 174, reemplazo, casos que tienen que caer)
 MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
-    # el servidor vuelve a las 2 h 15 min
-    'ventana_2h': ("    if t.fecha_registra < public.club_facturas_desde(now(), public.club_facturas_dias_busqueda()) then\n",
-                   "    if t.fecha_registra < now() - interval '2 hours 15 minutes' then\n", {'3a', '3g'}),
+    # la tarjeta vuelve a las 2 h 15 min
+    'ventana_2h': ("  if t.fecha_registra < public.club_facturas_desde(now(), public.club_facturas_dias_busqueda()) then\n",
+                   "  if t.fecha_registra < now() - interval '2 hours 15 minutes' then\n", {'3a', '3g'}),
+    # la tarjeta sigue usando club_pos_ref (la ventana nueva no llega)
+    'tarjeta_sin_ventana': ("  v_pos := public.club_pos_ref_tarjeta(p_pos, v_loc);", "  v_pos := public.club_pos_ref(p_pos, v_loc);", {'0c', '3a', '3g'}),
+    # los 3 días se abren para el canje y la visita de socio
+    'abre_canje_y_socio': ("\ncommit;\n", "\n" + _abrir('club_canje_aplicar', 'club_socio_visita_base'), {'0a', '0c', '5a', '5b'}),
+    # los 3 días se abren para el cupón
+    'abre_cupon': ("\ncommit;\n", "\n" + _abrir('club_cupon_usar__nucleo'), {'0a', '0c', '5c'}),
     # la lista trae también ayer
     'lista_con_ayer': ("case when v_bus is null then 0 else public.club_facturas_dias_busqueda() end",
                        "case when v_bus is null then 1 else public.club_facturas_dias_busqueda() end", {'1a', '1b', '1f', '2a'}),
-    # la búsqueda (y el servidor) sin el tope de 3 días
+    # la búsqueda (y la tarjeta) sin el tope de 3 días
     'sin_tope_3_dias': ("as $$ select 3 $$;", "as $$ select 30 $$;", {'1c', '1g', '2b', '3b'}),
     # el corte en UTC en vez de la hora de Costa Rica
     'utc': ("  select (((p_ahora at time zone 'America/Costa_Rica')::date - greatest(coalesce(p_dias_atras, 0), 0))::timestamp)\n"
@@ -40,7 +53,7 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
     # sin el freno de la factura ya usada
     'sin_freno_usada': (FRENO, "  if false then\n", {'3c', '3h'}),
     # el freno también con el pedido abierto (rompería CLUB-AUD-02)
-    'freno_en_pedido': (FRENO, "  if public.club_visita_con_tarjeta(p_location, p_visita) then\n", {'3i'}),
+    'freno_en_pedido': (FRENO, "  if public.club_visita_con_tarjeta(v_loc, v_pos->>'visita') then\n", {'3i'}),
     # «usada» sin mirar las personas pendientes
     'usada_sin_pendientes': ("    or exists (select 1 from public.club_personas_pendientes pp\n",
                              "    or false and exists (select 1 from public.club_personas_pendientes pp\n", {'3h', '3j'}),
@@ -57,8 +70,8 @@ MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
                        "grant execute on function public.club_facturas_buscar__nucleo(text, text) to authenticated;", {'0b', '2e'}),
 }
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
-    # el rollback no devuelve club_pos_ref
-    'rollback_sin_pos_ref': ("create or replace function public.club_pos_ref(", "create or replace function pg_temp.x_pos_ref(", {'4a', '4b'}),
+    # el rollback no devuelve el núcleo de la tarjeta
+    'rollback_sin_tarjeta': ("create or replace function public.club_tarjeta_manual__nucleo(", "create or replace function pg_temp.x_tarjeta(", {'4a', '4b'}),
 }
 
 

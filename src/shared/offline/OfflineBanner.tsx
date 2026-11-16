@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
   flushNow, pendingCount, initOutbox, rejectedCount, rejectedOps, getStuck, isStuck,
-  requeueRejectedNow, resolveRejectedNow,
+  requeueRejectedNow, resolveRejectedNow, forceRejectHeadNow, puedePasarARechazadas,
 } from './outbox'
 import type { RejectedOp, StuckState } from './outbox'
 import { getStaleTs } from './cache'
-import { avisoRechazadas, avisoTrabada, cuandoCR, queEra, motivoTexto } from './rechazadas'
+import { avisoRechazadas, avisoTrabada, cuandoCR, queEra, motivoTexto, CONFIRMAR_PASAR, CONFIRMAR_RESUELTA, motivoTraba } from './rechazadas'
 import { useAuth } from '../hooks/useAuth'
 
 /**
@@ -62,10 +62,18 @@ export default function OfflineBanner() {
     const rs = await rejectedOps().catch(() => [])
     setDetalle(rs.length ? rs : null)
   }
-  const reintentar = async (id: string) => { await requeueRejectedNow(id); await recargarDetalle() }
+  const reintentar = async (id: string) => {
+    try { await requeueRejectedNow(id) } catch (e) { window.alert(e instanceof Error ? e.message : String(e)) }
+    await recargarDetalle()
+  }
   const resolver = async (id: string) => {
-    if (!window.confirm('¿Ya cargaste o corregiste esto a mano? Se quita de la lista y queda registrado en este aparato.')) return
+    if (!window.confirm(CONFIRMAR_RESUELTA)) return
     await resolveRejectedNow(id, user?.id ?? null); await recargarDetalle()
+  }
+  const pasarARechazadas = async () => {
+    if (!stuck.head || !window.confirm(CONFIRMAR_PASAR)) return
+    const ok = await forceRejectHeadNow(stuck.head, stuck.attempts, motivoTraba(stuck))
+    if (!ok) window.alert('La cola cambió mientras tanto: no se movió nada. Mirá el aviso de nuevo.')
   }
 
   const trabada = pending > 0 && isStuck(stuck)
@@ -87,6 +95,9 @@ export default function OfflineBanner() {
       {trabada && (
         <div role="status" style={{ background: '#7a4a10', color: '#fff', textAlign: 'center', fontSize: '12px', fontWeight: 700, padding: '5px 8px' }}>
           ⚠ {avisoTrabada(stuck)}
+          {esGerencia && puedePasarARechazadas(stuck) && (
+            <button onClick={pasarARechazadas} style={{ ...btn, color: '#7a4a10', marginLeft: '0.75rem' }}>Pasar a rechazadas</button>
+          )}
         </div>
       )}
       {(!online || pending > 0) && (
@@ -123,6 +134,7 @@ export default function OfflineBanner() {
                 <div><strong>Qué:</strong> {queEra(r)}</div>
                 <div><strong>Cuándo:</strong> registrada {cuandoCR(r.created_at)} · rechazada {cuandoCR(r.rejected_at)}</div>
                 <div><strong>Motivo:</strong> {motivoTexto(r)}</div>
+                {r.depends_on && <div style={{ color: '#bbb' }}>Va junto con la operación rechazada de la misma fila: se reintenta o se resuelve todo junto, en orden.</div>}
                 {esGerencia && (
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.35rem' }}>
                     <button onClick={() => reintentar(r.client_op_id)} style={{ ...btn, color: '#333' }}>↻ Reintentar</button>

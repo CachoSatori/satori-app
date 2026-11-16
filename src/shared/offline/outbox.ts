@@ -6,6 +6,8 @@
 // El núcleo opera sobre interfaces inyectables (store + executor) para poder
 // testearlo con vitest sin navegador. Política completa en OFFLINE.md.
 
+import { targetKey } from './ordenEscrituras'
+
 export type OutboxTable = 'cash_movements' | 'tip_entries'
 export type OutboxOpType = 'insert' | 'upsert' | 'update' | 'delete'
 
@@ -60,6 +62,9 @@ export interface RejectedOp {
   reason: string
   code?: string
   status?: number
+  target?: string             // fila a la que apunta (ver targetKey)
+  depends_on?: string         // client_op_id de la rechazada que la arrastró (cadena)
+  orig_seq?: number           // seq original en la cola → orden de la cadena
 }
 
 export interface RejectedStore {
@@ -72,6 +77,7 @@ export interface RejectedStore {
 export interface FlushResult {
   applied: number; duplicates: number; fatals: number; stopped: boolean; remaining: number
   retryKind?: RetryKind; retryReason?: string
+  stoppedAt?: string          // client_op_id de la op que frenó el flush (la primera de la cola)
 }
 
 function normalize(o: ExecOutcome): ExecDetail | 'ok' | 'duplicate' {
@@ -92,38 +98,97 @@ export async function flushOutbox(
   store: OutboxStore, exec: OpExecutor, audit: AuditLogger, rejected: RejectedStore,
 ): Promise<FlushResult> {
   const res: FlushResult = { applied: 0, duplicates: 0, fatals: 0, stopped: false, remaining: 0 }
+  // Filas bloqueadas: las que tienen algo en rechazadas. Una edición/borrado de una fila cuya creación
+  // se rechazó NO se manda (respondería «ok» sin efecto): va a rechazadas como dependiente.
+  const blocked = new Map<string, string>()   // target → client_op_id raíz de la cadena
+  const enRechazadas = new Set<string>()      // ops que están en la cola Y en rechazadas (reintento a medias)
+  try {
+    for (const r of await rejected.all()) {
+      enRechazadas.add(r.client_op_id)
+      if (r.target && !blocked.has(r.target)) blocked.set(r.target, r.depends_on ?? r.client_op_id)
+    }
+  } catch {
+    res.stopped = true; res.retryKind = 'desconocido'; res.retryReason = 'no se pudo leer las rechazadas del aparato'
+    res.remaining = await store.count()
+    return res
+  }
   const ops = await store.all()
   for (const op of ops) {
+    const key = targetKey(op)
+    const root = key ? blocked.get(key) : undefined
     let r: ReturnType<typeof normalize>
-    try { r = normalize(await exec(op)) } catch {
-      r = { result: 'retry', kind: 'desconocido', reason: 'error inesperado al enviar' }
+    if (root && !enRechazadas.has(op.client_op_id)) {
+      r = { result: 'fatal', reason: 'depende de una operación rechazada antes (misma fila): no se envió' }
+    } else {
+      try { r = normalize(await exec(op)) } catch {
+        r = { result: 'retry', kind: 'desconocido', reason: 'error inesperado al enviar' }
+      }
     }
-    if (r === 'ok') res.applied++
-    else if (r === 'duplicate') res.duplicates++
-    else if (r.result === 'retry') {
-      res.stopped = true; res.retryKind = r.kind ?? 'desconocido'; res.retryReason = r.reason
+    if (r === 'ok' || r === 'duplicate') {
+      if (r === 'ok') res.applied++; else res.duplicates++
+      // Venía de un «Reintentar» que quedó a medias: ya entró → sale de rechazadas.
+      if (enRechazadas.has(op.client_op_id)) { try { await rejected.remove(op.client_op_id) } catch { /* queda visible: no se pierde */ } }
+    } else if (r.result === 'retry') {
+      res.stopped = true; res.retryKind = r.kind ?? 'desconocido'; res.retryReason = r.reason; res.stoppedAt = op.client_op_id
       break
     } else {
       const now = new Date().toISOString()
+      const dependsOn = root && !enRechazadas.has(op.client_op_id) ? root : undefined
       try {
-        await rejected.add({
-          client_op_id: op.client_op_id, table: op.table, op: op.op, payload: op.payload,
-          created_at: op.created_at, rejected_at: now, reason: r.reason, code: r.code, status: r.status,
-        })
+        await rejected.add(toRejected(op, now, r, dependsOn))
       } catch {
         // No se pudo dejar visible → NO se borra. Se frena y se reintenta después.
-        res.stopped = true; res.retryKind = 'desconocido'; res.retryReason = 'no se pudo guardar el rechazo en el aparato'
+        res.stopped = true; res.retryKind = 'desconocido'; res.retryReason = 'no se pudo guardar el rechazo en el aparato'; res.stoppedAt = op.client_op_id
         break
       }
+      if (key && !blocked.has(key)) blocked.set(key, op.client_op_id)
       res.fatals++
-      try { await audit({ op, reason: `rechazo del servidor (${r.code ?? r.status ?? 's/c'}) — pasó a rechazadas`, at: now }) } catch { /* best-effort */ }
+      try { await audit({ op, reason: `rechazo del servidor (${r.code ?? r.status ?? (dependsOn ? 'dependiente' : 's/c')}) — pasó a rechazadas`, at: now }) } catch { /* best-effort */ }
       // Sin datos de la fila en la consola: solo tabla, tipo, id de la op y código.
-      console.error('[outbox] op rechazada por el servidor → rechazadas:', op.table, op.op, op.client_op_id, r.code ?? r.status ?? '')
+      console.error('[outbox] op rechazada → rechazadas:', op.table, op.op, op.client_op_id, r.code ?? r.status ?? (dependsOn ? 'dependiente' : ''))
     }
     await store.remove(op.seq!)
   }
   res.remaining = await store.count()
   return res
+}
+
+function toRejected(op: OutboxOp, now: string, d: ExecDetail, dependsOn?: string): RejectedOp {
+  return {
+    client_op_id: op.client_op_id, table: op.table, op: op.op, payload: op.payload,
+    created_at: op.created_at, rejected_at: now, reason: d.reason, code: d.code, status: d.status,
+    target: targetKey(op), depends_on: dependsOn, orig_seq: op.seq,
+  }
+}
+
+/** La cadena de una rechazada: su raíz y todo lo de la misma fila, en el orden original. */
+export function chainOf(all: RejectedOp[], client_op_id: string): RejectedOp[] {
+  const r = all.find(x => x.client_op_id === client_op_id)
+  if (!r) return []
+  const root = r.depends_on ?? r.client_op_id
+  const rootOp = all.find(x => x.client_op_id === root)
+  const target = rootOp?.target ?? r.target
+  return all
+    .filter(x => x.client_op_id === root || x.depends_on === root || (target !== undefined && x.target === target))
+    .sort((a, b) => (a.orig_seq !== undefined && b.orig_seq !== undefined && a.orig_seq !== b.orig_seq)
+      ? a.orig_seq - b.orig_seq : a.created_at.localeCompare(b.created_at))
+}
+
+/**
+ * La gerencia saca de la cola la PRIMERA op cuando traba todo (5xx o error fijo). No se borra: va a
+ * rechazadas, y lo que dependa de ella (misma fila) la sigue en el próximo flush. Solo si la primera
+ * sigue siendo la que vio la pantalla (expectedId).
+ */
+export async function forceRejectHead(
+  store: OutboxStore, rejected: RejectedStore, audit: AuditLogger, expectedId: string, reason: string,
+): Promise<boolean> {
+  const head = (await store.all())[0]
+  if (!head || head.client_op_id !== expectedId) return false
+  const now = new Date().toISOString()
+  await rejected.add(toRejected(head, now, { result: 'fatal', reason }))
+  try { await audit({ op: head, reason: `pasada a rechazadas a mano: ${reason}`, at: now }) } catch { /* best-effort */ }
+  await store.remove(head.seq!)
+  return true
 }
 
 // ── Clasificación de errores del servidor (A01) ───────────────────────────────
@@ -187,12 +252,17 @@ export function motivoRechazo(code?: string, status?: number): string {
 
 /** Cuenta flushes frenados seguidos: a partir de STUCK_AFTER se avisa en pantalla. */
 export const STUCK_AFTER = 5
-export interface StuckState { attempts: number; kind?: RetryKind; reason?: string }
+export interface StuckState { attempts: number; kind?: RetryKind; reason?: string; head?: string }
 export function nextStuck(prev: StuckState, r: FlushResult | null): StuckState {
   if (!r) return prev                                     // otra pestaña / reentrada: sin dato nuevo
   if (!r.stopped) return { attempts: 0 }
-  return { attempts: prev.attempts + 1, kind: r.retryKind, reason: r.retryReason }
+  // Cuenta intentos seguidos con la MISMA op primera; si cambió la primera, arranca de nuevo.
+  const attempts = (prev.head !== undefined && prev.head === r.stoppedAt ? prev.attempts : 0) + 1
+  return { attempts, kind: r.retryKind, reason: r.retryReason, head: r.stoppedAt }
 }
+/** «Pasar a rechazadas» solo cuando el freno es del servidor o desconocido (no red ni sesión). */
+export const puedePasarARechazadas = (s: StuckState) =>
+  isStuck(s) && s.head !== undefined && (s.kind === 'servidor' || s.kind === 'desconocido')
 export const isStuck = (s: StuckState) => s.attempts >= STUCK_AFTER
 
 // ── Implementación browser (IndexedDB + supabase) ─────────────────────────────
@@ -314,10 +384,12 @@ function notifyPending() {
   ).catch(() => { /* sin IDB no hay cola */ })
 }
 
-export async function enqueue(op: Omit<OutboxOp, 'seq'>): Promise<void> {
+export async function enqueue(op: Omit<OutboxOp, 'seq'>, opts?: { kick?: boolean }): Promise<void> {
   await idbOutboxStore.add(op as OutboxOp)
   notifyPending()
-  console.warn(`[outbox] op encolada (sin red): ${op.table} ${op.op} ${op.client_op_id}`)
+  console.warn(`[outbox] op encolada${opts?.kick ? ' (detrás de la cola)' : ' (sin red)'}: ${op.table} ${op.op} ${op.client_op_id}`)
+  // Con red, encolada para no adelantarse a la cola (A01): que drene ya, sin esperar el backoff.
+  if (opts?.kick) { retryDelay = 5_000; window.setTimeout(() => { autoFlush() }, 0) }
 }
 
 export const pendingCount = () => idbCount(STORES.outbox)
@@ -332,38 +404,63 @@ function notifyRejected() {
 export const rejectedOps = () => idbRejectedStore.all()
 export const rejectedCount = () => idbRejectedStore.count()
 
+export const PENDIENTE_MISMA_FILA = 'Todavía hay operaciones de esta misma fila en la cola: sincronizá primero y después reintentá.'
+
 /**
- * Vuelve a mandar una rechazada (p. ej. la rechazó por permiso con otro usuario y ahora entró un
- * encargado). Primero vuelve a la cola, recién después sale de rechazadas: nunca queda en ningún
- * lado. Mismo client_op_id → si ya estaba aplicada, rebota como duplicado (no duplica plata).
+ * Vuelve a mandar una rechazada CON SU CADENA (creación → ediciones → borrado), en el orden original.
+ * Primero vuelven a la cola, recién después salen de rechazadas: nunca quedan en ningún lado. Mismo
+ * client_op_id → si ya estaba aplicada, rebota como duplicado (no duplica plata). Si en la cola hay
+ * algo de la misma fila, no hace nada (se adelantaría o atrasaría).
  */
-export async function requeueRejected(rej: RejectedStore, outbox: OutboxStore, client_op_id: string): Promise<boolean> {
-  const r = (await rej.all()).find(x => x.client_op_id === client_op_id)
-  if (!r) return false
-  await outbox.add({ client_op_id: r.client_op_id, table: r.table, op: r.op, payload: r.payload, created_at: r.created_at })
-  await rej.remove(client_op_id)
-  return true
+export async function requeueRejected(rej: RejectedStore, outbox: OutboxStore, client_op_id: string): Promise<number> {
+  const chain = chainOf(await rej.all(), client_op_id)
+  if (!chain.length) return 0
+  const targets = new Set(chain.map(c => c.target).filter((t): t is string => !!t))
+  if ((await outbox.all()).some(o => { const k = targetKey(o); return k !== undefined && targets.has(k) })) {
+    throw new Error(PENDIENTE_MISMA_FILA)
+  }
+  for (const r of chain) {
+    await outbox.add({ client_op_id: r.client_op_id, table: r.table, op: r.op, payload: r.payload, created_at: r.created_at })
+  }
+  for (const r of chain) await rej.remove(r.client_op_id)
+  return chain.length
 }
 
-/** La gerencia la resolvió a mano: queda en la auditoría del aparato y sale de la lista. */
-export async function resolveRejected(rej: RejectedStore, audit: AuditLogger, client_op_id: string, byUserId: string | null): Promise<boolean> {
-  const r = (await rej.all()).find(x => x.client_op_id === client_op_id)
-  if (!r) return false
-  await audit({
-    op: { client_op_id: r.client_op_id, table: r.table, op: r.op, payload: r.payload, created_at: r.created_at },
-    reason: `rechazada resuelta a mano por ${byUserId ?? 's/usuario'} (motivo original: ${r.code ?? r.status ?? 's/c'} ${r.reason})`,
-    at: new Date().toISOString(),
-  })
-  await rej.remove(client_op_id)
-  return true
+/** La gerencia la resolvió a mano: TODA la cadena queda en la auditoría del aparato y sale de la lista. */
+export async function resolveRejected(rej: RejectedStore, audit: AuditLogger, client_op_id: string, byUserId: string | null): Promise<number> {
+  const chain = chainOf(await rej.all(), client_op_id)
+  for (const r of chain) {
+    await audit({
+      op: { client_op_id: r.client_op_id, table: r.table, op: r.op, payload: r.payload, created_at: r.created_at },
+      reason: `rechazada resuelta a mano por ${byUserId ?? 's/usuario'} (motivo original: ${r.code ?? r.status ?? 's/c'} ${r.reason})`,
+      at: new Date().toISOString(),
+    })
+  }
+  for (const r of chain) await rej.remove(r.client_op_id)
+  return chain.length
+}
+
+/** Corre con el MISMO lock que el flush: nunca se mezcla con un replay a medio camino. */
+async function conLockDeCola<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== 'undefined' && navigator.locks) return navigator.locks.request('satori-outbox-flush', fn)
+  return fn()
 }
 
 export async function requeueRejectedNow(client_op_id: string): Promise<void> {
-  try { await requeueRejected(idbRejectedStore, idbOutboxStore, client_op_id) } finally { notifyRejected(); notifyPending() }
+  try { await conLockDeCola(() => requeueRejected(idbRejectedStore, idbOutboxStore, client_op_id)) } finally { notifyRejected(); notifyPending() }
   retryDelay = 5_000; autoFlush()
 }
 export async function resolveRejectedNow(client_op_id: string, byUserId: string | null): Promise<void> {
-  try { await resolveRejected(idbRejectedStore, idbAudit, client_op_id, byUserId) } finally { notifyRejected() }
+  try { await conLockDeCola(() => resolveRejected(idbRejectedStore, idbAudit, client_op_id, byUserId)) } finally { notifyRejected() }
+}
+export async function forceRejectHeadNow(expectedId: string, attempts: number, motivo: string): Promise<boolean> {
+  let ok: boolean
+  try {
+    ok = await conLockDeCola(() => forceRejectHead(idbOutboxStore, idbRejectedStore, idbAudit, expectedId,
+      `la gerencia la pasó a rechazadas tras ${attempts} intentos (${motivo})`))
+  } finally { notifyRejected(); notifyPending() }
+  if (ok) { stuck = { attempts: 0 }; window.dispatchEvent(new CustomEvent('satori:outbox-stuck', { detail: stuck })); retryDelay = 5_000; autoFlush() }
+  return ok
 }
 
 // ── Cola trabada: aviso tras STUCK_AFTER intentos seguidos frenados ──────────
@@ -371,7 +468,7 @@ let stuck: StuckState = { attempts: 0 }
 export const getStuck = () => stuck
 function trackStuck(r: FlushResult | null) {
   const next = nextStuck(stuck, r)
-  if (next.attempts === stuck.attempts && next.kind === stuck.kind) return
+  if (next.attempts === stuck.attempts && next.kind === stuck.kind && next.head === stuck.head) return
   stuck = next
   window.dispatchEvent(new CustomEvent('satori:outbox-stuck', { detail: stuck }))
 }

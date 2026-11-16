@@ -16,9 +16,16 @@ const MOTIVO_TRABA: Record<RetryKind, string> = {
   desconocido: 'error inesperado; se sigue reintentando. Avisá al manager',
 }
 
+export const motivoTraba = (s: StuckState) => MOTIVO_TRABA[s.kind ?? 'desconocido']
+
 export function avisoTrabada(s: StuckState): string {
-  return `No se pudo sincronizar después de ${s.attempts} intentos: ${MOTIVO_TRABA[s.kind ?? 'desconocido']}. Lo pendiente sigue guardado en este aparato.`
+  return `No se pudo sincronizar después de ${s.attempts} intentos: ${motivoTraba(s)}. Lo pendiente sigue guardado en este aparato.`
 }
+
+export const CONFIRMAR_PASAR =
+  'La primera operación de la cola no entra y frena todo lo demás. ¿Pasarla a rechazadas? No se borra: queda en «Ver detalle», junto con lo que dependa de ella, y el resto de la cola sigue.'
+export const CONFIRMAR_RESUELTA =
+  '¿Ya cargaste o corregiste esto a mano? Se quita de la lista junto con lo que va con ella, y queda registrado en este aparato.'
 
 /** «16/11 12:05» en hora de Costa Rica. */
 export function cuandoCR(iso: string): string {

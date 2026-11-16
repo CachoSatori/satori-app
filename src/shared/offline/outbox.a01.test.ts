@@ -9,7 +9,7 @@ vi.mock('../api/supabase', () => ({ supabase: {} }))
 
 import {
   flushOutbox, supabaseExecutor, classifyServerError, nextStuck, isStuck, STUCK_AFTER,
-  requeueRejected, resolveRejected,
+  requeueRejected, resolveRejected, forceRejectHead, chainOf, puedePasarARechazadas, PENDIENTE_MISMA_FILA,
 } from './outbox'
 import type { OutboxOp, OutboxStore, RejectedOp, RejectedStore, FlushResult, StuckState } from './outbox'
 import { supabase } from '../api/supabase'
@@ -234,7 +234,7 @@ describe('A01 — rechazadas: reintentar y resolver no pierden nada', () => {
   it('reintentar: vuelve a la cola con el MISMO client_op_id y sale de rechazadas', async () => {
     const store = memStore(); const rej = memRejected()
     await rej.add(rejected(7))
-    await expect(requeueRejected(rej, store, 'op-7')).resolves.toBe(true)
+    await expect(requeueRejected(rej, store, 'op-7')).resolves.toBe(1)
     expect(store.ops.map(o => o.client_op_id)).toEqual(['op-7'])
     expect(store.ops[0].payload).toEqual({ id: 'id-7', amount_crc: 7000 })
     expect(rej.items).toHaveLength(0)
@@ -263,7 +263,7 @@ describe('A01 — rechazadas: reintentar y resolver no pierden nada', () => {
 })
 
 describe('A01 — aviso de cola trabada', () => {
-  const stopped = (kind: FlushResult['retryKind']): FlushResult => ({ applied: 0, duplicates: 0, fatals: 0, stopped: true, remaining: 1, retryKind: kind, retryReason: 'r' })
+  const stopped = (kind: FlushResult['retryKind']): FlushResult => ({ applied: 0, duplicates: 0, fatals: 0, stopped: true, remaining: 1, retryKind: kind, retryReason: 'r', stoppedAt: 'op-1' })
   const clean: FlushResult = { applied: 1, duplicates: 0, fatals: 0, stopped: false, remaining: 0 }
 
   it(`avisa recién al intento ${STUCK_AFTER} seguido frenado, con el motivo`, () => {
@@ -281,5 +281,179 @@ describe('A01 — aviso de cola trabada', () => {
   it('flush que no corrió (otra pestaña) no cambia nada', () => {
     const s: StuckState = { attempts: 3, kind: 'red' }
     expect(nextStuck(s, null)).toBe(s)
+  })
+})
+
+// ── Verificador #234: cadenas (creación → ediciones → borrado) ───────────────
+// «Servidor» en memoria: insert crea la fila, update la pisa, delete la saca. Un update/delete de una
+// fila que no existe responde «ok» sin efecto, igual que PostgREST (0 filas).
+function fakeServer(rejectIds: Set<string>) {
+  const rows = new Map<string, Record<string, unknown>>()
+  const executed: string[] = []
+  const exec = async (o: OutboxOp) => {
+    executed.push(o.client_op_id)
+    if (rejectIds.has(o.client_op_id)) return { result: 'fatal' as const, reason: 'regla', code: 'P0001', status: 400 }
+    const p = o.payload as Record<string, unknown>
+    if (o.op === 'insert') { rows.set(p.id as string, { ...p }); return 'ok' as const }
+    const id = (p.match as { id: string }).id
+    if (o.op === 'update') { const r = rows.get(id); if (r) Object.assign(r, p.updates as object); return 'ok' as const }
+    rows.delete(id); return 'ok' as const
+  }
+  return { rows, executed, exec }
+}
+const ins = (n: number, id: string, amount: number) => op(n, { client_op_id: `ins-${n}`, payload: { id, amount_crc: amount } })
+const upd = (n: number, id: string, amount: number) => op(n, { client_op_id: `upd-${n}`, op: 'update', payload: { match: { id }, updates: { amount_crc: amount } } })
+const del = (n: number, id: string) => op(n, { client_op_id: `del-${n}`, op: 'delete', payload: { match: { id } } })
+
+describe('verificador #234 — ops dependientes de una rechazada', () => {
+  it('insert rechazado + borrado del cajero: el borrado NO se manda (va a rechazadas como dependiente)', async () => {
+    const store = memStore(); const rej = memRejected()
+    const srv = fakeServer(new Set(['ins-1']))
+    await store.add(ins(1, 'M', 5000)); await store.add(del(2, 'M')); await store.add(ins(3, 'N', 100))
+    const res = await flushOutbox(store, srv.exec, noAudit, rej)
+    expect(srv.executed).toEqual(['ins-1', 'ins-3'])           // del-2 ni se intentó
+    expect(res).toMatchObject({ applied: 1, fatals: 2, remaining: 0 })
+    expect(rej.items.find(r => r.client_op_id === 'del-2')).toMatchObject({ depends_on: 'ins-1', target: 'cash_movements:M' })
+    expect(srv.rows.has('N')).toBe(true)                        // otra fila no se frena
+  })
+
+  it('…y «Reintentar» manda la CADENA en orden: el movimiento borrado NO reaparece', async () => {
+    const store = memStore(); const rej = memRejected()
+    const blocked = new Set(['ins-1'])
+    const srv = fakeServer(blocked)
+    await store.add(ins(1, 'M', 5000)); await store.add(del(2, 'M'))
+    await flushOutbox(store, srv.exec, noAudit, rej)
+    blocked.clear()                                              // ahora el servidor lo acepta
+    await expect(requeueRejected(rej, store, 'del-2')).resolves.toBe(2)   // desde cualquier eslabón
+    expect(store.ops.map(o => o.client_op_id)).toEqual(['ins-1', 'del-2'])
+    expect(rej.items).toHaveLength(0)
+    await flushOutbox(store, srv.exec, noAudit, rej)
+    expect(srv.rows.has('M')).toBe(false)
+  })
+
+  it('…con edición: «Reintentar» deja el monto NUEVO', async () => {
+    const store = memStore(); const rej = memRejected()
+    const blocked = new Set(['ins-1'])
+    const srv = fakeServer(blocked)
+    await store.add(ins(1, 'M', 5000)); await store.add(upd(2, 'M', 7000))
+    await flushOutbox(store, srv.exec, noAudit, rej)
+    expect(srv.rows.has('M')).toBe(false)
+    blocked.clear()
+    await requeueRejected(rej, store, 'ins-1')
+    await flushOutbox(store, srv.exec, noAudit, rej)
+    expect(srv.rows.get('M')?.amount_crc).toBe(7000)
+  })
+
+  it('una op de la misma fila encolada DESPUÉS (otro flush) también queda en la cadena', async () => {
+    const store = memStore(); const rej = memRejected()
+    const srv = fakeServer(new Set(['ins-1']))
+    await store.add(ins(1, 'M', 5000))
+    await flushOutbox(store, srv.exec, noAudit, rej)
+    await store.add(upd(2, 'M', 9000))
+    await flushOutbox(store, srv.exec, noAudit, rej)
+    expect(srv.executed).toEqual(['ins-1'])
+    expect(chainOf(rej.items, 'ins-1').map(r => r.client_op_id)).toEqual(['ins-1', 'upd-2'])
+  })
+
+  it('«Ya lo resolví» sobre cualquier eslabón resuelve la cadena entera (auditada)', async () => {
+    const store = memStore(); const rej = memRejected()
+    const srv = fakeServer(new Set(['ins-1']))
+    await store.add(ins(1, 'M', 5000)); await store.add(upd(2, 'M', 7000)); await store.add(del(3, 'M'))
+    await flushOutbox(store, srv.exec, noAudit, rej)
+    const audited: string[] = []
+    await expect(resolveRejected(rej, async e => { audited.push(e.op.client_op_id) }, 'upd-2', 'u')).resolves.toBe(3)
+    expect(audited).toEqual(['ins-1', 'upd-2', 'del-3'])
+    expect(rej.items).toHaveLength(0)
+  })
+
+  it('«Reintentar» no hace nada si en la cola hay algo de la misma fila', async () => {
+    const store = memStore(); const rej = memRejected()
+    await rej.add({ ...ins(1, 'M', 5000), rejected_at: 'x', reason: 'r', target: 'cash_movements:M', orig_seq: 1 })
+    await store.add(upd(2, 'M', 7000))
+    await expect(requeueRejected(rej, store, 'ins-1')).rejects.toThrow(PENDIENTE_MISMA_FILA)
+    expect(rej.items).toHaveLength(1)
+    expect(store.ops.map(o => o.client_op_id)).toEqual(['upd-2'])
+  })
+
+  it('reintento a medias (la op está en la cola Y en rechazadas): se manda y al entrar sale de rechazadas', async () => {
+    const store = memStore(); const rej = memRejected()
+    const srv = fakeServer(new Set())
+    await rej.add({ ...ins(1, 'M', 5000), rejected_at: 'x', reason: 'r', target: 'cash_movements:M', orig_seq: 1 })
+    await store.add(ins(1, 'M', 5000))
+    const res = await flushOutbox(store, srv.exec, noAudit, rej)
+    expect(res).toMatchObject({ applied: 1, fatals: 0 })
+    expect(rej.items).toHaveLength(0)
+  })
+
+  it('tip_entries: un delete de la misma persona/turno después de un upsert rechazado también se encadena', async () => {
+    const store = memStore(); const rej = memRejected()
+    const row = { session_id: 's', employee_id: 'e' }
+    await store.add(op(1, { client_op_id: 'tu-1', table: 'tip_entries', op: 'upsert', payload: { onConflict: 'session_id,employee_id', row } }))
+    await store.add(op(2, { client_op_id: 'td-2', table: 'tip_entries', op: 'delete', payload: { match: row } }))
+    const executed: string[] = []
+    await flushOutbox(store, async o => { executed.push(o.client_op_id); return 'fatal' }, noAudit, rej)
+    expect(executed).toEqual(['tu-1'])
+    expect(rej.items.find(r => r.client_op_id === 'td-2')?.depends_on).toBe('tu-1')
+  })
+})
+
+describe('verificador #234 — «Pasar a rechazadas» la primera de una cola trabada', () => {
+  it('saca la primera (sin borrar) y sus dependientes la siguen; lo demás se aplica', async () => {
+    const store = memStore(); const rej = memRejected()
+    const srv = fakeServer(new Set())
+    await store.add(ins(1, 'M', 5000)); await store.add(upd(2, 'M', 7000)); await store.add(ins(3, 'N', 100))
+    await expect(forceRejectHead(store, rej, noAudit, 'ins-1', 'tras 5 intentos')).resolves.toBe(true)
+    expect(rej.items.map(r => r.client_op_id)).toEqual(['ins-1'])
+    expect(rej.items[0].payload).toEqual({ id: 'M', amount_crc: 5000 })
+    await flushOutbox(store, srv.exec, noAudit, rej)
+    expect(srv.executed).toEqual(['ins-3'])
+    expect(rej.items.map(r => r.client_op_id)).toEqual(['ins-1', 'upd-2'])
+  })
+  it('si la primera ya no es la que vio la pantalla, no toca nada', async () => {
+    const store = memStore(); const rej = memRejected()
+    await store.add(ins(1, 'M', 5000))
+    await expect(forceRejectHead(store, rej, noAudit, 'otra', 'x')).resolves.toBe(false)
+    expect(store.ops).toHaveLength(1); expect(rej.items).toHaveLength(0)
+  })
+  it('si no se pudo guardar en rechazadas, la op sigue en la cola', async () => {
+    const store = memStore(); const rej = memRejected()
+    rej.add = async () => { throw new Error('IDB') }
+    await store.add(ins(1, 'M', 5000))
+    await expect(forceRejectHead(store, rej, noAudit, 'ins-1', 'x')).rejects.toThrow()
+    expect(store.ops).toHaveLength(1)
+  })
+  it('el contador es por la MISMA primera op: si cambia, arranca de nuevo', () => {
+    const fr = (head: string, kind: 'servidor' | 'red' = 'servidor'): FlushResult =>
+      ({ applied: 0, duplicates: 0, fatals: 0, stopped: true, remaining: 1, retryKind: kind, retryReason: 'r', stoppedAt: head })
+    let s: StuckState = { attempts: 0 }
+    for (let i = 0; i < STUCK_AFTER; i++) s = nextStuck(s, fr('a'))
+    expect(puedePasarARechazadas(s)).toBe(true)
+    s = nextStuck(s, fr('b'))
+    expect(s).toMatchObject({ attempts: 1, head: 'b' })
+    expect(puedePasarARechazadas(s)).toBe(false)
+  })
+  it('el botón no se ofrece si el freno es de red o de sesión', () => {
+    expect(puedePasarARechazadas({ attempts: 9, kind: 'red', head: 'a' })).toBe(false)
+    expect(puedePasarARechazadas({ attempts: 9, kind: 'sesion', head: 'a' })).toBe(false)
+    expect(puedePasarARechazadas({ attempts: 9, kind: 'desconocido', head: 'a' })).toBe(true)
+  })
+})
+
+describe('verificador #234 — un executor que LANZA', () => {
+  it('flushOutbox lo trata como retry: frena y no borra nada', async () => {
+    const store = memStore(); const rej = memRejected()
+    await store.add(op(1)); await store.add(op(2))
+    const res = await flushOutbox(store, async () => { throw new Error('boom') }, noAudit, rej)
+    expect(res).toMatchObject({ stopped: true, fatals: 0, remaining: 2, stoppedAt: 'op-1' })
+    expect(rej.items).toHaveLength(0)
+  })
+  it('si no se pueden leer las rechazadas, no se manda nada', async () => {
+    const store = memStore(); const rej = memRejected()
+    rej.all = async () => { throw new Error('IDB') }
+    await store.add(op(1))
+    let called = false
+    const res = await flushOutbox(store, async () => { called = true; return 'ok' }, noAudit, rej)
+    expect(called).toBe(false)
+    expect(res).toMatchObject({ stopped: true, remaining: 1 })
   })
 })

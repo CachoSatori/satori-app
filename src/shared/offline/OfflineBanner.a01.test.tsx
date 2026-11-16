@@ -10,8 +10,9 @@ const rej: RejectedOp = {
   created_at: '2026-11-17T05:30:00.000Z',   // 23:30 del 16/11 en CR
   rejected_at: '2026-11-17T06:00:00.000Z', reason: 'un dato no cumple una regla de la base', code: '23514', status: 400,
 }
-const state = { pending: 0, rejected: 0, role: 'cajero' as string, stuck: { attempts: 0 } as { attempts: number; kind?: string } }
+const state = { pending: 0, rejected: 0, role: 'cajero' as string, stuck: { attempts: 0 } as { attempts: number; kind?: string; head?: string } }
 const requeue = vi.fn<(id: string) => Promise<void>>(async () => {})
+const force = vi.fn<(id: string, n: number, m: string) => Promise<boolean>>(async () => true)
 const resolve = vi.fn<(id: string, by: string | null) => Promise<void>>(async () => {})
 
 vi.mock('./outbox', async () => {
@@ -26,6 +27,7 @@ vi.mock('./outbox', async () => {
     getStuck: () => state.stuck,
     requeueRejectedNow: (id: string) => requeue(id),
     resolveRejectedNow: (id: string, by: string | null) => resolve(id, by),
+    forceRejectHeadNow: (id: string, n: number, m: string) => force(id, n, m),
   }
 })
 vi.mock('../api/supabase', () => ({ supabase: {} }))
@@ -35,7 +37,7 @@ import OfflineBanner from './OfflineBanner'
 
 beforeEach(() => {
   state.pending = 0; state.rejected = 0; state.role = 'cajero'; state.stuck = { attempts: 0 }
-  requeue.mockClear(); resolve.mockClear()
+  requeue.mockClear(); resolve.mockClear(); force.mockClear()
 })
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
 
@@ -115,5 +117,30 @@ describe('A01 — aviso de cola trabada', () => {
     await flush()
     expect(screen.queryByRole('status')).toBeNull()
     expect(document.body.textContent).toContain('3 operaciones pendientes de sincronizar')
+  })
+})
+
+describe('verificador #234 — «Pasar a rechazadas»', () => {
+  it('manager con cola trabada por el servidor: ve el botón y, si confirma, pasa la primera op', async () => {
+    state.pending = 2; state.role = 'manager'; state.stuck = { attempts: 5, kind: 'servidor', head: 'op-h' }
+    render(<OfflineBanner />)
+    await flush()
+    const confirm = vi.fn().mockReturnValue(true)
+    ;(window as unknown as { confirm: unknown }).confirm = confirm
+    fireEvent.click(screen.getByText('Pasar a rechazadas')); await flush()
+    expect(confirm.mock.calls[0][0]).toContain('No se borra')
+    expect(force).toHaveBeenCalledWith('op-h', 5, 'el servidor no está respondiendo bien; se sigue reintentando')
+  })
+  it('el cajero no ve el botón', async () => {
+    state.pending = 2; state.stuck = { attempts: 5, kind: 'servidor', head: 'op-h' }
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.queryByText('Pasar a rechazadas')).toBeNull()
+  })
+  it('con freno por sesión vencida no se ofrece (se arregla entrando de nuevo)', async () => {
+    state.pending = 2; state.role = 'owner'; state.stuck = { attempts: 5, kind: 'sesion', head: 'op-h' }
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.queryByText('Pasar a rechazadas')).toBeNull()
   })
 })

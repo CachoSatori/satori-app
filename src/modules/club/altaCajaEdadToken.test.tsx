@@ -50,6 +50,7 @@ describe('Escanear → alta en caja con edad: el cajero ve el botón del link', 
     fireEvent.click(campo(/Verifiqué que es local/))
     fireEvent.click(campo(/Es mayor de 18 años/))
     fireEvent.click(screen.getByText('Dar de alta'))
+    fireEvent.click(screen.getByText('Sí, es este'))   // hallazgo 230: confirma el WhatsApp
     const a = await screen.findByText(/Mandarle su link por WhatsApp/)
     expect(decodeURIComponent(a.closest('a')!.getAttribute('href')!)).toContain('https://club.ejemplo.test/p/' + TOK)
     const fns = H.rpc.mock.calls.map(c => c[0])

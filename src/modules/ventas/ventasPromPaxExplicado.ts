@@ -9,7 +9,7 @@
 // · Día: día CR de la factura (`fecha_registra`). NO cambia (§5).
 // · Turno: por la HORA CR de la factura, no por `pos_ndf_tickets.turno` (el turno de caja está mal
 //   anotado en los dos sentidos, r8/Q27). El RPC trae la franja: 06–16 mañana · 17–23 noche ·
-//   00–05 madrugada. **Madrugada = noche del MISMO día calendario** (decisión de Ismael, 06/11,
+//   00–05 madrugada. **Madrugada = noche del MISMO día calendario** (decisión del dueño, 06/11,
 //   opción B): así el día y el mes siguen siendo idénticos a los de Ventas. Vive SOLO acá:
 //   `turnoDeFranja`.
 // · Prom/pax = neta de salón ÷ pax de salón, incluida la neta de las facturas de salón sin pax.

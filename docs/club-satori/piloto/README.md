@@ -1,6 +1,6 @@
 # Material del piloto · BORRADORES
 
-Todo esto es **borrador**: Ismael lo revisa antes de usarlo. Sin datos personales (lo que va entre `<…>` se completa al
+Todo esto es **borrador**: el dueño lo revisa antes de usarlo. Sin datos personales (lo que va entre `<…>` se completa al
 mandarlo).
 
 | Archivo | Para quién | Idioma |

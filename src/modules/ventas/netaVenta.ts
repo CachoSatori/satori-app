@@ -14,7 +14,7 @@
 // 19 días). No se recalcula `valor_servido_crc` ni se toca el agente: la neta se arma acá, en
 // la app, con las líneas que la ingesta ya guarda completas (toda familia, con su monto).
 //
-// Firmado por el dueño (Ismael): fuera de la venta solo PERSONAL (6), X CORTESIAS (17) e
+// Firmado por el dueño: fuera de la venta solo PERSONAL (6), X CORTESIAS (17) e
 // Ingredientes (20). Todo lo demás cuenta — gift cards 12, dueños 28 (SIPP), BOXING 19, merch
 // 21/23/24/26/27, 11, 15, 22, 25 — y también la línea sin familia o con una familia que el
 // catálogo no conoce, que además se AVISA para poder cazar el hueco.

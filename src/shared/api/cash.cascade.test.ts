@@ -58,12 +58,12 @@ describe('cash.ts — deleteCashMovement con cascada (mig 039 RPC delete_movemen
   it('ONLINE con credenciales de gerencia: las reenvía a la RPC para la re-validación server-side (mig 044)', async () => {
     const { deleteCashMovement } = await import('./cash')
     // managerEmail = identidad devuelta por verify_manager_password (mig 045); la RPC re-valida el par.
-    await deleteCashMovement('mov-1', 'motivo', 'boss@satori.cr', 'clave-boss')
+    await deleteCashMovement('mov-1', 'motivo', 'boss@ejemplo.test', 'clave-boss')
 
     expect(rpcSpy).toHaveBeenCalledTimes(1)
     expect(rpcSpy).toHaveBeenCalledWith('delete_movement_cascade', {
       p_movement_id: 'mov-1', p_note: 'motivo',
-      p_manager_email: 'boss@satori.cr', p_manager_password: 'clave-boss',
+      p_manager_email: 'boss@ejemplo.test', p_manager_password: 'clave-boss',
     })
     expect(enqueueSpy).not.toHaveBeenCalled()
   })

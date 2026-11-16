@@ -3,7 +3,7 @@
 // Módulo PURO: sin I/O, sin reloj, sin zona horaria. Trabaja con días `YYYY-MM-DD` (el día CR
 // de la factura, el mismo de Ventas) y compara strings, así que no hay corrimientos por huso.
 //
-// Tramos firmados por Ismael (30/10), fijos en código en v1 (la tabla editable por local es v2):
+// Tramos firmados por el dueño (30/10), fijos en código en v1 (la tabla editable por local es v2):
 //   · `alta`        15-dic → 30-abr. Cruza el año y PERTENECE AL AÑO EN QUE TERMINA:
 //                   «Alta 2026» = 15 dic 2025 – 30 abr 2026.
 //   · `baja-may`     1-may → 31-may

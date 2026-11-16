@@ -1,6 +1,6 @@
 # Mensaje para anfitriones (hoteles y concierges) · BORRADOR
 
-> **Borrador (08-nov) para que lo revise Ismael antes de usarlo.** Sin datos personales: lo que va entre `<…>` se
+> **Borrador (08-nov) para que lo revise el dueño antes de usarlo.** Sin datos personales: lo que va entre `<…>` se
 > completa al mandarlo (su nombre, su link del portal y `<valor del crédito>`, el valor vigente en colones de la
 > configuración del local). Las partes **[con el pase]** van solo cuando el pase de Google Wallet esté encendido (hoy está
 > apagado hasta la prueba en un teléfono).
@@ -77,7 +77,7 @@ We take care of your data under our privacy notice: <link del aviso de privacida
 Thank you for recommending us!
 Satori Sushi Bar
 
-## Decidido (Ismael, 08-nov noche)
+## Decidido (el dueño, 08-nov noche)
 - El saldo de la tarjeta de papel pasa al portal (carga masiva: `docs/club-satori/piloto/saldos-papel.md`).
 - Los créditos vencen a los 12 meses **sin actividad**. Verificado: el SPEC (§5.1) y `club_vencer` cuentan desde la última
   actividad, no desde que se gana cada crédito; el mismo texto va en el portal, el aviso del canje por WhatsApp y las guías.

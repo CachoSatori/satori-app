@@ -639,7 +639,7 @@ de proveedores) abre la app y aterriza DIRECTO en su pantalla, viendo solo lo su
    ve únicamente lo suyo.
 4. **Gestión de usuarios desde Admin** (ya existía Admin → Usuarios: rol + habilitar/deshabilitar;
    se extiende con el rol `proveedor` y el flujo documentado): **crear cuentas** = el empleado se
-   registra (correo real o alias `satorisushibar+nombre@gmail.com`) → queda "pendiente" → el owner
+   registra (correo real o alias `<alias-del-correo-del-negocio>`) → queda "pendiente" → el owner
    le asigna rol y lo habilita desde esta pantalla. Crear cuentas server-side requeriría la
    service key en un backend (Edge Function) — innecesario por ahora.
 5. **PWA por puesto**: shortcuts del manifest (Registrar proveedor, Comandero, Caja) + guía de
@@ -1155,7 +1155,7 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 ##### 🟡 Fase A — Pendiente (cleanup de datos)
 - **Recategorizar histórico `egreso_socios`**: separar *deliverys* (repartidor externo → operativo `7100`/direct operating) de *retiros reales de socios*. ~105 movimientos importados bajo `egreso_socios`; requiere criterio del dueño/contador.
 - Separar Gerencia (`6100`) de Staff (`6200`) en `egreso_personal`.
-- Confirmar `caja_origen='Banco'` en compras por transferencia (PMT, guayafrut, Isleña, Pescados…) para que no toquen la caja física.
+- Confirmar `caja_origen='Banco'` en compras por transferencia (los proveedores de transferencia) para que no toquen la caja física.
 - ✅ Retiro de dueños **descuenta de Caja Fuerte** (traspaso Caja Fuerte → Banco; el saldo de CF resta los traspasos salientes). Las ventas en efectivo del cierre entran a Caja Fuerte.
 
 ##### ✅ Fase B — Bandeja + ingesta IA — **OPERATIVA EN PRODUCCIÓN** (2026-06-04)
@@ -1165,7 +1165,7 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 - ✅ **Multi-documento**: una foto → `documentos[]` → N filas. Esquema CR rico (factura/proforma/comprobante/propinas/otro, clave FE, IVA 1%/13%, ítems 2 líneas, unidades, condicion_pago, banco, moneda USD).
 - ✅ **Auto-genera el movimiento al subir** (si confianza ≥0.4 + cuadra + no requiere revisión). Manuscritas/baja confianza → quedan en Bandeja con aviso ⚠ + validación obligatoria. Crédito→pendiente; comprobante→concilia pendiente único o egreso; propinas→excluido del P&L; USD→TC del día.
 - ✅ PWA **Share Target** (`public/sw-share.js`) + subida manual/cámara. Anti-duplicado SHA-256 / `clave_fe`.
-- 🟡 Afinar el prompt con 8–10 fotos reales variadas por proveedor (BELCA, Isleña, PMT, Guayafrut, SINPE, LAFISE/BN, mariscos manuscritos).
+- 🟡 Afinar el prompt con 8–10 fotos reales variadas por proveedor (proveedores reales variados, SINPE, LAFISE/BN, mariscos manuscritos).
 - 🔭 Futuro: webhook WhatsApp Cloud API (Meta) como entrada alternativa.
 
 ##### ✅ Fase C — Auto-inventario (2026-06-04, en producción)

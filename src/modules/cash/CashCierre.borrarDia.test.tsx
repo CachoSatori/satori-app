@@ -72,10 +72,10 @@ describe('Deshacer cierre — un error forzado se ve en pantalla', () => {
 
 describe('Deshacer cierre — credenciales de gerencia al servidor (mig 071)', () => {
   it('cajero: pasa email y contraseña de gerencia a deshacerCierreDia', async () => {
-    mgr.fn.mockResolvedValueOnce({ ok: true, managerEmail: 'jefe@satori.cr', managerPassword: 'secreta' })
+    mgr.fn.mockResolvedValueOnce({ ok: true, managerEmail: 'jefe@ejemplo.test', managerPassword: 'secreta' })
     render(<CashCierre onRefresh={() => {}} openSession={null} />)
     fireEvent.click(await screen.findByText(/Deshacer cierre/))
-    await waitFor(() => expect(api.deshacerCierreDia).toHaveBeenCalledWith(HOY, 'jefe@satori.cr', 'secreta'))
+    await waitFor(() => expect(api.deshacerCierreDia).toHaveBeenCalledWith(HOY, 'jefe@ejemplo.test', 'secreta'))
     expect(await screen.findByText(/Cierre deshecho/)).toBeTruthy()
   })
   it('si la autorización se cancela, no llama a la RPC', async () => {

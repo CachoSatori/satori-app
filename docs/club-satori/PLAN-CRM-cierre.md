@@ -1,6 +1,6 @@
 # Plan · cerrar el CRM viejo (CLUB-AUD-64 / LC-DES-09)
 
-> **Solo el plan. Toca RLS de prod: no se ejecuta nada sin la firma de Ismael.** Diagnóstico hecho en STAGING (solo
+> **Solo el plan. Toca RLS de prod: no se ejecuta nada sin la firma del dueño.** Diagnóstico hecho en STAGING (solo
 > lectura, 08-nov). Antes de firmar, se repite la misma lectura en prod (consulta del paso 0).
 
 ## Diagnóstico (staging)
@@ -31,7 +31,7 @@ Datos: 2 clientes, 1 interacción, 1 config, 4 premios (staging). El módulo CRM
        `USING (get_my_role() in ('owner','manager'))` y el **mismo `WITH CHECK`**;
      - lo mismo para `customer_interactions`.
    - Cajero y contador: sin acceso.
-4. `loyalty_*`: lectura y escritura solo owner y manager (o borrarlas, si el Local Club las reemplaza; lo decide Ismael).
+4. `loyalty_*`: lectura y escritura solo owner y manager (o borrarlas, si el Local Club las reemplaza; lo decide el dueño).
 5. **Front:** `src/shared/api/crm.ts` y `ClientesModule` dejan de mostrarse a cajero y contador (ya está pausado; se
    esconde la tarjeta para esos roles).
 6. **Verificación:**

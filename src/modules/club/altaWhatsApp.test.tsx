@@ -158,6 +158,6 @@ describe('Escanear → Nuevo socio: «Es mayor de 18 años» (D6 A)', () => {
 
   it('con la casilla, manda mayorEdad = true a la base', async () => {
     await darDeAlta()
-    expect(api.socioAltaCaja).toHaveBeenCalledWith('Ana Prueba', '88880000', null, true, true)
+    expect(api.socioAltaCaja).toHaveBeenCalledWith('Ana Prueba', '88880000', null, true, true, null)
   })
 })

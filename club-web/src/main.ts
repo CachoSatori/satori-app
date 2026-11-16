@@ -17,7 +17,7 @@ import './styles.css'
 import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
-import { validarCumple } from './cumple'
+import { validarCumple, leerEstadoCumple, vistaCumple } from './cumple'
 import { esUrlResena, marcarClicResena, rutaSondeo, sondearCupon, vistaDelCupon } from './resena'
 import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
@@ -64,7 +64,7 @@ const msgError = (e: string) =>
      tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red, tope_canje: t.tope_canje,
      sin_saldo_canje: t.sin_saldo_canje, tope_altas: t.tope_altas, verificacion: t.alta_verificacion,
      datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible,
-     equipo_sin_canje: t.equipo_sin_canje } as Record<string, string>)[e] ?? t.servicio
+     equipo_sin_canje: t.equipo_sin_canje, cumple_ya_cargado: t.cumple_ya_cargado } as Record<string, string>)[e] ?? t.servicio
 
 // ── Formatos ─────────────────────────────────────────────────────────────────
 const fecha = (iso: string, conHora = true) =>
@@ -468,6 +468,8 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
       }))
     })
   }
+  // 173 (D-cumple-1 A): el cumpleaños se agrega UNA vez desde acá si no lo dio en el alta; la base no devuelve la fecha
+  const cumpleBox = seccionCumple(token)
   const sec = h('section', { class: 'tarjeta', 'aria-label': t.socio_titulo },
     h('h2', {}, t.socio_titulo),
     h('p', {}, activo ? t.socio_activo : t.socio_pendiente),
@@ -479,6 +481,7 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     activo && avanceBox,
     qrBox,
     activo && retosBox,
+    cumpleBox,
     err, baja)
   baja.addEventListener('click', async () => {
     if (!window.confirm(t.socio_baja_confirmar)) return
@@ -488,6 +491,44 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     baja.disabled = false; err.append(avisoEl('err', msgError(r.error)))
   })
   return sec
+}
+
+/** 173: «Su cumpleaños» en «Mi Club». Se pide aparte; si falla o no corresponde, no se muestra nada. */
+function seccionCumple(token: string): HTMLElement {
+  const box = h('div')
+  void api<unknown>(`portal/${token}/cumple`).then(r => {
+    const vista = vistaCumple(r.ok ? leerEstadoCumple(r.data) : null)
+    if (vista === 'ya') { box.replaceChildren(h('div', { class: 'avance' }, h('h3', {}, t.cumple_titulo), h('p', { class: 'sub' }, t.cumple_ya))); return }
+    if (vista !== 'form') return
+    const err = h('div')
+    const cDia = h('select', { id: 'p-cdia' }, h('option', { value: '' }, '—'),
+      ...Array.from({ length: 31 }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1)))) as HTMLSelectElement
+    const cMes = h('select', { id: 'p-cmes' }, h('option', { value: '' }, '—'),
+      ...t.meses.map((m, i) => h('option', { value: String(i + 1) }, m))) as HTMLSelectElement
+    const cPermiso = h('input', { type: 'checkbox', id: 'p-cpermiso' }) as HTMLInputElement
+    const boton = h('button', { type: 'submit', class: 'btn' }, t.cumple_guardar) as HTMLButtonElement
+    const form = h('form', {
+      onsubmit: async (e: Event) => {
+        e.preventDefault(); err.replaceChildren()
+        const c = validarCumple(cDia.value, cMes.value, cPermiso.checked)
+        if (!c.ok || !c.cumple) { err.append(avisoEl('err', c.ok || c.error === 'falta' ? t.alta_cumple_falta : t.alta_cumple_invalido)); return }
+        boton.disabled = true
+        const x = await api<{ ok: boolean }>(`portal/${token}/cumple`, { method: 'POST',
+          body: JSON.stringify({ dia: c.cumple.dia, mes: c.cumple.mes, permiso: true }) })
+        if (x.ok) { box.replaceChildren(h('div', { class: 'avance' }, h('h3', {}, t.cumple_titulo), avisoEl('ok', t.cumple_listo))); anunciar(t.cumple_listo); return }
+        boton.disabled = false
+        err.append(avisoEl('err', x.error === 'datos_invalidos' ? t.alta_cumple_falta : msgError(x.error)))
+      },
+    },
+      h('fieldset', { class: 'cumple' }, h('legend', {}, t.cumple_titulo),
+        h('p', { class: 'sub' }, t.cumple_txt),
+        h('label', { for: 'p-cdia' }, t.alta_cumple_dia), cDia,
+        h('label', { for: 'p-cmes' }, t.alta_cumple_mes), cMes,
+        h('label', { class: 'check', for: 'p-cpermiso' }, cPermiso, h('span', {}, t.alta_cumple_permiso))),
+      err, boton)
+    box.replaceChildren(form)
+  })
+  return box
 }
 
 /** A4.5: con los dos roles, dos pestañas («Mi Club» y «Anfitrión»); con uno, una sola sección. */

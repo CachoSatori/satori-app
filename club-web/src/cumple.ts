@@ -24,3 +24,22 @@ export function validarCumple(dia: string, mes: string, permiso: boolean): Resul
   if (!/^\d{1,2}$/.test(d) || !/^\d{1,2}$/.test(m) || !diaMesValido(dn, mn)) return { ok: false, error: 'invalido' }
   return { ok: true, cumple: { dia: dn, mes: mn } }
 }
+
+// 173 (D-cumple-1 A, 15-nov firmada) · Portal «Mi Club»: el socio que no lo dio en el alta lo agrega UNA vez. La base
+// (club_portal_cumple) contesta solo booleanos: nunca la fecha.
+export type EstadoCumple = { socio: boolean; tiene: boolean; puede_agregar: boolean }
+
+/** Lee la respuesta de GET /api/portal/:token/cumple; cualquier cosa rara → null (no se muestra nada). */
+export function leerEstadoCumple(x: unknown): EstadoCumple | null {
+  if (!x || typeof x !== 'object') return null
+  const o = x as Record<string, unknown>
+  if (typeof o.socio !== 'boolean' || typeof o.tiene !== 'boolean' || typeof o.puede_agregar !== 'boolean') return null
+  return { socio: o.socio, tiene: o.tiene, puede_agregar: o.puede_agregar }
+}
+
+/** Qué muestra el portal: el formulario (una vez), «ya lo tenemos» o nada. */
+export function vistaCumple(e: EstadoCumple | null): 'form' | 'ya' | null {
+  if (!e || !e.socio) return null
+  if (e.tiene) return 'ya'
+  return e.puede_agregar ? 'form' : null
+}

@@ -12,8 +12,8 @@ const DIR_MIG = new URL('../../supabase/migrations/', import.meta.url)
 const MIGS = readdirSync(DIR_MIG).filter(f => f.endsWith('.sql')).sort((a, b) => parseInt(a) - parseInt(b)).map(f => readFileSync(new URL(f, DIR_MIG), 'utf8')).join('\n')
 const ULTIMO_DEFAULT = [...MIGS.matchAll(/alter column aviso_privacidad_version set default '([^']+)'/g)].at(-1)?.[1]
 
-test('v1.2: el aviso completo (ES/EN) dice que guardamos el email, si lo da', () => {
-  expect(AVISO_PRIVACIDAD_VERSION).toBe('v1.2')
+test('v1.3: el aviso completo (ES/EN) dice que guardamos el email, si lo da', () => {
+  expect(AVISO_PRIVACIDAD_VERSION).toBe('v1.3')
   expect(TEXTOS.es.alta_aviso).toContain('Qué datos guardamos: su nombre, su número de WhatsApp y su email, si lo da.')
   expect(TEXTOS.en.alta_aviso).toContain('What we keep: your name, your WhatsApp number and your email, if you give it.')
 })
@@ -31,10 +31,10 @@ test('(14-nov, D6 A) v1.2 dice, en ES y EN, que es solo para mayores de 18 y có
   expect(es).toContain('Edad: el Local Club es solo para mayores de 18 años. Al anotarse confirma que lo es.')
   expect(es).toContain('Si nos da su cumpleaños con su permiso, solo el día y el mes (sin el año).')
   expect(es).toContain('también el de su cumpleaños, si nos dio permiso')
-  expect(es).toContain('El cumpleaños no se cambia desde el portal: para corregirlo o retirar el permiso, escríbanos. Si se da de baja, lo borramos.')
+  expect(es).toContain('Después no se cambia desde el portal: para corregirlo o retirar el permiso, escríbanos. Si se da de baja, lo borramos.')
   expect(en).toContain('Age: the Local Club is only for people 18 or older. By signing up you confirm you are.')
   expect(en).toContain('If you give us your birthday with your permission, only the day and month (no year).')
-  expect(en).toContain('Your birthday cannot be changed from the portal')
+  expect(en).toContain('your birthday cannot be changed from the portal')
   // v1.2 todavía no salió: la huella vieja de v1.2 (solo «usted») NO puede quedar en ninguna migración ni en config
   expect(MIGS).not.toContain('661a25dd310346231d49429c7bf216c3bc84d5670bd107d35ae638028a607df7')
   expect(AVISO_PRIVACIDAD_SHA256.en).not.toBe('748b783881f21370e3238517996a2a47780b0c7a18c597ecc7528a56018fddf7')
@@ -42,6 +42,20 @@ test('(14-nov, D6 A) v1.2 dice, en ES y EN, que es solo para mayores de 18 y có
 
 test('(14-nov) v1.2 se registra una sola vez en las migraciones (la 159)', () => {
   expect([...MIGS.matchAll(/\('v1\.2', '[0-9a-f]{64}', '[0-9a-f]{64}'\)/g)].length).toBe(1)
+})
+
+test('(15-nov, D-cumple-1 A) v1.3: el cumpleaños se agrega UNA vez desde el portal y el WhatsApp incluye el beneficio; se registra una vez (la 173)', () => {
+  const es = TEXTOS.es.alta_aviso, en = TEXTOS.en.alta_aviso
+  expect(es).toContain('Si no nos dio su cumpleaños al anotarse, puede agregarlo una sola vez desde su portal.')
+  expect(es).toContain('avisarle por WhatsApp sobre su cuenta del Club (incluido el beneficio de su cumpleaños)')
+  expect(en).toContain('If you did not give us your birthday when you signed up, you can add it once from your portal.')
+  expect(en).toContain('message you on WhatsApp about your Club account (including your birthday benefit)')
+  // ya no dice que «no se cambia desde el portal» a secas (ahora se AGREGA una vez)
+  expect(es).not.toMatch(/escribiendo a [^ ]+\. El cumpleaños no se cambia desde el portal/)
+  expect([...MIGS.matchAll(/\('v1\.3', '[0-9a-f]{64}', '[0-9a-f]{64}'\)/g)].length).toBe(1)
+  // las huellas de v1.2 no se reusan para v1.3
+  expect(AVISO_PRIVACIDAD_SHA256.es).not.toBe('755d3ac1c19bf0d679f6e7844bcf950aec4803abd2098616d0c2b6b897e256dc')
+  expect(AVISO_PRIVACIDAD_SHA256.en).not.toBe('a83ec65f5cc5eecb1a9d9a1c59c13af9b222110931c01d0b873c990404a306cf')
 })
 
 test('v1.1 corregido (08-nov noche): ofertas solo si las aceptó, servidores fuera de CR y retención = la configuración', () => {

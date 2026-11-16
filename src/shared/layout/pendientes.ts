@@ -4,6 +4,8 @@
 // (turnos abiertos hace mucho, movimientos por revisar, stock, lunes de revisión…), más los días sin
 // cierre de `diasSinCierre` (la misma alerta que ve Caja). Cada pendiente lleva al módulo donde se
 // resuelve, y solo sale si el rol ve ese módulo en su grilla.
+// 15-nov (validación del dueño): donde el módulo tiene una vista concreta para lo que se avisa, el link abre esa
+// vista directo (`?vista=…`). El parámetro nunca da permisos: cada módulo lo ignora si el rol no ve esa pestaña.
 
 export type Tono = 'malo' | 'pendiente'
 
@@ -62,6 +64,19 @@ export interface SenalesInicio {
   sinComprobar?:  readonly Senal[]
   /** Excepciones del puente del Club abiertas (owner y manager; antes era el aviso de la tarjeta). */
   clubExcepciones?: number | null
+  /** Local con que se contaron las excepciones del Club (`localActual()` tras `asegurarLocalParaRol`). El link abre
+   *  Excepciones en ese mismo local, así la lista coincide con el número del aviso. */
+  clubLocal?: string | null
+}
+
+/** Caja → pestaña «Pendientes» (movimientos con estado `pendiente`, los mismos que cuenta el Inicio). */
+export const RUTA_CAJA_PENDIENTES = '/caja?vista=pendientes'
+
+/** Club → pestaña «Excepciones» (abiertas de los últimos 30 días, como cuenta `club_excepciones_abiertas`). */
+export function rutaClubExcepciones(local?: string | null): string {
+  const q = new URLSearchParams({ vista: 'excepciones' })
+  if (local) q.set('local', local)
+  return `/club?${q.toString()}`
 }
 
 /** Desde cuántas horas un turno abierto se marca (el mismo umbral que tenían las tarjetas). */
@@ -98,7 +113,7 @@ export function calcularPendientes(s: SenalesInicio, modulosVisibles: ReadonlySe
       estado: `Abierta ${s.cashOpenHours} h` })
   }
   if (ok('movimientos') && s.pendingCount > 0) {
-    add({ id: 'movimientos', modulo: 'cash', path: '/caja', tono: 'pendiente',
+    add({ id: 'movimientos', modulo: 'cash', path: RUTA_CAJA_PENDIENTES, tono: 'pendiente',
       texto: 'Revisar los movimientos de Caja pendientes',
       estado: `${s.pendingCount} por revisar` })
   }
@@ -124,7 +139,7 @@ export function calcularPendientes(s: SenalesInicio, modulosVisibles: ReadonlySe
 
   // ── Club: excepciones abiertas (el mismo aviso que antes iba en la tarjeta del Club) ──
   if (s.clubExcepciones && s.clubExcepciones > 0) {
-    add({ id: 'club-excepciones', modulo: 'club', path: '/club', tono: 'pendiente',
+    add({ id: 'club-excepciones', modulo: 'club', path: rutaClubExcepciones(s.clubLocal), tono: 'pendiente',
       texto: 'Revisar las excepciones del Club',
       estado: plural(s.clubExcepciones, 'excepción', 'excepciones') })
   }

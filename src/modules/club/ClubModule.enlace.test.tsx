@@ -25,6 +25,7 @@ vi.mock('./Escanear', () => ({ default: () => <p>pantalla escanear</p> }))
 vi.mock('./Miembros', () => ({ default: ({ abrirId }: { abrirId?: string | null }) => <p>pantalla miembros {abrirId ?? 'ninguno'}</p> }))
 vi.mock('./Excepciones', () => ({ default: ({ tipoInicial }: { tipoInicial?: string | null }) => <p>pantalla excepciones {tipoInicial ?? 'todas'}</p> }))
 vi.mock('./Reportes', () => ({ default: () => <p>pantalla reportes</p> }))
+vi.mock('./Tablero', () => ({ default: () => <p>pantalla tablero</p> }))
 
 import ClubModule from './ClubModule'
 
@@ -55,6 +56,18 @@ describe('Club · enlaces desde el Inicio (164)', () => {
     s.role = 'cajero'
     montar('/club?vista=excepciones&tipo=CANJE_SIN_CODIGO')
     expect(await screen.findByText('pantalla escanear')).toBeTruthy()
+    expect(screen.queryByText(/pantalla excepciones/)).toBeNull()
+  })
+  it('15-nov · el aviso «Revisar las excepciones del Club» (?vista=excepciones&local=…) abre Excepciones, sin tipo, en ese local', async () => {
+    s.locales = [{ id: 'local-a', nombre: 'Local A', activo: true }, { id: 'local-b', nombre: 'Local B', activo: true }]
+    montar('/club?vista=excepciones&local=local-b')
+    expect(await screen.findByText('pantalla excepciones todas')).toBeTruthy()
+    expect((await screen.findByDisplayValue('Local B') as HTMLSelectElement).value).toBe('local-b')
+  })
+  it('15-nov · el contador no salta a Excepciones: sigue en su Tablero', async () => {
+    s.role = 'contador'
+    montar('/club?vista=excepciones')
+    expect(await screen.findByText('pantalla tablero')).toBeTruthy()
     expect(screen.queryByText(/pantalla excepciones/)).toBeNull()
   })
   it('una vista inventada no rompe: Escanear', async () => {

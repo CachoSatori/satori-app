@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { todayCR } from '../../shared/utils'
+import { diasAtrasCR, inicioDeMesCR } from './rangosPorDefecto'
 import type { DiasMap } from '../../shared/types/ventas'
 import {
   aggCajero, diasConCajasDeTurno, esEntradaCajero,
@@ -13,15 +14,11 @@ interface Props {
   dias: DiasMap
 }
 
-function nDaysAgo(n: number): string {
-  const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0,10)
-}
-
-
+// Desde «hoy» de Costa Rica (ver rangosPorDefecto.ts).
 const PRESETS = [
-  { label: '7 días',  from: () => nDaysAgo(7) },
-  { label: '15 días', from: () => nDaysAgo(14) },
-  { label: 'Mes',     from: () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` } },
+  { label: '7 días',  from: () => diasAtrasCR(7) },
+  { label: '15 días', from: () => diasAtrasCR(14) },
+  { label: 'Mes',     from: () => inicioDeMesCR() },
   { label: 'Todo',    from: () => '2020-01-01' },
 ]
 

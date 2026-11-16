@@ -1,6 +1,6 @@
 # Mensaje para anfitriones (hoteles y concierges) · BORRADOR
 
-> **Borrador (08-nov) para que lo revise Ismael antes de usarlo.** Sin datos personales: lo que va entre `<…>` se
+> **Borrador (08-nov; 10-nov: «usted» y el cartel) para que lo revise el dueño antes de usarlo.** Sin datos personales: lo que va entre `<…>` se
 > completa al mandarlo (su nombre, su link del portal y `<valor del crédito>`, el valor vigente en colones de la
 > configuración del local). Las partes **[con el pase]** van solo cuando el pase de Google Wallet esté encendido (hoy está
 > apagado hasta la prueba en un teléfono).
@@ -9,34 +9,33 @@
 
 Hola, <nombre>:
 
-Te escribimos de **Satori Sushi Bar** con una novedad del **Club Satori**, el programa para quienes nos recomiendan.
+Le escribimos de **Satori Sushi Bar** con una novedad del **Club Satori**, el programa para quienes nos recomiendan.
 
 **Qué cambia**
-- Ya no hay tarjetas de papel. Tenés un **portal propio** con tu QR, tu saldo y el botón «Canjear»: <link del portal>.
-  Guardalo; es solo tuyo.
-- Cada persona que llega con tu cupón suma: **cada 6 personas, 1 crédito** (se suma de a medio crédito). **Cada crédito
-  vale <valor del crédito>** en tu cuenta en Satori.
-- Tus huéspedes reciben un **cupón del 10 %** (un solo uso) al escanear tu QR.
+- Ya no hay tarjetas de papel. Usted tiene un **portal propio** con su QR, su saldo y el botón «Canjear»: <link del portal>.
+  Guárdelo; es solo suyo.
+- Cada persona que llega con su cupón suma: **cada 6 personas, 1 crédito** (se suma de a medio crédito). **Cada crédito
+  vale <valor del crédito>** en su cuenta en Satori.
+- Sus huéspedes reciben un **cupón del 10 %** (un solo uso) al escanear su QR.
 
-**Tu saldo de la tarjeta de papel pasa a tu portal.**
+**El saldo de su tarjeta de papel pasa a su portal.**
 
-**Los créditos vencen a los 12 meses sin actividad: cada persona que llega con tu cupón o cada canje vuelve a contar los 12 meses.**
+**Los créditos vencen a los 12 meses sin actividad: cada persona que llega con su cupón o cada canje vuelve a contar los 12 meses.**
 
-**[con el pase] Cómo guardás el pase**
-1. Abrí tu portal y tocá «Agregar a Google Wallet».
-2. Desde ahí ves tu saldo y tenés el botón «Canjear» siempre a mano.
-3. Con iPhone, por ahora: abrí tu portal y agregalo a la pantalla de inicio.
+**[con el pase] Cómo guarda el pase**
+1. Abra su portal y toque «Agregar a Google Wallet».
+2. Desde ahí ve su saldo y tiene el botón «Canjear» siempre a mano.
+3. Con iPhone, por ahora: abra su portal y agréguelo a la pantalla de inicio.
 
-**Cómo compartís tu link**
-- En tu portal, tocá «Compartir» y mandalo por WhatsApp, o mostrá tu QR en recepción.
+**Cómo comparte su link**
+- En su portal, toque «Compartir» y mándelo por WhatsApp, o muestre su QR en recepción. También le podemos dar un
+  **cartel para la recepción** con su QR.
 - Quien lo escanea obtiene su cupón del 10 % y lo muestra en caja al pagar.
 
-**Cómo canjeás tus créditos**
-1. En Satori, abrí tu portal (o tu pase) y tocá «Canjear».
-2. Te aparece un código de 6 caracteres que **vale 10 minutos y sirve una sola vez**: mostralo en caja.
-3. Elegís cuántos créditos usar (1, 1,5 o 2 por visita). Sin el código no se puede canjear.
+**Cómo canjea sus créditos**
+Para canjear sus créditos: toque «Canjear» en su portal y presente el código en caja. Listo.
 
-Tus datos los cuidamos según nuestro aviso de privacidad: <link del aviso de privacidad>
+Cuidamos sus datos según nuestro aviso de privacidad: <link del aviso de privacidad>
 
 ¡Gracias por recomendarnos!
 Satori Sushi Bar
@@ -64,24 +63,24 @@ This is **Satori Sushi Bar** with news about **Club Satori**, our program for th
 3. On iPhone, for now: open your portal and add it to your home screen.
 
 **How to share your link**
-- In your portal, tap “Share” and send it on WhatsApp, or show your QR at the front desk.
+- In your portal, tap “Share” and send it on WhatsApp, or show your QR at the front desk. We can also give you a
+  **front-desk poster** with your QR.
 - Whoever scans it gets a 10% coupon and shows it at the register when paying.
 
 **How to redeem your credits**
-1. At Satori, open your portal (or your pass) and tap “Redeem”.
-2. You get a 6-character code that is **valid for 10 minutes and works once**: show it at the register.
-3. You choose how many credits to use (1, 1.5 or 2 per visit). Without the code, credits cannot be redeemed.
+To redeem your credits: tap “Redeem” in your portal and show the code at the register. Done.
 
 We take care of your data under our privacy notice: <link del aviso de privacidad>
 
 Thank you for recommending us!
 Satori Sushi Bar
 
-## Decidido (Ismael, 08-nov noche)
+## Decidido (el dueño)
 - El saldo de la tarjeta de papel pasa al portal (carga masiva: `docs/club-satori/piloto/saldos-papel.md`).
-- Los créditos vencen a los 12 meses **sin actividad**. Verificado: el SPEC (§5.1) y `club_vencer` cuentan desde la última
-  actividad, no desde que se gana cada crédito; el mismo texto va en el portal, el aviso del canje por WhatsApp y las guías.
-- El valor del crédito va como `<valor del crédito>` (el vigente al mandarlo).
+- Los créditos vencen a los 12 meses **sin actividad** (cuentan desde la última actividad, no desde que se gana cada crédito).
+- El valor del crédito va siempre como `<valor del crédito>` (el vigente al mandarlo, de la configuración del local); no se escribe en el repo.
+- El español va con **usted**; el inglés queda igual.
+- El canje se explica simple: «Canjear» en el portal y el código en caja.
 
 ## Abierto
 - El texto para iPhone depende de cuándo se encienda Apple Wallet.

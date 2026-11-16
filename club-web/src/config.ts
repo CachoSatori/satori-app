@@ -57,8 +57,8 @@ export const TURNSTILE_SITEKEY: string = import.meta.env.VITE_TURNSTILE_SITEKEY 
 export const WALLET_GOOGLE_ACTIVO: boolean = import.meta.env.VITE_WALLET_GOOGLE === '1'
 
 /**
- * D 16-nov (el dueño): «Reservar» en el portal del socio abre OpenTable. El link por local vive en la base
- * (`club_cumple_config.reserva_url`, mig 173, editable en Club → Promociones), pero el portal por token todavía no lo
- * devuelve: exponerlo es un cambio de base (pendiente). Mientras tanto, el rid público por defecto de la 173.
+ * D 16-nov (el dueño): «Reservar» en el portal del socio abre OpenTable. Desde la mig 179 el portal devuelve el link del
+ * local del socio (`socio.reserva_url`, el de Club → Promociones) y se usa tal cual; este rid público (el por defecto de
+ * la 173) queda solo para cuando el local no tiene link (o la base todavía no tiene la 179).
  */
 export const OPENTABLE_RID = '1347736'

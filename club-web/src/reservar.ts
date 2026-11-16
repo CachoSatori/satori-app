@@ -10,6 +10,29 @@ export function urlReservaOpenTable(rid: string = OPENTABLE_RID): string | null 
   return `https://www.opentable.com/restref/client/?rid=${r}`
 }
 
+/** Mismos dominios que `club_reserva_url_ok` (mig 179): opentable.com, sus subdominios y las variantes regionales. */
+const HOST_OPENTABLE = /^([a-z0-9-]+\.)*opentable\.(com|ca|de|es|fr|it|ie|jp|nl|hk|sg|ae|co\.uk|co\.nz|co\.th|com\.au|com\.mx|com\.tw)$/i
+
+/**
+ * D 16-nov (el dueño, opción A; mig 179): el link de reserva del LOCAL del socio (`socio.reserva_url`, el de Club →
+ * Promociones) se usa TAL CUAL: trae los parámetros con los que OpenTable registra el canal de entrada. Nada se
+ * reconstruye ni se le quita. Solo se revisa que sea https de OpenTable (sin usuario ni puerto; ≤ 300); si no, null y el
+ * portal cae al rid por defecto.
+ */
+export function urlReservaLocal(url: unknown): string | null {
+  if (typeof url !== 'string' || url === '' || url.length > 300 || /[\s<>"]/.test(url)) return null
+  if (!/^https:\/\//.test(url)) return null
+  let u: URL
+  try { u = new URL(url) } catch { return null }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port || !HOST_OPENTABLE.test(u.hostname)) return null
+  return url
+}
+
+/** El link del botón: el del local del socio si vino y es de OpenTable; si no, el rid por defecto (config.ts). */
+export function urlReservaSocio(reservaUrl: unknown): string | null {
+  return urlReservaLocal(reservaUrl) ?? urlReservaOpenTable()
+}
+
 export interface TextosReservar { titulo: string; txt: string; boton: string }
 
 /**

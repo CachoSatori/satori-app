@@ -105,6 +105,12 @@
       "rama": "claude/esquema-centimos-alinear",
       "renumerada_a": "177"
     },
+    "098": {
+      "nombre": "esquema_columnas_caja_como_prod",
+      "bloque": "caja",
+      "rama": "claude/esquema-columnas-caja-faltantes",
+      "renumerada_a": "178"
+    },
     "100": {
       "nombre": "club_catalogo_locales",
       "bloque": "club",
@@ -242,6 +248,12 @@
       "bloque": "club",
       "rama": "claude/club-local-manager-3",
       "renumerada_a": "176"
+    },
+    "124": {
+      "nombre": "club_portal_reserva_local",
+      "bloque": "club",
+      "rama": "claude/club-portal-reserva-local",
+      "renumerada_a": "179"
     },
     "150": {
       "nombre": "club_satori_esquema",
@@ -398,6 +410,18 @@
       "bloque": "pase",
       "rama": "claude/esquema-centimos-alinear",
       "origen": "097"
+    },
+    "178": {
+      "nombre": "esquema_columnas_caja_como_prod",
+      "bloque": "pase",
+      "rama": "claude/esquema-columnas-caja-faltantes",
+      "origen": "098"
+    },
+    "179": {
+      "nombre": "club_portal_reserva_local",
+      "bloque": "pase",
+      "rama": "claude/club-portal-reserva-local",
+      "origen": "124"
     }
   }
 }

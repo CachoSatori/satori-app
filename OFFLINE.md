@@ -81,6 +81,10 @@ extremo puede clasificar mal un conflicto (solo afecta el warning, no el dato).
   visible: es preferible a saltear o perder un pago. El contador es por la **misma** primera op. Si el
   freno es del servidor o desconocido (no red ni sesión), owner/manager tienen «Pasar a rechazadas»: la
   primera op va a rechazadas (sin borrar) y sus dependientes la siguen en el próximo flush.
+  Un timeout de 15 s con `navigator.onLine=true` (o un 408) es «lento», no «red»: el aviso dice «el
+  servidor tarda en responder esta operación» y también habilita el botón. Las lecturas de IndexedDB que
+  deciden si una escritura con red va a la cola tienen un tope de 1,5 s: si vence, la escritura sigue
+  directo.
 - **Multi-pestaña**: el flush corre dentro de `navigator.locks`
   (`satori-outbox-flush`, `ifAvailable`) → dos pestañas nunca replyan a la vez.
 

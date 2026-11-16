@@ -90,7 +90,7 @@ en curso. Al 16/11 el ledger de prod llega a la 180.
 | **Reservas** (OpenTable por local, widget aislado en «Mi Club», campañas `local` / `turista` / `cumpleanos`, link por local en Club → Locales) | | ✅ prod (16/11, #210–#216, #220); validado por el dueño |
 | **Google Wallet** | Pase de producción sin marca de prueba, QR en caja, actualización automática | ✅ encendido en prod el 16/11 a las 15:40 (`VITE_WALLET_GOOGLE` en Pages); 🔲 falta la **prueba de baja** (§5.5 del paquete, opcional) |
 | Apple Wallet | Depende de la aprobación de Apple Developer | 🚧 |
-| Cumpleaños | Beneficio configurable, una vez por año, prendido el 16/11 | ✅ prod · 🔲 **aviso automático por el pase de Wallet, dos niveles configurables** (firmado 16/11, [spec §13](docs/club-satori/SPEC-clics-embudo.md)); se enciende con el acceso de publicación de Google |
+| Cumpleaños | Beneficio configurable, una vez por año, prendido el 16/11 | ✅ prod · 🔲 **aviso automático por el pase de Wallet, dos niveles configurables** (festejo y después; C1–C6 firmadas el 16/11, [spec §13](docs/club-satori/SPEC-clics-embudo.md)); el push de Google Wallet ya está encendido en prod (16/11) |
 | Beneficio de almuerzo y cena (tope del socio por comida) | Decisión B del 16/11 | 🟡 #229, mig 181, entra 23:31 del 16/11 |
 | Portal del anfitrión (link, WhatsApp ES/EN, «Reservar una mesa») | | 🟡 #226, mig 182, entra 23:31 del 16/11 |
 | «Tarjeta vieja» (nombre único) + artículo «PROMO CLUB 10 %» en el PoS | | 🟡 #225, entra 23:31 del 16/11 |

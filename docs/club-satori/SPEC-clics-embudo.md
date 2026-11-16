@@ -5,7 +5,7 @@
 > **Fecha:** 16-nov-2026 · **Base leída:** `main` `9225d87`, ledger 180 en prod y en staging (solo lectura) · PR #220 (borrador).
 > **Decisiones del dueño ya tomadas (16-nov):** qué se registra, opción A (ligado por ID interno), sin IP, 13 meses +
 > totales para siempre, el registro nunca frena el link, embudo clic → reserva → llegada → reseña, multi-local.
-> Cumpleaños automático por el pase de Wallet (opción A): §13.
+> Cumpleaños automático por el pase de Wallet, en dos niveles (C1 = A y C2–C6 firmadas el 16-nov): §13.
 
 ## 1. Objetivo
 
@@ -257,78 +257,94 @@ y 5 necesitan #220 en `main` (campañas).
 | D8 | Cada cuánto se carga el CSV | Semanal · **mensual** (día 1 a 5) | **Mensual**, con recordatorio | No |
 | D9 | Hallazgo 232 en el resto del portal | A) aplicar el mismo esquema de topes (credencial + IP) en un PR aparte · B) dejarlo en backlog | **A**, después de la fase 1 | Sí (toca la API pública) |
 
-## 13. Cumpleaños automático (decisión del dueño, 16-nov, opción A)
+## 13. Cumpleaños automático en dos niveles (firmado por el dueño, 16-nov: C1 = A, C2–C6)
 
-La app detecta el cumpleaños del socio y le manda un aviso directo al **pase de Wallet** (Google primero; Apple cuando
-apruebe). Se enciende cuando Google apruebe el acceso de publicación. Sin WhatsApp Business API (descartada por ahora).
-Igual que el resto de este SPEC: no autoriza código; cada pieza lleva su firma.
+La app avisa al socio por el **pase de Google Wallet** (push encendido en prod desde el 16-nov 15:40) y la caja aplica
+uno de **dos beneficios**, según el día. Sin pase de Google (o con Apple, hasta su aprobación) sigue el botón manual de
+WhatsApp del Inicio (173). Este SPEC no autoriza código: cada pieza lleva su firma (ver «Qué lleva firma»).
+**Base leída (16-nov, solo lectura):** prod y staging tienen `club_cumple_config` (2 locales), `club_cumple_envios` y
+`club_cumple_usos` tal como las dejaron la 173 y la 175, sin columnas de niveles; en prod todavía no hay envíos ni usos.
 
-**Qué no cambia (173 y 175):** una vez por socio y por **año del cumpleaños**, en cualquier local; la marca la hace la
-caja sobre la visita (`club_cumple_usar`); solo el owner la deshace; la caja nunca ve la fecha; la cortesía sigue siendo
-el artículo «CORTESÍA CLUB» a ₡0. Solo socios activos con cumpleaños **y permiso** (`cumple_permiso_en`).
+**Los dos niveles** (D = día del cumpleaños, día de Costa Rica). Se configuran **por local** en Club → Promociones →
+Cumpleaños (owner y manager de su local):
 
-**Cuándo se dispara.** Job diario (`pg_cron`, 15:00 UTC = **09:00 CR**). Toma a los socios cuyo próximo cumpleaños cae
-en `aviso_dias_antes` días (columna nueva en `club_cumple_config`, propuesta **5**; ver C1), con la configuración del
-**local del socio** (`club_miembros.location_id`: encendido, texto, mínimo de personas, link de reserva). Si el job no
-corrió un día, al siguiente avisa a quien quedó pendiente mientras falte para el cumpleaños; nunca avisa después.
-**Una vez por año:** usa la misma marca de hoy, `club_cumple_envios` (PK socio + año), con dos columnas nuevas: `canal`
-(`whatsapp` | `wallet`) y `vence_dia`. El job deja el pedido en la cola del pase (`club_alertas`, contrato de
-`CONTRATO-pase.md`) y la marca se escribe **recién cuando la Edge confirma el envío**. Con la marca puesta, ni el job ni
-el botón manual vuelven a avisar.
-
-**Texto del aviso** (pase; pasa por `src/shared/wallet/usted.test.ts`; `{beneficio}` y `{N}` salen de la configuración):
-- **ES** — «¡Feliz cumpleaños! Se acerca su día y queremos celebrarlo con usted. Si reserva y nos visita en los próximos
-  7 días, recibe {beneficio}. Mesas de {N} personas o más. Reserve aquí: {link}»
-- **EN** — "Happy birthday! Your day is coming up and we would love to celebrate with you. Book and visit us within the
-  next 7 days to receive {beneficio}. For tables of {N} or more. Book here: {link}"
-- `{link}` = `/ir/{codigo}` (§5) con origen `wallet` y grupo `cumpleanos`: registra el clic y abre el OpenTable del local
-  del socio con la campaña `cumpleanos` (#220). La línea de mesas se omite si el mínimo es 1.
-
-**Cambio de regla del beneficio.** Para el socio **avisado por el pase**, la ventana deja de ser «días antes y después
-del cumpleaños» y pasa a ser **el día del aviso + 7 días** (`vence_dia`, día de Costa Rica). `club_cumple_en_caja_dia`
-responde `aplica` solo dentro de esa ventana; afuera, `{"aplica": false}` como hoy. El socio **sin aviso por el pase**
-sigue con la ventana de la 173 (ver C2).
-
-**Cómo se verifica la reserva.** El widget y el link de OpenTable no dejan rastro por persona, así que la reserva
-**no se puede comprobar por socio en la base**. Lo robusto es separar dos cosas:
-- **Lo que decide el servidor:** que haya una **visita registrada en caja** dentro de la ventana y que no haya marca del
-  año (índice único de la 175). Eso no se puede saltar.
-- **Lo que confirma el cajero:** que la mesa vino con reserva y cumple el mínimo de personas, como hoy con «solo con
-  reserva»; el recuadro de Escanear se lo recuerda con el día de vencimiento («vale hasta el …», sin la fecha del
-  cumpleaños).
-- **OpenTable, campaña `cumpleanos`:** solo por **totales**, para el embudo y como control: si en un mes las marcas de
-  uso superan por mucho a las reservas de la campaña, sale en «Excepciones». No bloquea ninguna cortesía.
-
-**Quien no tiene pase** (o el envío falló, o el pase es de Apple antes de la aprobación): no cambia nada. Aparece en el
-bloque del Inicio con el botón manual de WhatsApp (173), que usa el link corto con origen `cumple_whatsapp`.
-
-**Qué ve el equipo en el Inicio** (owner y manager de sus locales): el bloque «Cumpleaños en los próximos N días» queda
-igual para los pendientes de WhatsApp, y suma una línea de solo lectura: «Avisados por Wallet: X» con el día de
-vencimiento de cada uno y «vino / no vino». Sin fecha de cumpleaños. Un envío que falló vuelve solo a la lista manual.
-
-**Medición en el embudo** (grupo `cumpleanos`, por local y por canal `wallet` | `whatsapp`):
-
-| Paso | Fuente | Nota |
+| | «Festejo» | «Después» |
 |---|---|---|
-| Aviso | `club_cumple_envios` por canal → total diario en `club_clics_totales` (tipo `aviso`) | Por persona, 13 meses; después totales |
-| Clic | `club_clics` (origen `wallet` o `cumple_whatsapp`, tipo `reservar`) | Por persona |
-| Reserva | `club_reservas_ot`, campaña `cumpleanos` | Por totales; no distingue canal |
-| Llegada | `club_cumple_usos` vigente dentro de la ventana | Por persona |
+| Ventana | del aviso (D−5) a D+1 | de D+2 a D+14 |
+| Reserva | **con reserva**; la confirma el cajero (C3) | con o sin reserva |
+| Beneficio (configurable) | producto especial · % de descuento · 2x1 (p. ej. bebidas del festejo) · cortesía libre | más chico: postre, shot o cortesía |
 
-**Dependencias.** (1) Aprobación de publicación de Google Wallet. (2) La Edge `club-pase` vive fuera de `main` por la
-regla 2 hasta cerrar el ítem 11 (PR #61): el envío se construye en `claude/club-pase-edge` y se despliega a mano, o
-espera al ítem 11. (3) Fase 5 de §9 (`club_clics_enlaces`, `/ir/`) y #220 en `main`. (4) Migración con firma: columnas
-de `club_cumple_envios` y `club_cumple_config`, job y cambio de `club_cumple_en_caja_dia` (copia exacta + la regla
-nueva; baterías de la 173 y la 175 verdes; medianoche CR; 29-feb; cruce de fin de año). (5) Aviso de privacidad (C4).
-(6) Guía `docs/sop-app/6.13` en el mismo PR. En §9, esto es la fase 6.
+- **Una vez por año del cumpleaños, en total:** quien usó el festejo no tiene el de después. Lo decide el servidor
+  (índice único socio + año de la 175, sin cambios). Si el owner deshace una marca, vale el nivel del día en que vuelva.
+- **Cada nivel guarda:** encendido, tipo de beneficio, valor o descripción, texto para el aviso en ES y EN (con «usted»)
+  y el **artículo del PoS a marcar** (para «Excepciones»).
+- **La caja** ve en «Qué aplicar» (Escanear) **solo el nivel de hoy**: qué dar, si pide reserva y «vale hasta el …».
+  Nunca la fecha del cumpleaños. En la ventana del festejo **sin reserva** no aplica nada ese día: el recuadro dice
+  desde qué día puede volver por el beneficio de «Después».
 
-**Decisiones abiertas**
+**Aviso** (aprobado por el dueño; pasa por `src/shared/wallet/usted.test.ts`). Job diario `pg_cron` 15:00 UTC =
+**09:00 CR** (C6), a D−5 (`aviso_dias_antes`, por local), con la configuración del **local del socio**:
+- **ES** — «Faltan {n} días para su cumpleaños 🎉 Si festeja con nosotros (reserve hasta el {día_festejo}), le preparamos
+  {beneficio_festejo}. Si viene más tarde, hasta el {día_después}, igual tiene {beneficio_después}. {link}»
+- **EN** — "{n} days until your birthday 🎉 Celebrate with us (book by {día_festejo}) and we will have
+  {beneficio_festejo} ready for you. If you come later, until {día_después}, you still get {beneficio_después}. {link}"
+- `{link}` = `/ir/{codigo}` (§5), origen `wallet`, grupo `cumpleanos`: abre el OpenTable del local con la campaña
+  `cumpleanos` (#220). Si un nivel está apagado, su frase no sale; con los dos apagados no hay aviso.
+- La marca `club_cumple_envios` (socio + año) se escribe **cuando la Edge confirma el envío** (cola `club_alertas`,
+  `CONTRATO-pase.md`). Con la marca, ni el job ni el botón manual repiten.
 
-| # | Decisión | Opciones | Recomendación | ¿Firma? |
-|---|---|---|---|---|
-| C1 | Cuántos días antes sale el aviso | A) 7: la ventana termina el día del cumpleaños · B) **5**: cubre hasta 2 días después · C) 3: poco tiempo para reservar una mesa grande | **B**, configurable por local | Sí (regla de cortesía) |
-| C2 | Ventana de quien no recibió el aviso por el pase | A) sigue la de la 173 (antes y después del cumpleaños) · B) 7 días desde el WhatsApp manual · C) sin aviso no hay beneficio | **B** cuando el pase lleve un mes andando: una sola regla; mientras tanto **A** | Sí |
-| C3 | «Con reserva» | A) lo confirma el cajero; OpenTable solo controla por totales · B) el cajero anota el número de confirmación · C) esperar a una API de OpenTable | **A**: sin fricción en caja y sin datos nuevos | Sí |
-| C4 | Aviso de privacidad | A) sumar a la v1.4 (§8) que el aviso de cumpleaños puede llegar al pase · B) dejar la v1.3 (solo nombra WhatsApp) | **A**, en la misma lectura legal de D1 | **Sí** |
-| C5 | Construir antes del ítem 11 | A) en `claude/club-pase-edge`, despliegue a mano · B) esperar al ítem 11 | **A** solo en staging; a prod con el ítem 11 cerrado | Sí (Edge en prod) |
-| C6 | Hora del aviso | **09:00** · 11:00 · 17:00 (hora CR) | **09:00**: se lee antes de planear el día y lejos del servicio | No (OK por chat) |
+**Modelo de datos propuesto (no se aplica nada):**
+- Tabla nueva `club_cumple_niveles` — PK (`location_id`, `nivel` ∈ `festejo` | `despues`): `activo`, `tipo`
+  (`producto` | `descuento` | `dos_por_uno` | `cortesia`), `valor_pct` (solo `descuento`, 1–100), `descripcion` (lo que
+  lee la caja), `texto_es`, `texto_en`, `cortesia_id` (artículo del PoS, de `club_cortesias` del mismo local),
+  `desde_dia` / `hasta_dia` (respecto de D; por defecto −5..+1 y +2..+14; un chequeo impide que se pisen),
+  `con_reserva`, `min_personas`. RLS encendida y sin acceso de la API, como la 173.
+- `club_cumple_config` + `aviso_dias_antes` (5). `club_cumple_envios` + `canal` (`whatsapp` | `wallet`).
+  `club_cumple_usos` + `nivel` (dentro de la guardia: la marca sigue sin poder editarse).
+
+**Cambios a la 173 y a la 175** (migración nueva; sus `.sql` no se tocan, regla 10):
+- 173: `club_cumple_config_ver` / `_guardar` leen y guardan los niveles; `club_cumple_enviar` anota el canal;
+  `club_cumple_proximos` suma «avisados por Wallet» (solo lectura) y devuelve a la lista manual los fallidos.
+- 175: `club_cumple_en_caja_dia` (copia exacta + la regla nueva) devuelve `nivel`, su beneficio, `vale_hasta` y
+  `con_reserva`; fuera de las ventanas, `{"aplica": false}` exacto. `club_cumple_usar_dia` guarda el nivel y el artículo
+  de ese nivel; `club_cumple_usos_listar` / `_resumen` abren por nivel. Baterías de la 173 y la 175 verdes, con
+  medianoche CR y cruce de fin de año.
+- **C2 (firmada):** el primer mes desde el encendido, el socio **sin aviso por el pase** sigue con la regla de la 173
+  (un beneficio, `dias_antes` / `dias_despues`); después, una sola regla: los dos niveles para todos, y el WhatsApp
+  manual usa el mismo texto. Las columnas viejas quedan sin uso y no se borran en esa migración.
+
+**Medición en el embudo** (grupo `cumpleanos`, por local, por canal y **por nivel**):
+
+| Paso | Fuente | Festejo | Después |
+|---|---|---|---|
+| Aviso | `club_cumple_envios` por canal → `club_clics_totales` (tipo `aviso`) | un aviso anuncia los dos | ídem |
+| Clic | `club_clics` (origen `wallet` o `cumple_whatsapp`, tipo `reservar`) | sí | no aplica |
+| Reserva | `club_reservas_ot`, campaña `cumpleanos` (totales, sin canal) | sí | no aplica |
+| Llegada | `club_cumple_usos.nivel` vigente | usos de festejo | usos de después |
+| Sin uso | avisados sin marca al cerrar D+14 | — | total |
+
+Tablero y «Excepciones»: usos y costo **por nivel**; uso sin su artículo en la factura; festejos del mes muy por
+encima de las reservas de la campaña (control por totales, no bloquea).
+
+**Casos borde**
+- **29-feb:** en año no bisiesto D = 28-feb (`club_cumple_fecha` de la 173); las dos ventanas se cuentan desde ahí.
+- **Alta o permiso dentro de la ventana:** el job avisa al día siguiente con `{n}` real mientras falte para D; desde D
+  no hay aviso, pero la caja igual aplica el nivel del día. Un uso el mismo día del alta sale en «Excepciones» (la fecha
+  se carga una sola vez y no la cambia el socio: 173).
+- **Socio de otro local:** el aviso sale con los textos de **su** local; en caja manda la configuración del **local de
+  la caja** (cruce de la 175) y sigue siendo una vez por año en total. Si ese local tiene el nivel apagado, no aplica.
+- **Aviso fallido o job caído:** sin confirmación no hay marca; el job reintenta cada mañana hasta D−1 y, si no sale,
+  el socio vuelve a la lista manual de WhatsApp. El beneficio no depende de haber recibido el aviso.
+- **Fin de año:** cuenta el año **del cumpleaños** (un 30-dic usado el 3-ene es del año anterior), como en la 175.
+
+**Qué lleva firma del SQL** (antes de staging no; antes de prod sí, con batería y verificador independiente):
+tabla `club_cumple_niveles` y columnas nuevas · job `pg_cron` · funciones rehechas de la 173 y la 175 · todo lo de
+`descuento` y `dos_por_uno` (**toca plata**: la app no cobra ni descuenta, solo indica; el descuento se hace en el PoS).
+Aparte: aviso de privacidad **v1.4** con el pase como canal (C4, en la lectura legal de D1) · Edge `club-pase` en prod
+(C5: se construye en staging en `claude/club-pase-edge` antes del ítem 11; a prod después del #61) · validación física
+del dueño de «Qué aplicar» y de la pantalla de Promociones · guía `docs/sop-app/6.13` en el mismo PR. En §9 es la fase 6
+y necesita la fase 5 (`/ir/`) y #220 en `main`.
+
+**Puntos a confirmar por el chat (no frenan el diseño):** (1) C2 con dos niveles se leyó como «tras un mes, los dos
+niveles para todos»; (2) cómo se costea en el Tablero un `descuento` o un `dos_por_uno` (hoy la 175 solo sabe costear
+cortesías a ₡0): propuesta, costo del artículo marcado para el 2x1 y monto descontado de la factura para el %.

@@ -12,7 +12,7 @@
 3. **Google Wallet (encendido en prod el 16/11, 15:40, con `VITE_WALLET_GOOGLE` en Pages):** prueba de baja (§5.5 del
    paquete, opcional) y, aparte, el aviso de cumpleaños al pase con el link de OpenTable (Edge `club-pase`, PR aparte).
 4. **Alerta «tarjeta vieja sin PROMO»** (firmada, PR aparte).
-5. **Cumpleaños automático por Wallet con dos niveles configurables** (firmado; [spec §13](docs/club-satori/SPEC-clics-embudo.md)). Se enciende con el acceso de publicación de Google.
+5. **Cumpleaños automático por Wallet con dos niveles configurables** (festejo y después; C1–C6 firmadas el 16-nov; [spec §13](docs/club-satori/SPEC-clics-embudo.md)). El push de Google Wallet ya está en prod; falta construir (staging primero, C5).
 6. **Registro de clics y embudo** (spec #223 firmada, D1–D9; 5 PRs). **El aviso v1.4 lo lee quien asesora en Ley 8968 antes de publicarse.** Después, el **cartel por referente** (decisión B: el mismo cartel del hotel cambiando solo el QR) y el hallazgo 232 (topes por IP en el resto del portal, D9).
 7. **Privacidad D3** (firmada): nombres de empleados a la base, correos y cédula de las Edge a secretos, montos reales fuera de los docs. PR chico.
 8. **`club_pases.actualizado_en`** (firmado; alcance en su PR).

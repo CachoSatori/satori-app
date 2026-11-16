@@ -5,6 +5,7 @@
 > **Fecha:** 16-nov-2026 · **Base leída:** `main` `9225d87`, ledger 180 en prod y en staging (solo lectura) · PR #220 (borrador).
 > **Decisiones del dueño ya tomadas (16-nov):** qué se registra, opción A (ligado por ID interno), sin IP, 13 meses +
 > totales para siempre, el registro nunca frena el link, embudo clic → reserva → llegada → reseña, multi-local.
+> Cumpleaños automático por el pase de Wallet (opción A): §13.
 
 ## 1. Objetivo
 
@@ -209,7 +210,7 @@ que quien asesora al negocio en la Ley 8968 lea la v1.4 antes de la firma.
 | 3 | Pantalla «Links» | `club_clics_reporte`, gráficos 1 a 5, exporte. Guía `docs/sop-app/6.13`. | OK + validación física |
 | 4 | OpenTable | Tablas e import del CSV, paso «reserva» en el embudo. | Sí (esquema) |
 | 5 | Cumpleaños | `club_clics_enlaces`, `/ir/{codigo}`, link corto en el WhatsApp del Inicio. | Sí + validación física |
-| 6 | Después | Portal del referente (cuando tenga «Reservar») y aviso de Wallet (cuando `club-pase` entre a `main`). | — |
+| 6 | Después | Portal del referente (cuando tenga «Reservar») y **cumpleaños automático por Wallet (§13)**. | Sí (§13) |
 
 Cada PR: batería antes de aplicar (base local), staging, verificador independiente, y recién ahí la firma. Los PR 1, 2, 4
 y 5 necesitan #220 en `main` (campañas).
@@ -255,3 +256,79 @@ y 5 necesitan #220 en `main` (campañas).
 | D7 | Contador | A) no ve · B) ve totales en el Tablero | **A** por ahora | No |
 | D8 | Cada cuánto se carga el CSV | Semanal · **mensual** (día 1 a 5) | **Mensual**, con recordatorio | No |
 | D9 | Hallazgo 232 en el resto del portal | A) aplicar el mismo esquema de topes (credencial + IP) en un PR aparte · B) dejarlo en backlog | **A**, después de la fase 1 | Sí (toca la API pública) |
+
+## 13. Cumpleaños automático (decisión del dueño, 16-nov, opción A)
+
+La app detecta el cumpleaños del socio y le manda un aviso directo al **pase de Wallet** (Google primero; Apple cuando
+apruebe). Se enciende cuando Google apruebe el acceso de publicación. Sin WhatsApp Business API (descartada por ahora).
+Igual que el resto de este SPEC: no autoriza código; cada pieza lleva su firma.
+
+**Qué no cambia (173 y 175):** una vez por socio y por **año del cumpleaños**, en cualquier local; la marca la hace la
+caja sobre la visita (`club_cumple_usar`); solo el owner la deshace; la caja nunca ve la fecha; la cortesía sigue siendo
+el artículo «CORTESÍA CLUB» a ₡0. Solo socios activos con cumpleaños **y permiso** (`cumple_permiso_en`).
+
+**Cuándo se dispara.** Job diario (`pg_cron`, 15:00 UTC = **09:00 CR**). Toma a los socios cuyo próximo cumpleaños cae
+en `aviso_dias_antes` días (columna nueva en `club_cumple_config`, propuesta **5**; ver C1), con la configuración del
+**local del socio** (`club_miembros.location_id`: encendido, texto, mínimo de personas, link de reserva). Si el job no
+corrió un día, al siguiente avisa a quien quedó pendiente mientras falte para el cumpleaños; nunca avisa después.
+**Una vez por año:** usa la misma marca de hoy, `club_cumple_envios` (PK socio + año), con dos columnas nuevas: `canal`
+(`whatsapp` | `wallet`) y `vence_dia`. El job deja el pedido en la cola del pase (`club_alertas`, contrato de
+`CONTRATO-pase.md`) y la marca se escribe **recién cuando la Edge confirma el envío**. Con la marca puesta, ni el job ni
+el botón manual vuelven a avisar.
+
+**Texto del aviso** (pase; pasa por `src/shared/wallet/usted.test.ts`; `{beneficio}` y `{N}` salen de la configuración):
+- **ES** — «¡Feliz cumpleaños! Se acerca su día y queremos celebrarlo con usted. Si reserva y nos visita en los próximos
+  7 días, recibe {beneficio}. Mesas de {N} personas o más. Reserve aquí: {link}»
+- **EN** — "Happy birthday! Your day is coming up and we would love to celebrate with you. Book and visit us within the
+  next 7 days to receive {beneficio}. For tables of {N} or more. Book here: {link}"
+- `{link}` = `/ir/{codigo}` (§5) con origen `wallet` y grupo `cumpleanos`: registra el clic y abre el OpenTable del local
+  del socio con la campaña `cumpleanos` (#220). La línea de mesas se omite si el mínimo es 1.
+
+**Cambio de regla del beneficio.** Para el socio **avisado por el pase**, la ventana deja de ser «días antes y después
+del cumpleaños» y pasa a ser **el día del aviso + 7 días** (`vence_dia`, día de Costa Rica). `club_cumple_en_caja_dia`
+responde `aplica` solo dentro de esa ventana; afuera, `{"aplica": false}` como hoy. El socio **sin aviso por el pase**
+sigue con la ventana de la 173 (ver C2).
+
+**Cómo se verifica la reserva.** El widget y el link de OpenTable no dejan rastro por persona, así que la reserva
+**no se puede comprobar por socio en la base**. Lo robusto es separar dos cosas:
+- **Lo que decide el servidor:** que haya una **visita registrada en caja** dentro de la ventana y que no haya marca del
+  año (índice único de la 175). Eso no se puede saltar.
+- **Lo que confirma el cajero:** que la mesa vino con reserva y cumple el mínimo de personas, como hoy con «solo con
+  reserva»; el recuadro de Escanear se lo recuerda con el día de vencimiento («vale hasta el …», sin la fecha del
+  cumpleaños).
+- **OpenTable, campaña `cumpleanos`:** solo por **totales**, para el embudo y como control: si en un mes las marcas de
+  uso superan por mucho a las reservas de la campaña, sale en «Excepciones». No bloquea ninguna cortesía.
+
+**Quien no tiene pase** (o el envío falló, o el pase es de Apple antes de la aprobación): no cambia nada. Aparece en el
+bloque del Inicio con el botón manual de WhatsApp (173), que usa el link corto con origen `cumple_whatsapp`.
+
+**Qué ve el equipo en el Inicio** (owner y manager de sus locales): el bloque «Cumpleaños en los próximos N días» queda
+igual para los pendientes de WhatsApp, y suma una línea de solo lectura: «Avisados por Wallet: X» con el día de
+vencimiento de cada uno y «vino / no vino». Sin fecha de cumpleaños. Un envío que falló vuelve solo a la lista manual.
+
+**Medición en el embudo** (grupo `cumpleanos`, por local y por canal `wallet` | `whatsapp`):
+
+| Paso | Fuente | Nota |
+|---|---|---|
+| Aviso | `club_cumple_envios` por canal → total diario en `club_clics_totales` (tipo `aviso`) | Por persona, 13 meses; después totales |
+| Clic | `club_clics` (origen `wallet` o `cumple_whatsapp`, tipo `reservar`) | Por persona |
+| Reserva | `club_reservas_ot`, campaña `cumpleanos` | Por totales; no distingue canal |
+| Llegada | `club_cumple_usos` vigente dentro de la ventana | Por persona |
+
+**Dependencias.** (1) Aprobación de publicación de Google Wallet. (2) La Edge `club-pase` vive fuera de `main` por la
+regla 2 hasta cerrar el ítem 11 (PR #61): el envío se construye en `claude/club-pase-edge` y se despliega a mano, o
+espera al ítem 11. (3) Fase 5 de §9 (`club_clics_enlaces`, `/ir/`) y #220 en `main`. (4) Migración con firma: columnas
+de `club_cumple_envios` y `club_cumple_config`, job y cambio de `club_cumple_en_caja_dia` (copia exacta + la regla
+nueva; baterías de la 173 y la 175 verdes; medianoche CR; 29-feb; cruce de fin de año). (5) Aviso de privacidad (C4).
+(6) Guía `docs/sop-app/6.13` en el mismo PR. En §9, esto es la fase 6.
+
+**Decisiones abiertas**
+
+| # | Decisión | Opciones | Recomendación | ¿Firma? |
+|---|---|---|---|---|
+| C1 | Cuántos días antes sale el aviso | A) 7: la ventana termina el día del cumpleaños · B) **5**: cubre hasta 2 días después · C) 3: poco tiempo para reservar una mesa grande | **B**, configurable por local | Sí (regla de cortesía) |
+| C2 | Ventana de quien no recibió el aviso por el pase | A) sigue la de la 173 (antes y después del cumpleaños) · B) 7 días desde el WhatsApp manual · C) sin aviso no hay beneficio | **B** cuando el pase lleve un mes andando: una sola regla; mientras tanto **A** | Sí |
+| C3 | «Con reserva» | A) lo confirma el cajero; OpenTable solo controla por totales · B) el cajero anota el número de confirmación · C) esperar a una API de OpenTable | **A**: sin fricción en caja y sin datos nuevos | Sí |
+| C4 | Aviso de privacidad | A) sumar a la v1.4 (§8) que el aviso de cumpleaños puede llegar al pase · B) dejar la v1.3 (solo nombra WhatsApp) | **A**, en la misma lectura legal de D1 | **Sí** |
+| C5 | Construir antes del ítem 11 | A) en `claude/club-pase-edge`, despliegue a mano · B) esperar al ítem 11 | **A** solo en staging; a prod con el ítem 11 cerrado | Sí (Edge en prod) |
+| C6 | Hora del aviso | **09:00** · 11:00 · 17:00 (hora CR) | **09:00**: se lee antes de planear el día y lejos del servicio | No (OK por chat) |

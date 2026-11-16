@@ -836,6 +836,7 @@ export type Database = {
           location_id: string
           mapa_url: string | null
           resena_url: string | null
+          reserva_url: string | null
           max_creditos_por_visita: number
           nombre: string | null
           personas_por_credito: number
@@ -885,6 +886,7 @@ export type Database = {
           location_id: string
           mapa_url?: string | null
           resena_url?: string | null
+          reserva_url?: string | null
           max_creditos_por_visita?: number
           nombre?: string | null
           personas_por_credito?: number
@@ -934,6 +936,7 @@ export type Database = {
           location_id?: string
           mapa_url?: string | null
           resena_url?: string | null
+          reserva_url?: string | null
           max_creditos_por_visita?: number
           nombre?: string | null
           personas_por_credito?: number

@@ -141,8 +141,13 @@ def armar(mutar: str | None, semilla: bool = False) -> str:
 
 
 def _caidos_de(txt: str) -> list[dict] | None:
-    m = re.search(r'173-FALLAN: ([0-9a-z,]+)', txt)
-    return [{'caso': c, 'ok': False, 'detalle': 'ASSERT'} for c in m.group(1).split(',')] if m else None
+    """Del error del ASSERT: los casos caídos (con su detalle si vienen los WARNING de psql) y el resumen X/Y."""
+    m = re.search(r'173-FALLAN: ([0-9a-z,]+)(?: · pasaron (\d+) / fallaron (\d+))?', txt)
+    if not m:
+        return None
+    detalles = {c: resto for c, resto in re.findall(r'173 FALLA (\S+) ([^\n]*)', txt)}
+    resumen = (int(m.group(2)), int(m.group(3))) if m.group(2) else None
+    return [{'caso': c, 'ok': False, 'detalle': detalles.get(c, 'ASSERT'), 'resumen': resumen} for c in m.group(1).split(',')]
 
 
 def correr(sql: str, local: str | None) -> list[dict]:
@@ -201,8 +206,10 @@ def main() -> None:
         ver = c.get('detalle') and (not c['ok'] or c['caso'].startswith('00 '))
         print(('ok   ' if c['ok'] else 'FALLA ') + c['caso'] + (f" · {c['detalle']}" if ver else ''))
     caen = [c for c in casos if not c['ok']]
-    print(f'── {len(casos)} casos · {len(casos) - len(caen)} ok')
-    sys.exit(1 if caen else 0)
+    # si el ASSERT abortó, solo vuelven los caídos: el resumen sale del mensaje del ASSERT
+    pasaron, fallaron = casos[0].get('resumen') or (len(casos) - len(caen), len(caen))
+    print(f'── 173: pasaron {pasaron} / fallaron {fallaron}' + (' · BATERÍA EN ERROR' if caen else ''))
+    sys.exit(1 if caen or fallaron else 0)
 
 
 if __name__ == '__main__':

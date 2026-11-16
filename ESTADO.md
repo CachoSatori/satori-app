@@ -42,8 +42,14 @@
 - **Pendiente del dueño / de la sesión:**
   - **Staging (16/11):** las 27 migraciones aplicaron sin error. Las baterías corridas DESPUÉS de aplicar (como se hizo) no son
     válidas para la mayoría: suponen la migración sin aplicar (casos «antes»/rollback) y varias piden un manager activo que staging
-    no tiene. Pasaron 160, 161, 162, 164, 165, 166 (y 173 salvo el caso 18). Defecto de batería: la 173 no avisa cuando cae su
-    caso 18. Desde ahora: correr la batería ANTES de aplicar (base local de `scripts/sql/local_armar_base.sh`) y aplicar a staging antes del merge.
+    no tiene. Pasaron 160, 161, 162, 164, 165, 166 (y 173 salvo el caso 18). Desde ahora: correr la batería ANTES de aplicar
+    (base local de `scripts/sql/local_armar_base.sh`) y aplicar a staging antes del merge.
+    **16/11 11:46:** el ASSERT de la 173 se tragaba su propio error (`exception when others`): arreglado en el PR
+    `claude/bateria-173-y-manager-staging` (cada caso caído = WARNING + resumen «pasaron X / fallaron Y» + error); la
+    173 contra una base local con ≤172: 20/20. Era la única batería con ese defecto (prueba estática
+    `scripts/sql/baterias_assert.test.ts`). **Staging ya tiene un manager activo de prueba** (ficticio, Santa Teresa;
+    `STAGING.md` «Manager de prueba», SQL idempotente `scripts/sql/staging_manager_prueba.sql`); su contraseña nadie la
+    conoce: resetearla para usarlo en la app.
   - **Beneficio de cumpleaños:** prendido por el dueño (16/11).
   - **Links de Santa Teresa en Club → Locales (16/11):** ubicación (Maps), reseña de Google y reservas de OpenTable con origen
     «Club Satori», cargados. Nosara se completa cuando abra (decisión del dueño: no volver a preguntar; pensar todo multi-local).

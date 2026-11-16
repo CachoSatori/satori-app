@@ -1,6 +1,6 @@
 # Mensaje corto para socios del Local Club · BORRADOR
 
-> **Borrador (08-nov) para que lo revise Ismael antes de usarlo.** Sin datos personales: `<…>` se completa al mandarlo (el link del aviso es `<dominio de club-web>/privacidad`).
+> **Borrador (08-nov) para que lo revise el dueño antes de usarlo.** Sin datos personales: `<…>` se completa al mandarlo (el link del aviso es `<dominio de club-web>/privacidad`).
 > El beneficio sale de la promoción vigente (hoy: 10 % y una cortesía sorpresa en cada visita); si cambia la promoción,
 > cambia el texto (por ejemplo, si la cortesía pasa a ser aleatoria). La parte **[con el pase]** va solo cuando el pase de
 > Google Wallet esté encendido.
@@ -31,7 +31,7 @@ Hi <name>, you are now a member of **Satori's Local Club** 🍣
 
 You can leave whenever you want from your portal. Privacy notice: <link del aviso de privacidad>
 
-## Decidido (Ismael, 08-nov noche)
+## Decidido (el dueño, 08-nov noche)
 - Invitados: sin límite; el beneficio vale para toda la mesa, siempre que se sienten con el socio (una sola factura por
   mesa con socio; cada acompañante con su 857).
 - Cortesía: en cada visita. El texto sale de la promoción vigente; si un día pasa a aleatoria, cambia el texto.

@@ -130,11 +130,11 @@ describe('cash.ts — discardDiaCompleto enruta por delete_movement_cascade (no 
 
   it('pasa las credenciales de gerencia a la RPC cuando vienen (cajero)', async () => {
     const { discardDiaCompleto } = await import('./cash')
-    await discardDiaCompleto('2026-06-20', 'jefe@satori.cr', 'secreta')
+    await discardDiaCompleto('2026-06-20', 'jefe@ejemplo.test', 'secreta')
     expect(rpcArgs[0]).toEqual({
       p_movement_id: 'turn-mov-1',
       p_note: 'Borrado de día completo 2026-06-20',
-      p_manager_email: 'jefe@satori.cr',
+      p_manager_email: 'jefe@ejemplo.test',
       p_manager_password: 'secreta',
     })
   })

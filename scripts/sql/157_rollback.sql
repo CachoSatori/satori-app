@@ -252,7 +252,7 @@ begin
                               jsonb_build_object('miembro', v_mv.miembro_id, 'local', v_mv.location_id));
   select public.club_nombre_pila(m.nombre) into v_nom from public.club_miembros m where m.id = v_mv.miembro_id;
   select * into v_cfg from public.club_config where location_id = v_mv.location_id;
-  -- (Ismael, 08-nov noche) el vencimiento, con el mismo texto que los mensajes, el portal y las guías: se cuenta desde la
+  -- (el dueño, 08-nov noche) el vencimiento, con el mismo texto que los mensajes, el portal y las guías: se cuenta desde la
   -- última actividad (SPEC §5.1 y club_vencer).
   v_txt := format('Hola %s: en Satori se canjearon %s %s de tu cuenta el %s. Te quedan %s. Los créditos vencen a los %s meses sin actividad: cada persona que llega con tu cupón o cada canje vuelve a contar los %s meses. Si no fuiste vos, avisanos por acá.',
                   coalesce(v_nom, ''), public.club_num(v_mv.creditos), case when v_mv.creditos = 1 then 'crédito' else 'créditos' end,

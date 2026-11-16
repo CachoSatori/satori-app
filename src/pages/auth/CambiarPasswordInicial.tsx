@@ -1,4 +1,4 @@
-// Primer ingreso con contraseña temporal (firmado por Ismael, 05/11): hay que elegir una nueva
+// Primer ingreso con contraseña temporal (firmado por el dueño, 05/11): hay que elegir una nueva
 // antes de usar la app. El flag `app_metadata.cambiar_password` lo baja SOLO la Edge Function
 // `alta-empleado`, en la misma llamada que cambia la contraseña (el usuario no puede bajarlo solo).
 import { useState } from 'react'

@@ -6,7 +6,7 @@
 - El export trae teléfonos y emails. Va **fuera del repo** (por ejemplo `~/club-export/`, con permisos 700). El script se niega a leer el export o a escribir la salida dentro del repo.
 - El script nunca imprime nombres, teléfonos ni emails: solo conteos y sumas. A los errores de la base se les quita la fila que falló.
 - Los dos CSV de revisión (`equivalencias_negocios.csv` y `duplicados.csv`) sí tienen nombres. Se escriben en `--out`, fuera del repo, con permisos 600.
-- Cuando Ismael apruebe la prueba, se borran el export y la carpeta de salida.
+- Cuando el dueño apruebe la prueba, se borran el export y la carpeta de salida.
 
 ## Controles (revisión de Grok del 07-nov, CLUB-AUD-19..23)
 - **El export se verifica antes de armar nada** (21). Si falla, el script sale con código 3 y no toca la base:
@@ -19,7 +19,7 @@
   - `diferencias_saldo_vs_firestore`, `cuentas_baja_con_saldo`, `vencer_simular_hoy` y el barrido de anon tienen que dar 0;
   - los conteos del plan tienen que ser iguales a los de la base;
   - cada total de `--esperados` tiene que coincidir.
-- **`--apply` exige `--esperados archivo.json`**: los totales firmados por Ismael, por ejemplo `{"miembros": 338, "creditos_activos": 66.0, "pm_pendiente": 0}`. No se hardcodean en el script.
+- **`--apply` exige `--esperados archivo.json`**: los totales firmados por el dueño, por ejemplo `{"miembros": 338, "creditos_activos": 66.0, "pm_pendiente": 0}`. No se hardcodean en el script.
 - **`--ensayo`**: hace la carga completa y la validación contra staging, pero termina en ROLLBACK. Sirve para probar el export real sin guardar nada.
 - **Datos personales** (20): viajan en un único literal jsonb (`jsonb_to_recordset`). Si la base devuelve un error, se imprime solo el SQLSTATE; nunca el cuerpo ni `LINE`.
 - **PM pendiente** (22): una sola definición, la de `club_reporte_mes`: cargos no anulados menos pagos.
@@ -56,7 +56,7 @@ python3 -I scripts/club/migrar_firestore.py --local <id-del-local> --export ~/cl
 | `referrals` debit (sin los de `vencimientos_*.json`) | `club_movimientos` `canje` | Se agrupan por referente y minuto UTC: un canje por grupo, con `personas = −Σ`, `creditos = Σ/6` y los ids viejos en `legacy_ids`. Los canjes de más de 2 créditos se migran como están (D3). |
 | ids de `vencimientos_*.json` | `club_movimientos` `vencimiento` | Uno por referente, con nota «cancelación inactividad 05-nov-2026». |
 | cuentas `deleted` con saldo > 0 | `club_movimientos` `vencimiento` | D1 (corregida el 05-nov): por el saldo, fechado en la baja = la más tardía entre `updatedAt` y el último movimiento de la cuenta, con la nota «cuenta borrada en el sistema viejo». Si alguna fecha cae desde el 1-nov-2026, el script frena. Así un mes cerrado da siempre lo mismo. |
-| restos sin actividad | `club_movimientos` `vencimiento` | Decisión de Ismael (07-nov): las cuentas sin tarjeta, canje ni restitución en el plazo de vencimiento que solo tienen un **resto de menos de medio crédito** (1 o 2 personas con la tasa 6) se vencen con la **fecha de la migración** y la nota «resto del sistema viejo». Mismo criterio que `club_vencer_candidatos`. Después, la simulación de hoy tiene que dar **0 cuentas**; si queda alguna, la migración frena sin guardar nada. |
+| restos sin actividad | `club_movimientos` `vencimiento` | Decisión del dueño (07-nov): las cuentas sin tarjeta, canje ni restitución en el plazo de vencimiento que solo tienen un **resto de menos de medio crédito** (1 o 2 personas con la tasa 6) se vencen con la **fecha de la migración** y la nota «resto del sistema viejo». Mismo criterio que `club_vencer_candidatos`. Después, la simulación de hoy tiene que dar **0 cuentas**; si queda alguna, la migración frena sin guardar nada. |
 | `referrals_club` credit / debit | `club_pm_cargos` (`pendiente`) / `club_pm_pagos` | `amount / 100` = colones. Los cargos de cuentas borradas pasan a `anulado`, con `anulado_en` = la fecha de la baja (D2). |
 
 ## Validación (`validacion.json`, solo agregados)

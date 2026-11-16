@@ -5,7 +5,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 const sb = vi.hoisted(() => ({ invoke: vi.fn(), signIn: vi.fn(async (_c: { email: string; password: string }) => { void _c; return { data: {}, error: null as null | { message: string } } }), signOut: vi.fn() }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: { functions: { invoke: sb.invoke }, auth: { signInWithPassword: sb.signIn } } }))
-vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ user: { email: 'ana@x.com' }, profile: { full_name: 'Ana Pérez' }, signOut: sb.signOut, signIn: vi.fn() }) }))
+vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ user: { email: 'ana@ejemplo.test' }, profile: { full_name: 'Ana Pérez' }, signOut: sb.signOut, signIn: vi.fn() }) }))
 
 import CambiarPasswordInicial from './CambiarPasswordInicial'
 import LoginPage from './LoginPage'
@@ -37,7 +37,7 @@ describe('CambiarPasswordInicial', () => {
     sb.invoke.mockResolvedValue({ data: { ok: true }, error: null })
     render(<CambiarPasswordInicial />)
     llenar('Temp12345678', 'mi-clave-nueva')
-    await waitFor(() => expect(sb.signIn).toHaveBeenCalledWith({ email: 'ana@x.com', password: 'mi-clave-nueva' }))
+    await waitFor(() => expect(sb.signIn).toHaveBeenCalledWith({ email: 'ana@ejemplo.test', password: 'mi-clave-nueva' }))
     expect(sb.signOut).not.toHaveBeenCalled()
     expect(sb.invoke).toHaveBeenCalledWith('alta-empleado', { body: { action: 'cambiar_password', actual: 'Temp12345678', nueva: 'mi-clave-nueva' } })
   })

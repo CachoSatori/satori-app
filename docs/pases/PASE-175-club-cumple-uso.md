@@ -19,10 +19,18 @@
 ## 1. Qué pasa y qué no
 - **Pasa:** tabla `club_cumple_usos` (marca de uso por socio y **año del cumpleaños**, vinculada a la visita del socio y su
   pedido/factura, con quién, local y artículo; índice único parcial por socio y año y por visita entre las vigentes;
-  guardia: la fila no se edita, solo se deshace una vez). `club_cumple_en_caja_dia` (173) suma `ya_uso` (sin fecha ni año).
+  guardia: la fila no se edita, solo se deshace una vez). `club_cumple_en_caja_dia` (173) suma `ya_uso` (sin fecha ni año)
+  y abre el **cruce de socios** (decisión del dueño 15-nov): el socio activo de cualquier local recibe el beneficio en el
+  local de la caja, con la configuración de ESE local (encendido, ventana, texto, artículo); una vez por año en total. Sin
+  beneficio, la caja recibe `{"aplica": false}` exacto (sin pistas de fecha). `club_cumple_usar_dia` toma el candado del
+  socio ANTES de la fila de la visita (mismo orden que `club_reto_en_visita`, 169: sin bloqueo mutuo entre dos cajas).
   Funciones nuevas: `club_cumple_usar` (caja; núcleo `club_cumple_usar_dia` sin EXECUTE), `club_cumple_uso_deshacer`
   (solo owner, con nota, auditado), `club_cumple_usos_listar` (owner y manager de su local) y `club_cumple_usos_resumen`
-  (owner, manager de su local y contador; solo totales; núcleo `club_cumple_usos_resumen_rango` sin EXECUTE).
+  (owner, manager de su local y contador; solo totales; núcleo `club_cumple_usos_resumen_rango` sin EXECUTE). El resumen
+  cuenta solo la unidad del artículo vinculada a la marca (una cortesía sorteada, de reto o de primeros 90 con el mismo
+  artículo en esa visita no es de cumpleaños) y la valora como el Tablero: moda del precio cobrado de 30 días (o el de la
+  línea) × cantidad (1) × `cortesia_costo_pct`. Diferencia documentada: el Tablero excluye además de la referencia las
+  facturas con socio; con el artículo de «CORTESÍA CLUB» (casi nunca cobrado) las dos caen al precio de la línea.
 - **No pasa:** plata nueva ni movimientos (es una marca; la cortesía sigue siendo el artículo de «CORTESÍA CLUB» a ₡0 en
   el PoS). No cambia `club_socio_visita`, `club_tablero_mes`, `club_excepciones`, la configuración del beneficio, saldos,
   cierres, pozo ni propinas. Sin Edge Functions ni secretos.
@@ -42,7 +50,9 @@
 
 ## 4. Prueba en staging (pendiente con el dueño)
 `python3 scripts/sql/175_pruebas.py` (Management API, ref de staging fijo; transacción descartada: no deja nada). Necesita
-la 173 en staging. Esperado: **14/14**. En Postgres 16 local ya corrió: 14/14 y `--mutar todas` → 19/19 muerden.
+la 173 en staging. Esperado: **17/17**. En Postgres 16 local (main `4ba922e` + la 174 de
+`claude/club-facturas-dia-busqueda` `d9662dd`) ya corrió: 17/17 y `--mutar todas` → 24/24 muerden. Si la 174 cambia
+antes del pase, se vuelve a correr sobre la vigente.
 
 ## 5. Humo después (solo lectura)
 - Ledger: exactamente 1 fila `175` con `name = club_cumple_uso_anual`; check «Supabase Preview» en success con «All
@@ -56,7 +66,7 @@ la 173 en staging. Esperado: **14/14**. En Postgres 16 local ya corrió: 14/14 y
 - Lo encendido en §3 sigue igual.
 - Funcional (en el local, con el deploy y el beneficio encendido): con un socio de prueba ficticio con cumpleaños dentro
   de la ventana, registrar la visita, tocar «Usó el beneficio de cumpleaños», ver el recuadro pasar a «Ya usó su beneficio
-  de cumpleaños este año»; el owner lo deshace con nota en Promociones → «Usos del beneficio de cumpleaños».
+  de cumpleaños este año»; con el mismo socio en la caja del OTRO local, el recuadro dice «Ya usó…» y no hay botón; el owner lo deshace con nota en Promociones → «Usos del beneficio de cumpleaños».
 
 ## 6. Criterios de parada
 Cualquier diferencia con §5, un error de Branching, o la caja con error al registrar la visita del socio → se para, se

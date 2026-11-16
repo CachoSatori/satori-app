@@ -15,14 +15,18 @@
 --  1. Tabla club_cumple_usos (sin acceso de la API) + índice único (miembro, año) y (visita) entre las marcas vigentes
 --     + guardia: la fila no se cambia, salvo deshacerla una vez (owner, con nota).
 --  2. club_cumple_en_caja_dia (173, interna) rehecha: suma `ya_uso` (true si ya hay marca vigente del año del cumpleaños
---     de la ventana de hoy). El resto, igual que la 173 (solo socios del local, sin la fecha).
+--     de la ventana de hoy) y CRUCE DE SOCIOS (el dueño aceptó el 15-nov que un socio de Nosara se atienda en Santa Teresa):
+--     el socio activo de CUALQUIER local recibe el beneficio en el local de la caja, con la configuración (encendido,
+--     ventana, texto, artículo) del LOCAL DE LA CAJA. Sigue siendo una vez por año en total. Quien llama tiene que estar
+--     autorizado en ese local (club_exigir_local en las públicas); sin beneficio, `{"aplica": false}` exacto, sin la fecha.
 --  3. club_cumple_usar(p_visita, p_location): owner, manager o cajero, con club_exigir_local. La visita tiene que ser de
 --     hoy (día CR), de este local, y el socio estar en la ventana con el beneficio encendido y el artículo listo.
 --     Núcleo interno club_cumple_usar_dia (p_hoy fijo en las pruebas; sin EXECUTE para la API).
 --  4. club_cumple_uso_deshacer(p_uso, p_nota): solo owner; nota de 5 a 300 letras.
 --  5. club_cumple_usos_listar(desde, hasta, local): owner y manager de su local (para ver y deshacer).
 --  6. club_cumple_usos_resumen(desde, hasta, local): owner, manager de su local y contador; solo totales (usos, deshechos,
---     cortesías a costo con club_config.cortesia_costo_pct como el Tablero, y usos sin el artículo en su factura).
+--     cortesías a costo con la regla del Tablero y usos sin el artículo en su factura). Solo cuenta la unidad VINCULADA a
+--     una marca de cumpleaños: una cortesía sorteada (o de reto / primeros 90) con el mismo artículo no es de cumpleaños.
 --
 -- ── LO QUE NO TOCA ───────────────────────────────────────────────────────────────────────────────────────────────
 --  · Ni plata nueva ni movimientos: es una marca; la cortesía sigue siendo el artículo de «CORTESÍA CLUB» a ₡0 en el PoS.
@@ -110,8 +114,8 @@ begin
     v_f := public.club_cumple_en_ventana(v_c.cumple_dia, v_c.cumple_mes, p_hoy, v_cfg.dias_antes, v_cfg.dias_despues);
   end if;
   if not v_cfg.activo or v_c.cumple_dia is null or v_c.cumple_permiso_en is null
-     -- socio de ESTE local (verificador, 15-nov): uno de otro local recibe lo mismo que «sin beneficio» (no revela nada)
-     or not exists (select 1 from public.club_miembros m where m.id = p_miembro and m.estado = 'activo' and m.location_id = p_location)
+     -- 175 · cruce de socios (dueño, 15-nov): socio activo de CUALQUIER local; la config es la del local de la CAJA
+     or not exists (select 1 from public.club_miembros m where m.id = p_miembro and m.estado = 'activo')
      or not exists (select 1 from public.club_miembro_roles r where r.miembro_id = p_miembro and r.rol = 'socio' and r.estado = 'activo')
      or v_f is null then
     return jsonb_build_object('aplica', false);
@@ -142,12 +146,17 @@ declare
   v_k   public.club_cortesias%rowtype;
   v_id  uuid;
 begin
+  -- ORDEN DE CANDADOS (verificador, 15-nov): primero el candado del socio y DESPUÉS la fila de la visita, igual que
+  -- club_socio_visita y club_reto_en_visita (169). Al revés, con un reto en la misma visita, las dos cajas se trababan.
+  select * into v_v from public.club_visitas_socio s where s.id = p_visita;   -- sin candado: solo para saber el socio
+  if not found then
+    raise exception 'Esa visita no es de hoy en este local: registrá la visita del socio y marcalo ahí' using errcode = 'P0001';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('club_socio_visita:' || v_v.miembro_id::text, 0));
   select * into v_v from public.club_visitas_socio s where s.id = p_visita for update;
   if not found or v_v.location_id is distinct from p_location or v_v.fecha is distinct from p_hoy then
     raise exception 'Esa visita no es de hoy en este local: registrá la visita del socio y marcalo ahí' using errcode = 'P0001';
   end if;
-  -- mismo candado que la visita del socio: dos cajas a la vez, una sola marca
-  perform pg_advisory_xact_lock(hashtextextended('club_socio_visita:' || v_v.miembro_id::text, 0));
   v_en := public.club_cumple_en_caja_dia(v_v.miembro_id, p_location, p_hoy);
   if not coalesce((v_en->>'aplica')::boolean, false) then
     raise exception 'Hoy no le corresponde el beneficio de cumpleaños' using errcode = 'P0001';
@@ -261,9 +270,15 @@ revoke all on function public.club_cumple_usos_listar(date, date, text) from pub
 grant execute on function public.club_cumple_usos_listar(date, date, text) to authenticated;
 
 -- ── 6. Resumen para Tablero y Excepciones (solo totales) ─────────────────────────────────────────────────────────
--- Cortesía a costo, como el Tablero (160): lista × club_config.cortesia_costo_pct. Lista = el precio de la línea del
--- artículo a ₡0 en las facturas de la visita (el artículo de «CORTESÍA CLUB» no se vende cobrado, así que la
--- referencia de 30 días del Tablero cae a ese mismo precio). Una unidad por uso (el beneficio es uno).
+-- Unidad de cumpleaños de una marca (la VINCULADA a la marca): en las facturas de su visita, las unidades del artículo
+-- de la marca a ₡0 MENOS las que explica otra cortesía del Club de esa misma visita con el mismo artículo (sorteada o de
+-- reto en club_visitas_socio.cortesias; la de primeros 90 en aplicar->primeros90 si se ofreció). Si queda ≥ 1, la marca
+-- tiene su unidad (una por marca: el beneficio es uno). Así una cortesía sorteada no se cuenta como de cumpleaños.
+-- Costo = la regla del Tablero (160) para cortesías: precio de lista = la referencia (moda del precio unitario cobrado
+-- del artículo en los 30 días anteriores al día de la factura, en facturas C del local sin marcador de descuento activo;
+-- empate → el más alto) o, sin referencia, el precio de la línea; × cantidad (1) × club_config.cortesia_costo_pct.
+-- Diferencia con el Tablero: allá la referencia excluye además las facturas cruzadas con el Club del mes; el artículo de
+-- «CORTESÍA CLUB» no se vende cobrado, así que en la práctica las dos caen al precio de la línea.
 create or replace function public.club_cumple_usos_resumen_rango(p_desde date, p_hasta date, p_location text)
 returns jsonb
 language sql
@@ -271,19 +286,44 @@ stable
 set search_path = public, pg_temp
 as $$
   with u as (
-    select u.*, v.pos_ref
+    select u.id, u.deshecho_en is null as vigente, u.cortesia_codigo as cod, v.cortesias, v.aplicar,
+           public.club_cruce_facturas(u.location_id, v.pos_ref, null) as tids
       from public.club_cumple_usos u join public.club_visitas_socio v on v.id = u.visita_id
      where u.location_id = p_location
        and (u.usado_en at time zone 'America/Costa_Rica')::date between p_desde and p_hasta),
   x as (
-    select u.id, u.deshecho_en is null as vigente, f.tids,
-           (select max(nullif(l.precio, 0)) from public.pos_ndf_ticket_lines l
-             where l.ticket_id = any (f.tids) and l.codigo_producto = u.cortesia_codigo
-               and coalesce(l.monto, 0) = 0 and coalesce(l.cantidad, 0) > 0) as precio,
-           exists (select 1 from public.pos_ndf_ticket_lines l
-                    where l.ticket_id = any (f.tids) and l.codigo_producto = u.cortesia_codigo
-                      and coalesce(l.monto, 0) = 0 and coalesce(l.cantidad, 0) > 0) as con_linea
-      from u cross join lateral (select public.club_cruce_facturas(u.location_id, u.pos_ref, null) as tids) f),
+    select u.*,
+           coalesce((select sum(l.cantidad) from public.pos_ndf_ticket_lines l
+                      where l.ticket_id = any (u.tids) and l.codigo_producto = u.cod
+                        and coalesce(l.monto, 0) = 0 and coalesce(l.cantidad, 0) > 0), 0) as unidades,
+           (select count(*) from jsonb_array_elements(coalesce(u.cortesias, '[]'::jsonb)) k where k->>'codigo' = u.cod)
+           + case when u.aplicar->'primeros90'->>'estado' = 'ofrecida' and u.aplicar->'primeros90'->>'codigo' = u.cod then 1 else 0 end
+             as otras,
+           (select l.precio from public.pos_ndf_ticket_lines l
+             where l.ticket_id = any (u.tids) and l.codigo_producto = u.cod
+               and coalesce(l.monto, 0) = 0 and coalesce(l.cantidad, 0) > 0
+             order by l.precio desc nulls last limit 1) as precio_linea,
+           (select (coalesce(t.fecha_registra, t.fecha_cierra) at time zone 'America/Costa_Rica')::date
+              from public.pos_ndf_tickets t where t.id = any (u.tids)
+             order by t.fecha_registra limit 1) as dia
+      from u),
+  y as (
+    select x.*, (x.unidades - x.otras) >= 1 as con_linea,
+           coalesce(
+             (select z.u from (
+                select round(l.monto / l.cantidad, 2) as u, count(*) as n
+                  from public.pos_ndf_ticket_lines l join public.pos_ndf_tickets t on t.id = l.ticket_id
+                 where t.local = p_location and t.estado = 'C' and l.codigo_producto = x.cod
+                   and l.cantidad > 0 and l.monto > 0 and not coalesce(l.es_cortesia, false) and not coalesce(l.es_pax, false)
+                   and (t.fecha_registra at time zone 'America/Costa_Rica')::date >= x.dia - 30
+                   and (t.fecha_registra at time zone 'America/Costa_Rica')::date < x.dia
+                   and not exists (select 1 from public.pos_ndf_ticket_lines z2
+                                     join public.club_marcadores_descuento k on k.location_id = p_location and k.activo
+                                                                            and k.codigo_producto = z2.codigo_producto
+                                    where z2.ticket_id = t.id)
+                 group by 1) z order by z.n desc, z.u desc limit 1),
+             nullif(x.precio_linea, 0)) as precio
+      from x),
   t as (
     select count(*) filter (where vigente) as usos,
            count(*) filter (where not vigente) as deshechos,
@@ -292,7 +332,7 @@ as $$
            count(*) filter (where vigente and cardinality(tids) = 0) as sin_factura,
            count(*) filter (where vigente and con_linea and precio is null) as sin_precio,
            coalesce(sum(precio) filter (where vigente and con_linea), 0) as lista
-      from x)
+      from y)
   select jsonb_build_object(
     'desde', p_desde, 'hasta', p_hasta, 'local', p_location,
     'usos', t.usos, 'deshechos', t.deshechos, 'con_cortesia', t.con_cortesia,

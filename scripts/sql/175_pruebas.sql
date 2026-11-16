@@ -99,7 +99,7 @@ create function pg_temp.cfg(p_loc text, p_activo boolean, p_extra jsonb default 
 select pg_temp.cfg('prueba175a', true);
 select pg_temp.cfg('prueba175b', true);
 -- socios de prueba175a: 1 (30-dic), 2 (2-ene), 3 (30-dic), 4 (30-dic), 5 (30-dic); 6 de prueba175b (30-dic);
--- 7: cumpleaños HOY (para las públicas, que usan el día CR de hoy)
+-- 7: cumpleaños HOY (para las públicas, que usan el día CR de hoy); 8 (caso 12): de prueba175b, cumpleaños HOY
 select pg_temp.alta(1, 30, 12); select pg_temp.alta(2, 2, 1); select pg_temp.alta(3, 30, 12); select pg_temp.alta(4, 30, 12);
 select pg_temp.alta(5, 30, 12); select pg_temp.alta(6, 30, 12, 'prueba175b');
 select pg_temp.alta(7, extract(day from (select hoy from _c175))::int, extract(month from (select hoy from _c175))::int);
@@ -198,9 +198,10 @@ exception when others then
   insert into _r175 (caso, ok, detalle) values ('05 (error sin atrapar)', false, sqlerrm);
 end $$;
 
--- 06. Rechazos: visita de otro día, de otro local, fuera de la ventana, beneficio apagado, artículo apagado; socio de otro
---     local (la caja no le da nada); dos marcas en la misma visita
-do $$ declare v uuid; e1 text; e2 text; e3 text; e4 text; e5 text; e6 text; vb uuid;
+-- 06. Rechazos: visita de otro día, de otro local, fuera de la ventana, beneficio apagado, artículo apagado. CRUCE DE
+--     SOCIOS (dueño, 15-nov): el socio de prueba175b SÍ recibe el beneficio en prueba175a (con la configuración y el
+--     artículo de prueba175a) y la marca queda en prueba175a.
+do $$ declare v uuid; e1 text; e2 text; e3 text; e4 text; e5 text; r6 jsonb; vb uuid; a6 jsonb;
 begin
   v  := pg_temp.visita(4, 'prueba175a', date '2027-01-02');
   e1 := pg_temp.err_usar(v, 'prueba175a', date '2027-01-03');                 -- la visita es de ayer
@@ -215,16 +216,33 @@ begin
   e5 := pg_temp.err_usar(v, 'prueba175a', date '2027-01-01');                 -- artículo apagado
   update public.club_cortesias set activa = true where codigo_producto = 'P175A1';
   vb := pg_temp.visita(6, 'prueba175a', date '2027-01-01');                   -- socio de prueba175b en prueba175a
-  e6 := pg_temp.err_usar(vb, 'prueba175a', date '2027-01-01');
-  insert into _r175 (caso, ok, detalle) values ('06 rechazos: visita de otro día u otro local, fuera de ventana, apagado, sin artículo, socio de otro local',
+  a6 := public.club_cumple_en_caja_dia(pg_temp.mid(6), 'prueba175a', date '2027-01-01');
+  r6 := pg_temp.usar(vb, 'prueba175a', date '2027-01-01');
+  insert into _r175 (caso, ok, detalle) values ('06 rechazos (otro día u otro local, fuera de ventana, apagado, sin artículo); socio de otro local SÍ, con el artículo de la caja',
     e1 like 'Esa visita no es de hoy en este local%' and e2 like 'Esa visita no es de hoy en este local%'
     and e3 = 'Hoy no le corresponde el beneficio de cumpleaños' and e4 = 'Hoy no le corresponde el beneficio de cumpleaños'
-    and e5 like 'En este local no hay un artículo de cortesía activo%' and e6 = 'Hoy no le corresponde el beneficio de cumpleaños'
-    and pg_temp.vigentes(4) = '{}' and pg_temp.vigentes(6) = '{}',
-    concat_ws(' | ', e1, e2, e3, e4, e5, e6));
+    and e5 like 'En este local no hay un artículo de cortesía activo%'
+    and (a6->>'aplica')::boolean and not (a6->>'ya_uso')::boolean
+    and (r6->>'ok')::boolean and r6->'cortesia'->>'codigo' = 'P175A1'
+    and pg_temp.vigentes(4) = '{}' and pg_temp.vigentes(6) = array[2026]
+    and exists (select 1 from public.club_cumple_usos x where x.visita_id = vb and x.location_id = 'prueba175a'),
+    concat_ws(' | ', e1, e2, e3, e4, e5, a6, r6));
 exception when others then
   insert into _r175 (caso, ok, detalle) values ('06 (error sin atrapar)', false, sqlerrm);
 end $$;
+
+-- 13. Orden de candados (verificador, 15-nov): club_cumple_usar_dia toma el candado del socio ANTES de la fila de la
+--     visita (for update), igual que club_reto_en_visita (169). Prueba de ESTRUCTURA: el bloqueo mutuo entre dos cajas
+--     no se reproduce en una sola transacción.
+insert into _r175 (caso, ok, detalle)
+select '13 orden de candados: primero el del socio, después la fila de la visita (como la 169)',
+       strpos(f.src, 'pg_advisory_xact_lock(hashtextextended(''club_socio_visita:''') > 0
+       and strpos(f.src, 'for update') > strpos(f.src, 'pg_advisory_xact_lock(hashtextextended(''club_socio_visita:''')
+       and exists (select 1 from pg_proc r where r.proname like 'club_reto_en_visita%'   -- la 169 (o su núcleo, si se envolvió)
+                     and strpos(r.prosrc, 'pg_advisory_xact_lock(hashtextextended(''club_socio_visita:''') > 0
+                     and strpos(r.prosrc, 'for update') > strpos(r.prosrc, 'pg_advisory_xact_lock(hashtextextended(''club_socio_visita:''')),
+       null
+  from (select prosrc as src from pg_proc where oid = 'public.club_cumple_usar_dia(uuid,text,date)'::regprocedure) f;
 
 -- 07. Deshacer: solo el owner, con nota; queda en la bitácora; después se puede volver a marcar; no se deshace dos veces;
 --     la fila no se edita a mano (ni siquiera como el dueño de la base)
@@ -301,14 +319,14 @@ begin
   e2 := pg_temp.err_como((select cajero from _c175), format('public.club_cumple_usos_resumen(%L::date, %L::date, %L)', (select hoy from _c175), (select hoy from _c175), 'prueba175a'));
   l  := pg_temp.como((select manager_a from _c175), format('public.club_cumple_usos_listar(%L::date, %L::date, %L)', (select hoy from _c175), (select hoy from _c175), 'prueba175a'));
   e3 := pg_temp.err_como((select contador from _c175), format('public.club_cumple_usos_listar(%L::date, %L::date, %L)', (select hoy from _c175), (select hoy from _c175), 'prueba175a'));
-  -- vigentes en prueba175a: socio 1 ×2 (2027 y el 2026 rehecho), socio 2 ×2, socio 7 = 5; deshechos: 1
+  -- vigentes en prueba175a: socio 1 ×2 (2027 y el 2026 rehecho), socio 2 ×2, socio 6 (de B), socio 7 = 6; deshechos: 1
   insert into _r175 (caso, ok, detalle) values ('09 resumen: usos vigentes, deshechos, cortesía a costo (40 %), sin artículo/sin factura; lista con socio y operador',
-    (s->>'usos')::int = 5 and (s->>'deshechos')::int = 1 and (s->>'con_cortesia')::int = 1
+    (s->>'usos')::int = 6 and (s->>'deshechos')::int = 1 and (s->>'con_cortesia')::int = 1
     and (s->>'cortesias_lista_crc')::numeric = 5000 and (s->>'cortesias_costo_crc')::numeric = 2000
-    and (s->>'sin_articulo_en_factura')::int = 0 and (s->>'sin_factura')::int = 4
+    and (s->>'sin_articulo_en_factura')::int = 0 and (s->>'sin_factura')::int = 5
     and sm = s and sc = s and not (sc::text ~ 'Socio Ficticio')
     and e1 = 'Sin permiso en ese local' and e2 = 'Sin permiso' and e3 = 'Sin permiso'
-    and jsonb_array_length(l) = 6
+    and jsonb_array_length(l) = 7
     and exists (select 1 from jsonb_array_elements(l) x where x->>'operador' = 'Cajero Ficticio' and x->>'socio' = 'Socio Ficticio 7')
     and exists (select 1 from jsonb_array_elements(l) x where x->>'deshecho_nota' = 'marcada por error en caja'),
     concat_ws(' | ', s, e1, e2, e3));
@@ -326,17 +344,100 @@ begin
   perform pg_temp.usar(v, 'prueba175a', date '2026-12-31');
   s := public.club_cumple_usos_resumen_rango((select hoy from _c175), (select hoy from _c175), 'prueba175a');
   insert into _r175 (caso, ok, detalle) values ('09b uso con factura sin el artículo → contado aparte, sin costo',
-    (s->>'usos')::int = 6 and (s->>'sin_articulo_en_factura')::int = 1 and (s->>'cortesias_costo_crc')::numeric = 2000, s::text);
+    (s->>'usos')::int = 7 and (s->>'sin_articulo_en_factura')::int = 1 and (s->>'cortesias_costo_crc')::numeric = 2000, s::text);
 exception when others then
   insert into _r175 (caso, ok, detalle) values ('09b (error sin atrapar)', false, sqlerrm);
 end $$;
 
--- 10. La 173 sigue: sin cumpleaños, socio de otro local y fuera de la ventana → {"aplica": false} exacto (sin «ya_uso»)
-insert into _r175 (caso, ok, detalle)
-select '10 la caja sigue igual que la 173 fuera de la ventana / otro local (no revela si lo usó)',
-       public.club_cumple_en_caja_dia(pg_temp.mid(1), 'prueba175a', date '2027-03-01') = '{"aplica": false}'::jsonb
-       and public.club_cumple_en_caja_dia(pg_temp.mid(3), 'prueba175b', date '2027-01-02') = '{"aplica": false}'::jsonb,
-       null;
+-- 09c. Solo la unidad VINCULADA a la marca y costo con la regla del Tablero:
+--   · socio 4 (27-dic-2026): su factura trae UNA unidad del artículo a ₡0, pero la visita ya tenía esa cortesía SORTEADA →
+--     no es de cumpleaños: «sin artículo», sin costo.
+--   · socio 6 (1-ene-2027, la marca del caso 06): dos unidades a ₡0 (precio de línea ₡5.000), una sorteada → queda una de
+--     cumpleaños. Lista = la MODA del precio cobrado de los 30 días anteriores (₡6.000 en 2 líneas contra ₡5.500 en 1), no
+--     el de la línea: + ₡6.000 de lista y ₡2.400 a costo (40 %).
+do $$ declare v uuid; s jsonb; tk uuid;
+begin
+  v := pg_temp.visita(4, 'prueba175a', date '2026-12-27');
+  update public.club_visitas_socio set cortesias = '[{"codigo":"P175A1","nombre":"Postre Ficticio A","motivo":"promo"}]' where id = v;
+  perform pg_temp.usar(v, 'prueba175a', date '2026-12-27');
+  insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta)
+  values ('prueba175a', 'F175-4-20261227', timestamptz '2026-12-27 20:00-06', 'C', 'salon', 'cajero', true, 'ok') returning id into tk;
+  insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, precio, monto) values
+    (tk, 'P175A1', 'Postre Ficticio A', 1, 5000, 0);
+  update public.club_visitas_socio set cortesias = '[{"codigo":"P175A1","nombre":"Postre Ficticio A","motivo":"promo"}]'
+   where id = (select visita_id from public.club_cumple_usos where miembro_id = pg_temp.mid(6) and deshecho_en is null);
+  insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta)
+  values ('prueba175a', 'F175-6-20270101', timestamptz '2027-01-01 20:00-06', 'C', 'salon', 'cajero', true, 'ok') returning id into tk;
+  insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, precio, monto) values
+    (tk, 'P175A1', 'Postre Ficticio A', 2, 5000, 0);
+  -- ventas cobradas del artículo en los 30 días anteriores al 1-ene (después del 28-dic: no cambian la referencia del socio 2)
+  insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta)
+  values ('prueba175a', 'V175-1', timestamptz '2026-12-29 13:00-06', 'C', 'salon', 'cajero', true, 'ok') returning id into tk;
+  insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, precio, monto) values (tk, 'P175A1', 'Postre Ficticio A', 1, 6000, 6000);
+  insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta)
+  values ('prueba175a', 'V175-2', timestamptz '2026-12-30 13:00-06', 'C', 'salon', 'cajero', true, 'ok') returning id into tk;
+  insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, precio, monto) values (tk, 'P175A1', 'Postre Ficticio A', 2, 6000, 12000);
+  insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta)
+  values ('prueba175a', 'V175-3', timestamptz '2026-12-30 14:00-06', 'C', 'salon', 'cajero', true, 'ok') returning id into tk;
+  insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, precio, monto) values (tk, 'P175A1', 'Postre Ficticio A', 1, 5500, 5500);
+  s := public.club_cumple_usos_resumen_rango((select hoy from _c175), (select hoy from _c175), 'prueba175a');
+  insert into _r175 (caso, ok, detalle) values ('09c solo la unidad vinculada (la sorteada no es de cumpleaños) y lista por la moda de 30 días, como el Tablero',
+    (s->>'usos')::int = 8 and (s->>'con_cortesia')::int = 2 and (s->>'sin_articulo_en_factura')::int = 2
+    and (s->>'sin_factura')::int = 4
+    and (s->>'cortesias_lista_crc')::numeric = 11000 and (s->>'cortesias_costo_crc')::numeric = 4400, s::text);
+exception when others then
+  insert into _r175 (caso, ok, detalle) values ('09c (error sin atrapar)', false, sqlerrm);
+end $$;
+
+-- 10. Fuera de la ventana, socio de baja o beneficio apagado en la caja → {"aplica": false} exacto (sin «ya_uso» ni fecha)
+do $$ declare a jsonb; b jsonb; c jsonb;
+begin
+  a := public.club_cumple_en_caja_dia(pg_temp.mid(1), 'prueba175a', date '2027-03-01');
+  update public.club_miembro_roles set estado = 'baja' where miembro_id = pg_temp.mid(5) and rol = 'socio';
+  b := public.club_cumple_en_caja_dia(pg_temp.mid(5), 'prueba175b', date '2027-01-02');
+  update public.club_miembro_roles set estado = 'activo' where miembro_id = pg_temp.mid(5) and rol = 'socio';
+  perform pg_temp.cfg('prueba175b', false);
+  c := public.club_cumple_en_caja_dia(pg_temp.mid(1), 'prueba175b', date '2027-01-02');   -- socio de A, caja de B apagada
+  perform pg_temp.cfg('prueba175b', true);
+  insert into _r175 (caso, ok, detalle) values ('10 sin beneficio (fuera de ventana, de baja, caja con el beneficio apagado) → {"aplica": false} exacto',
+    a = '{"aplica": false}'::jsonb and b = '{"aplica": false}'::jsonb and c = '{"aplica": false}'::jsonb, concat_ws(' | ', a, b, c));
+exception when others then
+  insert into _r175 (caso, ok, detalle) values ('10 (error sin atrapar)', false, sqlerrm);
+end $$;
+
+-- 12. CRUCE DE SOCIOS por la app (sin insert directo): socio 8 de prueba175b con cumpleaños HOY. La caja de prueba175a
+--     registra su visita (club_socio_visita), ve «aplica» y marca (club_cumple_usar). El mismo día en prueba175b: la caja
+--     ve «ya_uso» y el servidor rechaza la segunda marca. El manager de A no consulta ni marca en B (club_exigir_local).
+do $$ declare ra jsonb; rb jsonb; ca jsonb; ua jsonb; cb jsonb; eb text; e3 text; e4 text;
+begin
+  perform pg_temp.alta(8, extract(day from (select hoy from _c175))::int, extract(month from (select hoy from _c175))::int, 'prueba175b');
+  insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta)
+  values ('prueba175a', '1758001', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok'),
+         ('prueba175b', '1758002', now() - interval '4 minutes', 'C', 'salon', 'cajero', true, 'ok');
+  ra := pg_temp.como((select cajero from _c175), format('public.club_socio_visita(%L::uuid, %L::jsonb, %L::uuid, %L)', pg_temp.mid(8),
+          '{"modo":"factura","local":"prueba175a","numero_factura":"1758001"}', gen_random_uuid(), 'prueba175a'));
+  ca := pg_temp.como((select cajero from _c175), format('public.club_cumple_en_caja(%L::uuid, %L)', pg_temp.mid(8), 'prueba175a'));
+  ua := pg_temp.como((select cajero from _c175), format('public.club_cumple_usar(%L::uuid, %L)', ra->>'visita_id', 'prueba175a'));
+  rb := pg_temp.como((select manager_b from _c175), format('public.club_socio_visita(%L::uuid, %L::jsonb, %L::uuid, %L)', pg_temp.mid(8),
+          '{"modo":"factura","local":"prueba175b","numero_factura":"1758002"}', gen_random_uuid(), 'prueba175b'));
+  cb := pg_temp.como((select manager_b from _c175), format('public.club_cumple_en_caja(%L::uuid, %L)', pg_temp.mid(8), 'prueba175b'));
+  eb := pg_temp.err_como((select manager_b from _c175), format('public.club_cumple_usar(%L::uuid, %L)', rb->>'visita_id', 'prueba175b'));
+  e3 := pg_temp.err_como((select manager_a from _c175), format('public.club_cumple_usar(%L::uuid, %L)', rb->>'visita_id', 'prueba175b'));
+  e4 := pg_temp.err_como((select manager_a from _c175), format('public.club_cumple_en_caja(%L::uuid, %L)', pg_temp.mid(8), 'prueba175b'));
+  insert into _r175 (caso, ok, detalle) values ('12 cruce por la app: socio de B se marca en la caja de A; el mismo año en B → «ya_uso» y rechazado; manager de A no entra a B',
+    ra->>'visita_id' is not null and rb->>'visita_id' is not null
+    and (ca->>'aplica')::boolean and not (ca->>'ya_uso')::boolean
+    and ca::text !~ extract(year from (select hoy from _c175))::text
+    and (ua->>'ok')::boolean and ua->'cortesia'->>'codigo' = 'P175A1'
+    and (cb->>'aplica')::boolean and (cb->>'ya_uso')::boolean
+    and eb = 'Ya usó su beneficio de cumpleaños este año'
+    and e3 = 'Sin permiso en ese local' and e4 = 'Sin permiso en ese local'
+    and pg_temp.vigentes(8) = array[extract(year from (select hoy from _c175))::int]
+    and (select location_id from public.club_cumple_usos where miembro_id = pg_temp.mid(8) and deshecho_en is null) = 'prueba175a',
+    concat_ws(' | ', ra, ca, ua, rb, cb, eb, e3, e4));
+exception when others then
+  insert into _r175 (caso, ok, detalle) values ('12 (error sin atrapar)', false, sqlerrm);
+end $$;
 
 -- 11. ROLLBACK: con marcas, aborta; sin marcas, no queda nada de la 175 y la caja vuelve a la 173 (sin «ya_uso»)
 -- @@175RG@@   (aquí va el caso 11a: la guarda REAL de 175_rollback.sql, corrida con marcas, tiene que abortar)
@@ -370,6 +471,6 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r175 where ok is not true;   -- null = falla
   if v is not null then raise exception '175-FALLAN: %', v; end if;
-  if (select count(*) from _r175) <> 14 then raise exception '175-FALLAN: se esperaban 14 casos (NO PROBADO)'; end if;
+  if (select count(*) from _r175) <> 17 then raise exception '175-FALLAN: se esperaban 17 casos (NO PROBADO)'; end if;
 end $$;
 rollback;

@@ -72,6 +72,23 @@ MUTACIONES: dict[str, tuple] = {
     'lista_contador': ([("  if public.get_my_role() is null or public.get_my_role() not in ('owner','manager') then\n    raise exception 'Sin permiso' using errcode = '42501';\n  end if;\n  perform public.club_exigir_local(p_location);\n  p_location := public.club_local(p_location, false);\n  if p_desde is null or p_hasta is null or p_hasta < p_desde or p_hasta - p_desde > 400 then\n    raise exception 'Período no válido (hasta 400 días)' using errcode = 'P0001';\n  end if;\n  return coalesce((",
                          "  if public.get_my_role() is null or public.get_my_role() not in ('owner','manager','contador') then\n    raise exception 'Sin permiso' using errcode = '42501';\n  end if;\n  perform public.club_exigir_local(p_location);\n  p_location := public.club_local(p_location, false);\n  if p_desde is null or p_hasta is null or p_hasta < p_desde or p_hasta - p_desde > 400 then\n    raise exception 'Período no válido (hasta 400 días)' using errcode = 'P0001';\n  end if;\n  return coalesce((")],
                        None, {'09'}),
+    # sin cruce de socios: solo los socios del local de la caja (como la 173)
+    'solo_socios_del_local': ("     or not exists (select 1 from public.club_miembros m where m.id = p_miembro and m.estado = 'activo')\n",
+                              "     or not exists (select 1 from public.club_miembros m where m.id = p_miembro and m.estado = 'activo' and m.location_id = p_location)\n",
+                              {'06', '12'}),
+    # la configuración del beneficio sale del local del SOCIO, no del de la caja
+    'config_del_socio': ("  v_cfg public.club_cumple_config%rowtype := public.club_cumple_cfg(p_location);\n  v_c   public.club_miembros_contacto%rowtype;\n  v_f   date;\n",
+                         "  v_cfg public.club_cumple_config%rowtype := public.club_cumple_cfg((select m.location_id from public.club_miembros m where m.id = p_miembro));\n  v_c   public.club_miembros_contacto%rowtype;\n  v_f   date;\n",
+                         {'10'}),
+    # orden de candados de antes: la fila de la visita y después el del socio (al revés que la 169)
+    'candado_despues': ([("  perform pg_advisory_xact_lock(hashtextextended('club_socio_visita:' || v_v.miembro_id::text, 0));\n  select * into v_v from public.club_visitas_socio s where s.id = p_visita for update;\n",
+                          "  select * into v_v from public.club_visitas_socio s where s.id = p_visita for update;\n  perform pg_advisory_xact_lock(hashtextextended('club_socio_visita:' || v_v.miembro_id::text, 0));\n")],
+                        None, {'13'}),
+    # el resumen cuenta cualquier unidad del artículo a ₡0 (también la sorteada) como de cumpleaños
+    'resumen_sin_vinculo': ("    select x.*, (x.unidades - x.otras) >= 1 as con_linea,\n", "    select x.*, x.unidades >= 1 as con_linea,\n", {'09c'}),
+    # el resumen a precio de la línea (sin la moda de 30 días del Tablero)
+    'resumen_precio_linea': ("                 group by 1) z order by z.n desc, z.u desc limit 1),\n",
+                             "                 group by 1) z where false order by z.n desc, z.u desc limit 1),\n", {'09c'}),
 }
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
     # el rollback borra las marcas sin avisar

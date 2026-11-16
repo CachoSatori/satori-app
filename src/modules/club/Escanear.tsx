@@ -23,7 +23,7 @@ import {
 import { dateCR, todayCR } from '../../shared/utils'
 import { cumpleDelFormulario, MESES_CORTOS, textoCumpleCaja } from './cumple'
 import { parsearQR, urlPortal } from './qrFormato'
-import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
+import { formatoWhatsApp, linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
 import { esCuentaSinCreditos, MSG_EQUIPO_SIN_CANJE } from './equipo'
 import { pideEdadAlValidar } from './edadSocio'
 import { Aviso, Btn, Card, Chip } from './ui'
@@ -852,6 +852,11 @@ export function UsoCumple({ visita, c, onUsado }: { visita: string; c: CumpleEnC
 
 /** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia» y «es mayor de 18» (D6 A); NUNCA un número de documento. */
 /** D1 + mig 156: al terminar, «Mandarle su link por WhatsApp ↗» también para el cajero (el alta devuelve el token del socio nuevo). */
+/**
+ * Hallazgo 230 (D 16-nov): antes del alta (y del link del portal), «¿Este es su WhatsApp? +506 xxxx xxxx»: el cajero se
+ * lo lee al cliente y confirma («Sí, es este») o vuelve al campo («Corregir»). Sin confirmar no hay alta ni link: el
+ * link del portal abre la cuenta del socio, y a un número equivocado le llegaría a otra persona.
+ */
 function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: string | null) => void; rol: string | null | undefined }) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState('')
@@ -865,39 +870,52 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
   const [cPermiso, setCPermiso] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [confirmando, setConfirmando] = useState(false)   // hallazgo 230: mostrando «¿Este es su WhatsApp?»
+  const telRef = useRef<HTMLInputElement>(null)
   const cumple = cumpleDelFormulario(cDia, cMes, cPermiso)
   if (!abierto) {
     return <Btn variant="secondary" onClick={() => setAbierto(true)}>＋ Nuevo socio del Local Club</Btn>
   }
-  async function guardar() {
+  /** «Dar de alta»: primero la confirmación del WhatsApp (hallazgo 230); el alta sale recién con «Sí, es este». */
+  function pedirConfirmacion() {
+    setErr(null)
+    if (!cumple.ok) { setErr(cumple.error === 'falta' ? MSG_CUMPLE_FALTA : MSG_CUMPLE_INVALIDO); return }
+    setConfirmando(true)
+  }
+  function corregir() {
+    setConfirmando(false)
+    telRef.current?.focus(); telRef.current?.select()
+  }
+  /** `telOk`: el número que el cajero confirmó con el cliente. El alta y el link usan ese y solo ese. */
+  async function guardar(telOk: string) {
     setEnviando(true); setErr(null)
     try {
       if (!cumple.ok) { setErr(cumple.error === 'falta' ? MSG_CUMPLE_FALTA : MSG_CUMPLE_INVALIDO); return }
-      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico, mayor, cumple.cumple)
+      const r = await socioAltaCaja(nombre.trim(), telOk.trim(), email.trim() || null, verifico, mayor, cumple.cumple)
       const texto = `${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.` +
         (r.cumple === 'guardado' ? ' Cumpleaños guardado.' : r.cumple === 'ya_tenia' ? ' Ya tenía el cumpleaños cargado: no se cambió.' : '')
       // Sin link no se frena nada: el alta ya quedó (el link sale después desde Miembros).
       let link: string | null = null
       try {
         const tok = await tokenDelAlta(r, rol, tokenPortal)
-        link = tok ? linkAltaWhatsApp(tel, nombre, urlPortal(tok)) : null
+        link = tok ? linkAltaWhatsApp(telOk, nombre, urlPortal(tok), telOk) : null
       } catch { link = null }
       const extra = link ? ''
         : puedeMandarLinkPortal(rol) ? ' No se pudo armar el link de WhatsApp: copialo desde Miembros («⎘ Link del portal»).'
         : ' El link de su portal se lo manda un manager desde Miembros.'
       onHecho(texto + extra, link)
-      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false); setMayor(false); setCDia(''); setCMes(''); setCPermiso(false)
+      setAbierto(false); setConfirmando(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false); setMayor(false); setCDia(''); setCMes(''); setCPermiso(false)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }
   }
   return (
     <Card>
-      <form onSubmit={e => { e.preventDefault(); guardar() }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <form onSubmit={e => { e.preventDefault(); if (!confirmando) pedirConfirmacion() }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong>Nuevo socio del Local Club</strong>
         <label><span style={labelStyle}>Nombre y apellido</span>
           <input value={nombre} onChange={e => setNombre(e.target.value)} autoComplete="off" style={inputStyle} /></label>
         <label><span style={labelStyle}>WhatsApp</span>
-          <input value={tel} onChange={e => setTel(e.target.value)} inputMode="tel" autoComplete="off" placeholder="8 dígitos o con código de país" style={inputStyle} /></label>
+          <input ref={telRef} value={tel} onChange={e => { setTel(e.target.value); setConfirmando(false) }} inputMode="tel" autoComplete="off" placeholder="8 dígitos o con código de país" style={inputStyle} /></label>
         <label><span style={labelStyle}>Email (opcional)</span>
           <input value={email} onChange={e => setEmail(e.target.value)} inputMode="email" autoComplete="off" style={inputStyle} /></label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
@@ -933,11 +951,32 @@ function NuevoSocio({ onHecho, rol }: { onHecho: (texto: string, linkWhatsApp?: 
           Queda registrada la versión vigente del aviso. El cumpleaños (sin el año) se guarda solo si te dio permiso; después no se cambia en caja.
         </div>
         {err && <Aviso tono="error">{err}</Aviso>}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico || !mayor || !cumple.ok}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
-          <Btn type="button" variant="ghost" onClick={() => { setAbierto(false); setErr(null) }}>Cancelar</Btn>
-        </div>
+        {confirmando ? <ConfirmarWhatsApp tel={tel} enviando={enviando} onSi={() => guardar(tel)} onCorregir={corregir} /> : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico || !mayor || !cumple.ok}>Dar de alta</Btn>
+            <Btn type="button" variant="ghost" onClick={() => { setAbierto(false); setConfirmando(false); setErr(null) }}>Cancelar</Btn>
+          </div>
+        )}
       </form>
     </Card>
+  )
+}
+
+/**
+ * Hallazgo 230: «¿Este es su WhatsApp? +506 8888 0000». Pantalla del personal (voseo). Sin dígitos no hay «Sí, es este».
+ */
+function ConfirmarWhatsApp({ tel, enviando, onSi, onCorregir }: { tel: string; enviando: boolean; onSi: () => void; onCorregir: () => void }) {
+  const f = formatoWhatsApp(tel)
+  return (
+    <div role="alertdialog" aria-label="Confirmar el WhatsApp" style={{ border: `2px solid ${C.gold}`, borderRadius: 8, padding: '0.6rem 0.7rem', background: C.paper, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {f ? <>
+        <div style={{ fontSize: '0.85rem' }}>Leéselo a la persona y confirmalo antes de seguir: a este número le llega el link de su portal.</div>
+        <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>¿Este es su WhatsApp? {f}</div>
+      </> : <Aviso tono="error">Ese WhatsApp no tiene números: corregilo.</Aviso>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {f && <Btn type="button" onClick={onSi} disabled={enviando}>{enviando ? 'Guardando…' : 'Sí, es este'}</Btn>}
+        <Btn type="button" variant="secondary" onClick={onCorregir} disabled={enviando}>Corregir</Btn>
+      </div>
+    </div>
   )
 }

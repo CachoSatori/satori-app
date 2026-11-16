@@ -115,6 +115,7 @@ describe('Escanear → alta en caja con cumpleaños (v3)', () => {
     fireEvent.change(screen.getByLabelText('Mes del cumpleaños'), { target: { value: '3' } })
     fireEvent.click(campo(/Dio permiso para usar su cumpleaños/))
     fireEvent.click(screen.getByText('Dar de alta'))
+    fireEvent.click(screen.getByText('Sí, es este'))   // hallazgo 230: confirma el WhatsApp
     await screen.findByText(/Cumpleaños guardado/)
     const llamada = H.rpc.mock.calls.find(c => c[0] === 'club_socio_alta_caja_v3')!
     expect(llamada[1]).toMatchObject({ p_cumple_dia: 12, p_cumple_mes: 3, p_cumple_permiso: true, p_mayor_edad: true })
@@ -122,6 +123,7 @@ describe('Escanear → alta en caja con cumpleaños (v3)', () => {
   it('sin cumpleaños: los tres en null', async () => {
     llenar()
     fireEvent.click(screen.getByText('Dar de alta'))
+    fireEvent.click(screen.getByText('Sí, es este'))   // hallazgo 230: confirma el WhatsApp
     await waitFor(() => expect(H.rpc).toHaveBeenCalled())
     expect(H.rpc.mock.calls[0][1]).toMatchObject({ p_cumple_dia: null, p_cumple_mes: null, p_cumple_permiso: null })
   })

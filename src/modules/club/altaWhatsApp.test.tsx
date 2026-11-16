@@ -4,7 +4,7 @@
 // solo owner y manager lo piden con `club_miembro_token` (mig 150); al cajero no se le muestra el enlace.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { linkAltaWhatsApp, textoAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
+import { formatoWhatsApp, linkAltaWhatsApp, textoAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
 import { configurarClubUrl } from './qrFormato'
 
 const rol = vi.hoisted(() => ({ v: 'manager' }))
@@ -23,18 +23,31 @@ const URL_ALTA = 'https://club.ejemplo.test/p/' + TOK_ALTA
 
 describe('altaWhatsApp: texto y link', () => {
   it('arma el wa.me con el número internacional y el link del portal', () => {
-    const href = linkAltaWhatsApp('8888 0000', 'Ana María Prueba', URL)!
+    const href = linkAltaWhatsApp('8888 0000', 'Ana María Prueba', URL, '8888 0000')!
     expect(href.startsWith('https://wa.me/50688880000?text=')).toBe(true)
     const texto = decodeURIComponent(href.split('?text=')[1])
     expect(texto).toContain(URL)
     expect(texto).toContain('Hola, Ana.')
   })
   it('número con +506 o extranjero: no duplica el código', () => {
-    expect(linkAltaWhatsApp('+506 8888-0000', 'Ana', URL)!.startsWith('https://wa.me/50688880000?')).toBe(true)
-    expect(linkAltaWhatsApp('+1 555 010 0000', 'Ana', URL)!.startsWith('https://wa.me/15550100000?')).toBe(true)
+    expect(linkAltaWhatsApp('+506 8888-0000', 'Ana', URL, '88880000')!.startsWith('https://wa.me/50688880000?')).toBe(true)
+    expect(linkAltaWhatsApp('+1 555 010 0000', 'Ana', URL, '+1 555 010 0000')!.startsWith('https://wa.me/15550100000?')).toBe(true)
   })
   it('sin dígitos no hay link', () => {
-    expect(linkAltaWhatsApp('—', 'Ana', URL)).toBeNull()
+    expect(linkAltaWhatsApp('—', 'Ana', URL, '—')).toBeNull()
+  })
+  it('hallazgo 230: sin el número confirmado no hay link; con otro número confirmado, tampoco', () => {
+    expect(linkAltaWhatsApp('88880000', 'Ana', URL, null)).toBeNull()
+    expect(linkAltaWhatsApp('88880000', 'Ana', URL, '88880001')).toBeNull()
+    expect(linkAltaWhatsApp('88880000', 'Ana', URL, '')).toBeNull()
+    // el mismo número escrito distinto sí vale (el cajero confirmó el mismo WhatsApp)
+    expect(linkAltaWhatsApp('88880000', 'Ana', URL, '+506 8888 0000')).not.toBeNull()
+  })
+  it('hallazgo 230: el número como se lo lee el cajero', () => {
+    expect(formatoWhatsApp('88880000')).toBe('+506 8888 0000')
+    expect(formatoWhatsApp('+506 8888-0000')).toBe('+506 8888 0000')
+    expect(formatoWhatsApp('+1 555 010 0000')).toBe('+15550100000')
+    expect(formatoWhatsApp('—')).toBe('')
   })
   it('el texto para el cliente va de «usted»', () => {
     const t = textoAltaWhatsApp('Ana', URL)
@@ -76,6 +89,7 @@ async function darDeAlta() {
   fireEvent.click(screen.getByText(/Verifiqué que es local/).parentElement!.querySelector('input')!)
   fireEvent.click(screen.getByText(/Es mayor de 18 años/).parentElement!.querySelector('input')!)
   fireEvent.click(screen.getByText('Dar de alta'))
+  fireEvent.click(screen.getByText('Sí, es este'))   // hallazgo 230: confirma el WhatsApp
   await screen.findByText(/es socio \(activo provisional/)
 }
 
@@ -159,5 +173,65 @@ describe('Escanear → Nuevo socio: «Es mayor de 18 años» (D6 A)', () => {
   it('con la casilla, manda mayorEdad = true a la base', async () => {
     await darDeAlta()
     expect(api.socioAltaCaja).toHaveBeenCalledWith('Ana Prueba', '88880000', null, true, true, null)
+  })
+})
+
+describe('Escanear → Nuevo socio: «¿Este es su WhatsApp?» antes del alta y del link (hallazgo 230)', () => {
+  beforeEach(() => {
+    rol.v = 'cajero'
+    configurarClubUrl('https://club.ejemplo.test')
+    api.socioAltaCaja.mockReset().mockResolvedValue({ miembro_id: 'm1', estado: 'activo', provisional_hasta: '2026-11-20T12:00:00Z', token_portal: TOK_ALTA })
+    api.tokenPortal.mockReset()
+  })
+  const campo = (l: RegExp) => screen.getByText(l).parentElement!.querySelector('input') as HTMLInputElement
+  function llenar(tel = '88880000') {
+    render(<Escanear />)
+    fireEvent.click(screen.getByText(/Nuevo socio del Local Club/))
+    fireEvent.change(campo(/Nombre y apellido/), { target: { value: 'Ana Prueba' } })
+    fireEvent.change(campo(/^WhatsApp$/), { target: { value: tel } })
+    fireEvent.click(campo(/Verifiqué que es local/))
+    fireEvent.click(campo(/Es mayor de 18 años/))
+    fireEvent.click(screen.getByText('Dar de alta'))
+  }
+
+  it('«Dar de alta» muestra el número formateado y NO da de alta ni arma el link hasta «Sí, es este»', async () => {
+    llenar()
+    expect(screen.getByText('¿Este es su WhatsApp? +506 8888 0000')).toBeTruthy()
+    expect(api.socioAltaCaja).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Mandarle su link por WhatsApp/)).toBeNull()
+    expect(document.querySelector('a[href^="https://wa.me/"]')).toBeNull()
+    fireEvent.click(screen.getByText('Sí, es este'))
+    const a = await screen.findByText(/Mandarle su link por WhatsApp/)
+    expect(api.socioAltaCaja).toHaveBeenCalledTimes(1)
+    expect(a.closest('a')!.getAttribute('href')!.startsWith('https://wa.me/50688880000?text=')).toBe(true)
+  })
+
+  it('«Corregir» vuelve al campo del WhatsApp sin dar de alta; el número corregido se vuelve a confirmar y es el que se usa', async () => {
+    llenar('88880001')
+    fireEvent.click(screen.getByText('Corregir'))
+    expect(screen.queryByText(/¿Este es su WhatsApp\?/)).toBeNull()
+    expect(document.activeElement).toBe(campo(/^WhatsApp$/))
+    expect(api.socioAltaCaja).not.toHaveBeenCalled()
+    fireEvent.change(campo(/^WhatsApp$/), { target: { value: '88880000' } })
+    fireEvent.click(screen.getByText('Dar de alta'))
+    expect(screen.getByText('¿Este es su WhatsApp? +506 8888 0000')).toBeTruthy()
+    fireEvent.click(screen.getByText('Sí, es este'))
+    const a = await screen.findByText(/Mandarle su link por WhatsApp/)
+    expect(api.socioAltaCaja).toHaveBeenCalledWith('Ana Prueba', '88880000', null, true, true, null)
+    expect(a.closest('a')!.getAttribute('href')!.startsWith('https://wa.me/50688880000?text=')).toBe(true)
+  })
+
+  it('cambiar el número mientras se confirma cierra la confirmación (no se confirma un número que no se leyó)', () => {
+    llenar()
+    fireEvent.change(campo(/^WhatsApp$/), { target: { value: '88880009' } })
+    expect(screen.queryByText('Sí, es este')).toBeNull()
+    expect(api.socioAltaCaja).not.toHaveBeenCalled()
+  })
+
+  it('un WhatsApp sin números no se puede confirmar', () => {
+    llenar('—')
+    expect(screen.getByText(/no tiene números/)).toBeTruthy()
+    expect(screen.queryByText('Sí, es este')).toBeNull()
+    expect(api.socioAltaCaja).not.toHaveBeenCalled()
   })
 })

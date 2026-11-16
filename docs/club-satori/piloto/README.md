@@ -6,7 +6,7 @@ mandarlo).
 | Archivo | Para quién | Idioma |
 |---|---|---|
 | `guia-rapida-caja.html` (+ `.pdf` para imprimir, una página A4) | Caja: escanear, qué marcar en el PoS, si sale rojo, canje con código, alta en caja | ES |
-| `cartel-caja-tarjeta-vieja.html` (+ `.pdf`, una página A4) | Caja: el QR único de «Tarjeta vieja (sin QR)» (tarjeta de papel de un anfitrión). Lo genera `scripts/club/cartel_caja.mjs`; no editar a mano | ES |
+| `cartel-caja-tarjeta-vieja.html` (+ `.pdf`, una página A4) | Caja: el QR único de «Tarjeta vieja» (tarjeta de papel de un anfitrión). Lo genera `scripts/club/cartel_caja.mjs`; no editar a mano | ES |
 | `mensaje-anfitriones.md` | Hoteles y concierges: qué cambia, cómo guardan el pase, cómo comparten su link, cómo canjean | ES y EN |
 | `mensaje-socios.md` | Socios del Local Club: el pase, el beneficio, «vale en todos los Satori» | ES y EN |
 

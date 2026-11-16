@@ -3,15 +3,15 @@
  *  · Cupón vigente → personas + PEDIDO (de los abiertos en el PoS) → confirmar → «+N personas a {referente}».
  *    Plan B si el pedido ya se cerró o la lista no carga: elegir la factura de las últimas 2 h (en la tarjeta física, mig
  *    174: las cobradas hoy o buscarla por tiquete hasta 3 días atrás).
- *  · Pase de referente (/r/) → saldo y «Tarjeta física». NO habilita el canje (R-01): cualquiera puede
+ *  · Pase de referente (/r/) → saldo y «Tarjeta vieja». NO habilita el canje (R-01): cualquiera puede
  *    tener una foto del QR de la recepción.
  *  · Código de canje (/k/, 6 caracteres, lo genera el referente en su portal y vence a los 10 min) →
  *    canje (1 / 1,5 / 2). Respaldo sin celular: «Canje sin celular», solo owner o manager, con nota.
  *  · Usado, vencido, dado de baja o desconocido → una línea clara.
  *  Plan B: código a mano y búsqueda (nombre, negocio o últimos 4 del teléfono), que busca mientras se escribe.
- *  · «Tarjeta vieja (sin QR)» (piloto; decisión del dueño 11-nov, puesta al día 16-nov): el cliente llega con la tarjeta de
+ *  · «Tarjeta vieja» (piloto; decisión del dueño 11-nov, puesta al día 16-nov): el cliente llega con la tarjeta de
  *    papel de un anfitrión. La caja toca el botón (o escanea el QR único de caja) → busca al anfitrión → se abre su ficha
- *    en «Tarjeta física» → personas + pedido. Es el MISMO camino que «Tarjeta física» (`club_tarjeta_manual`: interruptor
+ *    en «Tarjeta vieja» → personas + pedido. Es el MISMO camino de servidor de siempre (`club_tarjeta_manual`: interruptor
  *    del local, topes y excepción para revisión): la pantalla no agrega reglas. Solo anfitriones ya inscriptos; el botón
  *    solo aparece con `tarjeta_manual_activa` en el local. La caja no muestra ningún QR.
  * Idempotencia: un `p_op` por intento; si falla la red, el reintento usa el mismo.
@@ -56,7 +56,9 @@ type Mensaje = { tono: 'ok' | 'error' | 'info'; texto: string; link?: { href: st
 
 /** Búsqueda mientras se escribe: espera entre la última tecla y la consulta (la base tiene un tope de búsquedas por minuto). */
 export const ESPERA_BUSQUEDA_MS = 450
-export const MSG_TARJETA_VIEJA_APAGADA = 'La tarjeta física está apagada en este local: registrá la visita con el cupón del turista.'
+/** (16-nov, decisión del dueño) Artículo del PoS con la tarjeta vieja: el mismo del cupón (vale ₡0, es la marca). */
+export const MARCA_TARJETA_VIEJA = '«PROMO CLUB 10 %»'
+export const MSG_TARJETA_VIEJA_APAGADA = 'La tarjeta vieja está apagada en este local: registrá la visita con el cupón del turista.'
 export const MSG_SIN_RESULTADOS_VIEJA = 'Sin resultados. Si el anfitrión no está inscripto, no se puede cargar su tarjeta: avisale al manager.'
 
 export default function Escanear() {
@@ -69,7 +71,7 @@ export default function Escanear() {
   const [cargando, setCargando]   = useState(false)
   const [actual, setActual]       = useState<Actual | null>(null)
   const [msg, setMsg]             = useState<Mensaje | null>(null)
-  // «Tarjeta vieja (sin QR)»: solo una entrada de pantalla; lo demás es «Tarjeta física»
+  // «Tarjeta vieja»: solo una entrada de pantalla; lo demás es «Tarjeta vieja»
   const [vieja, setVieja]         = useState(false)
   const [tarjetaActiva, setTarjetaActiva] = useState<boolean | null>(null)   // null = todavía no se sabe
   const [buscando, setBuscando]   = useState(false)
@@ -107,7 +109,7 @@ export default function Escanear() {
   function cerrarTarjetaVieja() { turnoBusqueda.current++; setVieja(false); setResultados(null); setQ(''); setBuscando(false) }
 
   async function resolver(texto: string, silencioso = false) {
-    // El QR de caja no es un código del Club: es el atajo a «Tarjeta vieja (sin QR)». No da ningún permiso.
+    // El QR de caja no es un código del Club: es el atajo a «Tarjeta vieja». No da ningún permiso.
     if (esQrCaja(texto)) { abrirTarjetaVieja(); return }
     const p = parsearQR(texto)
     if (p.tipo === 'desconocido' || !p.codigo) {
@@ -222,7 +224,7 @@ export default function Escanear() {
       } else if (modoRef === 'tarjeta') {
         const n = Number(personas)
         await tarjetaManual(actual.r.datos.id, n, pos!, opDe('tarjeta'))
-        setMsg({ tono: 'ok', texto: `Tarjeta física: +${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.nombre}` })
+        setMsg({ tono: 'ok', texto: `Tarjeta vieja: +${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.nombre}` })
         delete ops.current.tarjeta; limpiarFormularios()
         await refrescarFicha(actual)
       }
@@ -263,17 +265,17 @@ export default function Escanear() {
             </Btn>
           )}
 
-          {/* Piloto: solo con la tarjeta física encendida en el local. Termina en «Tarjeta física» (mismo servidor). */}
+          {/* Piloto: solo con la tarjeta vieja (`tarjeta_manual`) encendida en el local. Termina en la ficha con «Tarjeta vieja» (mismo servidor). */}
           {tarjetaActiva === true && !vieja && !camara && (
-            <Btn big variant="secondary" onClick={abrirTarjetaVieja}>Tarjeta vieja (sin QR)</Btn>
+            <Btn big variant="secondary" onClick={abrirTarjetaVieja}>Tarjeta vieja</Btn>
           )}
           {vieja && (
             <Card style={{ border: `2px solid ${C.ink}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                 <div>
-                  <strong style={{ fontSize: '1.1rem' }}>Tarjeta vieja (sin QR)</strong>
+                  <strong style={{ fontSize: '1.1rem' }}>Tarjeta vieja</strong>
                   <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 2 }}>
-                    Llegó con la tarjeta de papel de un anfitrión: buscalo (nombre, negocio o los últimos 4 del teléfono) y
+                    Llegó con la tarjeta de papel de un anfitrión (sin QR): buscalo (nombre, negocio o los últimos 4 del teléfono) y
                     elegilo de la lista. Solo anfitriones ya inscriptos. No le muestres ningún QR al cliente.
                   </div>
                 </div>
@@ -679,7 +681,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
               )}
               <div style={{ display: 'flex', gap: 6, margin: '12px 0' }}>
                 {d.tarjeta_manual_activa && (
-                  <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
+                  <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta vieja</Btn>
                 )}
                 {gestiona && !sinCreditos && (
                   <Btn variant={modo === 'aprobado' ? 'primary' : 'secondary'} onClick={() => setModo('aprobado')} style={{ flex: 1 }}>Canje sin celular</Btn>
@@ -738,14 +740,15 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
             ) : d.tarjeta_manual_activa ? (
               <>
                 <div style={{ fontSize: '0.85rem', color: C.muted }}>
-                  La tarjeta de papel del anfitrión (tarjeta vieja, sin QR) se carga acá: personas de la mesa y pedido. Queda
-                  como excepción «Tarjeta física» para que la revise otra persona.
+                  La tarjeta de papel del anfitrión (sin QR) se carga acá: personas de la mesa y pedido. En el PoS aplicá el
+                  10 % y marcá el artículo {MARCA_TARJETA_VIEJA} (vale ₡0: es la marca), como con el cupón. Queda como
+                  excepción «Tarjeta vieja» para que la revise otra persona.
                 </div>
                 <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
                 <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} modoTarjeta />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando ? (
-                  <Confirmacion texto={`Tarjeta física: +${p.personas} personas a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
+                  <Confirmacion texto={`Tarjeta vieja: +${p.personas} personas a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
                     enviando={p.enviando} onConfirmar={p.onConfirmar} onVolver={() => p.setConfirmando(false)} />
                 ) : (
                   <Btn big disabled={!p.personasOk || !p.facturaOk} onClick={() => p.setConfirmando(true)}>Continuar</Btn>

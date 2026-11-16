@@ -46,7 +46,7 @@ export default function Comparacion() {
     <Card>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>Comparación con la página vieja</div>
       <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
-        Piloto en paralelo: personas por referente y por semana, cargadas en el Club (cupones y tarjeta física) y en la página vieja.
+        Piloto en paralelo: personas por referente y por semana, cargadas en el Club (cupones y tarjeta vieja) y en la página vieja.
       </div>
       {msg && <Aviso tono={msg.tono} onClose={() => setMsg(null)}>{msg.t}</Aviso>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>

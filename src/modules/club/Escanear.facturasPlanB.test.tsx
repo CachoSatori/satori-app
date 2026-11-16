@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Mig 174 (decisión del dueño, 15-nov, opción A) · Escanear → «Tarjeta física» → «Factura (plan B)»: la lista muestra las
+// Mig 174 (decisión del dueño, 15-nov, opción A) · Escanear → «Tarjeta vieja» (antes «Tarjeta física») → «Factura (plan B)»: la lista muestra las
 // facturas cobradas HOY (día CR) y se busca por los últimos dígitos del tiquete (mínimo 4, hasta 3 días atrás). Una factura
 // que ya tiene tarjeta o cupón se ve marcada y no se puede elegir. Datos ficticios.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -43,7 +43,7 @@ async function abrirPlanB() {
   fireEvent.change(screen.getByPlaceholderText('Cupón, canje, socio o pase'), { target: { value: 'ABCDEFGH' } })
   fireEvent.click(screen.getByText('Ver'))
   await screen.findByText('Persona Prueba')
-  fireEvent.click(screen.getByText('Tarjeta física'))
+  fireEvent.click(screen.getByRole('button', { name: 'Tarjeta vieja' }))
   await screen.findByText('Factura (plan B)')
 }
 

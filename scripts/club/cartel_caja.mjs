@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Piloto (decisión del dueño 11-nov; puesta al día 16-nov) · Cartel del QR ÚNICO de caja: «Tarjeta vieja (sin QR)».
+// Piloto (decisión del dueño 11-nov; puesta al día 16-nov) · Cartel del QR ÚNICO de caja: «Tarjeta vieja».
 // HTML A4 imprimible, sin fuentes ni imágenes de afuera (system-ui, como la guía rápida de caja).
 //
 //   node scripts/club/cartel_caja.mjs
@@ -8,7 +8,7 @@
 //
 // El QR es un texto FIJO (el mismo en todos los locales; `QR_CAJA_TARJETA_VIEJA` de src/modules/club/qrFormato.ts; la
 // prueba qrFormato.test.ts comprueba que no se separen y que el HTML guardado lleve ese QR). La pantalla «Escanear» lo
-// reconoce y abre «Tarjeta vieja (sin QR)». No es un link y no da ningún permiso: el permiso es el usuario, su rol y
+// reconoce y abre «Tarjeta vieja». No es un link y no da ningún permiso: el permiso es el usuario, su rol y
 // `tarjeta_manual_activa` en el local. Es para la caja; no se le muestra al cliente. Sin dominio, sin locales, sin montos
 // y sin datos personales.
 import { writeFileSync } from 'node:fs'
@@ -29,7 +29,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tarjeta vieja (sin QR) · QR de caja · Club Satori</title>
+<title>Tarjeta vieja · QR de caja · Club Satori</title>
 <!-- Generado por scripts/club/cartel_caja.mjs. No editar a mano: cambiar el script y volver a generar. Sin datos personales. -->
 <style>
   @page { size: A4; margin: 14mm 16mm; }
@@ -56,32 +56,34 @@ const html = `<!doctype html>
     <div class="marca">Club Satori</div>
     <div class="cab-der">Solo para la caja<br>No es para el cliente</div>
   </div>
-  <h1>Tarjeta vieja (sin QR)</h1>
-  <p class="sub">El cliente llega con la tarjeta de papel de un anfitrión</p>
+  <h1>Tarjeta vieja</h1>
+  <p class="sub">El cliente llega con la tarjeta de papel de un anfitrión (sin QR)</p>
   <div class="cuerpo">
     <div>
       <h2>Qué hacer</h2>
       <ol>
         <li>En la app: <b>Club → Escanear → «📷 Escanear»</b> y apuntá a este código. Es lo mismo que tocar
-          <b>«Tarjeta vieja (sin QR)»</b>.</li>
+          <b>«Tarjeta vieja»</b>.</li>
         <li><b>Buscá al anfitrión</b> de la tarjeta: nombre, negocio o los últimos 4 del teléfono. La lista sale mientras
           escribís; elegilo.</li>
-        <li>Se abre su ficha en <b>«Tarjeta física»</b>: cargá las <b>personas de la mesa</b> y elegí el <b>pedido</b>
+        <li>Se abre su ficha en <b>«Tarjeta vieja»</b>: cargá las <b>personas de la mesa</b> y elegí el <b>pedido</b>
           (si ya se cobró: «El pedido no está» → la factura).</li>
-        <li><b>Continuar → Confirmar.</b> Tiene que decir «Tarjeta física: +N personas a …».</li>
+        <li><b>Continuar → Confirmar.</b> Tiene que decir «Tarjeta vieja: +N personas a …».</li>
+        <li><b>En el PoS, igual que el cupón:</b> aplicá el 10 % y marcá el artículo <b>«PROMO CLUB 10 %»</b> (vale ₡0: es
+          la marca).</li>
       </ol>
       <div class="no"><b>Si el anfitrión no aparece</b>, no está inscripto: no se carga a otro. Avisale al manager.</div>
       <h2>Para tener en cuenta</h2>
       <ul>
         <li>No le muestres ningún QR al cliente: este código es de la caja.</li>
-        <li>Cada tarjeta queda como excepción «Tarjeta física» y la revisa otra persona.</li>
+        <li>Cada tarjeta queda como excepción «Tarjeta vieja» y la revisa otra persona.</li>
         <li>Hay topes por anfitrión: si se pasa, la app avisa y no se carga.</li>
         <li>Si el cliente trae el <b>cupón en su teléfono</b>, no es tarjeta vieja: escaneá su cupón.</li>
       </ul>
     </div>
     <div class="qr">${qr}<div class="leyenda">Escanealo con «📷 Escanear» de la app.<br>Con la cámara del teléfono no abre nada.</div></div>
   </div>
-  <p class="pie">Piloto del Club · solo funciona con la tarjeta física encendida en el local · sale de la guía 6.13 (Tarea 4b)</p>
+  <p class="pie">Piloto del Club · solo funciona con la tarjeta vieja encendida en el local · sale de la guía 6.13 (Tarea 4b)</p>
 </body>
 </html>
 `

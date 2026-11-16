@@ -68,7 +68,7 @@ export interface ResolverReferente {
            /** (08-nov) para mostrar créditos y colones juntos, como el pase. */
            valor_credito_crc?: number
            canjeado_hoy: number; canje_min: number; canje_paso: number; max_creditos_por_visita: number
-           /** CLUB-AUD-26: tarjeta física habilitada en este local (staging sí, prod no). */
+           /** CLUB-AUD-26: tarjeta vieja (`tarjeta_manual`) habilitada en este local (staging sí, prod no). */
            tarjeta_manual_activa?: boolean
            /** D7 A (mig 157): cuenta del equipo → sin créditos ni canje; `personas_mes` = personas registradas en el mes. */
            sin_creditos?: boolean; personas_mes?: number }
@@ -109,6 +109,13 @@ export class ClubError extends Error {
 
 const RE_RED = /failed to fetch|networkerror|network request failed|load failed|fetch failed|timeout|timed out|aborted/i
 
+/**
+ * (16-nov, decisión del dueño) Nombre único para el personal: «Tarjeta vieja». Algunos avisos del servidor (tope diario,
+ * interruptor apagado) todavía dicen «tarjeta física»; se cambia SOLO el texto que se ve, nunca la base ni los valores.
+ */
+export const conNombreTarjetaVieja = (msg: string): string =>
+  msg.replace(/([Tt])arjeta f[ií]sica/g, (_, t: string) => `${t}arjeta vieja`).replace(/TARJETA F[IÍ]SICA/g, 'TARJETA VIEJA')
+
 export function aClubError(e: unknown): ClubError {
   if (e instanceof ClubError) return e
   const msg = e instanceof Error ? e.message : (e as { message?: string } | null)?.message ?? String(e)
@@ -116,7 +123,7 @@ export function aClubError(e: unknown): ClubError {
   if (RE_RED.test(msg)) return new ClubError('Sin conexión. Reintentá: no se va a duplicar.', true)
   if (/ficha de otro local/i.test(msg)) return new ClubError(MSG_FICHA_OTRO_LOCAL, false, 'FICHA_OTRO_LOCAL')
   if (/permission denied|sin permiso/i.test(msg)) return new ClubError('Tu usuario no tiene permiso para esto: pedile a un manager.', false)
-  return new ClubError(msg, false)
+  return new ClubError(conNombreTarjetaVieja(msg), false)
 }
 
 async function llamar<T>(fn: string, args: Record<string, unknown>): Promise<T> {
@@ -255,10 +262,10 @@ export const MIN_CARACTERES_BUSQUEDA = 3
 export const consultaBusquedaValida = (q: string) => q.trim().length >= MIN_CARACTERES_BUSQUEDA
 
 /**
- * Piloto (11-nov, puesta al día 16-nov) · «Tarjeta vieja (sin QR)»: ¿la tarjeta física está encendida en el local?
+ * Piloto (11-nov, puesta al día 16-nov) · «Tarjeta vieja»: ¿la tarjeta vieja (`tarjeta_manual`) está encendida en el local?
  * Lee `club_config.tarjeta_manual_activa` (lectura del staff por RLS, como `getLocalesClub`). Con un local elegido, el de
  * ese local; sin elegir, alguno de los locales con el Club encendido. SOLO decide si se muestra el botón: quien decide si
- * se puede cargar es la base, en `club_tarjeta_manual` (interruptor, topes y excepción), igual que «Tarjeta física».
+ * se puede cargar es la base, en `club_tarjeta_manual` (interruptor, topes y excepción), igual que la carga de la ficha del anfitrión.
  */
 export const getTarjetaManualActiva = async (local: string | null = localClub): Promise<boolean> => {
   const filas = await leer(from<{ location_id: string; club_activo: boolean; tarjeta_manual_activa: boolean }>('club_config')

@@ -23,8 +23,8 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   REGISTRO_SIN_FACTURA: { titulo: 'Registro sin factura', que: 'Cupón, tarjeta o canje con un número de factura que no está en el PoS.' },
   CREDITOS_SIN_CANJE:   { titulo: 'Créditos sin canje',   que: 'Factura pagada «a crédito» por un múltiplo de medio crédito, sin canje en el Club.' },
   CANJE_MONTO_DISTINTO: { titulo: 'Canje con monto distinto', que: 'El valor del canje no coincide con lo cobrado «a crédito» en la factura.' },
-  PROMO_SIN_CUPON:      { titulo: 'Promo sin cupón',      que: 'Factura con el artículo de la promo 10 % y sin cupón ni tarjeta registrada.' },
-  TARJETA_MANUAL:       { titulo: 'Tarjeta física',       que: 'Tarjeta impresa cargada a mano (piloto en paralelo). Siempre se revisa; no la resuelve quien la cargó.' },
+  PROMO_SIN_CUPON:      { titulo: 'Promo sin cupón',      que: 'Factura con el artículo de la promo 10 % y sin cupón ni tarjeta vieja registrada.' },
+  TARJETA_MANUAL:       { titulo: 'Tarjeta vieja',        que: 'Tarjeta de papel de un anfitrión (sin QR) cargada a mano (piloto en paralelo). Siempre se revisa; no la resuelve quien la cargó.' },
   CANJE_SIN_CODIGO:     { titulo: 'Canje sin código',     que: 'Canje sin celular aprobado por owner o manager. Siempre se revisa; no lo resuelve quien lo aprobó.' },
   CUPON_SIN_PROMO:      { titulo: 'Cupón sin promo',      que: 'Cupón usado en una visita cuyas facturas no tienen el artículo de la promo 10 %: sumó personas sin descuento aplicado.' },
   // LC-A5 · Local Club

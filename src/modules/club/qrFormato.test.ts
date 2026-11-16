@@ -122,11 +122,11 @@ describe('comparación con la página vieja: pegado', () => {
   })
 })
 
-// Piloto (11-nov; puesta al día 16-nov): el QR único de caja de «Tarjeta vieja (sin QR)».
+// Piloto (11-nov; puesta al día 16-nov): el QR único de caja de «Tarjeta vieja».
 import { readFileSync } from 'node:fs'
 import QRCode from 'qrcode'
 import { QR_CAJA_TARJETA_VIEJA, esQrCaja } from './qrFormato'
-describe('QR de caja · Tarjeta vieja (sin QR)', () => {
+describe('QR de caja · Tarjeta vieja', () => {
   it('se reconoce (con espacios o minúsculas) y no es ningún código del Club', () => {
     expect(esQrCaja(QR_CAJA_TARJETA_VIEJA)).toBe(true)
     expect(esQrCaja(`  ${QR_CAJA_TARJETA_VIEJA.toLowerCase()} `)).toBe(true)

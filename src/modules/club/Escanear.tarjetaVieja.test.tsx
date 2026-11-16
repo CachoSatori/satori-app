@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-// Piloto (decisión del dueño 11-nov; puesta al día 16-nov, del #118) · Escanear → «Tarjeta vieja (sin QR)»: la tarjeta de
-// PAPEL de un anfitrión que trae un turista. Botón propio (solo con la tarjeta física encendida en el local), QR único de
-// caja, búsqueda mientras se escribe, y termina en el MISMO camino de servidor que «Tarjeta física» (`tarjetaManual` →
+// Piloto (decisión del dueño 11-nov; puesta al día 16-nov, del #118) · Escanear → «Tarjeta vieja»: la tarjeta de
+// PAPEL de un anfitrión que trae un turista. Botón propio (solo con la tarjeta vieja —`tarjeta_manual`— encendida en el local), QR único de
+// caja, búsqueda mientras se escribe, y termina en el MISMO camino de servidor de siempre (`tarjetaManual` →
 // club_tarjeta_manual). Además: el aviso falso «Código no reconocido» después de Confirmar sobre una ficha abierta por
 // «Buscar». La pantalla real contra una API simulada. Datos ficticios.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -41,7 +41,7 @@ function escribirCodigo(codigo: string) {
 
 async function abrirVieja() {
   render(<Escanear />)
-  fireEvent.click(await screen.findByText('Tarjeta vieja (sin QR)'))
+  fireEvent.click(await screen.findByRole('button', { name: 'Tarjeta vieja' }))
   return screen.getByLabelText('Buscar referente por nombre, negocio o últimos 4 del teléfono')
 }
 
@@ -52,7 +52,7 @@ async function cargarTarjeta() {
   fireEvent.click(await screen.findByText('Confirmar'))
 }
 
-describe('Escanear · «Tarjeta vieja (sin QR)»', () => {
+describe('Escanear · «Tarjeta vieja»', () => {
   beforeEach(() => {
     rol.v = 'cajero'
     api.getTarjetaManualActiva.mockReset().mockResolvedValue(true)
@@ -66,12 +66,12 @@ describe('Escanear · «Tarjeta vieja (sin QR)»', () => {
     api.buscarFacturas.mockReset().mockResolvedValue([])
   })
 
-  it('el botón solo aparece con la tarjeta física encendida en el local', async () => {
+  it('el botón solo aparece con la tarjeta vieja encendida en el local', async () => {
     api.getTarjetaManualActiva.mockResolvedValue(false)
     render(<Escanear />)
     await waitFor(() => expect(api.getTarjetaManualActiva).toHaveBeenCalled())
     await act(async () => { await Promise.resolve() })
-    expect(screen.queryByText('Tarjeta vieja (sin QR)')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Tarjeta vieja' })).toBeNull()
   })
 
   it('busca mientras se escribe (con 3 caracteres, una sola consulta tras la espera) y abre la ficha por id', async () => {
@@ -84,8 +84,13 @@ describe('Escanear · «Tarjeta vieja (sin QR)»', () => {
     expect(api.buscar).toHaveBeenCalledWith('Pers')
     fireEvent.click(await screen.findByText('Persona Prueba'))
     await waitFor(() => expect(api.resolverMiembro).toHaveBeenCalledWith('m1'))
-    // la ficha abre en «Tarjeta física» (el camino de siempre), sin código de QR (CLUB-AUD-30)
+    // la ficha abre en «Tarjeta vieja» (el camino de siempre), sin código de QR (CLUB-AUD-30)
     expect(await screen.findByText(/La tarjeta de papel del anfitrión/)).toBeTruthy()
+    // (16-nov, decisión del dueño) en el PoS se marca «PROMO CLUB 10 %», como con el cupón
+    expect(screen.getByText(/marcá el artículo «PROMO CLUB 10 %» \(vale ₡0: es la marca\), como con el cupón/)).toBeTruthy()
+    expect(screen.getByText(/excepción «Tarjeta vieja»/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Tarjeta vieja' })).toBeTruthy()
+    expect(screen.queryByText(/Tarjeta f[ií]sica/)).toBeNull()
     expect(api.resolverQR).not.toHaveBeenCalled()
   })
 
@@ -110,7 +115,7 @@ describe('Escanear · «Tarjeta vieja (sin QR)»', () => {
     expect(screen.queryByText('Persona Prueba')).toBeNull()
   })
 
-  it('Confirmar usa el MISMO camino de servidor que «Tarjeta física» y no muestra «Código no reconocido»', async () => {
+  it('Confirmar usa el MISMO camino de servidor de siempre, dice «Tarjeta vieja: +N…» y no muestra «Código no reconocido»', async () => {
     const campo = await abrirVieja()
     fireEvent.change(campo, { target: { value: 'Persona' } })
     fireEvent.click(await screen.findByText('Persona Prueba', undefined, espera))
@@ -118,7 +123,8 @@ describe('Escanear · «Tarjeta vieja (sin QR)»', () => {
     await waitFor(() => expect(api.tarjetaManual).toHaveBeenCalledTimes(1))
     const [miembro, personas, pos] = api.tarjetaManual.mock.calls[0]
     expect([miembro, personas, pos?.modo]).toEqual(['m1', 2, 'pedido'])
-    expect(await screen.findByText('Tarjeta física: +2 personas a Persona Prueba')).toBeTruthy()
+    expect(await screen.findByText('Tarjeta vieja: +2 personas a Persona Prueba')).toBeTruthy()
+    expect(screen.queryByText(/Tarjeta f[ií]sica/)).toBeNull()
     // la ficha se relee por id (no hay código que resolver) y el aviso de éxito queda
     await waitFor(() => expect(api.resolverMiembro).toHaveBeenCalledTimes(2))
     expect(screen.queryByText(/Código no reconocido/)).toBeNull()
@@ -143,16 +149,16 @@ describe('Escanear · «Tarjeta vieja (sin QR)»', () => {
     expect(screen.queryByText(/Código no reconocido/)).toBeNull()
   })
 
-  it('el QR de caja abre «Tarjeta vieja (sin QR)» sin pasar por el servidor del Club', async () => {
+  it('el QR de caja abre «Tarjeta vieja» sin pasar por el servidor del Club', async () => {
     render(<Escanear />)
-    await screen.findByText('Tarjeta vieja (sin QR)')
+    await screen.findByRole('button', { name: 'Tarjeta vieja' })
     escribirCodigo(QR_CAJA_TARJETA_VIEJA.toLowerCase())
     expect(await screen.findByText('Anfitrión de la tarjeta')).toBeTruthy()
     expect(api.resolverQR).not.toHaveBeenCalled()
     expect(screen.queryByText(/Código no reconocido/)).toBeNull()
   })
 
-  it('el QR de caja con la tarjeta física apagada: aviso claro, sin buscador', async () => {
+  it('el QR de caja con la tarjeta vieja apagada: aviso claro, sin buscador', async () => {
     api.getTarjetaManualActiva.mockResolvedValue(false)
     render(<Escanear />)
     await waitFor(() => expect(api.getTarjetaManualActiva).toHaveBeenCalled())

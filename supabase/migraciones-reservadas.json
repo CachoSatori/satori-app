@@ -219,6 +219,12 @@
       "rama": "claude/club-cumple-promo",
       "renumerada_a": "173"
     },
+    "120": {
+      "nombre": "club_facturas_dia_busqueda",
+      "bloque": "club",
+      "rama": "claude/club-facturas-dia-busqueda",
+      "renumerada_a": "174"
+    },
     "121": {
       "nombre": "club_cumple_uso_anual",
       "bloque": "club",
@@ -356,6 +362,12 @@
       "bloque": "pase",
       "rama": "claude/club-cumple-promo",
       "origen": "119"
+    },
+    "174": {
+      "nombre": "club_facturas_dia_busqueda",
+      "bloque": "pase",
+      "rama": "claude/club-facturas-dia-busqueda",
+      "origen": "120"
     },
     "175": {
       "nombre": "club_cumple_uso_anual",

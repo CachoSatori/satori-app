@@ -1,8 +1,9 @@
 /**
  * Mig 173 (D-cumple-2, firmada por el dueño el 15-nov) · Club → Promociones → «Beneficio de cumpleaños».
  * Por local: encendido, texto del beneficio (por defecto «postre de cortesía»; sirve para ofrecer otra cosa cambiando el
- * texto), mínimo de personas, días antes y después del cumpleaños, uno por mesa, solo con reserva, link de reserva
- * (OpenTable por defecto; desde la mig 179 solo de OpenTable, y es también el de «Reservar» del portal del socio) y el artículo de «CORTESÍA CLUB» que marca la caja (₡0; el tablero lo cuenta a costo).
+ * texto), mínimo de personas, días antes y después del cumpleaños, uno por mesa, solo con reserva y el artículo de
+ * «CORTESÍA CLUB» que marca la caja (₡0; el tablero lo cuenta a costo). Mig 180: el link de reservas (OpenTable) es del
+ * LOCAL y se edita en Club → Locales; acá solo se muestra (la base ignora el que venga en el formulario).
  * Lo editan el owner y el manager de SU local (la base corta al manager en otro local). Cada cambio queda en la auditoría.
  * Lo que se guarda acá es lo que dice el WhatsApp del Inicio y lo que ve el cajero en Escanear.
  */
@@ -38,7 +39,7 @@ export function ConfigCumple({ edita }: { edita: boolean }) {
     if (!d) return
     setEnviando(true); setError(null); setOk(null)
     try {
-      const c = await guardarCumpleConfig({ ...d, ...cambio, beneficio: d.beneficio.trim(), reserva_url: d.reserva_url?.trim() || null })
+      const c = await guardarCumpleConfig({ ...d, ...cambio, beneficio: d.beneficio.trim() })   // 180: reserva_url va como vino (la base lo ignora)
       setCfg(c); setD(aDatos(c))
       setOk(cambio.activo === true ? 'Encendido: el Inicio avisa los cumpleaños y la caja ofrece el beneficio en la ventana.'
         : cambio.activo === false ? 'Apagado: el Inicio no avisa y la caja no lo ofrece.' : 'Guardado.')
@@ -88,8 +89,13 @@ export function ConfigCumple({ edita }: { edita: boolean }) {
                 <input type="checkbox" checked={d.solo_reserva} onChange={e => setD({ ...d, solo_reserva: e.target.checked })} />
                 <span>Solo con reserva</span>
               </label>
-              <label><span style={labelStyle}>Link de OpenTable de este local (copialo tal cual; lo usa también «Reservar» del portal del socio)</span>
-                <input value={d.reserva_url ?? ''} onChange={e => setD({ ...d, reserva_url: e.target.value })} inputMode="url" style={inputStyle} aria-label="Link de reserva" /></label>
+              <div>
+                <span style={labelStyle}>Link de reservas de este local (OpenTable)</span>
+                <div style={{ fontSize: '0.85rem', wordBreak: 'break-all' }} aria-label="Link de reservas del local">
+                  {cfg.reserva_url ?? <span style={{ color: C.muted }}>sin link</span>}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: C.muted }}>Se edita en Club → Locales (solo el owner).</div>
+              </div>
               <label><span style={labelStyle}>Artículo de «CORTESÍA CLUB» que marca la caja (solo los activos)</span>
                 <select value={d.cortesia_id ?? ''} onChange={e => setD({ ...d, cortesia_id: e.target.value || null })} style={inputStyle} aria-label="Artículo de cortesía del cumpleaños">
                   <option value="">— ninguno —</option>

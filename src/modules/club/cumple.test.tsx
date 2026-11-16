@@ -192,6 +192,14 @@ describe('Promociones: beneficio de cumpleaños', () => {
     expect(g[1].p_datos).toEqual({ activo: true, beneficio: 'una copa de vino', min_personas: 5, dias_antes: 7, dias_despues: 7,
       uno_por_mesa: true, solo_reserva: true, reserva_url: 'https://reservas.ejemplo.test/r?rid=1', cortesia_id: 'k1' })
   })
+  it('180: el link de reservas es del local: se muestra solo lectura con «Se edita en Club → Locales», sin campo editable', async () => {
+    render(<ConfigCumple edita />)
+    await screen.findByLabelText('Beneficio')
+    expect(screen.getByLabelText('Link de reservas del local').textContent).toBe('https://reservas.ejemplo.test/r?rid=1')
+    expect(screen.getByText(/Se edita en Club → Locales/)).toBeTruthy()
+    expect(screen.queryByLabelText('Link de reserva')).toBeNull()
+    expect(document.querySelectorAll('input[inputmode="url"]').length).toBe(0)
+  })
   it('quien no edita solo ve', async () => {
     render(<ConfigCumple edita={false} />)
     await screen.findByText(/Hoy:/)

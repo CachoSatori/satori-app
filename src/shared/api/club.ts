@@ -458,6 +458,17 @@ export async function setResenaUrl(id: string, url: string | null): Promise<void
   const filas = await leer(from<{ location_id: string }>('club_config').update({ resena_url: url }).eq('location_id', id).select('location_id'))
   if (filas.length !== 1) throw new ClubError('Solo el owner carga el link de reseña de un local', false)
 }
+/** 180 · El link de reservas (OpenTable) de cada local: «Reservar» del portal, botón de la página del cupón y WhatsApp de
+ * cumpleaños. Aparte de getLocalesClub, como la reseña: si la app llega antes que la columna, solo falla esto. */
+export const getReservasLocales = async (): Promise<Record<string, string | null>> =>
+  Object.fromEntries((await leer(from<{ location_id: string; reserva_url: string | null }>('club_config')
+    .select('location_id,reserva_url'))).map(r => [r.location_id, r.reserva_url ?? null]))
+/** 180 · Solo owner (RLS de club_config; queda en club_config_historial). `null` borra el link. La base solo acepta https
+ * de OpenTable (trigger club_config_reserva_url_trg); acá se valida antes con la misma expresión. */
+export async function setReservaUrl(id: string, url: string | null): Promise<void> {
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ reserva_url: url }).eq('location_id', id).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner carga el link de reservas de un local', false)
+}
 /** Solo owner. Alta de un local: queda APAGADO; con `copiarDe`, arranca con la configuración de ese local. */
 export const crearLocal = (p: { id: string; nombre: string; direccion: string | null; mapa: string | null; copiarDe: string | null }) =>
   llamar<string>('club_local_crear', { p_id: p.id, p_nombre: p.nombre, p_direccion: p.direccion, p_mapa: p.mapa, p_copiar_de: p.copiarDe })

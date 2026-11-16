@@ -58,7 +58,7 @@ export const WALLET_GOOGLE_ACTIVO: boolean = import.meta.env.VITE_WALLET_GOOGLE 
 
 /**
  * D 16-nov (el dueño): «Reservar» en el portal del socio abre OpenTable. Desde la mig 179 el portal devuelve el link del
- * local del socio (`socio.reserva_url`, el de Club → Promociones) y se usa tal cual; este rid público (el por defecto de
+ * local del socio (`socio.reserva_url`; desde la 180 se carga en Club → Locales) y se usa tal cual; este rid público (el por defecto de
  * la 173) queda solo para cuando el local no tiene link (o la base todavía no tiene la 179).
  */
 export const OPENTABLE_RID = '1347736'

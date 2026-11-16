@@ -24,6 +24,7 @@ import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resen
 import { leerAvance, textosAvance } from './avance'
 import { leerRetos, textosReto } from './retos'
 import { tarjetaReservar, urlReservaSocio } from './reservar'
+import { botonReservaCupon } from './reservaCupon'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -102,7 +103,9 @@ const optinHecho = (c: string) => { try { return localStorage.getItem(`club.opti
 const marcarOptin = (c: string) => { try { localStorage.setItem(`club.optin.${c}`, '1') } catch { /* nada */ } }
 
 // ── Vistas ───────────────────────────────────────────────────────────────────
-interface LocalPub { id: string; nombre: string; direccion: string | null; mapa: string | null }
+interface LocalPub { id: string; nombre: string; direccion: string | null; mapa: string | null
+  /** mig 180: link de reservas (OpenTable) del local del cupón, tal cual; null si el local no tiene */
+  reserva?: string | null }
 interface CuponVer { estado: 'vigente' | 'usado' | 'vencido'; vence_en: string; referente: string | null; local?: LocalPub | null
   /** 158: link de reseña de Google del local, solo con el cupón usado hace menos de 7 días */
   resena?: string | null }
@@ -121,7 +124,9 @@ async function vistaCupon(codigo: string, venceEn: string, referente: string | n
       // LC-ML: el local del cupón viene de la base; sin señal, solo la marca
       h('p', { class: 'local' }, [local?.nombre ? `${LOCAL.nombre} · ${local.nombre}` : LOCAL.nombre, local?.direccion].filter(Boolean).join(' · '),
         local?.mapa?.startsWith('https://') ? ' · ' : '',
-        local?.mapa?.startsWith('https://') ? h('a', { href: local.mapa, target: '_blank', rel: 'noopener' }, t.ver_mapa) : '')),
+        local?.mapa?.startsWith('https://') ? h('a', { href: local.mapa, target: '_blank', rel: 'noopener' }, t.ver_mapa) : ''),
+      // 180: «Reservar una mesa» con el OpenTable del local del cupón (Club → Locales); sin link, no aparece
+      botonReservaCupon(local, t.reservar_titulo) ?? ''),
     optinHecho(codigo) ? avisoEl('ok', t.optin_gracias) : formOptin(codigo),
   )
   // 158: mientras el cupón está vigente y la página abierta, se fija cada ~20 s (máx. 10 min) si la caja ya lo usó

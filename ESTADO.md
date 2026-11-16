@@ -1,9 +1,10 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-15, 06:45 hora de Costa Rica.** `main` = **`306b5cf`** (merge del #197). **Ledger de prod = 171.** Todos los
-merges con firma del dueño. El bloque anterior (02:10 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
-**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).**
+**Al día: 2026-11-16, 00:20 hora de Costa Rica.** `main` = merge de este PR de docs. **Ledger de prod = 176**; la **177** entra con
+este merge (su Supabase Preview del #207 falló por timeout de la API de Supabase, no por la migración: ver abajo). Todos los merges
+con firma u OK del dueño. El bloque anterior (06:45 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
+**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md)** (el handoff del 15/16-nov está en el proyecto privado).
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
 > en un PR de docs inmediato después del merge. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se
@@ -11,37 +12,44 @@ merges con firma del dueño. El bloque anterior (02:10 del 15/11) está archivad
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`306b5cf`** (15/11 06:32 -06:00: merge del #197, docs; última migración 171 con #193). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **171**. |
-| `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Desarrollo y proyecto Supabase de staging. Cloudflare Pages (`satori-staging.pages.dev`) publica esta rama. |
+| `main` | **`003e8b6`** antes de este PR (16/11 00:11 -06:00: merge del #207, mig 177). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **176** (177 al mergear este PR). |
+| `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Proyecto Supabase de staging. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
-- **Entraron el 15/11 después de la tanda 156–169** (hora CR, merge SHA):
+- **Entraron entre el 15/11 06:32 y el 16/11 00:11** (hora CR, merge SHA):
 
 | PR | Mig. | Merge | Hora CR | Nota |
 |---|---|---|---|---|
-| #194 | | `cb9f155` | 04:47 | docs (ESTADO tras la tanda nocturna) |
-| #190 | 170 | `a200b2c` | 05:34 | el manager solo ve y opera sus locales. Antes, con firma del dueño (05:27), se asignó en prod el local Santa Teresa a la única manager activa; **Nosara queda sin manager** |
-| #195 | | `591d8d3` | 05:37 | pruebas de #190 que quedaron fuera de su merge; el deploy de Pages de `a200b2c` falló en Tests y quedó resuelto con #195 |
-| #193 | 171 | `8ddf79d` | 05:44 | hotfix `club_miembro_guardar` = 156 + 157 sobre el núcleo de la 170 |
-| #196 | | `de36ef0` | 05:59 | pase de Wallet del equipo («Personas registradas») y avance de 90 días; Edge `club-pase` redeploy a v6 |
-| #197 | | `306b5cf` | 06:32 | docs: definiciones de referente y concierge |
+| #198 | | `c32646a` | 15/11 06:41 | docs: cómo funcionaba el sistema viejo de créditos (`docs/club-satori/historico/`) |
+| #199 | | `5596c8b` | 21:52 | docs: base del 10 % del concierge = subtotal (decisión A del dueño); 153 en prod |
+| #200 | | `1cc0645` | 21:56 | avisos del Inicio directo a la vista (`/caja?vista=pendientes`, `/club?vista=excepciones`). Validado en el local |
+| #201 | | `bbac16e` | 22:03 | montos ₡ con un solo separador (créditos de proveedor) + aviso cuando la fecha de la clave FE difiere de la impresa. Validado |
+| #202 | 172 | `5bf5ecf` | 22:11 | el manager solo opera fichas de su local (20 funciones más; `club_exigir_local_de`) |
+| #203 | 173 | `4ba922e` | 22:17 | cumpleaños en caja y portal + beneficio configurable en Promociones (apagado) + aviso v1.3. Validado |
+| #206 | 174 | `dd7a070` | 23:50 | tarjeta física: facturas cobradas hoy + búsqueda por tiquete hasta 3 días (solo tarjeta; cupón/canje/socio siguen 2 h 15) |
+| #205 | 175 | `9da06d8` | 23:55 | beneficio de cumpleaños una vez por año (servidor; cruce de locales; deshacer solo owner) |
+| #204 | 176 | `aa32dfe` | 23:59 | el manager ve en las listas solo sus locales (funciones + 17 políticas RLS) |
+| #208 | | `ed92dbb` | 16/11 ~00:05 | pruebas del Inicio con fecha fija: los lunes rompían CI (el deploy de `aa32dfe` falló en Tests y quedó resuelto acá) |
+| #207 | 177 | `003e8b6` | 00:11 | el repo declara los tipos numéricos como prod (39 columnas; **sin efecto en prod**, verificado). Supabase Preview falló por timeout de `api.supabase.com` → la 177 entra con el merge siguiente |
 
-- **Regresión de «Editar» socio: cerrada** con la 171 (ya no da «Tipo no válido» y vuelve a generar el link al pasar socio → anfitrión).
 - **Pendiente del dueño / de la sesión:**
-  - **Edge `club-pase`:** redeploy hecho el 15/11 de madrugada → prod **v6 · ACTIVE** (`verify_jwt` off), desde la rama `claude/club-pase-edge` (cabeza `6c5848e`, con `main` mergeado).
-  - **Validación física** de lo que entró (manager con la 170, «Editar» socio con la 171, tanda 156–169).
-  - **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
-    de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging** (la sesión no puede invocar la función: el proxy
-    bloquea `*.supabase.co`).
-- **Seguimientos (backlog, sin fecha):** el contador ve «Cohortes» · funciones por id del manager · funciones nuevas con local
-  (159, 163, 166, 168, 169) sin `club_exigir_local` · OpenTable · buscador de Escanear con socios · botón anfitrión → socio ·
-  fecha elegida en Bandeja · unificar la auditoría de la 161 y la 162 · pasar a SQL fijo el de la 162.
+  - **Tarjeta de barby (15/11, mesa 2):** cargarla en Escanear → Tarjeta física → buscar tiquete por número (la 174 ya está en prod).
+  - **Batería en staging (decisión A del dueño):** mañana con el dueño presente, de la 159 a la 177 (cada corrida pide su aprobación).
+  - **Beneficio de cumpleaños:** apagado; lo prende el dueño en Club → Promociones.
+  - **Pedido del dueño (16/11):** confirmar el teléfono del cliente antes de mandar el link del portal (hallazgo 230) y el link de
+    reservas de OpenTable (rid 1347736) en el portal del socio. Sin hacer.
+  - **Decisión abierta (PASE-177):** 5 columnas que existen en prod y en ninguna migración (`cash_movements.amount_usd`,
+    `cash_sessions.initial_cash_crc/_usd`, `final_cash_crc/_usd`). Recomendado: PR aparte con firma.
+  - **Wallet:** aviso de cumpleaños al Google Wallet con link de OpenTable (PR aparte, Edge `club-pase`).
+  - **Edge `extract-document`:** staging v29 desde `190b5f5`; prod sigue en la versión de `8a8dfb6`; falta prueba funcional en staging.
+- **Backlog (sin fecha):** el contador ve «Cohortes» · buscador de Escanear con socios · botón anfitrión → socio · fecha elegida en
+  Bandeja · unificar la auditoría de la 161 y la 162 · SQL fijo de la 162 · `p_factura` tipeada por API sin ventana (174) · tarjeta del
+  día 1 con factura del mes anterior cuenta en el mes nuevo (174) · `getEdadSocio` lee tabla directo (176) · retos de varios locales
+  cuentan el total (176) · el botón de WhatsApp de cumpleaños marca «enviado» sin deshacer (173) · topes por IP del portal (232).
 - **Local Club sigue en 15 %** hasta el lanzamiento del Club.
-- **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
-  solo de merges.
-- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
-  `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`). (Medidos el 14/11; no se re-midieron en este PR de docs.)
-- **Gate de `main`:** último dato medido (14/11): `vitest run` 2068 tests; se vuelve a medir en cada PR de código.
+- **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño.
+- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (verificados en cada PR del 15/16-nov).
+- **Gate de `main` (16/11 00:11):** `vitest run` 2414 pasan / 4 skip · eslint **82** (tope 83).
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 
 Documentos: fases → [ROADMAP.md](ROADMAP.md) · backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) ·

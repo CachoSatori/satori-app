@@ -1,0 +1,90 @@
+#!/usr/bin/env node
+// Piloto (decisión del dueño 11-nov; puesta al día 16-nov) · Cartel del QR ÚNICO de caja: «Tarjeta vieja (sin QR)».
+// HTML A4 imprimible, sin fuentes ni imágenes de afuera (system-ui, como la guía rápida de caja).
+//
+//   node scripts/club/cartel_caja.mjs
+//   google-chrome --headless --no-pdf-header-footer --print-to-pdf=docs/club-satori/piloto/cartel-caja-tarjeta-vieja.pdf \
+//     docs/club-satori/piloto/cartel-caja-tarjeta-vieja.html
+//
+// El QR es un texto FIJO (el mismo en todos los locales; `QR_CAJA_TARJETA_VIEJA` de src/modules/club/qrFormato.ts; la
+// prueba qrFormato.test.ts comprueba que no se separen y que el HTML guardado lleve ese QR). La pantalla «Escanear» lo
+// reconoce y abre «Tarjeta vieja (sin QR)». No es un link y no da ningún permiso: el permiso es el usuario, su rol y
+// `tarjeta_manual_activa` en el local. Es para la caja; no se le muestra al cliente. Sin dominio, sin locales, sin montos
+// y sin datos personales.
+import { writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+
+const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const require = createRequire(join(RAIZ, 'package.json'))
+const QRCode = require('qrcode')
+
+export const QR_CAJA_TARJETA_VIEJA = 'SATORI-CAJA:TARJETA-VIEJA'
+export const OPCIONES_QR = { type: 'svg', errorCorrectionLevel: 'M', margin: 1, color: { dark: '#111111', light: '#ffffff' } }
+
+const qr = await QRCode.toString(QR_CAJA_TARJETA_VIEJA, OPCIONES_QR)
+const html = `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarjeta vieja (sin QR) · QR de caja · Club Satori</title>
+<!-- Generado por scripts/club/cartel_caja.mjs. No editar a mano: cambiar el script y volver a generar. Sin datos personales. -->
+<style>
+  @page { size: A4; margin: 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 11pt/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #111; background: #fff; }
+  .cab { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #999; padding-bottom: 6px; }
+  .marca { font: 700 18pt/1 Georgia, 'Times New Roman', serif; }
+  .cab-der { text-align: right; color: #444; font-size: 10pt; }
+  h1 { font: 700 34pt/1.05 Georgia, 'Times New Roman', serif; margin: 6mm 0 2mm; }
+  .sub { color: #444; font-size: 14pt; margin: 0 0 5mm; }
+  .cuerpo { display: grid; grid-template-columns: 1fr 80mm; gap: 10mm; align-items: start; }
+  .qr { border: 1px solid #999; border-radius: 6px; padding: 5mm; text-align: center; }
+  .qr svg { width: 100%; height: auto; display: block; }
+  .leyenda { font-size: 10pt; color: #444; margin-top: 3mm; }
+  h2 { font: 700 14pt/1.2 system-ui, sans-serif; margin: 0 0 2mm; }
+  ol, ul { margin: 0 0 6mm; padding-left: 6mm; }
+  li { margin: 0 0 2mm; }
+  .no { border-left: 3px solid #a8321c; padding: 1mm 0 1mm 4mm; margin: 0 0 6mm; }
+  .pie { margin-top: 4mm; color: #666; font-size: 9pt; border-top: 1px solid #ccc; padding-top: 2mm; }
+</style>
+</head>
+<body>
+  <div class="cab">
+    <div class="marca">Club Satori</div>
+    <div class="cab-der">Solo para la caja<br>No es para el cliente</div>
+  </div>
+  <h1>Tarjeta vieja (sin QR)</h1>
+  <p class="sub">El cliente llega con la tarjeta de papel de un anfitrión</p>
+  <div class="cuerpo">
+    <div>
+      <h2>Qué hacer</h2>
+      <ol>
+        <li>En la app: <b>Club → Escanear → «📷 Escanear»</b> y apuntá a este código. Es lo mismo que tocar
+          <b>«Tarjeta vieja (sin QR)»</b>.</li>
+        <li><b>Buscá al anfitrión</b> de la tarjeta: nombre, negocio o los últimos 4 del teléfono. La lista sale mientras
+          escribís; elegilo.</li>
+        <li>Se abre su ficha en <b>«Tarjeta física»</b>: cargá las <b>personas de la mesa</b> y elegí el <b>pedido</b>
+          (si ya se cobró: «El pedido no está» → la factura).</li>
+        <li><b>Continuar → Confirmar.</b> Tiene que decir «Tarjeta física: +N personas a …».</li>
+      </ol>
+      <div class="no"><b>Si el anfitrión no aparece</b>, no está inscripto: no se carga a otro. Avisale al manager.</div>
+      <h2>Para tener en cuenta</h2>
+      <ul>
+        <li>No le muestres ningún QR al cliente: este código es de la caja.</li>
+        <li>Cada tarjeta queda como excepción «Tarjeta física» y la revisa otra persona.</li>
+        <li>Hay topes por anfitrión: si se pasa, la app avisa y no se carga.</li>
+        <li>Si el cliente trae el <b>cupón en su teléfono</b>, no es tarjeta vieja: escaneá su cupón.</li>
+      </ul>
+    </div>
+    <div class="qr">${qr}<div class="leyenda">Escanealo con «📷 Escanear» de la app.<br>Con la cámara del teléfono no abre nada.</div></div>
+  </div>
+  <p class="pie">Piloto del Club · solo funciona con la tarjeta física encendida en el local · sale de la guía 6.13 (Tarea 4b)</p>
+</body>
+</html>
+`
+const destino = join(RAIZ, 'docs/club-satori/piloto/cartel-caja-tarjeta-vieja.html')
+writeFileSync(destino, html)
+console.log(`cartel-caja-tarjeta-vieja: ${destino}`)

@@ -250,6 +250,22 @@ export const tarjetaManual = async (miembro: string, personas: number, pos: PosR
   primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
 export const buscar = (q: string) => llamar<BusquedaFila[]>('club_buscar', { p_q: q })
+/** Lo mismo que exige `club_buscar`: 3 caracteres (nombre, negocio o los últimos 4 del teléfono). */
+export const MIN_CARACTERES_BUSQUEDA = 3
+export const consultaBusquedaValida = (q: string) => q.trim().length >= MIN_CARACTERES_BUSQUEDA
+
+/**
+ * Piloto (11-nov, puesta al día 16-nov) · «Tarjeta vieja (sin QR)»: ¿la tarjeta física está encendida en el local?
+ * Lee `club_config.tarjeta_manual_activa` (lectura del staff por RLS, como `getLocalesClub`). Con un local elegido, el de
+ * ese local; sin elegir, alguno de los locales con el Club encendido. SOLO decide si se muestra el botón: quien decide si
+ * se puede cargar es la base, en `club_tarjeta_manual` (interruptor, topes y excepción), igual que «Tarjeta física».
+ */
+export const getTarjetaManualActiva = async (local: string | null = localClub): Promise<boolean> => {
+  const filas = await leer(from<{ location_id: string; club_activo: boolean; tarjeta_manual_activa: boolean }>('club_config')
+    .select('location_id,club_activo,tarjeta_manual_activa').order('location_id'))
+  return (local ? filas.filter(f => f.location_id === local) : filas.filter(f => f.club_activo === true))
+    .some(f => f.tarjeta_manual_activa === true)
+}
 
 // ── Gestión (owner, manager) ─────────────────────────────────────────────────
 export const guardarNegocio = (p: { id: string | null; nombre: string; tipo: TipoNegocio; activo: boolean }) =>

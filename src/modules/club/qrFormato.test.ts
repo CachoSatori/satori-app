@@ -121,3 +121,27 @@ describe('comparación con la página vieja: pegado', () => {
     ])
   })
 })
+
+// Piloto (11-nov; puesta al día 16-nov): el QR único de caja de «Tarjeta vieja (sin QR)».
+import { readFileSync } from 'node:fs'
+import QRCode from 'qrcode'
+import { QR_CAJA_TARJETA_VIEJA, esQrCaja } from './qrFormato'
+describe('QR de caja · Tarjeta vieja (sin QR)', () => {
+  it('se reconoce (con espacios o minúsculas) y no es ningún código del Club', () => {
+    expect(esQrCaja(QR_CAJA_TARJETA_VIEJA)).toBe(true)
+    expect(esQrCaja(`  ${QR_CAJA_TARJETA_VIEJA.toLowerCase()} `)).toBe(true)
+    expect(esQrCaja('SATORI-CAJA')).toBe(false)
+    expect(esQrCaja('')).toBe(false)
+    expect(esQrCaja(null)).toBe(false)
+    expect(parsearQR(QR_CAJA_TARJETA_VIEJA).tipo).toBe('desconocido')
+  })
+  it('no es un link: escaneado con la cámara de un teléfono no abre nada', () => {
+    expect(QR_CAJA_TARJETA_VIEJA).not.toMatch(/https?:|\/\/|www\./i)
+  })
+  it('el script del cartel usa la misma constante y el cartel guardado lleva ESE QR', async () => {
+    const script = readFileSync('scripts/club/cartel_caja.mjs', 'utf8')
+    expect(script).toContain(`export const QR_CAJA_TARJETA_VIEJA = '${QR_CAJA_TARJETA_VIEJA}'`)
+    const svg = await QRCode.toString(QR_CAJA_TARJETA_VIEJA, { type: 'svg', errorCorrectionLevel: 'M', margin: 1, color: { dark: '#111111', light: '#ffffff' } })
+    expect(readFileSync('docs/club-satori/piloto/cartel-caja-tarjeta-vieja.html', 'utf8')).toContain(svg)
+  })
+})

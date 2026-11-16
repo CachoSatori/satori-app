@@ -1,8 +1,8 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-16, 09:15 hora de Costa Rica.** `main` = merge de este PR de docs. **Ledger de prod = 180. Staging = 180**
-(puesto al día el 16/11 08:49 por la sesión de CC del dueño). Todos los merges con firma u OK del dueño. El bloque anterior (06:45 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
+**Al día: 2026-11-16, 11:45 hora de Costa Rica.** `main` = merge de este PR de docs. **Ledger de prod = 180. Staging = 180**
+(verificado el 16/11 11:30 con list_migrations). Todos los merges con firma u OK del dueño. El bloque anterior (06:45 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md)** (el handoff del 15/16-nov está en el proyecto privado).
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
@@ -11,7 +11,7 @@
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`3791496`** antes de este PR (16/11 09:06 -06:00: merge del #216). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **176** (177 al mergear este PR). |
+| `main` | **`2f54b19`** antes de este PR (merge del #217). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **180** (staging también 180, verificado 16/11 11:30 CR). |
 | `staging` | rama sin cambios desde el 13/11 (`4726b7f`); **base de staging con ledger 180** (16/11 08:49: 153 y 155–180 aplicadas de `main`, mismas 29 versiones y nombres que prod) | Proyecto Supabase de staging. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
@@ -47,8 +47,8 @@
   - **Beneficio de cumpleaños:** prendido por el dueño (16/11).
   - **Links de Santa Teresa en Club → Locales (16/11):** ubicación (Maps), reseña de Google y reservas de OpenTable con origen
     «Club Satori», cargados. Nosara se completa cuando abra (decisión del dueño: no volver a preguntar; pensar todo multi-local).
-  - **Validación física pendiente:** #213 (pestañas en el celular), #214/#215/#216 (link del portal desde la ficha, «Mi Club»,
-    reserva de prueba con origen «Club Satori», QR de turista), #210 (alta nueva con la confirmación del WhatsApp).
+  - **Validación física:** #210, #213, #214, #215 y #216 ya validados por el dueño el 16/11 (incluidas la reserva por el
+    widget y el QR de turista). **Pendiente solo:** confirmar en OpenTable que la reserva de prueba figura con origen «Club Satori».
   - **5 columnas de Caja que existen en prod y en ninguna migración** (`cash_movements.amount_usd`,
     `cash_sessions.initial_cash_crc/_usd`, `final_cash_crc/_usd`): decidido (16/11 06:45, «177 firmo A») → **migración 178**
     (PR en borrador, sin efecto en prod; paquete `docs/pases/PASE-178-columnas-caja.md`). La **179** queda reservada para otra rama del 16/11.
@@ -60,7 +60,7 @@
   cuentan el total (176) · el botón de WhatsApp de cumpleaños marca «enviado» sin deshacer (173) · topes por IP del portal (232).
 - **Local Club sigue en 15 %** hasta el lanzamiento del Club.
 - **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño.
-- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (verificados en cada PR del 15/16-nov).
+- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** · `cierrePozo.ts` **`bf22ee44`** (referencia registrada el 16/11) (verificados en cada PR del 15/16-nov).
 - **Gate de `main` (16/11 00:11):** `vitest run` 2414 pasan / 4 skip · eslint **82** (tope 83).
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 

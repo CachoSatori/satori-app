@@ -1,7 +1,7 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-15, 05:45 hora de Costa Rica.** `main` = **`8ddf79d`** (merge del #193). **Ledger de prod = 171.** Todos los
+**Al día: 2026-11-15, 06:45 hora de Costa Rica.** `main` = **`306b5cf`** (merge del #197). **Ledger de prod = 171.** Todos los
 merges con firma del dueño. El bloque anterior (02:10 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).**
 
@@ -11,7 +11,7 @@ merges con firma del dueño. El bloque anterior (02:10 del 15/11) está archivad
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`8ddf79d`** (15/11 05:44 -06:00: merge del #193, mig 171). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **171**. |
+| `main` | **`306b5cf`** (15/11 06:32 -06:00: merge del #197, docs; última migración 171 con #193). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **171**. |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Desarrollo y proyecto Supabase de staging. Cloudflare Pages (`satori-staging.pages.dev`) publica esta rama. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
@@ -23,10 +23,12 @@ merges con firma del dueño. El bloque anterior (02:10 del 15/11) está archivad
 | #190 | 170 | `a200b2c` | 05:34 | el manager solo ve y opera sus locales. Antes, con firma del dueño (05:27), se asignó en prod el local Santa Teresa a la única manager activa; **Nosara queda sin manager** |
 | #195 | | `591d8d3` | 05:37 | pruebas de #190 que quedaron fuera de su merge; el deploy de Pages de `a200b2c` falló en Tests y quedó resuelto con #195 |
 | #193 | 171 | `8ddf79d` | 05:44 | hotfix `club_miembro_guardar` = 156 + 157 sobre el núcleo de la 170 |
+| #196 | | `de36ef0` | 05:59 | pase de Wallet del equipo («Personas registradas») y avance de 90 días; Edge `club-pase` redeploy a v6 |
+| #197 | | `306b5cf` | 06:32 | docs: definiciones de referente y concierge |
 
 - **Regresión de «Editar» socio: cerrada** con la 171 (ya no da «Tipo no válido» y vuelve a generar el link al pasar socio → anfitrión).
 - **Pendiente del dueño / de la sesión:**
-  - **Edge `club-pase`:** redeploy manual pendiente (D7 en el pase y avance de la 168).
+  - **Edge `club-pase`:** redeploy hecho el 15/11 de madrugada → prod **v6 · ACTIVE** (`verify_jwt` off), desde la rama `claude/club-pase-edge` (cabeza `6c5848e`, con `main` mergeado).
   - **Validación física** de lo que entró (manager con la 170, «Editar» socio con la 171, tanda 156–169).
   - **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
     de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging** (la sesión no puede invocar la función: el proxy
@@ -169,7 +171,7 @@ de secretos (nombre + huella); para saber si cambió el código, el hash (`ezbr_
 | `ingest-ndf` | **v4 · off** (código de la v3 del 09/11, pase del puente, desde `5da233a` con `--use-api`; su código vive en `claude/puente-item11-prod-v2`, no en `main`) | v21 · off |
 | `ingest-punches` | — | v13 · off |
 | `alta-empleado` | v3 · on (código de la v1 del 06/11, a mano; código en `claude/alta-empleado-fn`, no en `main`) | v8 · on |
-| `club-pase` | — (no está en prod) | v1 · off (12/11, desde `c6b54fc`, rama `claude/club-pase-edge`; `WALLET_ENTORNO` = `stg`) |
+| `club-pase` | **v6 · off** (15/11 de madrugada, a mano desde `claude/club-pase-edge` @ `6c5848e`: pase del equipo con «Personas registradas» y avance de 90 días del socio) | v1 · off (12/11, desde `c6b54fc`, rama `claude/club-pase-edge`; `WALLET_ENTORNO` = `stg`) |
 
 Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos del 12/11 (evaluación del modelo y `club-pase`) subieron las versiones sin tocar el código.
 
@@ -269,7 +271,7 @@ Leídas el 12/11 a la noche (solo lectura). En staging, los cambios de secretos 
 | 117 | `club_miembro_guardar_reune_156_157` (HOTFIX 14-nov: la 157 pisó lo de la 156 en `club_miembro_guardar`) | club | `claude/hotfix-miembro-guardar` | **renumerada a 171** en el mismo PR (14-nov; regla 3: entra después de la 158–170). El número 117 no se reutiliza (regla 4) |
 | 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging (desde el 10/11 con la fila **150**: la 075 se renumeró con el texto del archivo). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
 | 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | staging (10/11, con su fila). Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` · **En prod desde el 11/11 23:22:08 -06:00** (merge del #59, `17a9efd`; pase cerrado, local apagado) |
-| 153 | `proveedor_agregar_alias` | pase (origen **096**) | `claude/alias-proveedor-rpc` | **Sin aplicar** (13/11: PR en borrador a `main`, espera firma). RPC `proveedor_agregar_alias` (SECURITY INVOKER) para que dos cajas no se pisen los alias. (El #140 pasó de la 152 a la **159**.) Rollback: `scripts/sql/153_rollback.sql` |
+| 153 | `proveedor_agregar_alias` | pase (origen **096**) | `claude/alias-proveedor-rpc` | **Aplicada en prod** (verificado 15/11 06:50 CR: ledger y función `proveedor_agregar_alias` presentes). RPC `proveedor_agregar_alias` (SECURITY INVOKER) para que dos cajas no se pisen los alias. (El #140 pasó de la 152 a la **159**.) Rollback: `scripts/sql/153_rollback.sql` |
 | 155 | `club_tope_sin_carga_inicial` | pase (origen **102**) | `claude/club-tope-sin-carga-inicial` | **En prod desde el 14/11 00:48 -06:00** (merge del #168, `dac805d`, vía Branching). `create or replace` de `club_excepciones`: ANFITRION_SOBRE_TOPE no cuenta `club_movimientos.origen = 'migracion'` (la carga inicial del 12/11), como el reporte del mes. Prueba en staging en transacción descartada: 9/9. Rollback: `scripts/sql/155_rollback.sql` |
 | 156 | `club_alta_caja_link_portal` | pase (origen **103**) | `claude/club-link-portal-cajero` | **Aplicada en prod el 14/11 22:19 -06:00** (merge → Branching; era: 14/11: PR en borrador a `main`, espera OK; vía merge → Branching). `create or replace` de `club_socio_alta_caja`: devuelve `token_portal` solo si esa alta creó a la persona (número que no era de nadie), y lo audita como `ver_link_portal`. `club_miembro_token` sigue solo owner/manager. Además (verificador, 14/11) `club_rol_activar_anfitrion` regenera `token_portal` al activar a un socio como anfitrión (el link del alta deja de servir para canjes), y `club_miembro_guardar` hace lo mismo al pasar un socio a anfitrión desde «Editar» (y acepta editar a un socio como socio, sin reactivarlo si está de baja: LC-DES-01). Prueba en staging en transacción descartada: 20/20; mutaciones muerden. Rollback: `scripts/sql/156_rollback.sql` |
 | 157 | `club_equipo_sin_creditos` | pase (origen **104**) | `claude/club-equipo-sin-creditos` | **Aplicada en prod el 14/11 22:33 -06:00** (merge → Branching; era: 14/11: PR en borrador a `main`, espera OK y verificador independiente; vía merge → Branching). D7 A: guarda del equipo en `club_canje_codigo_generar` y `club_canje_aplicar`; `club_saldo_canjeable` / `club_corte_equipo` (saldo congelado que no revive, foto en `club_auditoria`); portal, pase, ficha de caja, vencimiento, reporte del mes, baja (`club_miembro_guardar`), `club_ajuste` y `club_alertas_pendientes` con lo canjeable; `club_reporte_equipo` (ranking). Pruebas: `scripts/sql/157_pruebas.sql` (batería + 13 mutaciones en una transacción descartada; **pendiente de correr en staging**). Rollback: `scripts/sql/157_rollback.sql` |

@@ -19,6 +19,7 @@ están en la guía [6.13 Club Satori](../sop-app/6.13%20Club%20Satori.md).
 - Casi exclusivo de hotelería, en todos sus formatos.
 - Prefiere referir al cliente directo y recibe una **comisión del 10 % del consumo** de sus clientes en el restaurante (en
   efectivo o consumido). El cliente recibe un postre de cortesía.
+- **Base del 10 % = subtotal** de la cuenta, sin impuestos ni servicio (decisión del dueño, 15-nov-2026, opción A). La invitación a concierges decía «ticket total»: se corrige cuando el programa se reactive.
 - **Estado (decisión del dueño): en pausa** (`pm_pausado` en `club_config`). No hay una forma clara de registrar ese gasto
   ante Hacienda: la mayoría de los concierges no puede emitir factura. Por eso hubo poco movimiento últimamente.
   **Pendiente:** definición contable con el contador antes de reactivarlo.
@@ -32,6 +33,8 @@ Personal de Satori. Desde la migración 157 registra personas para el ranking de
 Residente con beneficio de descuento propio. No es anfitrión.
 
 ## Cómo funcionaba la página vieja
+
+Detalle completo (canje, alta y pago de concierges, reporte mensual, cancelación de 12 meses): [historico/PROCEDIMIENTOS-sistema-viejo.md](historico/PROCEDIMIENTOS-sistema-viejo.md).
 
 Sistema externo de créditos, reemplazado por el Club en la app el 12-nov-2026; quedó en solo lectura.
 

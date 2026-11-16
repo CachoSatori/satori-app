@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   normalizarFechaFactura, fechaDeClaveFE, invertirDiaMes, avisoFechaFactura, esFechaValida, fechaLarga,
-  preguntaFechaAmbigua, msgFacturaVieja, MSG_FECHA_INVERTIDA, MSG_FECHA_FUTURA, DIAS_FACTURA_VIEJA,
+  preguntaFechaAmbigua, msgFacturaVieja, msgClaveDistinta, MSG_FECHA_INVERTIDA, MSG_FECHA_FUTURA, DIAS_FACTURA_VIEJA,
 } from './fechaFactura'
 import { conFechaCR, type DocExtract } from '../api/documents'
 
@@ -41,16 +41,28 @@ describe('normalizarFechaFactura', () => {
     expect(normalizarFechaFactura('2026-09-11', null, HOY))
       .toEqual({ fecha: '2026-11-09', origen: 'invertida', aviso: MSG_FECHA_INVERTIDA })
   })
-  it('la clave FE manda sobre lo que leyó la IA (sin aviso si no es futura ni vieja)', () => {
+  it('la clave FE manda sobre lo que leyó la IA, pero si difieren avisa (hallazgo 228: nunca pisa en silencio)', () => {
+    // la IA leyó D/M al revés: la clave corrige y avisa como cualquier fecha invertida
     expect(normalizarFechaFactura('2026-09-11', clave('091126'), HOY))
+      .toEqual({ fecha: '2026-11-09', origen: 'clave', aviso: MSG_FECHA_INVERTIDA })
+    // la IA leyó una fecha no ambigua distinta: manda la clave y el aviso muestra las dos fechas
+    const r = normalizarFechaFactura('2026-11-12', clave('101126'), HOY)
+    expect(r.fecha).toBe('2026-11-10')
+    expect(r.aviso).toBe(msgClaveDistinta('2026-11-10', '2026-11-12', HOY))
+    expect(r.aviso).toBe('La clave dice 10 de noviembre y la factura dice 12 de noviembre: revisá la fecha.')
+    // distinta Y vieja: se suman los dos avisos
+    expect(normalizarFechaFactura('2026-10-25', clave('020126'), HOY))
+      .toEqual({ fecha: '2026-01-02', origen: 'clave',
+                 aviso: `${msgClaveDistinta('2026-01-02', '2026-10-25', HOY)} ${msgFacturaVieja(315)}` })
+    // la IA leyó lo mismo que la clave → sin aviso
+    expect(normalizarFechaFactura('2026-11-09', clave('091126'), HOY))
       .toEqual({ fecha: '2026-11-09', origen: 'clave', aviso: null })
-    // aunque la IA haya leído una fecha no ambigua distinta
-    expect(normalizarFechaFactura('2026-10-25', clave('020126'), HOY).fecha).toBe('2026-01-02')
-    // sin fecha de la IA, la clave la da
-    expect(normalizarFechaFactura(null, clave('091126'), HOY).fecha).toBe('2026-11-09')
-    // la clave manda aunque la lectura de la IA sea ambigua con las dos posibles: no se pregunta
+    // sin fecha de la IA, la clave la da (sin aviso de diferencia)
+    expect(normalizarFechaFactura(null, clave('091126'), HOY))
+      .toEqual({ fecha: '2026-11-09', origen: 'clave', aviso: null })
+    // la clave manda aunque la lectura de la IA sea ambigua con las dos posibles: no se pregunta, se avisa
     expect(normalizarFechaFactura('2026-10-11', clave('101126'), HOY))
-      .toEqual({ fecha: '2026-11-10', origen: 'clave', aviso: null })
+      .toEqual({ fecha: '2026-11-10', origen: 'clave', aviso: MSG_FECHA_INVERTIDA })
   })
   it('clave FE con fecha futura → avisa', () => {
     expect(normalizarFechaFactura(null, clave('201126'), HOY).aviso).toBe(MSG_FECHA_FUTURA)

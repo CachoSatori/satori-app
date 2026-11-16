@@ -108,3 +108,33 @@ describe('Bandeja · propinas: la fecha del movimiento es el día en que se regi
     expect(String(mov.description)).toContain('fact 2026-11-05')
   })
 })
+
+// (15-nov, hallazgo 228) La clave FE ya no pisa en silencio la fecha impresa: si difieren, la pantalla avisa con las
+// dos fechas; y el movimiento sigue entrando el día en que se registra, aunque la factura sea de otro día.
+describe('Bandeja · clave FE con fecha distinta de la impresa', () => {
+  // Clave FE ficticia de 50 dígitos con emisión 10-nov-2026 (DDMMAA = 101126).
+  const claveFicticia = `506101126${'0'.repeat(12)}${'1'.repeat(20)}1${'2'.repeat(8)}`
+  const conClave = (fechaImpresa: string): DocExtract => conFechaCR({
+    tipo: 'factura', proveedor: 'Proveedor Ficticio', clave_fe: claveFicticia, fecha: fechaImpresa, moneda: 'CRC',
+    metodo_pago: null, banco: null, referencia: null, subtotal: null, total: 1000, items: [], cuenta_qb_sugerida: null,
+    confianza: 0.9,
+  } as DocExtract, '2026-11-13')
+
+  it('precarga la fecha de la clave, avisa con las dos y el movimiento entra hoy (no el día de la factura)', async () => {
+    const { input, boton, onDone } = abrir(conClave('2026-11-12'))
+    expect(input.value).toBe('2026-11-10')
+    expect(screen.getByRole('status').textContent)
+      .toContain('La clave dice 10 de noviembre y la factura dice 12 de noviembre: revisá la fecha.')
+    fireEvent.click(boton())
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    const mov = m.createCash.mock.calls[0][0]
+    expect(String(mov.description)).toContain('fact 2026-11-10')
+    expect(mov.session_id).toBe('s1')
+    expect('fecha' in mov).toBe(false)
+  })
+
+  it('si la impresa coincide con la clave, no hay aviso', () => {
+    abrir(conClave('2026-11-10'))
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+})

@@ -123,6 +123,30 @@ describe('pendientes · Club (pase a producción)', () => {
   })
 })
 
+describe('pendientes · cada aviso lleva directo a la vista que avisa (15-nov)', () => {
+  const ruta = (s: Partial<SenalesInicio>, id: string, mods = visibles('owner')) =>
+    calcularPendientes({ ...TRANQUILO, ...s }, mods).find(p => p.id === id)?.path
+  it('movimientos pendientes → Caja, pestaña Pendientes', () => {
+    expect(ruta({ pendingCount: 3 }, 'movimientos')).toBe('/caja?vista=pendientes')
+  })
+  it('excepciones del Club → Club, pestaña Excepciones, en el local con que se contaron', () => {
+    const mods = new Set(['club'])
+    expect(ruta({ clubExcepciones: 2, clubLocal: 'local-b' }, 'club-excepciones', mods)).toBe('/club?vista=excepciones&local=local-b')
+    expect(ruta({ clubExcepciones: 2 }, 'club-excepciones', mods)).toBe('/club?vista=excepciones')
+    expect(ruta({ clubExcepciones: 2, clubLocal: null }, 'club-excepciones', mods)).toBe('/club?vista=excepciones')
+  })
+  it('sin vista concreta, la portada del módulo (como antes)', () => {
+    expect(ruta({ diasSinCierre: 1 }, 'dias-sin-cierre')).toBe('/caja')
+    expect(ruta({ turnosViejos: 1 }, 'turnos-viejos')).toBe('/caja')
+    expect(ruta({ cashOpen: true, cashOpenHours: 30 }, 'caja-larga')).toBe('/caja')
+    expect(ruta({ tipOpen: true, tipOpenHours: 30 }, 'propinas-larga')).toBe('/propinas')
+    expect(ruta({ invOutStock: 1 }, 'sin-stock')).toBe('/inventario')
+    expect(ruta({ invLowStock: 1 }, 'stock-bajo')).toBe('/inventario')
+    expect(ruta({ esLunes: true }, 'semana')).toBe('/semana')
+    expect(ruta({ sopsCount: 0 }, 'sops-vacios')).toBe('/sops')
+  })
+})
+
 describe('pendientes · lectura del Club fallida (auditoría 208)', () => {
   const base = {
     cashOpen: false, cashOpenHours: 0, tipOpen: false, tipOpenHours: 0, pendingCount: 0,

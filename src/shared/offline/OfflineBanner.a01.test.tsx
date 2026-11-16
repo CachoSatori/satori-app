@@ -11,8 +11,8 @@ const rej: RejectedOp = {
   rejected_at: '2026-11-17T06:00:00.000Z', reason: 'un dato no cumple una regla de la base', code: '23514', status: 400,
 }
 const state = { pending: 0, rejected: 0, role: 'cajero' as string, stuck: { attempts: 0 } as { attempts: number; kind?: string } }
-const requeue = vi.fn(async () => {})
-const resolve = vi.fn(async () => {})
+const requeue = vi.fn<(id: string) => Promise<void>>(async () => {})
+const resolve = vi.fn<(id: string, by: string | null) => Promise<void>>(async () => {})
 
 vi.mock('./outbox', async () => {
   const real = await vi.importActual<typeof import('./outbox')>('./outbox')

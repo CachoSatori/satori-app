@@ -77,6 +77,8 @@ MUTACIONES: dict[str, tuple] = {
     # MISMO_USUARIO vuelve a contar visitas
     'mismo_usuario_por_visitas': ("(select case when a.que = 'socio' then count(distinct (b.f at time zone 'America/Costa_Rica')::date) else count(*) end",
                                   "(select count(*)", {'15'}),
+    # MISMO_USUARIO cuenta días en UTC (no en CR): la cena de las 19:00 CR cae en otro día
+    'mu_utc': ("count(distinct (b.f at time zone 'America/Costa_Rica')::date)", "count(distinct (b.f at time zone 'UTC')::date)", {'16'}),
 }
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
     # el rollback no vuelve el cuerpo de la 150 (deja el tope por comida)

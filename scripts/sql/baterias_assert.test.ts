@@ -31,12 +31,12 @@ exception when others then insert into _r (caso) values ('x'); end $$;`
     expect(assertsTragados(sano)).toEqual([])
   })
 
-  it('la 181 avisa caso por caso, resume «pasaron X / fallaron Y» y exige sus 16 casos', () => {
+  it('la 181 avisa caso por caso, resume «pasaron X / fallaron Y» y exige sus 17 casos', () => {
     const t = readFileSync(join(DIR, '181_pruebas.sql'), 'utf8')
     expect(t).toMatch(/raise warning '181 FALLA % — %'/)
     expect(t).toMatch(/raise notice '181 RESUMEN: pasaron % \/ fallaron % de %'/)
     expect(t).toMatch(/raise exception '181-FALLAN: % · pasaron % \/ fallaron %'/)
-    expect(t).toMatch(/v_esp constant int := 16;/)
+    expect(t).toMatch(/v_esp constant int := 17;/)
   })
 
   it('la 173 avisa caso por caso y resume «pasaron X / fallaron Y»', () => {

@@ -121,13 +121,13 @@ Leído el 16/11 entre 13:3x y 14:5x -06:00:
 ## 5. Pruebas
 - Batería `scripts/sql/181_pruebas.sql` (runner `181_pruebas.py`) en Postgres 16 local armado con
   `scripts/sql/local_armar_base.sh` (**sin** la 181; las funciones de §2 con el md5 de prod), en transacción descartada,
-  ANTES de aplicar: **16/16**. Tope: almuerzo + cena; dos en el almuerzo; dos en la cena; borde 15:59:59.999 / 16:00:00;
+  ANTES de aplicar: **17/17**. Tope: almuerzo + cena; dos en el almuerzo; dos en la cena; borde 15:59:59.999 / 16:00:00;
   cruce de locales con cortes distintos; medianoche CR; sin beneficio no gasta; extremo a extremo con `club_socio_visita`
   como cajero; invitados/857 y reescaneo; tope configurable; internas cerradas. **Alertas:** (13) `SOCIO_USO_ANOMALO`:
   almuerzo + cena no, dos almuerzos sí, 15:59:59 / 16:00:00 no, almuerzo en dos locales sí; (14) semana: 6 visitas en 3
-  días no, 6 días sí, 5 días justos no; (15) `MISMO_USUARIO`: 4 visitas en 2 días no, 3 días sí («dias»). (12) rollback
+  días no, 6 días sí, 5 días justos no; (15) `MISMO_USUARIO`: 4 visitas en 2 días no, 3 días sí («dias»); (16) con horas fijas en CR que cruzan la medianoche UTC (12:00 y 19:00 CR de ayer + anteayer = 2 días CR) no dispara. (12) rollback
   con los 4 md5 de prod.
-- Mutaciones: **19/19 muerden** (`--mutar todas`), entre ellas: tope por día, corte de la caja, corte inclusivo, hora y
+- Mutaciones: **20/20 muerden** (incluye `mu_utc`: días contados en UTC → cae el 16) (`--mutar todas`), entre ellas: tope por día, corte de la caja, corte inclusivo, hora y
   día en UTC, anomalía por día, semana por visitas, mismo usuario por visitas, rollback que deja la base, las alertas o
   las excepciones.
 - App: `alertasInicio.test.ts` (aviso por días) y `Escanear.topeComida.test.tsx` (rojo con comida y hora).

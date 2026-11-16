@@ -128,14 +128,14 @@ begin
   return v;
 end $f$;
 
-select pg_temp.alta(g) from generate_series(1, 23) g;
+select pg_temp.alta(g) from generate_series(1, 24) g;
 
 -- 00. hay owner activo, cajero ficticio, 14 socios y los cortes de los locales ficticios
 insert into _r181 (caso, ok, detalle)
-select '00 owner activo, cajero ficticio, 23 socios activos, cortes A/B/C/D y tope por comida = 1',
+select '00 owner activo, cajero ficticio, 24 socios activos, cortes A/B/C/D y tope por comida = 1',
        c.owner_id is not null
        and exists (select 1 from public.profiles p where p.id = c.cajero and p.role::text = 'cajero' and p.is_active)
-       and (select count(*) from generate_series(1, 23) g join public.club_miembros m on m.id = pg_temp.mid(g) where m.estado = 'activo') = 23
+       and (select count(*) from generate_series(1, 24) g join public.club_miembros m on m.id = pg_temp.mid(g) where m.estado = 'activo') = 24
        and (select turno_corte from public.club_config where location_id = 'prueba181c') = time '16:00'
        and (select socio_visitas_por_comida from public.club_config_global) = 1,
        'owner ' || coalesce(c.owner_id::text, 'NINGUNO')
@@ -374,6 +374,19 @@ begin
 exception when others then insert into _r181 (caso, ok, detalle) values ('15 (error sin atrapar)', false, sqlerrm);
 end $$;
 
+-- 16. MISMO_USUARIO con horas FIJAS en CR que cruzan la medianoche UTC: ayer 12:00 y 19:00 CR (19:00 CR = 01:00 UTC
+--     del día siguiente) + anteayer 12:00 CR. En CR son 2 días → NO dispara (umbral 2). Contado en UTC serían 3 días.
+do $$ declare a jsonb; ayer date := (now() at time zone 'America/Costa_Rica')::date - 1;
+begin
+  perform pg_temp.vis_por(24, 'prueba181c', pg_temp.ts('12:00', ayer));
+  perform pg_temp.vis_por(24, 'prueba181c', pg_temp.ts('19:00', ayer));
+  perform pg_temp.vis_por(24, 'prueba181c', pg_temp.ts('12:00', ayer - 1));
+  a := pg_temp.alertas('prueba181c');
+  insert into _r181 (caso, ok, detalle) values ('16 MISMO_USUARIO cuenta días CR: almuerzo 12:00 y cena 19:00 CR de ayer + anteayer = 2 días, no dispara',
+    not pg_temp.hay(a, 'mismo-usuario:socio:' || pg_temp.mid(24)), a::text);
+exception when others then insert into _r181 (caso, ok, detalle) values ('16 (error sin atrapar)', false, sqlerrm);
+end $$;
+
 -- 12. ROLLBACK: vuelve el cuerpo exacto de la 150 (md5 de prod el 16-nov), sin las internas ni la columna; la caja
 --     vuelve a «una por día»: el socio 14 usa el almuerzo en A y en B (cena) ya no le toca. Excepciones y alertas, como prod.
 -- @@181R@@   (aquí va el cuerpo de 181_rollback.sql sin begin/commit)
@@ -400,12 +413,12 @@ end $$;
 select json_agg(json_build_object('caso', caso, 'ok', coalesce(ok, false), 'detalle', detalle) order by n) from _r181;
 
 -- ASSERT: cada caso que falla sale como WARNING («181 FALLA <caso> — <detalle>»), después el resumen
--- («181 RESUMEN: pasaron X / fallaron Y de 16») y, si Y > 0 o faltan casos, la transacción ABORTA con
+-- («181 RESUMEN: pasaron X / fallaron Y de 17») y, si Y > 0 o faltan casos, la transacción ABORTA con
 -- «181-FALLAN: <casos> · pasaron X / fallaron Y». Este bloque NO lleva «exception when others».
 do $$
 declare
   r record;
-  v_esp constant int := 16;
+  v_esp constant int := 17;
   v_tot int; v_ok int; v_mal int; v_lista text;
 begin
   for r in select caso, detalle from _r181 where ok is not true order by n loop   -- null = falla

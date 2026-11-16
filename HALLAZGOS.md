@@ -1,4 +1,4 @@
-# HALLAZGOS — backlog triado de las auditorías (al día: 2026-10-30)
+# HALLAZGOS — backlog triado de las auditorías (al día: 2026-11-16; el triage de abajo es del 30/10 con las correcciones marcadas)
 
 > **Cómo leer este archivo:** arriba está **lo vigente** — el triage al 30/10 de todo lo anterior y los hallazgos
 > nuevos de octubre. Abajo, en **📚 Histórico**, quedan completas y sin editar las entradas de junio a agosto (la
@@ -6,6 +6,26 @@
 > las bases el 30/10. El backlog accionable está en [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
 ---
+
+## 🧭 16/11 — Estado de lo abierto (revisado contra el repo y los PR)
+
+| Hallazgo | Estado al 16/11 | Evidencia |
+|---|---|---|
+| Seguridad #14 · `deploy.yml` sin gate de tests | ✅ **Resuelto** (13/11, #133): `deploy.yml` corre `npm test` antes del build y `ci.yml` corre el «Gate» en cada PR a `main`. Falta que el dueño marque «Gate» como requerido (`main` sin regla de protección) | `.github/workflows/` |
+| Seguridad #3 · falta `supabase/config.toml` (ítem 11) | 🔴 Abierto: sigue sin existir en `main`; PR #61 en borrador. Bloquea todo PR con `supabase/functions/` | repo |
+| Octubre #8 · `version.json` lleva al login por el service worker | 🔴 Abierto. Venía en el #132 (cerrado sin mergear el 16/11). Verificar con `curl` | `vite.config.ts` |
+| Octubre #11 · agente de BioTime parado desde el 14/09 | ✅ **Corregido el 06/11**: está ingresando a staging (ver PROMPT-CONTINUACION ítem 17) | |
+| Octubre #12 · ledger de staging sin 065 y 066 | 🟠 Sin cambios en este repaso | ESTADO.md § Migraciones |
+| 230 · el alta en caja no confirmaba el WhatsApp | ✅ Resuelto (#210, 16/11) | |
+| 231 · el manager operaba fichas de otros locales | ✅ Resuelto (migs 170, 172, 176; #190, #202, #204) | |
+| 232 · topes por IP en el resto del portal público | 🟠 Abierto; D9 de la spec de clics: PR aparte después de la fase 1 | `docs/club-satori/SPEC-clics-embudo.md` |
+| Privacidad del repo público (nombres, correos, cédulas, montos) | 🟠 Guarda `src/privacidadRepo.test.ts` desde el #221 (16/11). **D3 firmada:** nombres de empleados a la base, correos y cédula de las Edge a secretos, montos fuera de los docs (PR chico, pendiente) | #221 |
+| 5 columnas de Caja que existían en prod sin migración | ✅ Declaradas (mig 178, #211) | |
+| Tipos numéricos de prod sin declarar en el repo | ✅ Declarados (mig 177, #207), sin efecto en prod | |
+| Baterías SQL corridas después de aplicar | 🟠 Proceso: correrlas ANTES (base local `scripts/sql/local_armar_base.sh`). La 173 ya no se traga su error (#219) | ESTADO.md |
+| Fecha en hora CR | ✅ Ventas (#222). 🔲 Falta Inventario | |
+| Wallet · prueba de baja (§5.5 del paquete) | 🔲 Pendiente (opcional); Google Wallet ya está en prod | `docs/club-satori/WALLET-GOOGLE-ACTIVACION.md` |
+| `club_pases.actualizado_en` | 🔲 Firmado el 16/11; backlog | |
 
 ## 🔐 Noviembre 2026 — SEC-02: `monthly-report` respondía ventas y mandaba los correos a cualquiera (✅ prod, 06/11)
 
@@ -311,7 +331,7 @@ Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
 10. **Cloudflare Pages:** según el ESTADO de septiembre, la URL principal de staging publica desde
     `integracion/analitica-staging`, que quedó 4 commits atrás de `staging`. Lo validado el 30/10 en staging fue un
     deploy de *preview* de `staging`. Abierto: alinear las ramas.
-11. **Agente de BioTime parado desde el 14/09** (última sync 17:12 UTC). Abierto.
+11. **Agente de BioTime parado desde el 14/09** (última sync 17:12 UTC). *(Corregido el 06/11: está ingresando.)*
 12. **Ledger de staging sin las filas 065 y 066** (las columnas existen). Abierto.
 13. **«Contexto jueves» de Hoy mostró un promedio mal** (₡235.773 vs ₡406.064) mientras cargaba el histórico.
     Abierto: revisar si mezcla Excel y PoS.
@@ -333,7 +353,7 @@ Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
 | Seguridad #1 IDOR `extract-document` | ✅ Resuelto (prod v7, `verify_jwt` on) | Management API |
 | Seguridad #2 `monthly-report` sin auth (= **SEC-02**) | ✅ Cerrado en prod (06/11, v10, `verify_jwt` on) | Ver la sección SEC-02 arriba |
 | Seguridad #3 falta `supabase/config.toml` | 🔴 **Abierto** (= ítem 11) | No existe en `main` |
-| Seguridad #14 `deploy.yml` sin gate de tests | 🔴 **Abierto** | `deploy.yml` no corre `vitest` |
+| Seguridad #14 `deploy.yml` sin gate de tests | ✅ **Resuelto el 13/11** (#133) | `deploy.yml` corre `npm test`; ver la tabla del 16/11 arriba |
 | Seguridad #5 RLS de `cash_cierres_dia` | ✅ Verificado: prod y staging tienen las mismas 2 policies (lectura: cualquier autenticado; escritura: owner/manager/cajero/contador) | `pg_policies`, 30/10 |
 | Deep-dive auth C–J (watchdog, doble refresh, latido, re-suscripciones…) | ⏸️ Parqueado, va con el PILAR | — |
 | Testing: entorno DOM en vitest | ✅ Resuelto | — |

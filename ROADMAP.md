@@ -1,10 +1,11 @@
 # Satori App — Roadmap
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-10-30.**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-11-16 (tarde).** Las filas de caja, propinas, ventas y PoS conservan la verificación del 30/10 salvo donde dice otra fecha; el Club y la plataforma están al día al 16/11.
 
-> Esta página dice **en qué estado está cada fase hoy**, verificado contra `main` (`43e843d`), `staging`
-> (`a4b11ae`) y las dos bases. El plan largo original (visión en 3 capas, fases 0–5, PoS/KDS, CRM, chatbot,
+> Esta página dice **en qué estado está cada fase hoy**. Las secciones 1, 2, 3 y 4 se verificaron contra `main`
+> (`43e843d`), `staging` (`a4b11ae`) y las dos bases el 30/10; las secciones 3.1 y 5, el 16/11. El hash y el ledger
+> vigentes están en el bloque ⚡ARRANQUE de [ESTADO.md](ESTADO.md). El plan largo original (visión en 3 capas, fases 0–5, PoS/KDS, CRM, chatbot,
 > finanzas, matriz impacto/esfuerzo, decisiones pendientes) sigue completo en
 > [ROADMAP-ARCHIVO.md](ROADMAP-ARCHIVO.md). Estado vivo → [ESTADO.md](ESTADO.md) · backlog →
 > [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
@@ -78,15 +79,27 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 
 ## 3.1 Club Satori (reemplazo de la página de créditos)
 
-Un solo módulo para referentes y créditos, concierges PM y el Local Club, con pases de Wallet. Spec v2 (05/11) en
-revisión del dueño → [docs/club-satori/](docs/club-satori/). Fechas propuestas, copiadas del §1 del spec.
+Un solo módulo para referentes y créditos, concierges PM y el Local Club, con pases de Wallet. Spec →
+[docs/club-satori/](docs/club-satori/). **En prod desde el 11/11** (PR #59); piloto con el personal y apertura gradual
+en curso. Al 16/11 el ledger de prod llega a la 180.
 
-| Fase | Qué | Cuándo (propuesto) | Estado |
-|---|---|---|---|
-| **F0** | Cerrar el registro público del CRM (`customers_anon_insert WITH CHECK (true)`, SEC-03). Va después de SEC-01. | Inmediato | ✅ prod (05/11, mig 072; con SEC-04 en la 073) |
-| **F1** | Referentes y concierges con pase de Wallet + QR; cupón digital del turista; escáner único en caja; créditos, canjes y PM; portal; alertas; reportes; migración completa. Se dejan la página y las tarjetas físicas. | Construcción nov–dic. Piloto con 3-5 referentes antes del 10-dic; salida general después del 15-ene | 🔲 |
-| **F2** | Mejoras del cupón (en el Wallet del turista, ofertas con opt-in) y QR dinámico si hay abuso. | Feb–mar | 🔲 |
-| **F3** | Local Club en el Wallet: socios, ofertas que cambian, premios por frecuencia, referidos, sorpresas. Reemplaza el descuento fijo. | Desde may (temporada baja) | 🔲 |
+| Fase | Qué | Estado (16/11) |
+|---|---|---|
+| **F0** | Cerrar el registro público del CRM (SEC-03). | ✅ prod (05/11, mig 072; con SEC-04 en la 073) |
+| **F1** | Referentes y concierges con pase y QR, cupón digital del turista, escáner en caja, créditos, canjes, PM, portal, alertas, reportes y migración. | ✅ prod (11/11, #59) · 🟢 en piloto, falta la salida general |
+| **Reservas** (OpenTable por local, widget aislado en «Mi Club», campañas `local` / `turista` / `cumpleanos`, link por local en Club → Locales) | | ✅ prod (16/11, #210–#216, #220); validado por el dueño |
+| **Google Wallet** | Pase de producción sin marca de prueba, QR en caja, actualización automática | ✅ encendido en prod el 16/11 a las 15:40 (`VITE_WALLET_GOOGLE` en Pages); 🔲 falta la **prueba de baja** (§5.5 del paquete, opcional) |
+| Apple Wallet | Depende de la aprobación de Apple Developer | 🚧 |
+| Cumpleaños | Beneficio configurable, una vez por año, prendido el 16/11 | ✅ prod · 🔲 **aviso automático por el pase de Wallet, dos niveles configurables** (firmado 16/11, [spec §13](docs/club-satori/SPEC-clics-embudo.md)); se enciende con el acceso de publicación de Google |
+| Beneficio de almuerzo y cena (tope del socio por comida) | Decisión B del 16/11 | 🟡 #229, mig 181, entra 23:31 del 16/11 |
+| Portal del anfitrión (link, WhatsApp ES/EN, «Reservar una mesa») | | 🟡 #226, mig 182, entra 23:31 del 16/11 |
+| «Tarjeta vieja» (nombre único) + artículo «PROMO CLUB 10 %» en el PoS | | 🟡 #225, entra 23:31 del 16/11 |
+| **Alerta «tarjeta vieja sin PROMO»** | Firmada el 16/11 | 🔲 PR aparte |
+| **Registro de clics y embudo** (Reservar, Cómo llegar, Reseña) | Spec #223 firmada con D1–D9 (16/11) | 🔲 5 PRs. **Aviso de privacidad v1.4: lo lee quien asesora en Ley 8968 antes de publicarse** |
+| **Cartel por referente** | Decisión B (16/11): el mismo cartel del hotel cambiando solo el QR | 🔲 PR aparte, después de clics |
+| `club_pases.actualizado_en` | Firmado el 16/11 | 🔲 backlog; alcance a definir en su PR |
+| **F2** | Mejoras del cupón (ofertas con opt-in) y QR dinámico si hay abuso. | 🔲 |
+| **F3** | Local Club en el Wallet: socios, ofertas, premios por frecuencia, referidos. Reemplaza el descuento fijo (**sigue en 15 % hasta el lanzamiento del Club**). | 🔲 |
 
 ## 4. PoS propio (gran pase)
 
@@ -112,13 +125,24 @@ revisión del dueño → [docs/club-satori/](docs/club-satori/). Fechas propuest
 | `LoginPage` sigue ofreciendo «crear cuenta» de empleado | 🔲 | Con el signup apagado devuelve un error técnico (`Signups not allowed`). Ocultar el botón o poner un mensaje claro («pedile el alta al encargado»). Toca `src/`. |
 | **SEC-02 · `monthly-report` sin auth** (respondía el total de ventas y el top salonero y mandaba los correos a cualquiera, incluso sin token) | ✅ prod (06/11) | v10 con `verify_jwt` on: service_role u owner activo, CORS, parámetros validados, respuesta sin datos. Cron con `Authorization` desde el Vault (probado desde la base con `dry_run`), botón con JWT (PR #42). Código de la función en `claude/sec-02-monthly-report-fn` (entra a `main` con el ítem 11). Ver [HALLAZGOS.md](HALLAZGOS.md). |
 | Hardening ACL: 4 `SECURITY DEFINER` ejecutables por `anon` en prod | 🔲 | `get_my_role` exige análisis de policies antes del revoke. Higiene (en prod no son de plata). |
-| Gate de tests en `deploy.yml` | 🔲 | Hoy publica sin correr `vitest`. |
+| Gate de tests en `deploy.yml` | ✅ (13/11, #133) | `deploy.yml` corre `npm test` antes del build y `ci.yml` corre el «Gate» en cada PR a `main`. Pendiente del dueño: marcar el check «Gate» como requerido (hoy `main` no tiene regla de protección). |
 | Higiene · Sincronizar la rama `staging` con `main` | 🔲 | Al 05/11, `staging` está ~20 commits atrás de `main` (PRs #18–#22, archivos de las migraciones 065–068, código de logins viejos). El fix del #25 entró a `staging` como cherry-pick (`3f6fcb1`, merge `cef4f95`) justo para no arrastrarlos. Mergear `main` → `staging` con cuidado: hay conflictos en los docs y el ledger de staging no tiene las filas 065/066. |
-| `version.json` → login por el service worker | 🔲 | Agregar `/\/version\.json$/` a `navigateFallbackDenylist`. |
+| `version.json` → login por el service worker | 🔲 | Agregar `/\/version\.json$/` a `navigateFallbackDenylist`. Venía en el #132 (cerrado sin mergear el 16/11, triage). Mientras tanto, verificar con `curl`. |
+| Lo que quedó del #132 (cerrado el 16/11): limpieza de `auth.ts` sin imports, assets sin uso y `public/_redirects`; atajos del ícono de la PWA | 🔲 | Backlog, sin fecha. El arreglo de «hoy» en hora CR de Ventas sí entró (#222). |
+| **Privacidad D3** (firmada 16/11): nombres de empleados a la base, correos y cédula de las Edge a secretos, montos reales fuera de los docs | 🔲 | PR chico. La guarda `src/privacidadRepo.test.ts` (#221) ya impide que entren nuevos. |
+| Fecha en hora de Costa Rica en **Inventario** | 🔲 | Ventas ya la tiene (#222); falta revisar Inventario con `todayCR()` / `dateCR()`. |
+| PRs abiertos viejos: #60 (higiene `findDuplicate`), #61 (ítem 11, borrador), #63 (Salarios, aviso de 0 filas), #70 (caracterización de sagrados), #73 (arreglos fuera de sagrados), #75 (correos por configuración, borrador) | 🧪 | Esperan revisión o decisión; ninguno entra sin OK del dueño. #61 es el ítem 11. |
 
 ---
 
-## Lo próximo, en orden
+## Lo próximo, en orden (16/11)
+
+1. **23:31 del 16/11:** #229 → #226 → #225 → #230 (migraciones 181 y 182); validación física del dueño en la apertura.
+2. Club: prueba de baja de Wallet, aviso de cumpleaños al pase, clics y embudo (con lectura legal del aviso v1.4), alerta «tarjeta vieja sin PROMO», cartel por referente.
+3. Privacidad D3 y `club_pases.actualizado_en`.
+4. Ítem 11 (#61) y, después, Salarios, retirar el Excel y PILAR.
+
+**Lista de largo plazo (del 06/11, sigue vigente):**
 
 0. ~~SEC-01~~ ✅ → ~~alta de empleados~~ ✅ → ~~SEC-01b~~ ✅ → ~~SEC-02~~ ✅ (06/11).
 1. Cerrar lo que quedó del go-live del PoS: revocar/reemplazar el token `claude-code-prod`,

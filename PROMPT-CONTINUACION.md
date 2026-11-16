@@ -1,30 +1,37 @@
-# Continuación — backlog priorizado (al día: 2026-11-11)
+# Continuación — backlog priorizado (al día: 2026-11-16, tarde)
 
-> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md)** (13/11). El handoff
-> anterior es el del [06/11](docs/handoffs/HANDOFF-2026-11-06.md). Lo de abajo es el backlog detallado.
-
-> **Foto al 11/11:** `main` = **`66b3b85`** (PROD; merges de docs #96 y #108 sobre `c41e18b`). **Ledger de prod: 65 · 095.**
-> Agente del PoS en prod: **`5da233a`** (desde el 10/11 23:37:18 -06:00). Staging: ledger **91 · 151**. **El Club Satori
-> todavía no está en prod:** pase el **jue 12/11** (#59 @ `66c950d`, paquete #93 @ `d6c117b`). **Próximo número libre:**
-> caja **096**; Club y lo que quede atrás, bloque de pase **152+**. Estado completo y reglas → [ESTADO.md](ESTADO.md).
+> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-16.md](docs/handoffs/HANDOFF-2026-11-16.md)** (16/11). Índice de
+> todos en [docs/handoffs/README.md](docs/handoffs/README.md). El hash de `main`, el ledger y la foto de las bases están
+> **solo** en el bloque ⚡ARRANQUE de [ESTADO.md](ESTADO.md) (se reemplaza en cada entrega; acá no se copia).
 
 ## ▶️ Lo próximo (en este orden)
-1. **Cerrar el #109** (agente nuevo): lecturas 5.2/5.4, logs del Edge y el cierre de caja del 11/11; después, el OK del
-   dueño para mergear.
-2. **Pase del Club, jue 12/11 por la mañana:** merge del #59 → Branching aplica la 150 y la 151 (65 · 095 → 67 · 151);
-   configuración del local; sha256 de la `CLUB_WEB_KEY`; carga única firmada con `aplicar-firmado`.
-3. **Prueba interna con el personal, jue 12/11 por la tarde**, con Santa Teresa encendido sin anunciarlo.
-4. **Apertura a clientes: vie 13 o lun 16**, después de revisar las excepciones de la prueba.
-5. **Google Wallet:** semana del 23/11 (#99).
-6. **Bloque 152+:** la 087, la 088 y la MAINTAIN de `authenticated` en las tablas de caja. Después del Club.
+1. **23:31 del 16/11 (ventana D1):** merge de #229 (mig 181, tope por comida) → #226 (mig 182, portal del anfitrión) →
+   #225 («Tarjeta vieja» y «PROMO CLUB 10 %») → #230 (docs del pase de Wallet). Verificar por contenido y actualizar ESTADO.
+2. **Validación física del dueño:** Ventas (#222) esta noche después de las 18:00 (Paridad, Por línea, Cajeros,
+   Competencias); mañana en la apertura #229, #226 y #225; las 2 reservas de prueba del #220.
+3. **Google Wallet (encendido en prod el 16/11, 15:40, con `VITE_WALLET_GOOGLE` en Pages):** prueba de baja (§5.5 del
+   paquete, opcional) y, aparte, el aviso de cumpleaños al pase con el link de OpenTable (Edge `club-pase`, PR aparte).
+4. **Alerta «tarjeta vieja sin PROMO»** (firmada, PR aparte).
+5. **Cumpleaños automático por Wallet con dos niveles configurables** (firmado; [spec §13](docs/club-satori/SPEC-clics-embudo.md)). Se enciende con el acceso de publicación de Google.
+6. **Registro de clics y embudo** (spec #223 firmada, D1–D9; 5 PRs). **El aviso v1.4 lo lee quien asesora en Ley 8968 antes de publicarse.** Después, el **cartel por referente** (decisión B: el mismo cartel del hotel cambiando solo el QR) y el hallazgo 232 (topes por IP en el resto del portal, D9).
+7. **Privacidad D3** (firmada): nombres de empleados a la base, correos y cédula de las Edge a secretos, montos reales fuera de los docs. PR chico.
+8. **`club_pases.actualizado_en`** (firmado; alcance en su PR).
+9. **Ítem 11** (#61, borrador): `config.toml` + Edge versionadas. Hasta cerrarlo, ningún PR a `main` con `supabase/functions/`.
+10. **Lo que quedó del #132** (cerrado sin mergear el 16/11): limpieza (`auth.ts` sin imports, assets sin uso, `public/_redirects`), atajos del ícono y `/version.json` en el service worker (P1 #11).
+11. **Fecha CR en Inventario** (`todayCR()` / `dateCR()`), como ya hizo el #222 en Ventas.
+12. **PRs abiertos viejos** a decidir o cerrar: #60, #61, #63, #70, #73, #75.
 
-## ✅ Hecho 10–11/11 (detalle en el [handoff del 11/11](docs/handoffs/HANDOFF-2026-11-11.md) y en el §9 de cada PASE)
-- **Pases a prod del 10/11**, todos cerrados sin vuelta atrás: **085** (#80), **089** (#90), **090** (#97), **091** (#103)
-  y la tanda **092–095** (#107, un solo merge). Ledger de prod 57 → 65.
-- **Agente nuevo del PoS en prod** (`4d3513a` → `5da233a`), al segundo intento. Cierre abierto en el #109.
-- **Cloudflare del Club (11/11):** Worker `satori-club-api` desplegado a mano, con sus variables y secretos cargados.
-- **Carga única del Club (G-56):** firmada por el dueño el 11/11; ensayo en staging OK. Se aplica el jueves.
-- **Staging:** de la 091 a la 095 aplicadas el 10/11; la sesión del Club renumeró la 075 a 150 y aplicó la 151.
+## ✅ Hecho el 16/11 (detalle en el [handoff](docs/handoffs/HANDOFF-2026-11-16.md))
+- **Entraron:** #207–#209, #210–#217 (alta en caja con WhatsApp, «Reservar» por local, OpenTable aislado, móvil con todas las pestañas, migs 177–180), #218, #219 (batería 173 y manager de prueba en staging), #220 (campañas de OpenTable por grupo), #221 (guarda de privacidad del repo), #222 (Ventas con «hoy» en hora CR), #223 (spec de clics), #224, #227 (textos del piloto en «usted») y #228.
+- **Google Wallet encendido en prod** (15:40).
+- **Triage de PRs viejos, cerrados:** #99, #65, #12, #84, #72, #30, #74, #95, #68, #117, #118, #100 y #132. De #30 sigue vigente que 2 cierres de Fase 1 nunca se completaron en prod (07/06 y 06/07).
+- **Gate de tests:** `deploy.yml` corre `npm test` y `ci.yml` corre el «Gate» en cada PR (#133, 13/11); P1 #19 queda cerrado.
+
+## Hecho 10–13/11 (histórico; antes era «Lo próximo»)
+- Pases a prod del 10/11 (085, 089, 090, 091, 092–095), agente nuevo del PoS (`5da233a`), Club en prod el 11/11 (150 y 151) y
+  su carga única. Ver el [handoff del 11/11](docs/handoffs/HANDOFF-2026-11-11.md) y el §9 de cada PASE.
+- Pendientes de esa lista que siguen abiertos: la 087, la 088 y la MAINTAIN de `authenticated` en las tablas de caja
+  (bloque 152+; ojo: el bloque de pase llega a 182, quedan 17 números).
 
 ---
 
@@ -110,7 +117,7 @@
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 
 1. **🔐 Revocar el token `claude-code-prod`.** Se usó durante el go-live; ya no hace falta. *(Nuevo, 30/10.)*
-2. **⏸️ POSPUESTO (06/11) · 🔐 Rotar los secretos de ingest** (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos
+2. **⏸️ POSPUESTO (06/11) · 🔐 Rotar los secretos de ingest** *(duplicado del ítem 2 de «Pendiente — en este orden»; vale ese)* (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos
    agentes de la PC del PoS). Hacerlo con las dos tareas paradas y verificar `pos_ndf_cursor.last_error` null
    después. *(Nuevo, 30/10.)*
 3. **🖊️ «Contexto jueves» de «Hoy» mostró un promedio mal** (₡235.773 contra ₡406.064) **mientras cargaba el
@@ -135,11 +142,11 @@
    es respaldo (último día en prod: 20/10). Retirar después de un período con el PoS solo, con firma. Ojo: el
    respaldo `{...xls, ...pos}` y `ventas_hist` (2023–2025) se siguen usando; lo que se retira es la carga manual y
    la pantalla de validación. *(Nuevo, 30/10.)*
-9. **🖊️ Ítem 11 · versionar `ingest-ndf` en `main` con `supabase/config.toml`.** Detalle abajo (P2 #11 del
+9. **🖊️ Ítem 11 · versionar `ingest-ndf` en `main` con `supabase/config.toml`** *(duplicado del ítem 4 de «Pendiente»; PR #61)*. Detalle abajo (P2 #11 del
    backlog heredado). **Hasta cerrarlo, ningún PR a `main` con archivos bajo `supabase/functions/`.**
 10. **🖊️ Ítem 9 · actualizar los dos agentes + re-ingesta 2025 del `01` → ROSAURA** (450 tickets, ₡19,06M,
     2025-01-01 → 2025-09-21). Detalle abajo (P2 #9). Depende de tener el código del agente con el cambio.
-11. **`version.json` lleva al login** desde el navegador: el service worker responde `index.html` a toda
+11. **`version.json` lleva al login** *(venía en el #132, cerrado el 16/11; sigue abierto)* desde el navegador: el service worker responde `index.html` a toda
     navegación bajo `/satori-app/`. Arreglo: agregar `/\/version\.json$/` a `navigateFallbackDenylist` en
     `vite.config.ts`. Mientras tanto se ve con Cmd+Shift+R o `view-source:`. *(Nuevo, 30/10.)*
 12. **Mi Rendimiento · Semana → Por día.** Pedido del dueño; definir con él el alcance (fusionar la pestaña Semana
@@ -158,7 +165,7 @@
 18. **🔐 Hardening ACL en prod:** quedan **4** `SECURITY DEFINER` ejecutables por `anon` (`get_my_role`,
     `handle_new_user`, `log_movement_edit`, `unif_on_cash_movement`). `get_my_role` necesita un análisis de
     policies antes del revoke. *(Heredado P1 #3, actualizado: eran 3.)*
-19. **Gate de tests en `deploy.yml`:** hoy publica sin correr `vitest`. *(HALLAZGOS #14.)*
+19. ✅ **Gate de tests en `deploy.yml`: hecho (#133, 13/11).** `deploy.yml` corre `npm test`; `ci.yml` corre el «Gate» en cada PR. Falta que el dueño marque «Gate» como requerido (HALLAZGOS #14).
 20. **👁️ Validar Proveedores A+B en piso** y **📮 DNS de Resend + `RESEND_API_KEY`** (depende del dueño).
     *(Heredado P0 #1 y #2.)*
 21. **🧹 Limpieza en `main`:** `src/shared/api/auth.ts` sin ningún import (verificado 30/10), assets sin uso y

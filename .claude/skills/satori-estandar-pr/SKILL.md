@@ -43,8 +43,9 @@ npx eslint . | tail -1     # cantidad <= la de main medida en el mismo momento, 
 - [ ] Si tocás `club-web/` (páginas, `functions/`, `worker/`) o la API del Club:
       `cd club-web && npm ci && VITE_CLUB_URL=https://club.ejemplo.test npm run build` (sin `VITE_CLUB_URL` el build de
       producción falla a propósito). Sus pruebas corren dentro del `vitest` de la raíz.
-- [ ] El repo no corre pruebas en los PR y `deploy.yml` no corre `vitest`: **este gate es el único**. Va con números
-      en el PR (tests, lint antes/después, hashes de sagrados).
+- [ ] Desde el #133 (13/11) `ci.yml` corre el check «Gate» en cada PR a `main` y `deploy.yml` corre `npm test` antes de
+      publicar, pero `main` no tiene regla de protección (no bloquea el merge): **el gate de copia limpia sigue siendo el
+      que cuenta**. Va con números en el PR (tests, lint antes/después, hashes de sagrados).
 
 ## 4. Pruebas que muerden
 - [ ] Toda lógica crítica (plata, caja, propinas, permisos, fechas, migraciones) lleva prueba nueva o ajustada.

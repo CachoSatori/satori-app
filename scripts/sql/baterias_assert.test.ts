@@ -12,7 +12,7 @@ export function assertsTragados(sql: string): string[] {
   const bloques = sql.match(/do \$\$[\s\S]*?end\s*\$\$;/gi) ?? []
   return bloques
     .filter(b => /-FALLAN/.test(b) && /exception\s+when\s+others/i.test(b))
-    .map(b => (b.match(/'(\w+)-FALLAN/) ?? [, '?'])[1] as string)
+    .map(b => b.match(/'(\w+)-FALLAN/)?.[1] ?? '?')
 }
 
 describe('ASSERT final de las baterías SQL', () => {

@@ -23,7 +23,8 @@ import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 import { leerAvance, textosAvance } from './avance'
 import { leerRetos, textosReto } from './retos'
-import { tarjetaReservar, urlReservaSocio } from './reservar'
+import { crearTokenPortal } from './portalToken'
+import { tarjetaReservar, urlReservaSocio, urlWidgetOpenTable } from './reservar'
 import { botonReservaCupon } from './reservaCupon'
 
 let idioma: Idioma = idiomaInicial()
@@ -488,8 +489,10 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),
     activo && avanceBox,
     qrBox,
-    // D 16-nov (el dueño, opción A; mig 179): «Reservar» → el OpenTable del local del socio tal cual; sin él, el rid por defecto
-    tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton }, urlReservaSocio(socio.reserva_url)),
+    // D 16-nov (el dueño): «Reservar» con el widget de OpenTable armado desde el link del local del socio (mig 179), en el
+    // idioma del portal; debajo, el link tal cual. Sin link del local, el rid por defecto. Nada del socio va a OpenTable.
+    tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton, abrir: t.reservar_abrir, falla: t.reservar_falla, marco: t.reservar_marco },
+      urlReservaSocio(socio.reserva_url), urlWidgetOpenTable(socio.reserva_url, idioma)),
     activo && retosBox,
     cumpleBox,
     err, baja)
@@ -657,12 +660,17 @@ function paginaPase(token: string) {
 }
 
 // ── Router ───────────────────────────────────────────────────────────────────
+const tokenPortal = crearTokenPortal(() => { try { return sessionStorage } catch { return null } })
+
 function ruta() {
   pararReloj()
   document.documentElement.lang = idioma
   document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === idioma)))
   if (/^\/alta\/?$/.test(location.pathname)) return paginaAlta()
   if (/^\/privacidad\/?$/.test(location.pathname)) return paginaPrivacidad()
+  // #214 hallazgo 2: /p/{token} → /p/ en la barra; el token sigue en memoria y en sessionStorage de esta pestaña
+  const tokP = tokenPortal(location.pathname, history)
+  if (tokP) return paginaPortal(tokP)
   const m = location.pathname.match(/^\/([rcpkswb])\/([^/]+)\/?$/)
   if (!m) return pintar(h('h1', {}, t.inicio), h('p', { class: 'sub' }, t.inicio_txt))
   const [, tipo, cod] = m

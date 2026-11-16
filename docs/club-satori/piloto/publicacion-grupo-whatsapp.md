@@ -10,8 +10,8 @@
 >   grupo. **Registrar ese origen todavía no existe:** se construye con la spec de clics (#223). Mientras tanto el link
 >   funciona igual: la página de alta lee solo `local` y `ref` (`club-web/src/main.ts`, `paginaAlta`) e ignora cualquier
 >   otro parámetro; se revisó que un `origen` extra no la rompe.
-> - `<tope de visitas con beneficio por día>`: hoy el servidor dice **1 por día**; el dueño evalúa **2** (almuerzo y cena),
->   pendiente de su firma. Se completa con lo que esté vigente al publicar.
+> - Tope: **una en el almuerzo y una en la cena** (firmado por el dueño el 16-nov, mig 181; almuerzo hasta las 15:59, cena
+>   desde las 16:00). Publicar con este texto cuando la 181 esté en producción.
 > - `<link del aviso>`: `<dominio>/privacidad`.
 > - Cumpleaños **no** va en la publicación.
 
@@ -25,7 +25,7 @@ Nueva promoción vigente desde el <fecha de publicación>: 10 % en su cuenta y u
 2. Complete su nombre y su WhatsApp.
 3. En su próxima visita, muestre su QR de socio en caja y listo.
 
-Vale en Satori Santa Teresa · <tope de visitas con beneficio por día>.
+Vale en Satori Santa Teresa · Una visita con beneficio en el almuerzo y una en la cena, cada día.
 
 Aviso de privacidad: <link del aviso>
 
@@ -39,6 +39,6 @@ New promotion valid from <publication date>: 10% off your bill and a surprise tr
 2. Enter your name and your WhatsApp.
 3. On your next visit, show your member QR at the register and you are set.
 
-Valid at Satori Santa Teresa · <visits with the benefit per day>.
+Valid at Satori Santa Teresa · One visit with the benefit at lunch and one at dinner, every day.
 
 Privacy notice: <privacy notice link>

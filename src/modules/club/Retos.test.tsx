@@ -11,7 +11,7 @@ const rol = vi.hoisted(() => ({ v: 'owner' }))
 const api = vi.hoisted(() => ({
   getRetos: vi.fn(), guardarReto: vi.fn(), armarReto: vi.fn(), terminarReto: vi.fn(), borrarReto: vi.fn(),
   getCortesiasDe: vi.fn(), getLocalesClub: vi.fn(), setRetosExigeFactura: vi.fn(),
-  resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), getFacturasRecientes: vi.fn(), registrarVisitaSocio: vi.fn(), conPremioDeReto: vi.fn(),
+  resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), getFacturasRecientes: vi.fn(), buscarFacturas: vi.fn(), registrarVisitaSocio: vi.fn(), conPremioDeReto: vi.fn(),
 }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: rol.v, full_name: 'Prueba' } }) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
@@ -109,6 +109,7 @@ describe('Caja · premio del reto (mig 169)', () => {
     rol.v = 'cajero'
     for (const f of Object.values(api)) f.mockReset()
     api.getFacturasRecientes.mockResolvedValue([])
+    api.buscarFacturas.mockResolvedValue([])
     api.resolverQR.mockResolvedValue({ tipo: 'socio', datos: { id: 'm1', nombre: 'Socio Ficticio', persona_estado: 'activo', estado: 'activo',
       desde: '2026-11-01T12:00:00Z', alta_por: 'caja', provisional_hasta: null, es_anfitrion: false } })
     api.getPedidosAbiertos.mockResolvedValue([{ pedido: '12', clave: 'pedido:20261114:12', mesa: '5', salonero: 'Salonero Ficticio', total_crc: 1000, pax: 2, actualizado: '2026-11-14T18:00:00Z' }])

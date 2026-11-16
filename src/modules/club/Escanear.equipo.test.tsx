@@ -7,7 +7,7 @@ import type { ResolverReferente } from '../../shared/api/club'
 import { esCuentaSinCreditos, MSG_EQUIPO_SIN_CANJE } from './equipo'
 
 const rol = vi.hoisted(() => ({ v: 'manager' }))
-const api = vi.hoisted(() => ({ resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), getFacturasRecientes: vi.fn() }))
+const api = vi.hoisted(() => ({ resolverQR: vi.fn(), getPedidosAbiertos: vi.fn(), getFacturasRecientes: vi.fn(), buscarFacturas: vi.fn() }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: rol.v, full_name: 'Prueba' } }) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 vi.mock('../../shared/api/club', async orig => ({ ...(await orig<typeof import('../../shared/api/club')>()), ...api }))
@@ -46,6 +46,7 @@ describe('Escanear · cuenta del equipo (D7 A)', () => {
     api.resolverQR.mockReset()
     api.getPedidosAbiertos.mockReset().mockResolvedValue([])
     api.getFacturasRecientes.mockReset().mockResolvedValue([])
+    api.buscarFacturas.mockReset().mockResolvedValue([])
   })
 
   it('equipo: personas del mes, sin créditos, sin «Canje sin celular» ni instrucciones de canje', async () => {

@@ -23,7 +23,7 @@ import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 import { leerAvance, textosAvance } from './avance'
 import { leerRetos, textosReto } from './retos'
-import { tarjetaReservar, urlReservaSocio } from './reservar'
+import { tarjetaReservar, urlReservaSocio, urlWidgetOpenTable } from './reservar'
 
 let idioma: Idioma = idiomaInicial()
 let t = TEXTOS[idioma]
@@ -483,8 +483,10 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),
     activo && avanceBox,
     qrBox,
-    // D 16-nov (el dueño, opción A; mig 179): «Reservar» → el OpenTable del local del socio tal cual; sin él, el rid por defecto
-    tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton }, urlReservaSocio(socio.reserva_url)),
+    // D 16-nov (el dueño): «Reservar» con el widget de OpenTable armado desde el link del local del socio (mig 179), en el
+    // idioma del portal; debajo, el link tal cual. Sin link del local, el rid por defecto. Nada del socio va a OpenTable.
+    tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton, abrir: t.reservar_abrir, falla: t.reservar_falla },
+      urlReservaSocio(socio.reserva_url), urlWidgetOpenTable(socio.reserva_url, idioma)),
     activo && retosBox,
     cumpleBox,
     err, baja)

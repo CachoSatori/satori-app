@@ -149,3 +149,7 @@ h1, h2, .nombre, .cupon .etq, .saldo .num, .cuenta, .codigo, .btn, .tab, details
 .avance-barra { display: flex; gap: 6px; margin: .4rem 0; }
 .avance-barra span { flex: 1; height: 8px; border-radius: 4px; background: rgba(127, 127, 127, .25); }
 .avance-barra span.lleno { background: currentColor; }
+/* D 16-nov: widget de OpenTable dentro de «Reservar una mesa» (OpenTable pinta su iframe en .reservar-widget) */
+.reservar-widget { margin: .4rem 0; max-width: 100%; overflow-x: auto; }
+.reservar-widget iframe { max-width: 100%; border: 0; }
+.reservar-abrir { font-size: .85rem; }

@@ -95,6 +95,8 @@ export interface Saldo { personas: number; creditos: number }
 
 // ── Errores ──────────────────────────────────────────────────────────────────
 export const MSG_REFERENTE_INACTIVO = 'Referente dado de baja: seguí con la cuenta sin crédito'
+/** 176: el manager con una ficha (miembro, cupón, canje…) de un local que no es suyo. La base dice «Ficha de otro local». */
+export const MSG_FICHA_OTRO_LOCAL = 'Esta ficha es de otro local: la atiende el manager de ese local o el owner.'
 
 /** Error de la API con bandera de red: si es de red, el p_op se reusa en el reintento. */
 export class ClubError extends Error {
@@ -112,6 +114,7 @@ export function aClubError(e: unknown): ClubError {
   const msg = e instanceof Error ? e.message : (e as { message?: string } | null)?.message ?? String(e)
   if (msg === 'REFERENTE_INACTIVO') return new ClubError(MSG_REFERENTE_INACTIVO, false, 'REFERENTE_INACTIVO')
   if (RE_RED.test(msg)) return new ClubError('Sin conexión. Reintentá: no se va a duplicar.', true)
+  if (/ficha de otro local/i.test(msg)) return new ClubError(MSG_FICHA_OTRO_LOCAL, false, 'FICHA_OTRO_LOCAL')
   if (/permission denied|sin permiso/i.test(msg)) return new ClubError('Tu usuario no tiene permiso para esto: pedile a un manager.', false)
   return new ClubError(msg, false)
 }

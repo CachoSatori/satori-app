@@ -231,6 +231,12 @@
       "rama": "claude/club-cumple-uso-anual",
       "renumerada_a": "175"
     },
+    "122": {
+      "nombre": "club_local_manager_listas",
+      "bloque": "club",
+      "rama": "claude/club-local-manager-3",
+      "renumerada_a": "176"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -374,6 +380,12 @@
       "bloque": "pase",
       "rama": "claude/club-cumple-uso-anual",
       "origen": "121"
+    },
+    "176": {
+      "nombre": "club_local_manager_listas",
+      "bloque": "pase",
+      "rama": "claude/club-local-manager-3",
+      "origen": "122"
     }
   }
 }

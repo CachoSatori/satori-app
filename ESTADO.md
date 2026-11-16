@@ -1,9 +1,11 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-16, 13:05 hora de Costa Rica.** `main` = merge del #220 (`5396649`, 12:57; el #219 entró a las 12:43 y el #218 a las 12:36). **Ledger de prod = 180. Staging = 180**
+**Al día: 2026-11-16, 14:15 hora de Costa Rica.** `main` = merge del #223 (`e40ffd4`, 14:08; antes #227 `872c212` 14:02, #222 `2a07cdf` 13:49 y #221 `8f8ec54` 13:46). **Ledger de prod = 180. Staging = 180**
 (verificado el 16/11 11:30 con list_migrations). Todos los merges con firma u OK del dueño. El bloque anterior (06:45 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md)** (el handoff del 15/16-nov está en el proyecto privado).
+- **16-nov 15:20–15:30:** prueba de Google Wallet en prod OK (pase de producción sin marca de prueba, QR escaneado en caja abre la ficha, actualización automática OK tras validar socio); falta prueba de baja (opcional). **15:32:** el dueño firmó encender `VITE_WALLET_GOOGLE` (lo hace su sesión de CC, §7 del PASE #230).
+- **#229/181, #226/182 y #225 firmados:** entran en la ventana de las 23:30 CR, en ese orden.
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
 > en un PR de docs inmediato después del merge. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se
@@ -11,7 +13,7 @@
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`5396649`** (merge del #220, 16/11 12:57 -06:00; antes `9225d87` = #219, 12:43). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **180** (staging también 180, verificado 16/11 11:30 CR). |
+| `main` | **`e40ffd4`** (merge del #223, 16/11 14:08 -06:00; antes `872c212` = #227, 14:02). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **180** (staging también 180, verificado 16/11 11:30 CR). |
 | `staging` | rama sin cambios desde el 13/11 (`4726b7f`); **base de staging con ledger 180** (16/11 08:49: 153 y 155–180 aplicadas de `main`, mismas 29 versiones y nombres que prod) | Proyecto Supabase de staging. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
@@ -42,8 +44,17 @@
 | #218 | | `5395d41` | 12:36 | docs ESTADO (foto de las 11:45; ledger prod y staging 180) |
 | #219 | | `9225d87` | 12:43 | batería 173 que no se traga el error + manager de prueba en staging (`scripts/sql/`, `STAGING.md`; sin efecto en prod) |
 | #220 | | `5396649` | 12:57 | campañas de OpenTable por grupo (club-web; OK del dueño 16/11 12:47, Decisión 2 opción A) |
+| #221 | | `8f8ec54` | 13:46 | privacidad del repo público: guarda `src/privacidadRepo.test.ts` (sin nombres, correos ni cédulas en el repo). Firma del dueño 13:38 |
+| #222 | | `2a07cdf` | 13:49 | Ventas: «hoy» en hora de Costa Rica (rangos por defecto) |
+| #227 | | `872c212` | 14:02 | textos del piloto: carteles (scripts + docs), mensajes en «usted». Conflicto de docs resuelto juntando líneas |
+| #223 | | `e40ffd4` | 14:08 | spec de clics y embudo del Club (solo docs) |
 
 - **Pendiente del dueño / de la sesión:**
+  - **Validación física pendiente del dueño (#222):** esta noche después de las 18:00 en Ventas: Paridad, Por línea, Cajeros y Competencias.
+  - **Decisiones firmadas el 16/11:** beneficio de almuerzo y cena (B, en construcción) · cumpleaños automático por Wallet (A, spec §13) ·
+    spec de clics D1–D9 con las recomendaciones (firmado) · cartel por referente (B: el mismo cartel del hotel cambiando solo el QR; PR aparte
+    después de clics) · privacidad D3 (A: nombres de empleados a la base, correos y cédula de Edge a secretos, montos en un PR chico) ·
+    tarjeta vieja (artículo PROMO CLUB 10 %, nombre único «Tarjeta vieja», migración de «Reservar» para todo anfitrión).
   - **Staging (16/11):** las 27 migraciones aplicaron sin error. Las baterías corridas DESPUÉS de aplicar (como se hizo) no son
     válidas para la mayoría: suponen la migración sin aplicar (casos «antes»/rollback) y varias piden un manager activo que staging
     no tiene. Pasaron 160, 161, 162, 164, 165, 166 (y 173 salvo el caso 18). Desde ahora: correr la batería ANTES de aplicar

@@ -94,6 +94,7 @@ Leído el 16/11 13:3x -06:00:
 | Qué | Quién | Fecha y hora (-06:00) | SHA |
 |---|---|---|---|
 | Decisión (opción B) | dueño | 2026-11-16 13:36 | — |
+| Corte 16:00 CR como el PoS (almuerzo hasta 15:59:59, cena desde 16:00 hasta el cierre); se reusa `turno_corte` | dueño | 2026-11-16 13:59 | — |
 | Aplicación en staging | sesión de CC | 2026-11-16 ~13:46 | rama `claude/club-tope-almuerzo-cena` |
 | Firma del dueño (SQL final, prod) | | | |
 | Merge (Branching) | | | |

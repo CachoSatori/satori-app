@@ -43,6 +43,15 @@ describe('mensaje de cumpleaños (lo lee el cliente)', () => {
     expect(t).toContain('Vale del 28 de diciembre al 9 de enero.')   // no ofrece días que ya pasaron
     expect(t).toContain('Reserve aquí: https://reservas.ejemplo.test/r?rid=1')
   })
+  it('opción B (16-nov): el link de OpenTable con ot_source va con la campaña «cumpleanos»; sin ot_source, igual', () => {
+    const conSrc = 'https://www.opentable.com/r/local-ficticio?restref=9990301&ot_source=Club%20Satori&ot_campaign=Club%20Satori'
+    expect(textoCumpleWhatsApp({ ...ENVIO, reserva_url: conSrc }, '2026-12-28'))
+      .toContain('Reserve aquí: https://www.opentable.com/r/local-ficticio?restref=9990301&ot_source=Club%20Satori&ot_campaign=cumpleanos')
+    const sinSrc = 'https://www.opentable.com/restref/client/?rid=9990302'
+    expect(textoCumpleWhatsApp({ ...ENVIO, reserva_url: sinSrc }, '2026-12-28')).toContain(`Reserve aquí: ${sinSrc}\n`)
+    // el link de wa.me lleva el mismo texto (codificado), sin nada más del socio que su WhatsApp de destino
+    expect(decodeURIComponent(linkCumpleWhatsApp({ ...ENVIO, reserva_url: conSrc }, '2026-12-28')!.split('?text=')[1])).toContain('ot_campaign=cumpleanos')
+  })
   it('cambiando el texto sirve para otra cosa; sin condiciones ni link no deja frases sueltas', () => {
     const t = textoCumpleWhatsApp({ ...ENVIO, beneficio: 'una copa de vino', min_personas: 1, uno_por_mesa: false, solo_reserva: false, reserva_url: null },
       '2026-12-20')

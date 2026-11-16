@@ -19,3 +19,43 @@ export function normalizarReservaUrl(entrada: string): string | null {
   }
   return u
 }
+
+/**
+ * D 16-nov (el dueño, opción B): copia de `conCampanaOpenTable` de club-web/src/reservar.ts (la app no importa club-web);
+ * reservaUrl.test.ts corre las dos con los mismos casos. La usa el WhatsApp de cumpleaños del Inicio (`cumpleanos`).
+ * Solo cambia `ot_campaign` (reemplaza o agrega) si el link es https de OpenTable y trae `ot_source` con valor; si no,
+ * el link queda igual. Nada del socio viaja: solo la etiqueta del grupo.
+ */
+export type GrupoReserva = 'local' | 'turista' | 'referente' | 'cumpleanos'
+export const GRUPOS_RESERVA: readonly GrupoReserva[] = ['local', 'turista', 'referente', 'cumpleanos']
+
+function claveParam(par: string): string {
+  const k = par.split('=')[0]
+  try { return decodeURIComponent(k.replace(/\+/g, ' ')) } catch { return k }
+}
+
+export function conCampanaOpenTable(url: string, grupo: GrupoReserva): string {
+  if (!GRUPOS_RESERVA.includes(grupo) || typeof url !== 'string' || url.length > RESERVA_MAX || !RE_RESERVA_OPENTABLE.test(url)) return url
+  let host: URL
+  try { host = new URL(url) } catch { return url }
+  if (host.protocol !== 'https:' || host.username || host.password || host.port || !RE_HOST_OPENTABLE.test(host.hostname)) return url
+  const iHash = url.indexOf('#')
+  const sinHash = iHash < 0 ? url : url.slice(0, iHash)
+  const hash = iHash < 0 ? '' : url.slice(iHash)
+  const iQ = sinHash.indexOf('?')
+  if (iQ < 0) return url
+  const pares = sinHash.slice(iQ + 1).split('&')
+  if (!pares.some(p => claveParam(p) === 'ot_source' && p.includes('=') && p.slice(p.indexOf('=') + 1) !== '')) return url
+  const nuevo = `ot_campaign=${grupo}`
+  const salida: string[] = []
+  let puesto = false
+  for (const p of pares) {
+    if (claveParam(p) !== 'ot_campaign') { salida.push(p); continue }
+    if (!puesto) { salida.push(nuevo); puesto = true }
+  }
+  if (!puesto) {
+    if (salida.length > 0 && salida[salida.length - 1] === '') salida[salida.length - 1] = nuevo
+    else salida.push(nuevo)
+  }
+  return `${sinHash.slice(0, iQ)}?${salida.join('&')}${hash}`
+}

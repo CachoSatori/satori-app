@@ -99,6 +99,12 @@
       "rama": "claude/alias-proveedor-rpc",
       "renumerada_a": "153"
     },
+    "097": {
+      "nombre": "esquema_centimos_como_prod",
+      "bloque": "caja",
+      "rama": "claude/esquema-centimos-alinear",
+      "renumerada_a": "177"
+    },
     "100": {
       "nombre": "club_catalogo_locales",
       "bloque": "club",
@@ -350,6 +356,12 @@
       "bloque": "pase",
       "rama": "claude/club-cumple-promo",
       "origen": "119"
+    },
+    "177": {
+      "nombre": "esquema_centimos_como_prod",
+      "bloque": "pase",
+      "rama": "claude/esquema-centimos-alinear",
+      "origen": "097"
     }
   }
 }

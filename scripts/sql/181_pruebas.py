@@ -25,6 +25,12 @@ insert into auth.users (id, raw_user_meta_data) values ('00000000-0000-4000-8181
 update public.profiles set role = 'owner', is_active = true where id = '00000000-0000-4000-8181-0000000000aa';
 """
 
+# Las mutaciones del núcleo de excepciones cambian su md5 final: apagan la guarda de md5 de la migración y el rollback
+# no puede volver ese núcleo (su guarda lo frena), así que se salta ese bloque del rollback y además cae el caso 12.
+SIN_GUARDA_NUCLEO = ("  if md5(pg_get_functiondef(v_fn)) <> '94cf0df9d0b189322b27d4d8b208a3e0' then", "  if false then")
+MUTA_NUCLEO = {'anomalo_por_dia', 'semana_por_visitas'}
+SALTA_NUCLEO_RB = ("begin\n  if md5(v_def) <> '94cf0df9d0b189322b27d4d8b208a3e0' then", "begin\n  return;\n  if md5(v_def) <> '94cf0df9d0b189322b27d4d8b208a3e0' then")
+
 # nombre → (texto de la 181, reemplazo, casos que tienen que caer)
 MUTACIONES: dict[str, tuple] = {
     # el tope vuelve a ser por DÍA (sin mirar la comida)
@@ -58,10 +64,27 @@ MUTACIONES: dict[str, tuple] = {
     # la interna abierta a la API
     'interna_abierta': ("revoke all on function public.club_socio_tope_comida(uuid, text, timestamptz) from public, anon, authenticated;\n",
                         "grant execute on function public.club_socio_tope_comida(uuid, text, timestamptz) to authenticated;\n", {'11'}),
+    # SOCIO_USO_ANOMALO vuelve a «dos mesas el mismo día» (sin la comida)
+    'anomalo_por_dia': ([("'socio-comida:' || v.miembro_id || ':' || v.fecha || ':' || public.club_comida(v.location_id, v.registrada_en),",
+                          "'socio-comida:' || v.miembro_id || ':' || v.fecha || ':almuerzo',"),
+                         ("                              'comida', public.club_comida(v.location_id, v.registrada_en),\n",
+                          "                              'comida', 'almuerzo',\n"),
+                         ("     group by v.miembro_id, v.fecha, public.club_comida(v.location_id, v.registrada_en)\n",
+                          "     group by v.miembro_id, v.fecha\n"), SIN_GUARDA_NUCLEO], None, {'13', '12'}),
+    # el máximo semanal vuelve a contar visitas
+    'semana_por_visitas': ([("    having count(distinct v.fecha) > v_cfg.socio_visitas_semana_max",
+                             "    having count(*) > v_cfg.socio_visitas_semana_max"), SIN_GUARDA_NUCLEO], None, {'14', '12'}),
+    # MISMO_USUARIO vuelve a contar visitas
+    'mismo_usuario_por_visitas': ("(select case when a.que = 'socio' then count(distinct (b.f at time zone 'America/Costa_Rica')::date) else count(*) end",
+                                  "(select count(*)", {'15'}),
 }
 MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
     # el rollback no vuelve el cuerpo de la 150 (deja el tope por comida)
     'rollback_sin_base': ("create or replace function public.club_socio_visita_base(", "create or replace function pg_temp.club_socio_visita_base_mutada(", {'12'}),
+    # el rollback deja las alertas de la 181 (no vuelve la 164)
+    'rollback_deja_alertas': ("create or replace function public.club_alertas_inicio(", "create or replace function pg_temp.club_alertas_inicio_mutada(", {'12'}),
+    # el rollback deja las excepciones de la 181 (no vuelve la 155)
+    'rollback_deja_excepciones': ("begin\n  if md5(v_def) <> '94cf0df9d0b189322b27d4d8b208a3e0' then", "begin\n  return;\n  if md5(v_def) <> '94cf0df9d0b189322b27d4d8b208a3e0' then", {'12'}),
     # el rollback deja la columna
     'rollback_deja_columna': ("alter table public.club_config_global drop column if exists socio_visitas_por_comida;\n", "", {'12'}),
 }
@@ -85,6 +108,8 @@ def cuerpo(mutar: str | None) -> str:
 
 def _rollback(mutar: str | None) -> str:
     rb = ROLLBACK.read_text(encoding='utf-8')
+    if mutar in MUTA_NUCLEO:
+        rb = rb.replace(*SALTA_NUCLEO_RB)
     if mutar in MUTACIONES_ROLLBACK:
         viejo, nuevo, _ = MUTACIONES_ROLLBACK[mutar]
         if rb.count(viejo) != 1:

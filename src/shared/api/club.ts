@@ -842,6 +842,8 @@ export type TipoAlertaInicio = 'ANFITRION_24H' | 'MISMO_USUARIO' | 'VISITAS_SIN_
 export interface AlertaInicio {
   tipo: TipoAlertaInicio; ref: string; cantidad: number; umbral: number; fecha: string
   detalle: { miembro_id?: string; miembro?: string; tipo_miembro?: string; que?: 'socio' | 'equipo'; usuario?: string; dias?: number
+             /** Mig 181: para socios, `cantidad` = DÍAS distintos con visita (`'dias'`); sin la 181 o del equipo, veces. */
+             cuenta?: 'dias' | 'veces'
              /** El local del aviso; `multilocal` = el usuario ve más de un local con el Club encendido. */
              local?: string; local_nombre?: string; multilocal?: boolean }
 }

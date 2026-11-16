@@ -186,6 +186,176 @@ revoke all on function public.club_socio_visita_base(uuid, jsonb, uuid, text) fr
 comment on function public.club_socio_visita_base(uuid, jsonb, uuid, text) is
   '168: la visita del socio de antes (150), sin la cortesía de los primeros 90 días. La llama club_socio_visita. Para '
   'cambiar la visita, se cambia ESTA (create or replace club_socio_visita_base), no club_socio_visita.';
+-- Excepciones: el núcleo vuelve a la 155 con el reemplazo INVERSO de los 5 fragmentos de la 181 (exige el md5 de la 181
+-- antes y el de prod 16-nov, 5ad4ff8c…, después). Alertas del Inicio: el cuerpo de la 164 tal cual (md5 493eb9cb…). Van
+-- ANTES de borrar club_comida, que la versión de la 181 usa.
+do $$
+declare
+  v_fn  constant regprocedure := 'public.club_excepciones__nucleo(date,date,text,text)'::regprocedure;
+  v_def text := pg_get_functiondef('public.club_excepciones__nucleo(date,date,text,text)'::regprocedure);
+  r     record;
+begin
+  if md5(v_def) <> '94cf0df9d0b189322b27d4d8b208a3e0' then
+    raise exception '181 rollback: club_excepciones__nucleo no es la esperada (la de la 181) (md5 %): se para sin tocar nada', md5(v_def);
+  end if;
+  for r in select * from (values
+    (1, $v1$    having count(distinct v.fecha) > v_cfg.socio_visitas_semana_max and bool_or$v1$, $n1$    having count(*) > v_cfg.socio_visitas_semana_max and bool_or$n1$),
+    (2, $v2$'motivo', 'muchos días con visita en la semana',
+                              'visitas', count(*), 'dias', count(distinct v.fecha), 'maximo'$v2$, $n2$'motivo', 'muchas visitas en la semana',
+                              'visitas', count(*), 'maximo'$n2$),
+    (3, $v3$    -- SOCIO_USO_ANOMALO: más de N DÍAS con visita en la semana (en todos los locales; 181: días, no visitas, para que
+    -- almuerzo + cena el mismo día no cuente doble y el umbral siga con la misma sensibilidad)
+$v3$, $n3$    -- SOCIO_USO_ANOMALO: más de N visitas en la semana (en todos los locales)
+$n3$),
+    (4, $v4$     group by v.miembro_id, v.fecha, public.club_comida(v.location_id, v.registrada_en)
+    having count(distinct v.location_id$v4$, $n4$     group by v.miembro_id, v.fecha
+    having count(distinct v.location_id$n4$),
+    (5, $v5$    -- SOCIO_USO_ANOMALO: dos mesas en la MISMA COMIDA (181, firma del dueño 16-nov 14:51, opción A: con el tope por
+    -- comida, almuerzo + cena es normal; almuerzo y cena con el corte turno_corte del local de CADA visita, hora CR).
+    -- CLUB COMPARTIDO (08-nov): cuenta las visitas del socio en TODOS los locales (vsa) y sale en cada local donde tuvo
+    -- una de esas visitas; dice en qué locales.
+    select 'SOCIO_USO_ANOMALO', 'socio-comida:' || v.miembro_id || ':' || v.fecha || ':' || public.club_comida(v.location_id, v.registrada_en),
+           min(v.registrada_en), null, 'probable',
+           jsonb_build_object('miembro', public.club_nombre_limpio(min(mi.nombre)), 'motivo', 'dos mesas en la misma comida',
+                              'comida', public.club_comida(v.location_id, v.registrada_en),
+$v5$, $n5$    -- SOCIO_USO_ANOMALO: dos mesas el mismo día. CLUB COMPARTIDO (08-nov): cuenta las visitas del socio en TODOS los
+    -- locales (vsa) y sale en cada local donde tuvo una de esas visitas; dice en qué locales.
+    select 'SOCIO_USO_ANOMALO', 'socio-dia:' || v.miembro_id || ':' || v.fecha, min(v.registrada_en), null, 'probable',
+           jsonb_build_object('miembro', public.club_nombre_limpio(min(mi.nombre)), 'motivo', 'dos mesas el mismo día',
+$n5$)
+  ) f(i, viejo, nuevo) order by f.i loop
+    if position(r.viejo in v_def) = 0 or position(r.viejo in substr(v_def, position(r.viejo in v_def) + 1)) > 0 then
+      raise exception '181 rollback: el fragmento % no está exactamente una vez', r.i;
+    end if;
+    v_def := replace(v_def, r.viejo, r.nuevo);
+  end loop;
+  execute v_def;
+  if md5(pg_get_functiondef(v_fn)) <> '5ad4ff8cf91646c6406fc3ebc24b498e' then
+    raise exception '181 rollback: club_excepciones__nucleo quedó con md5 % (se esperaba 5ad4ff8cf91646c6406fc3ebc24b498e)', md5(pg_get_functiondef(v_fn));
+  end if;
+end
+$$;
+revoke all on function public.club_excepciones__nucleo(date, date, text, text) from public, anon, authenticated;
+create or replace function public.club_alertas_inicio(p_location text default null)
+returns table (tipo text, ref text, cantidad int, umbral int, fecha timestamptz, detalle jsonb)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol   public.user_role := public.get_my_role();
+  v_cfg   public.club_config%rowtype;
+  v_hoy   date := (now() at time zone 'America/Costa_Rica')::date;
+  v_desde timestamptz;
+  v_n     int;
+  v_loc   record;
+  v_multi boolean;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  -- Sin local (el Inicio): TODOS los locales con el Club encendido que el usuario ve, cada aviso con su local. Así, con
+  -- dos locales encendidos y ninguno elegido en el aparato, el Inicio no queda en «sin comprobar» (verificador #183).
+  if p_location is null then
+    select count(*) > 1 into v_multi from public.club_config c
+     where c.club_activo and public.puede_ver_local(c.location_id);
+    for v_loc in select c.location_id from public.club_config c
+                  where c.club_activo and public.puede_ver_local(c.location_id) order by c.location_id loop
+      return query select a.tipo, a.ref, a.cantidad, a.umbral, a.fecha,
+                          a.detalle || jsonb_build_object('multilocal', v_multi)
+                     from public.club_alertas_inicio(v_loc.location_id) a;
+    end loop;
+    return;
+  end if;
+  p_location := public.club_local(p_location, false);
+  if not public.puede_ver_local(p_location) then        -- 091: el manager ve solo sus locales
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if not public.club_local_activo(p_location) then return; end if;   -- Club apagado en el local: nada que revisar
+  select * into v_cfg from public.club_config c where c.location_id = p_location;
+  v_desde := (v_hoy - 1)::timestamp at time zone 'America/Costa_Rica';   -- ayer 00:00 hora CR
+
+  -- (a) más de N acumulaciones del mismo anfitrión en 24 h
+  return query
+  with ac as (
+    select m.miembro_id, m.fecha_visita as f
+      from public.club_movimientos m
+     where m.location_id = p_location and m.tipo = 'tarjeta' and m.personas > 0
+       and m.origen <> 'migracion'                                     -- la carga inicial no cuenta (como la 155)
+       and m.fecha_visita >= v_desde - interval '24 hours' and m.fecha_visita <= now()
+    union all
+    select pp.miembro_id, pp.fecha_visita
+      from public.club_personas_pendientes pp
+     where pp.location_id = p_location and pp.movimiento_id is null   -- aprobada = ya es movimiento (no se cuenta dos veces)
+       and pp.fecha_visita >= v_desde - interval '24 hours' and pp.fecha_visita <= now()),
+  ve as (   -- por cada acumulación de la ventana de revisión: cuántas del mismo anfitrión en las 24 h que terminan ahí
+    select a.miembro_id, a.f as hasta,
+           (select count(*) from ac b where b.miembro_id = a.miembro_id and b.f > a.f - interval '24 hours' and b.f <= a.f) as n
+      from ac a where a.f >= v_desde),
+  mx as (
+    select distinct on (ve.miembro_id) ve.miembro_id, ve.n, ve.hasta
+      from ve order by ve.miembro_id, ve.n desc, ve.hasta desc)
+  select 'ANFITRION_24H'::text, 'anfitrion-24h:' || mx.miembro_id, mx.n::int, v_cfg.alerta_anfitrion_24h_max, mx.hasta,
+         jsonb_build_object('local', p_location, 'local_nombre', coalesce(v_cfg.nombre, p_location),
+                            'miembro_id', mx.miembro_id, 'miembro', public.club_nombre_limpio(mi.nombre),
+                            'tipo_miembro', mi.tipo, 'desde', mx.hasta - interval '24 hours', 'hasta', mx.hasta)
+    from mx join public.club_miembros mi on mi.id = mx.miembro_id
+   where mx.n > v_cfg.alerta_anfitrion_24h_max
+   order by mx.n desc, mx.hasta desc;
+
+  -- (b) el mismo usuario registra al mismo socio (visitas) o al mismo del equipo (tarjetas) más de M veces en D días
+  return query
+  with rg as (
+    select v.miembro_id, v.registrado_por as usuario, v.registrada_en as f, 'socio'::text as que
+      from public.club_visitas_socio v
+     where v.location_id = p_location and v.registrado_por is not null
+       and v.registrada_en >= v_desde - make_interval(days => v_cfg.alerta_mismo_usuario_dias) and v.registrada_en <= now()
+    union all
+    select m.miembro_id, m.registrado_por, m.registrado_en, 'equipo'
+      from public.club_movimientos m join public.club_miembros mi on mi.id = m.miembro_id
+     where m.location_id = p_location and m.tipo = 'tarjeta' and m.personas > 0 and m.origen <> 'migracion'
+       and mi.tipo = 'equipo' and m.registrado_por is not null
+       and m.registrado_en >= v_desde - make_interval(days => v_cfg.alerta_mismo_usuario_dias) and m.registrado_en <= now()),
+  ve as (
+    select a.miembro_id, a.usuario, a.que, a.f as hasta,
+           (select count(*) from rg b where b.miembro_id = a.miembro_id and b.usuario = a.usuario and b.que = a.que
+               and b.f > a.f - make_interval(days => v_cfg.alerta_mismo_usuario_dias) and b.f <= a.f) as n
+      from rg a where a.f >= v_desde),
+  mx as (
+    select distinct on (ve.miembro_id, ve.usuario, ve.que) ve.*
+      from ve order by ve.miembro_id, ve.usuario, ve.que, ve.n desc, ve.hasta desc)
+  select 'MISMO_USUARIO'::text, 'mismo-usuario:' || mx.que || ':' || mx.miembro_id || ':' || mx.usuario, mx.n::int,
+         v_cfg.alerta_mismo_usuario_max, mx.hasta,
+         jsonb_build_object('local', p_location, 'local_nombre', coalesce(v_cfg.nombre, p_location),
+                            'miembro_id', mx.miembro_id, 'miembro', public.club_nombre_limpio(mi.nombre), 'que', mx.que,
+                            'usuario', coalesce((select p.full_name from public.profiles p where p.id = mx.usuario), 'Sin perfil'),
+                            'dias', v_cfg.alerta_mismo_usuario_dias)
+    from mx join public.club_miembros mi on mi.id = mx.miembro_id
+   where mx.n > v_cfg.alerta_mismo_usuario_max
+   order by mx.n desc, mx.hasta desc;
+
+  -- (c) visitas de socio sin factura cruzada (ayer y hoy): la misma cuenta que «Reportes → Visitas de socios por usuario»
+  select coalesce(sum(r.sin_factura), 0)::int into v_n from public.club_reporte_visitas(v_hoy - 1, v_hoy, p_location) r;
+  if v_n > v_cfg.alerta_visitas_sin_factura_max then
+    return query select 'VISITAS_SIN_FACTURA'::text, 'visitas-sin-factura:' || p_location || ':' || v_hoy, v_n,
+                        v_cfg.alerta_visitas_sin_factura_max, now(),
+                        jsonb_build_object('local', p_location, 'local_nombre', coalesce(v_cfg.nombre, p_location),
+                                           'desde', v_hoy - 1, 'hasta', v_hoy);
+  end if;
+
+  -- (d) canjes sin código sin resolver (30 días): las mismas filas de Excepciones, solo el conteo
+  select count(*)::int into v_n
+    from public.club_excepciones(v_hoy - 30, v_hoy, p_location, 'CANJE_SIN_CODIGO') e where not e.resuelta;
+  if v_n > v_cfg.alerta_canjes_sin_codigo_max then
+    return query select 'CANJE_SIN_CODIGO'::text, 'canjes-sin-codigo:' || p_location || ':' || v_hoy, v_n,
+                        v_cfg.alerta_canjes_sin_codigo_max, now(),
+                        jsonb_build_object('local', p_location, 'local_nombre', coalesce(v_cfg.nombre, p_location), 'dias', 30);
+  end if;
+end;
+$$;
+revoke all on function public.club_alertas_inicio(text) from public, anon, authenticated;
+grant execute on function public.club_alertas_inicio(text) to authenticated;
 drop function if exists public.club_socio_tope_comida(uuid, text, timestamptz);
 drop function if exists public.club_comida(text, timestamptz);
 alter table public.club_config_global drop column if exists socio_visitas_por_comida;

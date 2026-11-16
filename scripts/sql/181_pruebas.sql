@@ -97,14 +97,45 @@ create function pg_temp.caja(n int, p_loc text, p_factura text) returns jsonb la
 create function pg_temp.nvis(n int) returns int language sql stable as $f$
   select count(*)::int from public.club_visitas_socio where miembro_id = pg_temp.mid(n) $f$;
 
-select pg_temp.alta(g) from generate_series(1, 14) g;
+-- alertas antiabuso (181, opción A): Excepciones (SOCIO_USO_ANOMALO) y alertas del Inicio (MISMO_USUARIO), como owner
+create function pg_temp.exc(p_loc text, p_desde date, p_hasta date) returns jsonb language plpgsql as $f$
+declare r jsonb;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', (select owner_id from _c181), 'role', 'authenticated')::text, true);
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]'::jsonb) into r from public.club_excepciones(p_desde, p_hasta, p_loc, 'SOCIO_USO_ANOMALO') e;
+  perform set_config('request.jwt.claims', '', true);
+  return r;
+end $f$;
+create function pg_temp.alertas(p_loc text) returns jsonb language plpgsql as $f$
+declare r jsonb;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', (select owner_id from _c181), 'role', 'authenticated')::text, true);
+  select coalesce(jsonb_agg(to_jsonb(a)), '[]'::jsonb) into r from public.club_alertas_inicio(p_loc) a where a.tipo = 'MISMO_USUARIO';
+  perform set_config('request.jwt.claims', '', true);
+  return r;
+end $f$;
+-- ¿hay una alerta/excepción cuyo ref empieza con este prefijo?
+create function pg_temp.hay(p jsonb, p_pref text) returns boolean language sql immutable as $f$
+  select exists (select 1 from jsonb_array_elements(p) x where x->>'ref' like p_pref || '%') $f$;
+create function pg_temp.fila(p jsonb, p_pref text) returns jsonb language sql immutable as $f$
+  select x from jsonb_array_elements(p) x where x->>'ref' like p_pref || '%' limit 1 $f$;
+-- visita registrada por el cajero ficticio en un momento dado (para MISMO_USUARIO)
+create function pg_temp.vis_por(n int, p_loc text, p_ts timestamptz) returns uuid language plpgsql as $f$
+declare v uuid;
+begin
+  v := pg_temp.vis(n, p_loc, p_ts);
+  update public.club_visitas_socio set registrado_por = (select cajero from _c181) where id = v;
+  return v;
+end $f$;
+
+select pg_temp.alta(g) from generate_series(1, 23) g;
 
 -- 00. hay owner activo, cajero ficticio, 14 socios y los cortes de los locales ficticios
 insert into _r181 (caso, ok, detalle)
-select '00 owner activo, cajero ficticio, 14 socios activos, cortes A/B/C/D y tope por comida = 1',
+select '00 owner activo, cajero ficticio, 23 socios activos, cortes A/B/C/D y tope por comida = 1',
        c.owner_id is not null
        and exists (select 1 from public.profiles p where p.id = c.cajero and p.role::text = 'cajero' and p.is_active)
-       and (select count(*) from generate_series(1, 14) g join public.club_miembros m on m.id = pg_temp.mid(g) where m.estado = 'activo') = 14
+       and (select count(*) from generate_series(1, 23) g join public.club_miembros m on m.id = pg_temp.mid(g) where m.estado = 'activo') = 23
        and (select turno_corte from public.club_config where location_id = 'prueba181c') = time '16:00'
        and (select socio_visitas_por_comida from public.club_config_global) = 1,
        'owner ' || coalesce(c.owner_id::text, 'NINGUNO')
@@ -279,15 +310,83 @@ begin
 exception when others then insert into _r181 (caso, ok, detalle) values ('11 (error sin atrapar)', false, sqlerrm);
 end $$;
 
+-- 13. SOCIO_USO_ANOMALO por COMIDA (día fijo pasado 2026-11-03, local C con corte 16:00): almuerzo + cena en dos mesas
+--     NO dispara; dos mesas en el almuerzo SÍ (ref socio-comida:…:almuerzo, «dos mesas en la misma comida»); borde
+--     15:59:59 / 16:00:00 son comidas distintas (no dispara); almuerzo en C y almuerzo en D (corte 15:00) SÍ, con los dos
+--     locales.
+update public.club_config set socio_visitas_semana_max = 5 where location_id in ('prueba181c', 'prueba181d');
+do $$ declare e jsonb; d date := date '2026-11-03';
+begin
+  perform pg_temp.vis(15, 'prueba181c', pg_temp.ts('12:00', d)); perform pg_temp.vis(15, 'prueba181c', pg_temp.ts('19:00', d));
+  perform pg_temp.vis(16, 'prueba181c', pg_temp.ts('12:00', d)); perform pg_temp.vis(16, 'prueba181c', pg_temp.ts('13:30', d));
+  perform pg_temp.vis(17, 'prueba181c', pg_temp.ts('15:59:59', d)); perform pg_temp.vis(17, 'prueba181c', pg_temp.ts('16:00:00', d));
+  perform pg_temp.vis(18, 'prueba181c', pg_temp.ts('12:00', d)); perform pg_temp.vis(18, 'prueba181d', pg_temp.ts('13:00', d));
+  e := pg_temp.exc('prueba181c', d, d);
+  insert into _r181 (caso, ok, detalle) values ('13 SOCIO_USO_ANOMALO por comida: almuerzo+cena no; dos almuerzos sí; 15:59:59/16:00 no; C+D al almuerzo sí',
+    not pg_temp.hay(e, 'socio-comida:' || pg_temp.mid(15)) and not pg_temp.hay(e, 'socio-dia:' || pg_temp.mid(15))
+    and pg_temp.fila(e, 'socio-comida:' || pg_temp.mid(16))->>'ref' = 'socio-comida:' || pg_temp.mid(16) || ':2026-11-03:almuerzo'
+    and pg_temp.fila(e, 'socio-comida:' || pg_temp.mid(16))->'detalle'->>'motivo' = 'dos mesas en la misma comida'
+    and pg_temp.fila(e, 'socio-comida:' || pg_temp.mid(16))->'detalle'->>'comida' = 'almuerzo'
+    and not pg_temp.hay(e, 'socio-comida:' || pg_temp.mid(17))
+    and pg_temp.fila(e, 'socio-comida:' || pg_temp.mid(18))->'detalle'->'locales' @> '["prueba181c","prueba181d"]',
+    e::text);
+exception when others then insert into _r181 (caso, ok, detalle) values ('13 (error sin atrapar)', false, sqlerrm);
+end $$;
+
+-- 14. Máximo semanal (5) por DÍAS con visita (semana ISO del 2-nov al 8-nov de 2026): almuerzo + cena 3 días (6 visitas,
+--     3 días) NO dispara; 6 días distintos SÍ (dias = 6); 5 días justos (borde) NO.
+do $$ declare e jsonb; i int;
+begin
+  for i in 0..2 loop
+    perform pg_temp.vis(19, 'prueba181c', pg_temp.ts('12:00', date '2026-11-02' + i));
+    perform pg_temp.vis(19, 'prueba181c', pg_temp.ts('19:00', date '2026-11-02' + i));
+  end loop;
+  for i in 0..5 loop perform pg_temp.vis(20, 'prueba181c', pg_temp.ts('12:00', date '2026-11-02' + i)); end loop;
+  for i in 0..4 loop perform pg_temp.vis(21, 'prueba181c', pg_temp.ts('19:00', date '2026-11-02' + i)); end loop;
+  e := pg_temp.exc('prueba181c', date '2026-11-02', date '2026-11-08');
+  insert into _r181 (caso, ok, detalle) values ('14 semana por días: 6 visitas en 3 días no; 6 días sí (dias 6); 5 días justos no',
+    not pg_temp.hay(e, 'socio-semana:' || pg_temp.mid(19))
+    and (pg_temp.fila(e, 'socio-semana:' || pg_temp.mid(20))->'detalle'->>'dias')::int = 6
+    and pg_temp.fila(e, 'socio-semana:' || pg_temp.mid(20))->'detalle'->>'motivo' = 'muchos días con visita en la semana'
+    and not pg_temp.hay(e, 'socio-semana:' || pg_temp.mid(21)),
+    e::text);
+exception when others then insert into _r181 (caso, ok, detalle) values ('14 (error sin atrapar)', false, sqlerrm);
+end $$;
+
+-- 15. MISMO_USUARIO (umbral 2 en 3 días) cuenta DÍAS con visita del mismo usuario: almuerzo + cena hoy y ayer (4 visitas,
+--     2 días) NO dispara; hoy, ayer y anteayer (3 días) SÍ, con cantidad 3 y cuenta «dias».
+update public.club_config set alerta_mismo_usuario_max = 2, alerta_mismo_usuario_dias = 3 where location_id = 'prueba181c';
+do $$ declare a jsonb; f jsonb;
+begin
+  perform pg_temp.vis_por(22, 'prueba181c', now() - interval '1 minute');
+  perform pg_temp.vis_por(22, 'prueba181c', now() - interval '2 minutes');
+  perform pg_temp.vis_por(22, 'prueba181c', now() - interval '1 day');
+  perform pg_temp.vis_por(22, 'prueba181c', now() - interval '1 day 1 minute');
+  a := pg_temp.alertas('prueba181c');
+  perform pg_temp.vis_por(23, 'prueba181c', now() - interval '1 minute');
+  perform pg_temp.vis_por(23, 'prueba181c', now() - interval '1 day');
+  perform pg_temp.vis_por(23, 'prueba181c', now() - interval '2 days');
+  f := pg_temp.fila(pg_temp.alertas('prueba181c'), 'mismo-usuario:socio:' || pg_temp.mid(23));
+  insert into _r181 (caso, ok, detalle) values ('15 MISMO_USUARIO por días: 4 visitas en 2 días no; 3 días sí (cantidad 3, cuenta dias)',
+    not pg_temp.hay(a, 'mismo-usuario:socio:' || pg_temp.mid(22))
+    and (f->>'cantidad')::int = 3 and f->'detalle'->>'cuenta' = 'dias',
+    concat_ws(' | ', a, f));
+exception when others then insert into _r181 (caso, ok, detalle) values ('15 (error sin atrapar)', false, sqlerrm);
+end $$;
+
 -- 12. ROLLBACK: vuelve el cuerpo exacto de la 150 (md5 de prod el 16-nov), sin las internas ni la columna; la caja
---     vuelve a «una por día»: el socio 14 usa el almuerzo en A y en B (cena) ya no le toca.
+--     vuelve a «una por día»: el socio 14 usa el almuerzo en A y en B (cena) ya no le toca. Excepciones y alertas, como prod.
 -- @@181R@@   (aquí va el cuerpo de 181_rollback.sql sin begin/commit)
 do $$ declare a jsonb; b jsonb;
 begin
   a := pg_temp.caja(14, 'prueba181a', '1814001');
   b := pg_temp.caja(14, 'prueba181b', '1814002');
-  insert into _r181 (caso, ok, detalle) values ('12 rollback: base = la de la 150 (md5 a5765518…), sin internas ni columna; vuelve «una por día»',
+  insert into _r181 (caso, ok, detalle) values ('12 rollback: base (150), núcleo de excepciones (155) y alertas (164) con el md5 de prod; sin internas ni columna; vuelve «una por día»',
     md5(pg_get_functiondef('public.club_socio_visita_base(uuid,jsonb,uuid,text)'::regprocedure)) = 'a5765518898bbdd297336582a146a5df'
+    and md5(pg_get_functiondef('public.club_excepciones__nucleo(date,date,text,text)'::regprocedure)) = '5ad4ff8cf91646c6406fc3ebc24b498e'
+    and md5(pg_get_functiondef('public.club_alertas_inicio(text)'::regprocedure)) = '493eb9cb9dd73aae69b87afb1b8bd47f'
+    and md5(pg_get_functiondef('public.club_excepciones(date,date,text,text)'::regprocedure)) = '7e0b7ae5c466b5885de3b8d7547381f5'
+    and has_function_privilege('authenticated', 'public.club_alertas_inicio(text)', 'execute')
     and to_regprocedure('public.club_socio_tope_comida(uuid,text,timestamptz)') is null
     and to_regprocedure('public.club_comida(text,timestamptz)') is null
     and not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_config_global'
@@ -301,12 +400,12 @@ end $$;
 select json_agg(json_build_object('caso', caso, 'ok', coalesce(ok, false), 'detalle', detalle) order by n) from _r181;
 
 -- ASSERT: cada caso que falla sale como WARNING («181 FALLA <caso> — <detalle>»), después el resumen
--- («181 RESUMEN: pasaron X / fallaron Y de 13») y, si Y > 0 o faltan casos, la transacción ABORTA con
+-- («181 RESUMEN: pasaron X / fallaron Y de 16») y, si Y > 0 o faltan casos, la transacción ABORTA con
 -- «181-FALLAN: <casos> · pasaron X / fallaron Y». Este bloque NO lleva «exception when others».
 do $$
 declare
   r record;
-  v_esp constant int := 13;
+  v_esp constant int := 16;
   v_tot int; v_ok int; v_mal int; v_lista text;
 begin
   for r in select caso, detalle from _r181 where ok is not true order by n loop   -- null = falla

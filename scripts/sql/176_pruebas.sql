@@ -83,6 +83,13 @@ begin
     insert into public.club_retos_ganados (reto_id, miembro_id, visita_ganadora, vence_en, location_id) values
       ((u || 'f0' || s)::uuid, (u || 'b1' || s)::uuid, (u || 'd1' || s)::uuid, now() + interval '5 days', 'p176-' || l);
   end loop;
+  -- «hotel»: 21 anfitriones de B (ordenan primero) y 1 de A (último): con el límite de 20 ANTES del filtro, M_A no lo veía
+  insert into public.club_miembros (id, location_id, tipo, nombre, codigo)
+  select (u || '9' || lpad(i::text, 2, '0'))::uuid, 'p176-b', 'referente', 'Prueba Hotel B' || lpad(i::text, 2, '0'),
+         'HTHB' || substr('ABCDEFGHJKLMNPQRSTUVWXYZ', i, 1) || 'XYZ'
+    from generate_series(1, 21) i;
+  insert into public.club_miembros (id, location_id, tipo, nombre, codigo) values
+    ((u || '999')::uuid, 'p176-a', 'referente', 'Prueba Hotel Zulu A', 'HTHAZXYZ');
   -- reto de los dos locales, con la cortesía de cada uno
   insert into public.club_retos (id, nombre, nombre_en, locales, desde, hasta, meta, cortesias) values
     ((u || 'f03')::uuid, 'Reto P176 AB', 'Challenge AB', array['p176-a', 'p176-b'], '2001-02-01', '2001-02-28', 3,
@@ -191,14 +198,20 @@ select pg_temp.medir_rls('despues');
 
 -- 0. catálogo ──────────────────────────────────────────────────────────────────────────────────────────────────────
 insert into _r176 (caso, ok, detalle)
-select '0a 5 envoltorios y 5 núcleos nuevos: mismo nombre, argumentos, resultado y volatilidad; el núcleo, byte a byte la original',
+select '0a 5 envoltorios y 5 núcleos nuevos: mismo nombre, argumentos, resultado y volatilidad; el núcleo, byte a byte la original (club_buscar: la original + solo la línea del filtro)',
        count(*) = 5 and count(*) filter (where w.oid is not null and k.oid is not null) = 5
        and count(*) filter (where pg_get_function_arguments(w.oid) = a.args and pg_get_function_result(w.oid) = a.res
-                               and w.provolatile = a.vol and w.prosecdef and md5(k.prosrc) = a.md5
+                               and w.provolatile = a.vol and w.prosecdef
+                               and case when a.nom = 'club_buscar'
+                                     -- la única con el núcleo cambiado: el de la 150 + UNA línea con club_ve_ficha
+                                     then md5(k.prosrc) <> a.md5
+                                          and md5(regexp_replace(k.prosrc, E'\\n[^\\n]*club_ve_ficha\\(m\\.location_id\\)[^\\n]*', '')) = a.md5
+                                     else md5(k.prosrc) = a.md5 end
                                and w.proconfig = array['search_path=public, pg_temp']) = 5
        and (select count(*) from pg_proc where proname like 'club\_%\_\_nucleo' and pronamespace = 'public'::regnamespace)
            = (select n from _n_nucleo) + 5,
-       string_agg(a.nom, ',') filter (where w.oid is null or k.oid is null or md5(k.prosrc) <> a.md5 or w.provolatile <> a.vol)
+       string_agg(a.nom, ',') filter (where w.oid is null or k.oid is null or w.provolatile <> a.vol
+                                       or (a.nom <> 'club_buscar' and md5(k.prosrc) <> a.md5))
   from _antes176 a
   left join pg_proc w on w.proname = a.nom and w.pronamespace = 'public'::regnamespace
   left join pg_proc k on k.proname = a.nom || '__nucleo' and k.pronamespace = 'public'::regnamespace
@@ -239,6 +252,29 @@ select '1b club_buscar: owner, contador y cajero igual que hoy (envoltorio = nú
        bool_and(env = nuc) and bool_and(r = 'CO' or (env like '%176b01%' and env like '%176b02%')),
        string_agg(r || ': ' || env || ' ≠ ' || nuc, ' | ') filter (where env <> nuc or (r <> 'CO' and env not like '%176b02%'))
   from _b176 where r in ('OW', 'CO', 'CA');
+
+-- buscar + lo que anota la auditoría, en la misma llamada (después se deshace)
+create function pg_temp.buscar_aud(p_uid text, p_q text) returns text language plpgsql as $f$
+declare v text; r text;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
+  begin
+    select coalesce(string_agg(b.id::text, ',' order by b.id), '') into v from public.club_buscar(p_q) b;
+    select v || ' · auditoria filas=' || (a.despues->>'filas') into v from public.club_auditoria a
+     where a.actor = p_uid::uuid and a.accion = 'buscar' order by a.en desc, a.id desc limit 1;
+    raise exception using errcode = 'P0176', message = 'deshacer';
+  exception when others then
+    r := case when sqlstate = 'P0176' then 'ok:' || v else sqlstate || ' ' || sqlerrm end;
+  end;
+  perform set_config('request.jwt.claims', '', true);
+  return r;
+end $f$;
+insert into _r176 (caso, ok, detalle)
+select '1k club_buscar con 21 coincidencias de B y 1 de A: M_A ve la suya y la auditoría anota 1 (filtro antes del límite); owner ve 20, como hoy',
+       pg_temp.buscar_aud(pg_temp.uid('M_A'), 'prueba hotel') = 'ok:00000000-0000-4000-8000-000000176999 · auditoria filas=1'
+       and pg_temp.buscar_aud(pg_temp.uid('OW'), 'prueba hotel') like '%auditoria filas=20'
+       and pg_temp.buscar_aud(pg_temp.uid('OW'), 'prueba hotel') not like '%176999%',
+       pg_temp.buscar_aud(pg_temp.uid('M_A'), 'prueba hotel') || ' / owner ' || pg_temp.buscar_aud(pg_temp.uid('OW'), 'prueba hotel');
 
 create temp table _s176 on commit drop as
 select f.fn, u.r,
@@ -420,7 +456,7 @@ declare v text;
 begin
   select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r176 where not ok or ok is null;
   if v is not null then raise exception '176-FALLAN: %', v; end if;
-  if (select count(*) from _r176) < 20 then raise exception '176-FALLAN: faltan casos (NO PROBADO)'; end if;
+  if (select count(*) from _r176) < 22 then raise exception '176-FALLAN: faltan casos (NO PROBADO)'; end if;
 end $$;
 
 rollback;

@@ -24,12 +24,14 @@ BATERIA = RAIZ / 'scripts/sql/176_pruebas.sql'
 
 # nombre → (texto de la 176, reemplazo, casos que tienen que caer)
 MUTACIONES: dict[str, tuple[str, str, set[str]]] = {
-    # club_buscar sin filtro (lo de antes)
-    'buscar_sin_filtro': ("'where public.club_ve_ficha((select m.location_id from public.club_miembros m where m.id = b.id)); end'),",
-                          "'; end'),", {'1a'}),
+    # (el filtro del ENVOLTORIO de club_buscar quedó redundante desde que el núcleo filtra antes del límite: sacarlo
+    #  no cambia nada y por eso no tiene mutación propia; la del núcleo es buscar_filtro_despues_del_limite)
     # el filtro se aplica a todos los roles (cajero y owner pierden lo de otros locales)
     'filtro_todos_los_roles': ("  select public.get_my_role() is distinct from 'manager'::public.user_role\n      or public.club_puede_ver_local(p_location)",
                                "  select public.club_puede_ver_local(p_location)", {'1b'}),
+    # club_buscar con el filtro solo en el envoltorio (el límite de 20 corta antes de filtrar)
+    'buscar_filtro_despues_del_limite': ("       and public.club_ve_ficha(m.location_id)   -- 176: el manager, solo sus locales (ANTES del limit y de la auditoría)\n",
+                                         "", {'0a', '1k'}),
     # retos: el reto de los dos locales sigue con la cortesía del otro local
     'retos_con_cortesia_ajena': ("'where public.club_ve_ficha(k.key)), ''{}''::jsonb))", "'), ''{}''::jsonb))", {'1e'}),
     # resolver sin cortar el cupón de otro local
@@ -61,6 +63,9 @@ MUTACIONES_ROLLBACK: dict[str, tuple[str, str, set[str]]] = {
                                "", {'4a', '4b'}),
     # el rollback no devuelve el mensaje de la 172
     'rollback_sin_mensaje': ("    raise exception 'Sin permiso en ese local' using errcode = '42501';", "    raise exception 'Ficha de otro local' using errcode = '42501';", {'4a'}),
+    # el rollback deja el núcleo de club_buscar con el filtro (no vuelve al cuerpo de la 150)
+    'rollback_buscar_con_filtro': ("     where m.tipo in ('referente','concierge_pm','equipo')\n       and case when v_dig then",
+                                   "     where m.tipo in ('referente','concierge_pm','equipo')\n       and public.club_ve_ficha(m.location_id)\n       and case when v_dig then", {'4a'}),
     # el rollback no devuelve el EXECUTE de authenticated
     'rollback_sin_grant': ("    execute format('grant execute on function public.%I(%s) to authenticated', r.nom, v_ident);", "    null;", {'4a'}),
 }

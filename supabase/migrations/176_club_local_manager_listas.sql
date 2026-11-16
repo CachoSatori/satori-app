@@ -14,8 +14,8 @@
 --      muestra como «Esta ficha es de otro local…» en vez de «pedile a un manager» (que al manager no le dice nada).
 --      club_exigir_local (170, por p_location) sigue con «Sin permiso en ese local».
 --   3. Las cinco funciones, con la RECETA de la 170/172: la original pasa a <nombre>__nucleo (mismo cuerpo, byte a
---      byte; sin EXECUTE para la API) y la nueva <nombre>, con la MISMA firma, resultado, volatilidad y EXECUTE, llama
---      al núcleo y FILTRA lo que devuelve (no hay un local que chequear antes: son listas):
+--      byte, salvo club_buscar__nucleo: ver 3b; sin EXECUTE para la API) y la nueva <nombre>, con la MISMA firma,
+--      resultado, volatilidad y EXECUTE, llama al núcleo y FILTRA lo que devuelve (no hay un local que chequear antes: son listas):
 --        club_buscar, club_socios_por_confirmar, club_socio_solicitudes_abiertas → saca las filas cuyo miembro es de
 --          otro local (para el manager);
 --        club_retos_listar → para el manager, solo los retos con algún local suyo, y en «cortesias» solo sus locales;
@@ -170,6 +170,61 @@ begin
       || 'las fichas de sus locales (club_ve_ficha / club_exigir_local_de).');
   end loop;
 end $$;
+
+-- ── 3b. club_buscar: el filtro va DENTRO del núcleo, antes del «limit 20» ──────────────────────────────────────────
+-- Verificador del #204: con el filtro solo en el envoltorio, el núcleo cortaba en 20 ANTES de filtrar (un manager con
+-- más de 20 coincidencias de otro local veía la lista vacía) y la auditoría anotaba las filas sin filtrar. ÚNICA función
+-- de la 176 cuyo núcleo deja de ser idéntico a la versión vigente (la de la 150): mismo cuerpo + UNA condición
+-- (club_ve_ficha: para owner, contador y cajero es true, igual que hoy). El envoltorio conserva su filtro (no cambia nada).
+create or replace function public.club_buscar__nucleo(p_q text)
+returns table (id uuid, nombre text, negocio text, tipo text, estado text, personas int, creditos numeric)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_q    text := public.club_norm_texto(p_q);
+  v_dig  boolean;
+  v_tope int;
+  v_n    int;
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  v_dig := v_q ~ '^[0-9]{4}$';
+  if not v_dig and length(v_q) < 3 then
+    raise exception 'Escribí al menos 3 letras o los últimos 4 dígitos del teléfono' using errcode = 'P0001';
+  end if;
+  select coalesce(min(c.buscar_tope_minuto), 30) into v_tope from public.club_config c where c.club_activo;
+  perform pg_advisory_xact_lock(hashtextextended('club_buscar:' || auth.uid()::text, 0));
+  if (select count(*) from public.club_auditoria a
+       where a.actor = auth.uid() and a.accion = 'buscar' and a.en > now() - interval '1 minute') >= v_tope then
+    raise exception 'Demasiadas búsquedas seguidas: esperá un minuto' using errcode = 'P0001';
+  end if;
+  return query
+    select m.id, m.nombre, n.nombre, m.tipo, m.estado, s.personas, s.creditos
+      from public.club_miembros m
+      left join public.club_negocios n on n.id = m.negocio_id
+      left join public.club_saldos s on s.miembro_id = m.id
+     where m.tipo in ('referente','concierge_pm','equipo')
+       and public.club_ve_ficha(m.location_id)   -- 176: el manager, solo sus locales (ANTES del limit y de la auditoría)
+       and case when v_dig then
+             exists (select 1 from public.club_miembros_contacto c
+                      where c.miembro_id = m.id and right(c.telefono, 4) = v_q)
+           else
+             public.club_norm_texto(m.nombre) like '%' || v_q || '%'
+             or public.club_norm_texto(n.nombre) like '%' || v_q || '%'
+           end
+     order by (m.estado = 'activo') desc, m.nombre
+     limit 20;
+  get diagnostics v_n = row_count;   -- las filas que devolvió el RETURN QUERY
+  perform public.club_auditar('buscar', 'club_miembros', null, null,
+    jsonb_build_object('por', case when v_dig then 'digitos_telefono' else 'texto' end, 'filas', v_n));
+end;
+$$;
+revoke all on function public.club_buscar__nucleo(text) from public, anon, authenticated;
 
 -- ── 4. RLS: el manager lee directo solo filas de sus locales ───────────────────────────────────────────────────────
 -- Cada política conserva su condición de hoy y suma, solo para el manager, el local. (select …) = se evalúa una vez

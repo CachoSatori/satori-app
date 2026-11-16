@@ -278,6 +278,11 @@ describe('170 y 172 · el manager solo en sus locales', () => {
       expect(c, n).toMatch(/club_ve_ficha|club_exigir_local_de/)
     }
     expect(CUERPOS_176.get('club_resolver')).not.toMatch(/'socio'/)   // el QR del socio no se corta (Club compartido)
+    // club_buscar: el filtro va DENTRO del núcleo, antes del «limit 20» (si no, el manager ve vacío con >20 ajenas)
+    const nucleoBuscar = leer('176_club_local_manager_listas.sql').split('create or replace function public.club_buscar__nucleo(')[1] ?? ''
+    const iFiltro = nucleoBuscar.indexOf('public.club_ve_ficha(m.location_id)')
+    expect(iFiltro).toBeGreaterThan(0)
+    expect(iFiltro).toBeLessThan(nucleoBuscar.indexOf('limit 20'))
     expect(ENVUELTAS_176.filter(n => [...ENVUELTAS_170, ...ENVUELTAS_172].includes(n))).toEqual([])
     expect(violaciones176(migraciones().filter(m => Number(m.archivo.split('_')[0]) > 176), CUERPOS_176)).toEqual([])
     // y la guardia muerde

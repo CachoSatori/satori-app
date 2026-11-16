@@ -6,9 +6,10 @@
 >
 > - **Vía: merge → Branching** (la usada desde la 085). No se aplica nada a mano. Si el día del pase aparece una razón
 >   para hacerlo a mano, se para y se rehace el paquete.
-> - **Orden:** después de la **172** (#202; la 176 aborta si falta `club_exigir_local_de`) y de la 173–175 si entran antes.
->   No toca nada de la 173 (cumpleaños). Si 174/175 redefinen una de las cinco funciones de §1, se rebasea con la receta
->   (se cambia el `__nucleo`); la guardia del gate lo exige.
+> - **Orden OBLIGATORIO: 174 → 175 → 176.** La 176 entra recién cuando la 174 (origen 120,
+>   `claude/club-facturas-dia-busqueda`) y la 175 (origen 121, `claude/club-cumple-uso-anual`) están en el ledger de prod,
+>   en ese orden (Branching rechaza un número menor después de uno mayor). Necesita la 172 (aborta si falta
+>   `club_exigir_local_de`). Batería probada sobre main + 174 + 175: no chocan (ver §1).
 > - **Regla del ledger (Grok 122):** exactamente 1 fila 176 con su `name` + el catálogo (§5). No se compara md5.
 > - **Repo público:** en la bitácora (§9) solo conteos, nunca nombres ni montos.
 
@@ -20,6 +21,13 @@
   - RLS: 17 políticas de tablas `club_*` (miembros, negocios, movimientos, visitas, roles, alertas, cupones, contactos,
     cruces, excepciones resueltas, carga vieja, pases, primeros 90, reseñas, premios de retos) suman el local para el
     manager. `club_config` / `club_config_global` sin cambios.
+  - **`club_buscar__nucleo` NO es idéntico a la versión vigente** (la de la 150): es el mismo cuerpo + UNA condición
+    (`and public.club_ve_ficha(m.location_id)`) ANTES del `limit 20` y de la auditoría, para que el manager no vea la
+    lista vacía cuando hay más de 20 coincidencias de otro local y la auditoría anote las filas que de verdad ve. Para
+    owner, contador y cajero `club_ve_ficha` es true: igual que hoy. Es la única función de la 176 con el núcleo
+    cambiado; el rollback le devuelve el cuerpo de la 150.
+  - 174 y 175 no tocan estas funciones ni estas políticas; sus tablas nuevas no tienen lectura directa y sus funciones
+    reciben `p_location` con `club_exigir_local` (o son solo del owner).
   - `club_exigir_local_de` (172) dice «Ficha de otro local» (la app: «Esta ficha es de otro local: la atiende el manager
     de ese local o el owner.»). Nueva `club_ve_ficha(text)` interna.
 - **No pasa:** owner, contador, cajero, salonero y anon igual que hoy. Ninguna lógica de plata, caja, cierres ni
@@ -40,12 +48,12 @@
 
 ## 4. Prueba en staging (pendiente con el dueño)
 `python3 scripts/sql/176_pruebas.py --armar` y correr el SQL en staging (ref `hwiatgic…`, nunca prod; transacción
-descartada, no deja nada). Esperado: 21/21. En local (Postgres 16): 21/21 y `--mutar todas` 14/14 muerden.
+descartada, no deja nada). Esperado: 22/22. En local (Postgres 16, main + 174 + 175): 22/22 y `--mutar todas` 15/15 muerden.
 
 ## 5. Humo después (solo lectura)
 - Ledger: exactamente 1 fila `176` con `name = club_local_manager_listas`; «Supabase Preview» en success con «All
   migrations are up to date».
-- Cinco `__nucleo` nuevos sin EXECUTE para authenticated; los cinco envoltorios con EXECUTE para authenticated.
+- Cinco `__nucleo` nuevos sin EXECUTE para authenticated (`club_buscar__nucleo` con `club_ve_ficha(m.location_id)` en el cuerpo); los cinco envoltorios con EXECUTE para authenticated.
 - Las 17 políticas con `mis_locales` en `qual` (y en `with_check` la de `club_miembros_contacto`).
 - **En el local (validación física del dueño):** como manager de Santa Teresa: «Miembros», «Socios por confirmar»,
   «Retos», «Buscar» en Escanear muestran lo de Santa Teresa (no vacíos); «Excepciones», «Ranking» y «Tablero» como

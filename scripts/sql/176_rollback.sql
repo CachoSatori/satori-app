@@ -1,7 +1,7 @@
 -- Rollback de la 176 (origen club 122): saca los 5 envoltorios de la 176 (club_buscar, club_resolver,
 -- club_socios_por_confirmar, club_socio_solicitudes_abiertas, club_retos_listar), devuelve cada <nombre>__nucleo a su
--- nombre (el cuerpo es el original: la 176 no lo tocó) con los permisos de antes (EXECUTE para authenticated, sin public
--- ni anon), borra club_ve_ficha, devuelve el mensaje de club_exigir_local_de a «Sin permiso en ese local» (el de la 172)
+-- nombre (el cuerpo es el original, salvo club_buscar, que vuelve al de la 150) con los permisos de antes (EXECUTE
+-- para authenticated, sin public ni anon), borra club_ve_ficha, devuelve el mensaje de club_exigir_local_de a «Sin permiso en ese local» (el de la 172)
 -- y las políticas RLS del Club a su condición de antes (solo por rol). NO toca la 170 ni la 172. No toca datos. Borra la
 -- fila 176 del ledger.
 -- Vuelve lo de antes: el manager otra vez ve en las listas (y por SELECT directo) las fichas de todos los locales.
@@ -29,6 +29,57 @@ begin
     execute format('grant execute on function public.%I(%s) to authenticated', r.nom, v_ident);
   end loop;
 end $$;
+
+-- club_buscar: el cuerpo de la 150 (la 176 le había sumado el filtro del manager dentro del núcleo)
+create or replace function public.club_buscar(p_q text)
+returns table (id uuid, nombre text, negocio text, tipo text, estado text, personas int, creditos numeric)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_q    text := public.club_norm_texto(p_q);
+  v_dig  boolean;
+  v_tope int;
+  v_n    int;
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  v_dig := v_q ~ '^[0-9]{4}$';
+  if not v_dig and length(v_q) < 3 then
+    raise exception 'Escribí al menos 3 letras o los últimos 4 dígitos del teléfono' using errcode = 'P0001';
+  end if;
+  select coalesce(min(c.buscar_tope_minuto), 30) into v_tope from public.club_config c where c.club_activo;
+  perform pg_advisory_xact_lock(hashtextextended('club_buscar:' || auth.uid()::text, 0));
+  if (select count(*) from public.club_auditoria a
+       where a.actor = auth.uid() and a.accion = 'buscar' and a.en > now() - interval '1 minute') >= v_tope then
+    raise exception 'Demasiadas búsquedas seguidas: esperá un minuto' using errcode = 'P0001';
+  end if;
+  return query
+    select m.id, m.nombre, n.nombre, m.tipo, m.estado, s.personas, s.creditos
+      from public.club_miembros m
+      left join public.club_negocios n on n.id = m.negocio_id
+      left join public.club_saldos s on s.miembro_id = m.id
+     where m.tipo in ('referente','concierge_pm','equipo')
+       and case when v_dig then
+             exists (select 1 from public.club_miembros_contacto c
+                      where c.miembro_id = m.id and right(c.telefono, 4) = v_q)
+           else
+             public.club_norm_texto(m.nombre) like '%' || v_q || '%'
+             or public.club_norm_texto(n.nombre) like '%' || v_q || '%'
+           end
+     order by (m.estado = 'activo') desc, m.nombre
+     limit 20;
+  get diagnostics v_n = row_count;   -- las filas que devolvió el RETURN QUERY
+  perform public.club_auditar('buscar', 'club_miembros', null, null,
+    jsonb_build_object('por', case when v_dig then 'digitos_telefono' else 'texto' end, 'filas', v_n));
+end;
+$$;
+revoke all on function public.club_buscar(text) from public, anon, authenticated;
+grant execute on function public.club_buscar(text) to authenticated;
 
 drop function if exists public.club_ve_ficha(text);
 

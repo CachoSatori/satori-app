@@ -491,8 +491,9 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
     qrBox,
     // D 16-nov (el dueño): «Reservar» con el widget de OpenTable armado desde el link del local del socio (mig 179), en el
     // idioma del portal; debajo, el link tal cual. Sin link del local, el rid por defecto. Nada del socio va a OpenTable.
+    // Opción B (16-nov): campaña «local» (esta tarjeta vive solo en «Mi Club», que existe solo si hay socio de Local Club).
     tarjetaReservar({ titulo: t.reservar_titulo, txt: t.reservar_txt, boton: t.reservar_boton, abrir: t.reservar_abrir, falla: t.reservar_falla, marco: t.reservar_marco },
-      urlReservaSocio(socio.reserva_url), urlWidgetOpenTable(socio.reserva_url, idioma)),
+      urlReservaSocio(socio.reserva_url, 'local'), urlWidgetOpenTable(socio.reserva_url, idioma, 'local')),
     activo && retosBox,
     cumpleBox,
     err, baja)

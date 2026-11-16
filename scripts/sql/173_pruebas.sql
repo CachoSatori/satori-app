@@ -1,6 +1,7 @@
 -- 173_pruebas (origen club 119) · Aplica la 173 dentro de una transacción, prueba y termina en ROLLBACK: no deja nada.
 -- Corre sobre una base con la 159 y la 170 (staging, o el Postgres 16 local armado con las migraciones del árbol; con o
--- sin la 172). Devuelve un JSON con cada caso y ok, y al final un ASSERT: si algún caso falla, aborta con
+-- sin la 172). Devuelve un JSON con cada caso y ok, y al final un ASSERT: cada caso caído sale como WARNING, un resumen
+-- «pasaron X / fallaron Y» y, si algún caso falla, aborta con
 -- «173-FALLAN: <casos>». Se corre con scripts/sql/173_pruebas.py (o con el SQL armado: 173_pruebas.py --armar).
 --
 -- MARCADORES que llena el runner: «-- @@173@@ …» → el cuerpo de supabase/migrations/173_… sin begin/commit ni su bloque
@@ -439,14 +440,28 @@ select '18 rollback: sin tablas, funciones ni columna de la 173 · aviso de vuel
 
 select json_agg(json_build_object('caso', caso, 'ok', coalesce(ok, false), 'detalle', detalle) order by n) from _r173;
 
--- ASSERT: si algún caso falla, la transacción aborta y dice cuáles
+-- ASSERT: cada caso que falla sale como WARNING («173 FALLA <caso> — <detalle>»), después el resumen
+-- («173 RESUMEN: pasaron X / fallaron Y de 20») y, si Y > 0 o faltan casos, la transacción ABORTA con
+-- «173-FALLAN: <casos> · pasaron X / fallaron Y». Este bloque NO lleva «exception when others»: antes lo tenía y se
+-- tragaba su propio raise (un caso 18 caído terminaba en ROLLBACK limpio, sin error).
 do $$
-declare v text;
+declare
+  r record;
+  v_esp constant int := 20;
+  v_tot int; v_ok int; v_mal int; v_lista text;
 begin
-  select string_agg(split_part(caso, ' ', 1), ',' order by n) into v from _r173 where ok is not true;   -- null = falla
-  if v is not null then raise exception '173-FALLAN: %', v; end if;
-  if (select count(*) from _r173) <> 20 then raise exception '173-FALLAN: se esperaban 20 casos (NO PROBADO)'; end if;
-exception when others then
-  insert into _r173 (caso, ok, detalle) values ('18 (error sin atrapar)', false, sqlerrm);
+  for r in select caso, detalle from _r173 where ok is not true order by n loop   -- null = falla
+    raise warning '173 FALLA % — %', r.caso, coalesce(r.detalle, '(sin detalle)');
+  end loop;
+  select count(*), count(*) filter (where ok is true), string_agg(split_part(caso, ' ', 1), ',' order by n) filter (where ok is not true)
+    into v_tot, v_ok, v_lista from _r173;
+  v_mal := v_tot - v_ok;
+  if v_tot <> v_esp then
+    raise warning '173 FALLA cantidad: se esperaban % casos y hay % (NO PROBADO)', v_esp, v_tot;
+    v_mal := v_mal + greatest(v_esp - v_tot, 1);
+    v_lista := concat_ws(',', v_lista, 'cantidad');
+  end if;
+  raise notice '173 RESUMEN: pasaron % / fallaron % de %', v_ok, v_mal, v_esp;
+  if v_mal > 0 then raise exception '173-FALLAN: % · pasaron % / fallaron %', v_lista, v_ok, v_mal; end if;
 end $$;
 rollback;

@@ -1,8 +1,8 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo y de las bases (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-16, 09:15 hora de Costa Rica.** `main` = merge de este PR de docs. **Ledger de prod = 180. Staging = 180**
-(puesto al día el 16/11 08:49 por la sesión de CC del dueño). Todos los merges con firma u OK del dueño. El bloque anterior (06:45 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
+**Al día: 2026-11-16, 13:05 hora de Costa Rica.** `main` = merge del #220 (`5396649`, 12:57; el #219 entró a las 12:43 y el #218 a las 12:36). **Ledger de prod = 180. Staging = 180**
+(verificado el 16/11 11:30 con list_migrations). Todos los merges con firma u OK del dueño. El bloque anterior (06:45 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 **Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md)** (el handoff del 15/16-nov está en el proyecto privado).
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
@@ -11,7 +11,7 @@
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`3791496`** antes de este PR (16/11 09:06 -06:00: merge del #216). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **176** (177 al mergear este PR). |
+| `main` | **`5396649`** (merge del #220, 16/11 12:57 -06:00; antes `9225d87` = #219, 12:43). **Sin regla de protección.** | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **180** (staging también 180, verificado 16/11 11:30 CR). |
 | `staging` | rama sin cambios desde el 13/11 (`4726b7f`); **base de staging con ledger 180** (16/11 08:49: 153 y 155–180 aplicadas de `main`, mismas 29 versiones y nombres que prod) | Proyecto Supabase de staging. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
@@ -38,20 +38,33 @@
 | #214 | | `6bb68a4` | 08:38 | widget de OpenTable en «Mi Club» como iframe aislado (sin script de terceros) + el token del portal sale de la barra |
 | #215 | 180 | `e59b52a` | 08:44 | link de reservas por local en Club → Locales; «Reservar una mesa» en la página del cupón del turista |
 | #216 | | `3791496` | 09:06 | link del portal (copiar y WhatsApp con confirmación) también en la ficha del socio |
+| #217 | | `2f54b19` | ~09:15 | docs ESTADO 16-nov 09:15 |
+| #218 | | `5395d41` | 12:36 | docs ESTADO (foto de las 11:45; ledger prod y staging 180) |
+| #219 | | `9225d87` | 12:43 | batería 173 que no se traga el error + manager de prueba en staging (`scripts/sql/`, `STAGING.md`; sin efecto en prod) |
+| #220 | | `5396649` | 12:57 | campañas de OpenTable por grupo (club-web; OK del dueño 16/11 12:47, Decisión 2 opción A) |
 
 - **Pendiente del dueño / de la sesión:**
   - **Staging (16/11):** las 27 migraciones aplicaron sin error. Las baterías corridas DESPUÉS de aplicar (como se hizo) no son
     válidas para la mayoría: suponen la migración sin aplicar (casos «antes»/rollback) y varias piden un manager activo que staging
-    no tiene. Pasaron 160, 161, 162, 164, 165, 166 (y 173 salvo el caso 18). Defecto de batería: la 173 no avisa cuando cae su
-    caso 18. Desde ahora: correr la batería ANTES de aplicar (base local de `scripts/sql/local_armar_base.sh`) y aplicar a staging antes del merge.
+    no tiene. Pasaron 160, 161, 162, 164, 165, 166 (y 173 salvo el caso 18). Desde ahora: correr la batería ANTES de aplicar
+    (base local de `scripts/sql/local_armar_base.sh`) y aplicar a staging antes del merge.
+    **16/11 11:46:** el ASSERT de la 173 se tragaba su propio error (`exception when others`): arreglado en el PR
+    `claude/bateria-173-y-manager-staging` (cada caso caído = WARNING + resumen «pasaron X / fallaron Y» + error); la
+    173 contra una base local con ≤172: 20/20. Era la única batería con ese defecto (prueba estática
+    `scripts/sql/baterias_assert.test.ts`). **Staging ya tiene un manager activo de prueba** (ficticio, Santa Teresa;
+    `STAGING.md` «Manager de prueba», SQL idempotente `scripts/sql/staging_manager_prueba.sql`); su contraseña nadie la
+    conoce: resetearla para usarlo en la app.
   - **Beneficio de cumpleaños:** prendido por el dueño (16/11).
   - **Links de Santa Teresa en Club → Locales (16/11):** ubicación (Maps), reseña de Google y reservas de OpenTable con origen
     «Club Satori», cargados. Nosara se completa cuando abra (decisión del dueño: no volver a preguntar; pensar todo multi-local).
-  - **Validación física pendiente:** #213 (pestañas en el celular), #214/#215/#216 (link del portal desde la ficha, «Mi Club»,
-    reserva de prueba con origen «Club Satori», QR de turista), #210 (alta nueva con la confirmación del WhatsApp).
+  - **Validación física pendiente del dueño (#220):** 2 reservas de prueba (portal del socio → campaña `local`; cupón del turista → `turista`). La campaña `referente` queda lista sin punto de uso hasta el rebase del #117.
+  - **Validación física:** #210, #213, #214, #215 y #216 ya validados por el dueño el 16/11 (incluidas la reserva por el
+    widget y el QR de turista). **«Origen Club Satori en OpenTable»: CONFIRMADA por el dueño (16/11 12:15).** No queda validación física pendiente de estos PRs.
   - **5 columnas de Caja que existen en prod y en ninguna migración** (`cash_movements.amount_usd`,
     `cash_sessions.initial_cash_crc/_usd`, `final_cash_crc/_usd`): decidido (16/11 06:45, «177 firmo A») → **migración 178**
     (PR en borrador, sin efecto en prod; paquete `docs/pases/PASE-178-columnas-caja.md`). La **179** queda reservada para otra rama del 16/11.
+  - **Triage de PRs/issues viejos (16/11):** cerrados #99, #65, #12, #84, #72, #30, #74, #95 y #68. **Vigente (de #30):** 2 cierres
+    de Fase 1 nunca completados en prod (07/06 y 06/07).
   - **Wallet:** aviso de cumpleaños al Google Wallet con link de OpenTable (PR aparte, Edge `club-pase`).
   - **Edge `extract-document`:** staging v29 desde `190b5f5`; prod sigue en la versión de `8a8dfb6`; falta prueba funcional en staging.
 - **Backlog (sin fecha):** el contador ve «Cohortes» · buscador de Escanear con socios · botón anfitrión → socio · fecha elegida en
@@ -60,7 +73,7 @@
   cuentan el total (176) · el botón de WhatsApp de cumpleaños marca «enviado» sin deshacer (173) · topes por IP del portal (232).
 - **Local Club sigue en 15 %** hasta el lanzamiento del Club.
 - **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño.
-- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (verificados en cada PR del 15/16-nov).
+- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** · `cierrePozo.ts` **`bf22ee44`** (referencia registrada el 16/11) (verificados en cada PR del 15/16-nov).
 - **Gate de `main` (16/11 00:11):** `vitest run` 2414 pasan / 4 skip · eslint **82** (tope 83).
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 

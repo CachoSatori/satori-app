@@ -74,6 +74,7 @@ numéricas de prod, 199 existen en la base del repo y **39 tienen otro tipo** (3
 (todas `numeric` sin escala en prod). Ninguna migración del repo las crea: una base desde el repo no las tiene, aunque
 funciones del repo (p. ej. la 074) insertan `amount_usd`. Queda como decisión aparte (ver el PR). La batería (caso 08)
 falla si aparece otra faltante.
+**Resuelto (16-nov, «177 firmo A»):** las declara la 178 (`docs/pases/PASE-178-columnas-caja.md`).
 
 ### 2c. Dependencias
 Ninguna vista depende de estas tablas en prod (`pg_depend`/`pg_rewrite`: 0) ni en la base local; ninguna política ni

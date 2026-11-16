@@ -52,8 +52,23 @@ extremo puede clasificar mal un conflicto (solo afecta el warning, no el dato).
 - **Orden estricto** por `seq` (autoincremental de IndexedDB): una edición nunca
   se aplica antes que su creación. Un fallo de RED **frena todo el flush** (se
   reintenta después desde el mismo punto).
-- **Rechazo del servidor** (RLS, FK, datos inválidos): la op se **descarta** y se
-  audita + `console.error` — dejarla trabaría la cola para siempre.
+- **Clasificación (A01, 16-nov)** por `status` y `code` de supabase-js, no solo por texto
+  (`classifyServerError`). **Reintenta** (frena el flush, la op queda en la cola): red/timeout
+  (status 0), sesión vencida (401, `PGRST301/302/303`, 403 por JWT: refresca la sesión **una vez** y
+  reintenta la misma op), 408, 425, 429, 5xx, `PGRST000–003`, SQLSTATE `08*`, `53*`, `57*`, `40001`,
+  `40P01`, `25006`, y todo lo que no se puede clasificar. **Rechazo definitivo** (fatal): el resto de
+  los 4xx (regla de negocio `P0001`, constraints `23*`, formato `22*`, permiso `42501` con sesión válida).
+- **Rechazo del servidor → cola de «rechazadas»** (base IndexedDB aparte,
+  `satori-offline-rechazadas`, clave `client_op_id`). La op se guarda ahí **antes** de salir de la cola;
+  si no se puede guardar, no se borra y el flush se frena. Un rechazo **no frena** lo que sigue. La app
+  muestra en rojo «Hay N operaciones que el servidor rechazó: avisá al manager» con «Ver detalle» (qué,
+  cuándo, motivo). Owner/manager pueden «↻ Reintentar» (vuelve a la cola con el mismo `client_op_id`:
+  si ya estaba aplicada rebota como duplicado) o «✓ Ya lo resolví» (queda en el store `audit` del
+  aparato y sale de la lista). La consola solo registra tabla, tipo, id de la op y código: nunca la fila.
+- **Cola trabada:** tras 5 flushes seguidos frenados (backoff 5 s → 60 s, unos 75 s), aparece
+  «No se pudo sincronizar después de N intentos: <motivo>. Lo pendiente sigue guardado en este aparato.»
+  Un error del servidor que no se arregla solo (un 5xx fijo) traba la cola a propósito, en orden y
+  visible: es preferible a saltear o perder un pago.
 - **Multi-pestaña**: el flush corre dentro de `navigator.locks`
   (`satori-outbox-flush`, `ifAvailable`) → dos pestañas nunca replyan a la vez.
 

@@ -14,7 +14,7 @@ const ES = {
   optin_whatsapp: 'WhatsApp',
   optin_email: 'Email',
   optin_acepto: 'Leí el aviso de privacidad y acepto que Satori me contacte con ofertas.',
-  // LC-PRIV (Grok 63, 08-nov): versión corta del aviso v1 para el turista que deja contacto (BORRADOR: lo revisa Ismael)
+  // LC-PRIV (Grok 63, 08-nov): versión corta del aviso v1 para el turista que deja contacto (BORRADOR: lo revisa el dueño)
   optin_aviso: 'Aviso de privacidad (resumen): usamos su nombre y su WhatsApp o email solo para mandarle ofertas de Satori. No vendemos sus datos ni los compartimos. Puede pedir verlos, corregirlos o borrarlos, o darse de baja cuando quiera.',
   optin_aviso_completo: 'Aviso completo',
   optin_baja_en_mensajes: 'Al enviar le mostramos su link para darse de baja (guárdelo). Cada mensaje de ofertas también lo trae.',

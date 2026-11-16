@@ -2,7 +2,7 @@
 
 > **Estado:** rama `claude/multilocal-fase0` (encima de `main`, separada de la 089 y la 090), migración **091** sin
 > aplicar en ninguna base. Usa las 12 decisiones de `docs/MULTILOCAL-plan-caja.md` §14 (rama
-> `claude/multilocal-plan-caja`), **aprobadas por Ismael el 08-nov**. Ismael confirmó también que **el selector de
+> `claude/multilocal-plan-caja`), **aprobadas por el dueño el 08-nov**. El dueño confirmó también que **el selector de
 > local existirá antes de abrir otra sucursal**.
 
 ## Qué entra en la fase 0 (no toca sagrados ni plata)
@@ -20,7 +20,7 @@ manager, contador, cajero y salonero ven lo mismo antes y después; con un segun
 sin asignación no lo ven, owner y contador sí, y un manager asignado solo a ese local deja de ver Santa Teresa; una
 escritura en un local ajeno la rechaza la RLS. **Rollback:** `scripts/sql/091_rollback.sql`.
 
-## Las 12 decisiones (aprobadas por Ismael el 08-nov), tal como las toma (o no) esta fase
+## Las 12 decisiones (aprobadas por el dueño el 08-nov), tal como las toma (o no) esta fase
 | # | Decisión | En la fase 0 |
 |---|---|---|
 | 1 | Catálogo único `locations` | **Usada** |
@@ -75,7 +75,7 @@ escritura en un local ajeno la rechaza la RLS. **Rollback:** `scripts/sql/091_ro
   sin cast (`= any ((select …))`) se lee como subconsulta `ANY` y compara text con text[]. Probar en staging la
   creación de las políticas y el rollback (`scripts/sql/091_pruebas.sh`, en una ventana nocturna).
 
-## ⛔ Gates (Ismael, 08-nov)
+## ⛔ Gates (el dueño, 08-nov)
 1. **El día que haya selector de local, `location_id` pierde el default.** En el mismo PR que agregue el selector de
    local en la app, las 4 columnas pasan a `NOT NULL` **sin default** (`alter column location_id drop default`), para
    que ningún movimiento, turno, cierre o sesión de propinas caiga en Santa Teresa por omisión. Hasta ese día el
@@ -94,7 +94,7 @@ Revisado el 08-nov, solo lectura del repo. **El choque:**
 - **«Nuevo local» del Club** (`club_local_crear`, 075 L6143) insertaba solo en `club_config`: un local dado de alta desde
   el Club no existiría para caja y propinas (la FK de la 091 lo rechazaría y `mis_locales()` no lo listaría).
 
-**Decisión de Ismael (08-nov): opción a.**
+**Decisión del dueño (08-nov): opción a.**
 - **`locations` es el único catálogo.** `club_config.location_id` pasa a tener FK a `locations(id)`.
 - **«Nuevo local» del Club crea primero el local en `locations`** (id y nombre) y después su fila de `club_config`.
 - Las columnas no se renombran: `locations.id` / `locations.name` y `club_config.location_id` / `club_config.nombre`

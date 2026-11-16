@@ -1,4 +1,4 @@
-// (Ismael, 08-nov noche) El dominio del Club es configuración (club_config_global.club_url en la base, VITE_CLUB_URL en
+// (el dueño, 08-nov noche) El dominio del Club es configuración (club_config_global.club_url en la base, VITE_CLUB_URL en
 // club-web): no puede volver a aparecer escrito en ningún archivo del repo, salvo la documentación (docs/ y los .md).
 // El patrón se arma por partes para que esta prueba no se encuentre a sí misma.
 import { test, expect } from 'vitest'

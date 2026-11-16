@@ -11,7 +11,7 @@ Módulo propio de la app que reemplaza la página externa de créditos (Firebase
 
 Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Después») · Fases → [ROADMAP.md](../../ROADMAP.md).
 
-**F1d ✅ en staging** (05/11): las páginas públicas `/r/`, `/c/` y `/p/` viven en [`club-web/`](../../club-web/README.md). Es un mini-sitio aparte, con una Pages Function propia y tope por IP, en español e inglés. En la 075 se sumaron `club_cupon_ver` y `club_cupon_contacto` (anon). Pruebas: 85/85. Lighthouse en móvil: 100/100. **Pendiente de Ismael:** crear el proyecto `satori-club` en Cloudflare Pages, cargar las variables y el KV, y apuntar `club.satoricostarica.com`. Los pasos están en el README de `club-web`.
+**F1d ✅ en staging** (05/11): las páginas públicas `/r/`, `/c/` y `/p/` viven en [`club-web/`](../../club-web/README.md). Es un mini-sitio aparte, con una Pages Function propia y tope por IP, en español e inglés. En la 075 se sumaron `club_cupon_ver` y `club_cupon_contacto` (anon). Pruebas: 85/85. Lighthouse en móvil: 100/100. **Pendiente del dueño:** crear el proyecto `satori-club` en Cloudflare Pages, cargar las variables y el KV, y apuntar `club.satoricostarica.com`. Los pasos están en el README de `club-web`.
 
 **F1f ✅ en staging** (05/11): en `/club` se sumaron **Excepciones** y **Reportes** (owner y manager), con un contador de excepciones abiertas en la tarjeta Club del inicio.
 - **SQL, en la 075:**
@@ -22,7 +22,7 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **Factura:** se compara solo por dígitos y sin ceros a la izquierda. Falta confirmar qué número ve el cajero.
 
 
-**Cruce por PEDIDO ✅ en staging** (07/11, decisión de Ismael: con la mesa se confunde cuando se divide la cuenta). En la 075 y en Escanear/Excepciones:
+**Cruce por PEDIDO ✅ en staging** (07/11, decisión del dueño: con la mesa se confunde cuando se divide la cuenta). En la 075 y en Escanear/Excepciones:
 - **Escanear:** después del QR, la lista de pedidos abiertos del local (`club_pedidos_abiertos`): «Pedido 14 · Mesa 20 · ₡48.500 · salonero». Un toque elige. El servidor guarda el pedido, la mesa, el total, cuándo lo vio abierto el puente (`visto`) y la **hora del escaneo** (la del servidor). Si el pedido ya no está abierto, la función lo rechaza y la caja pasa al plan B.
 - **Cruce** (`club_cruce_auto`): la **primera factura cerrada con ese `numero_pedido` después de que el puente vio el pedido abierto, con tope de 18 h**. No usa el día de la factura (así se esquiva la medianoche) ni `fecha_cierra` (viene agrupada al cierre). Margen de 2 min por el reloj de la PC del PoS. El mismo número de pedido al día siguiente no cruza con el viejo.
 - **`SIN_CRUCE`** (Excepciones, «posible cuenta dividida»): un registro con pedido que no encontró su factura, una vez que el pedido ya no está abierto (o pasaron las 18 h). El PoS cobra las cuentas divididas y las refacturas en facturas **sin pedido**. El manager elige la factura de la lista de facturas sin pedido de ese día (`club_sin_cruce_candidatas`, `club_sin_cruce_elegir`). Queda anotado quién y cuándo (`club_cruces_manuales`) y la excepción queda resuelta con «Factura N elegida». No toca el libro.
@@ -30,7 +30,7 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **Pruebas:** `075_pruebas_staging.sql`, 128/128 (pedido normal, medianoche, mismo número al día siguiente, tope de 18 h, cuenta dividida → Excepciones → elegir, plan B). vitest en verde.
 - **Falta (ítem 11 del puente, en el backlog):** el campo que une las facturas sin pedido con su pedido, la fecha de apertura del pedido y el consecutivo fiscal.
 
-**Cruce v2 con el ítem 11 ✅ en staging** (07/11, firma de Ismael para staging). Hallazgos de Ismael en el PoS: la unión pedido → factura es `FAC_Pedidos.NumeroFactura` (una factura por pedido); las cuentas divididas son facturas **sin pedido** con la mesa en la factura.
+**Cruce v2 con el ítem 11 ✅ en staging** (07/11, firma del dueño para staging). Hallazgos del dueño en el PoS: la unión pedido → factura es `FAC_Pedidos.NumeroFactura` (una factura por pedido); las cuentas divididas son facturas **sin pedido** con la mesa en la factura.
 - **Escaneo:** se guardan el pedido, la mesa, la apertura del pedido (`pos_ndf_open.pedido_abierto_en`, mig 081) y la hora del escaneo.
 - **Cruce** (`club_cruce_facturas`, devuelve la lista):
   1. La **principal** es la factura del pedido: número + apertura, exacto cuando la factura trae `pedido_abierto_en`. Sin ese dato (antes del backfill), la primera con ese número desde la apertura, con tope de 18 h.
@@ -40,7 +40,7 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **Plan B:** la lista de 2 h muestra los últimos 4 dígitos del tiquete cuando llega el consecutivo.
 - **Pruebas:** 135/135 en staging. Incluyen los casos reales: el pedido 14 del 05-nov → 112430, y la mesa 19 del 31-oct → 112313 (pedido 33) + 112310 + 112311 (la mesa de la factura se simula hasta que llegue el backfill). También la medianoche y el mismo número al día siguiente.
 
-**Auditoría técnica (Grok, CLUB-AUD-01..13) — correcciones en la 075, en staging** (07/11). Decisiones de Ismael: las correcciones van en la 075; un referente tiene una tarjeta por visita; la restitución reinicia el plazo; la tasa se protege con una guarda (opción a); el cierre de mes se congela con snapshot (opción A).
+**Auditoría técnica (Grok, CLUB-AUD-01..13) — correcciones en la 075, en staging** (07/11). Decisiones del dueño: las correcciones van en la 075; un referente tiene una tarjeta por visita; la restitución reinicia el plazo; la tasa se protege con una guarda (opción a); el cierre de mes se congela con snapshot (opción A).
 - **01:** los contactos de los turistas están en `club_cupones_contactos` (solo owner y manager).
 - **02:** `club_visita_control` (advisory lock por visita, una tarjeta por referente, Σ personas ≤ pax) más el índice único (miembro, visita) y las excepciones `VISITA_REPETIDA` y `PERSONAS_SOBRE_PAX`.
 - **03:** `club_vencer` recalcula el saldo después del lock.
@@ -56,9 +56,9 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **Las 115 cuentas que vencería `club_vencer` hoy** (simulación de solo lectura, 07/11): suman **174 personas y 0 créditos**. Son 56 cuentas con 1 persona y 59 con 2: restos de menos de medio crédito. **Ninguna** está entre las 37 con saldo activo (66 créditos). Todas son migradas (110 referentes, 3 de equipo y 2 PM), con la última actividad entre oct-2022 y el 03-nov-2025; 62 ya tenían un vencimiento del sistema viejo.
   - **Cómo se calcula `ultima_actividad`:** es la `fecha_visita` más tardía entre tarjetas, canjes y restituciones; los vencimientos no cuentan. En los datos migrados, la tarjeta lleva el `createdAt` de Firestore, que es la fecha de carga y por eso aproximada, y el canje lleva el `createdAt` de su grupo (un canje por referente y minuto UTC). Los vencimientos de la D1 y los del 05-nov no cuentan como actividad.
 
-**Cuenta dividida AMBIGUA** (07/11, decisión de Ismael). Una factura sin pedido que cae en la ventana de **dos** pedidos de la misma mesa (de la apertura a 30 min después de la factura de cada uno) no se asigna a ninguno: va a Excepciones como `AMBIGUA`, con los pedidos que la tocan (`club_cruce_detalle` devuelve el rol: principal, dividida o ambigua). Prueba 35. **Pruebas:** 169/169. Después del backfill del puente, `scripts/sql/club_verificar_backfill.sql` vuelve a correr la mesa 19 del 31-oct con los datos reales.
+**Cuenta dividida AMBIGUA** (07/11, decisión del dueño). Una factura sin pedido que cae en la ventana de **dos** pedidos de la misma mesa (de la apertura a 30 min después de la factura de cada uno) no se asigna a ninguno: va a Excepciones como `AMBIGUA`, con los pedidos que la tocan (`club_cruce_detalle` devuelve el rol: principal, dividida o ambigua). Prueba 35. **Pruebas:** 169/169. Después del backfill del puente, `scripts/sql/club_verificar_backfill.sql` vuelve a correr la mesa 19 del 31-oct con los datos reales.
 
-**Vencimiento seguro** (07/11, decisión de Ismael):
+**Vencimiento seguro** (07/11, decisión del dueño):
 - `club_vencer_simular(p_corte)`: solo owner. Devuelve la lista (miembro, personas, créditos, última actividad) y no escribe nada.
 - `club_vencer(p_corte, p_confirmo_total)`: solo vence si el total confirmado coincide con lo que da la simulación en ese momento; si no, error «volvé a simular». Además toma un lock para que haya una sola corrida a la vez.
 - **Pantalla:** en Reportes, «Simular vencimiento» → lista → «Confirmar», solo para el owner.
@@ -82,9 +82,9 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **14:** `club-web` exige el binding `RATE_LIMITER` y `CLUB_WEB_KEY`; si falta alguno, responde 503.
 - **13:** EXPLAIN en [EXPLAIN-AUD-13.md](EXPLAIN-AUD-13.md).
 - **Pruebas:** 194/194 en staging.
-- **Pendiente de Ismael:** cargar `CLUB_WEB_KEY` en Cloudflare y su sha256 en Supabase (pasos en `club-web/README.md`). Hasta entonces, las funciones públicas fallan cerradas.
+- **Pendiente del dueño:** cargar `CLUB_WEB_KEY` en Cloudflare y su sha256 en Supabase (pasos en `club-web/README.md`). Hasta entonces, las funciones públicas fallan cerradas.
 
-**Área de la mesa** (07-nov, decisión de Ismael). El área '3' es una zona con clientes sentados (mesas 1–8) y **cuenta para el Club**. La 'B' también, si la factura trae mesa. Nada filtra por área. La mesa es **(área, mesa)**:
+**Área de la mesa** (07-nov, decisión del dueño). El área '3' es una zona con clientes sentados (mesas 1–8) y **cuenta para el Club**. La 'B' también, si la factura trae mesa. Nada filtra por área. La mesa es **(área, mesa)**:
 - el cruce de cuentas divididas y el control de AMBIGUA comparan área y mesa;
 - Escanear muestra «Pedido 7 · Área 3 · Mesa 4 · ₡…»;
 - la lista del plan B y la de Excepciones también muestran el área.
@@ -124,7 +124,7 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
   - aviso al referente: `club_alertas`, más «Avisarle por WhatsApp» en caja.
 - **R-02:** el puente no trae el descuento (`descuento_crc` vale 0 en todas las facturas desde agosto; las líneas no tienen
   columna de descuento). Por eso `CUPON_SIN_PROMO` sigue con el artículo marcador, después de la latencia del puente.
-  **Falta que Ismael cree «PROMO CLUB 10%» en el PoS** y lo cargue en `club_config.promo_articulo_codigo`.
+  **Falta que el dueño cree «PROMO CLUB 10%» en el PoS** y lo cargue en `club_config.promo_articulo_codigo`.
 - **26:** `tarjeta_manual_activa` (prod false; staging true), tope diario por miembro y `TARJETA_MANUAL`.
 - **30:** el staff no lee `codigo`; el contador, sin cupones.
 - **25:** `club_auditoria` de solo inserción, resoluciones como historial y segregación.

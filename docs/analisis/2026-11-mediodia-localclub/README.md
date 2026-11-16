@@ -5,7 +5,7 @@ Objetivo: decidir qué hacer con el menú de mediodía (familia 29 GREENSEASON) 
 
 **Reportes publicados (claude.ai):**
 - **Para socios v2 (vigente):** https://claude.ai/artifact/866259kzSBznyP84UF6woj
-- **Escenario 2027 con las propuestas:** resumen en [ESCENARIO-2027.md](ESCENARIO-2027.md) (el doc de Docs lo creó otra sesión; pedirle el link a Ismael)
+- **Escenario 2027 con las propuestas:** resumen en [ESCENARIO-2027.md](ESCENARIO-2027.md) (el doc de Docs lo creó otra sesión; pedirle el link al dueño)
 - **Análisis completo (formato largo):** https://claude.ai/artifact/Exxrv4VfRnQ6MKwyh1vQUA
 - **Programa de créditos y comisiones PM (conciliación):** https://claude.ai/artifact/9Ad3sbMcV4q2gMLfJbNXcq
 - **Descuento al personal, mes a mes:** https://claude.ai/artifact/Y1BFGg8YjFPiNn4quamMPZ
@@ -200,7 +200,7 @@ Ver también [research/](research/) ([mercado](research/mercado-gastronomico.md)
   - Margen = neta − costo (sin mano de obra ni gastos fijos).
 - **Temporada:** baja = mayo a mediados de diciembre; alta = mediados de diciembre a abril.
 
-### Historia de descuentos (confirmada por Ismael)
+### Historia de descuentos (confirmada por el dueño)
 
 | Período | Programa |
 |---|---|

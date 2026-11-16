@@ -257,9 +257,9 @@ Firma: ____________ · fecha y hora (-06:00): ____________ · SHA de la rama: `5
 | Paso | Hora CR | Quién | Resultado |
 |---|---|---|---|
 | Preparación (§0) | 16-nov 14:15–14:30 | sesión de CC (solo lectura en prod) | Edge v6 off `3ee7558f…`, ledger 180, 0 pases, cursor al día; rama al día con `main` (`5cc5073`), Edge idéntico a `6c5848e` |
-| §2 secretos | | | |
-| §3 antes | | | |
-| §4 portón | | | |
-| §5 Android | | | |
-| §7 encendido | | | |
-| §8 después | | | |
+| §2 secretos | 16-nov ~15:03 | sesión de CC del dueño (solo lectura) | 7/7 secretos de Supabase con nombre y digest coincidentes; el #8 del Worker se infiere porque `/vencer` dio 200 cada 10 min de 13:30 a 15:00 |
+| §3 antes | 16-nov ~15:03 | sesión de CC del dueño (solo lectura) | `club-pase` v6, `verify_jwt` off, hash `3ee7558f`; ledger 180 |
+| §4 portón | 16-nov ~15:03 | sesión de CC del dueño | `/google` sin `x-club-web` → 401; `/vencer` sin `x-club-pase-sync` → 401. §4.2 (con `CLUB_WEB_KEY`) salteado: el dueño no tiene el valor; equivalente: §5.1 devolvió un link de guardado válido |
+| §5 Android | 16-nov 15:19–15:28 | el dueño como socio (sin Android; Google Wallet web en Mac) | §5.1 OK (link de guardado `pay.google.com/gp/v/save/…`, largo < 1.800). §5.3: título Satori, «Socio del Local Club», nombre de pila, diseño tinta + daruma, QR con código corto, sin marca de prueba, sin teléfono ni correo; el QR escaneado con la caja de prod (Club → Escanear) abre la ficha. §5.4: tras validar al socio en caja (activo provisional), `/wallet/actualizar` → «actualizado»; el pase pasó a «Vale en todos los Satori» + «1 cortesía sorpresa», «Actualizado 16-nov 15:26» (la web de Google tardó ~2 min en reflejarlo). §5.5 (baja): **no hecha, pendiente**. Observación: `club_pases.actualizado_en` quedó igual a `emitido_en` (15:19) pese a la actualización exitosa; revisar si debería registrarse |
+| §7 encendido | 16-nov 15:38–15:40 | el dueño, a mano en Cloudflare (la sesión no tiene acceso a Cloudflare) | `VITE_WALLET_GOOGLE`=1 (Text, Production) en Pages `satori-club`; redeploy de producción sobre `main` `064a042`, success 15:40; alias del Club activo |
+| §8 después | 16-nov 15:41 | el dueño (validación física) | El portal muestra «Agregar a Google Wallet» y «Actualizar mi pase». Google Wallet **ENCENDIDO** para clientes |

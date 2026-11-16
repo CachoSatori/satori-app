@@ -2,7 +2,7 @@
 //
 // Rediseño B4, en el DOM: frase, 3 números, «Para hacer hoy» y el estado «todo en orden».
 // La base está simulada (solo lecturas); los datos son ficticios.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, waitFor, within, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 
@@ -76,7 +76,14 @@ function montar() {
   return render(<MemoryRouter><HomePage /></MemoryRouter>)
 }
 
+// 16-nov: estas pruebas dependían del día real. Los lunes el Inicio suma «Semana» y «Todo en orden» no sale, y CI (en UTC)
+// cae en lunes desde el domingo 18:00 CR. Se fija la fecha a un martes a media tarde CR; solo Date, así los timers
+// reales de waitFor siguen andando.
+afterEach(() => { vi.useRealTimers() })
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-17T21:00:00Z'))   // martes 17-nov 15:00 CR
+
   cleanup()
   role = 'owner'
   tablas = { sops: { count: 7 } }

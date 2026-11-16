@@ -19,7 +19,7 @@ test('sin ot_campaign en el link, se agrega; sin ot_source, el link queda igual 
     .toBe('https://www.opentable.com/restref/client/?rid=99')
 })
 
-test('anfitrión puro (la base no devuelve link) o link que no es de OpenTable: sin tarjeta, nunca el rid por defecto', () => {
+test('sin link (base sin la 182 y anfitrión que no es socio, o local sin link) o link que no es de OpenTable: sin tarjeta, nunca el rid por defecto', () => {
   for (const p of [{}, { socio: null }, { socio: { reserva_url: null } }, { socio: { reserva_url: 'https://evil.example/opentable.com' } },
                    { socio: { reserva_url: 'http://www.opentable.com/r/x?ot_source=a' } }, null, undefined]) {
     const u = urlReservaAnfitrion(p)
@@ -28,7 +28,14 @@ test('anfitrión puro (la base no devuelve link) o link que no es de OpenTable: 
   }
 })
 
-test('si la base algún día devuelve el link arriba (todo miembro), se usa ese primero', () => {
+test('mig 182: anfitrión puro (sin `socio`) con el link arriba → su OpenTable con la campaña `referente`', () => {
+  expect(urlReservaAnfitrion({ reserva_url: OT, socio: null })).toBe(
+    'https://www.opentable.com/r/ejemplo-restaurante?restref=123456&lang=es-MX&ot_source=Club%20Satori&ot_campaign=referente')
+  // arriba en null (local sin link) y sin socio: sin tarjeta
+  expect(urlReservaAnfitrion({ reserva_url: null, socio: null })).toBeNull()
+})
+
+test('mig 182: el link de arriba se usa antes que el de `socio` (prod sin la 182 sigue con `socio`)', () => {
   const otro = 'https://www.opentable.com/restref/client/?rid=7&ot_source=Club'
   expect(urlReservaAnfitrion({ reserva_url: otro, socio: { reserva_url: OT } })).toBe(`${otro}&ot_campaign=referente`)
 })

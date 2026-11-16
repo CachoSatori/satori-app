@@ -290,7 +290,7 @@ interface Portal {
   /** (08-nov) créditos y colones juntos, como el pase y la caja */
   valor_credito_crc?: number
   anfitrion?: boolean
-  /** Hoy no viene (la base solo manda el link dentro de `socio`); si algún día viene para todo miembro, se usa primero. */
+  /** (mig 182) el OpenTable del local del anfitrión, para todo anfitrión (sea socio o no); null sin link. Se usa primero. */
   reserva_url?: string | null
   socio?: {
     estado: 'pendiente' | 'activo'; desde: string; codigo_socio: string | null; beneficio: string | null; visitas_mes: number | null

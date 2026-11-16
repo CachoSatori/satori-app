@@ -261,6 +261,12 @@
       "rama": "claude/club-link-reserva-local",
       "renumerada_a": "180"
     },
+    "127": {
+      "nombre": "club_portal_reserva_anfitrion",
+      "bloque": "club",
+      "rama": "claude/club-portal-link-v2",
+      "renumerada_a": "182"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -434,6 +440,12 @@
       "bloque": "pase",
       "rama": "claude/club-link-reserva-local",
       "origen": "125"
+    },
+    "182": {
+      "nombre": "club_portal_reserva_anfitrion",
+      "bloque": "pase",
+      "rama": "claude/club-portal-link-v2",
+      "origen": "127"
     }
   }
 }

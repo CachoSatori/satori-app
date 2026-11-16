@@ -1,5 +1,53 @@
 # Satori App — Estado del proyecto
 
+## 🗄️ 2026-11-16 (00:20) — bloque ⚡ARRANQUE archivado al reemplazarlo (06:45 del 15/11)
+
+Historia: sus hashes, conteos y pendientes **no** valen como estado actual.
+
+**Al día: 2026-11-15, 06:45 hora de Costa Rica.** `main` = **`306b5cf`** (merge del #197). **Ledger de prod = 171.** Todos los
+merges con firma del dueño. El bloque anterior (02:10 del 15/11) está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
+**Punto de entrada: [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).**
+
+> **Regla (Definition of Done):** ninguna entrega se cierra sin ⚡ARRANQUE al día; puede ir en el mismo PR o
+> en un PR de docs inmediato después del merge. **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se
+> corrige el archivo.
+
+| Puntero | Hash | Qué es |
+|---|---|---|
+| `main` | **`306b5cf`** (15/11 06:32 -06:00: merge del #197, docs; última migración 171 con #193). **Sin regla de protección** (el dueño activa «Gate» como requisito en GitHub). | **PROD.** GitHub Pages (base `/satori-app/`). Ledger de prod: **171**. |
+| `staging` | sin cambios desde el 13/11 (`4726b7f`, merge del #162) | Desarrollo y proyecto Supabase de staging. Cloudflare Pages (`satori-staging.pages.dev`) publica esta rama. |
+| `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
+
+- **Entraron el 15/11 después de la tanda 156–169** (hora CR, merge SHA):
+
+| PR | Mig. | Merge | Hora CR | Nota |
+|---|---|---|---|---|
+| #194 | | `cb9f155` | 04:47 | docs (ESTADO tras la tanda nocturna) |
+| #190 | 170 | `a200b2c` | 05:34 | el manager solo ve y opera sus locales. Antes, con firma del dueño (05:27), se asignó en prod el local Santa Teresa a la única manager activa; **Nosara queda sin manager** |
+| #195 | | `591d8d3` | 05:37 | pruebas de #190 que quedaron fuera de su merge; el deploy de Pages de `a200b2c` falló en Tests y quedó resuelto con #195 |
+| #193 | 171 | `8ddf79d` | 05:44 | hotfix `club_miembro_guardar` = 156 + 157 sobre el núcleo de la 170 |
+| #196 | | `de36ef0` | 05:59 | pase de Wallet del equipo («Personas registradas») y avance de 90 días; Edge `club-pase` redeploy a v6 |
+| #197 | | `306b5cf` | 06:32 | docs: definiciones de referente y concierge |
+
+- **Regresión de «Editar» socio: cerrada** con la 171 (ya no da «Tipo no válido» y vuelve a generar el link al pasar socio → anfitrión).
+- **Pendiente del dueño / de la sesión:**
+  - **Edge `club-pase`:** redeploy hecho el 15/11 de madrugada → prod **v6 · ACTIVE** (`verify_jwt` off), desde la rama `claude/club-pase-edge` (cabeza `6c5848e`, con `main` mergeado).
+  - **Validación física** de lo que entró (manager con la 170, «Editar» socio con la 171, tanda 156–169).
+  - **Edge `extract-document`:** staging en **v29** desde `190b5f5`, con los secretos `NEGOCIO_*`. **Prod sigue en la versión
+    de `8a8dfb6`.** D15 firmado; falta una **prueba funcional en staging** (la sesión no puede invocar la función: el proxy
+    bloquea `*.supabase.co`).
+- **Seguimientos (backlog, sin fecha):** el contador ve «Cohortes» · funciones por id del manager · funciones nuevas con local
+  (159, 163, 166, 168, 169) sin `club_exigir_local` · OpenTable · buscador de Escanear con socios · botón anfitrión → socio ·
+  fecha elegida en Bandeja · unificar la auditoría de la 161 y la 162 · pasar a SQL fijo el de la 162.
+- **Local Club sigue en 15 %** hasta el lanzamiento del Club.
+- **Regla de merges D1 vigente:** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño. El bloqueo es
+  solo de merges.
+- **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
+  `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`). (Medidos el 14/11; no se re-midieron en este PR de docs.)
+- **Gate de `main`:** último dato medido (14/11): `vitest run` 2068 tests; se vuelve a medir en cada PR de código.
+- **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
+
+
 ## 🗄️ 2026-11-15 (05:45) — bloque ⚡ARRANQUE archivado al reemplazarlo (02:10 del 15/11)
 
 Historia: sus hashes, conteos y pendientes **no** valen como estado actual. Títulos bajados un nivel.

@@ -10,7 +10,7 @@ const rej: RejectedOp = {
   created_at: '2026-11-17T05:30:00.000Z',   // 23:30 del 16/11 en CR
   rejected_at: '2026-11-17T06:00:00.000Z', reason: 'un dato no cumple una regla de la base', code: '23514', status: 400,
 }
-const state = { pending: 0, rejected: 0, role: 'cajero' as string, stuck: { attempts: 0 } as { attempts: number; kind?: string; head?: string } }
+const state = { lista: null as RejectedOp[] | null, pending: 0, rejected: 0, role: 'cajero' as string, stuck: { attempts: 0 } as { attempts: number; kind?: string; head?: string } }
 const requeue = vi.fn<(id: string) => Promise<void>>(async () => {})
 const force = vi.fn<(id: string, n: number, m: string) => Promise<boolean>>(async () => true)
 const resolve = vi.fn<(id: string, by: string | null) => Promise<void>>(async () => {})
@@ -23,7 +23,7 @@ vi.mock('./outbox', async () => {
     flushNow: async () => null,
     pendingCount: async () => state.pending,
     rejectedCount: async () => state.rejected,
-    rejectedOps: async () => (state.rejected ? [rej] : []),
+    rejectedOps: async () => (state.lista ?? (state.rejected ? [rej] : [])),
     getStuck: () => state.stuck,
     requeueRejectedNow: (id: string) => requeue(id),
     resolveRejectedNow: (id: string, by: string | null) => resolve(id, by),
@@ -36,14 +36,14 @@ vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ profile: { role: state.ro
 import OfflineBanner from './OfflineBanner'
 
 beforeEach(() => {
-  state.pending = 0; state.rejected = 0; state.role = 'cajero'; state.stuck = { attempts: 0 }
+  state.lista = null; state.pending = 0; state.rejected = 0; state.role = 'cajero'; state.stuck = { attempts: 0 }
   requeue.mockClear(); resolve.mockClear(); force.mockClear()
 })
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
 
 describe('A01 — aviso de operaciones rechazadas', () => {
   it('con rechazadas muestra el texto exacto, aunque no haya cola pendiente', async () => {
-    state.rejected = 2
+    state.rejected = 2; state.lista = [rej, { ...rej, client_op_id: 'op-y' }]
     render(<OfflineBanner />)
     await flush()
     expect(screen.getByRole('alert').textContent).toContain('Hay 2 operaciones que el servidor rechazó: avisá al manager')
@@ -187,5 +187,39 @@ describe('verificador #234, 3ª pasada — op incierta en el detalle', () => {
       expect(confirm.mock.calls[0][0]).toContain('puede que ya haya entrado')
       expect(resolve).not.toHaveBeenCalled()
     } finally { rej.incierta = orig }
+  })
+})
+
+describe('verificador #234, cierre — textos e inciertas en cadena', () => {
+  const raiz: RejectedOp = { ...rej, client_op_id: 'raiz', incierta: true }
+  const dep: RejectedOp = { ...rej, client_op_id: 'dep', op: 'update', payload: { match: { id: 'M' }, updates: { amount_crc: 7000 } }, depends_on: 'raiz', reason: 'depende' }
+  const otra: RejectedOp = { ...rej, client_op_id: 'otra' }
+
+  it('«Ya lo resolví» tocado desde una op que DEPENDE de una incierta pide el aviso fuerte', async () => {
+    state.lista = [raiz, dep]; state.rejected = 2; state.role = 'manager'
+    render(<OfflineBanner />)
+    await flush()
+    fireEvent.click(screen.getByText('Ver detalle')); await flush()
+    const confirm = vi.fn().mockReturnValue(false)
+    ;(window as unknown as { confirm: unknown }).confirm = confirm
+    fireEvent.click(screen.getAllByText('✓ Ya lo resolví')[1]); await flush()   // el botón de «dep»
+    expect(confirm.mock.calls[0][0]).toContain('puede que ya haya entrado')
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('el aviso rojo separa las rechazadas de las no confirmadas', async () => {
+    state.lista = [raiz, dep, otra]; state.rejected = 3
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.getByRole('alert').textContent).toContain('Hay 1 operación que el servidor rechazó y 2 que no confirmó: avisá al manager')
+  })
+
+  it('solo no confirmadas: no dice «rechazó»', async () => {
+    state.lista = [raiz]; state.rejected = 1
+    render(<OfflineBanner />)
+    await flush()
+    const t = screen.getByRole('alert').textContent ?? ''
+    expect(t).toContain('Hay 1 operación que el servidor no confirmó: avisá al manager')
+    expect(t).not.toContain('rechazó')
   })
 })

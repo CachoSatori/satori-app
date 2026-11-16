@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  flushNow, pendingCount, initOutbox, rejectedCount, rejectedOps, getStuck, isStuck,
+  flushNow, pendingCount, initOutbox, rejectedOps, getStuck, isStuck, contarSinConfirmar,
   requeueRejectedNow, resolveRejectedNow, forceRejectHeadNow, puedePasarARechazadas,
 } from './outbox'
 import type { RejectedOp, StuckState } from './outbox'
@@ -22,6 +22,7 @@ export default function OfflineBanner() {
   const [online, setOnline]   = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [pending, setPending] = useState(0)
   const [rejected, setRejected] = useState(0)
+  const [sinConfirmar, setSinConfirmar] = useState(0)
   const [stuck, setStuck] = useState<StuckState>(getStuck())
   const [staleTs, setStaleTs] = useState<number | null>(getStaleTs())
   const [syncing, setSyncing] = useState(false)
@@ -32,7 +33,10 @@ export default function OfflineBanner() {
     const onOnline  = () => setOnline(true)
     const onOffline = () => setOnline(false)
     const onPending = (e: Event) => setPending((e as CustomEvent<{ count: number }>).detail.count)
-    const onRejected = (e: Event) => setRejected((e as CustomEvent<{ count: number }>).detail.count)
+    const onRejected = (e: Event) => {
+      const d = (e as CustomEvent<{ count: number; sinConfirmar?: number }>).detail
+      setRejected(d.count); setSinConfirmar(d.sinConfirmar ?? 0)
+    }
     const onStuck   = (e: Event) => setStuck((e as CustomEvent<StuckState>).detail)
     const onStale   = (e: Event) => setStaleTs((e as CustomEvent<{ ts: number | null }>).detail.ts)
     window.addEventListener('online', onOnline)
@@ -42,7 +46,7 @@ export default function OfflineBanner() {
     window.addEventListener('satori:outbox-stuck', onStuck)
     window.addEventListener('satori:stale-data', onStale)
     pendingCount().then(setPending).catch(() => { /* sin IDB */ })
-    rejectedCount().then(setRejected).catch(() => { /* sin IDB */ })
+    rejectedOps().then(rs => { setRejected(rs.length); setSinConfirmar(contarSinConfirmar(rs)) }).catch(() => { /* sin IDB */ })
     return () => {
       window.removeEventListener('online', onOnline)
       window.removeEventListener('offline', onOffline)
@@ -94,7 +98,7 @@ export default function OfflineBanner() {
     }}>
       {rejected > 0 && (
         <div role="alert" style={{ background: '#a12a2a', color: '#fff', textAlign: 'center', fontSize: '12px', fontWeight: 700, padding: '5px 8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <span>⛔ {avisoRechazadas(rejected)}</span>
+          <span>⛔ {avisoRechazadas(rejected, sinConfirmar)}</span>
           <button onClick={abrirDetalle} style={{ ...btn, color: '#a12a2a' }}>Ver detalle</button>
         </div>
       )}

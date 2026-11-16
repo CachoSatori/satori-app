@@ -424,9 +424,15 @@ export async function enqueue(op: Omit<OutboxOp, 'seq'>, opts?: { kick?: boolean
 export const pendingCount = () => idbCount(STORES.outbox)
 
 // ── Rechazadas: lo ve el personal y lo resuelve la gerencia (A01) ─────────────
+/** Cuántas NO tuvieron un rechazo explícito: las inciertas y lo que va con ellas (no se sabe si entraron). */
+export function contarSinConfirmar(rs: RejectedOp[]): number {
+  const inciertas = new Set(rs.filter(r => r.incierta).map(r => r.client_op_id))
+  return rs.filter(r => r.incierta || (r.depends_on !== undefined && inciertas.has(r.depends_on))).length
+}
+
 function notifyRejected() {
-  idbRejectedStore.count().then(n =>
-    window.dispatchEvent(new CustomEvent('satori:outbox-rejected', { detail: { count: n } }))
+  idbRejectedStore.all().then(rs =>
+    window.dispatchEvent(new CustomEvent('satori:outbox-rejected', { detail: { count: rs.length, sinConfirmar: contarSinConfirmar(rs) } }))
   ).catch(() => { /* sin IDB */ })
 }
 

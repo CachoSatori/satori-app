@@ -3,10 +3,17 @@
 import type { RejectedOp, RetryKind, StuckState } from './outbox'
 import { dateCR, horaCR, fi } from '../utils'
 
-export function avisoRechazadas(n: number): string {
-  return n === 1
-    ? 'Hay 1 operación que el servidor rechazó: avisá al manager'
-    : `Hay ${n} operaciones que el servidor rechazó: avisá al manager`
+/**
+ * n = total en la lista; sinConfirmar = las que no tuvieron un rechazo explícito (pasadas a mano y lo
+ * que va con ellas). No se dice «rechazó» de algo que el servidor no rechazó.
+ */
+export function avisoRechazadas(n: number, sinConfirmar = 0): string {
+  const m = Math.min(Math.max(sinConfirmar, 0), n)
+  const r = n - m
+  const ops = (k: number) => (k === 1 ? '1 operación' : `${k} operaciones`)
+  if (m === 0) return `Hay ${ops(r)} que el servidor rechazó: avisá al manager`
+  if (r === 0) return `Hay ${ops(m)} que el servidor no confirmó: avisá al manager`
+  return `Hay ${ops(r)} que el servidor rechazó y ${m} que no confirmó: avisá al manager`
 }
 
 const MOTIVO_TRABA: Record<RetryKind, string> = {

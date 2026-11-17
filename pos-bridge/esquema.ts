@@ -131,6 +131,12 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       usuarioregistra: opt('mesero que comandó la línea', 'UsuarioRegistra'),
       esextra:       opt('línea que NO cuenta como unidad', 'EsExtra'),
       compuesto:     opt('línea que NO cuenta como unidad', 'Compuesto', 'EsCompuesto'),
+      // D9 de Ventas v2 (firma del dueño, 17-nov): el descuento de la línea, en ₡. `Monto` YA viene neto
+      // (con el descuento aplicado), así que esto NO se resta de nada: solo se informa. Sin esta columna
+      // `descuento_crc` entraba en 0 en todas las facturas desde 2024 (auditoría de Ventas, P1-8).
+      // `opt`: si faltara, degrada a 0 como antes, nunca tumba la ingesta de la plata.
+      // Ojo: el % (`TipoDescuento = 'P'`) vive en `FAC_PedidosDet`, no acá: acá es monto.
+      descuento:     opt('descuento de la línea en ₡ (Monto ya viene neto)', 'Descuento'),
     },
   },
   productos: {

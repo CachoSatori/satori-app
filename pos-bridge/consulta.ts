@@ -258,7 +258,8 @@ export function sqlDetalle(
   ${nombreFamilia}                                  AS familia_nombre,
   ${od('usuarioregistra')}                          AS usuario_registra,
   ${od('esextra')}                                  AS es_extra,
-  ${od('compuesto')}                                AS compuesto
+  ${od('compuesto')}                                AS compuesto,
+  COALESCE(${od('descuento')}, 0)                   AS descuento
 FROM ${D} d
 INNER JOIN ${F} f ON f.${cf('numero')} = d.${cd('numerofactura')}
 LEFT JOIN ${PR} pr ON pr.${q(col(esq, 'productos', 'codigo'))} = d.${cd('producto')}${joinClas}
@@ -319,6 +320,11 @@ export interface FilaDetalle {
   familia_nombre: unknown
   es_extra:       unknown
   compuesto:      unknown
+  /**
+   * `FAC_FacturasDet.Descuento`: el descuento de la línea en ₡ (D9, 17-nov). `monto` ya viene NETO.
+   * Opcional en el tipo: las filas de las pruebas viejas no lo traen y valen 0, como el SELECT sin la columna.
+   */
+  descuento?:     unknown
 }
 
 export interface FilaEstado { estado: string | null; n: unknown }
@@ -413,6 +419,10 @@ export function armarTickets(
       // IVA: lo que dijo el PoS. Si la columna ImpV no existe, el SELECT ya lo trajo
       // en 0 y acá queda 0 — nunca se deriva de neto × 0,13.
       imp_venta:        lineas.reduce((s, l) => s + num(l.imp_venta), 0),
+      // Descuento de la factura = Σ `FAC_FacturasDet.Descuento` de sus líneas (₡). Es lo que el mapper
+      // ya esperaba en `descuento` y nadie le pasaba (P1-8): con esto `descuento_crc` y la clase
+      // `descuento` / `mixta` dejan de salir siempre en 0 / `cobrada`. No toca `total` ni `valor_servido`.
+      descuento:        lineas.reduce((s, l) => s + num(l.descuento), 0),
       pedidos:          entero(f.pedidos),
       saloneros_varios,
       medios: {

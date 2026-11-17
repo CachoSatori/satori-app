@@ -108,4 +108,9 @@ sigue la noche siguiente con el `--desde/--hasta` que falte; es idempotente).
 
 ## 10. Firma y bitácora
 - Firma del dueño: _pendiente_ (SHA: ______, fecha y hora −06:00).
-- Bitácora: _pendiente_.
+- Bitácora (17-nov):
+  - **B · humo antes:** 09:58 CR, iguales a los de §6.
+  - **B1 · de día, con firma del dueño:** 09:58–10:29 CR. Ventana cambiada a 09:00–13:50 con corte automático (en vez de 00:00–06:00) porque el personal usa la app desde las 14:00. 35 meses, errores 0, histórico completo.
+  - **B · humo después** (corte 17-nov 00:00 −06:00): `facturas` 41.045 (=) · `lineas` 231.217 (=) · `h_lineas` `0ff0e84ea80a` (=) · `con_descuento` 8.038 (19,6 %) · `descuento_negativo` 0 · `item11_en_null` 8 (antes 40.859) · `lineas_sin_mesero` 10 (=) · clases: cobrada 30.941 · cortesía 1.005 · descuento 7.288 · dueños 311 · mixta 750 · null 732 · sin_cobro 18.
+  - **Distintas:** `h_facturas` `e3b6557b3e3d` → `0b1f3ec1449b` y `h_item11_existentes` `f4126335550d` → `67e4a8e25ca3`. Por mes, los 34 meses 2024-01…2026-10 dan `h_facturas` idéntica; solo 2026-11 cambió (`7410050f0cce` → `5b759c6ab00f`). Contra staging (mismo PoS, @`14bd278`), columna por columna, todo igual salvo `descuento_crc` y `clase_ingreso` (esperados) y `servicio_crc` ±1 céntimo en 2 facturas del 15–16 nov.
+  - **Decisión del dueño (17-nov): aceptado, sin impacto en ventas, totales ni pagos.** Causa investigada en el comentario del PR #252 (solo lectura).

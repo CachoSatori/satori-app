@@ -273,6 +273,12 @@
       "rama": "claude/club-portal-link-v2",
       "renumerada_a": "182"
     },
+    "128": {
+      "nombre": "club_excepciones_rapida",
+      "bloque": "club",
+      "rama": "claude/club-excepciones-abiertas-rapida",
+      "renumerada_a": "183"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -458,6 +464,12 @@
       "bloque": "pase",
       "rama": "claude/club-portal-link-v2",
       "origen": "127"
+    },
+    "183": {
+      "nombre": "club_excepciones_rapida",
+      "bloque": "pase",
+      "rama": "claude/club-excepciones-abiertas-rapida",
+      "origen": "128"
     }
   }
 }

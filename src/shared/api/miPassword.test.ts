@@ -5,19 +5,34 @@ const sb = vi.hoisted(() => ({ signIn: vi.fn(), update: vi.fn(), signOut: vi.fn(
 vi.mock('./supabase', () => ({ supabase: { auth: { signInWithPassword: sb.signIn, updateUser: sb.update, signOut: sb.signOut } } }))
 
 import {
-  validarCambio, fuerzaPassword, motivoReingreso, motivoActualizar, cambiarMiPassword, PASSWORD_MIN_CAMBIO,
+  validarCambio, fuerzaPassword, MENSAJE_DEBIL, motivoReingreso, motivoActualizar, cambiarMiPassword, PASSWORD_MIN_CAMBIO,
 } from './miPassword'
 
 describe('validarCambio', () => {
   it('mínimo 10', () => {
     expect(PASSWORD_MIN_CAMBIO).toBe(10)
     expect(validarCambio('vieja-clave-1', '123456789', '123456789')).toBe('La contraseña nueva debe tener al menos 10 caracteres')
-    expect(validarCambio('vieja-clave-1', '1234567890', '1234567890')).toBeNull()
+    expect(validarCambio('vieja-clave-1', 'murcielago77', 'murcielago77')).toBeNull()
   })
   it('actual vacía, no coinciden, igual a la actual', () => {
     expect(validarCambio('', 'nueva-clave-larga', 'nueva-clave-larga')).toBe('Escribí tu contraseña actual')
     expect(validarCambio('vieja-clave-1', 'nueva-clave-larga', 'nueva-clave-largA')).toBe('Las contraseñas nuevas no coinciden')
     expect(validarCambio('misma-clave-1', 'misma-clave-1', 'misma-clave-1')).toBe('La contraseña nueva tiene que ser distinta de la actual')
+  })
+})
+
+describe('validarCambio · «Débil» no se acepta (decisión del dueño 17-nov)', () => {
+  it.each([
+    ['un solo tipo', 'murcielago'],
+    ['palabra del local', 'Satori2026!!'],
+    ['repetida', 'aaaaBBBB1234'],
+    ['solo números', '1234567890'],
+  ])('%s → mensaje con ejemplo', (_c, p) => {
+    expect(validarCambio('vieja-clave-1', p, p)).toBe(MENSAJE_DEBIL)
+  })
+  it('aceptable y fuerte pasan', () => {
+    expect(validarCambio('vieja-clave-1', 'murcielago77', 'murcielago77')).toBeNull()
+    expect(validarCambio('vieja-clave-1', 'Tortuga-verde7', 'Tortuga-verde7')).toBeNull()
   })
 })
 

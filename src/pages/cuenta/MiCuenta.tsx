@@ -102,8 +102,8 @@ export default function MiCuenta() {
                 onChange={e => setNueva2(e.target.value)} disabled={guardando} />
             </div>
             <p className="mi-cuenta-ayuda">
-              Consejo: una frase de varias palabras es fácil de recordar y difícil de adivinar. No uses la misma
-              contraseña de otro lado.
+              Tiene que salir «Aceptable» o «Fuerte»: una frase de varias palabras con un número es fácil de recordar
+              y difícil de adivinar. No uses la misma contraseña de otro lado.
             </p>
             {error && <p className="login-error" role="alert">{error}</p>}
             <button type="submit" className="login-btn" disabled={guardando || !enLinea}>

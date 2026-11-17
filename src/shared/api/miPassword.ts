@@ -12,10 +12,15 @@ import { supabase } from './supabase'
 
 export const PASSWORD_MIN_CAMBIO = 10
 
+export const MENSAJE_DEBIL =
+  'Esa contraseña es muy fácil de adivinar. Hacela más larga o mezclá palabras y números: por ejemplo, tres o cuatro palabras con un número en el medio'
+
 /** Valida el formulario antes de ir al servidor. Devuelve el mensaje a mostrar, o null si está bien. */
 export function validarCambio(actual: string, nueva: string, nueva2: string): string | null {
   if (!actual) return 'Escribí tu contraseña actual'
   if (nueva.length < PASSWORD_MIN_CAMBIO) return `La contraseña nueva debe tener al menos ${PASSWORD_MIN_CAMBIO} caracteres`
+  // Decisión del dueño (17-nov): lo que el medidor marca «Débil» no se acepta.
+  if (fuerzaPassword(nueva) === 'debil') return MENSAJE_DEBIL
   if (nueva !== nueva2) return 'Las contraseñas nuevas no coinciden'
   if (nueva === actual) return 'La contraseña nueva tiene que ser distinta de la actual'
   return null
@@ -35,7 +40,7 @@ const COMUNES = ['satori', 'sushi', 'password', 'contrasena', 'qwerty', 'asdf', 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
 
 /**
- * Fuerza simple, solo para orientar (no bloquea: el único mínimo es el largo).
+ * Fuerza simple. «Débil» no se acepta (`validarCambio`, decisión del dueño 17-nov).
  * Débil: menos del mínimo, una palabra común del local, 4 caracteres iguales seguidos o un solo tipo de carácter
  * corto. Fuerte: 14 o más con 3 tipos (minúscula, mayúscula, número, símbolo), o 18 o más con 2. El resto, aceptable.
  */

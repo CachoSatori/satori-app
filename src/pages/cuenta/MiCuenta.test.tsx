@@ -78,6 +78,16 @@ describe('MiCuenta · cambiar mi contraseña', () => {
     expect(sb.signIn).not.toHaveBeenCalled()
   })
 
+  it('contraseña «Débil»: mensaje con ejemplo y no va al servidor', () => {
+    pantalla()
+    llenar(ACTUAL, 'murcielago')
+    expect(screen.getByText('Fuerza: Débil')).toBeTruthy()
+    fireEvent.click(screen.getByText('Cambiar contraseña'))
+    expect(screen.getByRole('alert').textContent).toContain('Esa contraseña es muy fácil de adivinar')
+    expect(screen.getByRole('alert').textContent).toContain('por ejemplo')
+    expect(sb.signIn).not.toHaveBeenCalled()
+  })
+
   it('sin conexión: botón apagado con «Necesitás conexión»; vuelve al reconectar', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
     pantalla()

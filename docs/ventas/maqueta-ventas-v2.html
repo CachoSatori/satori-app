@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maqueta — Ventas v2 (datos ficticios)</title>
+<!-- Maqueta ESTÁTICA de docs/ventas/SPEC-ventas-v2.md. Todos los números y nombres son FICTICIOS.
+     Estética: docs/club-satori/ESTANDAR-reportes.md y los colores de src/index.css. -->
+<style>
+@font-face { font-family:'Cormorant Garamond'; font-weight:500; src:url('../../public/fonts/cormorant-garamond-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family:'Cormorant Garamond'; font-weight:500; font-style:italic; src:url('../../public/fonts/cormorant-garamond-latin-500-italic.woff2') format('woff2'); }
+@font-face { font-family:'Cormorant Garamond'; font-weight:600; src:url('../../public/fonts/cormorant-garamond-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family:'DM Sans'; font-weight:400; src:url('../../public/fonts/dm-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family:'DM Sans'; font-weight:500; src:url('../../public/fonts/dm-sans-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family:'DM Sans'; font-weight:600; src:url('../../public/fonts/dm-sans-latin-600-normal.woff2') format('woff2'); }
+:root{
+  --tinta:#1f2120; --gris:#6e706c; --gris-claro:#9a9b96; --linea:#e6e4de; --panel:#f6f5f2;
+  --oro:#b48e50; --oro-texto:#8a6a33; --laca:#a3392d; --musgo:#3e6a4c; --alta:#f4f0e6; --barra:#cfcbc1;
+  --serif:'Cormorant Garamond',Georgia,serif; --sans:'DM Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--tinta);font-family:var(--sans);font-size:14px;line-height:1.5;
+  font-variant-numeric:tabular-nums lining-nums}
+.pagina{max-width:1080px;margin:0 auto;padding:22px 28px 48px}
+.aviso-maqueta{font-size:12px;color:var(--gris);margin-bottom:14px}
+header.cab{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:8px;border-bottom:1px solid var(--oro)}
+.marca{font-family:var(--serif);font-weight:600;font-size:24px;letter-spacing:.02em}
+.cab-der{text-align:right;color:var(--gris);font-size:12px;line-height:1.35}
+/* barra global */
+.barra{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;align-items:center;padding:14px 0 10px;border-bottom:1px solid var(--linea)}
+.barra .rot{font-size:12px;color:var(--gris)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{font:inherit;font-size:13px;padding:5px 11px;border:1px solid var(--linea);border-radius:999px;background:#fff;color:var(--gris);cursor:pointer}
+.chip.on{border-color:var(--tinta);color:var(--tinta);font-weight:600}
+.chip.flecha{padding:5px 9px}
+select.local{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--linea);border-radius:6px;background:#fff;color:var(--tinta)}
+.en-palabras{font-size:12.5px;color:var(--gris);padding:10px 0 0}
+.en-palabras b{color:var(--tinta);font-weight:600}
+/* preguntas */
+nav.preguntas{display:flex;gap:26px;flex-wrap:wrap;margin-top:18px;border-bottom:1px solid var(--linea)}
+nav.preguntas button{font-family:var(--serif);font-weight:600;font-size:21px;background:none;border:0;border-bottom:2px solid transparent;
+  padding:4px 0 8px;color:var(--gris-claro);cursor:pointer}
+nav.preguntas button.on{color:var(--tinta);border-bottom-color:var(--oro)}
+nav.preguntas .aparte{margin-left:auto;display:flex;gap:18px}
+nav.preguntas .aparte button{font-family:var(--sans);font-weight:500;font-size:13px;padding-top:10px}
+section.pant{display:none;padding-top:20px}
+section.pant.on{display:block}
+h1{font-family:var(--serif);font-weight:500;font-size:34px;line-height:1.05;margin:0 0 4px}
+.bajada{color:var(--gris);max-width:640px;margin:0 0 20px;font-size:14px}
+h2{font-family:var(--serif);font-weight:600;font-size:19px;margin:30px 0 2px}
+.nota{font-size:12px;color:var(--gris);margin:0 0 10px}
+/* cifras */
+.cifras{display:grid;grid-template-columns:repeat(4,1fr)}
+.cifra{padding:2px 18px;border-left:1px solid var(--linea)}
+.cifra:first-child{padding-left:0;border-left:0}
+.cifra .et{font-size:12px;color:var(--gris)}
+.cifra .num{font-family:var(--serif);font-weight:500;font-size:38px;line-height:1.05;margin:2px 0 4px}
+.var{font-size:12px;color:var(--gris);line-height:1.45}
+.var b{font-weight:600}
+.sube{color:var(--musgo)} .baja{color:var(--laca)}
+/* meta */
+.meta{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:0;align-items:end}
+.meta > div{padding:0 18px;border-left:1px solid var(--linea)}
+.meta > div:first-child{padding-left:0;border-left:0}
+.pista{height:6px;background:var(--linea);position:relative;margin:10px 0 6px}
+.pista i{position:absolute;left:0;top:0;bottom:0;background:var(--tinta)}
+.pista u{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--oro)}
+.medio{font-family:var(--serif);font-weight:500;font-size:24px;line-height:1.1}
+/* tablas */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-weight:500;font-size:11.5px;color:var(--gris);text-align:right;padding:6px 8px;border-bottom:1px solid var(--oro)}
+td{padding:7px 8px;border-bottom:1px solid var(--linea);text-align:right;vertical-align:top}
+th:first-child,td:first-child{text-align:left;padding-left:0}
+th:last-child,td:last-child{padding-right:0}
+td.nom{font-weight:600}
+td .sec{display:block;font-weight:400;color:var(--gris);font-size:12px}
+tr.hija td{color:var(--gris)} tr.hija td:first-child{padding-left:18px;font-weight:400}
+tr.total td{border-top:1px solid var(--tinta);border-bottom:0;font-weight:600}
+.gris{color:var(--gris)} .tenue{color:var(--gris-claro)}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:34px}
+.estado{background:var(--panel);border-radius:6px;padding:11px 14px;font-size:12.5px;color:var(--tinta);margin-top:22px}
+.leyenda{font-size:11.5px;color:var(--gris);display:flex;gap:16px;margin-top:6px}
+.leyenda i{display:inline-block;width:11px;height:11px;vertical-align:-1px;margin-right:5px}
+.lista{list-style:none;margin:0;padding:0;border-top:1px solid var(--tinta)}
+.lista li{display:grid;grid-template-columns:120px 1fr 110px;gap:12px;padding:8px 0;border-bottom:1px solid var(--linea);font-size:13px}
+.lista .verbo{font-family:var(--serif);font-style:italic;font-weight:500;font-size:17px;line-height:1.2}
+.lista .cif{text-align:right;font-weight:600}
+.cuad{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--tinta)}
+.cuad > div{padding:10px 14px 12px 0;border-bottom:1px solid var(--linea)}
+.cuad > div:nth-child(odd){border-right:1px solid var(--linea)}
+.cuad > div:nth-child(even){padding-left:14px}
+.cuad .tit{font-family:var(--serif);font-style:italic;font-size:17px}
+.cuad .que{font-size:12px;color:var(--gris)}
+svg text{font-family:var(--sans)}
+a.liga{color:var(--oro-texto);text-decoration:none;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="pagina">
+  <div class="aviso-maqueta">Maqueta estática de la SPEC Ventas v2. Todos los números y nombres son ficticios.</div>
+
+  <header class="cab">
+    <div class="marca">Satori</div>
+    <div class="cab-der">Ventas<br>Lunes 16 de noviembre de 2026, 9:10</div>
+  </header>
+
+  <!-- Barra global: se conserva al cambiar de pregunta -->
+  <div class="barra">
+    <span class="rot">Local</span>
+    <div class="chips">
+      <select class="local" aria-label="Local"><option>Santa Teresa</option><option>Nosara</option><option>Todos los locales</option></select>
+    </div>
+    <span class="rot">Período</span>
+    <div class="chips" role="group" aria-label="Período">
+      <button class="chip flecha" aria-label="Período anterior">‹</button>
+      <button class="chip">Hoy</button><button class="chip">Ayer</button><button class="chip">Semana</button>
+      <button class="chip">Quincena</button><button class="chip on">Mes a la fecha</button><button class="chip">Mes</button>
+      <button class="chip">Año a la fecha</button><button class="chip">Temporada</button><button class="chip">Rango</button>
+      <button class="chip flecha" aria-label="Período siguiente">›</button>
+    </div>
+    <span class="rot">Comparar con</span>
+    <div class="chips" role="group" aria-label="Comparar con">
+      <button class="chip on">Período anterior equivalente</button>
+      <button class="chip on">Año anterior, mismo día de semana</button>
+      <button class="chip">Año anterior, mismas fechas</button>
+    </div>
+  </div>
+  <div class="en-palabras"><b>1 al 15 de noviembre</b> (15 días) contra <b>1 al 15 de octubre</b> y contra <b>2 al 16 de noviembre de 2025</b>.
+    Hoy, en curso, no entra: lleva ₡ 312.000 a las 9:10. <a class="liga" href="#">Ver en vivo</a></div>
+
+  <nav class="preguntas" aria-label="Preguntas">
+    <button class="on" data-p="voy">¿Cómo voy?</button>
+    <button data-p="que">¿Qué vende?</button>
+    <button data-p="quien">¿Quién vende?</button>
+    <button data-p="cuando">¿Cuándo vendo?</button>
+    <button data-p="regalo">¿Cuánto regalo?</button>
+    <span class="aparte"><button data-p="vivo">En vivo</button><button data-p="ajustes">Ajustes</button></span>
+  </nav>
+
+  <!-- ═══ ¿Cómo voy? ═══ -->
+  <section class="pant on" id="p-voy">
+    <h1>Noviembre, a la fecha</h1>
+    <p class="bajada">Vas 9 % arriba de octubre a la misma fecha y 7 % abajo del año pasado. Entra más gente que en octubre y gasta casi lo mismo.</p>
+
+    <div class="cifras">
+      <div class="cifra"><div class="et">Venta neta</div><div class="num">₡ 18.450.000</div>
+        <div class="var"><b class="sube">▲ 9,2 %</b> vs. 1–15 oct (₡ 16.900.000)<br><b class="baja">▼ 6,8 %</b> vs. año anterior (₡ 19.800.000)</div></div>
+      <div class="cifra"><div class="et">Personas</div><div class="num">1.540</div>
+        <div class="var"><b class="sube">▲ 8,5 %</b> vs. 1.420<br><b class="baja">▼ 4,3 %</b> vs. 1.610</div></div>
+      <div class="cifra"><div class="et">Venta por persona, salón</div><div class="num">₡ 10.650</div>
+        <div class="var"><b>+1,3 %</b> vs. ₡ 10.510<br><b>−2,2 %</b> vs. ₡ 10.890</div></div>
+      <div class="cifra"><div class="et">Cuenta promedio</div><div class="num">₡ 30.150</div>
+        <div class="var"><b>+1,7 %</b> vs. ₡ 29.650<br><b>−2,6 %</b> vs. ₡ 30.940</div></div>
+    </div>
+
+    <h2>Meta de noviembre</h2>
+    <p class="nota">El ritmo pondera cada día por lo que vende ese día de la semana. La proyección no usa el día en curso.</p>
+    <div class="meta">
+      <div><div class="et gris" style="font-size:12px">Avance: 46,1 % de ₡ 40.000.000</div>
+        <div class="pista"><i style="width:46.1%"></i><u style="left:48.5%"></u></div>
+        <div class="var">La marca de oro es donde habría que estar hoy (48,5 %).</div></div>
+      <div><div class="et gris" style="font-size:12px">Ritmo</div><div class="medio">95 %</div><div class="var">un poco por debajo</div></div>
+      <div><div class="et gris" style="font-size:12px">Proyección del mes</div><div class="medio">₡ 38.000.000</div><div class="var">entre ₡ 36.400.000 y ₡ 39.600.000</div></div>
+      <div><div class="et gris" style="font-size:12px">Para llegar</div><div class="medio">₡ 1.437.000</div><div class="var">por día, los 15 días que faltan</div></div>
+    </div>
+
+    <h2>Venta por día</h2>
+    <p class="nota">Los dos fines de semana quedaron por debajo del año pasado; entre semana, parejo.</p>
+    <div id="g-dias"></div>
+    <div class="leyenda"><span><i style="background:var(--oro)"></i>1–15 nov 2026</span><span><i style="background:var(--barra)"></i>Año anterior, mismo día de semana</span></div>
+
+    <h2>Quincenas</h2>
+    <p class="nota">Cada quincena contra la misma quincena del mes anterior y del año anterior. La segunda tiene entre 13 y 16 días: mirá la venta por día.</p>
+    <table>
+      <colgroup><col style="width:24%"><col><col><col><col><col></colgroup>
+      <thead><tr><th>Quincena</th><th>Venta neta</th><th>Días</th><th>Por día abierto</th><th>vs. mes anterior</th><th>vs. año anterior</th></tr></thead>
+      <tbody>
+        <tr><td class="nom">1–15 nov</td><td>₡ 18.450.000</td><td>15</td><td>₡ 1.230.000</td><td class="sube">▲ 9,2 %</td><td class="baja">▼ 6,8 %</td></tr>
+        <tr><td class="nom">16–31 oct</td><td>₡ 17.600.000</td><td>16</td><td>₡ 1.100.000</td><td>+4,1 %</td><td>−3,0 %</td></tr>
+        <tr><td class="nom">1–15 oct</td><td>₡ 16.900.000</td><td>15</td><td>₡ 1.127.000</td><td>+2,4 %</td><td class="baja">▼ 5,2 %</td></tr>
+        <tr><td class="nom">16–30 sep</td><td>₡ 16.910.000</td><td>15</td><td>₡ 1.127.000</td><td>−1,8 %</td><td>−4,4 %</td></tr>
+        <tr><td class="nom">1–15 sep</td><td>₡ 16.500.000</td><td>15</td><td>₡ 1.100.000</td><td class="baja">▼ 6,3 %</td><td class="baja">▼ 7,1 %</td></tr>
+        <tr><td class="nom">16–31 ago</td><td>₡ 19.200.000</td><td>16</td><td>₡ 1.200.000</td><td>+3,5 %</td><td>−2,0 %</td></tr>
+      </tbody>
+    </table>
+
+    <div class="dos">
+      <div>
+        <h2>Qué explica el cambio</h2>
+        <p class="nota">Contra el 1–15 de octubre. <a class="liga" href="#">Ver el detalle</a></p>
+        <ul class="lista">
+          <li><span class="verbo sube">Más gente</span><span>120 personas más, casi todas de noche.</span><span class="cif">+₡ 1.260.000</span></li>
+          <li><span class="verbo">Mismo gasto</span><span>La venta por persona se movió 1,3 %.</span><span class="cif">+₡ 215.000</span></li>
+          <li><span class="verbo">Delivery</span><span>Igual cantidad de pedidos, cuenta algo más alta.</span><span class="cif">+₡ 75.000</span></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Por canal</h2>
+        <p class="nota">Canal de la factura.</p>
+        <table>
+          <thead><tr><th>Canal</th><th>Venta neta</th><th>% del total</th><th>vs. oct</th></tr></thead>
+          <tbody>
+            <tr><td class="nom">Salón</td><td>₡ 16.400.000</td><td>88,9 %</td><td class="sube">▲ 9,9 %</td></tr>
+            <tr><td class="nom">Delivery</td><td>₡ 1.480.000</td><td>8,0 %</td><td>+5,3 %</td></tr>
+            <tr><td class="nom">Para llevar</td><td>₡ 570.000</td><td>3,1 %</td><td>+1,8 %</td></tr>
+            <tr class="total"><td>Total</td><td>₡ 18.450.000</td><td>100 %</td><td>+9,2 %</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="estado">Dato incompleto: 11 % de las facturas de salón no tienen personas cargadas. La venta por persona las cuenta en la venta y no en las personas.
+      <a class="liga" href="#">Ver cuáles</a></div>
+    <p class="nota" style="margin-top:14px">Contabilidad: <a class="liga" href="#">tabla por día (bruta, IVA, servicio, neta)</a> · <a class="liga" href="#">CSV</a> · <a class="liga" href="#">reporte del mes</a></p>
+  </section>
+
+  <!-- ═══ ¿Qué vende? ═══ -->
+  <section class="pant" id="p-que">
+    <h1>Qué se vendió</h1>
+    <p class="bajada">Los rolls siguen siendo cuatro de cada diez colones. El menú del mediodía gana lugar y las tapas lo pierden.</p>
+
+    <h2>Mix por categoría</h2>
+    <p class="nota">Comida y bebida. Cada categoría aparece una sola vez; se abre a subcategoría y producto.</p>
+    <table>
+      <colgroup><col style="width:30%"><col><col><col><col><col></colgroup>
+      <thead><tr><th>Categoría</th><th>Venta neta</th><th>Unidades</th><th>% del mix</th><th>vs. oct, en puntos</th><th>vs. año anterior, en puntos</th></tr></thead>
+      <tbody>
+        <tr><td class="nom">▾ Rolls</td><td>₡ 7.276.000</td><td>1.120</td><td>40,2 %</td><td>+0,8</td><td class="baja">▼ 1,1</td></tr>
+        <tr class="hija"><td>Clásicos</td><td>₡ 3.110.000</td><td>520</td><td>17,2 %</td><td>+0,2</td><td>−0,4</td></tr>
+        <tr class="hija"><td>Especiales</td><td>₡ 2.960.000</td><td>410</td><td>16,4 %</td><td>+0,7</td><td>−0,5</td></tr>
+        <tr class="hija"><td>Tempura</td><td>₡ 1.206.000</td><td>190</td><td>6,7 %</td><td>−0,1</td><td>−0,2</td></tr>
+        <tr><td class="nom">▸ Bebidas</td><td>₡ 4.235.000</td><td>1.905</td><td>23,4 %</td><td>−0,5</td><td>+0,9</td></tr>
+        <tr><td class="nom">▸ Pokes y bowls</td><td>₡ 2.824.000</td><td>405</td><td>15,6 %</td><td>+0,3</td><td>+0,4</td></tr>
+        <tr><td class="nom">▸ Tapas</td><td>₡ 2.552.000</td><td>610</td><td>14,1 %</td><td class="baja">▼ 0,9</td><td>−0,6</td></tr>
+        <tr><td class="nom">▸ Menú del mediodía</td><td>₡ 652.000</td><td>118</td><td>3,6 %</td><td>+0,4</td><td class="sube">▲ 0,7</td></tr>
+        <tr><td class="nom">▸ Postres</td><td>₡ 290.000</td><td>96</td><td>1,6 %</td><td>0,0</td><td>−0,2</td></tr>
+        <tr><td class="nom">▸ Menú de niños</td><td>₡ 271.000</td><td>58</td><td>1,5 %</td><td>−0,1</td><td>−0,1</td></tr>
+        <tr class="total"><td>Comida y bebida</td><td>₡ 18.100.000</td><td>4.312</td><td>100 %</td><td></td><td></td></tr>
+        <tr><td class="gris">Otros: tienda, tarjetas de regalo, promociones</td><td class="gris">₡ 350.000</td><td></td><td></td><td></td><td></td></tr>
+        <tr class="total"><td>Venta neta</td><td>₡ 18.450.000</td><td></td><td></td><td></td><td></td></tr>
+      </tbody>
+    </table>
+
+    <div class="dos">
+      <div>
+        <h2>Suben</h2><p class="nota">Cambio de venta contra el 1–15 de octubre.</p>
+        <table><thead><tr><th>Producto</th><th>Venta</th><th>Cambio</th></tr></thead><tbody>
+          <tr><td class="nom">Roll de la casa<span class="sec">Rolls · Especiales</span></td><td>₡ 910.000</td><td class="sube">+₡ 180.000</td></tr>
+          <tr><td class="nom">Bento del día<span class="sec">Menú del mediodía</span></td><td>₡ 410.000</td><td class="sube">+₡ 95.000</td></tr>
+          <tr><td class="nom">Poke de atún<span class="sec">Pokes y bowls</span></td><td>₡ 760.000</td><td class="sube">+₡ 70.000</td></tr>
+        </tbody></table>
+      </div>
+      <div>
+        <h2>Bajan</h2><p class="nota">Los que más venta perdieron.</p>
+        <table><thead><tr><th>Producto</th><th>Venta</th><th>Cambio</th></tr></thead><tbody>
+          <tr><td class="nom">Gyozas<span class="sec">Tapas</span></td><td>₡ 480.000</td><td class="baja">−₡ 110.000</td></tr>
+          <tr><td class="nom">Cerveza nacional<span class="sec">Bebidas · Cervezas</span></td><td>₡ 620.000</td><td class="baja">−₡ 60.000</td></tr>
+          <tr><td class="nom">Edamame<span class="sec">Tapas</span></td><td>₡ 215.000</td><td class="baja">−₡ 40.000</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <h2>Ingeniería de menú: rolls</h2>
+    <p class="nota">Popular si vende más que 0,70 ÷ cantidad de platos de la categoría. Rentable si su margen en colones supera el promedio. 22 de 24 rolls tienen costo cargado.</p>
+    <div class="cuad">
+      <div><div class="tit sube">Estrellas</div><div class="que">Populares y rentables. Cuidarlas y no tocarles el precio a la ligera.</div>Roll de la casa · Roll tempura · Roll de salmón</div>
+      <div><div class="tit">Caballos de carga</div><div class="que">Populares, dejan poco. Revisar porción y costo antes que precio.</div>Roll California · Roll vegetal</div>
+      <div><div class="tit" style="color:var(--oro-texto)">Enigmas</div><div class="que">Rentables, se piden poco. Moverlos en la carta y recomendarlos.</div>Roll de anguila · Roll del chef</div>
+      <div><div class="tit baja">Perros</div><div class="que">Ni se piden ni dejan. Evaluar sacarlos.</div>Roll de pepino</div>
+    </div>
+  </section>
+
+  <!-- ═══ ¿Quién vende? ═══ -->
+  <section class="pant" id="p-quien">
+    <h1>Quién vendió</h1>
+    <p class="bajada">Dos saloneros venden por persona bastante más que el resto del turno de noche. Una persona nueva todavía no tiene mesas suficientes para comparar.</p>
+
+    <h2>Equipo de salón</h2>
+    <p class="nota">Venta por persona contra el promedio de su mismo turno. En gris, menos de 100 personas: no alcanza para concluir.</p>
+    <table>
+      <colgroup><col style="width:22%"><col><col><col><col><col><col><col></colgroup>
+      <thead><tr><th>Salonero</th><th>Venta neta</th><th>Personas</th><th>Venta por persona</th><th>vs. su turno</th><th>Bebidas por persona</th><th>ICP</th><th>Días</th></tr></thead>
+      <tbody>
+        <tr><td class="nom">Salonero A<span class="sec">Noche</span></td><td>₡ 4.380.000</td><td>372</td><td>₡ 11.770</td><td class="sube">▲ 8,1 %</td><td>1,42</td><td>6,8 %</td><td>12</td></tr>
+        <tr><td class="nom">Salonera B<span class="sec">Noche</span></td><td>₡ 3.950.000</td><td>341</td><td>₡ 11.580</td><td class="sube">▲ 6,3 %</td><td>1,35</td><td>7,4 %</td><td>11</td></tr>
+        <tr><td class="nom">Salonero C<span class="sec">Noche</span></td><td>₡ 3.120.000</td><td>301</td><td>₡ 10.370</td><td>−4,8 %</td><td>1,18</td><td>5,9 %</td><td>11</td></tr>
+        <tr><td class="nom">Salonera D<span class="sec">Mediodía</span></td><td>₡ 2.640.000</td><td>288</td><td>₡ 9.170</td><td>+2,2 %</td><td>1,05</td><td>5,1 %</td><td>13</td></tr>
+        <tr><td class="nom">Salonero E<span class="sec">Mediodía</span></td><td>₡ 1.730.000</td><td>194</td><td>₡ 8.920</td><td>−0,6 %</td><td>0,98</td><td>4,7 %</td><td>10</td></tr>
+        <tr><td class="nom gris">Salonera F<span class="sec">Noche · nueva</span></td><td class="gris">₡ 580.000</td><td class="gris">44</td><td class="gris">₡ 13.180</td><td class="tenue">pocas mesas</td><td class="gris">1,50</td><td class="gris">6,0 %</td><td class="gris">3</td></tr>
+        <tr class="total"><td>Equipo</td><td>₡ 16.400.000</td><td>1.540</td><td>₡ 10.650</td><td></td><td>1,22</td><td>6,1 %</td><td></td></tr>
+      </tbody>
+    </table>
+    <p class="nota" style="margin-top:10px">Tocá un nombre para abrir su ficha: 12 semanas, consistencia, racha y sus productos. <a class="liga" href="#">Por línea</a> · <a class="liga" href="#">Competencias</a></p>
+
+    <h2>Cajas y canales</h2>
+    <p class="nota">Lo que no pasa por un salonero.</p>
+    <table>
+      <thead><tr><th>Caja</th><th>Venta neta</th><th>Pedidos</th><th>Cuenta promedio</th><th>vs. oct</th></tr></thead>
+      <tbody>
+        <tr><td class="nom">Caja del mediodía<span class="sec">Delivery y para llevar</span></td><td>₡ 640.000</td><td>58</td><td>₡ 11.030</td><td>+3,0 %</td></tr>
+        <tr><td class="nom">Caja de la tarde<span class="sec">Delivery y para llevar</span></td><td>₡ 1.410.000</td><td>96</td><td>₡ 14.690</td><td>+5,1 %</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ═══ ¿Cuándo vendo? ═══ -->
+  <section class="pant" id="p-cuando">
+    <h1>Cuándo se vendió</h1>
+    <p class="bajada">El sábado vende 30 % más que un día promedio. De noche, el pico es de 19 a 20 h; al mediodía, de 13 a 14 h.</p>
+    <div class="dos">
+      <div>
+        <h2>Día de la semana</h2>
+        <p class="nota">100 es el día promedio del período.</p>
+        <div id="g-dow"></div>
+        <div class="leyenda"><span><i style="background:var(--oro)"></i>1–15 nov</span><span><i style="background:var(--barra)"></i>Año anterior</span></div>
+      </div>
+      <div>
+        <h2>Por turno</h2>
+        <p class="nota">Por hora de la factura: mediodía hasta las 16:59, noche desde las 17:00.</p>
+        <table>
+          <thead><tr><th>Turno</th><th>Venta neta</th><th>Personas</th><th>Por persona</th><th>vs. oct</th></tr></thead>
+          <tbody>
+            <tr><td class="nom">Mediodía</td><td>₡ 4.890.000</td><td>520</td><td>₡ 8.990</td><td>+3,1 %</td></tr>
+            <tr><td class="nom">Noche</td><td>₡ 13.560.000</td><td>1.020</td><td>₡ 11.490</td><td class="sube">▲ 11,6 %</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <h2>Hora por día</h2>
+    <p class="nota">Venta promedio por hora. Más oscuro, más venta.</p>
+    <div id="g-calor"></div>
+    <h2>Meses</h2>
+    <p class="nota">Noviembre va a la fecha: se compara contra los mismos 15 días, no contra el mes entero.</p>
+    <table>
+      <thead><tr><th>Mes</th><th>2026</th><th>2025</th><th>Cambio</th><th>Por día abierto, 2026</th></tr></thead>
+      <tbody>
+        <tr><td class="nom">Noviembre, a la fecha<span class="sec">1–15 contra 2–16</span></td><td>₡ 18.450.000</td><td>₡ 19.800.000</td><td class="baja">▼ 6,8 %</td><td>₡ 1.230.000</td></tr>
+        <tr><td class="nom">Octubre</td><td>₡ 34.500.000</td><td>₡ 35.900.000</td><td>−3,9 %</td><td>₡ 1.113.000</td></tr>
+        <tr><td class="nom">Septiembre</td><td>₡ 33.410.000</td><td>₡ 35.400.000</td><td class="baja">▼ 5,6 %</td><td>₡ 1.114.000</td></tr>
+        <tr><td class="nom">Agosto</td><td>₡ 38.100.000</td><td>₡ 38.600.000</td><td>−1,3 %</td><td>₡ 1.229.000</td></tr>
+      </tbody>
+    </table>
+    <p class="nota" style="margin-top:10px"><a class="liga" href="#">Calendario por fecha</a> · <a class="liga" href="#">Temporadas</a> · <a class="liga" href="#">Las 12 últimas quincenas</a></p>
+  </section>
+
+  <!-- ═══ ¿Cuánto regalo? ═══ -->
+  <section class="pant" id="p-regalo">
+    <h1>Cuánto se regaló</h1>
+    <p class="bajada">De lo servido, 2,9 % no se cobró: cortesías, personal y dueños. Los descuentos todavía no se pueden medir.</p>
+    <div class="cifras">
+      <div class="cifra"><div class="et">Cortesías</div><div class="num">₡ 262.000</div><div class="var">1,4 % de lo servido<br><b>+0,2 puntos</b> vs. oct</div></div>
+      <div class="cifra"><div class="et">Consumo del personal</div><div class="num">₡ 171.000</div><div class="var">0,9 %<br><b>sin cambio</b></div></div>
+      <div class="cifra"><div class="et">Consumo de dueños</div><div class="num">₡ 114.000</div><div class="var">0,6 %<br><b>−0,1 puntos</b></div></div>
+      <div class="cifra"><div class="et">Descuentos</div><div class="num tenue">sin dato</div><div class="var">Local Club, tarjetas y personal:<br>falta leer el descuento por línea</div></div>
+    </div>
+    <div class="estado">Dato pendiente: el descuento de cada factura llega en cero desde el PoS. Cuando se lea por línea, esta pantalla lo abre por programa.</div>
+    <div class="dos">
+      <div>
+        <h2>Cortesías por salonero</h2><p class="nota">Valor a precio de lista.</p>
+        <table><thead><tr><th>Salonero</th><th>Cortesías</th><th>Valor</th><th>% de su venta</th></tr></thead><tbody>
+          <tr><td class="nom">Salonero A</td><td>9</td><td>₡ 78.000</td><td>1,8 %</td></tr>
+          <tr><td class="nom">Salonera B</td><td>7</td><td>₡ 61.000</td><td>1,5 %</td></tr>
+          <tr><td class="nom">Salonero C</td><td>11</td><td>₡ 96.000</td><td class="baja">3,1 %</td></tr>
+          <tr><td class="nom">Otros</td><td>4</td><td>₡ 27.000</td><td>0,6 %</td></tr>
+        </tbody></table>
+      </div>
+      <div>
+        <h2>Anulaciones</h2><p class="nota">Facturas anuladas que no son regalo.</p>
+        <table><thead><tr><th>Motivo</th><th>Facturas</th><th>Valor</th></tr></thead><tbody>
+          <tr><td class="nom">Error de carga</td><td>5</td><td>₡ 64.000</td></tr>
+          <tr><td class="nom">Sin motivo</td><td>2</td><td>₡ 31.000</td></tr>
+          <tr class="total"><td>Total</td><td>7</td><td>₡ 95.000</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="pant" id="p-vivo"><h1>En vivo</h1><p class="bajada">Sin cambios: lo cobrado, las cuentas abiertas, las mesas y el ritmo por hora del servicio en curso. No lleva selector de período.</p></section>
+  <section class="pant" id="p-ajustes"><h1>Ajustes</h1><p class="bajada">Metas por local, catálogo de productos y competencias.</p></section>
+</div>
+
+<script>
+// Maqueta: solo cambia de pantalla y dibuja tres gráficos con datos ficticios.
+document.querySelectorAll('nav.preguntas button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('nav.preguntas button').forEach(function (x) { x.classList.toggle('on', x === b) })
+    document.querySelectorAll('section.pant').forEach(function (s) { s.classList.toggle('on', s.id === 'p-' + b.dataset.p) })
+  })
+})
+var p = new URLSearchParams(location.search).get('p')
+if (p) { var bt = document.querySelector('nav.preguntas button[data-p="' + p + '"]'); if (bt) bt.click() }
+
+function svg(w, h, cuerpo) { return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" role="img">' + cuerpo + '</svg>' }
+
+// Venta por día (miles de colones)
+;(function () {
+  var act = [980,1050,1010,1120,1090,1380,1560,1150,1020,1080,1140,1210,1420,1650,1590]
+  var ant = [1100,1120,1080,1210,1190,1480,1690,1230,1090,1150,1230,1290,1530,1740,1670]
+  var dia = ['d','l','m','m','j','v','s','d','l','m','m','j','v','s','d']
+  var W = 1020, H = 230, x0 = 46, y0 = 180, alto = 150, max = 1800, paso = (W - x0 - 6) / 15, s = ''
+  ;[0, 600, 1200, 1800].forEach(function (v) {
+    var y = y0 - v / max * alto
+    s += '<line x1="' + x0 + '" x2="' + W + '" y1="' + y + '" y2="' + y + '" stroke="#e6e4de"/>'
+    s += '<text x="' + (x0 - 8) + '" y="' + (y + 3) + '" font-size="10.5" fill="#6e706c" text-anchor="end">' + (v ? '₡ ' + (v / 1000).toLocaleString('es-CR') + ' M' : '0') + '</text>'
+  })
+  act.forEach(function (v, i) {
+    var x = x0 + i * paso, bw = paso * 0.28, h1 = v / max * alto, h2 = ant[i] / max * alto
+    s += '<rect x="' + (x + paso * 0.18) + '" y="' + (y0 - h2) + '" width="' + bw + '" height="' + h2 + '" fill="#cfcbc1"/>'
+    s += '<rect x="' + (x + paso * 0.18 + bw + 2) + '" y="' + (y0 - h1) + '" width="' + bw + '" height="' + h1 + '" fill="#b48e50"/>'
+    s += '<text x="' + (x + paso / 2) + '" y="' + (y0 + 15) + '" font-size="10.5" fill="#6e706c" text-anchor="middle">' + dia[i] + '</text>'
+    s += '<text x="' + (x + paso / 2) + '" y="' + (y0 + 29) + '" font-size="10.5" fill="#9a9b96" text-anchor="middle">' + (i + 1) + '</text>'
+  })
+  document.getElementById('g-dias').innerHTML = svg(W, H, s)
+})()
+
+// Índice por día de semana
+;(function () {
+  var nom = ['lun','mar','mié','jue','vie','sáb','dom'], act = [84,87,90,92,110,130,107], ant = [86,85,92,90,108,133,106]
+  var W = 500, H = 190, x0 = 30, y0 = 150, alto = 120, max = 140, paso = (W - x0) / 7, s = ''
+  ;[0, 50, 100].forEach(function (v) {
+    var y = y0 - v / max * alto
+    s += '<line x1="' + x0 + '" x2="' + W + '" y1="' + y + '" y2="' + y + '" stroke="#e6e4de"/>'
+    s += '<text x="' + (x0 - 6) + '" y="' + (y + 3) + '" font-size="10.5" fill="#6e706c" text-anchor="end">' + v + '</text>'
+  })
+  act.forEach(function (v, i) {
+    var x = x0 + i * paso, bw = paso * 0.26
+    s += '<rect x="' + (x + paso * 0.2) + '" y="' + (y0 - ant[i] / max * alto) + '" width="' + bw + '" height="' + (ant[i] / max * alto) + '" fill="#cfcbc1"/>'
+    s += '<rect x="' + (x + paso * 0.2 + bw + 2) + '" y="' + (y0 - v / max * alto) + '" width="' + bw + '" height="' + (v / max * alto) + '" fill="#b48e50"/>'
+    s += '<text x="' + (x + paso / 2) + '" y="' + (y0 + 15) + '" font-size="10.5" fill="#6e706c" text-anchor="middle">' + nom[i] + '</text>'
+    s += '<text x="' + (x + paso / 2) + '" y="' + (y0 + 29) + '" font-size="10.5" fill="#1f2120" text-anchor="middle">' + v + '</text>'
+  })
+  document.getElementById('g-dow').innerHTML = svg(W, H, s)
+})()
+
+// Mapa de calor día × hora
+;(function () {
+  var nom = ['lun','mar','mié','jue','vie','sáb','dom'], horas = [12,13,14,15,16,17,18,19,20,21,22]
+  var forma = [0.35,0.6,0.5,0.25,0.12,0.3,0.6,1,0.95,0.7,0.3], peso = [0.84,0.87,0.9,0.92,1.1,1.3,1.07]
+  var W = 1020, cw = 84, ch = 24, x0 = 44, y0 = 18, s = ''
+  horas.forEach(function (h, j) { s += '<text x="' + (x0 + j * cw + cw / 2) + '" y="11" font-size="10.5" fill="#6e706c" text-anchor="middle">' + h + ' h</text>' })
+  nom.forEach(function (d, i) {
+    s += '<text x="0" y="' + (y0 + i * ch + 16) + '" font-size="10.5" fill="#6e706c">' + d + '</text>'
+    horas.forEach(function (h, j) {
+      var v = Math.min(1, forma[j] * peso[i] / 1.3)
+      s += '<rect x="' + (x0 + j * cw) + '" y="' + (y0 + i * ch) + '" width="' + (cw - 2) + '" height="' + (ch - 2) + '" fill="#b48e50" fill-opacity="' + (0.06 + v * 0.9).toFixed(2) + '"/>'
+    })
+  })
+  document.getElementById('g-calor').innerHTML = svg(W, y0 + 7 * ch + 2, s)
+})()
+</script>
+</body>
+</html>

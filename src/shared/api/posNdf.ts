@@ -258,21 +258,31 @@ export async function getTicketsRango(
  */
 const TANDA_IDS = 200
 
+/**
+ * Cuántas tandas de líneas se piden A LA VEZ. Un año de ventas son ~11.000 facturas y ~68.000 líneas
+ * (prod, 16-nov): ~55 tandas × 2 páginas. De a una eran ~110 viajes en fila (P&L de un año: 10 s o
+ * más); de a 4 son ~28 rondas. El resultado es el MISMO: las tandas se juntan en su orden.
+ */
+export const TANDAS_EN_PARALELO = 4
+
 export async function getLineasDeTickets(ticketIds: string[]): Promise<LineaNdfRow[]> {
   if (ticketIds.length === 0) return []
+  const tandas: string[][] = []
+  for (let i = 0; i < ticketIds.length; i += TANDA_IDS) tandas.push(ticketIds.slice(i, i + TANDA_IDS))
+  // DOS cortes distintos, por dos motivos distintos:
+  //   · `TANDA_IDS` parte la lista de ids para que cada pedido quede chico.
+  //   · `leerTodo` pagina las FILAS de cada tanda, porque 200 facturas son ~1.100 líneas
+  //     (5,6 por factura en staging) y una sola tanda ya pasa el corte de PostgREST.
+  // Sin lo segundo, cada tanda perdía sus líneas de más — callado.
+  // Lee por `pos_ventas_lineas` (mig 067), el mismo camino para todos los roles. El orden
+  // TOTAL (`ticket_id`, `id`) y el `limit`/`offset` van dentro de la función.
+  const leerTanda = (tanda: string[]) => leerTodo<LineaNdfRow>((desde, hasta) => sb.rpc('pos_ventas_lineas', {
+    p_ticket_ids: tanda, p_limit: hasta - desde + 1, p_offset: desde,
+  }))
   const out: LineaNdfRow[] = []
-  for (let i = 0; i < ticketIds.length; i += TANDA_IDS) {
-    const tanda = ticketIds.slice(i, i + TANDA_IDS)
-    // DOS cortes distintos, por dos motivos distintos:
-    //   · `TANDA_IDS` parte la lista de ids para que cada pedido quede chico.
-    //   · `leerTodo` pagina las FILAS de cada tanda, porque 200 facturas son ~1.100 líneas
-    //     (5,6 por factura en staging) y una sola tanda ya pasa el corte de PostgREST.
-    // Sin lo segundo, cada tanda perdía sus líneas de más — callado.
-    // Lee por `pos_ventas_lineas` (mig 067), el mismo camino para todos los roles. El orden
-    // TOTAL (`ticket_id`, `id`) y el `limit`/`offset` van dentro de la función.
-    out.push(...await leerTodo<LineaNdfRow>((desde, hasta) => sb.rpc('pos_ventas_lineas', {
-      p_ticket_ids: tanda, p_limit: hasta - desde + 1, p_offset: desde,
-    })))
+  for (let i = 0; i < tandas.length; i += TANDAS_EN_PARALELO) {
+    const grupo = await Promise.all(tandas.slice(i, i + TANDAS_EN_PARALELO).map(leerTanda))
+    for (const filas of grupo) out.push(...filas)
   }
   return out
 }

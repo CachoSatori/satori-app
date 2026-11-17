@@ -1,16 +1,14 @@
-// P2 — el swap de fuente: el módulo Ventas pasa a leer del PoS, con el Excel de respaldo.
+// Todo del PoS (decisión del dueño, 16-nov-2026): el módulo Ventas y Mi Rendimiento leen SOLO del
+// PoS. `ventas_dias` (xls) ya no se lee; `ventas_hist` aporta solo lo anterior al corte del PoS.
 //
-// Lo que se prueba acá es la REGLA DE FUSIÓN y el rango que se le pide al PoS. El armado del
-// día en sí ya está probado en `ventasDiasDesdePos.test.ts` (P1b) y en
-// `ventasEnVivoDatos.test.ts`; esto es la capa que decide quién gana en cada fecha.
+// Lo que se prueba acá es la CARGA (qué se pide y a quién) y la regla del CORTE. El armado del día
+// en sí ya está probado en `ventasDiasDesdePos.test.ts` y en `ventasEnVivoDatos.test.ts`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import type { DiaData, DiasMap, HistDay, HistMap } from '../../shared/types/ventas'
+import type { DiaData, HistDay, HistMap } from '../../shared/types/ventas'
 
 const api = vi.hoisted(() => ({
-  getVentasDias:    vi.fn(),
-  getAllVentasDias: vi.fn(),
-  getVentasHist:    vi.fn(),
+  getVentasHist: vi.fn(),
 }))
 const pos = vi.hoisted(() => ({
   getDiasMapDesdePos: vi.fn(),
@@ -18,6 +16,7 @@ const pos = vi.hoisted(() => ({
 }))
 
 vi.mock('../../shared/api/ventas', () => api)
+vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 const latido = vi.hoisted(() => ({ getLatidoVentas: vi.fn() }))
 vi.mock('../../shared/api/posNdf', () => latido)
 vi.mock('./ventasDiasDesdePos', () => ({
@@ -26,11 +25,12 @@ vi.mock('./ventasDiasDesdePos', () => ({
 }))
 
 const {
-  DIAS_EAGER, PRIMERA_JORNADA_POS, cargarDeFondo, cargarDias, cargarDiasEager, cargarHistEager,
-  fmtDiaMes, ultimoDia, fusionarDias, fusionarHist, hoyCR, rangoPos, restarDias,
+  CORTE_POS, DIAS_EAGER, PRIMERA_JORNADA_POS, cargarDeFondo, cargarDias, cargarDiasEager,
+  cargarHistEager, combinarHist, fmtDiaMes, ultimoDia, hoyCR, rangoPos, restarDias, ventasDelRango,
 } = await import('./ventasFuente')
+const apiReal = await vi.importActual<Record<string, unknown>>('../../shared/api/ventas')
 
-/** Un `DiaData` mínimo, con una marca para saber de qué fuente salió. */
+/** Un `DiaData` mínimo, con una marca para saber de dónde salió. */
 const dia = (marca: string, total = 100_000): DiaData => ({
   fileName: marca, uploadedAt: '2026-09-08',
   saloneros: { TITO: {
@@ -46,80 +46,85 @@ const hd = (ventaNeta: number): HistDay => ({
 
 beforeEach(() => { vi.clearAllMocks() })
 
-// ── La regla ───────────────────────────────────────────────────────────────────────────────
+// ── El Excel ya no existe para la app ──────────────────────────────────────────────────────
 
-describe('fusionarDias — el PoS se SUPERPONE al Excel, no lo reemplaza', () => {
-  const xls: DiasMap = {
-    '2023-06-15': dia('xls 2023'),          // el PoS no existía
-    '2025-03-02': dia('xls 2025'),          // hay las dos: gana el PoS
-    '2025-03-03': dia('xls sin lote'),      // el PoS no tiene lote de ese día
-  }
-  const delPos: DiasMap = { '2025-03-02': dia('pos 2025') }
-
-  it('2023 queda INTACTO: es el año que el PoS no cubre', () => {
-    expect(fusionarDias(xls, delPos)['2023-06-15'].fileName).toBe('xls 2023')
-  })
-
-  it('donde hay lote del PoS, el PoS pisa', () => {
-    expect(fusionarDias(xls, delPos)['2025-03-02'].fileName).toBe('pos 2025')
-  })
-
-  it('una jornada sin lote del PoS se sigue sirviendo del Excel — sin huecos', () => {
-    expect(fusionarDias(xls, delPos)['2025-03-03'].fileName).toBe('xls sin lote')
-  })
-
-  it('no se pierde ni se inventa ninguna fecha', () => {
-    expect(Object.keys(fusionarDias(xls, delPos)).sort())
-      .toEqual(['2023-06-15', '2025-03-02', '2025-03-03'])
-  })
-
-  it('una jornada que solo tiene el PoS entra igual', () => {
-    expect(fusionarDias({}, { '2026-09-07': dia('pos') })['2026-09-07']).toBeDefined()
-  })
-
-  it('no muta ninguno de los dos mapas de entrada', () => {
-    const a = { ...xls }, b = { ...delPos }
-    fusionarDias(xls, delPos)
-    expect(xls).toEqual(a)
-    expect(delPos).toEqual(b)
+describe('16-nov · el xls se retiró', () => {
+  it('la API ya no ofrece leer, cargar ni borrar `ventas_dias`, ni cargar `ventas_hist`', () => {
+    for (const f of ['getVentasDias', 'getAllVentasDias', 'saveVentasDia', 'deleteVentasDia', 'saveVentasHist']) {
+      expect(apiReal[f], f).toBeUndefined()
+    }
+    // El histórico viejo se sigue LEYENDO (solo lo anterior al corte).
+    expect(typeof apiReal.getVentasHist).toBe('function')
   })
 })
 
-describe('fusionarHist — misma regla para el histórico', () => {
-  it('2023 del Excel sobrevive y de 2024 en adelante manda el PoS', () => {
-    const xls: HistMap = { '2023-06-15': hd(1), '2024-06-15': hd(2) }
-    const r = fusionarHist(xls, { '2024-06-15': hd(99) })
+// ── El corte ───────────────────────────────────────────────────────────────────────────────
+
+describe('combinarHist — histórico viejo hasta el día anterior al corte, PoS desde el corte', () => {
+  it('el corte es el primer día del PoS leído de prod (2024-01-05)', () => {
+    expect(CORTE_POS).toBe('2024-01-05')
+    expect(CORTE_POS).toBe(PRIMERA_JORNADA_POS)
+  })
+
+  const viejo: HistMap = {
+    '2023-06-15': hd(1),
+    '2024-01-04': hd(2),       // último día del viejo
+    '2024-01-05': hd(3),       // el corte: lo tiene el viejo, pero manda el PoS
+    '2025-03-02': hd(4),       // después del corte, sin PoS ese día: NO vuelve el viejo
+  }
+  const delPos: HistMap = {
+    '2024-01-04': hd(90),      // PoS antes del corte (no debería existir): se descarta
+    '2024-01-05': hd(91),
+    '2026-11-05': hd(92),      // un día sin xls: ahora tiene ventas
+  }
+
+  it('cada día viene de UNA sola fuente: sin superposición en el corte', () => {
+    const r = combinarHist(viejo, delPos)
     expect(r['2023-06-15'].ventaNeta).toBe(1)
-    expect(r['2024-06-15'].ventaNeta).toBe(99)
+    expect(r['2024-01-04'].ventaNeta).toBe(2)
+    expect(r['2024-01-05'].ventaNeta).toBe(91)
+    expect(r['2025-03-02']).toBeUndefined()
+    expect(r['2026-11-05'].ventaNeta).toBe(92)
+    expect(Object.keys(r).sort()).toEqual(['2023-06-15', '2024-01-04', '2024-01-05', '2026-11-05'])
+  })
+
+  it('la suma no duplica el día del corte (Σ = viejo antes + PoS desde)', () => {
+    const r = combinarHist(viejo, delPos)
+    const suma = Object.values(r).reduce((s, d) => s + d.ventaNeta, 0)
+    expect(suma).toBe(1 + 2 + 91 + 92)
+  })
+
+  it('el día del corte es del PoS aunque el PoS no lo tenga: el viejo nunca lo cubre', () => {
+    const r = combinarHist({ '2024-01-04': hd(2), '2024-01-05': hd(3) }, {})
+    expect(Object.keys(r)).toEqual(['2024-01-04'])
+  })
+
+  it('el corte se puede mover (multi-local: cada local tiene su primer día)', () => {
+    const r = combinarHist(viejo, delPos, '2025-01-01')
+    expect(r['2024-01-05'].ventaNeta).toBe(3)
+    expect(r['2025-03-02']).toBeUndefined()
   })
 })
 
 // ── El rango que se le pide al PoS ─────────────────────────────────────────────────────────
 
-describe('rangoPos — en JORNADAS, y nunca antes de que el PoS exista', () => {
+describe('rangoPos', () => {
   const AHORA = new Date('2026-09-08T15:00:00Z')   // 09:00 en CR
 
   it('el eager pide solo los últimos DIAS_EAGER días', () => {
-    // 90, no 400: leer del PoS es agregar tickets y líneas crudas, y 400 días son ~16.000
-    // tickets y ~91.000 líneas antes de pintar nada.
     expect(DIAS_EAGER).toBeLessThanOrEqual(90)
     expect(rangoPos(DIAS_EAGER, AHORA))
       .toEqual({ desde: restarDias('2026-09-08', DIAS_EAGER), hasta: '2026-09-08' })
   })
 
-  it('el full arranca en la primera jornada del PoS, no en 2023', () => {
-    // Pedir 2023 serían viajes al pedo: ahí no hay una sola fila que traer.
+  it('el full arranca en el primer día del PoS, y un rango largo se recorta ahí', () => {
     expect(rangoPos('todo', AHORA)).toEqual({ desde: PRIMERA_JORNADA_POS, hasta: '2026-09-08' })
-    expect(PRIMERA_JORNADA_POS >= '2024-01-01').toBe(true)
-  })
-
-  it('un rango largo se recorta a la primera jornada del PoS', () => {
     expect(rangoPos(2_000, AHORA).desde).toBe(PRIMERA_JORNADA_POS)
   })
 
   it('`hasta` es HOY en Costa Rica, no en la zona del navegador', () => {
-    // 01:00 UTC del 9 son las 19:00 CR del 8: la jornada sigue siendo la del 8.
     expect(hoyCR(new Date('2026-09-09T01:00:00Z'))).toBe('2026-09-08')
+    expect(hoyCR(new Date('2026-09-09T05:30:00Z'))).toBe('2026-09-08')   // 23:30 CR
     expect(hoyCR(new Date('2026-09-09T06:30:00Z'))).toBe('2026-09-09')
   })
 
@@ -131,204 +136,124 @@ describe('rangoPos — en JORNADAS, y nunca antes de que el PoS exista', () => {
 
 // ── Las cargas ─────────────────────────────────────────────────────────────────────────────
 
-describe('cargarDiasEager / cargarDiasFull / cargarHist', () => {
-  const AHORA = new Date('2026-09-08T15:00:00Z')
+describe('cargarDias / eager / fondo — solo PoS', () => {
+  const AHORA = new Date('2026-11-17T05:30:00Z')   // 23:30 CR del 16-nov
 
-  it('el eager fusiona el Excel con el PoS', async () => {
-    api.getVentasDias.mockResolvedValue({ '2023-06-15': dia('xls'), '2026-09-07': dia('xls') })
-    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-09-07': dia('pos') }, pm: {} })
-
-    const { dias: r } = await cargarDiasEager('pos', 'santa-teresa', AHORA)
-
-    expect(r['2023-06-15'].fileName).toBe('xls')
-    expect(r['2026-09-07'].fileName).toBe('pos')
-    expect(api.getVentasDias).toHaveBeenCalledWith(DIAS_EAGER)
+  it('un día SIN xls (después del 20-oct) ahora tiene ventas: viene del PoS', async () => {
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-11-05': dia('pos') }, pm: {} })
+    const r = await cargarDias(365, 'santa-teresa', AHORA)
+    expect(r.estadoPos).toBe('ok')
+    expect(r.dias['2026-11-05'].fileName).toBe('pos')
+    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith(rangoPos(365, AHORA), 'santa-teresa')
   })
 
-  it('el fondo pide el rango entero del PoS y fusiona igual', async () => {
-    api.getAllVentasDias.mockResolvedValue({ '2023-01-01': dia('xls') })
-    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2024-05-05': dia('pos') }, pm: {} })
-
-    const { dias } = await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)
-
-    expect(Object.keys(dias).sort()).toEqual(['2023-01-01', '2024-05-05'])
-    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith(
-      { desde: PRIMERA_JORNADA_POS, hasta: '2026-09-08' }, 'santa-teresa')
+  it('devuelve EXACTAMENTE lo del PoS (no fusiona con nada)', async () => {
+    const delPos = { '2026-11-15': dia('pos') }
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: delPos, pm: { X: { tipo: 'comida' } } })
+    const r = await cargarDiasEager('santa-teresa', AHORA)
+    expect(r.dias).toBe(delPos)
+    expect(r.pm).toEqual({ X: { tipo: 'comida' } })
+    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith(rangoPos(DIAS_EAGER, AHORA), 'santa-teresa')
   })
 
-  it('el hist del eager es SOLO el Excel: no toca el PoS', async () => {
-    api.getVentasHist.mockResolvedValue({ '2023-06-15': hd(1), '2024-06-15': hd(2) })
+  it('filtra por local: el local pedido llega al PoS', async () => {
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-11-15': dia('pos') }, pm: {} })
+    await cargarDias(30, 'nosara', AHORA)
+    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith(rangoPos(30, AHORA), 'nosara')
+  })
 
+  it('el hist del eager es `ventas_hist` SOLO antes del corte, y no toca el PoS', async () => {
+    api.getVentasHist.mockResolvedValue({ '2023-06-15': hd(1), '2024-01-04': hd(2), '2024-06-15': hd(3) })
     const r = await cargarHistEager()
-
-    expect(r['2024-06-15'].ventaNeta).toBe(2)
+    expect(Object.keys(r).sort()).toEqual(['2023-06-15', '2024-01-04'])
     expect(pos.getDiasMapDesdePos).not.toHaveBeenCalled()
   })
 
-  it('el fondo superpone el HistMap del PoS sobre el del Excel', async () => {
-    api.getAllVentasDias.mockResolvedValue({})
+  it('el fondo: UN pase por el PoS (rango entero) y hist = viejo antes del corte + PoS desde', async () => {
     pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2024-06-15': dia('pos') }, pm: {} })
-    pos.aHistMap.mockReturnValue({ '2024-06-15': hd(99) })
+    pos.aHistMap.mockReturnValue({ '2024-01-05': hd(91), '2024-06-15': hd(99) })
 
-    const { hist } = await cargarDeFondo({ '2023-06-15': hd(1), '2024-06-15': hd(2) },
-      'pos', 'santa-teresa', AHORA)
-
-    expect(hist['2023-06-15'].ventaNeta).toBe(1)    // 2023: el PoS no llega, queda el Excel
-    expect(hist['2024-06-15'].ventaNeta).toBe(99)   // 2024: pisa el PoS
-  })
-
-  it('UN SOLO pase por el PoS para las dos salidas del fondo', async () => {
-    // Antes se pedía el rango completo dos veces —una para el DiasMap y otra para el
-    // HistMap—, agregando los mismos tickets y líneas dos veces. Es la mitad del trabajo.
-    api.getAllVentasDias.mockResolvedValue({})
-    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2024-06-15': dia('pos') }, pm: {} })
-    pos.aHistMap.mockReturnValue({})
-
-    await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)
+    const { dias, hist } = await cargarDeFondo({ '2023-06-15': hd(1), '2024-01-05': hd(2) }, 'santa-teresa', AHORA)
 
     expect(pos.getDiasMapDesdePos).toHaveBeenCalledTimes(1)
+    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith({ desde: PRIMERA_JORNADA_POS, hasta: '2026-11-16' }, 'santa-teresa')
+    expect(Object.keys(dias)).toEqual(['2024-06-15'])
+    expect(hist['2023-06-15'].ventaNeta).toBe(1)
+    expect(hist['2024-01-05'].ventaNeta).toBe(91)    // el corte: manda el PoS
+    expect(hist['2024-06-15'].ventaNeta).toBe(99)
   })
-})
 
-describe("FUENTE_VENTAS = 'xls' — el camino viejo, intacto", () => {
-  const AHORA = new Date('2026-09-08T15:00:00Z')
-
-  it('devuelve el Excel tal cual y NO consulta el PoS', async () => {
-    const soloXls = { '2026-09-07': dia('xls') }
-    api.getVentasDias.mockResolvedValue(soloXls)
-    api.getAllVentasDias.mockResolvedValue(soloXls)
-    api.getVentasHist.mockResolvedValue({ '2026-09-07': hd(1) })
-
-    const histXls = { '2026-09-07': hd(1) }
-    expect((await cargarDiasEager('xls', 'santa-teresa', AHORA)).dias).toBe(soloXls)
-    expect((await cargarHistEager())['2026-09-07'].ventaNeta).toBe(1)
-    const fondo = await cargarDeFondo(histXls, 'xls', 'santa-teresa', AHORA)
-    expect(fondo.dias).toBe(soloXls)
-    expect(fondo.hist).toBe(histXls)
-
-    // La aserción que importa: con el flag en `xls` no se pisa `pos_ndf_*` ni una vez.
-    expect(pos.getDiasMapDesdePos).not.toHaveBeenCalled()
-  })
-})
-
-// ── Eager == full en las fechas que se solapan ─────────────────────────────────────────────
-
-describe('el eager y el full no se pelean', () => {
-  it('la MISMA función de fusión decide en los dos, así que una fecha da lo mismo', async () => {
-    const AHORA = new Date('2026-09-08T15:00:00Z')
-    const delPos = { '2026-09-07': dia('pos', 123_456) }
-
-    api.getVentasDias.mockResolvedValue({ '2026-09-07': dia('xls', 999) })
-    api.getAllVentasDias.mockResolvedValue({ '2023-01-01': dia('xls'), '2026-09-07': dia('xls', 999) })
+  it('el eager y el fondo dan lo mismo en las fechas que comparten', async () => {
+    const delPos = { '2026-11-07': dia('pos', 123_456) }
     pos.getDiasMapDesdePos.mockResolvedValue({ dias: delPos, pm: {} })
-
-    const eager = (await cargarDiasEager('pos', 'santa-teresa', AHORA)).dias
-    const full  = (await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)).dias
-
-    // Si el eager y el full usaran fusiones distintas, «Hoy» y «Análisis» mostrarían números
-    // distintos de la misma fecha y algo saltaría al terminar de cargar el full.
-    expect(eager['2026-09-07']).toEqual(full['2026-09-07'])
-    // Y el full agrega historia sin tocar lo que el eager ya mostraba.
-    expect(full['2023-01-01']).toBeDefined()
+    const eager = (await cargarDiasEager('santa-teresa', AHORA)).dias
+    const full  = (await cargarDeFondo({}, 'santa-teresa', AHORA)).dias
+    expect(eager['2026-11-07']).toEqual(full['2026-11-07'])
   })
 })
 
-// ── Mi Rendimiento: la misma carga, con su rango ───────────────────────────────────────────
+describe('ventasDelRango — la lectura de las pantallas de un día / semana / mes', () => {
+  it('pide al PoS el rango y el local, tal cual', async () => {
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-11-05': dia('pos') }, pm: {} })
+    const r = await ventasDelRango('2026-11-01', '2026-11-30', 'santa-teresa')
+    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith({ desde: '2026-11-01', hasta: '2026-11-30' }, 'santa-teresa')
+    expect(r.dias['2026-11-05'].fileName).toBe('pos')
+  })
 
-describe('cargarDias — la carga de N días que usa Mi Rendimiento', () => {
-  const AHORA = new Date('2026-10-29T18:00:00Z')
-
-  it("en 'xls' es getVentasDias(365) tal cual: el mismo objeto y sin una consulta al PoS", async () => {
-    const soloXls = { '2026-10-07': dia('xls') }
-    api.getVentasDias.mockResolvedValue(soloXls)
-    const r = await cargarDias(365, 'xls', 'santa-teresa', AHORA)
-    expect(api.getVentasDias).toHaveBeenCalledWith(365)
-    expect(r.dias).toBe(soloXls)
-    expect(r.pm).toEqual({})
+  it('antes del corte no hay PoS: se recorta, y un rango entero anterior no consulta nada', async () => {
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: {}, pm: {} })
+    await ventasDelRango('2023-12-01', '2024-01-31')
+    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith({ desde: CORTE_POS, hasta: '2024-01-31' }, 'santa-teresa')
+    vi.clearAllMocks()
+    expect(await ventasDelRango('2023-06-01', '2023-06-30')).toEqual({ dias: {}, pm: {} })
     expect(pos.getDiasMapDesdePos).not.toHaveBeenCalled()
   })
-
-  it("en 'pos' fusiona con la MISMA regla que el eager, sobre 365 días de PoS", async () => {
-    api.getVentasDias.mockResolvedValue({ '2026-10-07': dia('xls'), '2026-10-25': dia('xls viejo') })
-    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-10-25': dia('pos') }, pm: { X: { tipo: 'comida' } } })
-    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
-    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith(rangoPos(365, AHORA), 'santa-teresa')
-    expect(r.dias['2026-10-07'].fileName).toBe('xls')
-    expect(r.dias['2026-10-25'].fileName).toBe('pos')
-    expect(r.pm).toEqual({ X: { tipo: 'comida' } })
-  })
-
-  it('el eager es cargarDias(DIAS_EAGER): una sola implementación', async () => {
-    api.getVentasDias.mockResolvedValue({})
-    await cargarDiasEager('xls', 'santa-teresa', AHORA)
-    expect(api.getVentasDias).toHaveBeenCalledWith(DIAS_EAGER)
-  })
 })
 
-// ── El estado del PoS: nunca cae en silencio al Excel ──────────────────────────────────────
+// ── El estado del PoS: sin respaldo, nunca un número viejo ─────────────────────────────────
 
 describe('cargarDias — estadoPos', () => {
   const AHORA = new Date('2026-10-30T18:00:00Z')
-  const xls = { '2026-10-19': dia('xls'), '2026-10-20': dia('xls último') }
   let warn: ReturnType<typeof vi.spyOn>
-  beforeEach(() => {
-    api.getVentasDias.mockResolvedValue(xls)
-    warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
+  beforeEach(() => { warn = vi.spyOn(console, 'warn').mockImplementation(() => {}) })
 
-  it("'xls': estadoPos null, sin PoS ni latido, sin warn", async () => {
-    const r = await cargarDias(365, 'xls', 'santa-teresa', AHORA)
-    expect(r.estadoPos).toBeNull()
-    expect(r.ultimoDiaXls).toBe('2026-10-20')
-    expect(latido.getLatidoVentas).not.toHaveBeenCalled()
-    expect(warn).not.toHaveBeenCalled()
-  })
-
-  it("'ok': el PoS trae días → fusión, sin latido ni warn", async () => {
+  it("'ok': el PoS trae días, sin latido ni warn", async () => {
     pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-10-28': dia('pos') }, pm: {} })
-    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
+    const r = await cargarDias(365, 'santa-teresa', AHORA)
     expect(r.estadoPos).toBe('ok')
-    expect(r.dias['2026-10-28'].fileName).toBe('pos')
     expect(latido.getLatidoVentas).not.toHaveBeenCalled()
     expect(warn).not.toHaveBeenCalled()
   })
 
-  it("'sin_acceso': el PoS vino vacío y el latido no tiene fila → Excel + warn", async () => {
+  it("'sin_acceso': PoS vacío y latido sin fila → vacío + warn", async () => {
     pos.getDiasMapDesdePos.mockResolvedValue({ dias: {}, pm: {} })
     latido.getLatidoVentas.mockResolvedValue({ acceso: false, ultimoPollAt: null })
-    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
-    expect(r.estadoPos).toBe('sin_acceso')
-    expect(r.dias).toBe(xls)
-    expect(r.pm).toEqual({})
-    expect(warn).toHaveBeenCalledWith('[ventas] PoS sin_acceso: mostrando solo el Excel (último día: 20/10)')
+    const r = await cargarDias(365, 'santa-teresa', AHORA)
+    expect(r).toEqual({ dias: {}, pm: {}, estadoPos: 'sin_acceso' })
+    expect(warn).toHaveBeenCalledWith('[ventas] PoS sin_acceso: sin ventas que mostrar')
   })
 
-  it("'vacio': el PoS vino vacío pero el latido sí responde → Excel + warn", async () => {
+  it("'vacio': PoS vacío pero el latido responde", async () => {
     pos.getDiasMapDesdePos.mockResolvedValue({ dias: {}, pm: {} })
     latido.getLatidoVentas.mockResolvedValue({ acceso: true, ultimoPollAt: '2026-10-30T17:59:00Z' })
-    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
-    expect(r.estadoPos).toBe('vacio')
-    expect(r.dias).toBe(xls)
-    expect(warn).toHaveBeenCalledOnce()
+    expect((await cargarDias(365, 'santa-teresa', AHORA)).estadoPos).toBe('vacio')
   })
 
-  it("'error': la lectura del PoS falla → el Excel, NO todo vacío", async () => {
+  it("'error': la lectura falla → vacío (no hay Excel al que caer)", async () => {
     pos.getDiasMapDesdePos.mockRejectedValue(new Error('timeout'))
-    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
-    expect(r.estadoPos).toBe('error')
-    expect(r.dias).toBe(xls)
-    expect(warn).toHaveBeenCalledOnce()
+    const r = await cargarDias(365, 'santa-teresa', AHORA)
+    expect(r).toEqual({ dias: {}, pm: {}, estadoPos: 'error' })
   })
 
   it("'error' también si falla el latido", async () => {
     pos.getDiasMapDesdePos.mockResolvedValue({ dias: {}, pm: {} })
     latido.getLatidoVentas.mockRejectedValue(new Error('rpc'))
-    expect((await cargarDias(365, 'pos', 'santa-teresa', AHORA)).estadoPos).toBe('error')
+    expect((await cargarDias(365, 'santa-teresa', AHORA)).estadoPos).toBe('error')
   })
 
   it('ultimoDia / fmtDiaMes', () => {
     expect(ultimoDia({})).toBeNull()
-    expect(ultimoDia(xls)).toBe('2026-10-20')
+    expect(ultimoDia({ '2026-10-19': dia('a'), '2026-10-20': dia('b') })).toBe('2026-10-20')
     expect(fmtDiaMes('2026-10-20')).toBe('20/10')
     expect(fmtDiaMes(null)).toBe('—')
   })

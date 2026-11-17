@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Employee, UserRole, Profile } from '../../shared/types/database'
 import { createEmployee, updateEmployee, toggleEmployeeActive, getAllProfiles, linkProfileToEmployee } from '../../shared/api/admin'
-// pos_name (columna viva en employees) = nombre exacto del empleado en el Excel de ventas (`ventas_dias`).
+// pos_name (columna viva en employees) = nombre exacto del empleado en el PoS (antes, en el Excel de ventas).
 // D8 A (14-nov): el Excel quedó de respaldo (las ventas vienen del PoS y el vínculo es `pos_login`), así que
 // pos_name es un DATO FIJO: se muestra y nunca se manda al guardar (no se puede perder ni cambiar desde acá).
 // Sigue siendo el respaldo del match en Mi Rendimiento y VentasICP (`claveDeEmpleado`, `clavesPropinaDeEmpleado`).

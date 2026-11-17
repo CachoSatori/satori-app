@@ -73,10 +73,10 @@ describe('B3 · Ventas en el menú', () => {
     expect(labels).not.toContain('Ajustes de Ventas')
   })
 
-  it('owner: «Ajustes de Ventas» lleva a Paridad, la primera vista de esa entrada', () => {
+  it('owner: «Ajustes de Ventas» lleva a Productos (Paridad y Cargar XLS se retiraron el 16-nov)', () => {
     const item = menuPara('owner').find(g => g.id === 'ventas')!.items.find(i => i.entrada === 'ajustes')!
     expect(item.label).toBe('Ajustes de Ventas')
-    expect(item.to).toBe('/ventas?tab=paridad')
+    expect(item.to).toBe('/ventas?tab=config')
   })
 
   it('la barra inferior del cajero: Caja, Propinas, Club y «Más»', () => {

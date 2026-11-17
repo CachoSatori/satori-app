@@ -1,14 +1,17 @@
 /**
  * La franja de «no se pudo leer el PoS». Se muestra cuando `cargarDias` no devolvió `'ok'`: la
- * pantalla está mostrando solo el Excel, y eso no puede pasar desapercibido (antes caía en
- * silencio). La usan Mi Rendimiento y el módulo Ventas.
+ * pantalla NO tiene ventas que mostrar (desde el 16-nov el Excel ya no es respaldo), y eso no
+ * puede pasar desapercibido. La usan Mi Rendimiento y el módulo Ventas.
  */
-import { fmtDiaMes, type EstadoPos } from './ventasFuente'
+import type { EstadoPos } from './ventasFuente'
 
-export default function AvisoFuentePos({ estado, ultimoDiaXls }: {
-  estado:       EstadoPos | null | undefined
-  ultimoDiaXls: string | null | undefined
-}) {
+const TEXTOS: Record<Exclude<EstadoPos, 'ok'>, string> = {
+  sin_acceso: 'Tu usuario no puede ver las ventas del PoS.',
+  vacio:      'El PoS no tiene ventas en este período.',
+  error:      'No se pudieron leer las ventas del PoS. Probá recargar en un rato.',
+}
+
+export default function AvisoFuentePos({ estado }: { estado: EstadoPos | null | undefined }) {
   if (!estado || estado === 'ok') return null
   return (
     <div
@@ -20,7 +23,7 @@ export default function AvisoFuentePos({ estado, ultimoDiaXls }: {
         fontSize: '0.8rem', fontWeight: 600,
       }}
     >
-      Mostrando solo el Excel (último día: {fmtDiaMes(ultimoDiaXls ?? null)}). No se pudo leer el PoS.
+      {TEXTOS[estado]}
     </div>
   )
 }

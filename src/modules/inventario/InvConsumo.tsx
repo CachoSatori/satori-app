@@ -11,7 +11,7 @@ import type { Profile } from '../../shared/types/database'
 import {
   getRecipes, getAllRecipeIngredients, countDeductionsForRef, addMovement,
 } from '../../shared/api/inventario'
-import { supabase } from '../../shared/api/supabase'
+import { ventasDelRango } from '../ventas/ventasFuente'
 import { todayCR } from '../../shared/utils'
 import { computeDepletion, unitsFromDiaData, type DepletionResult } from './depletion'
 
@@ -41,16 +41,12 @@ export default function InvConsumo({ ingredients, onRefresh, profile }: Props) {
       const done = await countDeductionsForRef(ref)
       setDone(done > 0)
 
-      // Ventas del día
-      const { data: dia, error: dErr } = await supabase
-        .from('ventas_dias')
-        .select('data')
-        .eq('session_date', date)
-        .maybeSingle()
-      if (dErr) throw new Error(dErr.message)
-      if (!dia) { setError(`No hay ventas cargadas para ${date}`); return }
+      // Ventas del día: del PoS (16-nov: nunca más el xls).
+      const { dias } = await ventasDelRango(date, date)
+      const dia = dias[date]
+      if (!dia) { setError(`El PoS no tiene ventas del ${date}`); return }
 
-      const units = unitsFromDiaData((dia as { data: Parameters<typeof unitsFromDiaData>[0] }).data)
+      const units = unitsFromDiaData(dia)
 
       // Recetas + ingredientes
       const [recipes, allRis] = await Promise.all([getRecipes(), getAllRecipeIngredients()])

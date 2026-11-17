@@ -131,7 +131,11 @@
 
 ## 🟧 P1 — Deuda corta
 
-8. **🖊️ Retirar el Excel: la pestaña «Cargar XLS» y la Paridad temporal.** Con el PoS como fuente, el Excel solo
+8b. **Ventas multi-local: el local está fijo en `santa-teresa`** (`LOCAL_POR_DEFECTO`). Todas las lecturas del PoS
+   ya reciben `local` (#244 / #245), pero ninguna pantalla ni la Edge `monthly-report` lo eligen todavía. Antes de
+   que abra Nosara: selector de local (o el local del manager) en Ventas, Resumen, Inicio, Inventario, Finanzas y el
+   reporte por correo; el corte del PoS (`CORTE_POS`) por local.
+8. **✅ (16-nov, #244) Retirar el Excel: la pestaña «Cargar XLS» y la Paridad temporal.** Con el PoS como fuente, el Excel solo
    es respaldo (último día en prod: 20/10). Retirar después de un período con el PoS solo, con firma. Ojo: el
    respaldo `{...xls, ...pos}` y `ventas_hist` (2023–2025) se siguen usando; lo que se retira es la carga manual y
    la pantalla de validación. *(Nuevo, 30/10.)*

@@ -2,7 +2,7 @@
 //
 // «Hoy» en Ventas es el día de Costa Rica (UTC−6), no la fecha UTC.
 //
-// El error que esto cuida: Competencias, Paridad, Saloneros por línea y Cajeros calculaban «hoy»
+// El error que esto cuida: Competencias, Paridad (retirada el 16-nov), Saloneros por línea y Cajeros calculaban «hoy»
 // con `new Date().toISOString()`. Desde las 18:00 CR la fecha UTC ya es «mañana»: de noche, en
 // pleno servicio, el rango por defecto terminaba en el día siguiente y una competencia que
 // terminaba hoy figuraba «Finalizada».
@@ -16,11 +16,10 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 vi.mock('./saloneroLentesDatos', () => ({ getLentesDesdePos: vi.fn() }))
 vi.mock('./ventasDiasDesdePos', () => ({ getDiasMapDesdePos: vi.fn() }))
 vi.mock('../../shared/api/ventas', () => ({
-  getAllVentasDias: vi.fn(), getProductMap: vi.fn(), saveComp: vi.fn(), deleteComp: vi.fn(),
+  getProductMap: vi.fn(), saveComp: vi.fn(), deleteComp: vi.fn(),
 }))
 
 import VentasCajeros from './VentasCajeros'
-import VentasParidad from './VentasParidad'
 import VentasSaloneroLineas from './VentasSaloneroLineas'
 import VentasCompetencias from './VentasCompetencias'
 import {
@@ -59,11 +58,6 @@ describe.each(MOMENTOS)('a las $hora del 30-nov', ({ utc }) => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(utc))
-  })
-
-  it('Paridad abre del 30-oct al 30-nov', () => {
-    render(<VentasParidad />)
-    expect(fechas()).toEqual(['2026-10-30', HOY])
   })
 
   it('Saloneros por línea abre con los últimos 7 días, hasta el 30-nov', () => {

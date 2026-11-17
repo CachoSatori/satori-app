@@ -61,9 +61,9 @@ En el «Inicio» de la app, la tarjeta «Club» muestra cuántas excepciones hay
     revise.
 - **Visita del socio:** «Registrar visita y ver qué aplicar». La pantalla dice exactamente qué aplicar en el PoS: el %, la
   cortesía sorteada, el artículo 856 (LOCAL CLUB) y un 857 (INVITADO) por cada acompañante.
-  - Una visita con beneficio por día en cualquier Satori, y un socio con beneficio por factura.
+  - Una visita con beneficio en el almuerzo y una en la cena por día (corte `turno_corte` del local, 16:00 CR; mig 181), en cualquier Satori, y un socio con beneficio por factura.
   - Si no hay beneficio, el recuadro sale con borde rojo y dice por qué: ya lo usó hoy, va como invitado, paga con
-    créditos o no hay promoción vigente.
+    créditos o no hay promoción vigente. Con el tope cumplido dice qué comida ya usó y desde cuándo lo vuelve a tener.
 - **Socios:** validar a un socio que se anotó por la web, o dar de alta uno nuevo en caja.
   - El alta queda **provisional** hasta que otra persona la confirma.
   - Nunca se anota un número de documento.

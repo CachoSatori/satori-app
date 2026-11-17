@@ -29,6 +29,14 @@ describe('avisoClub', () => {
     expect(v.texto).toContain('Visitas de socios por usuario')
     expect(v.path).toBe('/club?vista=reportes')
   })
+  it('(b) socio con la 181: cuenta días distintos (almuerzo + cena = 1 día)', () => {
+    const v = avisoClub(a({ tipo: 'MISMO_USUARIO', cantidad: 3, umbral: 2,
+      detalle: { miembro_id: 'm2', miembro: 'Socio Ficticio', que: 'socio', usuario: 'Cajero Ficticio', dias: 3, cuenta: 'dias' } }))
+    expect(v.titulo).toBe('Cajero Ficticio registró al socio Socio Ficticio en 3 días distintos de los últimos 3 días')
+    expect(v.texto).toContain('más de 2 días')
+    expect(v.estado).toBe('3 días')
+    expect(v.path).toBe('/club?vista=reportes')
+  })
   it('(b) equipo: tarjetas cargadas por el mismo usuario → ficha del del equipo', () => {
     const v = avisoClub(a({ tipo: 'MISMO_USUARIO', cantidad: 4, umbral: 2,
       detalle: { miembro_id: 'm3', miembro: 'Equipo Ficticio', que: 'equipo', usuario: 'Cajero Ficticio', dias: 3 } }))

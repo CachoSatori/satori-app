@@ -26,14 +26,24 @@ export const MOTIVO_DEBIL: Record<MotivoDebil, string> = {
   repeticion:    'Es una secuencia o una repetición (como 12345678 o aaaaaaaa): elegí otra',
 }
 
-/** Valida el formulario antes de ir al servidor. Devuelve el mensaje a mostrar, o null si está bien. */
-export function validarCambio(actual: string, nueva: string, nueva2: string): string | null {
-  if (!actual) return 'Escribí tu contraseña actual'
+/**
+ * Reglas de la contraseña nueva (largo, «Débil» con su motivo, repetición). Las usan el cambio normal y el modo
+ * recuperación («¿Olvidaste tu contraseña?», donde no se sabe la actual). Devuelve el mensaje, o null si está bien.
+ */
+export function validarNueva(nueva: string, nueva2: string): string | null {
   if (nueva.length < PASSWORD_MIN_CAMBIO) return `La contraseña nueva debe tener al menos ${PASSWORD_MIN_CAMBIO} caracteres`
   // Decisión del dueño (17-nov): lo que el medidor marca «Débil» no se acepta, y se dice por qué.
   const { motivo } = evaluarPassword(nueva)
   if (motivo) return `Contraseña débil. ${MOTIVO_DEBIL[motivo]}`
   if (nueva !== nueva2) return 'Las contraseñas nuevas no coinciden'
+  return null
+}
+
+/** Valida el formulario antes de ir al servidor. Devuelve el mensaje a mostrar, o null si está bien. */
+export function validarCambio(actual: string, nueva: string, nueva2: string): string | null {
+  if (!actual) return 'Escribí tu contraseña actual'
+  const msg = validarNueva(nueva, nueva2)
+  if (msg) return msg
   if (nueva === actual) return 'La contraseña nueva tiene que ser distinta de la actual'
   return null
 }
@@ -127,6 +137,7 @@ export type MotivoFallo =
   | 'debil_servidor'
   | 'reautenticar'
   | 'sin_correo'
+  | 'enlace_vencido'
   | 'desconocido'
 
 export const MENSAJE_FALLO: Record<MotivoFallo, string> = {
@@ -137,6 +148,7 @@ export const MENSAJE_FALLO: Record<MotivoFallo, string> = {
   debil_servidor:      'El sistema no acepta esa contraseña por ser muy fácil. Elegí otra más larga, con letras y números',
   reautenticar:        'Por seguridad, cerrá sesión, volvé a entrar y probá de nuevo',
   sin_correo:          'Tu cuenta no tiene correo: pedile ayuda a la gerencia',
+  enlace_vencido:      'El enlace del correo venció o ya se usó. Pedí uno nuevo',
   desconocido:         'No se pudo cambiar la contraseña. Probá de nuevo; si sigue, avisá a la gerencia',
 }
 
@@ -196,5 +208,44 @@ export async function cambiarMiPassword(email: string | null | undefined, actual
   } catch (e) {
     const err = (e ?? {}) as ErrorAuth
     return { ok: false, motivo: esSinConexion(err) ? 'sin_conexion' : 'desconocido' }
+  }
+}
+
+/**
+ * Motivo de un error de `updateUser({ password })` en MODO RECUPERACIÓN (entró con el enlace del correo). Si la sesión
+ * del enlace ya no sirve (vencida, usada, cerrada) o el servidor pide reautenticar, el único camino es pedir otro
+ * enlace: se devuelve `enlace_vencido`. El resto, como en el cambio normal.
+ */
+export function motivoActualizarRecuperacion(e: ErrorAuth): MotivoFallo {
+  if (esSinConexion(e)) return 'sin_conexion'
+  const codigo = e.code ?? ''
+  if (
+    e.name === 'AuthSessionMissingError' || e.status === 401 || e.status === 403 ||
+    ['session_not_found', 'session_expired', 'bad_jwt', 'refresh_token_not_found', 'refresh_token_already_used',
+      'otp_expired', 'reauthentication_needed', 'reauthentication_not_valid'].includes(codigo)
+  ) return 'enlace_vencido'
+  return motivoActualizar(e)
+}
+
+/**
+ * Pone la contraseña nueva cuando la persona entró con el enlace de «¿Olvidaste tu contraseña?»: no sabe la actual,
+ * así que no se reingresa (la sesión del enlace ya prueba que tiene el correo). Después cierra las otras sesiones.
+ * No valida el formulario (eso es `validarNueva`). Nunca lanza.
+ */
+export async function cambiarPasswordRecuperacion(nueva: string): Promise<ResultadoCambio> {
+  try {
+    const { error: e1 } = await supabase.auth.updateUser({ password: nueva })
+    if (e1) return { ok: false, motivo: motivoActualizarRecuperacion(e1) }
+    let otrasSesionesCerradas = true
+    try {
+      const { error: e2 } = await supabase.auth.signOut({ scope: 'others' })
+      if (e2) otrasSesionesCerradas = false
+    } catch {
+      otrasSesionesCerradas = false
+    }
+    return { ok: true, otrasSesionesCerradas }
+  } catch (e) {
+    const err = (e ?? {}) as ErrorAuth
+    return { ok: false, motivo: esSinConexion(err) ? 'sin_conexion' : motivoActualizarRecuperacion(err) }
   }
 }

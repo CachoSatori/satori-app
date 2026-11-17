@@ -169,6 +169,31 @@ describe('App · cambio de contraseña obligatorio (mig 185)', () => {
     expect(window.location.pathname).toBe('/caja')
   })
 
+  it('marcado y en modo recuperación (entró con el enlace del correo): /mi-cuenta NO pide la actual y libera', async () => {
+    mock.debe = [true, false]
+    // lo que deja el evento PASSWORD_RECOVERY de supabase-js para este usuario (ver recuperarClave.ts)
+    sessionStorage.setItem('satori-recuperacion', JSON.stringify({ uid: 'u1', hasta: Date.now() + 60_000 }))
+    try {
+      await montar('/caja')
+      await waitFor(() => expect(window.location.pathname).toBe('/mi-cuenta'))
+      await screen.findByTestId('aviso-recuperacion')
+      expect(screen.queryByTestId('aviso-cambio-obligatorio')).toBeNull()
+      expect(screen.queryByLabelText('Contraseña actual')).toBeNull()
+      fireEvent.change(screen.getByLabelText('Contraseña nueva (mínimo 8)'), { target: { value: 'Tortuga-verde7' } })
+      fireEvent.change(screen.getByLabelText('Repetir contraseña nueva'), { target: { value: 'Tortuga-verde7' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Cambiar contraseña' }))
+      await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Listo: tu contraseña cambió.'))
+      expect(mock.signIn).not.toHaveBeenCalled()
+      expect(mock.update).toHaveBeenCalledWith({ password: 'Tortuga-verde7' })
+      expect(mock.llamadas).toBe(2)   // volvió a consultar seguridad_debo_cambiar_clave()
+      expect(sessionStorage.getItem('satori-recuperacion')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Volver al inicio' }))
+      await waitFor(() => expect(window.location.pathname).not.toBe('/mi-cuenta'))
+    } finally {
+      sessionStorage.clear()
+    }
+  })
+
   it('no marcado: no redirige', async () => {
     mock.debe = [false]
     await montar('/caja')

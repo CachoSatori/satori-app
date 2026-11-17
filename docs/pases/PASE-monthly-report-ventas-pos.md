@@ -21,7 +21,7 @@
 ## 2. SHA y huellas
 | Qué | Valor |
 |---|---|
-| Rama | `claude/reporte-mensual-desde-pos`, **sobre #241** (`claude/correo-estandar-monthly-report` @ `5fe3ccd`, plantilla nueva). Se despliegan JUNTOS: lecturas del PoS + plantilla del estándar |
+| Rama | `claude/reporte-mensual-desde-pos`, **sobre #241** (`claude/correo-estandar-monthly-report` @ `2bc860c`: plantilla nueva y sin correo por defecto). Se despliegan JUNTOS: lecturas del PoS + plantilla del estándar |
 | Paquete `ventasPos.gen.js` | generado desde `claude/ventas-desde-pos` @ `4f7091a` (sin nombres: roster vacío, meseros «<código> · sin asignar», sin comentarios), `sha256(cuerpo)` en su cabecera (la prueba lo verifica) |
 | Prod antes (leído 16-nov 22:5x CR, solo lectura) | `monthly-report` **v22**, `verify_jwt` on, `ezbr_sha256` `314a893e…` |
 | Vuelta atrás | volver a **v22** (hash `314a893e…`): redesplegar su fuente, `claude/reporte-quincenal-fechas` @ `4d5f973` |
@@ -49,6 +49,10 @@ Esperado (staging puede tener otros datos): `ok:true`, `fuente:"pos"`, `enviados
 `dias_xls_sin_pos: 0` y `razon_neta_dias_en_comun` entre 0,98 y 1,02.
 
 ## 6. Prod: lecturas antes, despliegue, dry_run (sin enviar)
+0. **Destinatario (desde #241 @ `2bc860c` no hay correo por defecto):** `supabase secrets list --project-ref
+   yiczgdtirrkdvohdquzf` y verificar que exista **`REPORT_TO_EMAIL` por NOMBRE** (solo nombre y huella; nunca el
+   valor). Si falta, **parar**: el envío real respondería 500 «falta_destinatario» (el dry_run igual corre). Lo mismo
+   en staging antes del §5.
 1. Antes (solo lectura): versión, `verify_jwt`, `ezbr_sha256` de `monthly-report` = §2. Si no coincide, **parar**.
 2. `supabase functions deploy monthly-report --project-ref yiczgdtirrkdvohdquzf --use-api` (desde esta rama, SHA del PR).
 3. Después: versión +1, `verify_jwt` **on**, hash nuevo anotado.
@@ -76,7 +80,7 @@ Esperado (staging puede tener otros datos): `ok:true`, `fuente:"pos"`, `enviados
    `dias_xls: 0` (no hay xls de noviembre) — confirma que el día 15 de diciembre ya no sale vacío.
 
 ## 7. Criterios de parada
-- Cualquier `ok:false` / 500, `verify_jwt` off, o `razon_neta_dias_en_comun` fuera de 0,98–1,03 → **volver atrás** (§2)
+- `REPORT_TO_EMAIL` ausente por nombre (§6.0), cualquier `ok:false` / 500, `verify_jwt` off, o `razon_neta_dias_en_comun` fuera de 0,98–1,03 → **volver atrás** (§2)
   y avisar. No se manda ningún correo real hasta que el dueño lo pida.
 
 ## 8. Vuelta atrás (a v22)

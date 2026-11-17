@@ -67,6 +67,20 @@ export function tramoDelAnioAnterior(t: Pick<Tramo, 'id' | 'anio'>): Tramo {
   return rangoDeTramo(t.id, t.anio - 1)
 }
 
+/**
+ * El tramo inmediatamente anterior (otra temporada: sirve para ver la dirección, no el nivel).
+ * Los tramos son contiguos: el anterior termina el día antes de que empiece `t`.
+ * Orden: alta(a) → baja-may(a) → media(a) → baja-sepdic(a) → alta(a+1).
+ */
+export function tramoAnterior(t: Pick<Tramo, 'id' | 'anio'>): Tramo {
+  switch (t.id) {
+    case 'alta':        return rangoDeTramo('baja-sepdic', t.anio - 1)
+    case 'baja-may':    return rangoDeTramo('alta', t.anio)
+    case 'media':       return rangoDeTramo('baja-may', t.anio)
+    case 'baja-sepdic': return rangoDeTramo('media', t.anio)
+  }
+}
+
 /** `'2025-12-15'` → `'15 dic 2025'`. */
 export function diaLegible(dia: string): string {
   const m = RE_DIA.exec(dia)

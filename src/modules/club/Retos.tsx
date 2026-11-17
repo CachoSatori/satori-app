@@ -1,8 +1,9 @@
 /**
  * Retos de temporada baja (mig 169, ítem #16 del Club v2) — en Club → Promociones.
- *  · El owner arma un reto («3 almuerzos este mes»): nombre ES/EN, local(es), fechas (un mismo año, hasta 92 días), días y
- *    franja horaria (igual que las promociones, hora de Costa Rica), meta de visitas, premio = una cortesía de «CORTESÍA
- *    CLUB» de CADA local del reto, días que vale el premio y «Reservar 15 % sin reto» (grupo de control).
+ *  · El owner arma un reto («3 almuerzos este mes»): nombre ES/EN, local (mig 187: UNO por reto; para otro local, otro
+ *    reto), fechas (un mismo año, hasta 92 días), días y franja horaria (igual que las promociones, hora de Costa Rica),
+ *    meta de visitas, premio = una cortesía de «CORTESÍA CLUB» del local, días que vale el premio y «Reservar 15 % sin
+ *    reto» (grupo de control). El manager ve solo los retos de sus locales; el owner, todos.
  *  · Borrador → Armado (vigente) → Terminado. Un borrador no cuenta para nada. Armado ya no se edita: solo se termina.
  *  · La base rechaza un 4.º reto armado en el año y dos retos que se pisen en fechas en un mismo local.
  *  · Solo socios activos del Local Club (el equipo nunca). El manager ve la lista; solo el owner edita.
@@ -39,7 +40,7 @@ export default function Retos({ owner }: { owner: boolean }) {
   async function accion(r: Reto, que: 'armar' | 'terminar' | 'borrar') {
     const msg = que === 'armar'
       ? `¿Armar «${r.nombre}»? Desde el ${fmtFecha(r.desde)} los socios lo ven y pueden ganar el premio. Armado ya no se edita, y cuenta para el máximo de 3 por año.`
-      : que === 'terminar' ? `¿Terminar «${r.nombre}»? Nadie más lo gana; los premios ya ganados se respetan. Sigue contando para el máximo del año, pero ya no bloquea sus locales.` : `¿Borrar el borrador «${r.nombre}»?`
+      : que === 'terminar' ? `¿Terminar «${r.nombre}»? Nadie más lo gana; los premios ya ganados se respetan. Sigue contando para el máximo del año, pero ya no bloquea su local.` : `¿Borrar el borrador «${r.nombre}»?`
     if (!window.confirm(msg)) return
     setEnviando(true); setError(null); setOk(null)
     try {
@@ -179,10 +180,11 @@ function FormReto({ inicial, locales, onCancelar, onGuardado }: {
         <label><span style={labelStyle}>Nombre en inglés</span>
           <input value={d.nombre_en} onChange={e => setD({ ...d, nombre_en: e.target.value })} maxLength={80} placeholder="3 lunches this month" style={inputStyle} /></label>
         <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
-          <legend style={labelStyle}>Locales</legend>
+          <legend style={labelStyle}>Local (uno por reto; para otro local, armá otro reto)</legend>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {locales.map(l => (
-              <Btn key={l.id} variant={d.locales.includes(l.id) ? 'primary' : 'secondary'} onClick={() => setD({ ...d, locales: alterna(d.locales, l.id) })}>{l.nombre}</Btn>
+              <Btn key={l.id} variant={d.locales.includes(l.id) ? 'primary' : 'secondary'}
+                onClick={() => setD({ ...d, locales: [l.id] })}>{l.nombre}</Btn>
             ))}
           </div>
         </fieldset>
@@ -212,7 +214,7 @@ function FormReto({ inicial, locales, onCancelar, onGuardado }: {
           </div>
         </fieldset>
         <div style={{ fontSize: '0.8rem', color: C.muted }}>
-          Cuenta una visita por día, registrada en caja dentro de la franja (hora de Costa Rica), en uno de los locales del reto.
+          Cuenta una visita por día, registrada en caja dentro de la franja (hora de Costa Rica), en el local del reto.
         </div>
         {d.locales.map(l => (
           <label key={l}><span style={labelStyle}>Premio en {locales.find(x => x.id === l)?.nombre ?? l} (cortesía de «CORTESÍA CLUB»)</span>

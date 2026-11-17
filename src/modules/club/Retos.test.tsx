@@ -98,6 +98,35 @@ describe('Promociones · retos (mig 169)', () => {
     expect(problemaReto({ ...datos, nombre_en: '' }, hoy)).toMatch(/inglés/)
     expect(resumenFranja({ dias: [1, 2, 3, 4, 5, 6, 7], hora_desde: null, hora_hasta: null })).toBe('todos los días · todo el día')
   })
+
+  it('mig 187: un reto es de un solo local (ni cero ni dos)', () => {
+    const hoy = '2026-11-14'
+    expect(problemaReto({ ...datos, locales: [] }, hoy)).toMatch(/un solo local/)
+    expect(problemaReto({ ...datos, locales: ['loc-a', 'loc-b'] }, hoy)).toMatch(/un solo local/)
+    expect(problemaReto({ ...datos, locales: ['loc-b'] }, hoy)).toBeNull()
+  })
+
+  it('mig 187: en el formulario, elegir otro local REEMPLAZA al anterior (se guarda con uno)', async () => {
+    rol.v = 'owner'
+    api.getLocalesClub.mockResolvedValue([{ id: 'loc-a', nombre: 'Local Ficticio A', activo: true },
+                                          { id: 'loc-b', nombre: 'Local Ficticio B', activo: true }])
+    api.getRetos.mockResolvedValue({ exige_factura: true, retos: [] })
+    api.guardarReto.mockResolvedValue('r9')
+    render(<Retos owner />)
+    fireEvent.click(await screen.findByText('+ Nuevo reto'))
+    fireEvent.change(screen.getByPlaceholderText('3 almuerzos este mes'), { target: { value: 'Reto Ficticio' } })
+    fireEvent.change(screen.getByPlaceholderText('3 lunches this month'), { target: { value: 'Fictitious' } })
+    fireEvent.click(await screen.findByText('Local Ficticio A'))
+    fireEvent.click(screen.getByText('Local Ficticio B'))
+    expect(screen.queryByText(/Premio en Local Ficticio A/)).toBeNull()
+    expect(screen.getByText(/Premio en Local Ficticio B/)).toBeTruthy()
+    const [desde, hasta] = Array.from(document.querySelectorAll('input[type="date"]')) as HTMLInputElement[]
+    fireEvent.change(desde, { target: { value: '2099-03-01' } })
+    fireEvent.change(hasta, { target: { value: '2099-03-20' } })
+    fireEvent.click(screen.getByText('Guardar borrador'))
+    await waitFor(() => expect(api.guardarReto).toHaveBeenCalled())
+    expect(api.guardarReto.mock.calls[0][1]).toMatchObject({ locales: ['loc-b'] })
+  })
 })
 
 describe('Caja · premio del reto (mig 169)', () => {

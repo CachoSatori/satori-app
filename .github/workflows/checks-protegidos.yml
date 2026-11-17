@@ -1,0 +1,50 @@
+# Guarda de los checks propios: «un cambio no puede modificar los checks que lo juzgan».
+# Si el PR toca un archivo que juzga cambios, lo marca y pide OK del dueño (etiqueta `ok-dueno-checks`).
+# Detalle, lista y cómo pasar a bloquear: docs/REGLAS-checks-protegidos.md
+#
+# Seguridad:
+# - `pull_request_target`: corre la versión de este workflow y del script que está en `main`, no la del PR. Un PR no
+#   puede cambiar su propio juez (el cambio a este archivo recién rige después del merge).
+# - El checkout es de la rama BASE (el default de `pull_request_target`), solo `scripts/ci`. Nunca se baja ni se
+#   ejecuta código del PR: la lista de archivos sale de la API.
+# - Nada del PR (título, rama, cuerpo) se interpola en el shell. El script lee el número del PR del evento.
+# - Permisos mínimos de solo lectura. El token no persiste en el checkout.
+name: Checks protegidos
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: checks-protegidos-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  guarda:
+    name: Checks protegidos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout de main (solo scripts/ci)
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci
+          sparse-checkout-cone-mode: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # MODO: `observar` anota y no falla · `bloquear` falla sin la etiqueta ok-dueno-checks.
+      - name: Revisar archivos protegidos
+        env:
+          MODO: observar
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/checks-protegidos.mjs

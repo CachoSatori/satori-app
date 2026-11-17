@@ -38,7 +38,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon-32.png', 'favicon-64.png', 'apple-touch-icon.png'],
       manifest: {
         name:             'Satori App',
         short_name:       'Satori',
@@ -51,8 +51,11 @@ export default defineConfig({
         scope:            BASE,
         lang:             'es',
         icons: [
-          { src: `${BASE}icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: `${BASE}icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          // Daruma (17-nov). Se generan con docs/club-satori/img/daruma/iconos_pwa.py. «any»: cuadro tinta redondeado
+          // con margen; «maskable»: tinta a sangre con el daruma dentro de la zona segura (Android lo recorta a su forma).
+          { src: `${BASE}icon-192.png`,          sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: `${BASE}icon-512.png`,          sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: `${BASE}icon-maskable-512.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         // Long-press del ícono (Android/desktop) → atajo directo al puesto.
         // iOS no soporta shortcuts, pero el aterrizaje por rol cubre lo mismo.

@@ -138,3 +138,32 @@ describe.skipIf(!ARCHIVO || !ESPERADO)('VentasPromPaxExplicado — §9 v2.3 en p
     numerosDeLaFraseEnSuFila()
   })
 })
+
+describe('VentasPromPaxExplicado — a la fecha (fase 1.3)', () => {
+  it('el mes en curso va hasta ayer (hora CR, de noche) y se compara contra los mismos días del mes anterior', async () => {
+    vi.setSystemTime(new Date('2026-11-17T05:30:00Z'))   // 16-nov 23:30 CR → ayer = 15-nov
+    H.filas = []
+    for (let d = 1; d <= 31; d++) {
+      const dd = String(d).padStart(2, '0')
+      H.filas.push(f(`2026-10-${dd}`, 'noche', '026', 10, 100_000))
+      if (d <= 16) H.filas.push(f(`2026-11-${dd}`, 'noche', '026', 10, 120_000))
+    }
+    render(<VentasPromPaxExplicado />)
+    await waitFor(() => expect(screen.getByTestId('pp-tarjetas')).toBeTruthy())
+    fireEvent.change(screen.getByLabelText('Mes'), { target: { value: '2026-11' } })
+    await waitFor(() => expect(screen.getByTestId('pp-periodos').textContent).toContain('a la fecha'))
+    const txt = screen.getByTestId('pp-periodos').textContent!
+    expect(txt).toContain('1 al 15 de noviembre (15 días) · a la fecha')
+    expect(txt).toContain('los mismos días: 1 al 15 de octubre (15 días)')
+    // La última lectura no pide ni hoy ni la segunda mitad de octubre.
+    expect(H.llamadas.at(-1)).toEqual(['santa-teresa', '2026-10-01', '2026-11-15'])
+    await waitFor(() => expect(screen.getByTestId('pp-tarjetas').textContent).toContain('₡12.000'))
+  })
+
+  it('un mes que todavía no tiene días cerrados lo dice', async () => {
+    H.filas = []
+    render(<VentasPromPaxExplicado />)
+    fireEvent.change(screen.getByLabelText('Mes'), { target: { value: '2026-12' } })
+    await waitFor(() => expect(document.body.textContent).toContain('todavía no tiene días cerrados'))
+  })
+})

@@ -1,3 +1,4 @@
+import { ventaPorPersonaDeTotales } from './indicadores'
 import type { ProductoComandado } from '../../shared/ndf/ingestNdf'
 import type { DiaData, ProductMap } from '../../shared/types/ventas'
 
@@ -422,9 +423,10 @@ export function mixPorCategoria(dia: DiaData, pm: ProductMap): MixCategoria[] {
  * el nativo no es obligatorio y hoy no es confiable. Cuando el nativo llegue al 100 %
  * (§3.F) esto se invierte y el artículo se retira.
  */
-export function ventaPorPax(venta: number, pax: number): number {
-  if (!pax || pax <= 0) return 0
-  return Math.round(venta / pax)
+export function ventaPorPax(ventaSalon: number, pax: number): number {
+  // La cuenta es la de `indicadores.ts` (D4): quien llama pasa la venta de SALÓN.
+  const v = ventaPorPersonaDeTotales(ventaSalon, pax)
+  return v === null ? 0 : Math.round(v)
 }
 
 /**

@@ -415,6 +415,31 @@ export function ventaPorPersona(
 }
 
 /**
+ * LA venta por persona (D4) cuando la pantalla solo tiene TOTALES ya sumados (el resumen por día
+ * `DiaData`/`HistDay`, un mes, un salonero): neta de salón ÷ personas de salón. Es la misma
+ * cuenta que `ventaPorPersona` con un estimador que no estima (lo cuida una prueba de contrato).
+ *
+ * Lo que el resumen por día NO permite, y queda para las pantallas que lean facturas (fase 2):
+ * estimar las personas de mesas sin pax y sacar mesas de dueños y regalías totales. Por eso
+ * estas pantallas muestran la venta por persona con personas CARGADAS.
+ *
+ * Una sola regla en toda la app: el numerador es la neta de SALÓN (nunca la neta total ni el
+ * delivery) y el denominador, las personas de salón. `null` si no hay personas.
+ */
+export function ventaPorPersonaDeTotales(netaSalon: number, personas: number): number | null {
+  const p = n(personas)
+  return p > 0 ? n(netaSalon) / p : null
+}
+
+/**
+ * La neta de SALÓN de un salonero en el resumen por día: su `total` sin su `delivery` (el
+ * delivery que cargó un mesero no es salón; días del .xls sin el campo = todo salón).
+ */
+export function netaSalonDeSalonero(s: { total: number; delivery?: number | null }): number {
+  return n(s.total) - n(s.delivery)
+}
+
+/**
  * Venta por persona por salonero (lente «mesa»), con el grupo SIN SALONERO aparte y nunca
  * repartido. La referencia del estimador es la del local entero (todas las `facturas`).
  */

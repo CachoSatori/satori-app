@@ -9,6 +9,7 @@ import { supabase } from '../../shared/api/supabase'
 import { todayCR, fi } from '../../shared/utils'
 import { ventasDelRango } from '../ventas/ventasFuente'
 import { ventasDeLaSemana } from './ventasSemana'
+import { ventaPorPersonaDeTotales } from '../ventas/indicadores'
 
 // ── Date helpers ───────────────────────────────────────────────
 function startOfWeek(date: string): string {
@@ -55,7 +56,7 @@ interface WeekSnapshot {
 async function fetchWeek(from: string, to: string): Promise<WeekSnapshot> {
   // Ventas: del PoS (16-nov: nunca más el xls). Un día sin factura no aparece.
   const { dias } = await ventasDelRango(from, to)
-  const { ventaNeta, ventaBruta, pax, days, salMap } = ventasDeLaSemana(dias)
+  const { ventaNeta, ventaBruta, pax, promPax, days, salMap } = ventasDeLaSemana(dias)
 
   // Propinas
   const { data: tipSess } = await supabase
@@ -68,13 +69,14 @@ async function fetchWeek(from: string, to: string): Promise<WeekSnapshot> {
 
   const sortedDays = [...days].sort((a, b) => b.ventaNeta - a.ventaNeta)
   const topSal = Object.entries(salMap)
-    .map(([nombre, d]) => ({ nombre, ...d, promPax: d.pax > 0 ? d.total / d.pax : 0 }))
+    .map(([nombre, d]) => ({ nombre, total: d.total, pax: d.pax, days: d.days, promPax: ventaPorPersonaDeTotales(d.salon, d.pax) ?? 0 }))
     .sort((a, b) => b.promPax - a.promPax)
     .slice(0, 5)
 
   return {
     from, to, ventaNeta, ventaBruta, pax,
-    promPax: pax > 0 ? ventaNeta / pax : 0,
+    // D4: salón ÷ personas (antes, neta TOTAL ÷ personas: sumaba el delivery).
+    promPax,
     days: days.sort((a, b) => a.fecha.localeCompare(b.fecha)),
     topSal,
     propinas,
@@ -133,7 +135,7 @@ export default function ResumenSemanal() {
       `📅 *SATORI — Semana ${fmtShort(thisWeek.from)} al ${fmtShort(thisWeek.to)}*`,
       '━━━━━━━━━━━━━━━━━━━━',
       `💰 Ventas: *${fi(thisWeek.ventaNeta)}*${pctV}`,
-      thisWeek.pax > 0 ? `👥 PAX: ${thisWeek.pax}  •  Prom/PAX: *${fi(thisWeek.ventaNeta / thisWeek.pax)}*` : '',
+      thisWeek.pax > 0 ? `👥 PAX: ${thisWeek.pax}  •  Prom/PAX: *${fi(thisWeek.promPax)}*` : '',
       thisWeek.propinas > 0 ? `💵 Propinas: *${fi(thisWeek.propinas)}*${pctP}` : '',
       thisWeek.days.length > 0 ? `📆 ${thisWeek.days.length} días trabajados` : '',
       '━━━━━━━━━━━━━━━━━━━━',

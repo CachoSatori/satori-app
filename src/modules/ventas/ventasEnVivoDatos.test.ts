@@ -779,7 +779,10 @@ describe('paridad con las funciones de Hoy', () => {
     expect(g.cajTotal).toBe(5000)
     expect(g.cajDelivery).toBe(5000)
     expect(g.totalRest).toBe(25000)
-    expect(g.promPax).toBeCloseTo(20000 / 6, 6)
+    // D4 (17-nov): la venta por persona del día es todo el salón ÷ todas las personas: los 20.000 de
+    // salón de meseros (la caja solo cobró delivery) ÷ 8 personas (6 de meseros + 2 de caja).
+    // Antes: 20.000 ÷ 6, solo meseros.
+    expect(g.promPax).toBeCloseTo(20000 / 8, 6)
   })
 
   it('aggSalonero saltea a la caja y da el Prom/PAX de cada mesero', () => {

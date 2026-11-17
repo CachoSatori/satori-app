@@ -1,3 +1,4 @@
+import { ventaPorPersonaDeTotales } from './indicadores'
 import { useState, useMemo, lazy, Suspense, Fragment } from 'react'
 import type { DiasMap, HistMap, Meta, ProductMap } from '../../shared/types/ventas'
 import {
@@ -37,7 +38,7 @@ export default function VentasContabilidad({ dias, hist, metas, pm }: Props) {
   const totSalon      = days.reduce((s, d) => s + d.salon, 0)
   const totDelivery   = days.reduce((s, d) => s + d.delivery, 0)
   const totPax        = days.reduce((s, d) => s + d.pax, 0)
-  const totPromPax    = totPax > 0 ? totSalon / totPax : 0
+  const totPromPax    = ventaPorPersonaDeTotales(totSalon, totPax) ?? 0
 
   const progress = !isYear ? metaProgress(metas, dias, hist, selected) : null
 

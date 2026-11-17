@@ -12,6 +12,7 @@
  * (`ventasDelRango`); antes del corte del PoS (2024-01-05), `ventas_hist` (`cargarHistEager`).
  * Para propinas y caja consulta el rango del mes vía supabase.
  */
+import { ventaPorPersonaDeTotales } from '../ventas/indicadores'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../shared/api/supabase'
@@ -58,7 +59,7 @@ function computeVentas(ym: string, dias: DiasMap, hist: HistMap): VentasBlock {
 
   return {
     totVN, pax,
-    promPax: pax > 0 ? salon / pax : 0,
+    promPax: ventaPorPersonaDeTotales(salon, pax) ?? 0,
     days: days.length,
     maxDay: maxDay ? { fecha: maxDay.fecha, ventaNeta: maxDay.ventaNeta } : null,
     minDay: minDay ? { fecha: minDay.fecha, ventaNeta: minDay.ventaNeta } : null,

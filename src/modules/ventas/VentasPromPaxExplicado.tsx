@@ -6,13 +6,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getPromPaxAgregado, getSaloneroNombres } from '../../shared/api/posNdf'
-import { fechaCR } from '../../shared/ndf/jornada'
+import { todayCR } from '../../shared/utils'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
 import {
-  cubrir, largoEnDias, periodoDeComparacion, periodoMes, periodoRango, periodoSemana, periodoTemporada,
+  cubrir, largoEnDias, periodoMes, periodoRango, periodoSemana, periodoTemporada,
   type ModoComparacion, type Periodo, type TipoPeriodo,
 } from './periodosPromPax'
 import { resolverPersonas } from './promPaxSaloneros'
+import { alinearPromPax, corteDe, rotulo } from './aLaFecha'
 import { diaLegible, etiquetaTramo, rangoDeTramo, TRAMOS, tramoDe, type TramoId } from './temporadas'
 import {
   aCsv, analizar, crc, entero, pctPax, signoCrc, tablaCorte, tablaSaloneros, type Analisis, type Corte, type FilaAgregada,
@@ -47,7 +48,9 @@ async function cargar(actual: Periodo, comp: Periodo): Promise<FilaAgregada[]> {
 }
 
 export default function VentasPromPaxExplicado() {
-  const hoy = fechaCR(new Date().toISOString()) ?? new Date().toISOString().slice(0, 10)
+  // Hoy en Costa Rica. Un período que sigue después de AYER va «a la fecha» (Ventas v2, fase 1.3).
+  const hoy = todayCR()
+  const corte = useMemo(() => corteDe(hoy), [hoy])
   const mesAnterior = (() => {
     const [a, m] = hoy.split('-').map(Number)
     return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`
@@ -67,7 +70,7 @@ export default function VentasPromPaxExplicado() {
   const [carga, setCarga] = useState<{ clave: string; filas: FilaAgregada[] | null; error: string | null } | null>(null)
   const [nombres, setNombres] = useState<Record<string, string>>({})
 
-  const periodos = useMemo((): { actual: Periodo; comp: Periodo } | { error: string } => {
+  const periodos = useMemo((): { actual: Periodo; comp: Periodo; enCurso: boolean } | { error: string } => {
     try {
       let actual: Periodo
       if (tipo === 'mes') { const [a, m] = mes.split('-').map(Number); actual = periodoMes(a, m) }
@@ -76,11 +79,12 @@ export default function VentasPromPaxExplicado() {
       else actual = periodoRango(desde, hasta)
       if (largoEnDias(actual) > 731) return { error: 'El período no puede pasar de 731 días.' }
       const m = modo === 'tramo-anio-anterior' && tipo !== 'temporada' ? 'anio-anterior' : modo
-      return { actual, comp: periodoDeComparacion(actual, m) }
+      // Nunca un período en curso contra uno completo: se corta en ayer y la comparación, a los mismos días.
+      return alinearPromPax(actual, m, corte)
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
-  }, [tipo, mes, diaSemana, tramo, anioTramo, desde, hasta, modo])
+  }, [tipo, mes, diaSemana, tramo, anioTramo, desde, hasta, modo, corte])
 
   useEffect(() => {
     getSaloneroNombres().then(setNombres).catch(() => { /* sin nombres: se usa el roster del código */ })
@@ -161,7 +165,14 @@ export default function VentasPromPaxExplicado() {
         <div className="vt-empty"><div className="vt-empty-sub">{periodos.error}</div></div>
       ) : (
         <div style={{ fontSize: '0.78rem', color: 'var(--c-gris)', marginBottom: '1rem' }} data-testid="pp-periodos">
-          <strong>{rangoTxt(periodos.actual)}</strong> · comparado con {rangoTxt(periodos.comp)}.
+          {periodos.enCurso ? (
+            <>
+              <strong>{rotulo(periodos.actual, corte)} · a la fecha</strong> (hasta ayer; hoy no entra) · comparado con
+              {' '}los mismos días: {rotulo(periodos.comp, corte)}.
+            </>
+          ) : (
+            <><strong>{rangoTxt(periodos.actual)}</strong> · comparado con {rangoTxt(periodos.comp)}.</>
+          )}
           {' '}Turno por la hora de la factura (mañana 6–16 h, noche 17–24 h; después de medianoche cuenta como noche del mismo día).
         </div>
       )}

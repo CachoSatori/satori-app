@@ -154,8 +154,9 @@ function natural(tipo: TipoPeriodoV2, d: string): Rango {
 
 const min = (a: string, b: string) => (a < b ? a : b)
 
-/** Los primeros `k` días de `r` (o `r` entero si es más corto). */
-const primeros = (r: Rango, k: number): Rango => ({ desde: r.desde, hasta: min(r.hasta, sumarDias(r.desde, k - 1)) })
+/** Los primeros `k` días de `r` (o `r` entero si es más corto): «los mismos días transcurridos». */
+export const primerosDias = (r: Rango, k: number): Rango => ({ desde: r.desde, hasta: min(r.hasta, sumarDias(r.desde, k - 1)) })
+const primeros = primerosDias
 
 const correr = (r: Rango, n: number): Rango => ({ desde: sumarDias(r.desde, n), hasta: sumarDias(r.hasta, n) })
 

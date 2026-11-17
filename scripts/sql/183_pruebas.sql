@@ -1,5 +1,6 @@
--- 183_pruebas (origen club 128) · Excepciones del Club más rápidas (índice de la ventana de facturas + la regla del
--- «cambio de lista» de DESCUENTO_SIN_RESPALDO sin recorrer ddia por cada candidata). Arma datos ficticios, saca una FOTO
+-- 183_pruebas (origen club 128) · Excepciones del Club más rápidas (tk por fecha_registra con el índice que ya existe, la
+-- regla del «cambio de lista» de DESCUENTO_SIN_RESPALDO sin recorrer ddia por cada candidata, y desempate fijo de la línea
+-- ejemplo de DESCUENTO_SIN_RESPALDO). Arma datos ficticios, saca una FOTO
 -- de todo lo que devuelven las excepciones ANTES, aplica la 183 dentro de la transacción, saca la foto DESPUÉS, corre el
 -- rollback y saca otra: las tres tienen que ser idénticas fila por fila. Termina en ROLLBACK: no deja nada.
 -- Se corre con scripts/sql/183_pruebas.py (--local, o --armar para staging). Necesita la 181 en la base y NO la 183.
@@ -21,6 +22,11 @@
 --   prueba183b · B183 a ₡2000 los días -20…-11. Día -6: 3 a 2000, 1 a 1600 (20 %, clasificado por un tipo de
 --               descuento del local: sale en la lista pero NO cuenta en el Inicio) y 1 a 1500 (25 %, sin clasificar).
 --               Abiertas a 30 días: 2 descuentos − 1 clasificado + 5 pendientes = 6.
+--   Empate (prueba183a): las facturas de A183 a ₡1000 llevan además C183 a ₡2000; la factura 5 del día -5 lleva A183 a 800
+--               (20 %, ₡200) y C183 a 1600 (20 %, ₡400): empatan en el %. Con el desempate fijo sale C183 (₡400) y el
+--               reporte de descuentos de prueba183a a 30 días suma ₡600 (200 + 400) con CUALQUIER plan.
+--   Factura que cruza la medianoche (prueba183a): se registra el día -31 a las 23:30 y se cierra el -30 a las 00:30, con
+--               cxc ₡9000 (CREDITOS_SIN_CANJE). A 30 días NO entra (cuenta fecha_registra, como el coalesce de siempre).
 begin;
 create temp table _r183 (n serial, caso text, ok boolean, detalle text) on commit drop;
 create temp table _f183 (etapa text, loc text, rango text, fila jsonb) on commit drop;              -- filas del núcleo
@@ -67,6 +73,8 @@ union all select * from (values
   ('prueba183b', -6, 4, 'B183', 1600), ('prueba183b', -6, 5, 'B183', 1500)) v(loc, d, i, cod, u);
 alter table _t183v add column id uuid default gen_random_uuid(), add column nf text;
 update _t183v set nf = '183' || (case loc when 'prueba183a' then '1' else '2' end) || lpad((-d)::text, 2, '0') || i;
+create temp table _i183 on commit drop as
+select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename = 'pos_ndf_tickets';
 
 insert into public.pos_ndf_tickets (id, local, numero_factura, fecha_registra, fecha_cierra, estado, canal, registrado_por,
                                     con_servicio, pax, pax_alerta, total_crc)
@@ -74,6 +82,14 @@ select v.id, v.loc, v.nf, f, f, 'C', 'salon', 'salonero', true, 1, 'ok', v.u
   from _t183v v cross join lateral (select (((select hoy from _c183) + v.d) + time '20:00') at time zone 'America/Costa_Rica' as f) x;
 insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, precio, monto, familia, es_cortesia)
 select v.id, v.cod, 'Plato ficticio', 1, v.u, v.u, 2, false from _t183v v;
+insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, precio, monto, familia, es_cortesia)
+select v.id, 'C183', 'Otro plato ficticio', 1, x.u, x.u, 2, false
+  from _t183v v cross join lateral (select case when v.d = -5 and v.i = 5 then 1600 else 2000 end::numeric as u) x
+ where v.loc = 'prueba183a' and (v.u = 1000 or (v.d = -5 and v.i = 5));
+insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, fecha_cierra, estado, canal, registrado_por,
+                                    con_servicio, pax, pax_alerta, total_crc, cxc_crc)
+select 'prueba183a', '1839999', (((select hoy from _c183) - 31) + time '23:30') at time zone 'America/Costa_Rica',
+       (((select hoy from _c183) - 30) + time '00:30') at time zone 'America/Costa_Rica', 'C', 'salon', 'salonero', true, 1, 'ok', 9000, 9000;
 
 -- una de las del día -5 de prueba183a, resuelta; en prueba183b, el 20 % es un tipo de descuento conocido
 insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por)
@@ -101,6 +117,28 @@ create function pg_temp.norm(f jsonb) returns jsonb language sql immutable as $f
   select case when f->>'tipo' = 'DESCUENTO_SIN_RESPALDO'
               then jsonb_set(f, '{detalle}', (f->'detalle') - 'articulo' - 'nombre' - 'precio' - 'referencia' - 'descuento_crc')
               else f end $f$;
+
+-- DESCUENTO_SIN_RESPALDO crudo (sin normalizar) y el reporte de descuentos, con un juego de planificador dado
+create function pg_temp.con_plan(p_plan text, p_loc text) returns jsonb language plpgsql as $f$
+declare v jsonb; g text; v_hoy date := (select hoy from _c183);
+begin
+  foreach g in array string_to_array(p_plan, ',') loop
+    if g <> '' then perform set_config(g, 'off', true); end if;
+  end loop;
+  select jsonb_build_object(
+           'desc', (select jsonb_agg(to_jsonb(e) order by e.ref) from public.club_excepciones(v_hoy - 30, v_hoy, p_loc, 'DESCUENTO_SIN_RESPALDO') e),
+           'desc_todo', (select jsonb_agg(to_jsonb(e) order by e.ref) from public.club_excepciones(v_hoy - 30, v_hoy, p_loc) e
+                          where e.tipo = 'DESCUENTO_SIN_RESPALDO'),
+           'reporte', (select jsonb_agg(to_jsonb(r) order by r.mes, r.tipo, r.turno) from public.club_reporte_descuentos(v_hoy - 30, v_hoy, p_loc) r))
+    into v;
+  foreach g in array string_to_array(p_plan, ',') loop
+    if g <> '' then perform set_config(g, 'on', true); end if;
+  end loop;
+  return v;
+end $f$;
+create temp table _planes (plan text) on commit drop;
+insert into _planes values (''), ('enable_hashjoin'), ('enable_mergejoin,enable_hashjoin'), ('enable_nestloop'),
+  ('enable_indexscan,enable_bitmapscan'), ('enable_seqscan'), ('enable_hashagg'), ('enable_incremental_sort,enable_sort');
 
 create function pg_temp.foto(p_etapa text) returns void language plpgsql as $f$
 declare
@@ -142,6 +180,9 @@ begin
       from public.club_excepciones(v_c.hoy - 30, v_c.hoy, v_l, 'DESCUENTO_SIN_RESPALDO') e;
     insert into _a183 select p_etapa, 'owner', v_l, coalesce(d::text, 'null'), pg_temp.abiertas(d, v_l)
       from unnest(array[1, 7, 30, 90, null]) d;
+    -- humo del reporte de descuentos (no se compara entre etapas: antes de la 183 el ejemplo de un empate es arbitrario)
+    insert into _a183 select p_etapa, 'reporte', v_l, '30', coalesce(sum(r.facturas), 0) || ' fact. / ' || coalesce(sum(r.descuento_crc), 0)
+      from public.club_reporte_descuentos(v_c.hoy - 30, v_c.hoy, v_l) r;
     -- tiempo: la mejor de 3 llamadas a 30 días (como el Inicio)
     for v_n in 1..3 loop
       v_t0 := clock_timestamp();
@@ -186,8 +227,8 @@ select pg_temp.como(null);
 
 -- 01. funciones: el núcleo con el md5 de la 183; envoltorio y contador sin tocar; mismos permisos, dueño y atributos
 insert into _r183 (caso, ok, detalle)
-select '01 núcleo md5 bd1b4d15…; envoltorio y abiertas idénticos; SECURITY DEFINER, search_path, volatilidad, ACL y dueño iguales',
-       (select md5 from _p183 where etapa = 'despues' and fn like 'club_excepciones__nucleo%') = 'bd1b4d15e6ec6453d540c59b61d80d76'
+select '01 núcleo md5 100caed1…; envoltorio y abiertas idénticos; SECURITY DEFINER, search_path, volatilidad, ACL y dueño iguales',
+       (select md5 from _p183 where etapa = 'despues' and fn like 'club_excepciones__nucleo%') = '100caed16f137eda0888deec497f9103'
        and (select md5 from _p183 where etapa = 'antes' and fn like 'club_excepciones__nucleo%') = '94cf0df9d0b189322b27d4d8b208a3e0'
        and not exists (select fn, secdef, cfg, vol, acl, dueno from _p183 where etapa = 'antes'
                        except select fn, secdef, cfg, vol, acl, dueno from _p183 where etapa = 'despues')
@@ -209,10 +250,12 @@ select '02 núcleo idéntico fila por fila, todas las columnas (salvo la línea 
 -- 03. el contador del Inicio da lo mismo para cada rol, local y cantidad de días (errores incluidos)
 insert into _r183 (caso, ok, detalle)
 select '03 club_excepciones_abiertas idéntico (owner, manager, cajero; 1/7/30/90/null días; sin local)',
-       not exists (select rol, loc, dias, valor from _a183 where etapa = 'antes' except all select rol, loc, dias, valor from _a183 where etapa = 'despues')
-       and not exists (select rol, loc, dias, valor from _a183 where etapa = 'despues' except all select rol, loc, dias, valor from _a183 where etapa = 'antes'),
+       not exists (select rol, loc, dias, valor from _a183 where etapa = 'antes' and rol <> 'reporte'
+                   except all select rol, loc, dias, valor from _a183 where etapa = 'despues' and rol <> 'reporte')
+       and not exists (select rol, loc, dias, valor from _a183 where etapa = 'despues' and rol <> 'reporte'
+                       except all select rol, loc, dias, valor from _a183 where etapa = 'antes' and rol <> 'reporte'),
        (select string_agg(rol || '@' || loc || '/' || dias || '=' || valor, ' ' order by rol, loc, dias) from _a183
-         where etapa = 'despues' and (dias = '30' or rol <> 'owner'));
+         where etapa = 'despues' and rol <> 'reporte' and (dias = '30' or rol <> 'owner'));
 
 -- 04. permisos: el cajero y el manager fuera de su local siguen afuera (42501); anon no ejecuta; authenticated sí
 insert into _r183 (caso, ok, detalle)
@@ -227,28 +270,60 @@ select '04 permisos: cajero 42501, manager de A en B 42501, anon sin EXECUTE, el
        (select string_agg(rol || '@' || loc || '=' || valor, ' ' order by rol, loc) from _a183
          where etapa = 'despues' and rol in ('cajero', 'manager_a', 'owner_authenticated'));
 
--- 05. el índice existe y sirve para el filtro de tk (la misma expresión). Con estadísticas al día (analyze dentro de la
---     transacción descartada) y sin seq scan, el planificador tiene que elegirlo: la condición sobre coalesce(…) solo la
---     puede resolver este índice.
+-- 05. tk: sin índice nuevo (mismos índices de pos_ndf_tickets antes y después), fecha_registra sigue NOT NULL y el filtro
+--     de tk es por fecha_registra (lo resuelve el índice existente pos_ndf_tickets_local_fecha_idx)
+--     (con estadísticas al día: analyze dentro de la transacción descartada)
 analyze public.pos_ndf_tickets;
 create function pg_temp.plan_tk() returns text language plpgsql as $f$
 declare v text := ''; l text;
 begin
   perform set_config('enable_seqscan', 'off', true);
   for l in execute $q$explain (format text) select 1 from public.pos_ndf_tickets t
-           where t.local = 'prueba183a' and coalesce(t.fecha_registra, t.fecha_cierra) >= now() - interval '4 days'
-             and coalesce(t.fecha_registra, t.fecha_cierra) < now() - interval '3 days'$q$ loop
+           where t.local = 'prueba183a' and t.fecha_registra >= now() - interval '4 days'
+             and t.fecha_registra < now() - interval '3 days'$q$ loop
     v := v || ' | ' || btrim(l);
   end loop;
   perform set_config('enable_seqscan', 'on', true);
   return v;
 end $f$;
 insert into _r183 (caso, ok, detalle)
-select '05 índice pos_ndf_tickets_local_fecha_efectiva_idx sobre (local, coalesce(fecha_registra, fecha_cierra)) y el plan lo usa',
-       exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'pos_ndf_tickets_local_fecha_efectiva_idx'
-                and indexdef like '%(local, COALESCE(fecha_registra, fecha_cierra))%')
-       and pg_temp.plan_tk() like '%pos_ndf_tickets_local_fecha_efectiva_idx%',
+select '05 tk por fecha_registra con el índice existente; sin índices nuevos; fecha_registra NOT NULL',
+       not exists (select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename = 'pos_ndf_tickets'
+                   except select indexname, indexdef from _i183)
+       and not exists (select indexname, indexdef from _i183
+                       except select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename = 'pos_ndf_tickets')
+       and (select attnotnull from pg_attribute where attrelid = 'public.pos_ndf_tickets'::regclass and attname = 'fecha_registra')
+       and position('where t.local = p_location and t.fecha_registra >= v_ini' in
+                    pg_get_functiondef('public.club_excepciones__nucleo(date,date,text,text)'::regprocedure)) > 0
+       and pg_temp.plan_tk() like '%pos_ndf_tickets_local_fecha_idx%',
        pg_temp.plan_tk();
+
+-- 08. desempate fijo: la factura con empate muestra C183 (₡400), y DESCUENTO_SIN_RESPALDO (con p_tipo y sin él) junto con
+--     el reporte de descuentos dan EXACTAMENTE lo mismo (sin normalizar) con 8 juegos distintos del planificador, en cada
+--     local con el Club encendido
+select pg_temp.como((select owner_id from _c183));
+create temp table _pl183 on commit drop as
+select l.location_id as loc, p.plan, pg_temp.con_plan(p.plan, l.location_id) as res
+  from _planes p, (select location_id from public.club_config where club_activo) l;
+insert into _r183 (caso, ok, detalle)
+select '08 desempate fijo: C183 ₡400 en la factura con empate; mismas filas crudas y mismo reporte con 8 planes distintos',
+       (select count(*) from public.club_excepciones((select hoy from _c183) - 30, (select hoy from _c183), 'prueba183a', 'DESCUENTO_SIN_RESPALDO') e
+         where e.factura = (select nf from _t183v where loc = 'prueba183a' and d = -5 and i = 5)
+           and e.detalle->>'articulo' = 'C183' and (e.detalle->>'descuento_crc')::numeric = 400) = 1
+       and (select bool_and(n = 1) from (select loc, count(distinct res) n from _pl183 group by loc) z)
+       and (select count(*) from _pl183) = 8 * (select count(*) from public.club_config where club_activo),
+       (select string_agg(loc || ': ' || n || ' resultado(s) en ' || m || ' planes', ' · ' order by loc)
+          from (select loc, count(distinct res) n, count(*) m from _pl183 group by loc) z);
+
+-- 09. reporte de descuentos (club_reporte_descuentos, Marcadores): prueba183a a 30 días suma ₡600 en 2 facturas
+insert into _r183 (caso, ok, detalle)
+select '09 reporte de descuentos: prueba183a 2 facturas, ₡600 (200 + 400 del desempate fijo)',
+       (select sum(r.facturas) = 2 and sum(r.descuento_crc) = 600
+          from public.club_reporte_descuentos((select hoy from _c183) - 30, (select hoy from _c183), 'prueba183a') r),
+       (select 'antes ' || coalesce((select string_agg(loc || '=' || valor, ' ' order by loc) from _a183 where etapa = 'antes' and rol = 'reporte'), '?')
+               || ' · después ' || coalesce((select string_agg(loc || '=' || valor, ' ' order by loc) from _a183 where etapa = 'despues' and rol = 'reporte'), '?'));
+
+select pg_temp.como(null);
 
 -- 06. tiempo: después no es peor que antes en ningún local (la mejor de 3; margen de 10 % + 20 ms por el ruido).
 --     En staging (volumen real) el detalle muestra la mejora; en la base local los datos son chicos.
@@ -259,33 +334,34 @@ select '06 tiempo de club_excepciones_abiertas(30): después ≤ antes (mejor de
   from (select loc, min(ms) ms from _t183 where etapa = 'antes' group by loc) a
   join (select loc, min(ms) ms from _t183 where etapa = 'despues' group by loc) d using (loc);
 
--- 07. vuelta atrás (en esta misma transacción descartada): núcleo de la 181, sin índice, y la misma foto
+-- 07. vuelta atrás (en esta misma transacción descartada): núcleo de la 181 y la misma foto
 -- @@183R@@   (aquí va el cuerpo de scripts/sql/183_rollback.sql sin begin/commit)
 select pg_temp.foto('rollback');
 insert into _r183 (caso, ok, detalle)
-select '07 rollback: núcleo md5 94cf0df9 (181), sin el índice, mismas filas y mismos conteos que antes',
+select '07 rollback: núcleo md5 94cf0df9 (181), mismos índices, mismas filas y mismos conteos que antes',
        (select md5 from _p183 where etapa = 'rollback' and fn like 'club_excepciones__nucleo%') = '94cf0df9d0b189322b27d4d8b208a3e0'
-       and to_regclass('public.pos_ndf_tickets_local_fecha_efectiva_idx') is null
+       and not exists (select indexname from pg_indexes where schemaname = 'public' and tablename = 'pos_ndf_tickets'
+                       except select indexname from _i183)
        and not exists (select fn, md5, secdef, cfg, vol, acl, dueno from _p183 where etapa = 'antes'
                        except select fn, md5, secdef, cfg, vol, acl, dueno from _p183 where etapa = 'rollback')
        and not exists (select loc, rango, pg_temp.norm(fila) from _f183 where etapa = 'antes'
                        except all select loc, rango, pg_temp.norm(fila) from _f183 where etapa = 'rollback')
        and not exists (select loc, rango, pg_temp.norm(fila) from _f183 where etapa = 'rollback'
                        except all select loc, rango, pg_temp.norm(fila) from _f183 where etapa = 'antes')
-       and not exists (select rol, loc, dias, valor from _a183 where etapa = 'antes' and rol <> 'owner_authenticated'
-                       except all select rol, loc, dias, valor from _a183 where etapa = 'rollback'),
+       and not exists (select rol, loc, dias, valor from _a183 where etapa = 'antes' and rol not in ('owner_authenticated', 'reporte')
+                       except all select rol, loc, dias, valor from _a183 where etapa = 'rollback' and rol <> 'reporte'),
        (select string_agg(fn || '=' || left(md5, 8), ' ') from _p183 where etapa = 'rollback');
 
 -- Resultado
 select json_agg(json_build_object('caso', caso, 'ok', ok, 'detalle', detalle) order by n) from _r183;
 
 -- ASSERT: cada caso que falla sale como WARNING («183 FALLA <caso> — <detalle>»), después el resumen
--- («183 RESUMEN: pasaron X / fallaron Y de 8») y, si Y > 0 o faltan casos, la transacción ABORTA con
+-- («183 RESUMEN: pasaron X / fallaron Y de 10») y, si Y > 0 o faltan casos, la transacción ABORTA con
 -- «183-FALLAN: <casos> · pasaron X / fallaron Y». Este bloque NO lleva «exception when others».
 do $$
 declare
   r record;
-  v_esp constant int := 8;
+  v_esp constant int := 10;
   v_tot int; v_ok int; v_mal int; v_lista text;
 begin
   for r in select caso, detalle from _r183 where ok is not true order by n loop   -- null = falla

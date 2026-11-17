@@ -27,8 +27,8 @@ update public.profiles set role = 'owner', is_active = true where id = '00000000
 """
 
 # Las mutaciones del núcleo cambian su md5 final: se apaga la guarda de md5 de la migración, y el rollback no puede
-# volver ese núcleo (su propia guarda lo frena), así que se salta entero: además del caso propio cae el 07.
-SIN_GUARDA_NUCLEO = ("  if md5(pg_get_functiondef(v_fn)) <> 'bd1b4d15e6ec6453d540c59b61d80d76' then", "  if false then")
+# volver ese núcleo (su propia guarda lo frena), así que se salta entero: además del caso propio caen el 01 y el 07.
+SIN_GUARDA_NUCLEO = ("  if md5(pg_get_functiondef(v_fn)) <> '100caed16f137eda0888deec497f9103' then", "  if false then")
 
 # nombre → (texto de la 183, reemplazo, casos que tienen que caer)
 MUTACIONES: dict[str, tuple] = {
@@ -39,18 +39,21 @@ MUTACIONES: dict[str, tuple] = {
     'cuenta_por_filas': ("(select sum(x.n) filter (where x.u <= k.u * 1.001)::numeric / nullif(sum(x.n), 0)\n                      from unnest",
                          "(select count(*) filter (where x.u <= k.u * 1.001)::numeric / nullif(count(*), 0)\n                      from unnest",
                          {'01', '02', '03', '07'}),
-    # el join pierde el día: cruza solo por artículo (mezcla las ventas de todos los días)
+    # el join pierde el día: cruza con el día anterior
     'join_sin_dia': ("              left join ddia q on q.cod = k.cod and q.dia = k.dia   -- 183",
                      "              left join ddia q on q.cod = k.cod and q.dia = k.dia - 1   -- 183", {'01', '02', '03', '07'}),
-    # sin el índice: la ventana de facturas vuelve a recorrer toda la tabla
-    'sin_indice': ("create index if not exists pos_ndf_tickets_local_fecha_efectiva_idx\n  on public.pos_ndf_tickets (local, (coalesce(fecha_registra, fecha_cierra)));",
-                   "", {'05'}),
+    # tk por fecha_cierra: la factura que se registra el día -31 y se cierra el -30 entra a los 30 días
+    'tk_usa_cierra': ("     where t.local = p_location and t.fecha_registra >= v_ini\n       and t.fecha_registra < v_fin),",
+                      "     where t.local = p_location and t.fecha_cierra >= v_ini\n       and t.fecha_cierra < v_fin),",
+                      {'01', '02', '03', '05', '07'}),
+    # desempate al revés: a igual %, la línea de MENOR monto (A183, ₡200)
+    'desempate_menor_monto': ("round((c.ref - c.u) * c.q) desc, c.cod", "round((c.ref - c.u) * c.q) asc, c.cod",
+                              {'01', '07', '08', '09'}),
+    # sin la guarda de NOT NULL: si fecha_registra admitiera nulos la equivalencia no vale (se prueba quitándole el NOT
+    # NULL dentro de la transacción: la 183 tiene que parar → la batería aborta con error, no con casos; ver main())
 }
-MUTA_NUCLEO = {'umbral_sin_tolerancia', 'cuenta_por_filas', 'join_sin_dia'}
-MUTACIONES_ROLLBACK: dict[str, tuple] = {
-    # el rollback deja el índice
-    'rollback_deja_indice': ("drop index if exists public.pos_ndf_tickets_local_fecha_efectiva_idx;\n", "", {'07'}),
-}
+MUTA_NUCLEO = {'umbral_sin_tolerancia', 'cuenta_por_filas', 'join_sin_dia', 'tk_usa_cierra', 'desempate_menor_monto'}
+MUTACIONES_ROLLBACK: dict[str, tuple] = {}
 
 
 def _sacar_beg_com(txt: str) -> str:
@@ -59,10 +62,6 @@ def _sacar_beg_com(txt: str) -> str:
 
 def cuerpo(mutar: str | None) -> str:
     mig = MIG.read_text(encoding='utf-8')
-    if mutar == 'sin_indice':
-        # sin índice, la verificación final de la propia 183 abortaría antes de los casos: se apaga solo esa línea
-        mig = mig.replace("  if to_regclass('public.pos_ndf_tickets_local_fecha_efectiva_idx') is null then",
-                          "  if false then")
     if mutar in MUTACIONES:
         viejo, nuevo, _ = MUTACIONES[mutar]
         if mig.count(viejo) != 1:

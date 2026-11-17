@@ -5,14 +5,16 @@ const sb = vi.hoisted(() => ({ signIn: vi.fn(), update: vi.fn(), signOut: vi.fn(
 vi.mock('./supabase', () => ({ supabase: { auth: { signInWithPassword: sb.signIn, updateUser: sb.update, signOut: sb.signOut } } }))
 
 import {
-  validarCambio, fuerzaPassword, tiposDeCaracter, MENSAJE_DEBIL, motivoReingreso, motivoActualizar, cambiarMiPassword, PASSWORD_MIN_CAMBIO,
+  validarCambio, fuerzaPassword, evaluarPassword, tiposDeCaracter, MOTIVO_DEBIL, motivoReingreso, motivoActualizar, cambiarMiPassword, PASSWORD_MIN_CAMBIO,
 } from './miPassword'
 
+const SESENTA = 'Tortuga verde 27 en la playa de Santa Teresa con 3 amigos ok'
+
 describe('validarCambio', () => {
-  it('mínimo 10', () => {
-    expect(PASSWORD_MIN_CAMBIO).toBe(10)
-    expect(validarCambio('vieja-clave-1', '123456789', '123456789')).toBe('La contraseña nueva debe tener al menos 10 caracteres')
-    expect(validarCambio('vieja-clave-1', 'murcielago77', 'murcielago77')).toBeNull()
+  it('mínimo 8 (decisión del dueño 17-nov)', () => {
+    expect(PASSWORD_MIN_CAMBIO).toBe(8)
+    expect(validarCambio('vieja-clave-1', 'abc1234', 'abc1234')).toBe('La contraseña nueva debe tener al menos 8 caracteres')
+    expect(validarCambio('vieja-clave-1', 'abcd1234', 'abcd1234')).toBeNull()
   })
   it('actual vacía, no coinciden, igual a la actual', () => {
     expect(validarCambio('', 'nueva-clave-larga', 'nueva-clave-larga')).toBe('Escribí tu contraseña actual')
@@ -21,44 +23,67 @@ describe('validarCambio', () => {
   })
 })
 
-describe('validarCambio · «Débil» no se acepta (decisión del dueño 17-nov)', () => {
+describe('validarCambio · «Débil» no se acepta y dice el motivo', () => {
   it.each([
-    ['un solo tipo', 'murcielago'],
-    ['palabra del local', 'Satori2026!!'],
-    ['repetida', 'aaaaBBBB1234'],
-    ['solo números', '1234567890'],
-  ])('%s → mensaje con ejemplo', (_c, p) => {
-    expect(validarCambio('vieja-clave-1', p, p)).toBe(MENSAJE_DEBIL)
+    ['solo letras', 'murcielago', 'falta_numero'],
+    ['solo números', '1234567890', 'falta_letra'],
+    ['nombre del local con un número', 'satori2026', 'nombre_local'],
+    ['palabra conocida con un número', 'qwerty12', 'palabra_comun'],
+    ['repetición', 'a1a1a1a1', 'repeticion'],
+  ] as const)('%s → «Contraseña débil.» + motivo', (_c, p, m) => {
+    expect(validarCambio('vieja-clave-1', p, p)).toBe(`Contraseña débil. ${MOTIVO_DEBIL[m]}`)
   })
-  it('aceptable y fuerte pasan', () => {
+  it('aceptable y fuerte pasan (sin signos ni mayúsculas)', () => {
+    expect(validarCambio('vieja-clave-1', 'abcd1234', 'abcd1234')).toBeNull()
     expect(validarCambio('vieja-clave-1', 'murcielago77', 'murcielago77')).toBeNull()
-    expect(validarCambio('vieja-clave-1', 'Tortuga-verde7', 'Tortuga-verde7')).toBeNull()
+    expect(validarCambio('vieja-clave-1', SESENTA, SESENTA)).toBeNull()
   })
 })
 
-describe('fuerzaPassword', () => {
+describe('evaluarPassword · reglas del dueño 17-nov', () => {
   it.each([
-    ['corta', 'Ab1!', 'debil'],
-    ['palabra del local', 'Satori2026!!', 'debil'],
-    ['con tilde: contraseña', 'MiContraseña99', 'debil'],
-    ['repetida', 'aaaaBBBB1234', 'debil'],
-    ['un solo tipo, 10', 'murcielago', 'debil'],
-    ['dos tipos, 12', 'murcielago77', 'media'],
-    ['frase larga un tipo (los espacios no suman)', 'tortuga verde en la playa', 'media'],
-    ['frase con un número', 'tortuga verde 27 playa', 'fuerte'],
-    // Bordes (verificador de d934a586): tilde, ñ y espacio no cuentan como símbolo; mayúscula solo inicial no suma.
-    ['tilde = letra', 'murciélago', 'debil'],
-    ['ñ = letra', 'mañanitass', 'debil'],
-    ['espacio final', 'murcielago ', 'debil'],
-    ['espacio inicial', ' murcielago', 'debil'],
-    ['espacios en el medio', 'murci elago', 'debil'],
-    ['solo mayúscula inicial', 'Murcielago', 'debil'],
-    ['mayúscula inicial con tilde', 'Murciélagos', 'debil'],
-    ['mayúscula en el medio sí suma', 'murciElago', 'media'],
-    ['tilde con número', 'murciélago7', 'media'],
-    ['símbolo real', 'murcielago!', 'media'],
-    ['14 con tres tipos', 'Tortuga-verde7', 'fuerte'],
-  ])('%s', (_c, p, f) => expect(fuerzaPassword(p)).toBe(f))
+    // Pedidas en la tarea.
+    ['frase larga con «satori» adentro', 'me encanta el sushi de satori los viernes', 'fuerte', null],
+    ['frase de 8–15 con «satori» y más palabras', 'satori playa 7', 'fuerte', null],
+    ['abcd1234', 'abcd1234', 'media', null],
+    ['abcdefgh (falta número)', 'abcdefgh', 'debil', 'falta_numero'],
+    ['12345678', '12345678', 'debil', 'falta_letra'],
+    ['60 de letras y números', 'a1b2c3d4e5'.repeat(6), 'fuerte', null],
+    ['60 con espacios (el caso del dueño)', SESENTA, 'fuerte', null],
+    // Bordes.
+    ['corta', 'Ab1!', 'debil', 'corta'],
+    ['7 caracteres', 'abc1234', 'debil', 'corta'],
+    ['nombre del local + año', 'satori2026', 'debil', 'nombre_local'],
+    ['nombre del local + año + signos', 'Sushi2026!!', 'debil', 'nombre_local'],
+    ['con tilde: contraseña', 'Contraseña99', 'debil', 'palabra_comun'],
+    ['nombre del local + palabra', 'satoriplaya7', 'fuerte', null],
+    ['secuencia alternada', 'a1a1a1a1', 'debil', 'repeticion'],
+    ['bloque repetido', 'ab12ab12', 'debil', 'repeticion'],
+    ['un solo carácter, 8', 'aaaaaaaa', 'debil', 'repeticion'],
+    ['un solo carácter, 20', '1'.repeat(20), 'debil', 'repeticion'],
+    ['16+ solo letras', 'tortuga verde en la playa', 'fuerte', null],
+    ['16+ solo números', '8302749165038271', 'fuerte', null],
+    ['16+ con palabra del local', 'satorisatorisatori', 'fuerte', null],
+    ['4 iguales seguidos ya no es débil', 'aaaa1234bc', 'media', null],
+    ['11 con letras y números', 'murciélago7', 'media', null],
+    ['12 con letras y números', 'murcielago77', 'fuerte', null],
+    ['solo signos', '!!!!@@@@##', 'debil', 'falta_letra'],
+    // Tildes, ñ, espacio y mayúscula inicial: siguen sin hacer falta signo ni mayúscula; solo letras = falta número.
+    ['tilde = letra', 'murciélago', 'debil', 'falta_numero'],
+    ['ñ = letra', 'mañanitass', 'debil', 'falta_numero'],
+    ['espacio final', 'murcielago ', 'debil', 'falta_numero'],
+    ['solo mayúscula inicial', 'Murcielago', 'debil', 'falta_numero'],
+    ['símbolo no reemplaza al número', 'murcielago!', 'debil', 'falta_numero'],
+  ] as const)('%s', (_c, p, f, m) => {
+    expect(evaluarPassword(p)).toEqual({ fuerza: f, motivo: m })
+    expect(fuerzaPassword(p)).toBe(f)
+  })
+  it('la frase de 60 caracteres mide 60', () => expect(SESENTA.length).toBe(60))
+  it('todo motivo tiene texto', () => {
+    for (const m of ['corta', 'falta_numero', 'falta_letra', 'nombre_local', 'palabra_comun', 'repeticion'] as const) {
+      expect(MOTIVO_DEBIL[m].length).toBeGreaterThan(10)
+    }
+  })
 })
 
 describe('tiposDeCaracter', () => {

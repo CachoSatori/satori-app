@@ -451,6 +451,7 @@ html, body, #root {
 
 /* ── Mi cuenta: cambiar mi contraseña ───────────────────── */
 .mi-cuenta { min-height: auto; padding-bottom: calc(var(--shell-barra-alto, 0px) + 2.5rem); }
+.mi-cuenta-medidor { min-height: 1.2rem; }
 .mi-cuenta-fuerza { display: flex; align-items: center; gap: 0.5rem; min-height: 1.2rem; font-size: 0.75rem; color: var(--gray-light); }
 .mi-cuenta-barra { flex: 0 0 72px; height: 4px; border-radius: 2px; background: var(--c-linea); overflow: hidden; }
 .mi-cuenta-barra > span { display: block; height: 100%; }

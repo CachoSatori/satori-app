@@ -6,7 +6,7 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
-  PASSWORD_MIN_CAMBIO, validarCambio, fuerzaPassword, FUERZA_TEXTO, MENSAJE_FALLO, cambiarMiPassword,
+  PASSWORD_MIN_CAMBIO, validarCambio, evaluarPassword, FUERZA_TEXTO, MOTIVO_DEBIL, MENSAJE_FALLO, cambiarMiPassword,
 } from '../../shared/api/miPassword'
 
 function useEnLinea(): boolean {
@@ -34,7 +34,8 @@ export default function MiCuenta() {
   const [guardando, setGuardando] = useState(false)
   const [listo, setListo] = useState<Listo | null>(null)
 
-  const fuerza = nueva ? fuerzaPassword(nueva) : null
+  const evaluada = nueva ? evaluarPassword(nueva) : null
+  const fuerza = evaluada?.fuerza ?? null
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault()
@@ -87,13 +88,15 @@ export default function MiCuenta() {
               <label htmlFor="mc-nueva">Contraseña nueva (mínimo {PASSWORD_MIN_CAMBIO})</label>
               <input id="mc-nueva" type="password" autoComplete="new-password" value={nueva}
                 onChange={e => setNueva(e.target.value)} disabled={guardando} aria-describedby="mc-fuerza" />
-              <div id="mc-fuerza" className="mi-cuenta-fuerza" aria-live="polite">
+              <div id="mc-fuerza" className="mi-cuenta-medidor" aria-live="polite">
                 {fuerza && (
-                  <>
+                  <div className="mi-cuenta-fuerza">
                     <span className={`mi-cuenta-barra ${fuerza}`} aria-hidden="true"><span /></span>
                     <span>Fuerza: {FUERZA_TEXTO[fuerza]}</span>
-                  </>
+                  </div>
                 )}
+                {/* Si sale «Débil», el motivo concreto (reclamo del dueño 17-nov: decía «Débil» sin explicar). */}
+                {evaluada?.motivo && <p className="mi-cuenta-ayuda">{MOTIVO_DEBIL[evaluada.motivo]}</p>}
               </div>
             </div>
             <div className="field">

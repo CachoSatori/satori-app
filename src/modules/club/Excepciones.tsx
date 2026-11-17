@@ -178,7 +178,10 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
     ...(Array.isArray(d.locales) && d.locales.length > 0 ? [['Locales', (d.locales as string[]).join(' · ')] as [string, string]] : []),
     ...(e.tipo === 'DESCUENTO_SIN_RESPALDO' ? [['Clasificación', d.clasificacion ? String(d.clasificacion) : 'sin clasificar (ningún tipo ni marcador)'] as [string, string]] : []),
     ...(d.descuento_pct != null ? [['Descuento', `${String(d.descuento_pct).replace('.', ',')} % (precio ${crc(d.precio)} · habitual ${crc(d.referencia)})`] as [string, string]] : []),
-    ...(d.descuento_crc != null ? [['Monto estimado', crc(d.descuento_crc)] as [string, string]] : []),
+    ...(d.descuento_crc != null ? [[Array.isArray(d.lineas_sin_respaldo) ? 'Monto estimado (esta línea)' : 'Monto estimado', crc(d.descuento_crc)] as [string, string]] : []),
+    // 184: todas las líneas sin respaldo de la factura (lo que suma el reporte de descuentos de Marcadores)
+    ...(e.tipo === 'DESCUENTO_SIN_RESPALDO' && Array.isArray(d.lineas_sin_respaldo) && d.descuento_crc_lineas != null
+      ? [['Sin respaldo en la factura', `${crc(d.descuento_crc_lineas)} en ${(d.lineas_sin_respaldo as unknown[]).length} ${(d.lineas_sin_respaldo as unknown[]).length === 1 ? 'línea' : 'líneas'}`] as [string, string]] : []),
     ...(Array.isArray(d.pos_logins) && d.pos_logins.length > 0
       ? [['Login del PoS', (d.pos_logins as string[]).map(l => Array.isArray(d.logins_fijos) && (d.logins_fijos as string[]).includes(l)
           ? `${l} (login fijo de caja)` : l).join(' · ')] as [string, string]] : []),

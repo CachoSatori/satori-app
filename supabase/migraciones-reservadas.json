@@ -279,6 +279,12 @@
       "rama": "claude/club-excepciones-abiertas-rapida",
       "renumerada_a": "183"
     },
+    "129": {
+      "nombre": "club_descuentos_todas_lineas",
+      "bloque": "club",
+      "rama": "claude/club-descuentos-todas-lineas",
+      "renumerada_a": "184"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -470,6 +476,12 @@
       "bloque": "pase",
       "rama": "claude/club-excepciones-abiertas-rapida",
       "origen": "128"
+    },
+    "184": {
+      "nombre": "club_descuentos_todas_lineas",
+      "bloque": "pase",
+      "rama": "claude/club-descuentos-todas-lineas",
+      "origen": "129"
     }
   }
 }

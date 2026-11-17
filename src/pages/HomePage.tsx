@@ -359,6 +359,8 @@ export default function HomePage() {
         <div className="header-user">
           <span className="user-name">{profile.full_name}</span>
           <span className="user-role">{ROLE_LABELS[profile.role] ?? profile.role}</span>
+          <button type="button" className="btn-signout btn-cuenta" onClick={() => navigate('/mi-cuenta')}
+            title="Cambiar mi contraseña" aria-label="Cambiar mi contraseña">鍵 Contraseña</button>
           <button className="btn-signout" onClick={signOut} title="Cerrar sesión">✕</button>
         </div>
       </header>

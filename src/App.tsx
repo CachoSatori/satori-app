@@ -31,6 +31,7 @@ const FinanzasModule    = lazy(() => import('./modules/finanzas/FinanzasModule')
 const InboxModule       = lazy(() => import('./modules/inbox/InboxModule'))
 const PruebaModule      = lazy(() => import('./modules/prueba/PruebaModule'))
 const RegistroCliente   = lazy(() => import('./pages/RegistroCliente'))
+const MiCuenta          = lazy(() => import('./pages/cuenta/MiCuenta'))
 
 // ── Loading fallback — same spinner used for auth ──────────────
 function ModuleLoading({ kanji = '祭' }: { kanji?: string }) {
@@ -165,6 +166,8 @@ function AppRoutes() {
         <Route path="/caja"     element={<PrivateRoute roles={['owner','manager','cajero','contador']}><CashModule /></PrivateRoute>} />
         <Route path="/ventas"   element={<PrivateRoute roles={['owner','manager','contador']}><VentasModule /></PrivateRoute>} />
         <Route path="/sops"          element={<PrivateRoute><SOPsModule /></PrivateRoute>} />
+        {/* «Cambiar mi contraseña»: cualquier usuario logueado, todos los roles. */}
+        <Route path="/mi-cuenta"     element={<PrivateRoute><MiCuenta /></PrivateRoute>} />
         {/* Mis Propinas se integró como pestaña de Mi Rendimiento (la "casa del empleado").
             La ruta vieja redirige a esa pestaña para no romper enlaces/cards del Home. */}
         <Route path="/mis-propinas"  element={<Navigate to="/mi-rendimiento?tab=propinas" replace />} />

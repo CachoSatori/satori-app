@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useCambioClave } from '../../shared/hooks/useCambioClave'
 import {
   PASSWORD_MIN_CAMBIO, validarCambio, evaluarPassword, FUERZA_TEXTO, MOTIVO_DEBIL, MENSAJE_FALLO, cambiarMiPassword,
 } from '../../shared/api/miPassword'
@@ -24,7 +25,9 @@ function useEnLinea(): boolean {
 type Listo = { otrasSesionesCerradas: boolean }
 
 export default function MiCuenta() {
-  const { user, profile } = useAuth()
+  const { user, profile, signOut } = useAuth()
+  // Cambio obligatorio (mig 185): el owner lo pidió; las rutas solo dejan estar acá hasta cambiarla.
+  const { debe: obligado, recargar } = useCambioClave()
   const navigate = useNavigate()
   const enLinea = useEnLinea()
   const [actual, setActual] = useState('')
@@ -53,6 +56,8 @@ export default function MiCuenta() {
     }
     // Hecho: los campos se vacían para que la contraseña no quede en pantalla ni en memoria del formulario.
     setActual(''); setNueva(''); setNueva2('')
+    // Si estaba obligado, se vuelve a preguntar a la base: con la contraseña nueva la marca se borra y se libera.
+    await recargar()
     setListo({ otrasSesionesCerradas: r.otrasSesionesCerradas })
   }
 
@@ -66,6 +71,12 @@ export default function MiCuenta() {
             {profile?.full_name ?? ''}{user?.email ? ` · ${user.email}` : ''}
           </p>
         </header>
+
+        {obligado && !listo && (
+          <p className="login-error" role="alert" data-testid="aviso-cambio-obligatorio">
+            Por seguridad tenés que cambiar tu contraseña antes de seguir.
+          </p>
+        )}
 
         {listo ? (
           <div className="login-form">
@@ -112,8 +123,13 @@ export default function MiCuenta() {
             <button type="submit" className="login-btn" disabled={guardando || !enLinea}>
               {!enLinea ? 'Necesitás conexión' : guardando ? 'Guardando…' : 'Cambiar contraseña'}
             </button>
-            <button type="button" className="login-btn secundario" style={{ marginTop: '0.5rem' }}
-              onClick={() => navigate('/')} disabled={guardando}>Cancelar</button>
+            {obligado ? (
+              <button type="button" className="login-btn secundario" style={{ marginTop: '0.5rem' }}
+                onClick={() => { void signOut() }} disabled={guardando}>Cerrar sesión</button>
+            ) : (
+              <button type="button" className="login-btn secundario" style={{ marginTop: '0.5rem' }}
+                onClick={() => navigate('/')} disabled={guardando}>Cancelar</button>
+            )}
           </form>
         )}
       </div>

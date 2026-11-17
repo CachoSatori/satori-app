@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { etiquetaTramo, rangoDeTramo, TRAMOS, tramoDe, tramoDelAnioAnterior, type Tramo } from './temporadas'
+import { etiquetaTramo, rangoDeTramo, TRAMOS, tramoAnterior, tramoDe, tramoDelAnioAnterior, type Tramo } from './temporadas'
 
 /** Todos los días de [desde, hasta] como `YYYY-MM-DD`, en UTC (sin huso: solo calendario). */
 function dias(desde: string, hasta: string): string[] {
@@ -80,5 +80,23 @@ describe('temporadas — bordes y etiquetas', () => {
 
   it('un día mal formado tira', () => {
     expect(() => tramoDe('2026-1-01')).toThrow()
+  })
+})
+
+describe('temporadas — tramoAnterior', () => {
+  it('termina justo el día antes del tramo, en todos los tramos 2024–2030', () => {
+    for (let anio = 2024; anio <= 2030; anio++) {
+      for (const id of TRAMOS) {
+        const t = rangoDeTramo(id, anio)
+        const ant = tramoAnterior(t)
+        const diaAntes = dias(ant.hasta, t.desde)
+        expect(diaAntes, `${id} ${anio}`).toHaveLength(2)
+        expect(ant.id).not.toBe(id)
+      }
+    }
+  })
+
+  it('la alta 2026 viene después de la baja sep–dic 2025', () => {
+    expect(tramoAnterior({ id: 'alta', anio: 2026 })).toEqual(rangoDeTramo('baja-sepdic', 2025))
   })
 })

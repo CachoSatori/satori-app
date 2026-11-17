@@ -35,12 +35,18 @@ export default function Retos({ owner }: { owner: boolean }) {
   }, [recarga])
   const nombreLocal = (id: string) => locales.find(l => l.id === id)?.nombre ?? id
   const anio = todayCR().slice(0, 4)
-  const armadosAnio = (lista ?? []).filter(r => r.armado && r.desde.startsWith(anio)).length
+  // mig 187: el tope de 3 armados por año es POR LOCAL (un reto es de un solo local)
+  const armadosPorLocal = new Map<string, number>()
+  for (const r of lista ?? []) {
+    if (!r.armado || !r.desde.startsWith(anio)) continue
+    for (const l of r.locales) armadosPorLocal.set(l, (armadosPorLocal.get(l) ?? 0) + 1)
+  }
+  const armadosTexto = [...armadosPorLocal].map(([l, n]) => `${nombreLocal(l)} ${n}`).sort().join(' · ') || 'ninguno'
 
   async function accion(r: Reto, que: 'armar' | 'terminar' | 'borrar') {
     const msg = que === 'armar'
-      ? `¿Armar «${r.nombre}»? Desde el ${fmtFecha(r.desde)} los socios lo ven y pueden ganar el premio. Armado ya no se edita, y cuenta para el máximo de 3 por año.`
-      : que === 'terminar' ? `¿Terminar «${r.nombre}»? Nadie más lo gana; los premios ya ganados se respetan. Sigue contando para el máximo del año, pero ya no bloquea su local.` : `¿Borrar el borrador «${r.nombre}»?`
+      ? `¿Armar «${r.nombre}»? Desde el ${fmtFecha(r.desde)} los socios lo ven y pueden ganar el premio. Armado ya no se edita, y cuenta para el máximo de 3 por año de su local.`
+      : que === 'terminar' ? `¿Terminar «${r.nombre}»? Nadie más lo gana; los premios ya ganados se respetan. Sigue contando para el máximo del año de su local, pero ya no bloquea su local.` : `¿Borrar el borrador «${r.nombre}»?`
     if (!window.confirm(msg)) return
     setEnviando(true); setError(null); setOk(null)
     try {
@@ -72,7 +78,7 @@ export default function Retos({ owner }: { owner: boolean }) {
       </div>
       <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
         Ej. «3 almuerzos este mes»: el socio ve su avance en «Mi Club» y, al cumplir, gana una cortesía que la caja ofrece una sola vez.
-        Solo socios del Local Club (el equipo no). Máximo 3 retos armados por año ({armadosAnio} en {anio}). Cuenta una visita por
+        Solo socios del Local Club (el equipo no). Máximo 3 retos armados por año en cada local (armados en {anio}: {armadosTexto}). Cuenta una visita por
         jornada (una noche que pasa la medianoche es una sola) y una sola cortesía de premio por factura.
       </div>
       {datos && (

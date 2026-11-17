@@ -140,7 +140,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 127 | → 182 |
 | 128 | → 183 |
 | 129 | → 184 |
-| 131 | → 187 (retos: un local por reto; PR en borrador, sin firma; va después de la 186) |
+| 131 | → 187 (retos: un local por reto + tope de 3 armados por año por local; PR en borrador, sin firma; va después de la 186) |
 | 150 | ← 075 |
 | 151 | ← 100 |
 | 153 | ← 096 |

@@ -23,9 +23,11 @@ insert into auth.users (id, raw_user_meta_data) values ('00000000-0000-4000-8187
 update public.profiles set role = 'owner', is_active = true where id = '00000000-0000-4000-8187-0000000000aa';
 """
 
-GUARDA_FINAL = ("    raise exception '187: el CHECK, el trigger o sus permisos no quedaron como se esperaba';", "    null;")
-# nombre → ([(texto de la 187, reemplazo, veces)], casos que tienen que caer). Toda mutación apaga además la guarda final
-# de la 187 (si no, la migración mutada aborta entera y no se ve qué caso muerde).
+GUARDAS = [("    raise exception '187: el CHECK, el trigger o sus permisos no quedaron como se esperaba';", "    null;", 1),
+           ("  if md5(pg_get_functiondef(v_fn)) <> 'badac2f48c64e3c57db7af170be173d0' then\n", "  if false then\n", 1)]
+# nombre → ([(texto de la 187, reemplazo, veces)], casos que tienen que caer). Toda mutación apaga además las guardas
+# finales de la 187 (la del CHECK/trigger y el md5 «después» del tope; si no, la migración mutada aborta entera y no se ve
+# qué caso muerde).
 MUTACIONES: dict[str, tuple] = {
     # sin el CHECK: solo queda el trigger
     'sin_check': ([("alter table public.club_retos add constraint club_retos_un_local check (cardinality(locales) = 1);\n", "", 1)], {'03', '06'}),
@@ -34,6 +36,10 @@ MUTACIONES: dict[str, tuple] = {
     # el trigger solo mira los INSERT: editar un borrador a dos locales da el mensaje genérico
     'trigger_solo_insert': ([("before insert or update of locales on public.club_retos", "before insert on public.club_retos", 1)], {'02'}),
     # el pre-chequeo no mira los retos existentes
+    # el tope vuelve a contar todos los locales juntos (la 169)
+    'tope_global': ([("\n     and r.locales && new.locales;   -- 187: el tope es POR LOCAL (un reto es de un solo local)\n", ";\n", 1)], {'09'}),
+    # sin la guarda de md5 «antes» (R13): el bloque del tope corre sobre una definición distinta
+    'sin_guarda_md5': ([("  if md5(v_def) <> '000ef92116630f046136fc56a90f5b6f' then\n", "  if false then\n", 1)], {'10'}),
     'sin_prechequeo': ([("  if exists (select 1 from public.club_retos r where cardinality(r.locales) <> 1) then\n",
                          "  if false then\n", 1)], {'08'}),
 }
@@ -46,15 +52,25 @@ def _sacar_beg_com(txt: str) -> str:
 def cuerpo(mutar: str | None) -> str:
     mig = MIG.read_text(encoding='utf-8')
     if mutar:
-        for viejo, nuevo, veces in MUTACIONES[mutar][0] + [GUARDA_FINAL + (1,)]:
+        for viejo, nuevo, veces in MUTACIONES[mutar][0] + GUARDAS:
             if mig.count(viejo) != veces:
                 sys.exit(f'mutación {mutar}: el ancla no está (o está repetida) en la 187')
             mig = mig.replace(viejo, nuevo)
     return _sacar_beg_com(mig)
 
 
-def cuerpo_rollback(_mutar: str | None) -> str:
-    return _sacar_beg_com(ROLLBACK.read_text(encoding='utf-8'))
+GUARDAS_ROLLBACK = [("  if md5(v_def) <> 'badac2f48c64e3c57db7af170be173d0' then\n", "  if false then\n"),
+                    ("  if md5(pg_get_functiondef(v_fn)) <> '000ef92116630f046136fc56a90f5b6f' then\n", "  if false then\n")]
+
+
+def cuerpo_rollback(mutar: str | None) -> str:
+    rb = ROLLBACK.read_text(encoding='utf-8')
+    if mutar:   # con la 187 mutada, club_retos_reglas no es la de la 187: el rollback no aborta y el caso 07 lo ve
+        for viejo, nuevo in GUARDAS_ROLLBACK:
+            if rb.count(viejo) != 1:
+                sys.exit('rollback 187: el ancla de una guarda no está (o está repetida)')
+            rb = rb.replace(viejo, nuevo)
+    return _sacar_beg_com(rb)
 
 
 def prechequeo(mutar: str | None) -> str:
@@ -65,9 +81,17 @@ def prechequeo(mutar: str | None) -> str:
             + m.group(0) + '$q187$; end $p187$;')
 
 
+def reglas_bloque(mutar: str | None) -> str:
+    m = re.search(r'(?ms)^do \$\$\ndeclare\n  v_fn  constant regprocedure := \'public\.club_retos_reglas\(\)\'.*?^\$\$;', cuerpo(mutar))
+    if not m:
+        sys.exit('187: no encontré el bloque «do $$ … $$;» del tope (club_retos_reglas)')
+    return ('create function pg_temp.reglas_bloque() returns void language plpgsql as $p187$ begin execute $q187$'
+            + m.group(0) + '$q187$; end $p187$;')
+
+
 def armar(mutar: str | None, semilla: bool = False) -> str:
     sql = BATERIA.read_text(encoding='utf-8')
-    for marca, fn in (('@@187PRE@@', prechequeo), ('@@187@@', cuerpo), ('@@187R@@', cuerpo_rollback)):
+    for marca, fn in (('@@187PRE@@', prechequeo), ('@@187@@', cuerpo), ('@@187REGLAS@@', reglas_bloque), ('@@187R@@', cuerpo_rollback)):
         sql, n = re.subn(r'(?m)^ *-- ' + re.escape(marca) + r'.*$', lambda _: fn(mutar), sql)
         if n != 1:
             sys.exit(f'187_pruebas.sql: falta el marcador «-- {marca}» (o está repetido)')

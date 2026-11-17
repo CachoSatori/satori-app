@@ -5,7 +5,8 @@
 --
 -- MARCADORES que llena el runner: «-- @@187@@» → cuerpo de supabase/migrations/187_… sin begin/commit (con --mutar, con
 -- el arreglo roto a propósito); «-- @@187R@@» → cuerpo de scripts/sql/187_rollback.sql sin begin/commit;
--- «-- @@187PRE@@» → la función pg_temp.prechequeo() con el PRIMER bloque «do $$ … $$;» de la 187 (el pre-chequeo).
+-- «-- @@187PRE@@» → la función pg_temp.prechequeo() con el PRIMER bloque «do $$ … $$;» de la 187 (el pre-chequeo);
+-- «-- @@187REGLAS@@» → la función pg_temp.reglas_bloque() con el bloque «do $$ … $$;» del tope por local (caso 10).
 -- Locales FICTICIOS prueba187a y prueba187b; un owner activo de la base (en local lo crea --semilla-local) y un manager
 -- de prueba187a ficticio. Fechas del reto en 2032 (nunca en el pasado).
 begin;
@@ -149,11 +150,44 @@ select '06 función del trigger sin EXECUTE para la API; CHECK validado; el trig
            = array['club_retos_a_un_local_trg', 'club_retos_reglas_trg'],
        null;
 
--- 07. rollback: se van el trigger, la función y el CHECK; los retos quedan
+-- 09. tope de 3 armados por año POR LOCAL (decisión del dueño 17-nov): A arma 3 en 2033 y el 4.º de A se rechaza con el
+--     nombre del local; B, en el mismo año y con A ya en 3, arma igual (con el tope de la 169, todos juntos, caía)
+do $$ declare v uuid; e text; e4 text; eb text; i int;
+begin
+  for i in 1..3 loop
+    e := concat_ws(' | ', e, pg_temp.guardar(null, pg_temp.datos('Tope A' || i, array['prueba187a'], make_date(2033, i + 1, 1))));
+    v := (select id from public.club_retos where nombre = 'Tope A' || i);
+    e := concat_ws(' | ', e, pg_temp.err_como((select owner_id from _c187), format('public.club_reto_armar(%L::uuid)', v)));
+  end loop;
+  e4 := pg_temp.guardar(null, pg_temp.datos('Tope A4', array['prueba187a'], date '2033-06-01'));
+  e4 := concat_ws(' | ', e4, pg_temp.err_como((select owner_id from _c187),
+          format('public.club_reto_armar(%L::uuid)', (select id from public.club_retos where nombre = 'Tope A4'))));
+  eb := pg_temp.guardar(null, pg_temp.datos('Tope B1', array['prueba187b'], date '2033-02-01'));
+  eb := concat_ws(' | ', eb, pg_temp.err_como((select owner_id from _c187),
+          format('public.club_reto_armar(%L::uuid)', (select id from public.club_retos where nombre = 'Tope B1'))));
+  insert into _r187 (caso, ok, detalle) values ('09 tope por local: A arma 3 en 2033, el 4.º de A → «Ya hay 3 retos armados en 2033 en «Local Ficticio A»»; B arma igual',
+    nullif(e, '') is null and e4 like 'P0001:Ya hay 3 retos armados en 2033 en «Local Ficticio A»: es el máximo por año y local%'
+    and (select armado_en from public.club_retos where nombre = 'Tope A4') is null
+    and nullif(eb, '') is null and (select estado from public.club_retos where nombre = 'Tope B1') = 'vigente',
+    concat_ws(' || ', e, e4, eb));
+end $$;
+
+-- 10. guarda de md5 (R13): con club_retos_reglas ya cambiada, el bloque del tope de la 187 aborta sin tocar nada
+-- @@187REGLAS@@   (aquí va create function pg_temp.reglas_bloque() … con el bloque «do $$ … $$;» del tope de la 187)
+do $$ declare e text; m0 text := md5(pg_get_functiondef('public.club_retos_reglas()'::regprocedure));
+begin
+  e := pg_temp.error_de('select pg_temp.reglas_bloque()');
+  insert into _r187 (caso, ok, detalle) values ('10 guarda de md5: sobre una club_retos_reglas distinta de la 169, el bloque aborta «no es la esperada» y no la cambia',
+    e like 'P0001:187: club_retos_reglas no es la esperada (la de la 169)%'
+    and md5(pg_get_functiondef('public.club_retos_reglas()'::regprocedure)) = m0, e);
+end $$;
+
+-- 07. rollback: se van el trigger, la función y el CHECK; club_retos_reglas vuelve a la de la 169; los retos quedan
 -- @@187R@@   (aquí va el cuerpo de scripts/sql/187_rollback.sql sin begin/commit)
 insert into _r187 (caso, ok, detalle)
-select '07 rollback: sin trigger, función ni CHECK; Reto A y Reto B siguen',
-       to_regprocedure('public.club_retos_a_un_local()') is null
+select '07 rollback: sin trigger, función ni CHECK; club_retos_reglas = la de la 169 (md5); Reto A y Reto B siguen',
+       md5(pg_get_functiondef('public.club_retos_reglas()'::regprocedure)) = '000ef92116630f046136fc56a90f5b6f'
+       and to_regprocedure('public.club_retos_a_un_local()') is null
        and not exists (select 1 from pg_constraint where conname = 'club_retos_un_local')
        and not exists (select 1 from pg_trigger where tgname = 'club_retos_a_un_local_trg')
        and (select count(*) from public.club_retos where nombre in ('Reto A', 'Reto B')) = 2,
@@ -174,12 +208,12 @@ end $$;
 select json_agg(json_build_object('caso', caso, 'ok', ok, 'detalle', detalle) order by n) from _r187;
 
 -- ASSERT: cada caso que falla sale como WARNING («187 FALLA <caso> — <detalle>»), después el resumen
--- («187 RESUMEN: pasaron X / fallaron Y de 9») y, si Y > 0 o faltan casos, la transacción ABORTA con
+-- («187 RESUMEN: pasaron X / fallaron Y de 11») y, si Y > 0 o faltan casos, la transacción ABORTA con
 -- «187-FALLAN: <casos> · pasaron X / fallaron Y». Este bloque NO lleva «exception when others».
 do $$
 declare
   r record;
-  v_esp constant int := 9;
+  v_esp constant int := 11;
   v_tot int; v_ok int; v_mal int; v_lista text;
 begin
   for r in select caso, detalle from _r187 where ok is not true order by n loop   -- null = falla

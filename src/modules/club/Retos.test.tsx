@@ -6,6 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { QueAplicar, Reto, RetoDatos } from '../../shared/api/club'
 import Retos from './Retos'
 import { problemaReto, resumenFranja } from './retosReglas'
+import { todayCR } from '../../shared/utils'
 
 const rol = vi.hoisted(() => ({ v: 'owner' }))
 const api = vi.hoisted(() => ({
@@ -48,7 +49,7 @@ describe('Promociones · retos (mig 169)', () => {
     expect(screen.getByText(/Lu Ma Mi Ju Vi · 11:30–15:00/)).toBeTruthy()
     fireEvent.click(screen.getByText('Armar'))
     await waitFor(() => expect(api.armarReto).toHaveBeenCalledWith('r1'))
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('máximo de 3 por año'))
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('máximo de 3 por año de su local'))
     expect(await screen.findByText('«3 almuerzos ficticios» armado.')).toBeTruthy()
     expect(screen.getByText('Terminar')).toBeTruthy()
     expect(screen.queryByText('Editar')).toBeNull()
@@ -79,9 +80,18 @@ describe('Promociones · retos (mig 169)', () => {
     expect(screen.queryByText('Dejar de exigir')).toBeNull()
   })
 
+  it('mig 187: el tope de 3 armados por año se cuenta POR LOCAL en el texto de la lista', async () => {
+    const anio = todayCR().slice(0, 4)
+    const armado = (id: string, loc: string, mes: string): Reto => ({ ...reto, id, nombre: `Reto ${id}`, locales: [loc], estado: 'vigente', armado: true, desde: `${anio}-${mes}-01`, hasta: `${anio}-${mes}-20` })
+    api.getRetos.mockResolvedValue({ exige_factura: true, retos: [armado('a1', 'loc-a', '01'), armado('a2', 'loc-a', '02'), armado('b1', 'loc-b', '03'), reto] })
+    render(<Retos owner />)
+    expect(await screen.findByText(/Máximo 3 retos armados por año en cada local/)).toBeTruthy()
+    expect(screen.getByText(new RegExp(`armados en ${anio}: Local Ficticio A 2 · loc-b 1\\)`))).toBeTruthy()
+  })
+
   it('error de la base (4.º del año) se muestra tal cual', async () => {
     api.getRetos.mockResolvedValue({ exige_factura: true, retos: [reto] })
-    api.armarReto.mockRejectedValue(new Error('Ya hay 3 retos armados en 2026: es el máximo por año'))
+    api.armarReto.mockRejectedValue(new Error('Ya hay 3 retos armados en 2026 en «Local Ficticio A»: es el máximo por año y local'))
     render(<Retos owner />)
     fireEvent.click(await screen.findByText('Armar'))
     expect(await screen.findByText(/Ya hay 3 retos armados en 2026/)).toBeTruthy()

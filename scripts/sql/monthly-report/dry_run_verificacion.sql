@@ -20,7 +20,8 @@ begin
   end loop;
 end $$;
 
--- ~30 s después (solo lectura). Esperado, en este orden de ids:
+-- ~30 s después (solo lectura). Esperado (la consulta ordena por id DESC: la última llamada sale primera).
+-- En el orden en que se encolaron (ids crecientes, o sea de abajo hacia arriba en el resultado):
 --   200 {"ok":true,"month":"octubre de 2026","periodo":"mes","dry_run":true,"enviados":["ventas","propinas"],...}
 --   200 {"ok":true,"month":"1.ª quincena de noviembre de 2026","periodo":"quincena","dry_run":true,"enviados":[...]}
 --   200 {"ok":true,"month":"1.ª quincena de octubre de 2026","periodo":"quincena","dry_run":true,...}

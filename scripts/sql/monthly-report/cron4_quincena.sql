@@ -4,7 +4,7 @@
 -- URL y Authorization (service_role desde Vault) quedan exactamente como están: se hace replace sobre el comando vivo,
 -- así este archivo no lleva el ref ni ninguna clave.
 -- Orden: DESPUÉS de desplegar la Edge nueva (con la Edge vieja, `periodo` se ignora y manda el mes anterior: inocuo).
--- Antes de correrlo: leer el ref en pantalla (yiczgdti… = PROD).
+-- Antes de correrlo: leer el ref en pantalla y confirmar que es PROD.
 begin;
 
 do $$

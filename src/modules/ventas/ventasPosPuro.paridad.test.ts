@@ -15,6 +15,8 @@ import { pathToFileURL } from 'node:url'
 
 vi.mock('../../shared/api/supabase', () => ({ supabase: null }))
 import * as app from './ventasPosPuro'
+import { SALONEROS_CONOCIDOS } from '../../shared/ndf/mapTicket'
+import { personasConocidas } from '../../shared/ndf/personasNdf'
 
 const DIR = new URL('./__paridad__/', import.meta.url).pathname
 const RAIZ = new URL('../../../', import.meta.url).pathname
@@ -50,6 +52,14 @@ describe('paridad de ventas desde el PoS: app ↔ paquete de la Edge', () => {
     const codigo: string = await empaquetar()
     expect(codigo).not.toMatch(/^import /m)              // sin dependencias: Deno lo carga tal cual
     expect(codigo).not.toMatch(/import\.meta\.env/)
+    // Privacidad (D3): el paquete NO copia el roster de nombres reales (va vacío; la Edge lee `employees`).
+    expect(codigo).toMatch(/const SALONEROS_CONOCIDOS = \{\}/)
+    expect(Object.keys(SALONEROS_CONOCIDOS).length).toBeGreaterThan(0)
+    const meseros = personasConocidas().filter(p => p.rol === 'mesero')
+    expect(meseros.length).toBeGreaterThan(0)
+    const nombres = [...Object.values(SALONEROS_CONOCIDOS), ...meseros.map(p => p.etiqueta)]
+    for (const n of nombres) expect(codigo.toLowerCase(), n).not.toMatch(new RegExp(`\\b${n.toLowerCase()}\\b`))
+    expect(codigo).not.toMatch(/\/\/|\/\*/)            // sin comentarios
     const archivo = join(mkdtempSync(join(tmpdir(), 'paridad-')), 'ventasPos.gen.mjs')
     writeFileSync(archivo, cabecera(codigo) + codigo)
     const paquete = await import(/* @vite-ignore */ pathToFileURL(archivo).href) as Modulo

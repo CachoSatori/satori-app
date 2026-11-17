@@ -6,10 +6,14 @@
 //
 // · El cliente de Supabase de la app (`shared/api/supabase.ts`, Vite) se reemplaza por un módulo
 //   vacío: lo puro no lo usa, y así el paquete no arrastra supabase-js ni `import.meta.env`.
+// · Privacidad (D3, repo público): el roster `SALONEROS_CONOCIDOS` de `mapTicket.ts` (nombres reales) se
+//   reemplaza por `{}`. La Edge saca los nombres de `employees` (pos_login → full_name, la misma primera capa
+//   que la app); un login que no esté ahí sale «sin asignar», no rompe.
 // · La cabecera lleva el commit y el sha256 del contenido, para saber de qué `src/` salió.
 // · `ventasPosPuro.paridad.test.ts` arma el paquete en memoria con `empaquetar()` y lo compara
 //   contra la app en el caso de `__paridad__/`.
 import { rolldown } from 'rolldown'
+import ts from 'typescript'
 import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
@@ -29,11 +33,32 @@ export async function empaquetar() {
       name: 'supabase-vacio',
       resolveId(id) { return /(^|\/)supabase$/.test(id) && !id.includes('@supabase') ? STUB : null },
       load(id) { return id === STUB ? 'export const supabase = null' : null },
+    }, {
+      name: 'sin-roster-de-nombres',
+      transform(code, id) {
+        if (!id.endsWith('/shared/ndf/mapTicket.ts')) return null
+        const re = /export const SALONEROS_CONOCIDOS: Record<string, string> = \{[\s\S]*?\n\}/
+        if (!re.test(code)) throw new Error('empaquetar: no encontré SALONEROS_CONOCIDOS en mapTicket.ts')
+        return code.replace(re, 'export const SALONEROS_CONOCIDOS: Record<string, string> = {}')
+      },
+    }, {
+      // `personasNdf.ts` une los códigos de una misma persona (eso se queda) y le pone una etiqueta con
+      // su nombre (eso NO viaja): la etiqueta de cada mesero pasa a «<código> · sin asignar».
+      name: 'sin-etiquetas-de-nombres',
+      transform(code, id) {
+        if (!id.endsWith('/shared/ndf/personasNdf.ts')) return null
+        const re = /(\{ id: '([^']+)',\s*rol: 'mesero',\s*etiqueta: )'[^']*'/g
+        if (!re.test(code)) throw new Error('empaquetar: no encontré las etiquetas de meseros en personasNdf.ts')
+        return code.replace(re, (_m, pre, cod) => `${pre}'${cod} · sin asignar'`)
+      },
     }],
   })
   const { output } = await b.generate({ format: 'esm' })
   await b.close()
-  return output[0].code
+  // Sin comentarios: los de `src/` nombran personas en el texto (repo público, D3).
+  return ts.transpileModule(output[0].code, {
+    compilerOptions: { removeComments: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText
 }
 
 export function cabecera(codigo) {

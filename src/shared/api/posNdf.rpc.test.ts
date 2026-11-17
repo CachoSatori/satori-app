@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const H = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn() }))
 vi.mock('./supabase', () => ({ supabase: { rpc: H.rpc, from: H.from } }))
 
-const { getTicketsRango, getLineasDeTickets, getLatidoVentas, ventanaRangoJornadas } = await import('./posNdf')
+const { getTicketsRango, getLineasDeTickets, getLatidoVentas, ventanaRangoJornadas, TANDAS_EN_PARALELO } = await import('./posNdf')
 
 const filas = (n: number, pref: string) => Array.from({ length: n }, (_, i) => ({ id: `${pref}${i}` }))
 
@@ -36,16 +36,36 @@ describe('getTicketsRango → pos_ventas_tickets_rango', () => {
 describe('getLineasDeTickets → pos_ventas_lineas', () => {
   it('parte los ids en tandas de 200 y pagina las filas de cada tanda', async () => {
     const ids = Array.from({ length: 250 }, (_, i) => `t${i}`)
-    H.rpc
-      .mockResolvedValueOnce({ data: filas(1000, 'x'), error: null })   // tanda 1, página 1
-      .mockResolvedValueOnce({ data: filas(10, 'y'), error: null })     // tanda 1, página 2
-      .mockResolvedValueOnce({ data: filas(5, 'z'), error: null })      // tanda 2
+    // Respuesta por (tanda, offset): las tandas van en paralelo, así que el orden de las llamadas no es fijo.
+    H.rpc.mockImplementation(async (_fn: string, a: { p_ticket_ids: string[]; p_offset: number }) => {
+      if (a.p_ticket_ids[0] === 't0') return { data: a.p_offset === 0 ? filas(1000, 'x') : filas(10, 'y'), error: null }
+      return { data: filas(5, 'z'), error: null }
+    })
     const r = await getLineasDeTickets(ids)
     expect(r).toHaveLength(1015)
-    expect(H.rpc).toHaveBeenNthCalledWith(1, 'pos_ventas_lineas', { p_ticket_ids: ids.slice(0, 200), p_limit: 1000, p_offset: 0 })
-    expect(H.rpc).toHaveBeenNthCalledWith(2, 'pos_ventas_lineas', { p_ticket_ids: ids.slice(0, 200), p_limit: 1000, p_offset: 1000 })
-    expect(H.rpc).toHaveBeenNthCalledWith(3, 'pos_ventas_lineas', { p_ticket_ids: ids.slice(200), p_limit: 1000, p_offset: 0 })
+    expect(H.rpc).toHaveBeenCalledWith('pos_ventas_lineas', { p_ticket_ids: ids.slice(0, 200), p_limit: 1000, p_offset: 0 })
+    expect(H.rpc).toHaveBeenCalledWith('pos_ventas_lineas', { p_ticket_ids: ids.slice(0, 200), p_limit: 1000, p_offset: 1000 })
+    expect(H.rpc).toHaveBeenCalledWith('pos_ventas_lineas', { p_ticket_ids: ids.slice(200), p_limit: 1000, p_offset: 0 })
+    expect(H.rpc).toHaveBeenCalledTimes(3)
+    // El orden del resultado es el de las tandas (tanda 1 entera, después la 2).
+    expect(r.map(x => (x as unknown as { id: string }).id.slice(0, 1)).join('')).toBe('x'.repeat(1000) + 'y'.repeat(10) + 'z'.repeat(5))
     expect(H.from).not.toHaveBeenCalled()
+  })
+
+  it('pide las tandas de a TANDAS_EN_PARALELO a la vez (P&L de un año) y no más', async () => {
+    const ids = Array.from({ length: 200 * 10 }, (_, i) => `t${i}`)
+    let enVuelo = 0, maximo = 0
+    H.rpc.mockImplementation(async (_fn: string, a: { p_ticket_ids: string[] }) => {
+      enVuelo++; maximo = Math.max(maximo, enVuelo)
+      await new Promise(r => setTimeout(r, 5))
+      enVuelo--
+      return { data: [{ id: a.p_ticket_ids[0] }], error: null }
+    })
+    const r = await getLineasDeTickets(ids)
+    expect(maximo).toBe(TANDAS_EN_PARALELO)
+    expect(TANDAS_EN_PARALELO).toBeGreaterThanOrEqual(3)
+    expect(TANDAS_EN_PARALELO).toBeLessThanOrEqual(4)
+    expect(r.map(x => (x as unknown as { id: string }).id)).toEqual(Array.from({ length: 10 }, (_, i) => `t${i * 200}`))
   })
 
   it('sin ids no consulta', async () => {

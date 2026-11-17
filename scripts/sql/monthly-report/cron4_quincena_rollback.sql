@@ -1,24 +1,29 @@
--- ⛔ PROD — vuelta atrás de cron4_quincena.sql: el job 4 vuelve a mandar body '{}' (mes anterior completo, como v20).
--- Va JUNTO con redesplegar la Edge v20 (o solo, si se quiere el día 15 mensual otra vez). Leer el ref antes.
+-- ⛔ PROD — vuelta atrás de cron4_quincena.sql: el job 4 vuelve EXACTAMENTE al comando anterior
+-- (md5 95d77b5e87b3066ac3c199358966aac0, body '{}' = mes anterior completo, como v20).
+-- Sin `for update` (postgres no tiene UPDATE sobre cron.job): solo cron.alter_job. Leer el ref antes.
 begin;
 
 do $$
 declare
   j record;
+  viejo text;
 begin
-  select jobid, jobname, command into j from cron.job where jobid = 4 for update;
+  select jobid, jobname, command into j from cron.job where jobid = 4;
   if not found or j.jobname <> 'satori-quincenal-report' then raise exception 'PARAR: job 4 inesperado'; end if;
-  if j.command not like '%body := ''{"periodo":"quincena"}''::jsonb%' then
-    raise exception 'PARAR: el job 4 no tiene el body de quincena (nada que revertir)';
+  if md5(j.command) <> '122fa7131bc0c51dacf00c18dca8dedf' then
+    raise exception 'PARAR: el job 4 no tiene el comando de quincena (md5 %)', md5(j.command);
   end if;
-  perform cron.alter_job(job_id := 4,
-    command := replace(j.command, 'body := ''{"periodo":"quincena"}''::jsonb', 'body := ''{}''::jsonb'));
+  viejo := replace(j.command, 'body := ''{"periodo":"quincena"}''::jsonb', 'body := ''{}''::jsonb');
+  if md5(viejo) <> '95d77b5e87b3066ac3c199358966aac0' then
+    raise exception 'PARAR: la vuelta no reconstruye el comando original (md5 %)', md5(viejo);
+  end if;
+  perform cron.alter_job(job_id := 4, command := viejo);
 end $$;
 
 do $$
 begin
-  if (select command from cron.job where jobid = 4) not like '%body := ''{}''::jsonb%' then
-    raise exception 'PARAR: el job 4 no volvió a ''{}''';
+  if (select md5(command) from cron.job where jobid = 4) <> '95d77b5e87b3066ac3c199358966aac0' then
+    raise exception 'PARAR: el job 4 no volvió al comando original';
   end if;
 end $$;
 

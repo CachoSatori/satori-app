@@ -40,6 +40,23 @@ const COMUNES = ['satori', 'sushi', 'password', 'contrasena', 'qwerty', 'asdf', 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
 
 /**
+ * Cuántos tipos de carácter tiene: minúscula, mayúscula, número, símbolo. Letras con tilde y la ñ son letras
+ * (`\p{L}`), no símbolos; el espacio no suma ningún tipo; una sola mayúscula al principio («Murcielago») no cuenta
+ * como mayúscula (es lo primero que cualquiera prueba).
+ */
+export function tiposDeCaracter(p: string): number {
+  const t = p.trim()
+  const mayusculas = (t.match(/\p{Lu}/gu) ?? []).length
+  const soloInicial = mayusculas === 1 && /^\p{Lu}/u.test(t)
+  return [
+    /\p{Ll}/u.test(t),
+    mayusculas > 0 && !soloInicial,
+    /\p{N}/u.test(t),
+    /[^\p{L}\p{N}\s]/u.test(t),
+  ].filter(Boolean).length
+}
+
+/**
  * Fuerza simple. «Débil» no se acepta (`validarCambio`, decisión del dueño 17-nov).
  * Débil: menos del mínimo, una palabra común del local, 4 caracteres iguales seguidos o un solo tipo de carácter
  * corto. Fuerte: 14 o más con 3 tipos (minúscula, mayúscula, número, símbolo), o 18 o más con 2. El resto, aceptable.
@@ -49,7 +66,7 @@ export function fuerzaPassword(p: string): Fuerza {
   const plano = sinTildes(p.toLowerCase())
   if (COMUNES.some(w => plano.includes(w))) return 'debil'
   if (/(.)\1{3,}/.test(p)) return 'debil'
-  const tipos = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(r => r.test(p)).length
+  const tipos = tiposDeCaracter(p)
   if ((p.length >= 14 && tipos >= 3) || (p.length >= 18 && tipos >= 2)) return 'fuerte'
   if (tipos >= 2 || p.length >= 16) return 'media'
   return 'debil'

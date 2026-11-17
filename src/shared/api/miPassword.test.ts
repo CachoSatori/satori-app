@@ -5,7 +5,7 @@ const sb = vi.hoisted(() => ({ signIn: vi.fn(), update: vi.fn(), signOut: vi.fn(
 vi.mock('./supabase', () => ({ supabase: { auth: { signInWithPassword: sb.signIn, updateUser: sb.update, signOut: sb.signOut } } }))
 
 import {
-  validarCambio, fuerzaPassword, MENSAJE_DEBIL, motivoReingreso, motivoActualizar, cambiarMiPassword, PASSWORD_MIN_CAMBIO,
+  validarCambio, fuerzaPassword, tiposDeCaracter, MENSAJE_DEBIL, motivoReingreso, motivoActualizar, cambiarMiPassword, PASSWORD_MIN_CAMBIO,
 } from './miPassword'
 
 describe('validarCambio', () => {
@@ -44,9 +44,27 @@ describe('fuerzaPassword', () => {
     ['repetida', 'aaaaBBBB1234', 'debil'],
     ['un solo tipo, 10', 'murcielago', 'debil'],
     ['dos tipos, 12', 'murcielago77', 'media'],
-    ['frase larga un tipo', 'tortuga verde en la playa', 'fuerte'],
+    ['frase larga un tipo (los espacios no suman)', 'tortuga verde en la playa', 'media'],
+    ['frase con un número', 'tortuga verde 27 playa', 'fuerte'],
+    // Bordes (verificador de d934a586): tilde, ñ y espacio no cuentan como símbolo; mayúscula solo inicial no suma.
+    ['tilde = letra', 'murciélago', 'debil'],
+    ['ñ = letra', 'mañanitass', 'debil'],
+    ['espacio final', 'murcielago ', 'debil'],
+    ['espacio inicial', ' murcielago', 'debil'],
+    ['espacios en el medio', 'murci elago', 'debil'],
+    ['solo mayúscula inicial', 'Murcielago', 'debil'],
+    ['mayúscula inicial con tilde', 'Murciélagos', 'debil'],
+    ['mayúscula en el medio sí suma', 'murciElago', 'media'],
+    ['tilde con número', 'murciélago7', 'media'],
+    ['símbolo real', 'murcielago!', 'media'],
     ['14 con tres tipos', 'Tortuga-verde7', 'fuerte'],
   ])('%s', (_c, p, f) => expect(fuerzaPassword(p)).toBe(f))
+})
+
+describe('tiposDeCaracter', () => {
+  it.each([
+    ['áéíóúñ', 1], ['ÁÉÑ', 1], ['a b', 1], ['Abc', 1], ['aBc', 2], ['ABc', 2], ['a1', 2], ['a!', 2], ['a¿', 2], ['aB1!', 4],
+  ])('%s → %i', (p, n) => expect(tiposDeCaracter(p as string)).toBe(n))
 })
 
 describe('traducción de errores', () => {

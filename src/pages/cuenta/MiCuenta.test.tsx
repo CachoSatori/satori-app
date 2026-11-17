@@ -44,6 +44,20 @@ afterEach(() => {
 })
 
 describe('MiCuenta · cambiar mi contraseña', () => {
+  it('los campos son type=password con el autocomplete correcto (gestores de contraseñas, nada visible)', () => {
+    pantalla()
+    const campos: [string, string][] = [
+      ['Contraseña actual', 'current-password'],
+      ['Contraseña nueva (mínimo 10)', 'new-password'],
+      ['Repetir contraseña nueva', 'new-password'],
+    ]
+    for (const [label, ac] of campos) {
+      const el = screen.getByLabelText(label) as HTMLInputElement
+      expect(el.getAttribute('type')).toBe('password')
+      expect(el.getAttribute('autocomplete')).toBe(ac)
+    }
+  })
+
   it('flujo feliz: reingresa, cambia, cierra las otras sesiones y avisa', async () => {
     pantalla()
     llenar(ACTUAL, NUEVA)

@@ -32,7 +32,7 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   REGISTRO_LC_SIN_856:      { titulo: 'Visita de socio sin el 856', que: 'Se registró la visita del socio (con beneficio), pero su factura no tiene el artículo LOCAL CLUB.' },
   CANJE_CON_DESCUENTO:      { titulo: 'Canje con descuento', que: 'Factura pagada con créditos que además tiene el Local Club, la promo, un marcador de descuento o una cortesía. Regla fija: con créditos, sin descuento.' },
   DESCUENTO_SIN_RESPALDO:   { titulo: 'Descuento sin respaldo', que: 'Una línea por debajo de su precio habitual (moda de los 30 días anteriores) en una factura sin cupón ni marcador de descuento. Si era un descuento autorizado (tarjeta de hotel, personal…), cargá su artículo en Club → Descuentos y deja de salir.' },
-  SOCIO_USO_ANOMALO:        { titulo: 'Uso raro del QR de socio', que: 'El mismo socio en dos mesas el mismo día, o más visitas en la semana que el máximo configurado.' },
+  SOCIO_USO_ANOMALO:        { titulo: 'Uso raro del QR de socio', que: 'El mismo socio en dos mesas en la misma comida (almuerzo o cena), o más días con visita en la semana que el máximo configurado.' },
   CUPON_AUTOREFERIDO:       { titulo: 'Cupón autorreferido', que: 'Cupón de un anfitrión usado en una visita donde él mismo es socio: no debió sumar.' },
   CORTESIA_DISTINTA:        { titulo: 'Cortesía distinta', que: 'En la factura de la visita se cobró otra cortesía de «CORTESÍA CLUB» que la sorteada, o más de las sorteadas.' },
   CORTESIA_SIN_SOCIO:       { titulo: 'Cortesía sin socio', que: 'Un artículo de «CORTESÍA CLUB» en una factura sin visita de socio.' },

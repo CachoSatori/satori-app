@@ -157,5 +157,6 @@ Diagnóstico, sin cambiar nada:
 | 2026-11-16 22:04 | sesión | 183 v1 aplicada en staging (ledger staging 183) |
 | 2026-11-16 ~22:15 | verificador independiente | CAMBIOS: desempate fijo, sin índice nuevo si alcanza, humo del reporte |
 | 2026-11-16 22:30 | sesión | Staging pasa al núcleo final `100caed1…`; queda el `drop` del índice v1 (pendiente, CC del dueño) |
-| | dueño | Firma SQL para prod sobre el SHA: ________ |
-| | control | §5 antes / §6 después |
+| 2026-11-17 02:53 | dueño | Firma SQL para prod por el chat (OK de merge del #240) |
+| 2026-11-17 03:06 | sesión | Merge del #240 (`51a765a`); Branching aplicó la 183 (ledger prod 183) |
+| 2026-11-17 | control | §6 OK: ledger 183, núcleo `100caed1`, contador y permisos sin cambio. Humo: contador y filas de excepciones iguales a §5, facturas del reporte iguales y el descuento estable entre llamadas. El contador tarda unos 0,14 s |

@@ -11,7 +11,8 @@
 -- la fila y reemplaza las líneas). Nada más.
 --
 -- Regla: después = antes en `facturas`, `lineas`, `h_facturas_sin_salonero` y `h_lineas`.
---        `salonero_null` BAJA, y baja EXACTAMENTE la suma de `salonero_por_lineas` del log de B1 (días < corte).
+--        `salonero_null` BAJA, y baja EXACTAMENTE el N que imprime B1 (días < corte, sin duplicar meses).
+-- Corte: CERRADO, dos días antes del pase a las 00:00 −06:00 (el agente en vivo relee 36 h: lo anterior no lo toca).
 --        Ningún login baja en el bloque 4 (un salonero que ya estaba no se pierde: solo se suman facturas).
 
 begin read only;
@@ -55,7 +56,7 @@ select count(*)                                          as facturas_24h_antes,
 
 -- ── 3. Humo: resumen (ANTES y DESPUÉS del re-backfill, MISMO corte) ─────────────────────────────────────
 with params as (
-  select timestamptz '2026-11-18 00:00:00-06:00' as corte             -- ← EDITAR: mismo valor antes y después
+  select timestamptz '2026-11-16 00:00:00-06:00' as corte             -- ← EDITAR: CORTE_HUMO (pase − 2 días), igual antes y después
 ),
 base as (
   select t.* from public.pos_ndf_tickets t, params where t.estado = 'C' and t.fecha_registra < params.corte
@@ -95,7 +96,7 @@ select
 
 -- ── 4. Por login (SOLO para el chat; no va a la bitácora) ──────────────────────────────────────────────
 -- Esperado: ningún login BAJA entre antes y después; los que suben suman lo mismo que bajó `salonero_null`.
-with params as (select timestamptz '2026-11-18 00:00:00-06:00' as corte)   -- ← mismo corte
+with params as (select timestamptz '2026-11-16 00:00:00-06:00' as corte)   -- ← mismo corte
 select coalesce(t.salonero_login, '(null)') as login, count(*) as facturas
   from public.pos_ndf_tickets t, params
  where t.estado = 'C' and t.fecha_registra < params.corte
@@ -103,7 +104,7 @@ select coalesce(t.salonero_login, '(null)') as login, count(*) as facturas
  order by 1;
 
 -- ── 5. Por mes (para ubicar una diferencia si una huella del bloque 3 no coincide) ─────────────────────
-with params as (select timestamptz '2026-11-18 00:00:00-06:00' as corte),  -- ← mismo corte
+with params as (select timestamptz '2026-11-16 00:00:00-06:00' as corte),  -- ← mismo corte
 base as (
   select t.* from public.pos_ndf_tickets t, params where t.estado = 'C' and t.fecha_registra < params.corte
 ),

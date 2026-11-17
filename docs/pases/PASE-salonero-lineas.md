@@ -60,8 +60,14 @@ salonero. **Parar** si `N = 0` los 7 días o `N` > 30 % de las facturas. **`M` >
 que ganan salonero): se sigue solo si Claude lo da por bueno (ver §8, riesgo del balde de cajeros).
 
 ## 6. Humo antes y después ([`scripts/sql/salonero_lineas_humo.sql`](../../scripts/sql/salonero_lineas_humo.sql), bloques 3–5)
-`begin read only … rollback`, mismo corte antes y después: **el día de la PRIMERA corrida de B1, a las 00:00 −06:00**
-(B1 arranca en «ayer», así todo lo que reenvía queda antes del corte y N cuadra).
+`begin read only … rollback`, mismo corte antes y después: **corte CERRADO = dos días antes del pase, a las 00:00 −06:00**
+(pase el 18-nov → `2026-11-16 00:00:00-06:00`). B1 lo fija en su progreso la primera vez y lo imprime (`CORTE_HUMO`).
+
+**Por qué dos días y no «hoy»:** desde A5 el agente nuevo ya acredita por líneas todo lo que relee, y relee las últimas
+**36 h** (`rangoLectura`): con A5 después de las 00:00 del día del pase, nada anterior a «pase − 2 días 00:00» lo puede
+tocar el agente en vivo. Así, entre el humo antes y el después, lo único que mueve facturas anteriores al corte es B1, y
+N (el conteo de B1) se toma **solo de los días anteriores al corte**. **A y B van el mismo día** (decisión del dueño,
+18-nov de mañana, antes de las 14:00).
 
 **Las huellas:**
 - `h_facturas_sin_salonero` = md5 por factura de **todas** las columnas de `pos_ndf_tickets` salvo `id`, `ingested_at`,
@@ -76,7 +82,7 @@ que ganan salonero): se sigue solo si Claude lo da por bueno (ver §8, riesgo de
 | `facturas` · `lineas` | _(se anota)_ | **=** |
 | `h_facturas_sin_salonero` | _(se anota)_ | **=** |
 | `h_lineas` | _(se anota)_ | **=** |
-| `salonero_null` | _(se anota)_ | **baja exactamente** Σ `salonero_por_lineas` del log de B1 (días anteriores al corte) |
+| `salonero_null` | _(se anota)_ | **baja exactamente N** = Σ `salonero_por_lineas` de B1 en los días anteriores al corte (B1 lo imprime, sin duplicar meses) |
 | `salonero_null_salon` · `salon_90d_null` | _(se anota)_ | **bajan** (en 90 días de salón, ~200 menos) |
 | `incoherentes` (salonero no null con `registrado_por` ≠ salonero) | 0 | **0** |
 | `registrado_por` | _(se anota)_ | `salonero` sube lo mismo que bajan `cajero` + `sistema` + `sin_pedido`; el total no cambia |
@@ -86,12 +92,13 @@ que ganan salonero): se sigue solo si Claude lo da por bueno (ver §8, riesgo de
 Cualquier otra diferencia es parada.
 
 ## 7. Orden y horario
-**Ventana:** de mañana antes de las 14:00 CR (corte automático 13:50) o 00:00–06:00 (corte 05:50). Parte A y parte B el
-mismo día si alcanza; si no, B la mañana o la madrugada siguiente (B1 retoma solo).
+**Ventana:** de mañana antes de las 14:00 CR (corte automático 13:50) o 00:00–06:00 (corte 05:50). **Parte A y parte B el
+mismo día** (18-nov de mañana). Si B1 se corta por la hora, retoma solo en la ventana siguiente con el mismo
+`CORTE_HUMO` (queda en el progreso) y N se sigue sumando sin duplicar.
 
 0. Preámbulo + A0–A6 (abajo): carpeta nueva `C:\satori\agente-sal` con el SHA firmado, `.env` copiado idéntico,
    `npm ci` en la raíz **y** en `pos-bridge\`, pruebas, prueba en seco, cambio de la tarea, verificación.
-1. Humo «antes» (§6) con el corte del día.
+1. Humo «antes» (§6) con `CORTE_HUMO` (dos días antes del pase, 00:00 −06:00).
 2. B1: backfill por mes, del más nuevo al más viejo, `--pausa-ms 800`, hasta `2024-01-01`.
 3. Humo «después» (mismo corte). Si una huella no coincide, bloque 5 antes y después para ver el mes.
 4. Bitácora en §10.
@@ -481,14 +488,16 @@ Después, bloque 1 del SQL: late sin error. Las facturas que entraron con el age
 Orden: **(1) humo antes** → **(2) B1** → **(3) humo después**. Si B1 se cortó por la hora: en la ventana siguiente,
 humo antes, B1 otra vez (retoma solo) y humo después.
 
-**(1) Humo antes (Claude, prod `yiczgdti…`, solo lectura):** bloques 3 y 4 del SQL con el corte = **día de la primera corrida de
-B1 a las 00:00 −06:00** (el mismo antes y después, todas las ventanas). Se anotan en §10 (el bloque 4 solo en el chat).
+**(1) Humo antes (Claude, prod `yiczgdti…`, solo lectura):** bloques 3 y 4 del SQL con el corte = **`CORTE_HUMO`, dos días antes del
+pase a las 00:00 −06:00** (el mismo antes y después, todas las ventanas). Se anotan en §10 (el bloque 4 solo en el chat).
 
 ## B1 · Re-backfill mes por mes, del más nuevo al más viejo (se corta solo)
 Rango: de **ayer** hacia atrás hasta `2024-01-01`, un mes por corrida, con `--pausa-ms 800`. Antes de cada mes mira la
 hora: si el mes que sigue no termina antes del corte (13:50, o 05:50 de madrugada), **para y dice dónde quedó**. El
 progreso queda en `C:\satori\sal-vuelta\backfill-progreso.json`; el mismo bloque retoma solo. Reenviar un mes no duplica.
-Al final suma `salonero_por_lineas` del log (para el humo después).
+**N** sale de la salida de **esta** corrida de cada mes (no de los logs viejos): por mes se guarda en el progreso la suma
+de `salonero_por_lineas` de sus días **anteriores a `CORTE_HUMO`**; si un mes se vuelve a correr, su valor se
+**reemplaza**, no se suma. N = suma de los meses del progreso.
 ```powershell
 & {
 $N = Carpeta $NUEVA; $V = Carpeta $VUELTA; $T = Leer-Tarea
@@ -499,7 +508,14 @@ $h = git -C $N rev-parse HEAD; Ok 'rev-parse'; if ($h -cne $SHA) { throw 'la car
 $DESDE_MIN = '2024-01-01'
 $PROG = Join-Path $V 'backfill-progreso.json'
 $hasta = $ahora.Date.AddDays(-1).ToString('yyyy-MM-dd', $INV)
-if (Test-Path -LiteralPath $PROG) { $pg = [IO.File]::ReadAllText($PROG) | ConvertFrom-Json; $hasta = [string]$pg.siguiente_hasta; "retoma: falta $DESDE_MIN … $hasta" }
+$CORTE_HUMO = $ahora.Date.AddDays(-2).ToString('yyyy-MM-dd', $INV)   # 1.ª corrida = día del pase: pase − 2 días
+$NMES = @{}                                                            # mes → N de ese mes (se reemplaza, no se suma)
+if (Test-Path -LiteralPath $PROG) {
+  $pg = [IO.File]::ReadAllText($PROG) | ConvertFrom-Json; $hasta = [string]$pg.siguiente_hasta; $CORTE_HUMO = [string]$pg.corte_humo
+  foreach ($pr in @($pg.n_por_mes.PSObject.Properties)) { $NMES[$pr.Name] = [int]$pr.Value }
+  "retoma: falta $DESDE_MIN … $hasta · CORTE_HUMO $CORTE_HUMO (fijo desde la primera corrida)"
+}
+if ($CORTE_HUMO -notmatch '^\d{4}-\d{2}-\d{2}$') { throw 'el progreso no tiene corte_humo: se para y se avisa' }
 if ($hasta -lt $DESDE_MIN) { 'B1: el histórico ya está completo. Nada que hacer.'; return }
 $LOG = Join-Path $V ('backfill-' + $ahora.ToString('yyyy-MM-dd_HHmm', $INV) + '.log')
 $dur = [TimeSpan]::FromMinutes(5); $hechos = @()
@@ -509,29 +525,39 @@ foreach ($m in @(Meses-Backfill $DESDE_MIN $hasta)) {
   $t0 = Hoy-CR
   $nc = $env:NO_COLOR; $fc = $env:FORCE_COLOR; $env:NO_COLOR = '1'; $env:FORCE_COLOR = '0'
   Push-Location $N; try {
-    node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts --desde $m.Desde --hasta $m.Hasta --pausa-ms 800 | Tee-Object -FilePath $LOG -Append
-    if ($LASTEXITCODE -ne 0) { throw "PARADA en $($m.Mes) (código $LASTEXITCODE). Quedó pendiente $DESDE_MIN … $($m.Hasta): re-correr este bloque (reenviar no duplica)" }
+    node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts --desde $m.Desde --hasta $m.Hasta --pausa-ms 800 | Tee-Object -Variable SALM
+    $cod = $LASTEXITCODE
+    [IO.File]::AppendAllLines($LOG, [string[]]@($SALM | ForEach-Object { Sin-Ansi ([string]$_) }), (New-Object Text.UTF8Encoding($false)))
+    if ($cod -ne 0) { throw "PARADA en $($m.Mes) (código $cod). Quedó pendiente $DESDE_MIN … $($m.Hasta): re-correr este bloque (reenviar no duplica)" }
   } finally { Pop-Location; $env:NO_COLOR = $nc; $env:FORCE_COLOR = $fc }
+  # N de ESTE mes, solo de la salida de esta corrida y solo de días anteriores al corte del humo.
+  $nm = 0
+  foreach ($l in @($SALM | ForEach-Object { Sin-Ansi ([string]$_) })) {
+    $x = [regex]::Match($l, '(\d{4}-\d{2}-\d{2})\s+tickets=\d+\s+guardados=\d+.*?salonero_por_lineas=(\d+)')
+    if ($x.Success -and $x.Groups[1].Value -lt $CORTE_HUMO) { $nm += [int]$x.Groups[2].Value }
+  }
+  $NMES[$m.Mes] = $nm
   $dur = (Hoy-CR) - $t0; $hechos += $m.Mes
   $sig = ([datetime]::ParseExact($m.Desde, 'yyyy-MM-dd', $INV)).AddDays(-1).ToString('yyyy-MM-dd', $INV)
-  $js = (New-Object PSObject -Property ([ordered]@{ ultimo_mes_hecho = $m.Mes; siguiente_hasta = $sig; desde_min = $DESDE_MIN; hora_cr = (Hoy-CR).ToString('yyyy-MM-dd HH:mm', $INV) })) | ConvertTo-Json
+  $js = (New-Object PSObject -Property ([ordered]@{ ultimo_mes_hecho = $m.Mes; siguiente_hasta = $sig; desde_min = $DESDE_MIN
+    corte_humo = $CORTE_HUMO; n_por_mes = $NMES; hora_cr = (Hoy-CR).ToString('yyyy-MM-dd HH:mm', $INV) })) | ConvertTo-Json
   [IO.File]::WriteAllText("$PROG.tmp", $js, (New-Object Text.UTF8Encoding($false))); Move-Item -LiteralPath "$PROG.tmp" -Destination $PROG -Force
-  "── $($m.Mes) ok en $([math]::Round($dur.TotalMinutes, 1)) min · siguiente: $sig"
+  "── $($m.Mes) ok en $([math]::Round($dur.TotalMinutes, 1)) min · salonero_por_lineas (antes del corte) $nm · siguiente: $sig"
 }
-$pl = 0; foreach ($f in @(Get-ChildItem -LiteralPath $V -Filter 'backfill-*.log')) { foreach ($l in [IO.File]::ReadAllLines($f.FullName)) { $x = [regex]::Match($l, 'guardados=\d+.*?salonero_por_lineas=(\d+)'); if ($x.Success) { $pl += [int]$x.Groups[1].Value } } }
 $pg = [IO.File]::ReadAllText((Archivo $PROG)) | ConvertFrom-Json
+$pl = 0; foreach ($pr in @($pg.n_por_mes.PSObject.Properties)) { $pl += [int]$pr.Value }
 $fin = if ([string]$pg.siguiente_hasta -lt $DESDE_MIN) { 'HISTÓRICO COMPLETO' } else { "falta $DESDE_MIN … $($pg.siguiente_hasta) (sigue en la próxima ventana)" }
-"B1 · meses hechos: $($hechos.Count) ($($hechos -join ', ')) · $fin · salonero_por_lineas (todos los logs) $pl · log $LOG"
+"B1 · meses hechos: $($hechos.Count) ($($hechos -join ', ')) · $fin · CORTE_HUMO $CORTE_HUMO 00:00 -06:00 · N = $pl · log $LOG"
 }
 ```
 **Ve:** por cada mes, las líneas del backfill (`tickets=… guardados=… líneas=… salonero_por_lineas=…`) y
-`── AAAA-MM ok en N min`. Al final `B1 · … salonero_por_lineas (todos los logs) N`: **se le pasa N a Claude**.
+`── AAAA-MM ok en N min`. Al final `B1 · … CORTE_HUMO … · N = …`: **se le pasan el corte y N a Claude**.
 **Parada (el bloque para solo):** un mes con error o el agente en vivo que deja de correr. **A ojo:** `inválidos=` o
 `guardados` menor que `tickets` → cerrar la ventana de PowerShell con la X (reenviar no duplica) y avisar.
 
 **(3) Humo después (Claude, mismo corte):** bloques 3, 4 y 5. Regla de §6: `facturas`, `lineas`,
-`h_facturas_sin_salonero` y `h_lineas` **iguales**; `salonero_null` baja **exactamente N** (si B1 repitió un mes por un
-corte, se cuenta una sola vez); `incoherentes = 0`; ningún login baja. Con el histórico a medias, las huellas tienen que
+`h_facturas_sin_salonero` y `h_lineas` **iguales**; `salonero_null` baja **exactamente N** (el N final de B1, que ya no
+duplica meses); `incoherentes = 0`; ningún login baja. Con el histórico a medias, las huellas tienen que
 dar igual igual. Si una no coincide, bloque 5 antes y después, y se para.
 
 ---
@@ -549,6 +575,6 @@ dar igual igual. Si una no coincide, bloque 5 antes y después, y se para.
 | A4 · en seco (7 días) | `salonero_por_lineas` 3–20 % · nada enviado · `no_salon` mirado | |
 | A5 · `HORA_CAMBIO` | `-06:00` · ~30 s detenido | |
 | A6 · latido ×2 · facturas nuevas | late sin error | |
-| B · humo antes | se anotan `facturas`, `lineas`, huellas, `salonero_null`, `registrado_por` | |
-| B1 · meses | histórico completo · errores 0 · N = Σ `salonero_por_lineas` | |
+| B · humo antes (`CORTE_HUMO` = pase − 2 días, 00:00) | se anotan `facturas`, `lineas`, huellas, `salonero_null`, `registrado_por` | |
+| B1 · meses | histórico completo · errores 0 · `CORTE_HUMO` y N del progreso | |
 | B · humo después | huellas iguales · `salonero_null` baja N · `incoherentes` 0 · ningún login baja | |

@@ -399,7 +399,7 @@ Todo **DDL aditivo**, numerado **040+**, idempotente (`if not exists` / `create 
 
 ## 16. ⚠️ Riesgos técnicos y dependencias (visibles)
 
-1. **🔴 BUG ABIERTO — `Cmd+Shift+R` en `/caja` deja la app colgada** (PROMPT-CONTINUACION §0.1c, **sin RCA**).
+1. **🔴 BUG ABIERTO — `Cmd+Shift+R` en `/caja` deja la app colgada** (`docs/historico/PROMPT-CONTINUACION-HISTORICO.md` §0.1c, **sin RCA**).
    El nuevo "Agregar" vive en `CashTurno` = exactamente esa ruta. **No bloquea el diseño**, pero es
    **precondición de la fase de construcción de UI**: hacer el RCA + fix de ese cuelgue de arranque de `/caja`
    antes de apilarle el flujo nuevo. Documentado acá para que no se pierda.

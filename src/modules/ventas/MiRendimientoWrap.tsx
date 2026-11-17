@@ -1,7 +1,7 @@
 /**
  * Wrapper de datos de Mi Rendimiento ("casa del empleado").
  * Carga en paralelo:
- *   - Ventas (365d según FUENTE_VENTAS, como el módulo Ventas + product_map + metas + comps)
+ *   - Ventas (365d del PoS, como el módulo Ventas + product_map + metas + comps)
  *   - Propinas (empleado vinculado + historial de asistencia 12m) para la pestaña Propinas
  * Mantiene el bundle separado del VentasModule completo.
  *
@@ -38,7 +38,7 @@ export default function MiRendimientoWrap() {
   const [pm,    setPm]    = useState<ProductMap>({})
   const [metas, setMetas] = useState<Meta>({ restaurante:{}, margen:{}, global:{ promPax:15000, bebPax:1.2, ratioCB:3.0, ticketItem:7500, ventas:800000 }, salMetas:{} })
   const [comps, setComps] = useState<Comp[]>([])
-  const [fuentePos, setFuentePos] = useState<{ estado: EstadoPos | null; ultimoDiaXls: string | null }>({ estado: null, ultimoDiaXls: null })
+  const [fuentePos, setFuentePos] = useState<EstadoPos | null>(null)
   const [employee,   setEmployee]   = useState<Employee | null>(null)
   const [empleados,  setEmpleados]  = useState<Employee[]>([])
   const [attendance, setAttendance] = useState<AttendanceRow[]>([])
@@ -48,13 +48,13 @@ export default function MiRendimientoWrap() {
   useEffect(() => {
     let alive = true
     // Ventas: no bloquean la vista si fallan (un empleado de cocina igual ve propinas).
-    // Los días salen de la MISMA carga que el módulo Ventas (`FUENTE_VENTAS`), y el `pm` con la
-    // misma fusión curado + familia. En 'xls' es `getVentasDias(365)` y el curado tal cual.
+    // Los días salen de la MISMA carga que el módulo Ventas (el PoS, `cargarDias`), y el `pm` con
+    // la misma fusión curado + familia.
     const ventasP = Promise.all([cargarDias(365), getProductMap(), getMetas(), getComps()])
       .then(([d, p, m, c]) => {
         if (!alive) return
         setDias(d.dias); setPm(fusionarProductMap(p, d.pm)); setMetas(m); setComps(c)
-        setFuentePos({ estado: d.estadoPos ?? null, ultimoDiaXls: d.ultimoDiaXls ?? null })
+        setFuentePos(d.estadoPos ?? null)
       })
       .catch(() => { /* ventas opcionales para roles sin venta individual */ })
 
@@ -130,7 +130,7 @@ export default function MiRendimientoWrap() {
           )}
         </div>
       )}
-      <AvisoFuentePos estado={fuentePos.estado} ultimoDiaXls={fuentePos.ultimoDiaXls} />
+      <AvisoFuentePos estado={fuentePos} />
       <MiRendimiento
         dias={dias} pm={pm} metas={metas} comps={comps}
         employee={employee} attendance={attendance} noLink={noLink}

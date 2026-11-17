@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
 // Mi Rendimiento muestra la franja «no se pudo leer el PoS» cuando la carga no salió 'ok', y
-// sigue mostrando los días del Excel (no queda vacío).
+// lo dice (desde el 16-nov no hay Excel de respaldo).
 import { describe, it, expect, vi } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -16,7 +16,7 @@ vi.mock('../../shared/api/ventas', () => ({
 }))
 vi.mock('./ventasFuente', async orig => ({
   ...(await orig<Record<string, unknown>>()),
-  cargarDias: vi.fn(async () => ({ dias: {}, pm: {}, estadoPos: H.estado, ultimoDiaXls: '2026-10-20' })),
+  cargarDias: vi.fn(async () => ({ dias: {}, pm: {}, estadoPos: H.estado})),
 }))
 vi.mock('../../shared/api/tips', () => ({ getAttendanceHistory: vi.fn(async () => []) }))
 vi.mock('../../shared/api/admin', () => ({ getAllEmployees: vi.fn(async () => []), getEmployeeByProfileId: vi.fn(async () => null) }))
@@ -30,7 +30,7 @@ describe('MiRendimientoWrap · aviso del PoS', () => {
     H.estado = 'sin_acceso'
     const { container } = montar()
     await waitFor(() => expect(container.querySelector('[data-estado-pos]')).not.toBeNull())
-    expect(container.textContent).toContain('Mostrando solo el Excel (último día: 20/10). No se pudo leer el PoS.')
+    expect(container.textContent).toContain('Tu usuario no puede ver las ventas del PoS.')
   })
 
   it("con estado 'ok' no hay franja", async () => {

@@ -2,7 +2,7 @@
 //
 // Rediseño A5, en el DOM: Ventas pide los datos A PEDIDO. Lo que se prueba:
 //   · cada vista recibe los MISMOS datos que antes con los mismos datos de la base;
-//   · En vivo, Paridad y Por línea se pintan sin esperar los 90 días;
+//   · En vivo y Por línea se pintan sin esperar los 90 días;
 //   · la historia completa (`cargarDeFondo`) se pide solo al abrir una vista que la usa.
 // Las vistas se reemplazan por marcadores que muestran lo que recibieron.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -26,7 +26,7 @@ let resolverEager: () => void = () => {}
 let resolverFondo: () => void = () => {}
 vi.mock('./ventasFuente', () => ({
   cargarDiasEager: vi.fn(() => new Promise(res => {
-    resolverEager = () => res({ dias: D90, pm: { SAKE: { tipo: 'bebida' } }, estadoPos: 'ok', ultimoDiaXls: null })
+    resolverEager = () => res({ dias: D90, pm: { SAKE: { tipo: 'bebida' } }, estadoPos: 'ok' })
   })),
   cargarHistEager: vi.fn(async () => ({ xls: 1 })),
   cargarDeFondo:   vi.fn(() => new Promise(res => {
@@ -47,7 +47,6 @@ const vista = (n: string) => ({
 })
 vi.mock('./VentasHoy',            () => vista('hoy'))
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
-vi.mock('./VentasParidad',        () => vista('paridad'))
 vi.mock('./VentasContabilidad',   () => vista('ventas'))
 vi.mock('./VentasSaloneros',      () => vista('saloneros'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
@@ -56,7 +55,6 @@ vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasAnalisis',       () => vista('analisis'))
 vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
-vi.mock('./VentasXLS',            () => vista('xls'))
 vi.mock('./VentasConfig',         () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
 vi.mock('./VentasEvaluacion',     () => vista('evaluacion'))
@@ -91,7 +89,7 @@ describe('ventasTabs · qué necesita cada vista', () => {
 })
 
 describe('VentasModule · carga a pedido (A5)', () => {
-  it.each(['envivo', 'paridad', 'salolineas'])('%s se pinta sin pedir ni esperar los 90 días', async id => {
+  it.each(['envivo', 'salolineas'])('%s se pinta sin pedir ni esperar los 90 días', async id => {
     abrir(`/ventas?tab=${id}`)
     expect(await texto()).toContain(`${id}|`)
     expect(fuente.cargarDiasEager).not.toHaveBeenCalled()

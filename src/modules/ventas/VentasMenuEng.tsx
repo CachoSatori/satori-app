@@ -4,7 +4,7 @@
  * Replicates the "Menu Engineering Quadrant" from Lightspeed Pro Analytics ($399/mo)
  * and Restaurant365 ($435/mo), using already-existing data:
  *   - product_map.costo_unitario  → ingredient cost per unit
- *   - ventas_dias product records → units sold + revenue
+ *   - días del PoS (`dias` del módulo Ventas) → units sold + revenue
  *
  * Four quadrants (popularidad × margen):
  *   ⭐ ESTRELLAS   — alta popularidad + alto margen   → defender y promover

@@ -5,6 +5,8 @@ import type { UserRole } from '../shared/types/database'
 import { supabase } from '../shared/api/supabase'
 import { todayCR, fi } from '../shared/utils'
 import { monthRangeBounds } from '../shared/utils/dateRange'
+import { restarDias, ventasDelRango } from '../modules/ventas/ventasFuente'
+import { totalesDelDia, totalesDelRango } from '../modules/ventas/totalesVentas'
 import { ROLE_LABELS } from '../shared/constants'
 import { modulosPara } from '../shared/layout/modulos'
 import { calcularPendientes, fraseEstado, TODAS_LAS_SENALES, type Pendiente, type Senal } from '../shared/layout/pendientes'
@@ -54,8 +56,8 @@ interface HomeStatus {
 type Lectura = Senal
 
 /** Una lectura falló si se rechazó o si la base devolvió `error` (supabase-js casi nunca rechaza). */
-function fallo(r: PromiseSettledResult<{ error?: unknown }>): boolean {
-  return r.status === 'rejected' || !!r.value?.error
+function fallo(r: PromiseSettledResult<unknown>): boolean {
+  return r.status === 'rejected' || !!(r.value as { error?: unknown } | null)?.error
 }
 
 async function fetchHomeStatus(): Promise<HomeStatus> {
@@ -74,8 +76,8 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     supabase.from('ventas_metas').select('value').eq('key', 'all').maybeSingle(),
     // SOPs count
     supabase.from('sops').select('id', { count: 'exact', head: true }).eq('is_active', true),
-    // Today's ventas with salonero data
-    supabase.from('ventas_dias').select('data').eq('session_date', today).maybeSingle(),
+    // Ventas de hoy: del PoS, en vivo (16-nov: nunca más el xls)
+    ventasDelRango(today, today),
     // Suppliers
     supabase.from('suppliers').select('id,ciclo_pago').eq('is_active', true),
     // Today's tip session (open OR closed) for pool total
@@ -136,32 +138,21 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
       // Get current month ventas total. Límite superior EXCLUSIVO = 1° del mes siguiente
       // (no `${curMonth}-31`, que es fecha inválida y daba 400 en meses de 30 días/feb).
       const { start, endExclusive } = monthRangeBounds(curMonth)
-      const { data: dias, error: diasError } = await supabase
-        .from('ventas_dias')
-        .select('data')
-        .gte('session_date', start)
-        .lt('session_date', endExclusive)
-      if (diasError) fallas.add('meta')
-      if (dias) {
-        const ventas = (dias as { data: { saloneros: Record<string, { total?: number; esCajero?: boolean }> } }[])
-          .reduce((s, row) => {
-            const sals = row.data.saloneros ?? {}
-            return s + Object.values(sals).reduce((ss, sal) => ss + (sal.total ?? 0), 0)
-          }, 0)
-        metaPct = Math.min(100, (ventas / meta) * 100)
+      try {
+        const { dias } = await ventasDelRango(start, restarDias(endExclusive, 1))
+        metaPct = Math.min(100, (totalesDelRango(dias).ventaNeta / meta) * 100)
+      } catch {
+        fallas.add('meta')
       }
     }
   }
 
   // ── Ventas numbers ──────────────────────────────────────────
-  let ventaNeta = 0, ventaPax = 0
-  const ventasData = ventasRes.status === 'fulfilled' ? ventasRes.value.data : null
-  if (ventasData) {
-    const sals = Object.values((ventasData as { data: { saloneros: Record<string,{ total?:number; pax?:number; esCajero?:boolean }> } }).data?.saloneros ?? {})
-    ventaNeta = sals.reduce((s, sl) => s + (sl.total ?? 0), 0)
-    ventaPax  = sals.filter(sl => !(sl as { esCajero?: boolean }).esCajero).reduce((s, sl) => s + (sl.pax ?? 0), 0)
-  }
-  const ventaPromPax = ventaPax > 0 ? ventaNeta / ventaPax : 0
+  // Hoy, del PoS, con la misma suma que el módulo Ventas (`totalesDelDia`).
+  const hoyVentas = totalesDelDia(ventasRes.status === 'fulfilled' ? ventasRes.value.dias[today] : null)
+  const ventaNeta = hoyVentas.ventaNeta
+  const ventaPax  = hoyVentas.pax
+  const ventaPromPax = hoyVentas.promPax
 
   // ── Tip numbers ─────────────────────────────────────────────
   const tipDetail = tipDetailRes.status === 'fulfilled'

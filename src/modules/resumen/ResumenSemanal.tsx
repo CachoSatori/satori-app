@@ -7,6 +7,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { supabase } from '../../shared/api/supabase'
 import { todayCR, fi } from '../../shared/utils'
+import { ventasDelRango } from '../ventas/ventasFuente'
+import { ventasDeLaSemana } from './ventasSemana'
 
 // ── Date helpers ───────────────────────────────────────────────
 function startOfWeek(date: string): string {
@@ -51,40 +53,9 @@ interface WeekSnapshot {
 }
 
 async function fetchWeek(from: string, to: string): Promise<WeekSnapshot> {
-  const { data: diasRows } = await supabase
-    .from('ventas_dias')
-    .select('session_date, data')
-    .gte('session_date', from).lte('session_date', to) as {
-      data: Array<{ session_date: string; data: { saloneros: Record<string, {
-        total?: number; iva?: number; serv?: number; pax?: number
-        esCajero?: boolean; delivery?: number
-      }> } }> | null
-    }
-
-  let ventaNeta = 0, ventaBruta = 0, pax = 0
-  const days: DayData[] = []
-  const salMap: Record<string, { total: number; pax: number; days: number }> = {}
-
-  for (const row of diasRows ?? []) {
-    let dayVenta = 0, dayIVA = 0, dayServ = 0, dayPax = 0
-    for (const [name, s] of Object.entries(row.data?.saloneros ?? {})) {
-      dayVenta += s.total ?? 0
-      dayIVA   += (s as { iva?: number }).iva ?? 0
-      dayServ  += (s as { serv?: number }).serv ?? 0
-      if (!(s as { esCajero?: boolean }).esCajero) {
-        dayPax += s.pax ?? 0
-        const k = name.toUpperCase().trim()
-        if (!salMap[k]) salMap[k] = { total: 0, pax: 0, days: 0 }
-        salMap[k].total += s.total ?? 0
-        salMap[k].pax   += s.pax ?? 0
-        salMap[k].days++
-      }
-    }
-    ventaNeta  += dayVenta
-    ventaBruta += dayVenta + dayIVA + dayServ
-    pax        += dayPax
-    days.push({ fecha: row.session_date, ventaNeta: dayVenta, pax: dayPax })
-  }
+  // Ventas: del PoS (16-nov: nunca más el xls). Un día sin factura no aparece.
+  const { dias } = await ventasDelRango(from, to)
+  const { ventaNeta, ventaBruta, pax, days, salMap } = ventasDeLaSemana(dias)
 
   // Propinas
   const { data: tipSess } = await supabase

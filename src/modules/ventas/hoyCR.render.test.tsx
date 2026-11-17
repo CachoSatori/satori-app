@@ -2,7 +2,7 @@
 //
 // «Hoy» en Ventas es el día de Costa Rica (UTC−6), no la fecha UTC.
 //
-// El error que esto cuida: Competencias, Paridad, Saloneros por línea y Cajeros calculaban «hoy»
+// El error que esto cuida: Competencias, Paridad (retirada el 16-nov), Saloneros por línea y Cajeros calculaban «hoy»
 // con `new Date().toISOString()`. Desde las 18:00 CR la fecha UTC ya es «mañana»: de noche, en
 // pleno servicio, el rango por defecto terminaba en el día siguiente y una competencia que
 // terminaba hoy figuraba «Finalizada».
@@ -16,11 +16,10 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 vi.mock('./saloneroLentesDatos', () => ({ getLentesDesdePos: vi.fn() }))
 vi.mock('./ventasDiasDesdePos', () => ({ getDiasMapDesdePos: vi.fn() }))
 vi.mock('../../shared/api/ventas', () => ({
-  getAllVentasDias: vi.fn(), getProductMap: vi.fn(), saveComp: vi.fn(), deleteComp: vi.fn(),
+  getProductMap: vi.fn(), saveComp: vi.fn(), deleteComp: vi.fn(),
 }))
 
 import VentasCajeros from './VentasCajeros'
-import VentasParidad from './VentasParidad'
 import VentasSaloneroLineas from './VentasSaloneroLineas'
 import VentasCompetencias from './VentasCompetencias'
 import {
@@ -59,11 +58,6 @@ describe.each(MOMENTOS)('a las $hora del 30-nov', ({ utc }) => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(utc))
-  })
-
-  it('Paridad abre del 30-oct al 30-nov', () => {
-    render(<VentasParidad />)
-    expect(fechas()).toEqual(['2026-10-30', HOY])
   })
 
   it('Saloneros por línea abre con los últimos 7 días, hasta el 30-nov', () => {
@@ -125,15 +119,15 @@ describe('aritmética de días (sin reloj)', () => {
   })
 })
 
-// Guardia del módulo: que el patrón no vuelva a Ventas. Quedan dos usos que no son «hoy» de un rango:
-//   · VentasConfig.tsx: la fecha solo va en el nombre del CSV que se descarga.
+// Guardia del módulo: que el patrón no vuelva a Ventas. Queda un uso que no es «hoy» de un rango
+// (VentasConfig.tsx pasó a todayCR() el 16-nov; la guarda de todo src/ es src/fechaHoyCR.test.ts):
 //   · VentasPromPaxExplicado.tsx: usa `fechaCR()` y la fecha UTC solo si aquella devuelve null.
 describe('guardia: Ventas no calcula «hoy» con la fecha UTC', () => {
   it('ningún archivo nuevo de src/modules/ventas usa new Date().toISOString().slice(0, 10)', async () => {
     const { readFileSync, readdirSync } = await import('node:fs')
     // En happy-dom `import.meta.url` no es una ruta del disco: se parte de la raíz del repo.
     const dir = `${process.cwd()}/src/modules/ventas/`
-    const PERMITIDOS = ['VentasConfig.tsx', 'VentasPromPaxExplicado.tsx']
+    const PERMITIDOS = ['VentasPromPaxExplicado.tsx']
     const conPatron = readdirSync(dir)
       .filter(n => /\.(ts|tsx)$/.test(n) && !/\.test\.(ts|tsx)$/.test(n))
       .filter(n => /new Date\(\)\.toISOString\(\)\.slice\(0, ?10\)/.test(readFileSync(dir + n, 'utf8')))

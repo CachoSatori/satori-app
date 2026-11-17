@@ -2,7 +2,7 @@
  * InvFoodCost — Food cost teórico vs real (Fase 1.3 / control de merma)
  *
  * Para un mes compara:
- *  - Ventas netas (ventas_dias)
+ *  - Ventas netas (del PoS, `ventasDelRango` + `totalesDelRango`; 16-nov: nunca más el xls)
  *  - COGS teórico = Σ deducción por venta × costo del ingrediente (lo que las recetas
  *    dicen que se debió consumir)
  *  - Compras reales de mercadería (cash_movements egreso_mercaderia — dato real de Caja)
@@ -14,6 +14,8 @@ import type { Ingredient } from '../../shared/types/inventario'
 import { supabase } from '../../shared/api/supabase'
 import { todayCR, fi } from '../../shared/utils'
 import { monthRangeBounds } from '../../shared/utils/dateRange'
+import { restarDias, ventasDelRango } from '../ventas/ventasFuente'
+import { totalesDelRango } from '../ventas/totalesVentas'
 
 interface Props { ingredients: Ingredient[] }
 
@@ -64,8 +66,7 @@ export default function InvFoodCost({ ingredients }: Props) {
             .select('amount_crc, movement_type, status, created_at')
             .eq('movement_type', 'egreso_mercaderia')
             .gte('created_at', mb.startTs).lt('created_at', mb.endExclusiveTs),
-          supabase.from('ventas_dias')
-            .select('data').gte('session_date', mb.start).lt('session_date', mb.endExclusive),
+          ventasDelRango(mb.start, restarDias(mb.endExclusive, 1)),
         ])
         if (cancel) return
 
@@ -92,10 +93,7 @@ export default function InvFoodCost({ ingredients }: Props) {
           .reduce((s, c) => s + c.amount_crc, 0)
 
         // Ventas netas del mes
-        let ventas = 0
-        for (const row of (diasRes.data ?? []) as Array<{ data: { saloneros?: Record<string, { total?: number }> } }>) {
-          for (const s of Object.values(row.data?.saloneros ?? {})) ventas += s.total ?? 0
-        }
+        const ventas = totalesDelRango(diasRes.dias).ventaNeta
 
         const topConsumo = Object.entries(consumo)
           .map(([id, value]) => ({ name: costById.get(id)?.name ?? id, value }))

@@ -56,6 +56,6 @@
 ## 6. Firma y bitácora
 | Qué | Quién | Fecha y hora (-06:00) | SHA |
 |---|---|---|---|
-| Firma del dueño (esquema, SQL final) | | | |
-| Merge (Branching) | | | |
-| Control §3 | | | |
+| Firma del dueño (esquema, SQL final) | dueño (chat) | 2026-11-16 | `dafaeff` |
+| Merge (Branching) | sesión de la cola nocturna | 2026-11-16 23:43 | `8112b90` (cabeza `6c7e93d` = `dafaeff` + main, solo docs/registro) |
+| Control §3 | sesión de la cola nocturna (lectura) | 2026-11-16 23:46 y 2026-11-17 01:35 | ledger 1 fila 182 · `1b716215…` · permisos OK |

@@ -3,6 +3,7 @@ import type { CashSession, CashMovement, Supplier, MovementType } from '../types
 import type { Database } from '../types/supabase.gen'
 import { cachedFetch } from '../offline/cache'
 import { enqueue, pendingOps } from '../offline/outbox'
+import { debeEncolarAhora, estadoFilaAhora, cashKey, BORRAR_PENDIENTE, BORRAR_RECHAZADA, BORRAR_SIN_ORDEN } from '../offline/ordenEscrituras'
 import { parseTraspaso } from '../../modules/cash/pozo'
 import { planBorradoDia, type MovimientoBorrable, type PlanBorradoDia } from '../../modules/cash/borrarDia'
 
@@ -282,11 +283,13 @@ export async function createCashMovement(movement: {
     created_at:    now,
     updated_at:    now,
   }
-  const queueAndReturn = async (): Promise<CashMovement> => {
-    await enqueue({ client_op_id: id, table: 'cash_movements', op: 'insert', payload: row, created_at: now })
+  const queueAndReturn = async (kick = false): Promise<CashMovement> => {
+    await enqueue({ client_op_id: id, table: 'cash_movements', op: 'insert', payload: row, created_at: now }, kick ? { kick } : undefined)
     return { ...row, _pending: true } as unknown as CashMovement
   }
   if (isOffline()) return queueAndReturn()
+  // A01: con cola pendiente, lo nuevo va DETRÁS de la cola (no se adelanta a lo que se guardó sin señal).
+  if (await debeEncolarAhora()) return queueAndReturn(true)
   try {
     const { data, error } = await withWriteTimeout(signal => supabase
       .from('cash_movements')
@@ -329,8 +332,8 @@ export async function createCashMovement(movement: {
 }
 
 // Encola una mutación de caja (update/delete) si no hay red o la red falló.
-async function queueCashMutation(op: 'update' | 'delete', payload: Record<string, unknown>): Promise<void> {
-  await enqueue({ client_op_id: crypto.randomUUID(), table: 'cash_movements', op, payload, created_at: new Date().toISOString() })
+async function queueCashMutation(op: 'update' | 'delete', payload: Record<string, unknown>, kick = false): Promise<void> {
+  await enqueue({ client_op_id: crypto.randomUUID(), table: 'cash_movements', op, payload, created_at: new Date().toISOString() }, kick ? { kick } : undefined)
 }
 
 // ── Guard de dirección de traspaso (ítem 1a) ────────────────────────────────────────────────
@@ -381,6 +384,9 @@ export async function updateCashMovement(
   const { _pending, ...clean } = updates
   void _pending
   if (isOffline()) return queueCashMutation('update', { match: { id }, updates: clean })
+  // A01: con cola pendiente (o la fila en rechazadas), la edición va detrás de la cola: si su creación
+  // todavía no entró, un update directo tocaría 0 filas y respondería «ok» sin efecto.
+  if (await debeEncolarAhora(cashKey(id))) return queueCashMutation('update', { match: { id }, updates: clean }, true)
   try {
     const { error } = await withWriteTimeout(signal => supabase
       .from('cash_movements')
@@ -473,11 +479,12 @@ export async function createDayMovement(m: {
     ...(m.suggested_classification ? { suggested_classification: m.suggested_classification } : {}),
     ...(m.suggested_confidence != null ? { suggested_confidence: m.suggested_confidence } : {}),
   }
-  const queueAndReturn = async (): Promise<string> => {
-    await enqueue({ client_op_id: id, table: 'cash_movements', op: 'insert', payload: row, created_at: now })
+  const queueAndReturn = async (kick = false): Promise<string> => {
+    await enqueue({ client_op_id: id, table: 'cash_movements', op: 'insert', payload: row, created_at: now }, kick ? { kick } : undefined)
     return id
   }
   if (isOffline()) return queueAndReturn()
+  if (await debeEncolarAhora()) return queueAndReturn(true)   // A01: detrás de la cola
   try {
     const { error } = await withWriteTimeout(signal => supabase
       .from('cash_movements')
@@ -527,6 +534,12 @@ export async function deleteCashMovement(id: string, note: string, managerEmail?
   if (isOffline()) {
     throw new Error('El borrado requiere conexión: arrastra el inventario ligado y no puede encolarse a medias. Reintentá con internet.')
   }
+  // A01: si el movimiento todavía está en la cola o lo rechazó el servidor, en el servidor no existe:
+  // la RPC sería un no-op y después la cola (o «Reintentar») lo haría aparecer. Se frena con aviso.
+  const enAparato = await estadoFilaAhora(cashKey(id))
+  if (enAparato === 'pendiente') throw new Error(BORRAR_PENDIENTE)
+  if (enAparato === 'rechazada') throw new Error(BORRAR_RECHAZADA)
+  if (enAparato === 'desconocido') throw new Error(BORRAR_SIN_ORDEN)
   // Credenciales de gerencia (mig 044): el cajero las valida en el modal y la RPC las re-verifica
   // server-side. owner/manager logueado no las pasa (la RPC autoriza por su rol). NO se persisten.
   const args: Record<string, unknown> = { p_movement_id: id, p_note: note }

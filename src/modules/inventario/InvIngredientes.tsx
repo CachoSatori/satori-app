@@ -6,7 +6,7 @@ import type { Ingredient } from '../../shared/types/inventario'
 import { INGREDIENT_CATEGORIES, INGREDIENT_UNITS } from '../../shared/types/inventario'
 import { upsertIngredient, deleteIngredient } from '../../shared/api/inventario'
 import { getIngredientPrices, type IngredientPrice } from '../../shared/api/inventoryIngest'
-import { fi } from '../../shared/utils'
+import { fi, todayCR } from '../../shared/utils'
 
 interface Props {
   ingredients: Ingredient[]
@@ -130,7 +130,7 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
     const url  = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `satori-ingredientes-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `satori-ingredientes-${todayCR()}.csv`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }

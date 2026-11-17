@@ -210,10 +210,42 @@ export async function listInbox(estado: 'nuevo' | 'procesado' | 'descartado' = '
   return (data ?? []) as DocumentRow[]
 }
 
-export async function signedUrl(path: string): Promise<string | null> {
-  const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600)
-  return data?.signedUrl ?? null
+// (16-nov) Caja → Movimientos y Finanzas montan un FacturaVerify por fila y cada uno pedía su firma al montarse:
+// el 15/11 a las 21:18 CR un iPhone pidió ~980 firmas en 7 s y Storage respondió 429 (demasiados pedidos) y 544
+// (timeout) a 259 de ellas (las miniaturas quedaban vacías). Ahora: memoria de ~55 min por foto (la firma vale 1 h),
+// un solo pedido por foto aunque la pidan varias filas a la vez, y como mucho MAX_FIRMAS pedidos en vuelo.
+export const MAX_FIRMAS = 4
+const firmas = new Map<string, { url: string; vence: number }>()
+const firmando = new Map<string, Promise<string | null>>()
+let enVuelo = 0
+const espera: Array<() => void> = []
+
+async function conTurno<T>(fn: () => Promise<T>): Promise<T> {
+  if (enVuelo >= MAX_FIRMAS) await new Promise<void>(listo => espera.push(listo))   // el que termina le pasa su lugar
+  else enVuelo++
+  try { return await fn() } finally {
+    const siguiente = espera.shift()
+    if (siguiente) siguiente(); else enVuelo--
+  }
 }
+
+export async function signedUrl(path: string): Promise<string | null> {
+  const guardada = firmas.get(path)
+  if (guardada && guardada.vence > Date.now()) return guardada.url
+  const pendiente = firmando.get(path)
+  if (pendiente) return pendiente
+  const p = conTurno(async () => {
+    const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600)
+    const url = data?.signedUrl ?? null
+    if (url) firmas.set(path, { url, vence: Date.now() + 3_300_000 })   // ~55 min < 1 h de la firma
+    return url
+  }).finally(() => { firmando.delete(path) })
+  firmando.set(path, p)
+  return p
+}
+
+/** Solo para pruebas: vacía la memoria de firmas. */
+export function _olvidarFirmas(): void { firmas.clear(); firmando.clear() }
 
 // La foto (documents) enlazada a un movimiento de caja — para el verificado de
 // factura (FacturaVerify). Devuelve la más reciente o null si no hay factura cargada.

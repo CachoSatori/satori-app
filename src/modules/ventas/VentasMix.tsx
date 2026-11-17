@@ -34,6 +34,20 @@ const CLAS_ORDER_COM = [
 const TIPOS_BASE = ['bebida','comida','comensales','local club','invitados','cortesia','personal']
 
 type Section = { label: string; color: string; filterFn: (p: PMItem) => boolean; clasOrder?: string[] }
+
+// ── Claves de fila (React `key`) y de expandido ────────────────────────────────────────────
+//
+// Una misma clasificación puede tener productos de dos tipos (p. ej. comida y bebida) y entonces
+// se dibuja en DOS secciones. Antes la clave era solo la clasificación «slugificada»: las dos
+// filas compartían `key`, React reconciliaba mal y cada clic dejaba una fila huérfana; y abrir
+// la de una sección abría también la de la otra. La clave lleva ahora sección + clasificación
+// (+ subclasificación), sin slugify (que además juntaba «A B» con «A_B»).
+function claveClas(seccion: string, clas: string): string {
+  return JSON.stringify([seccion, clas])
+}
+function claveSubcl(seccion: string, clas: string, subcl: string): string {
+  return JSON.stringify([seccion, clas, subcl])
+}
 const SECTIONS: Section[] = [
   { label: 'Bebidas',               color: 'var(--c-musgo)', filterFn: p => p.tipo === 'bebida' },
   { label: 'Comidas',               color: 'var(--c-oro-texto)', filterFn: p => p.tipo === 'comida', clasOrder: CLAS_ORDER_COM },
@@ -246,11 +260,13 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
     if (expand) {
       const clsIds  = new Set<string>()
       const subIds  = new Set<string>()
-      for (const [clas, cd] of Object.entries(CM)) {
-        const cId = slugify(clas)
-        clsIds.add(cId)
-        for (const subcl of Object.keys(cd.subcls)) subIds.add(`${cId}_s_${slugify(subcl)}`)
-      }
+      // Todas las secciones: una clasificación que no está en una sección no se dibuja ahí,
+      // así que su clave de más no tiene efecto.
+      for (const sec of SECTIONS)
+        for (const [clas, cd] of Object.entries(CM)) {
+          clsIds.add(claveClas(sec.label, clas))
+          for (const subcl of Object.keys(cd.subcls)) subIds.add(claveSubcl(sec.label, clas, subcl))
+        }
       setOpenClas(clsIds)
       setOpenSubcl(subIds)
     } else {
@@ -260,7 +276,6 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
     setAllExpanded(expand)
   }
 
-  function slugify(s: string) { return s.replace(/[^a-zA-Z0-9]/g,'_') }
 
   return (
     <div className="vt-section">
@@ -580,7 +595,6 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
   openClas: Set<string>; openSubcl: Set<string>
   onToggleClas: (id: string) => void; onToggleSubcl: (id: string) => void
 }) {
-  function slugify(s: string) { return s.replace(/[^a-zA-Z0-9]/g,'_') }
 
   const rows: ReactElement[] = []
   let gT = 0, gU = 0
@@ -638,7 +652,7 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
       for (const sf of subFil) for (const p of sf.prods) { cM+=getMonto(p,canal); cU+=p.unidades; cSal+=p.salon; cDel+=p.delivery }
       gT += cM; gU += cU
 
-      const cId  = slugify(clas)
+      const cId  = claveClas(sec.label, clas)
       const pC   = tots.totG ? cM/tots.totG*100 : 0
       const open = openClas.has(cId)
 
@@ -667,7 +681,7 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
         let sM=0, sU=0, sSal=0, sDel=0
         for (const p of prods) { sM+=getMonto(p,canal); sU+=p.unidades; sSal+=p.salon; sDel+=p.delivery }
 
-        const sId    = `${cId}_s_${slugify(subcl)}`
+        const sId    = claveSubcl(sec.label, clas, subcl)
         const pS     = tots.totG ? sM/tots.totG*100 : 0
         const pSClas = cM ? sM/cM*100 : 0
         const clColorS = pSClas > 40 ? 'var(--c-musgo)' : pSClas > 15 ? 'var(--c-oro-texto)' : 'var(--c-gris)'
@@ -782,7 +796,6 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
   openClas: Set<string>; openSubcl: Set<string>
   onToggleClas: (id: string) => void; onToggleSubcl: (id: string) => void
 }) {
-  function slugify(s: string) { return s.replace(/[^a-zA-Z0-9]/g,'_') }
   const N = cmpData.length
 
   function varVsFirst(vals: number[]): ReactElement {
@@ -863,7 +876,7 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
       })
       clasTots.forEach((t,i) => gTs[i] += t)
 
-      const cId  = slugify(clas)
+      const cId  = claveClas(sec.label, clas)
       const open = openClas.has(cId)
 
       rows.push(
@@ -893,7 +906,7 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
       for (const sf of subFil) {
         const { subcl, prods } = sf
         const subTots = cmpData.map(c => { let t=0; for(const p of prods){const pp=c.PM[p.nombre]; if(pp&&sec.filterFn(p))t+=getMonto(pp,canal)} return t })
-        const sId  = `${cId}_s_${slugify(subcl)}`
+        const sId  = claveSubcl(sec.label, clas, subcl)
         const sOpen = openSubcl.has(sId)
 
         rows.push(

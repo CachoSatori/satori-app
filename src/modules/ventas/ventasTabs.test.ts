@@ -6,10 +6,10 @@ import { TABS, ENTRADAS, tabPorDefecto, resolverTab, entradasVisibles, entradaDe
 const ROLES = ['owner', 'manager', 'contador'] as const
 
 describe('ventasTabs', () => {
-  it('las 18 vistas siguen ahí y cada una está en exactamente una entrada', () => {
-    expect(TABS).toHaveLength(18)
+  it('las 16 vistas siguen ahí y cada una está en exactamente una entrada', () => {
+    expect(TABS).toHaveLength(16)
     const enEntradas = ENTRADAS.flatMap(e => e.vistas)
-    expect(enEntradas).toHaveLength(18)
+    expect(enEntradas).toHaveLength(16)
     expect(new Set(enEntradas)).toEqual(new Set(TABS.map(t => t.id)))
   })
 
@@ -17,16 +17,16 @@ describe('ventasTabs', () => {
     expect(ENTRADAS.map(e => e.id)).toEqual(['hoy','envivo','saloneros','analisis','historico','menueng','metas','ajustes'])
     expect(ENTRADAS.find(e => e.id === 'saloneros')!.vistas).toEqual(['saloneros','salolineas','evaluacion','icp','competencias'])
     expect(ENTRADAS.find(e => e.id === 'historico')!.vistas).toEqual(['historico','calendario','mix','ventas','cajeros'])
-    expect(ENTRADAS.find(e => e.id === 'ajustes')!.vistas).toEqual(['paridad','xls','config'])
+    expect(ENTRADAS.find(e => e.id === 'ajustes')!.vistas).toEqual(['config'])
   })
 
   it('los roles de cada vista son los de antes del rediseño', () => {
     const roles = Object.fromEntries(TABS.map(t => [t.id, [...t.roles].sort().join(',')]))
     const omc = 'contador,manager,owner', om = 'manager,owner'
     expect(roles).toEqual({
-      hoy: omc, envivo: omc, paridad: 'owner', saloneros: om, salolineas: om, evaluacion: om,
+      hoy: omc, envivo: omc, saloneros: om, salolineas: om, evaluacion: om,
       icp: omc, cajeros: omc, ventas: omc, historico: omc, mix: omc, analisis: omc,
-      calendario: omc, menueng: om, metas: omc, competencias: om, xls: om, config: om,
+      calendario: omc, menueng: om, metas: omc, competencias: om, config: om,
     })
   })
 
@@ -55,9 +55,16 @@ describe('ventasTabs', () => {
     expect(e.map(x => x.id)).not.toContain('menueng')
   })
 
-  it('el manager ve Ajustes sin Paridad (solo owner)', () => {
-    expect(entradasVisibles('manager').find(x => x.id === 'ajustes')!.vistas).toEqual(['xls','config'])
-    expect(entradasVisibles('owner').find(x => x.id === 'ajustes')!.vistas).toEqual(['paridad','xls','config'])
+  it('16-nov · todo del PoS: ningún rol ve «Paridad» ni «Cargar XLS», y sus ?tab= viejos caen en «Hoy»', () => {
+    for (const role of ROLES) {
+      const vistas = entradasVisibles(role).flatMap(e => e.vistas) as string[]
+      expect(vistas).not.toContain('paridad')
+      expect(vistas).not.toContain('xls')
+      expect(resolverTab(role, 'paridad')).toBe('hoy')
+      expect(resolverTab(role, 'xls')).toBe('hoy')
+    }
+    expect(entradasVisibles('manager').find(x => x.id === 'ajustes')!.vistas).toEqual(['config'])
+    expect(entradasVisibles('owner').find(x => x.id === 'ajustes')!.vistas).toEqual(['config'])
   })
 
   it('cada vista sabe a qué entrada pertenece', () => {

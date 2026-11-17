@@ -32,7 +32,8 @@ describe('correo de ventas', () => {
     expect(texto).toContain('El salón hizo el 86 % de la venta y el mejor día de la semana fue el sábado.')
   })
   it('mismas cifras que el correo anterior, con formato del estándar', () => {
-    for (const s of ['₡48.250.000', '₡41.300.000', '₡2.800.000', '₡4.150.000', '3.120', '₡13.237', '₡1.608.333', '₡41.000.000']) expect(texto).toContain(s)
+    // Ticket por persona: (salón + caja) ÷ pax desde el PoS (16-nov, #245) = (41,3 M + 4,15 M) ÷ 3.120.
+    for (const s of ['₡48.250.000', '₡41.300.000', '₡2.800.000', '₡4.150.000', '3.120', '₡14.567', '₡1.608.333', '₡41.000.000']) expect(texto).toContain(s)
     // Variación +18 %: dentro de 70–130 %, va en gris y sin flecha.
     expect(html).not.toContain('▲')
     expect(texto).toContain('Ana Prueba')

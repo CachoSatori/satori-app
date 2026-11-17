@@ -43,6 +43,17 @@ describe('paridad con la app (paquete generado)', () => {
     expect(createHash('sha256').update(cuerpo).digest('hex')).toBe(m![1])
     expect(txt).not.toMatch(/^import /m)
   })
+
+  it('privacidad (D3): el paquete no trae el roster de nombres ni comentarios', () => {
+    const txt = readFileSync(join(DIR, 'ventasPos.gen.js'), 'utf8')
+    const cuerpo = txt.slice(txt.indexOf('// @ts-nocheck\n') + '// @ts-nocheck\n'.length)
+    expect(cuerpo).toMatch(/const SALONEROS_CONOCIDOS = \{\}/)
+    expect(cuerpo).not.toMatch(/\/\/|\/\*/)
+    // Las únicas etiquetas con texto son las de caja, turno y genéricas; las de personas son «<código> · sin asignar».
+    const etiquetas = [...new Set([...cuerpo.matchAll(/etiqueta: "([^"]*)"/g)].map(m => m[1]))]
+    const permitidas = /^(\d+ · sin asignar|Caja (mañana|noche|bar)|Login compartido \(xx\)|Mañana · almuerzo|Tarde · noche|Sin código)$/
+    expect(etiquetas.filter(e => !permitidas.test(e))).toEqual([])
+  })
 })
 
 // ── Cliente falso: registra la cadena y devuelve páginas ─────────────────────────────────────
@@ -97,7 +108,8 @@ describe('lectura de las tablas (lo mismo que la 067)', () => {
     const sb = clienteFalso({ pos_ndf_ticket_lines: ids.map(id => ({ ticket_id: id })) })
     const r = await leerLineas(sb, ids)
     expect(r).toHaveLength(450)
-    expect(sb.llamadas.map(l => (l.ops.find(o => o[0] === 'in')![1][1] as string[]).length)).toEqual([200, 200, 50])
+    expect(sb.llamadas.map(l => (l.ops.find(o => o[0] === 'in')![1][1] as string[]).length).sort((a, b) => b - a)).toEqual([200, 200, 50])
+    expect(r.map(f => f.ticket_id)).toEqual(ids)            // en paralelo, pero en orden
   })
 })
 
@@ -111,6 +123,14 @@ describe('diasDelPos: de las filas al día, igual que la app', () => {
     expect(JSON.parse(JSON.stringify(dias))).toEqual(
       JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(esperado.dias).map(([f, d]) => [f, { ...(d as object), uploadedAt: caso.rango.hasta }])))))
     expect(Object.keys(dias).sort()).toEqual(['2026-10-05', '2026-10-06'])
+  })
+
+  it('un login que no está en employees sale «sin asignar» y no rompe', async () => {
+    const tickets = [{ ...caso.tickets[0], id: 'z1', numero_factura: 'z1', salonero_login: '023' }]
+    const lineas = [{ ...caso.lineas[0], ticket_id: 'z1', usuario_registra: '023' }]
+    const sb = clienteFalso({ pos_ndf_tickets: tickets, pos_ndf_ticket_lines: lineas, employees: [] })
+    const { dias } = await diasDelPos(sb, caso.rango)
+    expect(Object.keys(dias['2026-10-05'].saloneros)).toContain('023 · sin asignar')
   })
 
   it('sin tickets → sin días (el correo sale «sin datos», no con ceros)', async () => {

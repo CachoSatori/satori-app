@@ -4,6 +4,7 @@
 > (regla 2: nada bajo `supabase/functions/` hasta el ítem 11); se despliega **a mano** desde esta rama.
 
 ## 1. Qué pasa y qué no
+- Incluye el correo con el estándar de reportes de **#241** (`plantilla.ts`): este pase reemplaza al de #241.
 - **Pasa:** el correo de ventas (día 1 = mes anterior; día 15 = quincena 1–14) suma las ventas **del PoS**
   (`pos_ndf_tickets` + `pos_ndf_ticket_lines`, estado `C`, local `santa-teresa`, día CR de factura) con la
   **misma lógica que la app** (paquete `ventasPos.gen.js` de `src/modules/ventas/ventasPosPuro.ts`).
@@ -20,15 +21,18 @@
 ## 2. SHA y huellas
 | Qué | Valor |
 |---|---|
-| Rama | `claude/reporte-mensual-desde-pos` (base `claude/reporte-quincenal-fechas` @ `4d5f973`) |
-| Paquete `ventasPos.gen.js` | generado desde `claude/ventas-desde-pos` @ `0515017`, `sha256(cuerpo)` en su cabecera (la prueba lo verifica) |
+| Rama | `claude/reporte-mensual-desde-pos`, **sobre #241** (`claude/correo-estandar-monthly-report` @ `5fe3ccd`, plantilla nueva). Se despliegan JUNTOS: lecturas del PoS + plantilla del estándar |
+| Paquete `ventasPos.gen.js` | generado desde `claude/ventas-desde-pos` @ `4f7091a` (sin nombres: roster vacío, meseros «<código> · sin asignar», sin comentarios), `sha256(cuerpo)` en su cabecera (la prueba lo verifica) |
 | Prod antes (leído 16-nov 22:5x CR, solo lectura) | `monthly-report` **v22**, `verify_jwt` on, `ezbr_sha256` `314a893e…` |
-| Vuelta atrás | redesplegar desde `claude/reporte-quincenal-fechas` @ `4d5f973` |
+| Vuelta atrás | volver a **v22** (hash `314a893e…`): redesplegar su fuente, `claude/reporte-quincenal-fechas` @ `4d5f973` |
 
 ## 3. Responsables
 Ejecuta: sesión de CC del dueño. Control: otra persona/sesión (no la misma). Firma: el dueño, sobre el SHA del PR.
 
 ## 4. Prerrequisitos
+- **Nombres:** el paquete no trae nombres (privacidad D3). Los saca de `employees` (`pos_login` → nombre). Un login
+  sin cargar sale «<código> · sin asignar» en el ranking. Hoy (16-nov, solo lectura): **1 login de oct–nov sin
+  `employees.pos_login`, 4 facturas** → el dueño lo carga en Admin → Empleados → «Login del PoS» antes del 1-dic.
 - Gate de la rama verde (vitest de `supabase/functions/monthly-report/`: paridad, lectura, totales, control).
 - PR A (`claude/ventas-desde-pos`) **no** es requisito para desplegar: el paquete es autocontenido. Sí lo es para
   regenerarlo (`node scripts/edge/empaquetar-ventas-pos.mjs supabase/functions/monthly-report/ventasPos.gen.js`).
@@ -66,16 +70,18 @@ Esperado (staging puede tener otros datos): `ok:true`, `fuente:"pos"`, `enviados
    | `control.razon_total_pos_vs_xls` | ≈ 1,79 (el reporte del 1-nov tenía solo 20 días) |
    Los logs del 1-nov ya no están (retención), así que «lo que mandó» se reconstruye con la misma suma del código
    viejo sobre `ventas_dias` (Σ `total` de todos los buckets): es exactamente lo que leía.
-5. dry_run de la quincena actual (`{"periodo":"quincena","tipo":"ventas","dry_run":true}`): `enviados:["ventas"]`,
+5. En el dry_run también se puede pedir `tipo:"ambos"`: la respuesta dice `enviados:["ventas","propinas"]` sin mandar
+   nada; los HTML de la plantilla de #241 se ven con `docs/reportes/previews/` (no salen por la respuesta).
+6. dry_run de la quincena actual (`{"periodo":"quincena","tipo":"ventas","dry_run":true}`): `enviados:["ventas"]`,
    `dias_xls: 0` (no hay xls de noviembre) — confirma que el día 15 de diciembre ya no sale vacío.
 
 ## 7. Criterios de parada
 - Cualquier `ok:false` / 500, `verify_jwt` off, o `razon_neta_dias_en_comun` fuera de 0,98–1,03 → **volver atrás** (§2)
   y avisar. No se manda ningún correo real hasta que el dueño lo pida.
 
-## 8. Vuelta atrás
-`git switch claude/reporte-quincenal-fechas && git checkout 4d5f973 && supabase functions deploy monthly-report
---project-ref yiczgdtirrkdvohdquzf --use-api`; verificar que el hash vuelva a `314a893e…`.
+## 8. Vuelta atrás (a v22)
+`git checkout 4d5f973 && supabase functions deploy monthly-report --project-ref yiczgdtirrkdvohdquzf --use-api`;
+verificar `verify_jwt` on y que el hash vuelva a `314a893e…` (si no coincide, avisar: la fuente de v22 no es esa).
 
 ## 9. Firma y bitácora
 | Fecha y hora (-06:00) | Quién | Qué | Resultado |

@@ -19,6 +19,7 @@ import * as V from './ventasPos.gen.js'
 export const LOCAL = 'santa-teresa'
 const PAGINA = 1000
 const TANDA_IDS = 200
+const EN_PARALELO = 4
 
 export interface RangoDias { desde: string; hasta: string }
 type Fila = Record<string, unknown>
@@ -66,20 +67,27 @@ export async function leerTickets(sb: Cliente, rango: RangoDias, local = LOCAL):
 }
 
 /** Las líneas de esos tickets, por tandas de ids (URL corta) y paginadas. */
+/** Las líneas de esos tickets, por tandas de ids (URL corta), paginadas y de a 4 tandas a la vez (orden fijo). */
 export async function leerLineas(sb: Cliente, ids: string[]): Promise<Fila[]> {
+  const tandas: string[][] = []
+  for (let i = 0; i < ids.length; i += TANDA_IDS) tandas.push(ids.slice(i, i + TANDA_IDS))
+  const leer = (tanda: string[]) => leerTodo('pos_lineas', (a, b) => tabla(sb, 'pos_ndf_ticket_lines')
+    .select(V.COLS_LINEAS_067.join(','))
+    .in('ticket_id', tanda)
+    .order('ticket_id', { ascending: true }).order('id', { ascending: true })
+    .range(a, b))
   const out: Fila[] = []
-  for (let i = 0; i < ids.length; i += TANDA_IDS) {
-    const tanda = ids.slice(i, i + TANDA_IDS)
-    out.push(...await leerTodo('pos_lineas', (a, b) => tabla(sb, 'pos_ndf_ticket_lines')
-      .select(V.COLS_LINEAS_067.join(','))
-      .in('ticket_id', tanda)
-      .order('ticket_id', { ascending: true }).order('id', { ascending: true })
-      .range(a, b)))
+  for (let i = 0; i < tandas.length; i += EN_PARALELO) {
+    for (const filas of await Promise.all(tandas.slice(i, i + EN_PARALELO).map(leer))) out.push(...filas)
   }
   return out
 }
 
-/** `pos_login → nombre` de `employees`: la primera capa de nombres, igual que la app. */
+/**
+ * `pos_login → nombre` de `employees`: la primera capa de nombres, igual que la app. El paquete NO trae
+ * el roster de nombres (privacidad D3): un login que no esté acá sale «<código> · sin asignar» y el
+ * reporte sigue (16-nov: 1 login de oct–nov sin cargar, 4 facturas; el dueño lo carga en Admin).
+ */
 export async function leerNombres(sb: Cliente): Promise<Record<string, string>> {
   const { data, error } = await tabla(sb, 'employees').select('pos_login, full_name').not('pos_login', 'is', null)
   exigir('nombres', error)

@@ -140,6 +140,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 127 | → 182 |
 | 128 | → 183 |
 | 129 | → 184 |
+| 130 | → 186 (cumpleaños: el owner deshace «enviado»; PR en borrador, sin firma) |
 | 150 | ← 075 |
 | 151 | ← 100 |
 | 153 | ← 096 |
@@ -174,6 +175,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 183 | ← 128 |
 | 184 | ← 129 |
 | 185 | ← 099 (en PR, sin firma; entra a prod por merge → Branching) |
+| 186 | ← 130 (en PR, sin firma; entra a prod por merge → Branching) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 

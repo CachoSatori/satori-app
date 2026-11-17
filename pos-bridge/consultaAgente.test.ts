@@ -502,6 +502,39 @@ describe('leerProvisionales', () => {
     expect(tickets[0].numero_factura).toBe('7001')
     expect(tickets[0].valor_servido).toBe(9000)
   })
+
+  it('agente en vivo: cuenta dividida (sin pedido) con un mesero en las líneas → salonero por líneas', async () => {
+    const factura = {
+      numero_factura: '7002', fecha_hora: '2026-09-09 21:10:00', estado: 'C', login_cajero: '222',
+      tipo_factura: 'M', area_factura: 'SALON 1', usuario_registra: null, usuario_max: null,
+      personas: null, pedidos: 0, tipo_pedido: null, area_pedido: null, salonero_nombre: null,
+      efectivo: 10000, tarjeta: 0, monto_electronico: 0, deposito: 0, cheque: 0, cuenta_cobrar: 0,
+      dolares_efectivo: 0, dolares_tarjeta: 0, vuelto: 0,
+    } as FilaFactura
+    const detalle = {
+      numero_factura: '7002', codigo: '25', nombre: 'ROLL', cantidad: 1, monto: 9000,
+      imp_servicio: 900, imp_venta: 0, familia: 2, familia_nombre: 'SUSHI',
+      usuario_registra: '032', es_extra: null, compuesto: null,
+    } as FilaDetalle
+    const qy: Queryable = {
+      async query<T>(sql: string): Promise<{ rows: T[] }> {
+        if (sql.includes('FROM [dbo].[FAC_FacturasDet] d')) return { rows: [detalle] as T[] }
+        return { rows: [factura] as T[] }
+      },
+    }
+    const { tickets } = await leerCerradas(qy, ESQUEMA, { desde: 'a', hasta: 'b', ultima: null })
+    expect(tickets[0].salonero_login).toBe('032')
+    expect(tickets[0].salonero_origen).toBe('lineas')
+    expect(tickets[0].registrado_por).toBe('salonero')
+    // El Edge lo acepta tal cual y NO necesita columna nueva: `salonero_origen` no llega a la fila.
+    const n = normalizarTicket('santa-teresa', tickets[0])
+    expect(n.ok).toBe(true)
+    if (n.ok) {
+      expect(n.valor.fila.salonero_login).toBe('032')
+      expect(n.valor.fila.registrado_por).toBe('salonero')
+      expect(Object.keys(n.valor.fila)).not.toContain('salonero_origen')
+    }
+  })
 })
 
 // ── Frente C v1 · monto estimado + pax de la mesa abierta ─────────────────────────────────

@@ -93,6 +93,27 @@ export interface OpcionesBackfill {
   pausaMs: number
 }
 
+/**
+ * Los conteos del salonero de un día, para el dry-run (solo números, nunca logins ni montos):
+ *   · `porLineas`           — facturas con `salonero_origen = 'lineas'`.
+ *   · `porLineasFueraSalon` — de esas, las que no son de canal `salon` (delivery, llevar, barra…):
+ *                             son las que salen del balde de cajeros, hay que verlas aparte.
+ *   · `sinSalonero`         — facturas que siguen con `salonero_login` null.
+ */
+export function conteoSalonero(
+  tickets: readonly Pick<TicketIngest, 'salonero_origen' | 'salonero_login' | 'canal'>[],
+): { porLineas: number; porLineasFueraSalon: number; sinSalonero: number } {
+  let porLineas = 0, porLineasFueraSalon = 0, sinSalonero = 0
+  for (const t of tickets) {
+    if (t.salonero_origen === 'lineas') {
+      porLineas++
+      if (t.canal !== 'salon') porLineasFueraSalon++
+    }
+    if (t.salonero_login === null) sinSalonero++
+  }
+  return { porLineas, porLineasFueraSalon, sinSalonero }
+}
+
 /** Un día: leer, mandar, contar. Nunca tira — el error vuelve en `ResultadoDia`. */
 export async function correrDia(
   puertos: PuertosBackfill,
@@ -112,9 +133,14 @@ export async function correrDia(
     // D9 (17-nov): cuántas facturas traen descuento. Solo un conteo (nunca montos en el log): es la
     // prueba del dry-run en la PC del PoS de que `FAC_FacturasDet.Descuento` se está leyendo.
     const conDescuento = tickets.filter((t) => t.descuento > 0).length
+    // Salonero por líneas (17-nov): cuántas facturas toman el salonero de las líneas y cuántas
+    // quedan sin salonero. Solo conteos: es el humo del pase en la PC del PoS.
+    const { porLineas, sinSalonero, porLineasFueraSalon } = conteoSalonero(tickets)
     if (dryRun) {
       puertos.log(
-        `    ${fecha}  tickets=${tickets.length} líneas=${lineas} con_descuento=${conDescuento}  (dry-run: NO se envía)`,
+        `    ${fecha}  tickets=${tickets.length} líneas=${lineas} con_descuento=${conDescuento} ` +
+        `salonero_por_lineas=${porLineas} salonero_por_lineas_no_salon=${porLineasFueraSalon} ` +
+        `salonero_null=${sinSalonero}  (dry-run: NO se envía)`,
       )
       return { fecha, tickets: tickets.length, guardados: 0, lineas, error: null }
     }
@@ -123,7 +149,8 @@ export async function correrDia(
     for (const p of res.problemas) puertos.log(`    ⚠ ${fecha} · ${p}`)
     puertos.log(
       `    ${fecha}  tickets=${tickets.length} guardados=${res.tickets_guardados} ` +
-      `líneas=${res.lineas_guardadas}${res.invalid ? ` inválidos=${res.invalid}` : ''}`,
+      `líneas=${res.lineas_guardadas}${res.invalid ? ` inválidos=${res.invalid}` : ''} ` +
+      `salonero_por_lineas=${porLineas}`,
     )
     return {
       fecha,

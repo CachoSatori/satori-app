@@ -16,7 +16,7 @@ const NUEVA = 'Tortuga-verde7'
 
 const llenar = (actual: string, nueva: string, nueva2 = nueva) => {
   fireEvent.change(screen.getByLabelText('Contraseña actual'), { target: { value: actual } })
-  fireEvent.change(screen.getByLabelText('Contraseña nueva (mínimo 10)'), { target: { value: nueva } })
+  fireEvent.change(screen.getByLabelText('Contraseña nueva (mínimo 8)'), { target: { value: nueva } })
   fireEvent.change(screen.getByLabelText('Repetir contraseña nueva'), { target: { value: nueva2 } })
 }
 const pantalla = () => render(<MemoryRouter><MiCuenta /></MemoryRouter>)
@@ -48,7 +48,7 @@ describe('MiCuenta · cambiar mi contraseña', () => {
     pantalla()
     const campos: [string, string][] = [
       ['Contraseña actual', 'current-password'],
-      ['Contraseña nueva (mínimo 10)', 'new-password'],
+      ['Contraseña nueva (mínimo 8)', 'new-password'],
       ['Repetir contraseña nueva', 'new-password'],
     ]
     for (const [label, ac] of campos) {
@@ -81,25 +81,42 @@ describe('MiCuenta · cambiar mi contraseña', () => {
     expect(sb.update).not.toHaveBeenCalled()
     expect(sb.signOut).not.toHaveBeenCalled()
     expect((screen.getByLabelText('Contraseña actual') as HTMLInputElement).value).toBe('')
-    expect((screen.getByLabelText('Contraseña nueva (mínimo 10)') as HTMLInputElement).value).toBe(NUEVA)
+    expect((screen.getByLabelText('Contraseña nueva (mínimo 8)') as HTMLInputElement).value).toBe(NUEVA)
   })
 
   it('validación local: corta → no va al servidor', () => {
     pantalla()
-    llenar(ACTUAL, 'corta-123')
+    llenar(ACTUAL, 'cort-12')
+    expect(screen.getByText('Muy corta: usá al menos 8 caracteres')).toBeTruthy()
     fireEvent.click(screen.getByText('Cambiar contraseña'))
-    expect(screen.getByRole('alert').textContent).toBe('La contraseña nueva debe tener al menos 10 caracteres')
+    expect(screen.getByRole('alert').textContent).toBe('La contraseña nueva debe tener al menos 8 caracteres')
     expect(sb.signIn).not.toHaveBeenCalled()
   })
 
-  it('contraseña «Débil»: mensaje con ejemplo y no va al servidor', () => {
+  it('contraseña «Débil»: el medidor y el aviso dicen el motivo, y no va al servidor', () => {
     pantalla()
     llenar(ACTUAL, 'murcielago')
     expect(screen.getByText('Fuerza: Débil')).toBeTruthy()
+    expect(screen.getByText('Le falta un número: agregá al menos uno (no hace falta ningún signo)')).toBeTruthy()
     fireEvent.click(screen.getByText('Cambiar contraseña'))
-    expect(screen.getByRole('alert').textContent).toContain('Esa contraseña es muy fácil de adivinar')
-    expect(screen.getByRole('alert').textContent).toContain('por ejemplo')
+    expect(screen.getByRole('alert').textContent).toBe('Contraseña débil. Le falta un número: agregá al menos uno (no hace falta ningún signo)')
     expect(sb.signIn).not.toHaveBeenCalled()
+  })
+
+  it('el caso del dueño: frase larga con el nombre del local → Fuerte, sin motivo', () => {
+    pantalla()
+    const frase = 'me encanta el sushi de satori los viernes con 2 amigos'
+    llenar(ACTUAL, frase)
+    expect(screen.getByText('Fuerza: Fuerte')).toBeTruthy()
+    expect(screen.queryByText(/Contraseña débil|Es el nombre del local/)).toBeNull()
+  })
+
+  it('aceptable sin signo ni mayúscula: «abcd1234» pasa', async () => {
+    pantalla()
+    llenar(ACTUAL, 'abcd1234')
+    expect(screen.getByText('Fuerza: Aceptable')).toBeTruthy()
+    fireEvent.click(screen.getByText('Cambiar contraseña'))
+    await waitFor(() => expect(sb.update).toHaveBeenCalledWith({ password: 'abcd1234' }))
   })
 
   it('sin conexión: botón apagado con «Necesitás conexión»; vuelve al reconectar', () => {

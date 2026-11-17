@@ -10,17 +10,29 @@
 // Los errores se traducen a un motivo fijo; el mensaje técnico de Supabase no se muestra ni se guarda.
 import { supabase } from './supabase'
 
-export const PASSWORD_MIN_CAMBIO = 10
+// Decisión del dueño (17-nov, en prod): «con 8 caracteres mezclando letras y números está bien; que no haga falta
+// ningún signo». Mayúsculas y signos no son obligatorios.
+export const PASSWORD_MIN_CAMBIO = 8
 
-export const MENSAJE_DEBIL =
-  'Esa contraseña es muy fácil de adivinar. Hacela más larga o mezclá palabras y números: por ejemplo, tres o cuatro palabras con un número en el medio'
+/** Por qué una contraseña sale «Débil». Se muestra siempre, en el medidor y al tocar «Cambiar contraseña». */
+export type MotivoDebil = 'corta' | 'falta_numero' | 'falta_letra' | 'nombre_local' | 'palabra_comun' | 'repeticion'
+
+export const MOTIVO_DEBIL: Record<MotivoDebil, string> = {
+  corta:         `Muy corta: usá al menos ${PASSWORD_MIN_CAMBIO} caracteres`,
+  falta_numero:  'Le falta un número: agregá al menos uno (no hace falta ningún signo)',
+  falta_letra:   'Le falta una letra: agregá al menos una',
+  nombre_local:  'Es el nombre del local con un número: agregá otra palabra',
+  palabra_comun: 'Es una palabra muy conocida con un número: elegí otra o agregá otra palabra',
+  repeticion:    'Es una secuencia o una repetición (como 12345678 o aaaaaaaa): elegí otra',
+}
 
 /** Valida el formulario antes de ir al servidor. Devuelve el mensaje a mostrar, o null si está bien. */
 export function validarCambio(actual: string, nueva: string, nueva2: string): string | null {
   if (!actual) return 'Escribí tu contraseña actual'
   if (nueva.length < PASSWORD_MIN_CAMBIO) return `La contraseña nueva debe tener al menos ${PASSWORD_MIN_CAMBIO} caracteres`
-  // Decisión del dueño (17-nov): lo que el medidor marca «Débil» no se acepta.
-  if (fuerzaPassword(nueva) === 'debil') return MENSAJE_DEBIL
+  // Decisión del dueño (17-nov): lo que el medidor marca «Débil» no se acepta, y se dice por qué.
+  const { motivo } = evaluarPassword(nueva)
+  if (motivo) return `Contraseña débil. ${MOTIVO_DEBIL[motivo]}`
   if (nueva !== nueva2) return 'Las contraseñas nuevas no coinciden'
   if (nueva === actual) return 'La contraseña nueva tiene que ser distinta de la actual'
   return null
@@ -34,15 +46,17 @@ export const FUERZA_TEXTO: Record<Fuerza, string> = {
   fuerte: 'Fuerte',
 }
 
-// Palabras que hacen fácil de adivinar una contraseña del local (en minúscula y sin tildes).
-const COMUNES = ['satori', 'sushi', 'password', 'contrasena', 'qwerty', 'asdf', '123456', 'abc123', 'santateresa', 'nosara']
+// Palabras que hacen fácil de adivinar una contraseña (en minúscula y sin tildes). Solo pesan si la contraseña ES
+// básicamente una de ellas: una frase larga que las contiene no es débil.
+const DEL_LOCAL = ['santateresa', 'satori', 'sushi', 'nosara']
+const COMUNES = [...DEL_LOCAL, 'contrasena', 'password', 'qwerty', 'abc123', '123456', 'asdf']
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
 
 /**
  * Cuántos tipos de carácter tiene: minúscula, mayúscula, número, símbolo. Letras con tilde y la ñ son letras
  * (`\p{L}`), no símbolos; el espacio no suma ningún tipo; una sola mayúscula al principio («Murcielago») no cuenta
- * como mayúscula (es lo primero que cualquiera prueba).
+ * como mayúscula (es lo primero que cualquiera prueba). Informativo: la fuerza ya no exige mayúsculas ni signos.
  */
 export function tiposDeCaracter(p: string): number {
   const t = p.trim()
@@ -56,20 +70,53 @@ export function tiposDeCaracter(p: string): number {
   ].filter(Boolean).length
 }
 
+/** Toda la contraseña es un mismo carácter, una secuencia seguida (abcd…, 1234…, 9876…) o un bloque corto repetido. */
+function esSecuenciaORepeticion(p: string): boolean {
+  const c = [...p.toLowerCase()]
+  if (c.length < 2) return false
+  const paso = c[1].codePointAt(0)! - c[0].codePointAt(0)!
+  if (Math.abs(paso) <= 1 && c.every((x, i) => i === 0 || x.codePointAt(0)! - c[i - 1].codePointAt(0)! === paso)) return true
+  for (let n = 2; n <= 4 && n * 2 <= c.length; n++) {
+    if (c.every((x, i) => x === c[i % n])) return true
+  }
+  return false
+}
+
 /**
- * Fuerza simple. «Débil» no se acepta (`validarCambio`, decisión del dueño 17-nov).
- * Débil: menos del mínimo, una palabra común del local, 4 caracteres iguales seguidos o un solo tipo de carácter
- * corto. Fuerte: 14 o más con 3 tipos (minúscula, mayúscula, número, símbolo), o 18 o más con 2. El resto, aceptable.
+ * Fuerza y motivo. Reglas (decisión del dueño 17-nov):
+ * - Débil: menos de 8; o 8–15 sin letras o sin números; o es básicamente una palabra común (quitándola quedan
+ *   4 caracteres o menos, o quedan solo números y signos, menos de 8: «satori2026», «Sushi2026!!»); o es toda una
+ *   secuencia o repetición («12345678», «a1a1a1a1»).
+ * - 16 o más nunca es débil, salvo que sea un solo carácter repetido.
+ * - Fuerte: 12+ con letras y números, o 16+ de cualquier tipo. El resto, aceptable.
  */
+export function evaluarPassword(p: string): { fuerza: Fuerza; motivo: MotivoDebil | null } {
+  const debil = (motivo: MotivoDebil) => ({ fuerza: 'debil' as const, motivo })
+  if (p.length < PASSWORD_MIN_CAMBIO) return debil('corta')
+  if (/^(.)\1*$/su.test(p)) return debil('repeticion')
+  if (p.length >= 16) return { fuerza: 'fuerte', motivo: null }
+
+  const tieneLetra = /\p{L}/u.test(p)
+  const tieneNumero = /\p{N}/u.test(p)
+  if (!tieneLetra) return debil('falta_letra')
+  if (!tieneNumero) return debil('falta_numero')
+
+  const plano = sinTildes(p.toLowerCase()).replace(/\s+/g, '')
+  const encontradas = COMUNES.filter(w => plano.includes(w))
+  if (encontradas.length) {
+    const resto = encontradas.reduce((r, w) => r.split(w).join(''), plano)
+    if (resto.length <= 4 || (!/\p{L}/u.test(resto) && resto.length < 8)) {
+      return debil(encontradas.some(w => DEL_LOCAL.includes(w)) ? 'nombre_local' : 'palabra_comun')
+    }
+  }
+  if (esSecuenciaORepeticion(p)) return debil('repeticion')
+
+  return { fuerza: p.length >= 12 ? 'fuerte' : 'media', motivo: null }
+}
+
+/** Solo la fuerza (ver `evaluarPassword`). «Débil» no se acepta (`validarCambio`). */
 export function fuerzaPassword(p: string): Fuerza {
-  if (p.length < PASSWORD_MIN_CAMBIO) return 'debil'
-  const plano = sinTildes(p.toLowerCase())
-  if (COMUNES.some(w => plano.includes(w))) return 'debil'
-  if (/(.)\1{3,}/.test(p)) return 'debil'
-  const tipos = tiposDeCaracter(p)
-  if ((p.length >= 14 && tipos >= 3) || (p.length >= 18 && tipos >= 2)) return 'fuerte'
-  if (tipos >= 2 || p.length >= 16) return 'media'
-  return 'debil'
+  return evaluarPassword(p).fuerza
 }
 
 export type MotivoFallo =
@@ -87,7 +134,7 @@ export const MENSAJE_FALLO: Record<MotivoFallo, string> = {
   sin_conexion:        'Sin conexión: no se cambió nada. Probá de nuevo cuando tengas internet',
   demasiados_intentos: 'Demasiados intentos seguidos. Esperá unos minutos y probá de nuevo',
   igual_a_actual:      'La contraseña nueva tiene que ser distinta de la actual',
-  debil_servidor:      'El sistema no acepta esa contraseña por ser muy fácil. Elegí otra más larga o con números y símbolos',
+  debil_servidor:      'El sistema no acepta esa contraseña por ser muy fácil. Elegí otra más larga, con letras y números',
   reautenticar:        'Por seguridad, cerrá sesión, volvé a entrar y probá de nuevo',
   sin_correo:          'Tu cuenta no tiene correo: pedile ayuda a la gerencia',
   desconocido:         'No se pudo cambiar la contraseña. Probá de nuevo; si sigue, avisá a la gerencia',

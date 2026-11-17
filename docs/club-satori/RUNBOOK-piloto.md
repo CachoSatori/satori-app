@@ -299,9 +299,9 @@ clasificación, así que se compara la clasificación (cuando el puente mande la
 **CORTESIA_SIN_SOCIO cuenta solo desde `lc_excepciones_desde`** (antes del lanzamiento la sección se usa fuera del Club).
 Si corresponde, `articulos_cero_permitidos` (p. ej. el 857 «INVITADO»).
 
-## 9. Tarjeta física apagada
+## 9. Tarjeta vieja (antes «Tarjeta física») apagada
 **Hacer:** `update club_config set tarjeta_manual_activa = false;` (ya viene `false` por defecto; se confirma).
-**Verificar:** en caja no aparece «Tarjeta física» y `club_tarjeta_manual` rechaza a todos los roles.
+**Verificar:** en caja no aparece «Tarjeta vieja» y `club_tarjeta_manual` rechaza a todos los roles.
 
 ## 10. Merge del PR #59 (último)
 **Antes:** el ledger de PROD tiene la `069`, la `081`, la `082` y la del Club con su número de 3b (hoy, `150`), sin ninguna

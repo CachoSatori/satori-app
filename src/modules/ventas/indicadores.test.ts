@@ -3,8 +3,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import { readFileSync } from 'node:fs'
+import { FAMILIA_DUENOS as FAMILIA_DUENOS_POS } from '../../shared/ndf/mapTicket'
 import {
-  alertaMesasSinPax, diaCRDeFactura, esRegaliaTotal, estimadorPorNeta, facturasDesdePos,
+  alertaMesasSinPax, diaCRDeFactura, esMesaDeDuenos, esRegaliaTotal, FAMILIA_DUENOS, estimadorPorNeta, facturasDesdePos,
   franjaDeHora, HORA_FIN_NOCHE, personasCargadas, rangoAyer, rangoDeLecturaParaEstimar,
   turnoPorHora, ubicarFactura, ubicarFacturas, ventaPorPersona, ventaPorPersonaPorSalonero,
   type EstimadorPersonas, type FacturaIndicador, type Ubicacion,
@@ -50,6 +51,7 @@ function fac(cr: string, o: Extra = {}): FacturaIndicador {
     fecha_cierra: cierre,
     total_crc: o.total_crc === undefined ? Math.round((o.neta ?? 0) * 1.23) || 1 : o.total_crc,
     clase_ingreso: o.clase_ingreso ?? 'cobrada',
+    ...(o.neta_duenos !== undefined ? { neta_duenos: o.neta_duenos } : {}),
   }
 }
 
@@ -318,6 +320,7 @@ describe('propiedad — Σ venta no cambia con la estimación', () => {
           neta: Math.floor(azar() * 100_000),
           cajero_login: azar() < 0.15 ? null : undefined,
           ...(regalo ? { total_crc: 0, clase_ingreso: 'cortesia' } : {}),
+          ...(azar() < 0.08 ? { clase_ingreso: 'duenos' } : {}),
         }))
       }
       const r = { desde: '2026-11-09', hasta: '2026-11-22' }
@@ -328,14 +331,15 @@ describe('propiedad — Σ venta no cambia con la estimación', () => {
       const v1 = ventaPorPersona(fs, r)
       const nulo = ventaPorPersona(fs, r, { estimador: NULO })
       const tres = ventaPorPersona(fs, r, { estimador: { id: 'tres', estimar: () => 3 } })
-      expect(v1.netaSalon).toBe(esperado)
-      expect(nulo.netaSalon).toBe(esperado)
-      expect(tres.netaSalon).toBe(esperado)
+      const todo = (x: typeof v1) => x.netaSalon + x.netaRegaliasTotales + x.netaMesasDuenos
+      expect(todo(v1)).toBe(esperado)
+      expect(nulo.netaSalon).toBe(v1.netaSalon)
+      expect(tres.netaSalon).toBe(v1.netaSalon)
       expect(v1.personasCargadas).toBe(nulo.personasCargadas)
       expect(tres.personasEstimadas).toBe(3 * tres.facturasSinPax)
       const m = ventaPorPersona(fs, r, { turno: 'mañana' })
       const n = ventaPorPersona(fs, r, { turno: 'noche' })
-      expect(m.netaSalon + n.netaSalon).toBe(esperado)
+      expect(todo(m) + todo(n)).toBe(esperado)
       expect(m.personasEstimadas + n.personasEstimadas).toBe(v1.personasEstimadas)
     }
   })
@@ -383,11 +387,12 @@ describe('alerta de mesas sin pax', () => {
     expect(a.sinSalonero).toEqual({ facturasSalon: 2, sinPax: 1, pct: 50 })
     expect(a.total).toEqual({ facturasSalon: 8, sinPax: 4, pct: 50 })
     expect(a.regaliasTotales).toBe(2)
+    expect(a.mesasDuenos).toBe(0)
   })
 
   it('sin facturas: todo en 0, sin dividir por cero', () => {
     const a = alertaMesasSinPax([], { desde: '2026-11-18', hasta: '2026-11-18' })
-    expect(a).toEqual({ porSalonero: [], sinSalonero: { facturasSalon: 0, sinPax: 0, pct: 0 }, total: { facturasSalon: 0, sinPax: 0, pct: 0 }, regaliasTotales: 0 })
+    expect(a).toEqual({ porSalonero: [], sinSalonero: { facturasSalon: 0, sinPax: 0, pct: 0 }, total: { facturasSalon: 0, sinPax: 0, pct: 0 }, regaliasTotales: 0, mesasDuenos: 0 })
   })
 })
 
@@ -431,7 +436,7 @@ describe('regalías totales (decisión 17/11)', () => {
     expect(esRegaliaTotal({ clase_ingreso: null, total_crc: null, neta: 0 })).toBe(false)
   })
 
-  it('no cuentan personas (ni cargadas ni estimadas), se cuentan aparte y la neta queda', () => {
+  it('fuera del numerador y del denominador, contadas aparte (dueños con total 0 = mesa de dueños)', () => {
     const fs = [
       fac('2026-11-18 20:00', { pax: 2, neta: 40_000 }),
       fac('2026-11-18 20:30', { pax: 3, neta: 0, total_crc: 0, clase_ingreso: 'cortesia' }),
@@ -440,8 +445,9 @@ describe('regalías totales (decisión 17/11)', () => {
     ]
     const r = ventaPorPersona(fs, SEMANA)
     expect(r).toMatchObject({
-      regaliasTotales: 2, netaRegaliasTotales: 22_000, personasCargadas: 2, personasEstimadas: 1,
-      facturasSinPax: 1, facturasSalon: 4, netaSalon: 82_000,
+      regaliasTotales: 1, netaRegaliasTotales: 0, mesasDuenos: 1, netaMesasDuenos: 22_000,
+      personasCargadas: 2, personasEstimadas: 1, facturasSinPax: 1, facturasSalon: 4, netaSalon: 60_000,
+      valor: 20_000,
     })
   })
 
@@ -466,5 +472,50 @@ describe('grupo «sin salonero» siempre aparte', () => {
     expect(p.porSalonero.map(s => [s.salonero_login, s.valor])).toEqual([['901', 20_000], ['902', 5_000]])
     expect(p.sinSalonero).toMatchObject({ valor: 5_000, facturasSalon: 2, regaliasTotales: 1, facturasSinSalonero: 2 })
     expect(ventaPorPersona(fs, SEMANA).facturasSinSalonero).toBe(2)
+  })
+})
+
+describe('mesas de dueños (decisión 17/11): fuera de la venta por persona y de la alerta', () => {
+  it('la familia de dueños es la del PoS', () => {
+    expect(FAMILIA_DUENOS).toBe(FAMILIA_DUENOS_POS)
+  })
+
+  it('criterio: con líneas, familia 28 > la mitad de la neta; sin líneas, clase `duenos`', () => {
+    expect(esMesaDeDuenos({ clase_ingreso: 'duenos', neta: 30_000 })).toBe(true)
+    expect(esMesaDeDuenos({ clase_ingreso: 'mixta', neta: 30_000 })).toBe(false)
+    expect(esMesaDeDuenos({ clase_ingreso: 'mixta', neta: 30_000, neta_duenos: 20_000 })).toBe(true)
+    // una línea de dueños en una cuenta cobrada: mesa normal
+    expect(esMesaDeDuenos({ clase_ingreso: 'duenos', neta: 30_000, neta_duenos: 5_000 })).toBe(false)
+    expect(esMesaDeDuenos({ clase_ingreso: 'duenos', neta: 30_000, neta_duenos: 15_000 })).toBe(false)
+    expect(esMesaDeDuenos({ clase_ingreso: 'cobrada', neta: 0, neta_duenos: 0 })).toBe(false)
+  })
+
+  it('una mesa de dueños COBRADA y con pax tampoco entra (ni neta ni personas) y no va a la alerta', () => {
+    const normal = fac('2026-11-18 20:00', { pax: 2, neta: 40_000 })
+    const duenos = fac('2026-11-18 20:30', { pax: 4, neta: 90_000, total_crc: 50_000, clase_ingreso: 'duenos' })
+    const duenosSinPax = fac('2026-11-18 21:00', { pax: 0, neta: 60_000, neta_duenos: 60_000, clase_ingreso: 'mixta' })
+    const r = ventaPorPersona([normal, duenos, duenosSinPax], SEMANA)
+    expect(r).toMatchObject({
+      valor: 20_000, netaSalon: 40_000, personasCargadas: 2, personasEstimadas: 0,
+      mesasDuenos: 2, netaMesasDuenos: 150_000, facturasSinPax: 0,
+    })
+    const a = alertaMesasSinPax([normal, duenos, duenosSinPax], { desde: '2026-11-18', hasta: '2026-11-18' })
+    expect(a.total).toEqual({ facturasSalon: 1, sinPax: 0, pct: 0 })
+    expect(a.mesasDuenos).toBe(2)
+  })
+
+  it('facturasDesdePos arma `neta_duenos` desde las líneas de familia 28', () => {
+    const t = { numero_factura: '1', estado: 'C' as const, fecha_registra: '2026-11-18T02:00:00Z', canal: 'salon',
+      salonero_login: '901', pax: 0, pax_articulo: null, valor_servido_crc: 0,
+      cajero_login: '222', fecha_cierra: '2026-11-18T07:00:00Z', total_crc: 0, clase_ingreso: 'duenos' }
+    const fs = facturasDesdePos(
+      [{ ...t, id: 'a' }, { ...t, id: 'b', clase_ingreso: 'cobrada', total_crc: 9_000 }],
+      [
+        { ticket_id: 'a', familia: 28, monto: 12_000, codigo_producto: 'D' },
+        { ticket_id: 'a', familia: 2, monto: 3_000, codigo_producto: 'A' },
+        { ticket_id: 'b', familia: 2, monto: 9_000, codigo_producto: 'A' },
+      ],
+    )
+    expect(fs.map(f => [f.neta, f.neta_duenos, esMesaDeDuenos(f)])).toEqual([[15_000, 12_000, true], [9_000, 0, false]])
   })
 })

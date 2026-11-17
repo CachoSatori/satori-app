@@ -36,13 +36,19 @@
 //     «turno inferido». La columna `pos_ndf_tickets.turno` NO se usa: para un cajero que no es
 //     111/222 la ingesta la deriva del reloj (`mapTurno`, mapTicket.ts), así que no agrega nada.
 //
-// ── REGALÍAS TOTALES (decisión del dueño, 17/11) ───────────────────────────────────────────
-// Una factura regalada completa no cuenta personas (ni cargadas ni estimadas), no entra a la
-// referencia del estimador ni a la alerta de mesas sin pax; se cuenta aparte. Ver `esRegaliaTotal`.
+// ── FUERA DE LA VENTA POR PERSONA (decisiones del dueño, 17/11) ────────────────────────────
+// Dos tipos de factura de salón salen del indicador ENTERAS (numerador Y denominador), de la
+// referencia del estimador y de la alerta de mesas sin pax, y se cuentan aparte:
+//   · Mesas de dueños («no tienen que tener pax ni contabilizarse en el prom/pax»): `esMesaDeDuenos`.
+//   · Regalías totales (total 0): `esRegaliaTotal`.
+// Siguen sumando en la venta total del local: `netaVenta.ts` (firmada) no cambia.
 
 import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
 import { jornadaPorTicket } from '../../shared/ndf/jornada'
 import { netaPorTicket } from './netaVenta'
+
+/** Familia del PoS de los consumos de dueños (`FAMILIA_DUENOS` de mapTicket; contrato en la prueba). */
+export const FAMILIA_DUENOS = 28
 import { lunesDe, sumarDias, type Rango } from './periodosPromPax'
 import { turnoDeFranja, type Franja, type TurnoPromPax } from './ventasPromPaxExplicado'
 
@@ -69,6 +75,8 @@ export interface FacturaIndicador {
   total_crc?:     number | null
   /** `cobrada | cortesia | duenos | sin_cobro | descuento | mixta` (mapClaseIngreso). */
   clase_ingreso?: string | null
+  /** Parte de `neta` de la familia 28 (dueños). Si falta, se decide por `clase_ingreso`. */
+  neta_duenos?:   number
 }
 
 /** Dónde cae una factura: día y turno de su sesión de caja. */
@@ -154,6 +162,28 @@ export function ubicarFactura(f: FacturaIndicador): Ubicacion | null {
   return ubicarFacturas([f]).get(f) ?? null
 }
 
+/**
+ * ¿Mesa de DUEÑOS? Criterio:
+ *   · Con las líneas (`neta_duenos` presente, lo arma `facturasDesdePos`): la familia 28 es MÁS
+ *     de la mitad de la neta de la factura. Una cuenta cobrada con una línea de dueños es una
+ *     mesa normal (mismo criterio que la cortesía parcial).
+ *   · Sin líneas: `clase_ingreso = 'duenos'` (`mapClaseIngreso` la pone cuando hay familia 28 y
+ *     ninguna otra condición; una `mixta` sin líneas no se puede saber y queda como mesa normal).
+ */
+export function esMesaDeDuenos(f: Pick<FacturaIndicador, 'clase_ingreso' | 'neta' | 'neta_duenos'>): boolean {
+  if (typeof f.neta_duenos === 'number') return f.neta_duenos > 0 && f.neta_duenos * 2 > n(f.neta)
+  return f.clase_ingreso === 'duenos'
+}
+
+/** ¿Sale ENTERA de la venta por persona y de la alerta? Mesa de dueños o regalía total. */
+export function quedaFueraDelIndicador(
+  f: Pick<FacturaIndicador, 'clase_ingreso' | 'neta' | 'neta_duenos' | 'total_crc'>,
+): 'duenos' | 'regalia' | null {
+  if (esMesaDeDuenos(f)) return 'duenos'
+  if (esRegaliaTotal(f)) return 'regalia'
+  return null
+}
+
 /** Clases de ingreso que, con el total en 0, son regalo completo. */
 export const CLASES_REGALIA_TOTAL = ['cortesia', 'duenos', 'sin_cobro'] as const
 
@@ -196,12 +226,19 @@ export function facturasDesdePos(
   lineas: readonly Pick<LineaNdfRow, 'ticket_id' | 'familia' | 'monto' | 'codigo_producto'>[],
 ): FacturaIndicador[] {
   const neta = netaPorTicket(tickets, lineas)
+  const duenos = new Map<string, number>()
+  const conLineas = new Set<string>()
+  for (const l of lineas) {
+    conLineas.add(l.ticket_id)
+    if (l.familia === FAMILIA_DUENOS) duenos.set(l.ticket_id, (duenos.get(l.ticket_id) ?? 0) + n(l.monto))
+  }
   return tickets.map(t => ({
     id: t.id, fecha_registra: t.fecha_registra, estado: t.estado, canal: t.canal,
     salonero_login: t.salonero_login, pax: t.pax, pax_articulo: t.pax_articulo,
     neta: neta.get(t.id) ?? 0,
     cajero_login: t.cajero_login, fecha_cierra: t.fecha_cierra, total_crc: t.total_crc,
     clase_ingreso: t.clase_ingreso ?? null,
+    ...(conLineas.has(t.id) ? { neta_duenos: duenos.get(t.id) ?? 0 } : {}),
   }))
 }
 
@@ -238,7 +275,7 @@ export function estimadorPorNeta(historial: readonly FacturaIndicador[]): Estima
   const ubic = ubicarFacturas(historial)
   const acc = new Map<string, { neta: number; personas: number }>()
   for (const f of historial) {
-    if (!esFacturaDeSalon(f) || esRegaliaTotal(f)) continue
+    if (!esFacturaDeSalon(f) || quedaFueraDelIndicador(f)) continue
     const p = personasCargadas(f)
     if (p <= 0) continue
     const u = ubic.get(f)
@@ -276,21 +313,25 @@ export interface VentaPorPersona {
   valor:                 number | null
   /** Rotulada: neta ÷ personas, solo facturas de salón CON pax (para comparar saloneros). */
   valorSoloConPax:       number | null
-  /** Toda la neta de salón del rango (incluidas sin referencia y regalías totales). */
+  /** Neta de salón del INDICADOR (numerador): sin mesas de dueños ni regalías totales. */
   netaSalon:             number
   personasCargadas:      number
   personasEstimadas:     number
   /** Estimadas ÷ (cargadas + estimadas), 0–100. Para el rótulo «incluye X % estimado». */
   pctEstimado:           number
+  /** TODAS las de salón del rango, incluidas mesas de dueños y regalías totales. */
   facturasSalon:         number
-  /** Sin pax y que no son regalía total. */
+  /** Sin pax, entre las que cuentan (sin dueños ni regalías totales). */
   facturasSinPax:        number
   /** Facturas sin pax que no se pudieron estimar: su neta está en el numerador, sus personas no. */
   facturasSinReferencia: number
   netaSinReferencia:     number
-  /** «Regalías totales: N». No cuentan personas; su neta queda en `netaSalon`. */
+  /** «Regalías totales: N». Fuera del numerador y del denominador. */
   regaliasTotales:       number
   netaRegaliasTotales:   number
+  /** Mesas de dueños. Fuera del numerador y del denominador. */
+  mesasDuenos:           number
+  netaMesasDuenos:       number
   /** Facturas cuyo día y turno salieron del reloj (sin caja 111/222). */
   turnosInferidos:       number
   /** Facturas de salón sin salonero (sin pedido, caja o sistema). */
@@ -321,7 +362,7 @@ export function ventaPorPersona(
   const ubic = ubicarFacturas(facturas)
   let netaSalon = 0, netaConPax = 0, cargadas = 0, estimadas = 0
   let facturasSalon = 0, sinPax = 0, sinRef = 0, netaSinRef = 0
-  let regalias = 0, netaRegalias = 0, inferidos = 0, sinSalonero = 0
+  let regalias = 0, netaRegalias = 0, duenos = 0, netaDuenos = 0, inferidos = 0, sinSalonero = 0
   for (const f of facturas) {
     if (!esFacturaDeSalon(f)) continue
     const u = ubic.get(f)
@@ -330,14 +371,12 @@ export function ventaPorPersona(
     if (opciones.filtro && !opciones.filtro(f)) continue
     const neta = n(f.neta)
     facturasSalon += 1
-    netaSalon += neta
     if (u.inferido) inferidos += 1
     if (!f.salonero_login) sinSalonero += 1
-    if (esRegaliaTotal(f)) {
-      regalias += 1
-      netaRegalias += neta
-      continue
-    }
+    const fuera = quedaFueraDelIndicador(f)
+    if (fuera === 'duenos') { duenos += 1; netaDuenos += neta; continue }
+    if (fuera === 'regalia') { regalias += 1; netaRegalias += neta; continue }
+    netaSalon += neta
     const p = personasCargadas(f)
     if (p > 0) {
       cargadas += p
@@ -367,6 +406,8 @@ export function ventaPorPersona(
     netaSinReferencia:     netaSinRef,
     regaliasTotales:       regalias,
     netaRegaliasTotales:   netaRegalias,
+    mesasDuenos:           duenos,
+    netaMesasDuenos:       netaDuenos,
     turnosInferidos:       inferidos,
     facturasSinSalonero:   sinSalonero,
     estimador:             estimador.id,
@@ -393,7 +434,7 @@ export function ventaPorPersonaPorSalonero(
 // ── Alerta de mesas sin pax ────────────────────────────────────────────────────────────────
 
 export interface ConteoSinPax {
-  /** Facturas de salón que cuentan para la alerta (sin regalías totales). */
+  /** Facturas de salón que cuentan para la alerta (sin mesas de dueños ni regalías totales). */
   facturasSalon: number
   sinPax:        number
   /** sinPax ÷ facturasSalon, 0–100 (0 sin facturas). */
@@ -411,6 +452,8 @@ export interface AlertaMesasSinPax {
   total:           ConteoSinPax
   /** Regalías totales del rango: fuera de la alerta, contadas aparte. */
   regaliasTotales: number
+  /** Mesas de dueños del rango: fuera de la alerta, contadas aparte. */
+  mesasDuenos:     number
 }
 
 const conteo = (facturasSalon: number, sinPax: number): ConteoSinPax =>
@@ -420,12 +463,14 @@ const conteo = (facturasSalon: number, sinPax: number): ConteoSinPax =>
 export function alertaMesasSinPax(facturas: readonly FacturaIndicador[], r: Rango): AlertaMesasSinPax {
   const ubic = ubicarFacturas(facturas)
   const por = new Map<string, { t: number; s: number }>()
-  let tSin = 0, sSin = 0, tTot = 0, sTot = 0, regalias = 0
+  let tSin = 0, sSin = 0, tTot = 0, sTot = 0, regalias = 0, duenos = 0
   for (const f of facturas) {
     if (!esFacturaDeSalon(f)) continue
     const u = ubic.get(f)
     if (!u || !enRango(u.dia, r)) continue
-    if (esRegaliaTotal(f)) { regalias += 1; continue }
+    const fuera = quedaFueraDelIndicador(f)
+    if (fuera === 'duenos') { duenos += 1; continue }
+    if (fuera === 'regalia') { regalias += 1; continue }
     const falta = personasCargadas(f) <= 0 ? 1 : 0
     tTot += 1
     sTot += falta
@@ -443,7 +488,7 @@ export function alertaMesasSinPax(facturas: readonly FacturaIndicador[], r: Rang
   const porSalonero = [...por.entries()]
     .map(([salonero_login, e]) => ({ salonero_login, ...conteo(e.t, e.s) }))
     .sort((a, b) => b.sinPax - a.sinPax || b.pct - a.pct || a.salonero_login.localeCompare(b.salonero_login))
-  return { porSalonero, sinSalonero: conteo(tSin, sSin), total: conteo(tTot, sTot), regaliasTotales: regalias }
+  return { porSalonero, sinSalonero: conteo(tSin, sSin), total: conteo(tTot, sTot), regaliasTotales: regalias, mesasDuenos: duenos }
 }
 
 /** El rango de un solo día: ayer respecto de `hoy` (día CR, de `todayCR()`). */

@@ -108,5 +108,6 @@ Por clasificación (proporción después / antes): «Descuento 10 %» ×3,96 · 
 | 2026-11-17 02:13 | dueño | Firma la decisión (opción A: el reporte suma todas las líneas, cada una con su clasificación) |
 | 2026-11-17 02:22 | sesión | 184 aplicada en staging (ledger staging 184) |
 | | verificador independiente | Revisión SQL + batería |
-| | dueño | Firma SQL para prod sobre el SHA: ________ |
-| | control | §5 antes / §6 después |
+| 2026-11-17 02:53 | dueño | Firma SQL para prod por el chat (OK de merge del #250, después de la 183) |
+| 2026-11-17 03:10 | sesión | Merge del #250 (`c775b3d`); Branching aplicó la 184 (ledger prod 184) |
+| 2026-11-17 | control | §6 OK: ledger 184, md5 según lo esperado (núcleo de excepciones `0b7b956e`, reporte `7a5e33e2`, contador `3c3c963d` y envoltorio `7e0b7ae5` sin cambio). La lista de excepciones sin las dos claves nuevas tiene el mismo md5 que antes. Σ reporte = Σ `descuento_crc_lineas` y el total sube unas 2,2 veces |

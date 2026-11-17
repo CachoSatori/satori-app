@@ -125,7 +125,7 @@ carteles.push({
     es: `<h2>Su beneficio</h2>
       <ul>
         <li><b>10 % en su cuenta</b> y una <b>cortesía sorpresa</b> en cada visita.</li>
-        <li>Una visita con beneficio por día.</li>
+        <li>Una visita con beneficio en el almuerzo y una en la cena, cada día.</li>
         <li><b>Vale en Satori Santa Teresa (y pronto en Nosara).</b></li>
         <li>Sus invitados en la misma mesa también.</li>
       </ul>
@@ -138,7 +138,7 @@ carteles.push({
     en: `<h2>Your benefit</h2>
       <ul>
         <li><b>10% off your bill</b> and a <b>surprise treat</b> on every visit.</li>
-        <li>One visit with the benefit per day.</li>
+        <li>One visit with the benefit at lunch and one at dinner, every day.</li>
         <li><b>Valid at Satori Santa Teresa (and soon in Nosara).</b></li>
         <li>Your guests at the same table too.</li>
       </ul>

@@ -5,16 +5,16 @@
 > cambia el texto (por ejemplo, si la cortesía pasa a ser aleatoria). La parte **[con el pase]** va solo cuando el pase de
 > Google Wallet esté encendido.
 >
-> **Tope por día (16-nov):** va como marcador `<tope de visitas con beneficio por día>` (EN: `<visits with the benefit per day>`). Hoy el servidor
-> dice **1 por día**; el dueño evalúa **2** (almuerzo y cena) y está pendiente de su firma. Se completa al mandar. Este mensaje no
-> lleva cumpleaños.
+> **Tope (firmado por el dueño el 16-nov, mig 181):** una visita con beneficio en el almuerzo y una en la cena, cada día
+> (almuerzo hasta las 15:59, cena desde las 16:00, hora de Costa Rica). Vale cuando la 181 esté en producción. Este mensaje
+> no lleva cumpleaños.
 
 ## Español
 
 Hola, <nombre>: ya es socio del **Local Club de Satori** 🍣
 
 - **Su beneficio:** 10 % en su cuenta y, en cada visita, una **cortesía sorpresa**.
-- <tope de visitas con beneficio por día>.
+- Una visita con beneficio en el almuerzo y una en la cena, cada día.
 - **Vale en Satori Santa Teresa (y pronto en Nosara).**
 - **Su QR de socio** está en su portal: <link del portal>. Muéstrelo en caja y listo.
 - Reserve su mesa desde su portal: <link del portal>.
@@ -28,7 +28,7 @@ Puede darse de baja cuando quiera desde su portal. Aviso de privacidad: <link de
 Hi <name>, you are now a member of **Satori's Local Club** 🍣
 
 - **Your benefit:** 10% off your bill and a **surprise treat** on every visit.
-- <visits with the benefit per day>.
+- One visit with the benefit at lunch and one at dinner, every day.
 - **Valid at Satori Santa Teresa (and soon in Nosara).**
 - **Your member QR** is in your portal: <portal link>. Show it at the register and you are set.
 - Book your table from your portal: <portal link>.
@@ -41,13 +41,13 @@ You can leave whenever you want from your portal. Privacy notice: <link del avis
 - Invitados: sin límite; el beneficio vale para toda la mesa, siempre que se sienten con el socio (una sola factura por
   mesa con socio; cada acompañante con su 857).
 - Cortesía: en cada visita. El texto sale de la promoción vigente; si un día pasa a aleatoria, cambia el texto.
-- Tope: hoy una visita con beneficio por día (configuración única del Club); el dueño evalúa 2 (almuerzo y cena), pendiente de su firma: por eso el texto lleva el marcador.
+- Tope (16-nov, firmado, mig 181): una visita con beneficio en el almuerzo y una en la cena por día (almuerzo hasta las 15:59, cena desde las 16:00; configuración única del Club). No son dos libres: no puede usarlo dos veces en la misma comida.
 - Pendiente: el emoji, si va.
 
 ## Decidido (el dueño, 10-nov)
 - El español va con **usted** (anfitriones y socios). El inglés queda igual.
 - «Vale en todos los Satori» → **«Vale en Satori Santa Teresa (y pronto en Nosara)»**, también en inglés. Hoy el único local
-  encendido es Santa Teresa: por eso también se sacó «en cualquier Satori» de la línea del tope por día.
+  encendido es Santa Teresa: por eso también se sacó «en cualquier Satori» de la línea del tope.
 - La app y club-web siguen diciendo «vale en todos los Satori»: el código no nombra ningún local (multilocal genérico,
   pruebas 70 y 72), y con un solo local encendido es lo mismo.
 

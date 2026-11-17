@@ -42,6 +42,20 @@ export const urlSocio     = (codigo: string) => `${clubUrl()}/s/${codigo}`
 
 export type TipoQR = 'referente' | 'cupon' | 'canje' | 'socio' | 'desconocido'
 
+/**
+ * (Piloto, decisión del dueño 11-nov; puesta al día 16-nov) El QR ÚNICO de caja, pegado al lado de la caja: cuando llega
+ * un cliente con la tarjeta de papel de un anfitrión (tarjeta vieja, sin QR), la caja lo escanea y se abre
+ * «Tarjeta vieja» (buscar al anfitrión → personas → pedido), que termina en el mismo camino de servidor que
+ * «Tarjeta vieja» (`club_tarjeta_manual`: topes y excepción para revisión).
+ * Es un texto FIJO, el mismo en todos los locales, y no es un link: escaneado con la cámara de un teléfono no abre nada.
+ * NO da ningún permiso: es un atajo de pantalla. El permiso sigue siendo el usuario, su rol y `tarjeta_manual_activa`.
+ * No pasa por `club_resolver` (no es un código del Club): lo reconoce la pantalla. El cartel lo genera
+ * `scripts/club/cartel_caja.mjs` con esta misma constante (la prueba lo compara).
+ */
+export const QR_CAJA_TARJETA_VIEJA = 'SATORI-CAJA:TARJETA-VIEJA'
+export const esQrCaja = (texto: string | null | undefined): boolean =>
+  (texto ?? '').trim().toUpperCase() === QR_CAJA_TARJETA_VIEJA
+
 const RE_COD = /^[A-HJ-NP-Z2-9]+$/
 
 /**

@@ -68,7 +68,7 @@ export interface ResolverReferente {
            /** (08-nov) para mostrar créditos y colones juntos, como el pase. */
            valor_credito_crc?: number
            canjeado_hoy: number; canje_min: number; canje_paso: number; max_creditos_por_visita: number
-           /** CLUB-AUD-26: tarjeta física habilitada en este local (staging sí, prod no). */
+           /** CLUB-AUD-26: tarjeta vieja (`tarjeta_manual`) habilitada en este local (staging sí, prod no). */
            tarjeta_manual_activa?: boolean
            /** D7 A (mig 157): cuenta del equipo → sin créditos ni canje; `personas_mes` = personas registradas en el mes. */
            sin_creditos?: boolean; personas_mes?: number }
@@ -109,6 +109,13 @@ export class ClubError extends Error {
 
 const RE_RED = /failed to fetch|networkerror|network request failed|load failed|fetch failed|timeout|timed out|aborted/i
 
+/**
+ * (16-nov, decisión del dueño) Nombre único para el personal: «Tarjeta vieja». Algunos avisos del servidor (tope diario,
+ * interruptor apagado) todavía dicen «tarjeta física»; se cambia SOLO el texto que se ve, nunca la base ni los valores.
+ */
+export const conNombreTarjetaVieja = (msg: string): string =>
+  msg.replace(/([Tt])arjeta f[ií]sica/g, (_, t: string) => `${t}arjeta vieja`).replace(/TARJETA F[IÍ]SICA/g, 'TARJETA VIEJA')
+
 export function aClubError(e: unknown): ClubError {
   if (e instanceof ClubError) return e
   const msg = e instanceof Error ? e.message : (e as { message?: string } | null)?.message ?? String(e)
@@ -116,7 +123,7 @@ export function aClubError(e: unknown): ClubError {
   if (RE_RED.test(msg)) return new ClubError('Sin conexión. Reintentá: no se va a duplicar.', true)
   if (/ficha de otro local/i.test(msg)) return new ClubError(MSG_FICHA_OTRO_LOCAL, false, 'FICHA_OTRO_LOCAL')
   if (/permission denied|sin permiso/i.test(msg)) return new ClubError('Tu usuario no tiene permiso para esto: pedile a un manager.', false)
-  return new ClubError(msg, false)
+  return new ClubError(conNombreTarjetaVieja(msg), false)
 }
 
 async function llamar<T>(fn: string, args: Record<string, unknown>): Promise<T> {
@@ -250,6 +257,22 @@ export const tarjetaManual = async (miembro: string, personas: number, pos: PosR
   primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
 export const buscar = (q: string) => llamar<BusquedaFila[]>('club_buscar', { p_q: q })
+/** Lo mismo que exige `club_buscar`: 3 caracteres (nombre, negocio o los últimos 4 del teléfono). */
+export const MIN_CARACTERES_BUSQUEDA = 3
+export const consultaBusquedaValida = (q: string) => q.trim().length >= MIN_CARACTERES_BUSQUEDA
+
+/**
+ * Piloto (11-nov, puesta al día 16-nov) · «Tarjeta vieja»: ¿la tarjeta vieja (`tarjeta_manual`) está encendida en el local?
+ * Lee `club_config.tarjeta_manual_activa` (lectura del staff por RLS, como `getLocalesClub`). Con un local elegido, el de
+ * ese local; sin elegir, alguno de los locales con el Club encendido. SOLO decide si se muestra el botón: quien decide si
+ * se puede cargar es la base, en `club_tarjeta_manual` (interruptor, topes y excepción), igual que la carga de la ficha del anfitrión.
+ */
+export const getTarjetaManualActiva = async (local: string | null = localClub): Promise<boolean> => {
+  const filas = await leer(from<{ location_id: string; club_activo: boolean; tarjeta_manual_activa: boolean }>('club_config')
+    .select('location_id,club_activo,tarjeta_manual_activa').order('location_id'))
+  return (local ? filas.filter(f => f.location_id === local) : filas.filter(f => f.club_activo === true))
+    .some(f => f.tarjeta_manual_activa === true)
+}
 
 // ── Gestión (owner, manager) ─────────────────────────────────────────────────
 export const guardarNegocio = (p: { id: string | null; nombre: string; tipo: TipoNegocio; activo: boolean }) =>
@@ -760,6 +783,12 @@ export interface QueAplicar {
   texto: string; avisos: string[]; articulo_lc: string; repetida: boolean; promo: string | null
   /** Mig 168 (primeros 90 días): la cortesía especial de bienvenida. Sin la 168 (o sin nada que decir) no viene. */
   primeros90?: Primeros90EnCaja
+  /**
+   * Mig 181 (tope por comida): solo con `estado` = 'ya_uso_hoy'. Qué comida ya usó hoy (corte = `turno_corte` del local,
+   * hora CR) y cuándo lo vuelve a tener («Vuelve a tenerlo en la cena, desde las 16:00.»). `texto` y `avisos` ya lo dicen.
+   */
+  comida?: 'almuerzo' | 'cena'
+  vuelve?: string
 }
 /** Mig 168: qué pasó con la cortesía especial en esta visita. `ofrecida` = va en esta factura (una sola vez). */
 export type Primeros90EnCaja =
@@ -836,6 +865,8 @@ export type TipoAlertaInicio = 'ANFITRION_24H' | 'MISMO_USUARIO' | 'VISITAS_SIN_
 export interface AlertaInicio {
   tipo: TipoAlertaInicio; ref: string; cantidad: number; umbral: number; fecha: string
   detalle: { miembro_id?: string; miembro?: string; tipo_miembro?: string; que?: 'socio' | 'equipo'; usuario?: string; dias?: number
+             /** Mig 181: para socios, `cantidad` = DÍAS distintos con visita (`'dias'`); sin la 181 o del equipo, veces. */
+             cuenta?: 'dias' | 'veces'
              /** El local del aviso; `multilocal` = el usuario ve más de un local con el Club encendido. */
              local?: string; local_nombre?: string; multilocal?: boolean }
 }

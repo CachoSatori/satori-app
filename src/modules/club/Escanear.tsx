@@ -3,12 +3,17 @@
  *  · Cupón vigente → personas + PEDIDO (de los abiertos en el PoS) → confirmar → «+N personas a {referente}».
  *    Plan B si el pedido ya se cerró o la lista no carga: elegir la factura de las últimas 2 h (en la tarjeta física, mig
  *    174: las cobradas hoy o buscarla por tiquete hasta 3 días atrás).
- *  · Pase de referente (/r/) → saldo y «Tarjeta física». NO habilita el canje (R-01): cualquiera puede
+ *  · Pase de referente (/r/) → saldo y «Tarjeta vieja». NO habilita el canje (R-01): cualquiera puede
  *    tener una foto del QR de la recepción.
  *  · Código de canje (/k/, 6 caracteres, lo genera el referente en su portal y vence a los 10 min) →
  *    canje (1 / 1,5 / 2). Respaldo sin celular: «Canje sin celular», solo owner o manager, con nota.
  *  · Usado, vencido, dado de baja o desconocido → una línea clara.
- *  Plan B: código a mano y búsqueda (nombre, negocio o últimos 4 del teléfono).
+ *  Plan B: código a mano y búsqueda (nombre, negocio o últimos 4 del teléfono), que busca mientras se escribe.
+ *  · «Tarjeta vieja» (piloto; decisión del dueño 11-nov, puesta al día 16-nov): el cliente llega con la tarjeta de
+ *    papel de un anfitrión. La caja toca el botón (o escanea el QR único de caja) → busca al anfitrión → se abre su ficha
+ *    en «Tarjeta vieja» → personas + pedido. Es el MISMO camino de servidor de siempre (`club_tarjeta_manual`: interruptor
+ *    del local, topes y excepción para revisión): la pantalla no agrega reglas. Solo anfitriones ya inscriptos; el botón
+ *    solo aparece con `tarjeta_manual_activa` en el local. La caja no muestra ningún QR.
  * Idempotencia: un `p_op` por intento; si falla la red, el reintento usa el mismo.
  */
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
@@ -18,11 +23,11 @@ import {
   describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, tokenPortal, getEdadSocio, type EdadSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente, conPremioDeReto, type RetoEnCaja, getCumpleEnCaja, type CumpleEnCaja, usarCumple,
-  digitosTiquete, MIN_DIGITOS_TIQUETE, MSG_TIQUETE_NO_APARECE,
+  digitosTiquete, MIN_DIGITOS_TIQUETE, MSG_TIQUETE_NO_APARECE, getTarjetaManualActiva, consultaBusquedaValida,
 } from '../../shared/api/club'
 import { dateCR, todayCR } from '../../shared/utils'
 import { cumpleDelFormulario, MESES_CORTOS, textoCumpleCaja } from './cumple'
-import { parsearQR, urlPortal } from './qrFormato'
+import { parsearQR, urlPortal, esQrCaja } from './qrFormato'
 import { linkAltaWhatsApp, puedeMandarLinkPortal, tokenDelAlta } from './altaWhatsApp'
 import { ConfirmarWhatsApp } from './ConfirmarWhatsApp'
 import { esCuentaSinCreditos, MSG_EQUIPO_SIN_CANJE } from './equipo'
@@ -49,6 +54,13 @@ type Accion = 'usar' | 'canje' | 'tarjeta' | 'aprobado'
 type ModoRef = 'tarjeta' | 'aprobado'
 type Mensaje = { tono: 'ok' | 'error' | 'info'; texto: string; link?: { href: string; texto: string } }
 
+/** Búsqueda mientras se escribe: espera entre la última tecla y la consulta (la base tiene un tope de búsquedas por minuto). */
+export const ESPERA_BUSQUEDA_MS = 450
+/** (16-nov, decisión del dueño) Artículo del PoS con la tarjeta vieja: el mismo del cupón (vale ₡0, es la marca). */
+export const MARCA_TARJETA_VIEJA = '«PROMO CLUB 10 %»'
+export const MSG_TARJETA_VIEJA_APAGADA = 'La tarjeta vieja está apagada en este local: registrá la visita con el cupón del turista.'
+export const MSG_SIN_RESULTADOS_VIEJA = 'Sin resultados. Si el anfitrión no está inscripto, no se puede cargar su tarjeta: avisale al manager.'
+
 export default function Escanear() {
   const { profile } = useAuth()
   const gestiona = profile?.role === 'owner' || profile?.role === 'manager'
@@ -59,6 +71,17 @@ export default function Escanear() {
   const [cargando, setCargando]   = useState(false)
   const [actual, setActual]       = useState<Actual | null>(null)
   const [msg, setMsg]             = useState<Mensaje | null>(null)
+  // «Tarjeta vieja»: solo una entrada de pantalla; lo demás es «Tarjeta vieja»
+  const [vieja, setVieja]         = useState(false)
+  const [tarjetaActiva, setTarjetaActiva] = useState<boolean | null>(null)   // null = todavía no se sabe
+  const [buscando, setBuscando]   = useState(false)
+  const turnoBusqueda = useRef(0)
+
+  useEffect(() => {
+    let vivo = true
+    getTarjetaManualActiva().then(v => { if (vivo) setTarjetaActiva(v) }).catch(() => { if (vivo) setTarjetaActiva(false) })
+    return () => { vivo = false }
+  }, [])
 
   // formularios
   const [personas, setPersonas]   = useState('')
@@ -78,7 +101,16 @@ export default function Escanear() {
     setPersonas(''); setPos(null); setCreditos(null); setConfirmando(false); setErrAccion(null); setModoRef('tarjeta'); setNota('')
   }
 
+  function abrirTarjetaVieja() {
+    if (tarjetaActiva !== true) { setVieja(false); setActual(null); setMsg({ tono: 'error', texto: MSG_TARJETA_VIEJA_APAGADA }); return }
+    turnoBusqueda.current++
+    setActual(null); setMsg(null); setResultados(null); setQ(''); setCamara(false); setVieja(true)
+  }
+  function cerrarTarjetaVieja() { turnoBusqueda.current++; setVieja(false); setResultados(null); setQ(''); setBuscando(false) }
+
   async function resolver(texto: string, silencioso = false) {
+    // El QR de caja no es un código del Club: es el atajo a «Tarjeta vieja». No da ningún permiso.
+    if (esQrCaja(texto)) { abrirTarjetaVieja(); return }
     const p = parsearQR(texto)
     if (p.tipo === 'desconocido' || !p.codigo) {
       setActual(null); setMsg({ tono: 'error', texto: 'Código no reconocido. Probá de nuevo o buscá por nombre.' })
@@ -106,15 +138,30 @@ export default function Escanear() {
     }
   }
 
-  async function onBuscar() {
-    setCargando(true); setMsg(null); setResultados(null)
-    try { setResultados(await buscar(q)) }
-    catch (e) { setMsg({ tono: 'error', texto: aClubError(e).message }) }
-    finally { setCargando(false) }
-  }
+  // Una búsqueda a la vez: si llega la respuesta de una consulta vieja (se siguió escribiendo), se descarta.
+  const buscarAhora = useCallback(async (texto: string) => {
+    const turno = ++turnoBusqueda.current
+    setBuscando(true); setMsg(null)
+    try {
+      const filas = await buscar(texto)
+      if (turno === turnoBusqueda.current) setResultados(filas)
+    } catch (e) {
+      if (turno === turnoBusqueda.current) { setResultados(null); setMsg({ tono: 'error', texto: aClubError(e).message }) }
+    } finally {
+      if (turno === turnoBusqueda.current) setBuscando(false)
+    }
+  }, [])
+  const onBuscar = () => { if (consultaBusquedaValida(q)) void buscarAhora(q) }
+
+  // Búsqueda mientras se escribe, sobre la misma `club_buscar` (3 caracteres; la base registra y topea cada búsqueda).
+  useEffect(() => {
+    if (!consultaBusquedaValida(q)) { turnoBusqueda.current++; return }   // una respuesta en vuelo ya no se muestra
+    const id = setTimeout(() => { void buscarAhora(q) }, ESPERA_BUSQUEDA_MS)
+    return () => clearTimeout(id)
+  }, [q, buscarAhora])
 
   async function elegir(f: BusquedaFila) {
-    setResultados(null); setQ('')
+    turnoBusqueda.current++; setResultados(null); setQ(''); setVieja(false); setBuscando(false)
     if (f.estado !== 'activo') { setActual(null); setMsg({ tono: 'error', texto: MSG_REFERENTE_INACTIVO }); return }
     setCargando(true)
     try {
@@ -130,6 +177,19 @@ export default function Escanear() {
   }
 
   function cerrarCuenta() { setActual(null); ops.current = {}; limpiarFormularios() }
+
+  /**
+   * Vuelve a leer la ficha del anfitrión después de una operación. Si se abrió por «Buscar» (o por «Tarjeta vieja») no hay
+   * código que volver a resolver: se relee por su id. Antes se llamaba a `resolver('')`, que borraba el aviso de éxito y
+   * mostraba «Código no reconocido…» aunque el registro había quedado guardado.
+   */
+  async function refrescarFicha(a: Actual) {
+    if (a.codigo || (a.kind !== 'referente' && a.kind !== 'canje')) { await resolver(a.codigo, true); return }
+    try {
+      const r = await resolverMiembro(a.r.datos.id)
+      if (r.tipo === 'referente') setActual({ kind: 'referente', r, codigo: '' }); else setActual(null)
+    } catch { setActual(null) }   // la operación ya quedó: sin ficha, se vuelve al inicio con el aviso de éxito
+  }
 
   async function confirmar() {
     if (!actual) return
@@ -160,13 +220,13 @@ export default function Escanear() {
         const vc = 'valor_credito_crc' in actual.r.datos ? actual.r.datos.valor_credito_crc : undefined
         setMsg({ tono: 'ok', texto: `Canje sin celular de ${fmtCreditosCrc(creditos, vc)} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditosCrc(s.creditos, vc)}.` })
         delete ops.current.aprobado; limpiarFormularios()
-        await resolver(actual.codigo, true)
+        await refrescarFicha(actual)
       } else if (modoRef === 'tarjeta') {
         const n = Number(personas)
         await tarjetaManual(actual.r.datos.id, n, pos!, opDe('tarjeta'))
-        setMsg({ tono: 'ok', texto: `Tarjeta física: +${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.nombre}` })
+        setMsg({ tono: 'ok', texto: `Tarjeta vieja: +${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.nombre}` })
         delete ops.current.tarjeta; limpiarFormularios()
-        await resolver(actual.codigo, true)
+        await refrescarFicha(actual)
       }
     } catch (e) {
       // El p_op se conserva: si fue la red, el reintento no duplica.
@@ -200,10 +260,33 @@ export default function Escanear() {
               <LectorQR onCerrar={() => setCamara(false)} onDetectar={t => { setCamara(false); resolver(t) }} />
             </Suspense>
           ) : (
-            <Btn big onClick={() => { setMsg(null); setCamara(true) }} style={{ fontSize: '1.35rem', padding: '1.6rem 1rem' }}>
+            <Btn big onClick={() => { cerrarTarjetaVieja(); setMsg(null); setCamara(true) }} style={{ fontSize: '1.35rem', padding: '1.6rem 1rem' }}>
               📷 Escanear
             </Btn>
           )}
+
+          {/* Piloto: solo con la tarjeta vieja (`tarjeta_manual`) encendida en el local. Termina en la ficha con «Tarjeta vieja» (mismo servidor). */}
+          {tarjetaActiva === true && !vieja && !camara && (
+            <Btn big variant="secondary" onClick={abrirTarjetaVieja}>Tarjeta vieja</Btn>
+          )}
+          {vieja && (
+            <Card style={{ border: `2px solid ${C.ink}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                <div>
+                  <strong style={{ fontSize: '1.1rem' }}>Tarjeta vieja</strong>
+                  <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 2 }}>
+                    Llegó con la tarjeta de papel de un anfitrión (sin QR): buscalo (nombre, negocio o los últimos 4 del teléfono) y
+                    elegilo de la lista. Solo anfitriones ya inscriptos. No le muestres ningún QR al cliente.
+                  </div>
+                </div>
+                <Btn variant="ghost" onClick={cerrarTarjetaVieja} aria-label="Volver">✕</Btn>
+              </div>
+              <Buscador q={q} setQ={setQ} onBuscar={onBuscar} buscando={buscando} resultados={resultados} elegir={elegir}
+                rotulo="Anfitrión de la tarjeta" sinResultados={MSG_SIN_RESULTADOS_VIEJA} enfocar />
+            </Card>
+          )}
+
+          {!vieja && <>
 
           <Card>
             <form onSubmit={e => { e.preventDefault(); if (manual.trim()) { resolver(manual); setManual('') } }}
@@ -218,36 +301,12 @@ export default function Escanear() {
           </Card>
 
           <Card>
-            <form onSubmit={e => { e.preventDefault(); onBuscar() }} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <label style={{ flex: 1 }}>
-                <span style={labelStyle}>Buscar referente (plan B)</span>
-                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Nombre, negocio o tel." aria-label="Buscar referente por nombre, negocio o últimos 4 del teléfono"
-                  autoComplete="off" style={inputStyle} />
-              </label>
-              <Btn type="submit" variant="secondary" disabled={cargando || q.trim().length < 3}>Buscar</Btn>
-            </form>
-            {resultados && (
-              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {resultados.length === 0 && <div style={{ color: C.muted, fontSize: '0.9rem' }}>Sin resultados.</div>}
-                {resultados.map(f => (
-                  <button key={f.id} onClick={() => elegir(f)}
-                    style={{ textAlign: 'left', background: C.paper, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.7rem 0.8rem', cursor: 'pointer', minHeight: 44 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <strong>{f.nombre}</strong>
-                      {/* D7 A (mig 157): el equipo no tiene créditos (el saldo de antes quedó congelado) */}
-                      <span>{f.tipo === 'equipo' ? 'sin créditos' : `${fmtCreditos(f.creditos)} cr.`}</span>
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: C.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
-                      {f.negocio ?? 'Sin negocio'} · {TIPO_MIEMBRO_LABEL[f.tipo] ?? f.tipo}
-                      {f.estado !== 'activo' && <Chip color={C.red}>baja</Chip>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+            <Buscador q={q} setQ={setQ} onBuscar={onBuscar} buscando={buscando} resultados={resultados} elegir={elegir}
+              rotulo="Buscar referente (plan B)" sinResultados="Sin resultados." />
           </Card>
           <NuevoSocio rol={profile?.role}
             onHecho={(t, href) => setMsg({ tono: 'ok', texto: t, ...(href ? { link: { href, texto: 'Mandarle su link por WhatsApp' } } : {}) })} />
+          </>}
           {cargando && <div style={{ textAlign: 'center', color: C.muted }}>Buscando…</div>}
         </>
       )}
@@ -276,6 +335,52 @@ export default function Escanear() {
 }
 
 // ── Piezas ──────────────────────────────────────────────────────────────────
+
+/**
+ * Buscador de anfitriones (plan B y «Tarjeta vieja»): busca mientras se escribe (y con el botón), sobre `club_buscar`.
+ * Muestra nombre, negocio, tipo y créditos; nunca teléfono, email ni el código del QR (CLUB-AUD-30).
+ */
+function Buscador({ q, setQ, onBuscar, buscando, resultados, elegir, rotulo, sinResultados, enfocar }: {
+  q: string; setQ: (s: string) => void; onBuscar: () => void; buscando: boolean
+  resultados: BusquedaFila[] | null; elegir: (f: BusquedaFila) => void; rotulo: string; sinResultados: string; enfocar?: boolean
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (enfocar) ref.current?.focus() }, [enfocar])
+  const corta = q.trim().length > 0 && !consultaBusquedaValida(q)
+  return (
+    <>
+      <form onSubmit={e => { e.preventDefault(); onBuscar() }} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: enfocar ? 10 : 0 }}>
+        <label style={{ flex: 1 }}>
+          <span style={labelStyle}>{rotulo}</span>
+          <input ref={ref} value={q} onChange={e => setQ(e.target.value)} placeholder="Nombre, negocio o tel." aria-label="Buscar referente por nombre, negocio o últimos 4 del teléfono"
+            autoComplete="off" style={inputStyle} />
+        </label>
+        <Btn type="submit" variant="secondary" disabled={!consultaBusquedaValida(q)}>Buscar</Btn>
+      </form>
+      {corta && <div style={{ marginTop: 6, color: C.muted, fontSize: '0.82rem' }}>Escribí al menos 3 letras (o los últimos 4 del teléfono).</div>}
+      {buscando && !corta && q.trim() !== '' && <div style={{ marginTop: 8, color: C.muted, fontSize: '0.9rem' }}>Buscando…</div>}
+      {resultados && !corta && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }} aria-live="polite">
+          {resultados.length === 0 && <div style={{ color: C.muted, fontSize: '0.9rem' }}>{sinResultados}</div>}
+          {resultados.map(f => (
+            <button key={f.id} onClick={() => elegir(f)}
+              style={{ textAlign: 'left', background: C.paper, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.7rem 0.8rem', cursor: 'pointer', minHeight: 44 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <strong>{f.nombre}</strong>
+                {/* D7 A (mig 157): el equipo no tiene créditos (el saldo de antes quedó congelado) */}
+                <span>{f.tipo === 'equipo' ? 'sin créditos' : `${fmtCreditos(f.creditos)} cr.`}</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: C.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
+                {f.negocio ?? 'Sin negocio'} · {TIPO_MIEMBRO_LABEL[f.tipo] ?? f.tipo}
+                {f.estado !== 'activo' && <Chip color={C.red}>baja</Chip>}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
 
 function CampoPersonas({ v, set }: { v: string; set: (s: string) => void }) {
   const n = Number(v) || 0
@@ -576,7 +681,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
               )}
               <div style={{ display: 'flex', gap: 6, margin: '12px 0' }}>
                 {d.tarjeta_manual_activa && (
-                  <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
+                  <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta vieja</Btn>
                 )}
                 {gestiona && !sinCreditos && (
                   <Btn variant={modo === 'aprobado' ? 'primary' : 'secondary'} onClick={() => setModo('aprobado')} style={{ flex: 1 }}>Canje sin celular</Btn>
@@ -635,14 +740,15 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
             ) : d.tarjeta_manual_activa ? (
               <>
                 <div style={{ fontSize: '0.85rem', color: C.muted }}>
-                  Piloto en paralelo: la tarjeta impresa del comercio se carga acá además del proceso de siempre. Queda como
-                  excepción «Tarjeta física» para que la revise otra persona.
+                  La tarjeta de papel del anfitrión (sin QR) se carga acá: personas de la mesa y pedido. En el PoS aplicá el
+                  10 % y marcá el artículo {MARCA_TARJETA_VIEJA} (vale ₡0: es la marca), como con el cupón. Queda como
+                  excepción «Tarjeta vieja» para que la revise otra persona.
                 </div>
                 <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
                 <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} modoTarjeta />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando ? (
-                  <Confirmacion texto={`Tarjeta física: +${p.personas} personas a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
+                  <Confirmacion texto={`Tarjeta vieja: +${p.personas} personas a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
                     enviando={p.enviando} onConfirmar={p.onConfirmar} onVolver={() => p.setConfirmando(false)} />
                 ) : (
                   <Btn big disabled={!p.personasOk || !p.facturaOk} onClick={() => p.setConfirmando(true)}>Continuar</Btn>

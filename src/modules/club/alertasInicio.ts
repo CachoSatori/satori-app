@@ -66,6 +66,16 @@ function avisoSinLocal(a: AlertaInicio): AvisoClub {
           path: d.miembro_id ? rutaClub('miembros', { miembro: d.miembro_id }) : rutaClub('miembros'),
         }
       }
+      // mig 181 (opción A): para socios la base cuenta DÍAS con visita (almuerzo + cena el mismo día = 1)
+      if (d.cuenta === 'dias') {
+        return {
+          id: a.ref,
+          titulo: `${usuario} registró al socio ${nombre(d.miembro)} en ${plural(a.cantidad, 'día distinto', 'días distintos')} de los últimos ${plural(dias, 'día', 'días')}`,
+          texto: `El aviso salta con más de ${plural(a.umbral, 'día', 'días')}. En Reportes → «Visitas de socios por usuario», revisá que cada visita tenga su factura.`,
+          estado: `${plural(a.cantidad, 'día', 'días')}`,
+          path: rutaClub('reportes'),
+        }
+      }
       return {
         id: a.ref,
         titulo: `${usuario} registró al socio ${nombre(d.miembro)} ${plural(a.cantidad, 'vez', 'veces')} en ${plural(dias, 'día', 'días')}`,

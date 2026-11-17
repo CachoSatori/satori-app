@@ -5,7 +5,8 @@ mandarlo).
 
 | Archivo | Para quién | Idioma |
 |---|---|---|
-| `guia-rapida-caja.html` (+ `.pdf` para imprimir, dos páginas A4) | Caja: escanear, qué marcar en el PoS, si sale rojo, canje con código, alta en caja; **página 2 (11-nov): tarjeta vieja de papel, paso a paso (modo transición)** | ES |
+| `guia-rapida-caja.html` (+ `.pdf` para imprimir, una página A4) | Caja: escanear, qué marcar en el PoS, si sale rojo, canje con código, alta en caja | ES |
+| `cartel-caja-tarjeta-vieja.html` (+ `.pdf`, una página A4) | Caja: el QR único de «Tarjeta vieja» (tarjeta de papel de un anfitrión). Lo genera `scripts/club/cartel_caja.mjs`; no editar a mano | ES |
 | `mensaje-anfitriones.md` | Hoteles y concierges: qué cambia, cómo guardan el pase, cómo comparten su link, cómo canjean | ES (usted) y EN |
 | `publicacion-grupo-whatsapp.md` | Grupo de WhatsApp del Local Club (~500 personas que ya lo conocen): la promoción nueva y el link de alta con `&origen=whatsapp` | ES (usted) y EN |
 | `mensaje-socios.md` | Socios del Local Club: el pase, el beneficio, «vale en Satori Santa Teresa (y pronto en Nosara)» | ES (usted) y EN |
@@ -22,10 +23,9 @@ mandarlo).
 - **Textos del 16-nov (aprobados por el dueño):** el cartel del hotel suma «Desde su cupón también puede reservar su mesa.»;
   el mensaje a socios suma la reserva desde el portal; el canje de anfitriones queda simple; la publicación del grupo de
   WhatsApp es nueva.
-- **Tope de visitas por día — pendiente de la firma del dueño:** hoy el servidor dice 1 por día; el dueño evalúa 2
-  (almuerzo y cena). Los mensajes lo llevan como marcador `<tope de visitas con beneficio por día>`. **El cartel de socios
-  dice «Una visita con beneficio por día»: si el dueño firma 2, hay que cambiar ese texto en
-  `scripts/club/carteles.mjs` (ES y EN) y regenerar el cartel.**
+- **Tope — firmado por el dueño el 16-nov (mig 181, PR #229):** una visita con beneficio en el almuerzo y una en la cena,
+  cada día (almuerzo hasta las 15:59, cena desde las 16:00). Mensajes, publicación y cartel de socios ya lo dicen; se
+  usan cuando la 181 esté en producción.
 - Los PDF de los carteles se regeneran con el script si hay Playwright instalado (no es dependencia del repo); si no, se
   imprimen desde el HTML con Chromium (A4, «gráficos de fondo»).
 - La guía rápida de caja no se toca acá: la maneja el PR #225.

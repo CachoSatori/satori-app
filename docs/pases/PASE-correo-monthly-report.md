@@ -7,8 +7,11 @@
   estándar de reportes v1 (`docs/club-satori/ESTANDAR-reportes.md`) adaptado a correo. Plantilla nueva en
   `supabase/functions/monthly-report/plantilla.ts` + `correo-estandar.ts`.
 - **No pasa:** no cambia qué se calcula ni de dónde se lee (`calcVentas`, `calcPropinas`, `pool.ts`, `fechas.ts`,
-  `periodo.ts` iguales), ni los asuntos, ni el destinatario, ni la autenticación (SEC-02), ni `verify_jwt` (sigue **on**).
-  Sin migraciones, sin secretos, sin merges.
+  `periodo.ts` iguales), ni los asuntos, ni la autenticación (SEC-02), ni `verify_jwt` (sigue **on**).
+  Sin migraciones, sin secretos nuevos, sin merges.
+- **Pasa también (firma del dueño, 16-nov):** se saca el correo por defecto escrito en el código. El destinatario sale
+  **solo** del secreto `REPORT_TO_EMAIL`; si falta o no tiene forma de correo, la función no manda nada, loguea
+  «falta destinatario» y responde `500` `falta_destinatario` (el `dry_run` sigue andando: no manda).
 
 ## SHA y huellas
 - Fuente: rama `claude/correo-estandar-monthly-report` (base `claude/reporte-quincenal-fechas` @ `4d5f9733`, el código
@@ -28,6 +31,9 @@ campos, no hay que tocar `plantilla.ts`.
 - Control: el dueño (o quien él designe), distinto de quien ejecuta.
 
 ## Antes (solo lectura)
+- [ ] **Paso previo obligatorio:** el secreto `REPORT_TO_EMAIL` existe en prod (`supabase secrets list --project-ref
+      yiczgdtirrkdvohdquzf`: **solo nombre y digest**, nunca el valor). Según el coordinador ya está cargado; si no
+      aparece, **parar**: con este código el reporte no saldría.
 - [ ] `monthly-report`: versión, `verify_jwt` = on, `ezbr_sha256` = `314a893e3764…`. Si el hash es otro, **parar**: alguien
       desplegó después de este paquete.
 - [ ] Hash de las demás funciones anotado (no tienen que cambiar).
@@ -43,6 +49,7 @@ Sin `--no-verify-jwt` (la función va con `verify_jwt` = on).
 - [ ] `monthly-report`: versión +1, `verify_jwt` **on**, hash nuevo anotado. Las demás funciones, mismo hash.
 - [ ] Humo sin correo: botón de Admin no; usar `POST` con el JWT del owner y `{"dry_run":true}` → `200`, `enviados`
       con `ventas` y `propinas` (calcula y arma el HTML, no manda). Con `{"dry_run":true,"periodo":"quincena"}` igual.
+- [ ] El log del `dry_run` no dice «falta destinatario» (el `dry_run` no lo exige: la prueba real lo confirma).
 - [ ] Prueba real (con OK del dueño): `{"tipo":"ventas"}` o `{"tipo":"propinas"}` → el dueño mira el correo en Gmail
       web y en el teléfono (modo claro y oscuro) y lo compara con `docs/reportes/previews/monthly-report-*.png`.
 - [ ] Si la sesión no puede invocar la función (proxy), la prueba la hace el dueño con una foto. Queda **pendiente**, no

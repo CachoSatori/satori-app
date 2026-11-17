@@ -23,16 +23,19 @@ import { poolTotalSesion, type PoolEntry } from './pool.ts'
 import { mesActualCR, type RangoMes } from './fechas.ts'
 import { elegirPeriodo } from './periodo.ts'
 import { buildVentasEmail, buildPropinasEmail } from './plantilla.ts'
+import { destinatarioDe, FALTA_DESTINATARIO } from './destinatario.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const TO_EMAIL       = Deno.env.get('REPORT_TO_EMAIL') ?? 'cachorrogp@gmail.com'
+// Sin correo por defecto en el código (firma del dueño, 16-nov): sin REPORT_TO_EMAIL no se manda nada.
+const TO_EMAIL       = destinatarioDe(Deno.env.get('REPORT_TO_EMAIL'))
 const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
 
 // Plantillas de los correos (estándar de reportes Satori adaptado a correo): ./plantilla.ts
 
 async function send(subject: string, html: string): Promise<void> {
+  if (!TO_EMAIL) throw new Error(FALTA_DESTINATARIO)   // nunca manda sin destinatario
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -358,6 +361,11 @@ Deno.serve(async (req) => {
     if (tipo !== 'ventas' && tipo !== 'propinas' && tipo !== 'ambos') return falla(400, 'tipo', 'Tipo inválido (ventas, propinas o ambos)')
     if (body.dry_run !== undefined && typeof body.dry_run !== 'boolean') return falla(400, 'dry_run', 'dry_run inválido')
     const dry = body.dry_run === true   // modo seco: calcula todo, NO manda correos
+    // Sin destinatario no se manda nada (el modo seco no manda, así que puede seguir).
+    if (!dry && !TO_EMAIL) {
+      console.error(JSON.stringify({ ref, etapa: FALTA_DESTINATARIO, secreto: 'REPORT_TO_EMAIL' }))
+      return falla(500, 'falta_destinatario', 'Falta el destinatario del reporte (secreto REPORT_TO_EMAIL)')
+    }
 
     // 3) Reporte. La respuesta dice qué se envió, sin montos ni nombres (van solo en el correo).
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)

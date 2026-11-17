@@ -1,39 +1,25 @@
-// ── P2 · De dónde salen las ventas del módulo: PoS con el Excel de respaldo ─────────────────
+// ── De dónde salen las ventas: SOLO del PoS (decisión del dueño, 16-nov-2026 22:20 CR) ──────
 //
-// Hasta P1 el módulo Ventas leía SOLO del Excel (`ventas_dias` / `ventas_hist`, cargados a mano
-// con la pestaña «Cargar XLS»). Acá se hace el swap: la fuente pasa a ser el PoS
-// (`pos_ndf_*`, vía los adaptadores de P1b/P1c) y el Excel queda como piso.
+// «Todo lo que lee ventas lee del PoS. Nunca más Excel ni Paridad.» Las ventas entran solas por
+// el puente (`pos_ndf_*`, vía las funciones de la 067) y la app las arma con `getDiasMapDesdePos`.
+// La carga a mano del xls (`ventas_dias`) y la pestaña Paridad se retiraron de la interfaz; las
+// TABLAS quedan (histórico, sin borrar nada).
 //
-// ── LA FUSIÓN NO ES UN REEMPLAZO ───────────────────────────────────────────────────────────
-// Se parte del mapa del Excel y se le SUPERPONE el del PoS: `{ ...xls, ...pos }`. El PoS pisa
-// donde tiene lote; donde no llega, queda el Excel intacto.
+// ── LA FECHA DE CORTE (leída de prod, solo lectura, 16-nov) ────────────────────────────────
+//   · `pos_ndf_tickets` (santa-teresa): primer día CR de factura = **2024-01-05**.
+//   · `ventas_hist` (reporte general, sin salonero): 2023-01-01 → 2025-12-31.
+//   · `ventas_dias` (detalle diario del xls): 2026-01-01 → 2026-10-20. Ninguno de sus días le
+//     falta al PoS (0 de 292) y ninguno es anterior al corte: el detalle diario sale 100 % del PoS.
+//   · Días de `ventas_hist` desde el corte sin factura en el PoS: 0.
 //
-// ⚠️ QUÉ CUBRE CADA FUENTE DE VERDAD (medido, no supuesto — no confundir las dos tablas):
-//   · `ventas_dias` (DETALLE diario, con saloneros)  → **solo enero 2026 → hoy**.
-//   · `ventas_hist` (reporte diario GENERAL, sin salonero) → **2023-2025**.
-//   · `pos_ndf_*`                                     → **2024-01-05 → hoy**.
-//
-// De ahí sale lo que hay que tener claro y es fácil leer al revés:
-//   · **2023 NO tiene detalle diario en ninguna fuente.** Sobrevive por el `HistMap`
-//     (`ventas_hist`), no por el `DiasMap`. Apagar el Excel (P4) no le quita a 2023 un detalle
-//     que nunca tuvo, pero sí le quitaría el reporte general.
-//   · **2024-2025 tampoco tenía detalle diario**: el PoS se lo AGREGA. Es ganancia del swap, no
-//     algo que había que preservar.
-//   · El Excel es piso real del `DiasMap` solo de enero 2026 en adelante — y ahí es donde de
-//     verdad tapa una jornada sin lote del PoS.
-//
-// Pedirle al adaptador un rango que arranque antes de `PRIMERA_JORNADA_POS` no rompe nada, pero
-// son viajes al pedo: no hay filas que traer.
-//
-// ── LAS 15 PESTAÑAS NO SE ENTERAN ──────────────────────────────────────────────────────────
-// Lo que sale de acá tiene la MISMA forma que antes (`DiasMap` / `HistMap`), así que ninguna
-// pestaña se toca. El swap es un cambio de quién llena el mapa, no de qué hay adentro.
+// Regla de combinación (solo para el RESUMEN diario, `HistMap`): `ventas_hist` hasta el día
+// ANTERIOR a `CORTE_POS` y el PoS desde `CORTE_POS`. Nunca los dos el mismo día (`combinarHist`).
+// Así 2023 —que el PoS no tiene— sigue visible en Histórico, Análisis y Calendario.
 //
 // ── SOLO LECTURA ───────────────────────────────────────────────────────────────────────────
-// Todo lo que se llama acá son SELECT. Nada de esto escribe, ni en `pos_ndf_*` (que además no
-// tiene una sola policy de escritura) ni en `ventas_dias`/`ventas_hist`.
+// Todo lo que se llama acá son SELECT. Nada escribe en `pos_ndf_*`, `ventas_dias` ni `ventas_hist`.
 
-import { getAllVentasDias, getVentasDias, getVentasHist } from '../../shared/api/ventas'
+import { getVentasHist } from '../../shared/api/ventas'
 import { getLatidoVentas } from '../../shared/api/posNdf'
 import type { DiasMap, HistMap, ProductMap } from '../../shared/types/ventas'
 import {
@@ -41,45 +27,22 @@ import {
 } from './ventasDiasDesdePos'
 
 /**
- * De dónde se alimenta el módulo Ventas.
+ * La primera jornada que el PoS tiene ingestada = la FECHA DE CORTE entre el histórico viejo
+ * (`ventas_hist`) y el PoS.
  *
- * · `'pos'`           → PoS fusionado con el Excel de respaldo.
- * · `'xls'` (default) → 100 % Excel, el comportamiento anterior EXACTO. Sin fusión, sin una
- *                        sola consulta a `pos_ndf_*`.
- *
- * Es una constante y no un toggle de UI a propósito: es la palanca para volver atrás en un
- * deploy si el swap muestra algo raro, no una preferencia del usuario.
- *
- * ⚠️ RELEASE A PROD: queda en `'xls'`. Con `'pos'`, apenas el backfill cargue el PoS, los días
- * 2024–2025 y los del Excel pasan a leerse del PoS y los números históricos de prod cambian. El
- * flip a `'pos'` es una decisión FIRMADA del dueño, después de validar prod contra el reporte.
- */
-export type FuenteVentas = 'pos' | 'xls'
-
-export const FUENTE_VENTAS: FuenteVentas = 'pos'
-
-/**
- * La primera jornada que el PoS tiene ingestada.
- *
- * ✅ **CONFIRMADO** por `VALIDACION-cuadre-pos-agosto-2026-09-04`: el backfill cubre
- * **5-ene-2024 → 3-sep-2026**. Antes de eso no hay una sola factura en `pos_ndf_tickets`.
- *
- * Lo que **no** hay que hacer es bajarla a 2023: ahí el PoS no existe y serían viajes al pedo.
- * 2023 lo sirve `ventas_hist` (el reporte general), NO el detalle diario — ver arriba.
+ * ✅ Leída de prod el 16-nov-2026 (solo lectura): `min((fecha_registra at time zone
+ * 'America/Costa_Rica')::date)` de `pos_ndf_tickets` = 2024-01-05. Coincide con el backfill
+ * validado en `VALIDACION-cuadre-pos-agosto-2026-09-04`.
  */
 export const PRIMERA_JORNADA_POS = '2024-01-05'
+export const CORTE_POS = PRIMERA_JORNADA_POS
 
 /**
  * Cuántos días trae el EAGER — el que bloquea el primer render.
  *
- * Bajó de 400 a 90 (P2-perf). Leer del PoS no es leer una fila por día: son los tickets y las
- * líneas CRUDAS, que la app agrega en el navegador. A la escala medida en staging (39.470
- * tickets y 221.639 líneas en 973 días ≈ 41 tickets y 228 líneas por día), 400 días son ~16.000
- * tickets y ~91.000 líneas antes de pintar nada.
- *
  * 90 alcanza para lo único que el primer render necesita: «Hoy» compara contra las **4 últimas
- * ocurrencias del mismo día de semana** (28 días), y lo reciente cabe de sobra. La historia
- * completa sigue llegando por `cargarDeFondo`, en segundo plano.
+ * ocurrencias del mismo día de semana** (28 días). La historia completa llega por
+ * `cargarDeFondo`, en segundo plano.
  */
 export const DIAS_EAGER = 90
 
@@ -95,11 +58,8 @@ export function restarDias(fecha: string, dias: number): string {
 }
 
 /**
- * El rango de JORNADAS que hay que pedirle al PoS.
- *
- * En jornadas, no en días civiles: la jornada de un ticket es la fecha de apertura de su LOTE
- * de cierre (`jornada.ts`), así que el turno que cierra a la 01:00 sigue contando en el día que
- * abrió. El adaptador ya lee un superset y descarta lo que sobra.
+ * El rango de días que hay que pedirle al PoS: días CR de FACTURA (`fecha_registra`), el mismo
+ * corte que el reporte del PoS (ver `ventasDiasDesdePos.ts`). Hoy incluido.
  *
  * Nunca arranca antes de `PRIMERA_JORNADA_POS`.
  */
@@ -109,109 +69,81 @@ export function rangoPos(dias: number | 'todo', ahora: Date = new Date()): Rango
   return { desde: desde < PRIMERA_JORNADA_POS ? PRIMERA_JORNADA_POS : desde, hasta }
 }
 
-// ── La fusión ──────────────────────────────────────────────────────────────────────────────
+// ── La combinación con el histórico viejo ──────────────────────────────────────────────────
 
 /**
- * Excel + PoS → el mapa que ven las pestañas. **Una sola función, para las dos cargas.**
- *
- * Que el eager (`dias`) y el full (`diasFull`) usen ESTA misma función es lo que evita que
- * «Hoy» y «Análisis» muestren números distintos de la misma fecha, y que algo salte en pantalla
- * cuando el full termina de cargar en segundo plano. Si hubiera dos fusiones, cualquier
- * diferencia entre ellas se vería como un parpadeo de la plata.
- *
- * ⚠️ **El PoS pisa donde tiene jornada, aunque su jornada esté incompleta.** Es la regla
- * firmada, y tiene un filo: si una jornada se ingestó a medias (el agente se cayó a mitad del
- * servicio), esa jornada corta pisa un día del Excel que estaba completo y el día muestra de
- * menos. No se "arregla" acá con un umbral, porque un umbral inventado escondería el problema
- * en vez de mostrarlo: la pestaña **Paridad (validación)** compara EXACTAMENTE estos dos mapas,
- * día por día, y marca las jornadas donde no coinciden. Ése es el control.
+ * `ventas_hist` hasta el día ANTERIOR a `corte`, el PoS desde `corte`. **Un día viene de una sola
+ * fuente**: lo del histórico viejo en o después del corte se descarta (aunque el PoS no tenga ese
+ * día), y lo del PoS antes del corte también. Sin superposición posible.
  */
-export function fusionarDias(xls: DiasMap, pos: DiasMap): DiasMap {
-  return { ...xls, ...pos }
-}
-
-/** Lo mismo para el histórico (`HistMap`). Misma regla, mismo motivo. */
-export function fusionarHist(xls: HistMap, pos: HistMap): HistMap {
-  return { ...xls, ...pos }
+export function combinarHist(viejo: HistMap, pos: HistMap, corte: string = CORTE_POS): HistMap {
+  const out: HistMap = {}
+  for (const [f, d] of Object.entries(viejo)) if (f < corte) out[f] = d
+  for (const [f, d] of Object.entries(pos)) if (f >= corte) out[f] = d
+  return out
 }
 
 // ── Las cargas ─────────────────────────────────────────────────────────────────────────────
 //
-// ⚠️ CAMBIO ESPERADO, NO ES UN BUG: el **delivery baja ~4-5 %** contra el Excel.
-// El xls marcaba como delivery todo lo que no tenía cargo de servicio, y ahí adentro caían
-// también «para llevar» y la barra. El PoS usa el canal real (`canal = 'delivery'`), que es lo
-// que de verdad salió en moto. **El número del PoS es el correcto**; el del Excel venía
-// inflado. La neta, el salón y el servicio no se mueven (paridad de agosto 2026: neta −0,4 %,
-// salón −0,0 %, pax +1,5 %).
+// Bloquea el primer render: `cargarDiasEager` (90 días del PoS) + `cargarHistEager` (una
+// consulta a `ventas_hist`, solo lo anterior al corte).
+// No bloquea: `cargarDeFondo`, que trae la historia completa del PoS en segundo plano (un solo
+// pase: de ahí salen el `DiasMap` full y el `HistMap` desde el corte, vía `aHistMap`).
+//
+// ⚠️ Efecto visible: hasta que el fondo termina, las pestañas que leen `hist` (Histórico, Mix,
+// Análisis, Calendario, Metas) muestran 2023 y los 90 días; 2024 en adelante llega con el fondo.
 
-// ── QUÉ BLOQUEA EL PRIMER RENDER Y QUÉ NO (P2-perf) ────────────────────────────────────────
-//
-// Bloquea: `cargarDiasEager` (90 días) + `cargarHistEager` (una consulta al Excel).
-// No bloquea: `cargarDeFondo`, que trae la historia completa del PoS en segundo plano.
-//
-// La primera versión de P2 metía el histórico ENTERO del PoS en el `Promise.all` bloqueante
-// (`getHistDesdePos` con el rango `'todo'`), y eso solo ya era ~2,4× el eager de 400 días: el
-// histórico del PoS no es una tabla de resúmenes, se DERIVA agregando los mismos tickets y
-// líneas crudas. Estaba pagando el rango completo dos veces —una para el `HistMap` y otra para
-// el `DiasMap` full— antes de pintar un pixel.
-//
-// Ahora el PoS del rango completo se lee UNA sola vez, en `cargarDeFondo`, y de ese único pase
-// salen las dos cosas: el `DiasMap` full y el `HistMap` (que es una proyección del mismo día,
-// vía `aHistMap`). Mitad de trabajo, y nada de eso bloquea.
-
-/**
- * Los días del eager (los últimos `DIAS_EAGER`), fusionados. **Bloquea el primer render.**
- *
- * Con `FUENTE_VENTAS = 'xls'` devuelve exactamente lo que devolvía antes y **no consulta el
- * PoS**: el camino viejo queda intacto, no emulado.
- */
+/** Los días del eager (los últimos `DIAS_EAGER`), del PoS. **Bloquea el primer render.** */
 export async function cargarDiasEager(
-  fuente: FuenteVentas = FUENTE_VENTAS,
   local: string = LOCAL_POR_DEFECTO,
   ahora: Date = new Date(),
 ): Promise<CargaDias> {
-  return cargarDias(DIAS_EAGER, fuente, local, ahora)
+  return cargarDias(DIAS_EAGER, local, ahora)
 }
 
 /**
- * Los últimos `dias` días, fusionados con la MISMA regla que el eager. La usa Mi Rendimiento
- * (365 días), que tiene que ver los mismos números que el módulo Ventas.
+ * Los últimos `dias` días, del PoS. La usan el eager de Ventas y Mi Rendimiento (365 días).
  *
- * Con `FUENTE_VENTAS = 'xls'` es `getVentasDias(dias)` tal cual: no consulta el PoS y
- * `estadoPos` es `null`.
- *
- * Con `'pos'` NUNCA cae en silencio al Excel: si el PoS no se pudo leer, devuelve el Excel igual
- * (no todo vacío), con `estadoPos` distinto de `'ok'` y un `console.warn`, para que la pantalla
- * lo diga (`AvisoFuentePos`).
+ * Si el PoS no se pudo leer devuelve un mapa VACÍO (no hay respaldo: el Excel se retiró) con
+ * `estadoPos` distinto de `'ok'` y un `console.warn`, para que la pantalla lo diga
+ * (`AvisoFuentePos`). Nunca muestra un número viejo como si fuera el actual.
  */
 export async function cargarDias(
   dias: number,
-  fuente: FuenteVentas = FUENTE_VENTAS,
   local: string = LOCAL_POR_DEFECTO,
   ahora: Date = new Date(),
 ): Promise<CargaDias> {
-  const xls = await getVentasDias(dias)
-  if (fuente === 'xls') return { dias: xls, pm: {}, estadoPos: null, ultimoDiaXls: ultimoDia(xls) }
-
   let estado: EstadoPos
   try {
     const pos = await getDiasMapDesdePos(rangoPos(dias, ahora), local)
-    if (Object.keys(pos.dias).length > 0) {
-      return { dias: fusionarDias(xls, pos.dias), pm: pos.pm, estadoPos: 'ok', ultimoDiaXls: ultimoDia(xls) }
-    }
+    if (Object.keys(pos.dias).length > 0) return { dias: pos.dias, pm: pos.pm, estadoPos: 'ok' }
     // Sin una sola factura: o este usuario no puede leer el PoS (las funciones de la mig 067
     // devuelven 0 filas, igual que el RLS), o el PoS de verdad no tiene nada. El latido decide.
     estado = (await getLatidoVentas(local)).acceso ? 'vacio' : 'sin_acceso'
   } catch {
     estado = 'error'
   }
-  const ultimo = ultimoDia(xls)
-  console.warn(`[ventas] PoS ${estado}: mostrando solo el Excel (último día: ${fmtDiaMes(ultimo)})`)
-  return { dias: xls, pm: {}, estadoPos: estado, ultimoDiaXls: ultimo }
+  console.warn(`[ventas] PoS ${estado}: sin ventas que mostrar`)
+  return { dias: {}, pm: {}, estadoPos: estado }
 }
 
 /**
- * Cómo salió la lectura del PoS. `null` = no se leyó (fuente `'xls'`).
+ * Las ventas de un rango de días (inclusivo, días CR de factura), del PoS y del local pedido.
+ * Es la lectura de las pantallas que miran un día, una semana o un mes (Resumen, Inicio,
+ * Inventario, Finanzas, Reporte mensual). Antes del corte no hay PoS: se recorta.
+ */
+export async function ventasDelRango(
+  desde: string,
+  hasta: string,
+  local: string = LOCAL_POR_DEFECTO,
+): Promise<{ dias: DiasMap; pm: ProductMap }> {
+  const d = desde < CORTE_POS ? CORTE_POS : desde
+  if (hasta < d) return { dias: {}, pm: {} }
+  return getDiasMapDesdePos({ desde: d, hasta }, local)
+}
+
+/**
+ * Cómo salió la lectura del PoS.
  *   · `'ok'`         → el PoS respondió con días.
  *   · `'sin_acceso'` → el usuario no puede leer las ventas del PoS (latido sin fila).
  *   · `'vacio'`      → tiene acceso, pero el PoS no devolvió ninguna factura del rango.
@@ -233,37 +165,22 @@ export function fmtDiaMes(fecha: string | null): string {
 }
 
 /**
- * El `HistMap` del EXCEL, y nada más. **Bloquea el primer render, y por eso no toca el PoS.**
- *
- * `ventas_hist` son 1.096 filas ya resumidas: una sola consulta. El overlay del PoS —que
- * cuesta agregar el rango completo— llega después, por `cargarDeFondo`.
- *
- * Efecto visible, y es el mismo patrón que ya tenía el `DiasMap` full: por un momento las
- * pestañas que leen `hist` (Histórico, Mix, Análisis, Contabilidad, Calendario, Metas) muestran
- * los números del Excel, y cuando el fondo termina pasan a los del PoS. No quedan vacías: acá
- * sí, `ventas_hist` cubre 2023-2025 completo (a diferencia de `ventas_dias`, que arranca en
- * enero 2026).
+ * El histórico viejo (`ventas_hist`), SOLO lo anterior a `CORTE_POS`. **Bloquea el primer
+ * render, y por eso no toca el PoS.** Una consulta chica (2023 + 4 días de 2024).
  */
 export async function cargarHistEager(): Promise<HistMap> {
-  return getVentasHist()
+  return combinarHist(await getVentasHist(), {})
 }
 
-/**
- * Los días fusionados + el `ProductMap` por FAMILIA que viene del PoS.
- *
- * `pm` va vacío con `FUENTE_VENTAS = 'xls'`: sin PoS no hay familias que leer, y el camino
- * viejo tiene que quedar EXACTAMENTE como estaba.
- */
+/** Los días del PoS + el `ProductMap` por FAMILIA que viene del PoS. */
 export interface CargaDias {
   dias: DiasMap
   pm:   ProductMap
-  /** Cómo salió la lectura del PoS; `null` con la fuente `'xls'`. */
-  estadoPos?:    EstadoPos | null
-  /** El último día del Excel, para el aviso. */
-  ultimoDiaXls?: string | null
+  /** Cómo salió la lectura del PoS. */
+  estadoPos?: EstadoPos | null
 }
 
-/** Lo que llega en segundo plano: la historia completa, ya fusionada. */
+/** Lo que llega en segundo plano: la historia completa. */
 export interface CargaDeFondo extends CargaDias {
   hist: HistMap
 }
@@ -271,27 +188,18 @@ export interface CargaDeFondo extends CargaDias {
 /**
  * La historia completa, en segundo plano y con **un solo pase por el PoS**.
  *
- * `histXls` es el que ya trajo `cargarHistEager`: se pasa en vez de volver a pedirlo, porque el
- * `HistMap` del Excel no cambia entre las dos cargas.
- *
- * Las dos salidas usan las MISMAS funciones de fusión que el eager, que es lo que garantiza que
- * una fecha que está en los dos dé exactamente lo mismo y nada salte cuando esto termina.
+ * `histViejo` es el que ya trajo `cargarHistEager` (anterior al corte): se pasa en vez de volver
+ * a pedirlo. El `HistMap` sale de `combinarHist`: viejo antes del corte, PoS desde el corte.
  */
 export async function cargarDeFondo(
-  histXls: HistMap,
-  fuente: FuenteVentas = FUENTE_VENTAS,
+  histViejo: HistMap,
   local: string = LOCAL_POR_DEFECTO,
   ahora: Date = new Date(),
 ): Promise<CargaDeFondo> {
-  const diasXls = await getAllVentasDias()
-  if (fuente === 'xls') return { dias: diasXls, hist: histXls, pm: {} }
-
-  // UNA lectura del PoS para las dos salidas. `aHistMap` es un re-shape puro del mismo día:
-  // pedir `getHistDesdePos` aparte volvería a agregar los mismos tickets y líneas.
   const pos = await getDiasMapDesdePos(rangoPos('todo', ahora), local)
   return {
-    dias: fusionarDias(diasXls, pos.dias),
-    hist: fusionarHist(histXls, aHistMap(pos.dias)),
+    dias: pos.dias,
+    hist: combinarHist(histViejo, aHistMap(pos.dias)),
     pm:   pos.pm,
   }
 }

@@ -4,8 +4,8 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
 import { fusionarProductMap } from './ventasUtils'
 import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
-// La fuente de las ventas (P2). `getVentasDias`/`getAllVentasDias`/`getVentasHist` siguen
-// existiendo y se llaman desde acá adentro: el Excel es el piso de la fusión, no se retiró.
+// La fuente de las ventas: SOLO el PoS (decisión del dueño, 16-nov). `ventas_hist` aporta solo
+// lo anterior al corte del PoS (2023); ver `ventasFuente.ts`.
 import { cargarDeFondo, cargarDiasEager, cargarHistEager, type EstadoPos } from './ventasFuente'
 import AvisoFuentePos from './AvisoFuentePos'
 import './ventasNav.css'
@@ -18,7 +18,6 @@ const VentasHoy          = lazy(() => import('./VentasHoy'))
 // Pestaña ADITIVA (preliminar, datos simulados). No recibe props: lee su propio snapshot del
 // mock y no toca `dias`, `pm` ni ninguna otra pestaña.
 const VentasEnVivo       = lazy(() => import('./VentasEnVivo'))
-const VentasParidad      = lazy(() => import('./VentasParidad'))
 const VentasContabilidad = lazy(() => import('./VentasContabilidad'))
 const VentasSaloneros    = lazy(() => import('./VentasSaloneros'))
 const VentasSaloneroLineas = lazy(() => import('./VentasSaloneroLineas'))
@@ -27,7 +26,6 @@ const VentasMix          = lazy(() => import('./VentasMix'))
 const VentasAnalisis     = lazy(() => import('./VentasAnalisis'))
 const VentasMetas        = lazy(() => import('./VentasMetas'))
 const VentasCompetencias = lazy(() => import('./VentasCompetencias'))
-const VentasXLS          = lazy(() => import('./VentasXLS'))
 const VentasConfig       = lazy(() => import('./VentasConfig'))
 const VentasCajeros      = lazy(() => import('./VentasCajeros'))
 const VentasEvaluacion   = lazy(() => import('./VentasEvaluacion'))
@@ -92,7 +90,7 @@ export default function VentasModule() {
   const [diasFull, setDiasFull] = useState<DiasMap>({})
   /** La carga de fondo (historia completa del PoS) sigue corriendo. Solo para avisar. */
   const [cargandoFondo, setCargandoFondo] = useState(false)
-  const [fuentePos, setFuentePos] = useState<{ estado: EstadoPos | null; ultimoDiaXls: string | null }>({ estado: null, ultimoDiaXls: null })
+  const [fuentePos, setFuentePos] = useState<EstadoPos | null>(null)
   const [hist,  setHist]  = useState<HistMap>({})
   const [pm,    setPm]    = useState<ProductMap>({})
   const [metas, setMetas] = useState<Meta>({
@@ -104,9 +102,9 @@ export default function VentasModule() {
 
   // ── A5 · CUÁNDO se pide cada cosa (qué se pide y cómo se calcula, igual que antes) ────────
   // Tres cargas, cada una UNA vez por entrada al módulo (o por «recargar»):
-  //   · base  — lo liviano (hist del Excel, product_map, metas, comps). Siempre; bloquea el módulo.
-  //   · eager — los 90 días (PoS + Excel). Solo al abrir una vista que usa `dias`; En vivo,
-  //             Paridad y Por línea se pintan sin esperarla.
+  //   · base  — lo liviano (hist anterior al corte, product_map, metas, comps). Siempre; bloquea.
+  //   · eager — los 90 días del PoS. Solo al abrir una vista que usa `dias`; En vivo y Por línea
+  //             se pintan sin esperarla.
   //   · fondo — la historia completa del PoS. Solo al abrir una vista de `VISTAS_CON_FONDO`.
   // `gen` invalida lo que llega tarde de una carga anterior a un «recargar».
   const gen    = useRef(0)
@@ -124,7 +122,7 @@ export default function VentasModule() {
       const g = gen.current
       const vigente = () => g === gen.current
       baseP.current = Promise.all([
-        cargarHistEager(),      // el hist del Excel; el overlay del PoS llega en el fondo
+        cargarHistEager(),      // `ventas_hist` antes del corte (2023); el PoS llega en el fondo
         getProductMap(),
         getMetas(),
         getComps(),
@@ -143,18 +141,15 @@ export default function VentasModule() {
     if (!eagerP.current) {
       const g = gen.current
       const vigente = () => g === gen.current
-      // ── P2 · LA FUENTE ES EL PoS, con el Excel de respaldo ──────────────────────────
-      // Todo fusiona `{ ...xls, ...pos }` con la MISMA función (`ventasFuente.ts`): el PoS
-      // pisa donde tiene lote, el Excel queda intacto en 2023 y en cualquier jornada sin lote.
-      // Con `FUENTE_VENTAS = 'xls'` nada de esto consulta el PoS.
+      // ── LA FUENTE ES EL PoS (sin Excel de respaldo desde el 16-nov) ─────────────────
       eagerP.current = Promise.all([pedirBase(), cargarDiasEager()]).then(([{ h, p }, d]) => {
         if (vigente()) {
           setDias(d.dias)
-          setFuentePos({ estado: d.estadoPos ?? null, ultimoDiaXls: d.ultimoDiaXls ?? null })
+          setFuentePos(d.estadoPos ?? null)
           // ── El ProductMap que ven las pantallas: curado + FAMILIA del PoS ───────────────
           // La fusión es CONSERVADORA (ver `fusionarProductMap`): la familia solo rellena lo
           // que no tiene un tipo válido puesto a mano. Un `cortesia`/`personal` curado no se
-          // pisa, así que `cortTotal`/`persTotal`, Menu Engineering y la Paridad no se mueven.
+          // pisa, así que `cortTotal`/`persTotal` y Menu Engineering no se mueven.
           setPm(fusionarProductMap(p, d.pm))
         }
         return { h, dias: d.dias }
@@ -171,8 +166,8 @@ export default function VentasModule() {
       const g = gen.current
       const vigente = () => g === gen.current
       // La historia completa, en segundo plano: es lo que necesitan Análisis (año contra año),
-      // Histórico y Calendario. Hasta que llegue, esas pestañas muestran el Excel — nunca
-      // quedan vacías, porque el Excel cubre 2023-2025 entero.
+      // Histórico y Calendario. Hasta que llegue, esas pestañas muestran 2023 (`ventas_hist`)
+      // y los 90 días del eager.
       fondoP.current = Promise.all([pedirBase(), pedirEager()]).then(([{ p }, { h, dias: d90 }]) => {
         if (!vigente()) return
         setCargandoFondo(true)
@@ -193,7 +188,7 @@ export default function VentasModule() {
     return fondoP.current
   }, [pedirBase, pedirEager])
 
-  /** «Recargar» (Competencias, Cargar XLS, Productos): vuelve a pedir todo, como antes. */
+  /** «Recargar» (Competencias, Productos): vuelve a pedir todo, como antes. */
   const loadAll = () => {
     gen.current += 1
     baseP.current = null
@@ -284,14 +279,13 @@ export default function VentasModule() {
         </div>
       )}
 
-      <AvisoFuentePos estado={fuentePos.estado} ultimoDiaXls={fuentePos.ultimoDiaXls} />
+      <AvisoFuentePos estado={fuentePos} />
 
       {/* La historia completa llega en segundo plano (P2-perf). Sin este aviso, Análisis e
-          Histórico muestran los años viejos del Excel y parecen "mal" hasta que el PoS entra. */}
+          Histórico parecen "mal" (sin 2024 en adelante) hasta que el PoS entra. */}
       {cargandoFondo && (
         <div style={{ margin: '0.75rem 1.5rem', fontSize: '0.75rem', color: 'var(--c-gris)' }}>
-          Cargando la historia completa del PoS… mientras tanto, los años anteriores se muestran
-          desde el Excel.
+          Cargando la historia completa del PoS… mientras tanto se ven los últimos 90 días y 2023.
         </div>
       )}
 
@@ -316,7 +310,6 @@ export default function VentasModule() {
             >
               {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
               {tab === 'envivo'      && <VentasEnVivo       metas={metas} />}
-              {tab === 'paridad'     && <VentasParidad     />}
               {tab === 'ventas'      && <VentasContabilidad dias={allDias} hist={hist} metas={metas} pm={pm} />}
               {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}
               {tab === 'salolineas'  && <VentasSaloneroLineas />}
@@ -330,7 +323,6 @@ export default function VentasModule() {
               {tab === 'menueng'    && <VentasMenuEng      dias={allDias} pm={pm} />}
               {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
               {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} />}
-              {tab === 'xls'         && <VentasXLS          dias={allDias} onRefresh={loadAll} />}
               {tab === 'config'      && <VentasConfig       dias={allDias} pm={pm} onRefresh={loadAll} />}
             </div>
             )}

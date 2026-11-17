@@ -176,9 +176,9 @@ pos_ndf_tickets · pos_ndf_ticket_lines · pos_ndf_open · pos_ndf_cursor   (RLS
    ├──► funciones 067 (SECURITY DEFINER, rol chequeado adentro, sin medios de pago)
    │        pos_ventas_tickets_rango · pos_ventas_lineas · pos_ventas_latido
    │        ▼
-   │     app: ventasFuente.cargarDias / cargarDiasEager / cargarDeFondo ({...xls, ...pos})
-   │          → Ventas (Hoy, Cajeros, Mix, Saloneros, ICP, Histórico…) · Mi Rendimiento · lentes de saloneros
-   │          → si el PoS no se puede leer: estadoPos ≠ 'ok' + franja «Mostrando solo el Excel…»
+   │     app: ventasFuente.cargarDias / cargarDiasEager / cargarDeFondo / ventasDelRango (SOLO PoS)
+   │          → Ventas · Mi Rendimiento · Resumen · Semana · Reporte mensual · Inicio · Inventario · Finanzas
+   │          → si el PoS no se puede leer: estadoPos ≠ 'ok' + franja, sin ventas (no hay respaldo)
    │
    └──► lectura directa (solo gerencia): «En vivo» (mesas abiertas, jornada, latido del agente)
 ```
@@ -186,8 +186,10 @@ pos_ndf_tickets · pos_ndf_ticket_lines · pos_ndf_open · pos_ndf_cursor   (RLS
 - **Tickets en prod:** 40.549 (2024-01-06 → 2026-10-30). En staging: 40.781.
 - **Día del reporte** = fecha CR de `fecha_registra` (el mismo corte que el reporte del PoS). «En vivo» y los
   turnos siguen usando la jornada por lote de cierre.
-- **El Excel (`ventas_dias`) quedó como respaldo:** en prod el último día cargado es el **20/10**. La pestaña
-  «Cargar XLS» y Paridad siguen vivas hasta que se retiren (backlog).
+- **Todo del PoS (decisión firmada del dueño, 16/11 22:20):** ninguna pantalla lee `ventas_dias` (xls; último día
+  cargado en prod: 20/10). «Cargar XLS» y Paridad retiradas de la interfaz (PR `claude/ventas-desde-pos`); las tablas
+  quedan como histórico. **Corte:** `ventas_hist` solo antes del **2024-01-05** (primer día del PoS, leído de prod);
+  desde ahí, solo PoS. Guarda: `src/ventasSoloPos.test.ts`. La Edge `monthly-report` pasa al PoS en su propio PR.
 
 ### Agentes en las PCs
 

@@ -1,71 +1,19 @@
 import { supabase } from './supabase'
-import type { DiaData, HistDay, ProductInfo, Meta, Comp } from '../types/ventas'
+import type { HistDay, ProductInfo, Meta, Comp } from '../types/ventas'
 import type { Json } from '../types/supabase.gen'
 
 // ── Días ────────────────────────────────────────────────────
-
-// 400 days = ~13 months, covers full current + previous year
-// At ~5.5KB/day × 400 = ~2.2MB initial load (acceptable)
-// Previous 90-day limit was silently cutting off Jan-Feb when loading in June
-export async function getVentasDias(days = 400): Promise<Record<string, DiaData>> {
-  const since = new Date()
-  since.setDate(since.getDate() - days)
-  const sinceStr = since.toISOString().slice(0, 10)
-
-  const { data, error } = await supabase
-    .from('ventas_dias')
-    .select('session_date, data')
-    .gte('session_date', sinceStr)
-    .order('session_date', { ascending: true })
-  if (error) throw new Error(error.message)
-  const result: Record<string, DiaData> = {}
-  for (const row of (data as unknown as Array<{ session_date: string; data: DiaData }> ?? [])) {
-    result[row.session_date] = row.data
-  }
-  return result
-}
-
-export async function getAllVentasDias(): Promise<Record<string, DiaData>> {
-  // PostgREST corta callado en 1000 filas: sin este limit el histórico se truncaba y los días
-  // más viejos (2023 / inicio 2024) desaparecían sin error. Mismo motivo y mismo número que
-  // `getVentasHist()`.
-  const { data, error } = await supabase
-    .from('ventas_dias')
-    .select('session_date, data')
-    .order('session_date', { ascending: true })
-    .limit(5000)
-  if (error) throw new Error(error.message)
-  const result: Record<string, DiaData> = {}
-  for (const row of (data as unknown as Array<{ session_date: string; data: DiaData }> ?? [])) {
-    result[row.session_date] = row.data
-  }
-  return result
-}
-
-export async function saveVentasDia(
-  date: string,
-  data: DiaData,
-  uploadedBy: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from('ventas_dias')
-    .upsert({
-      session_date: date,
-      file_name:    data.fileName,
-      data:         data as unknown as Json,
-      uploaded_by:  uploadedBy,
-      uploaded_at:  new Date().toISOString(),
-    }, { onConflict: 'session_date' })
-  if (error) throw new Error(error.message)
-}
-
-export async function deleteVentasDia(date: string): Promise<void> {
-  const { error } = await supabase.from('ventas_dias').delete().eq('session_date', date)
-  if (error) throw new Error(error.message)
-}
+// 16-nov-2026 (decisión del dueño): las ventas del día se leen SOLO del PoS
+// (`modules/ventas/ventasFuente.ts`). La carga y la lectura de `ventas_dias` (xls) se retiraron;
+// la tabla queda como histórico, sin borrar nada.
 
 // ── Histórico ────────────────────────────────────────────────
 
+/**
+ * `ventas_hist` (reporte general 2023-2025). La app usa SOLO lo anterior al corte del PoS
+ * (`combinarHist` en `ventasFuente.ts`); se pide entero y se recorta allá, para que la regla del
+ * corte viva en un solo lugar.
+ */
 export async function getVentasHist(): Promise<Record<string, HistDay>> {
   // PostgREST default limit is 1000 rows — override to avoid silently truncating
   // historical data (we have 1096 days: 2023–2025)
@@ -80,21 +28,6 @@ export async function getVentasHist(): Promise<Record<string, HistDay>> {
     result[row.session_date] = row.data
   }
   return result
-}
-
-export async function saveVentasHist(hist: Record<string, HistDay>): Promise<void> {
-  const rows = Object.entries(hist).map(([date, d]) => ({
-    session_date: date,
-    data:         d as unknown as Json,  // HistDay → JSONB
-    source:       'hist',
-  }))
-  if (!rows.length) return
-  for (let i = 0; i < rows.length; i += 100) {
-    const { error } = await supabase
-      .from('ventas_hist')
-      .upsert(rows.slice(i, i + 100), { onConflict: 'session_date' })
-    if (error) throw new Error(error.message)
-  }
 }
 
 // ── Product Map ──────────────────────────────────────────────

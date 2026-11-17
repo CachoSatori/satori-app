@@ -8,17 +8,17 @@
  * - Caja: ingresos totales, egresos por subcategoría (top 3), saldo neto
  * - Compartir (navigator.share → WhatsApp, fallback clipboard) + Imprimir
  *
- * Datos: reutiliza las funciones de shared/api de ventas (getVentasDias/getVentasHist/
- * getProductMap). Para propinas y caja consulta el rango del mes vía supabase
- * (no existe una función mes-filtrada en shared/api).
+ * Datos de ventas: del PoS (16-nov, nunca más el xls), solo el mes elegido y el anterior
+ * (`ventasDelRango`); antes del corte del PoS (2024-01-05), `ventas_hist` (`cargarHistEager`).
+ * Para propinas y caja consulta el rango del mes vía supabase.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../shared/api/supabase'
-import { getVentasDias, getVentasHist, getProductMap } from '../../shared/api/ventas'
+import { cargarHistEager, ventasDelRango } from '../../modules/ventas/ventasFuente'
 import { getActiveEmployees } from '../../shared/api/tips'
 import { monthRangeBounds } from '../../shared/utils/dateRange'
-import type { DiasMap, HistMap, ProductMap } from '../../shared/types/ventas'
+import type { DiasMap, HistMap } from '../../shared/types/ventas'
 import type { Employee, MovementType } from '../../shared/types/database'
 import {
   getContabilidadDays, fi, fmtDate, fmtMonthLabel, daysInMonth, todayISO,
@@ -190,7 +190,7 @@ export default function ReporteMensual() {
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
-  // Ventas source (loaded once)
+  // Ventas: `hist` (anterior al corte) una vez; los días del PoS por mes elegido.
   const [dias, setDias] = useState<DiasMap>({})
   const [hist, setHist] = useState<HistMap>({})
   const [emps, setEmps] = useState<Employee[]>([])
@@ -200,11 +200,11 @@ export default function ReporteMensual() {
   const [propinas, setPropinas] = useState<PropinasBlock | null>(null)
   const [caja, setCaja] = useState<CajaBlock | null>(null)
 
-  // Load heavy ventas source + employees once
+  // El histórico viejo (antes del corte) + empleados, una vez.
   useEffect(() => {
-    Promise.all([getVentasDias(400), getVentasHist(), getProductMap(), getActiveEmployees()])
-      .then(([d, h, _pm, e]: [DiasMap, HistMap, ProductMap, Employee[]]) => {
-        setDias(d); setHist(h); setEmps(e); setSourceReady(true)
+    Promise.all([cargarHistEager(), getActiveEmployees()])
+      .then(([h, e]: [HistMap, Employee[]]) => {
+        setHist(h); setEmps(e); setSourceReady(true)
       })
       .catch(console.error)
   }, [])
@@ -226,7 +226,13 @@ export default function ReporteMensual() {
     if (!sourceReady) return
     setLoading(true)
     try {
-      const v = computeVentas(ym, dias, hist)
+      // El PoS del mes anterior (para «vs mes anterior») hasta el último día del mes elegido.
+      const [yy, mm] = ym.split('-').map(Number)
+      const prev = mm === 1 ? `${yy - 1}-12` : `${yy}-${String(mm - 1).padStart(2, '0')}`
+      const fin = `${ym}-${String(daysInMonth(ym)).padStart(2, '0')}`
+      const { dias: delPos } = await ventasDelRango(`${prev}-01`, fin)
+      setDias(delPos)
+      const v = computeVentas(ym, delPos, hist)
       const [p, c] = await Promise.all([fetchPropinas(ym, emps), fetchCaja(ym)])
       setVentas(v); setPropinas(p); setCaja(c)
     } catch (e) {
@@ -234,7 +240,7 @@ export default function ReporteMensual() {
     } finally {
       setLoading(false)
     }
-  }, [ym, dias, hist, emps, sourceReady])
+  }, [ym, hist, emps, sourceReady])
 
   useEffect(() => { reload() }, [reload])
 

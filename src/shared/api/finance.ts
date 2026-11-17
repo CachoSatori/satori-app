@@ -1,5 +1,8 @@
 import { supabase } from './supabase'
 import { dateCR } from '../utils'
+import type { DiasMap } from '../types/ventas'
+import { ventasDelRango } from '../../modules/ventas/ventasFuente'
+import { totalesDelDia } from '../../modules/ventas/totalesVentas'
 
 export interface FinanceAccount {
   id: string
@@ -55,7 +58,7 @@ export async function upsertActual(a: { account_id: string; year: number; month:
 
 // ── REAL automático desde datos vivos de la app (Fase 2C.3 v2) ───
 // Mapea lo que YA registra Satori a las cuentas del P&L:
-//   Ventas Salón/Delivery ← ventas_dias  ·  egresos de Caja → cuentas del P&L por SUBCATEGORÍA.
+//   Ventas Salón/Delivery ← PoS (16-nov: nunca más el xls)  ·  egresos de Caja → cuentas del P&L por SUBCATEGORÍA.
 const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
 // Subcategoría de Caja → cuenta del P&L. Devuelve null para EXCLUIR (ej. propinas pass-through).
@@ -128,12 +131,25 @@ function mapCashIncomeToAccount(subcat: string): string | null {
   return null
 }
 
+/** Σ salón y delivery por mes (1–12) de los días del PoS. PURA. */
+export function ingresosPorMes(dias: DiasMap): Record<number, { salon: number; delivery: number }> {
+  const out: Record<number, { salon: number; delivery: number }> = {}
+  for (const [fecha, dia] of Object.entries(dias)) {
+    const m = Number(fecha.slice(5, 7))
+    const t = totalesDelDia(dia)
+    const acc = (out[m] ??= { salon: 0, delivery: 0 })
+    acc.salon += t.salon
+    acc.delivery += t.delivery
+  }
+  return out
+}
+
 export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
   const from = `${year}-01-01`, to = `${year}-12-31`
   const [ventasRes, cashRes] = await Promise.all([
-    supabase.from('ventas_dias')
-      .select('session_date, data')
-      .gte('session_date', from).lte('session_date', to),
+    // Ventas del año, del PoS (días CR de factura). Si el PoS falla, el P&L entero falla: mejor
+    // un error que un año sin ingresos que parece real.
+    ventasDelRango(from, to),
     supabase.from('cash_movements')
       .select('movement_type, subcategory, description, amount_crc, status, created_at, account_id')
       .gte('created_at', `${from}T00:00:00Z`).lte('created_at', `${to}T23:59:59Z`),
@@ -147,16 +163,11 @@ export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
     cells[k].amount += amount
   }
 
-  // Ingresos: salón (saloneros no-cajero) + delivery (cajeros)
-  for (const row of (ventasRes.data ?? []) as Array<{ session_date: string; data: { saloneros?: Record<string, { total?: number; delivery?: number; esCajero?: boolean }> } }>) {
-    const month = Number(row.session_date.slice(5, 7))
-    let salon = 0, delivery = 0
-    for (const s of Object.values(row.data?.saloneros ?? {})) {
-      if (s.esCajero) delivery += s.delivery ?? 0
-      else salon += s.total ?? 0
-    }
-    add('ventas_salon', month, salon)
-    add('ventas_delivery', month, delivery)
+  // Ingresos: salón + delivery por mes, con la MISMA suma que el módulo Ventas (`getDayStats`):
+  // el delivery de un mesero va a delivery y la venta de salón cobrada con login de caja va a salón.
+  for (const [m, t] of Object.entries(ingresosPorMes(ventasRes.dias))) {
+    add('ventas_salon', Number(m), t.salon)
+    add('ventas_delivery', Number(m), t.delivery)
   }
 
   // Movimientos de Caja → cuentas del P&L

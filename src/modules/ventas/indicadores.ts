@@ -21,11 +21,27 @@
 // ── DEFINICIONES QUE SE REUSAN (no se redefinen acá) ───────────────────────────────────────
 // · Neta: `netaVenta.ts` (firmada). `facturasDesdePos` la arma con `netaPorTicket`.
 // · Día: día CR de `fecha_registra`. Semana: ISO, lunes a domingo (`lunesDe`).
-// · Turno: por la HORA CR de la factura, la de `ventasPromPaxExplicado.ts` y la RPC 080:
-//   06–16 h mañana (mediodía), 17–23 h noche, 00–05 h madrugada = noche del mismo día.
 // · Solo facturas cerradas (`estado = 'C'`) y de salón (`canal = 'salon'`).
+//
+// ── TURNO Y DÍA = LA SESIÓN DE CAJA (decisión del dueño, 17/11 ~10:45) ─────────────────────
+// No se mira el reloj de la factura: manda la caja que estaba abierta. Se usa la definición
+// compartida de `shared/ndf/jornada.ts`:
+//   · turno   = la caja del lote (`cajero_login`: 111 → mañana · 222 → noche).
+//   · día     = la jornada del lote (`cajero_login`, `fecha_cierra`) = día CR de su apertura.
+//     Una factura de 00:30 cobrada por la caja de la noche es noche del día ANTERIOR.
+//     Lote todavía ABIERTO (sin `fecha_cierra`, solo en vivo): jornada.ts lo agrupa por día CR
+//     de la venta; acá, si es la caja de la noche y la hora CR es < 07:00, se pasa al día anterior.
+//   · Si la caja no es 111/222 (o falta), se cae al criterio de hora (franja de la RPC 080:
+//     06–16 mañana · 17–23 noche · 00–05 noche del mismo día) y la factura cuenta como
+//     «turno inferido». La columna `pos_ndf_tickets.turno` NO se usa: para un cajero que no es
+//     111/222 la ingesta la deriva del reloj (`mapTurno`, mapTicket.ts), así que no agrega nada.
+//
+// ── REGALÍAS TOTALES (decisión del dueño, 17/11) ───────────────────────────────────────────
+// Una factura regalada completa no cuenta personas (ni cargadas ni estimadas), no entra a la
+// referencia del estimador ni a la alerta de mesas sin pax; se cuenta aparte. Ver `esRegaliaTotal`.
 
 import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
+import { jornadaPorTicket } from '../../shared/ndf/jornada'
 import { netaPorTicket } from './netaVenta'
 import { lunesDe, sumarDias, type Rango } from './periodosPromPax'
 import { turnoDeFranja, type Franja, type TurnoPromPax } from './ventasPromPaxExplicado'
@@ -45,6 +61,22 @@ export interface FacturaIndicador {
   pax:            number | null
   pax_articulo:   number | null
   neta:           number
+  /** La caja que cobró (`FAC_Facturas.Login`). Define el turno. */
+  cajero_login?:  string | null
+  /** Cierre de caja (con zona). Junto con el cajero forma el lote, que define el día. */
+  fecha_cierra?:  string | null
+  /** Total cobrado. Para reconocer una regalía total. */
+  total_crc?:     number | null
+  /** `cobrada | cortesia | duenos | sin_cobro | descuento | mixta` (mapClaseIngreso). */
+  clase_ingreso?: string | null
+}
+
+/** Dónde cae una factura: día y turno de su sesión de caja. */
+export interface Ubicacion {
+  dia:      string
+  turno:    TurnoPromPax
+  /** `true` = no había caja 111/222: día y turno salieron del reloj. */
+  inferido: boolean
 }
 
 const n = (v: number | null | undefined): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
@@ -77,9 +109,64 @@ export function franjaDeHora(h: number): Franja {
   return 'madrugada'
 }
 
-/** Turno de la factura (madrugada = noche del mismo día, opción B del 06/11). */
-export function turnoDeFactura(f: Pick<FacturaIndicador, 'fecha_registra'>): TurnoPromPax {
+/** Turno por el RELOJ (solo el respaldo «inferido»): madrugada = noche del mismo día. */
+export function turnoPorHora(f: Pick<FacturaIndicador, 'fecha_registra'>): TurnoPromPax {
   return turnoDeFranja(franjaDeHora(horaCRDeFactura(f.fecha_registra)))
+}
+
+/** Hora CR antes de la cual una venta de la caja de noche ABIERTA es de la jornada anterior. */
+export const HORA_FIN_NOCHE = 7
+
+/** Turno de jornada.ts (`manana`/`tarde`) → turno del indicador. Otro valor → `null`. */
+function turnoDeCaja(t: string | null): TurnoPromPax | null {
+  if (t === 'manana') return 'mañana'
+  if (t === 'tarde') return 'noche'
+  return null
+}
+
+/**
+ * Día y turno de cada factura por su sesión de caja (ver cabecera). Necesita TODAS las facturas
+ * juntas: la jornada es del lote, no de la factura suelta. Las que no tienen fecha legible no salen.
+ */
+export function ubicarFacturas(facturas: readonly FacturaIndicador[]): Map<FacturaIndicador, Ubicacion> {
+  const out = new Map<FacturaIndicador, Ubicacion>()
+  const lotes = jornadaPorTicket(facturas)
+  for (const f of facturas) {
+    const diaReloj = diaCRDeFactura(f.fecha_registra)
+    if (!diaReloj) continue
+    const l = lotes.get(f)
+    const turno = turnoDeCaja(l?.turno ?? null)
+    if (!l || !turno || !l.jornada) {
+      out.set(f, { dia: diaReloj, turno: turnoPorHora(f), inferido: true })
+      continue
+    }
+    let dia = l.jornada
+    if (l.lote.abierto && turno === 'noche' && horaCRDeFactura(f.fecha_registra) < HORA_FIN_NOCHE) {
+      dia = sumarDias(diaReloj, -1)
+    }
+    out.set(f, { dia, turno, inferido: false })
+  }
+  return out
+}
+
+/** Ubicación de UNA factura suelta (lote de una sola). Para pruebas y consultas puntuales. */
+export function ubicarFactura(f: FacturaIndicador): Ubicacion | null {
+  return ubicarFacturas([f]).get(f) ?? null
+}
+
+/** Clases de ingreso que, con el total en 0, son regalo completo. */
+export const CLASES_REGALIA_TOTAL = ['cortesia', 'duenos', 'sin_cobro'] as const
+
+/**
+ * ¿Regalada COMPLETA? `sin_cobro` siempre (por definición el total es 0). `cortesia` o `duenos`
+ * solo con el total en 0: `mapClaseIngreso` marca `cortesia` aunque sea UNA línea de cortesía en
+ * una cuenta cobrada, y esa mesa sí cuenta. Sin clase (la RPC 067 no la trae): neta 0 y total 0.
+ */
+export function esRegaliaTotal(f: Pick<FacturaIndicador, 'clase_ingreso' | 'total_crc' | 'neta'>): boolean {
+  if (f.clase_ingreso === 'sin_cobro') return true
+  const sinCobrar = typeof f.total_crc === 'number' && f.total_crc <= 0
+  if (!sinCobrar) return false
+  return (CLASES_REGALIA_TOTAL as readonly string[]).includes(f.clase_ingreso ?? '') || n(f.neta) === 0
 }
 
 /** Personas CARGADAS: artículo pax si es > 0; si no, `pax` (null = 0). Igual que `paxDelTicket`. */
@@ -97,11 +184,15 @@ function enRango(dia: string, r: Rango): boolean {
   return dia !== '' && dia >= r.desde && dia <= r.hasta
 }
 
+/** Lo que hace falta de una fila de `pos_ndf_tickets` (la RPC 067 no trae `clase_ingreso`). */
+export type TicketParaIndicador = Pick<TicketNdfConId,
+  | 'id' | 'numero_factura' | 'estado' | 'fecha_registra' | 'canal' | 'salonero_login'
+  | 'pax' | 'pax_articulo' | 'valor_servido_crc' | 'cajero_login' | 'fecha_cierra' | 'total_crc'>
+  & { clase_ingreso?: string | null }
+
 /** Arma las facturas del indicador desde las filas del PoS, con la neta firmada. */
 export function facturasDesdePos(
-  tickets: readonly Pick<TicketNdfConId,
-    'id' | 'numero_factura' | 'estado' | 'fecha_registra' | 'canal' | 'salonero_login'
-    | 'pax' | 'pax_articulo' | 'valor_servido_crc'>[],
+  tickets: readonly TicketParaIndicador[],
   lineas: readonly Pick<LineaNdfRow, 'ticket_id' | 'familia' | 'monto' | 'codigo_producto'>[],
 ): FacturaIndicador[] {
   const neta = netaPorTicket(tickets, lineas)
@@ -109,6 +200,8 @@ export function facturasDesdePos(
     id: t.id, fecha_registra: t.fecha_registra, estado: t.estado, canal: t.canal,
     salonero_login: t.salonero_login, pax: t.pax, pax_articulo: t.pax_articulo,
     neta: neta.get(t.id) ?? 0,
+    cajero_login: t.cajero_login, fecha_cierra: t.fecha_cierra, total_crc: t.total_crc,
+    clase_ingreso: t.clase_ingreso ?? null,
   }))
 }
 
@@ -123,12 +216,13 @@ export function rangoDeLecturaParaEstimar(r: Rango): Rango {
 // ── Estimación de personas (interfaz v1 → v2) ──────────────────────────────────────────────
 
 /**
- * Estima las personas de UNA factura de salón sin pax. Devuelve un entero ≥ 1, o `null` si no hay
- * con qué estimar («sin referencia»). La v2 (platos fuertes y bebidas, D8) implementa esto mismo.
+ * Estima las personas de UNA factura de salón sin pax, ya ubicada (día y turno de su caja).
+ * Devuelve un entero ≥ 1, o `null` si no hay con qué estimar («sin referencia»).
+ * La v2 (platos fuertes y bebidas, D8) implementa esto mismo.
  */
 export interface EstimadorPersonas {
   readonly id: string
-  estimar(f: FacturaIndicador): number | null
+  estimar(f: FacturaIndicador, u: Ubicacion): number | null
 }
 
 /** Semanas ISO hacia atrás que mira la v1 cuando la semana de la factura no tiene referencia. */
@@ -136,18 +230,20 @@ export const SEMANAS_RESPALDO = 4
 
 /**
  * v1: por neta. La referencia sale de `historial` (todas las facturas que se pasen, aunque estén
- * fuera del rango pedido): Σ neta ÷ Σ personas cargadas de las facturas de salón CON pax, por
- * (semana ISO, turno). Primero la misma semana; si no hay, las 4 anteriores juntas.
+ * fuera del rango pedido): Σ neta ÷ Σ personas cargadas de las facturas de salón CON pax y que
+ * no son regalía total, por (semana ISO de la jornada, turno de caja). Primero la misma semana;
+ * si no hay, las 4 anteriores juntas.
  */
 export function estimadorPorNeta(historial: readonly FacturaIndicador[]): EstimadorPersonas {
+  const ubic = ubicarFacturas(historial)
   const acc = new Map<string, { neta: number; personas: number }>()
   for (const f of historial) {
-    if (!esFacturaDeSalon(f)) continue
+    if (!esFacturaDeSalon(f) || esRegaliaTotal(f)) continue
     const p = personasCargadas(f)
     if (p <= 0) continue
-    const dia = diaCRDeFactura(f.fecha_registra)
-    if (!dia) continue
-    const k = `${lunesDe(dia)}|${turnoDeFactura(f)}`
+    const u = ubic.get(f)
+    if (!u) continue
+    const k = `${lunesDe(u.dia)}|${u.turno}`
     const e = acc.get(k) ?? { neta: 0, personas: 0 }
     e.neta += n(f.neta)
     e.personas += p
@@ -165,10 +261,8 @@ export function estimadorPorNeta(historial: readonly FacturaIndicador[]): Estima
   }
   return {
     id: 'v1-neta',
-    estimar(f) {
-      const dia = diaCRDeFactura(f.fecha_registra)
-      if (!dia) return null
-      const ref = referencia(lunesDe(dia), turnoDeFactura(f))
+    estimar(f, u) {
+      const ref = referencia(lunesDe(u.dia), u.turno)
       if (ref === null) return null
       return Math.max(1, Math.round(n(f.neta) / ref))
     },
@@ -182,31 +276,41 @@ export interface VentaPorPersona {
   valor:                 number | null
   /** Rotulada: neta ÷ personas, solo facturas de salón CON pax (para comparar saloneros). */
   valorSoloConPax:       number | null
-  /** Toda la neta de salón del rango: con pax, estimadas y sin referencia. */
+  /** Toda la neta de salón del rango (incluidas sin referencia y regalías totales). */
   netaSalon:             number
   personasCargadas:      number
   personasEstimadas:     number
   /** Estimadas ÷ (cargadas + estimadas), 0–100. Para el rótulo «incluye X % estimado». */
   pctEstimado:           number
   facturasSalon:         number
+  /** Sin pax y que no son regalía total. */
   facturasSinPax:        number
   /** Facturas sin pax que no se pudieron estimar: su neta está en el numerador, sus personas no. */
   facturasSinReferencia: number
   netaSinReferencia:     number
+  /** «Regalías totales: N». No cuentan personas; su neta queda en `netaSalon`. */
+  regaliasTotales:       number
+  netaRegaliasTotales:   number
+  /** Facturas cuyo día y turno salieron del reloj (sin caja 111/222). */
+  turnosInferidos:       number
+  /** Facturas de salón sin salonero (sin pedido, caja o sistema). */
+  facturasSinSalonero:   number
   estimador:             string
 }
 
 export interface OpcionesVentaPorPersona {
   /** Por defecto, la v1 con todas las `facturas` recibidas como historial. */
   estimador?: EstimadorPersonas
+  /** Turno de CAJA (o inferido, si no hubo caja). */
   turno?:     TurnoPromPax
-  /** Corte extra (salonero, día…). Se aplica después de salón + rango + turno. */
+  /** Corte extra (salonero…). Se aplica después de salón + rango + turno. */
   filtro?:    (f: FacturaIndicador) => boolean
 }
 
 /**
  * LA venta por persona (D4). `facturas` puede traer días fuera de `r` (el historial para la
- * referencia, ver `rangoDeLecturaParaEstimar`); el resultado cuenta solo las de `r`.
+ * referencia, ver `rangoDeLecturaParaEstimar`); el resultado cuenta solo las de `r`, por la
+ * jornada de su caja.
  */
 export function ventaPorPersona(
   facturas: readonly FacturaIndicador[],
@@ -214,16 +318,26 @@ export function ventaPorPersona(
   opciones: OpcionesVentaPorPersona = {},
 ): VentaPorPersona {
   const estimador = opciones.estimador ?? estimadorPorNeta(facturas)
+  const ubic = ubicarFacturas(facturas)
   let netaSalon = 0, netaConPax = 0, cargadas = 0, estimadas = 0
   let facturasSalon = 0, sinPax = 0, sinRef = 0, netaSinRef = 0
+  let regalias = 0, netaRegalias = 0, inferidos = 0, sinSalonero = 0
   for (const f of facturas) {
     if (!esFacturaDeSalon(f)) continue
-    if (!enRango(diaCRDeFactura(f.fecha_registra), r)) continue
-    if (opciones.turno && turnoDeFactura(f) !== opciones.turno) continue
+    const u = ubic.get(f)
+    if (!u || !enRango(u.dia, r)) continue
+    if (opciones.turno && u.turno !== opciones.turno) continue
     if (opciones.filtro && !opciones.filtro(f)) continue
     const neta = n(f.neta)
     facturasSalon += 1
     netaSalon += neta
+    if (u.inferido) inferidos += 1
+    if (!f.salonero_login) sinSalonero += 1
+    if (esRegaliaTotal(f)) {
+      regalias += 1
+      netaRegalias += neta
+      continue
+    }
     const p = personasCargadas(f)
     if (p > 0) {
       cargadas += p
@@ -231,7 +345,7 @@ export function ventaPorPersona(
       continue
     }
     sinPax += 1
-    const e = estimador.estimar(f)
+    const e = estimador.estimar(f, u)
     if (e === null) {
       sinRef += 1
       netaSinRef += neta
@@ -251,13 +365,35 @@ export function ventaPorPersona(
     facturasSinPax:        sinPax,
     facturasSinReferencia: sinRef,
     netaSinReferencia:     netaSinRef,
+    regaliasTotales:       regalias,
+    netaRegaliasTotales:   netaRegalias,
+    turnosInferidos:       inferidos,
+    facturasSinSalonero:   sinSalonero,
     estimador:             estimador.id,
   }
+}
+
+/**
+ * Venta por persona por salonero (lente «mesa»), con el grupo SIN SALONERO aparte y nunca
+ * repartido. La referencia del estimador es la del local entero (todas las `facturas`).
+ */
+export function ventaPorPersonaPorSalonero(
+  facturas: readonly FacturaIndicador[],
+  r: Rango,
+  opciones: Omit<OpcionesVentaPorPersona, 'filtro'> = {},
+): { porSalonero: (VentaPorPersona & { salonero_login: string })[]; sinSalonero: VentaPorPersona } {
+  const op = { ...opciones, estimador: opciones.estimador ?? estimadorPorNeta(facturas) }
+  const logins = [...new Set(facturas.map(f => f.salonero_login).filter((l): l is string => !!l))].sort()
+  const porSalonero = logins
+    .map(login => ({ salonero_login: login, ...ventaPorPersona(facturas, r, { ...op, filtro: f => f.salonero_login === login }) }))
+    .filter(s => s.facturasSalon > 0)
+  return { porSalonero, sinSalonero: ventaPorPersona(facturas, r, { ...op, filtro: f => !f.salonero_login }) }
 }
 
 // ── Alerta de mesas sin pax ────────────────────────────────────────────────────────────────
 
 export interface ConteoSinPax {
+  /** Facturas de salón que cuentan para la alerta (sin regalías totales). */
   facturasSalon: number
   sinPax:        number
   /** sinPax ÷ facturasSalon, 0–100 (0 sin facturas). */
@@ -266,10 +402,15 @@ export interface ConteoSinPax {
 
 export interface AlertaMesasSinPax {
   /** Por `salonero_login` de la factura. Orden: más sin pax primero, después % y login. */
-  porSalonero: (ConteoSinPax & { salonero_login: string })[]
-  /** Facturas de salón sin salonero (sin pedido, caja o sistema): aparte, no se reparten. */
-  sinSalonero: ConteoSinPax
-  total:       ConteoSinPax
+  porSalonero:     (ConteoSinPax & { salonero_login: string })[]
+  /**
+   * SIN SALONERO (sin pedido, caja o sistema): grupo propio, siempre presente, nunca repartido
+   * ni mezclado con un salonero. En prod es ~1 de cada 5 facturas de salón (medido 17/11).
+   */
+  sinSalonero:     ConteoSinPax
+  total:           ConteoSinPax
+  /** Regalías totales del rango: fuera de la alerta, contadas aparte. */
+  regaliasTotales: number
 }
 
 const conteo = (facturasSalon: number, sinPax: number): ConteoSinPax =>
@@ -277,16 +418,19 @@ const conteo = (facturasSalon: number, sinPax: number): ConteoSinPax =>
 
 /** Para un rango (normalmente ayer), cuántas facturas de salón quedaron sin pax, por salonero. */
 export function alertaMesasSinPax(facturas: readonly FacturaIndicador[], r: Rango): AlertaMesasSinPax {
+  const ubic = ubicarFacturas(facturas)
   const por = new Map<string, { t: number; s: number }>()
-  let tSin = 0, sSin = 0, tTot = 0, sTot = 0
+  let tSin = 0, sSin = 0, tTot = 0, sTot = 0, regalias = 0
   for (const f of facturas) {
     if (!esFacturaDeSalon(f)) continue
-    if (!enRango(diaCRDeFactura(f.fecha_registra), r)) continue
+    const u = ubic.get(f)
+    if (!u || !enRango(u.dia, r)) continue
+    if (esRegaliaTotal(f)) { regalias += 1; continue }
     const falta = personasCargadas(f) <= 0 ? 1 : 0
     tTot += 1
     sTot += falta
     const login = f.salonero_login
-    if (login === null || login === '') {
+    if (!login) {
       tSin += 1
       sSin += falta
       continue
@@ -299,7 +443,7 @@ export function alertaMesasSinPax(facturas: readonly FacturaIndicador[], r: Rang
   const porSalonero = [...por.entries()]
     .map(([salonero_login, e]) => ({ salonero_login, ...conteo(e.t, e.s) }))
     .sort((a, b) => b.sinPax - a.sinPax || b.pct - a.pct || a.salonero_login.localeCompare(b.salonero_login))
-  return { porSalonero, sinSalonero: conteo(tSin, sSin), total: conteo(tTot, sTot) }
+  return { porSalonero, sinSalonero: conteo(tSin, sSin), total: conteo(tTot, sTot), regaliasTotales: regalias }
 }
 
 /** El rango de un solo día: ayer respecto de `hoy` (día CR, de `todayCR()`). */

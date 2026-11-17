@@ -3,6 +3,7 @@ import type { TipSession, Employee, RoleTipPoints, UserRole } from '../../shared
 import { getTipEntriesBySession, upsertTipEntry, deleteTipEntry, updateSessionPools, savePayouts, totalElectronicoCrc } from '../../shared/api/tips'
 import { reconcilePropinaEgreso } from '../../shared/api/cash'
 import { calcHistory, calcTurno, formatCRC, formatNum, ROL_LABELS, ROL_ORDER, NO_PROPINA_ROLES, type HistoryCalc, type HistoryRow, type DraftLine } from '../../shared/utils/tipCalculations'
+import { avisosCierrePropinas } from './guardasCierre'
 import { shiftLabel } from '../../shared/utils'
 
 interface Props {
@@ -180,6 +181,9 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
     // draft (rol efectivo) → se persiste abajo como fuente de verdad (mig 051).
     const { totals, updatedLines } = calcTurno(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), rate)
     if (!updatedLines.some(l => l.active)) { setEditErr('Marcá al menos un empleado que trabajó'); return }
+    // Guardas H1/H2 (mismas que el cierre): pozo que nadie puede cobrar → no se guarda.
+    const avisos = avisosCierrePropinas(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), rate)
+    if (avisos.length) { setEditErr(avisos[0].texto); return }
 
     setSaving(true); setEditErr(null)
     try {
@@ -356,17 +360,18 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
       {/* ── MODAL ── */}
       {modalSession && (() => {
         // Preview en vivo del reparto mientras se edita
-        const preview = editMode ? calcTurno(
-          eRows.map(r => {
-            const eff = (r.coveredRole || r.role) as UserRole  // rol efectivo: puntos + pool barra
-            return {
-              employeeId: r.employeeId, employeeName: r.employeeName, role: eff,
-              active: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd,
-              pts_rol: ptsMap.get(eff) ?? 0, pts_val: 0, take_home: 0,
-            }
-          }) as DraftLine[],
-          Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), modalSession.exchange_rate,
-        ) : null
+        const previewDraft = editMode ? eRows.map(r => {
+          const eff = (r.coveredRole || r.role) as UserRole  // rol efectivo: puntos + pool barra
+          return {
+            employeeId: r.employeeId, employeeName: r.employeeName, role: eff,
+            active: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd,
+            pts_rol: ptsMap.get(eff) ?? 0, pts_val: 0, take_home: 0,
+          }
+        }) as DraftLine[] : null
+        const previewArgs = [Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), modalSession.exchange_rate] as const
+        const preview = previewDraft ? calcTurno(previewDraft, ...previewArgs) : null
+        // Guardas H1/H2: con pozo que nadie cobra, «Guardar cambios» queda deshabilitado con aviso.
+        const avisosEdit = previewDraft ? avisosCierrePropinas(previewDraft, ...previewArgs) : []
         const payoutMap = new Map(preview?.updatedLines.map(l => [l.employeeId, Math.round(l.take_home)]) ?? [])
         const headPool  = editMode && preview ? preview.totals.totalPool : (modalCalc ? modalCalc.totalPool : poolTotalOf(modalSession))
 
@@ -535,8 +540,13 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
             <div style={{ display: 'flex', gap: '0.5rem', padding: '0.875rem 1.25rem', borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap', justifyContent: 'flex-end', background: 'var(--c-panel)' }}>
               {editMode ? (
                 <>
-                  <button onClick={() => handleSaveEdit(modalSession, modalCalc)} disabled={saving}
-                    style={{ padding: '7px 16px', borderRadius: 4, border: `1px solid ${TEAL}`, background: TEAL, color: 'var(--c-fondo)', fontWeight: 700, fontSize: '0.82rem', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+                  {avisosEdit.length > 0 && (
+                    <div role="alert" data-testid="avisos-edicion" style={{ flexBasis: '100%', padding: '0.5rem 0.75rem', borderLeft: `3px solid ${RED}`, background: 'var(--c-fondo)', fontSize: '0.8rem', lineHeight: 1.4 }}>
+                      {avisosEdit.map(a => <div key={a.tipo}>⚠ {a.texto}</div>)}
+                    </div>
+                  )}
+                  <button onClick={() => handleSaveEdit(modalSession, modalCalc)} disabled={saving || avisosEdit.length > 0}
+                    style={{ padding: '7px 16px', borderRadius: 4, border: `1px solid ${TEAL}`, background: TEAL, color: 'var(--c-fondo)', fontWeight: 700, fontSize: '0.82rem', cursor: (saving || avisosEdit.length > 0) ? 'default' : 'pointer', opacity: (saving || avisosEdit.length > 0) ? 0.6 : 1 }}>
                     {saving ? 'Guardando…' : '💾 Guardar cambios'}
                   </button>
                   <button onClick={() => { setEditMode(false); setEditErr(null) }} disabled={saving}

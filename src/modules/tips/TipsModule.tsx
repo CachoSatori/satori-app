@@ -28,6 +28,7 @@ import {
   type DraftLine,
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
+import { avisosCierrePropinas } from './guardasCierre'
 import { availableForCobertura, eligibleRoster } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
 const TipQuincenal = lazy(() => import('./TipQuincenal'))
@@ -214,6 +215,24 @@ export default function TipsModule() {
       take_home: updatedLines[i]?.take_home ?? 0,
     }))
     return { displayLines: merged, totals: t }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, coberturas, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate, openSession?.id])
+
+  // ── Guardas H1/H2: pozo que nadie puede cobrar → no deja cerrar (guardasCierre.ts) ──
+  // Mismos datos que la llamada a calcTurno de arriba (rol efectivo con cobertura).
+  const avisosCierre = useMemo(() => {
+    if (!openSession) return []
+    const linesForCalc = lines.map(l => {
+      const cov = coberturas[l.employeeId]
+      return cov ? { ...l, role: cov as import('../../shared/types/database').UserRole } : l
+    })
+    return avisosCierrePropinas(
+      linesForCalc,
+      Number(efectivoCRC) || 0,
+      Number(efectivoUSD) || 0,
+      (Number(barraCRC) || 0) + (Number(barraElecCRC) || 0),
+      exchangeRate,
+    )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, coberturas, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate, openSession?.id])
 
@@ -420,6 +439,7 @@ export default function TipsModule() {
     if (!openSession || !profile || !totals) return
     const workedLines = displayLines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
+    if (avisosCierre.length) { setError(avisosCierre[0].texto); return }   // defensa: el botón ya está deshabilitado
     // 3 números que reconcilian: Total asignado = Efectivo ya en mano + Electrónico a entregar.
     const totalAsignado = Math.round(workedLines.reduce((s, l) => s + l.take_home, 0))
     const efectivoEquipo = Math.round(
@@ -852,11 +872,18 @@ export default function TipsModule() {
 
               {/* Cerrar turno */}
               {canOperate && lines.some(l => l.active) && (
+                <>
+                {avisosCierre.length > 0 && (
+                  <div role="alert" data-testid="avisos-cierre" style={{ marginBottom: '0.6rem', padding: '0.6rem 0.8rem', borderLeft: '3px solid var(--c-laca)', background: 'var(--c-panel)', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                    {avisosCierre.map(a => <div key={a.tipo}>⚠ {a.texto}</div>)}
+                  </div>
+                )}
                 <div className="tips-close-bar">
-                  <button className="tips-btn-danger" onClick={handleCloseSession} disabled={closing}>
+                  <button className="tips-btn-danger" onClick={handleCloseSession} disabled={closing || avisosCierre.length > 0}>
                     {closing ? 'Cerrando…' : '▶ Cerrar turno y guardar payouts'}
                   </button>
                 </div>
+                </>
               )}
             </>
           )}

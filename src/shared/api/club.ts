@@ -640,10 +640,11 @@ export interface EdadSocio {
   estado: 'pendiente' | 'activo' | 'baja'; baja_por: 'socio' | 'gerencia' | null; alta_por: string
   validado_en: string | null; mayor_edad_en: string | null
 }
-/** Rol de socio de una persona (null si no es socio). Lectura directa: la RLS deja leer los roles a owner, manager y cajero. */
+/** Rol de socio de una persona (null si no es socio). Mig 188: por función de la base (`club_socio_edad`; owner, manager,
+ *  cajero, contador), con control de local: al manager, una ficha de otro local le da «Ficha de otro local» (error) en
+ *  vez de un «no es socio» silencioso. Quien la llama, ante un error, muestra la casilla de mayor de 18 (`undefined`). */
 export const getEdadSocio = async (miembro: string): Promise<EdadSocio | null> =>
-  (await leer(from<EdadSocio>('club_miembro_roles').select('estado,baja_por,alta_por,validado_en,mayor_edad_en')
-    .eq('miembro_id', miembro).eq('rol', 'socio').limit(1)))[0] ?? null
+  (await llamar<EdadSocio | null>('club_socio_edad', { p_miembro: miembro })) ?? null
 /** Confirmar un alta provisional (owner o manager distinto de quien la cargó). */
 export const socioConfirmar = (miembro: string, nota: string) =>
   llamar<boolean>('club_socio_confirmar', { p_miembro: miembro, p_nota: nota })

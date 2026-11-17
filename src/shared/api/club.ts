@@ -760,6 +760,12 @@ export interface QueAplicar {
   texto: string; avisos: string[]; articulo_lc: string; repetida: boolean; promo: string | null
   /** Mig 168 (primeros 90 días): la cortesía especial de bienvenida. Sin la 168 (o sin nada que decir) no viene. */
   primeros90?: Primeros90EnCaja
+  /**
+   * Mig 181 (tope por comida): solo con `estado` = 'ya_uso_hoy'. Qué comida ya usó hoy (corte = `turno_corte` del local,
+   * hora CR) y cuándo lo vuelve a tener («Vuelve a tenerlo en la cena, desde las 16:00.»). `texto` y `avisos` ya lo dicen.
+   */
+  comida?: 'almuerzo' | 'cena'
+  vuelve?: string
 }
 /** Mig 168: qué pasó con la cortesía especial en esta visita. `ofrecida` = va en esta factura (una sola vez). */
 export type Primeros90EnCaja =
@@ -836,6 +842,8 @@ export type TipoAlertaInicio = 'ANFITRION_24H' | 'MISMO_USUARIO' | 'VISITAS_SIN_
 export interface AlertaInicio {
   tipo: TipoAlertaInicio; ref: string; cantidad: number; umbral: number; fecha: string
   detalle: { miembro_id?: string; miembro?: string; tipo_miembro?: string; que?: 'socio' | 'equipo'; usuario?: string; dias?: number
+             /** Mig 181: para socios, `cantidad` = DÍAS distintos con visita (`'dias'`); sin la 181 o del equipo, veces. */
+             cuenta?: 'dias' | 'veces'
              /** El local del aviso; `multilocal` = el usuario ve más de un local con el Club encendido. */
              local?: string; local_nombre?: string; multilocal?: boolean }
 }

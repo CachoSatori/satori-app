@@ -22,10 +22,9 @@ mandarlo).
 - **Textos del 16-nov (aprobados por el dueño):** el cartel del hotel suma «Desde su cupón también puede reservar su mesa.»;
   el mensaje a socios suma la reserva desde el portal; el canje de anfitriones queda simple; la publicación del grupo de
   WhatsApp es nueva.
-- **Tope de visitas por día — pendiente de la firma del dueño:** hoy el servidor dice 1 por día; el dueño evalúa 2
-  (almuerzo y cena). Los mensajes lo llevan como marcador `<tope de visitas con beneficio por día>`. **El cartel de socios
-  dice «Una visita con beneficio por día»: si el dueño firma 2, hay que cambiar ese texto en
-  `scripts/club/carteles.mjs` (ES y EN) y regenerar el cartel.**
+- **Tope — firmado por el dueño el 16-nov (mig 181, PR #229):** una visita con beneficio en el almuerzo y una en la cena,
+  cada día (almuerzo hasta las 15:59, cena desde las 16:00). Mensajes, publicación y cartel de socios ya lo dicen; se
+  usan cuando la 181 esté en producción.
 - Los PDF de los carteles se regeneran con el script si hay Playwright instalado (no es dependencia del repo); si no, se
   imprimen desde el HTML con Chromium (A4, «gráficos de fondo»).
 - La guía rápida de caja no se toca acá: la maneja el PR #225.

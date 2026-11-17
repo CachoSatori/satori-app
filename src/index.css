@@ -442,6 +442,24 @@ html, body, #root {
   color: var(--error);
 }
 
+/* «鍵 Contraseña» del Inicio → /mi-cuenta (cambiar mi contraseña) */
+.btn-cuenta { min-height: 32px; white-space: nowrap; }
+.btn-cuenta:hover { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 480px) {
+  .header-user { flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+}
+
+/* ── Mi cuenta: cambiar mi contraseña ───────────────────── */
+.mi-cuenta { min-height: auto; padding-bottom: calc(var(--shell-barra-alto, 0px) + 2.5rem); }
+.mi-cuenta-fuerza { display: flex; align-items: center; gap: 0.5rem; min-height: 1.2rem; font-size: 0.75rem; color: var(--gray-light); }
+.mi-cuenta-barra { flex: 0 0 72px; height: 4px; border-radius: 2px; background: var(--c-linea); overflow: hidden; }
+.mi-cuenta-barra > span { display: block; height: 100%; }
+.mi-cuenta-barra.debil  > span { width: 33%;  background: var(--error); }
+.mi-cuenta-barra.media  > span { width: 66%;  background: var(--accent); }
+.mi-cuenta-barra.fuerte > span { width: 100%; background: #3f8f5a; }
+.mi-cuenta-ayuda { font-size: 0.75rem; line-height: 1.5; color: var(--gray-light); margin: 0; }
+.mi-cuenta-ok { font-size: 0.9rem; line-height: 1.5; margin: 0; }
+
 /* ── Home / Módulos ──────────────────────────────────────── */
 
 .home-container {

@@ -45,6 +45,14 @@ describe('AppShell', () => {
     expect(screen.getByTestId('pantalla')).toBeTruthy()
   })
 
+  it('pie del menú lateral: «Cambiar contraseña» lleva a /mi-cuenta, para cualquier rol con menú', () => {
+    for (const r of ['owner', 'cajero']) {
+      cleanup(); role = r
+      montar()
+      expect(within(lateral()).getByRole('link', { name: 'Cambiar contraseña' }).getAttribute('href')).toBe('/mi-cuenta')
+    }
+  })
+
   it('marca como activo el módulo de la ruta', () => {
     montar('/caja')
     const caja = within(lateral()).getByRole('link', { name: /Caja/ })

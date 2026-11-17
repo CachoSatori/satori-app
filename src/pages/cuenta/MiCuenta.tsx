@@ -59,7 +59,7 @@ export default function MiCuenta() {
     <div className="login-container mi-cuenta">
       <div className="login-card">
         <header className="login-header">
-          <div className="login-mark" aria-hidden="true">鍵</div>
+          <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" className="login-daruma" width={58} height={64} />
           <h1>Cambiar mi contraseña</h1>
           <p className="login-subtitle">
             {profile?.full_name ?? ''}{user?.email ? ` · ${user.email}` : ''}

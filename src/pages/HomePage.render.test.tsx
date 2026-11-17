@@ -481,7 +481,7 @@ describe('Inicio · la venta de hoy sale del PoS (16-nov)', () => {
 })
 
 // «Cambiar mi contraseña»: el botón del encabezado del Inicio, para cualquier rol (también los que no tienen menú).
-describe('Inicio · «鍵 Contraseña»', () => {
+describe('Inicio · «Contraseña» (llave)', () => {
   it.each([['owner'], ['barman']])('%s: lleva a /mi-cuenta', async (r) => {
     role = r
     montarConRutas()

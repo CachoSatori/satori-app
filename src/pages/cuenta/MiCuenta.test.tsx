@@ -44,6 +44,13 @@ afterEach(() => {
 })
 
 describe('MiCuenta · cambiar mi contraseña', () => {
+  it('encabezado: el Daruma de la marca (como el login), sin el kanji 鍵', () => {
+    const { container } = pantalla()
+    const img = container.querySelector('.login-header img.login-daruma')
+    expect(img?.getAttribute('src')).toMatch(/marca\/daruma\.png$/)
+    expect(container.querySelector('.login-header')?.textContent).not.toContain('鍵')
+  })
+
   it('los campos son type=password con el autocomplete correcto (gestores de contraseñas, nada visible)', () => {
     pantalla()
     const campos: [string, string][] = [

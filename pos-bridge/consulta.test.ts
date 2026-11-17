@@ -15,7 +15,8 @@ import {
   type Queryable,
 } from './consulta.ts'
 import { resolverEsquema } from './esquema.ts'
-import { normalizarLinea } from '../src/shared/ndf/ingestNdf.ts'
+import { normalizarLinea, normalizarTicket } from '../src/shared/ndf/ingestNdf.ts'
+import { aTicketIngest } from './consultaAgente.ts'
 import { assertSoloSelect } from './sqlGuard.ts'
 
 const ESQUEMA = resolverEsquema(new Map(Object.entries({
@@ -538,6 +539,96 @@ describe('sqlFacturas / sqlDetalle con estados', () => {
   it('las provisionales siguen pasando el candado read-only', () => {
     for (const sql of [sqlFacturas(ESQUEMA, false, ESTADOS_PROVISIONALES), sqlDetalle(ESQUEMA, false, ESTADOS_PROVISIONALES)]) {
       expect(() => assertSoloSelect(sql)).not.toThrow()
+    }
+  })
+})
+
+// ── Descuento por línea (D9 de Ventas v2, firma del dueño 17-nov; auditoría P1-8) ───────────────
+//
+// `FAC_FacturasDet.Descuento` es el descuento de la línea en ₡ y `Monto` YA viene neto. Antes el
+// SELECT no lo traía y `descuento_crc` entraba en 0 en el 100 % de las facturas desde 2024.
+// Datos ficticios: un roll de lista ₡10.000 con 15 % (neto ₡8.500, descuento ₡1.500) + una bebida
+// sin descuento.
+describe('descuento por línea (FAC_FacturasDet.Descuento)', () => {
+  const ESQ_DESC = resolverEsquema(new Map(Object.entries({
+    fac_facturas: [
+      'NumeroFactura', 'FechaRegistra', 'Estado', 'Login', 'Efectivo', 'Tarjeta',
+      'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'Vuelto',
+    ],
+    fac_pedidos:     ['NumeroFactura', 'UsuarioRegistra', 'Personas'],
+    fac_facturasdet: ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS', 'IV', 'Descuento'],
+    fac_productos:   ['Codigo', 'Nombre', 'Clasificacion'],
+  })))
+  const SIN_COLUMNA = resolverEsquema(new Map(Object.entries({
+    fac_facturas: [
+      'NumeroFactura', 'FechaRegistra', 'Estado', 'Login', 'Efectivo', 'Tarjeta',
+      'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'Vuelto',
+    ],
+    fac_pedidos:     ['NumeroFactura', 'UsuarioRegistra', 'Personas'],
+    fac_facturasdet: ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS', 'IV'],
+    fac_productos:   ['Codigo', 'Nombre', 'Clasificacion'],
+  })))
+
+  const LINEAS: FilaDetalle[] = [
+    filaDetalle({ codigo: '100', monto: 8500, imp_servicio: 850, imp_venta: 1105, familia: 2, descuento: 1500 }),
+    filaDetalle({ codigo: '200', monto: 2000, imp_servicio: 200, imp_venta: 260, familia: 5, descuento: 0 }),
+  ]
+  const FACTURA = filaFactura({ efectivo: 0, tarjeta: 12915 })
+
+  it('el SELECT trae la columna cuando existe, y pasa el candado read-only', () => {
+    const sql = sqlDetalle(ESQ_DESC)
+    expect(sql).toContain('COALESCE(d.[Descuento], 0)')
+    expect(sql).toMatch(/AS descuento\s/)
+    expect(() => assertSoloSelect(sql)).not.toThrow()
+  })
+
+  it('sin la columna degrada a 0 (no tumba la ingesta)', () => {
+    const sql = sqlDetalle(SIN_COLUMNA)
+    expect(sql).toMatch(/COALESCE\(NULL, 0\)\s+AS descuento/)
+    expect(() => assertSoloSelect(sql)).not.toThrow()
+  })
+
+  it('el descuento de la factura es la Σ de sus líneas y la clase pasa a `descuento`', () => {
+    const t = armarTickets([FACTURA], LINEAS).tickets[0]
+    expect(t.descuento).toBe(1500)
+    expect(t.clase_ingreso).toBe('descuento')
+  })
+
+  it('NO mueve la plata: total, valor servido, IVA, servicio y regalía quedan iguales', () => {
+    const con = armarTickets([FACTURA], LINEAS).tickets[0]
+    const sin = armarTickets([FACTURA], LINEAS.map(l => ({ ...l, descuento: 0 }))).tickets[0]
+    expect(sin.descuento).toBe(0)
+    expect(sin.clase_ingreso).toBe('cobrada')
+    for (const k of ['total', 'valor_servido', 'iva', 'imp_servicio', 'regalia'] as const) {
+      expect(con[k]).toBe(sin[k])
+    }
+    // `Monto` ya es neto: el valor servido es 8.500 + 2.000, no 10.000 + 2.000.
+    expect(con.valor_servido).toBe(10500)
+  })
+
+  it('cortesía + descuento → `mixta`', () => {
+    const t = armarTickets([FACTURA], [
+      ...LINEAS,
+      filaDetalle({ codigo: '900', monto: 3000, imp_servicio: 0, imp_venta: 0, familia: 17, descuento: 0 }),
+    ]).tickets[0]
+    expect(t.clase_ingreso).toBe('mixta')
+  })
+
+  it('una línea sin el campo (fila vieja) cuenta 0, no NaN', () => {
+    const { descuento: _omit, ...sinCampo } = LINEAS[0]
+    void _omit
+    const t = armarTickets([FACTURA], [sinCampo as FilaDetalle, LINEAS[1]]).tickets[0]
+    expect(t.descuento).toBe(0)
+  })
+
+  it('llega al Edge: aTicketIngest → normalizarTicket guarda descuento_crc', () => {
+    const t = armarTickets([FACTURA], LINEAS).tickets[0]
+    const r = normalizarTicket('santa-teresa', aTicketIngest(t))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.valor.fila.descuento_crc).toBe(1500)
+      expect(r.valor.fila.clase_ingreso).toBe('descuento')
+      expect(r.valor.fila.total_crc).toBe(12915)
     }
   })
 })

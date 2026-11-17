@@ -105,6 +105,23 @@ describe('correrDia', () => {
     expect(enviados).toEqual([])
     expect(r).toMatchObject({ tickets: 1, guardados: 0, lineas: 1 })
     expect(log.join(' ')).toContain('NO se envía')
+    // D9: el dry-run cuenta las facturas con descuento (el ticket de prueba no trae: 0).
+    expect(log.join(' ')).toContain('con_descuento=0')
+  })
+
+  it('--dry-run cuenta las facturas con descuento (D9), sin montos en el log', async () => {
+    const log: string[] = []
+    const p: PuertosBackfill = {
+      async leerDia() {
+        return { tickets: [{ ...ticket('5001'), descuento: 1500 }, ticket('5002')], avisos: [] }
+      },
+      async enviar() { throw new Error('no debería enviar') },
+      async pausar() {},
+      log(l) { log.push(l) },
+    }
+    await correrDia(p, LOCAL, '2026-08-20', true)
+    expect(log.join(' ')).toContain('con_descuento=1')
+    expect(log.join(' ')).not.toContain('1500')
   })
 
   it('un día que falla se anota y NO tira', async () => {

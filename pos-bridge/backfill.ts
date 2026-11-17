@@ -109,8 +109,13 @@ export async function correrDia(
       puertos.log(`    ${fecha}  sin ventas`)
       return { fecha, tickets: 0, guardados: 0, lineas: 0, error: null }
     }
+    // D9 (17-nov): cuántas facturas traen descuento. Solo un conteo (nunca montos en el log): es la
+    // prueba del dry-run en la PC del PoS de que `FAC_FacturasDet.Descuento` se está leyendo.
+    const conDescuento = tickets.filter((t) => t.descuento > 0).length
     if (dryRun) {
-      puertos.log(`    ${fecha}  tickets=${tickets.length} líneas=${lineas}  (dry-run: NO se envía)`)
+      puertos.log(
+        `    ${fecha}  tickets=${tickets.length} líneas=${lineas} con_descuento=${conDescuento}  (dry-run: NO se envía)`,
+      )
       return { fecha, tickets: tickets.length, guardados: 0, lineas, error: null }
     }
 

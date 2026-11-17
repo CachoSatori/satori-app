@@ -37,7 +37,7 @@ describe('H1 — pozo de barra sin horas de barra', () => {
     expect(av).toHaveLength(1)
     expect(av[0].tipo).toBe('barra_sin_horas')
     expect(av[0].monto).toBe(15000)
-    expect(av[0].texto).toBe('Hay ₡15.000 de propina de barra y nadie de barra tiene horas cargadas. Cargá las horas de barra o pasá ese monto al pozo general.')
+    expect(av[0].texto).toBe('Hay ₡15.000 de propina de barra y nadie de barra tiene horas cargadas. Cargá las horas de barra; si nadie de barra trabajó, avisá al owner.')
   })
   it('barman marcado con 0 horas (o vacío) → bloquea', () => {
     expect(avisosCierrePropinas([linea('a', 'salonero', 6), linea('b', 'barman', 0)], 0, 0, 5000, TC)[0]?.tipo).toBe('barra_sin_horas')

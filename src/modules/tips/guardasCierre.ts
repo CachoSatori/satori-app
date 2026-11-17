@@ -19,7 +19,7 @@ export type AvisoCierre =
 
 export function textoBarraSinHoras(monto: number): string {
   return `Hay ${formatCRC(monto)} de propina de barra y nadie de barra tiene horas cargadas. ` +
-    'Cargá las horas de barra o pasá ese monto al pozo general.'
+    'Cargá las horas de barra; si nadie de barra trabajó, avisá al owner.'
 }
 
 export function textoGeneralSinPuntos(monto: number): string {

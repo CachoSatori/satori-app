@@ -257,7 +257,7 @@ y 5 necesitan #220 en `main` (campañas).
 | D8 | Cada cuánto se carga el CSV | Semanal · **mensual** (día 1 a 5) | **Mensual**, con recordatorio | No |
 | D9 | Hallazgo 232 en el resto del portal | A) aplicar el mismo esquema de topes (credencial + IP) en un PR aparte · B) dejarlo en backlog | **A**, después de la fase 1 | Sí (toca la API pública) |
 
-## 13. Cumpleaños automático en dos niveles (firmado por el dueño, 16-nov: C1 = A, C2–C6)
+## 13. Cumpleaños automático en dos niveles (firmado por el dueño, 16-nov: C1 = A, C3–C6; C2 pendiente de confirmación)
 
 La app avisa al socio por el **pase de Google Wallet** (push encendido en prod desde el 16-nov 15:40) y la caja aplica
 uno de **dos beneficios**, según el día. Sin pase de Google (o con Apple, hasta su aprobación) sigue el botón manual de
@@ -279,8 +279,12 @@ Cumpleaños (owner y manager de su local):
 - **Cada nivel guarda:** encendido, tipo de beneficio, valor o descripción, texto para el aviso en ES y EN (con «usted»)
   y el **artículo del PoS a marcar** (para «Excepciones»).
 - **La caja** ve en «Qué aplicar» (Escanear) **solo el nivel de hoy**: qué dar, si pide reserva y «vale hasta el …».
-  Nunca la fecha del cumpleaños. En la ventana del festejo **sin reserva** no aplica nada ese día: el recuadro dice
-  desde qué día puede volver por el beneficio de «Después».
+  Nunca la fecha del cumpleaños. **Firmado por el dueño (16-nov 21:32 CR):** si el socio viene en la ventana del
+  festejo **sin reserva**, le corresponde el beneficio del nivel «Después» (no se queda sin nada); sigue siendo una vez
+  por año.
+- **Alcance (aclaración):** el beneficio y el aviso son solo para socios del Local Club **activos**, con fecha de
+  cumpleaños cargada y que **aceptaron recibir avisos** (consentimiento de la 173). No aplica a turistas con cupón ni a
+  anfitriones que no sean socios.
 
 **Aviso** (aprobado por el dueño; pasa por `src/shared/wallet/usted.test.ts`). Job diario `pg_cron` 15:00 UTC =
 **09:00 CR** (C6), a D−5 (`aviso_dias_antes`, por local), con la configuración del **local del socio**:
@@ -309,9 +313,11 @@ Cumpleaños (owner y manager de su local):
   `con_reserva`; fuera de las ventanas, `{"aplica": false}` exacto. `club_cumple_usar_dia` guarda el nivel y el artículo
   de ese nivel; `club_cumple_usos_listar` / `_resumen` abren por nivel. Baterías de la 173 y la 175 verdes, con
   medianoche CR y cruce de fin de año.
-- **C2 (firmada):** el primer mes desde el encendido, el socio **sin aviso por el pase** sigue con la regla de la 173
-  (un beneficio, `dias_antes` / `dias_despues`); después, una sola regla: los dos niveles para todos, y el WhatsApp
-  manual usa el mismo texto. Las columnas viejas quedan sin uso y no se borran en esa migración.
+- **C2 (lectura del asesor, pendiente de confirmación del dueño):** durante el primer mes, los socios **con pase de
+  Wallet** reciben el aviso automático con los dos niveles; los que **no tienen pase** siguen con el botón manual de
+  WhatsApp y la ventana actual de la 173 (un beneficio, `dias_antes` / `dias_despues`). Pasado un mes, se unifica: dos
+  niveles para todos los socios, sin importar el canal del aviso, y el WhatsApp manual usa el mismo texto. Las columnas
+  viejas quedan sin uso y no se borran en esa migración.
 
 **Medición en el embudo** (grupo `cumpleanos`, por local, por canal y **por nivel**):
 
@@ -345,6 +351,7 @@ Aparte: aviso de privacidad **v1.4** con el pase como canal (C4, en la lectura l
 del dueño de «Qué aplicar» y de la pantalla de Promociones · guía `docs/sop-app/6.13` en el mismo PR. En §9 es la fase 6
 y necesita la fase 5 (`/ir/`) y #220 en `main`.
 
-**Puntos a confirmar por el chat (no frenan el diseño):** (1) C2 con dos niveles se leyó como «tras un mes, los dos
-niveles para todos»; (2) cómo se costea en el Tablero un `descuento` o un `dos_por_uno` (hoy la 175 solo sabe costear
-cortesías a ₡0): propuesta, costo del artículo marcado para el 2x1 y monto descontado de la factura para el %.
+**Firmado por el dueño (16-nov 21:32 CR):** los descuentos y 2x1 de cumpleaños se cuentan en el Tablero a **precio de
+venta**, igual que los otros descuentos del Club.
+
+**Punto a confirmar por el chat (no frena el diseño):** C2, tal como está escrita arriba.

@@ -5,13 +5,14 @@
 > ventas, qué hay en prod y en staging, pendientes de estabilización, seguridad abierta y notas. Más viejo: [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-17, 03:10 hora de Costa Rica.** `main` = merge del #250 (`c775b3d`). **Ledger de prod = 184** (#247 Mix, #240 mig 183 y #250 mig 184, con OK y firma del dueño por el chat a las 02:53 CR). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (el del 15/16-nov está en el proyecto privado).
-- **PASE 183 y 184 (§6 OK):** md5 en prod: núcleo de excepciones `0b7b956e`, núcleo del reporte de descuentos `7a5e33e2`.
-- **#248 (el puente lee el descuento por línea):** mergeado en la rama del agente `claude/puente-item11-prod-v2` (`578f38c`), **NO en `main`**. Falta cambiar la carpeta del agente en la PC del PoS y correr el backfill 00:00–06:00 (PASE-D9).
-- **Cron del Club** (`docs/pases/PASE-cron-club-mantenimiento.md`): jobid 8, `15 9 * * *` (03:15 CR). **Pendiente confirmar la corrida del 17/11** (§5.6 del PASE) y repetir el 23-nov.
-- **Validación física pendiente del dueño:** #229 (segundo escaneo = rojo) · #225 · #226 (`ot_campaign=referente`) · #234 · #238 · #244 · #247 (Mix) · #222 (Ventas después de las 18:00) · #220 (2 reservas de prueba).
-- **Edge 17/11 ~06:20 CR (verificado en prod):** el dueño desplegó `pago-notificar` v14, `cierre-email` v14 y `monthly-report` v23 (`verify_jwt` on, código idéntico a su SHA; `monthly-report`: dry_run, mensual y quincena 200 sin enviar, ventas del PoS). Los PRs #242, #243, #245 y #241 siguen abiertos: el código de Edge no va a `main` (regla 2; se resuelve con A05). `cierre-email` y `pago-notificar` no tienen vista previa: **sin prueba funcional hasta el próximo cierre o pago real**.
-- **Otros pendientes:** reintentar el `drop` del índice de la v1 de la 183 en staging (`pos_ndf_tickets_local_fecha_efectiva_idx`; la herramienta cancela los `drop`: va por sesión de CC) · #231, #232 y #235 sin entrar · `extract-document` en staging: falta prueba funcional.
+**Al día: 2026-11-17, ~07:00 hora de Costa Rica.** `main` = `2dd942b` (#254; antes #253 `14cc9bd`, #251 y #250 `c775b3d`). **Ledger de prod = 184** (verificado 17-nov 06:3x). Sagrados iguales (tabla de abajo, sin cambios). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (el del 15/16-nov está en el proyecto privado).
+- **Validación física del dueño OK:** #244, #247, Marcadores «todas las líneas», #234, #238, #225, #226 y #239. **Falta:** #229 (en servicio con un socio real). #222 y #220: a confirmar contra el handoff privado.
+- **Edge en prod:** `monthly-report` v23, `cierre-email` v14, `pago-notificar` v14. Sin prueba funcional hasta el próximo cierre o pago. Los PRs #242, #243, #245 y #241 siguen abiertos: el código de Edge no va a `main` (regla 2; se resuelve con A05).
+- **Cron:** job 4 (quincena) aplicado el 16-nov 22:24, **NO volver a aplicar**. Job 8 (Club, `15 9 * * *`) corrió OK el 17-nov; repetir la verificación el 23-nov.
+- **Método nuevo (#253)** y **guarda de checks protegidos en modo observar (#254)** ya en `main`.
+- **Hoy, agente D9 (#252):** parte A de día, fuera de 15:50–19:00; parte B (backfill del descuento por línea) de 00:00 a 06:00.
+- **Ventas v2 (SPEC en PR #246):** D1 = A con pestañas Resumen · Productos · Equipo · Tiempos · Regalías; D2, D3 y D10 = A. Fase 1.1 en curso. D4–D8 abiertas.
+- **Otros pendientes:** reintentar el `drop` del índice de la v1 de la 183 en staging (`pos_ndf_tickets_local_fecha_efectiva_idx`; va por sesión de CC) · #231, #232 y #235 sin entrar · `extract-document` en staging: falta prueba funcional.
 - Local Club sigue en 15 % hasta el lanzamiento; todo se piensa multi-local.
 - **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403/000): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Workers Builds: satori-club-api».
 
@@ -19,7 +20,7 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `c775b3d` + #251 (solo docs) |
+| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `2dd942b` (#254) |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 184 |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |

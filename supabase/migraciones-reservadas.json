@@ -111,6 +111,12 @@
       "rama": "claude/esquema-columnas-caja-faltantes",
       "renumerada_a": "178"
     },
+    "099": {
+      "nombre": "seguridad_cambio_clave",
+      "bloque": "caja",
+      "rama": "claude/forzar-cambio-clave",
+      "renumerada_a": "185"
+    },
     "100": {
       "nombre": "club_catalogo_locales",
       "bloque": "club",
@@ -482,6 +488,12 @@
       "bloque": "pase",
       "rama": "claude/club-descuentos-todas-lineas",
       "origen": "129"
+    },
+    "185": {
+      "nombre": "seguridad_cambio_clave",
+      "bloque": "pase",
+      "rama": "claude/forzar-cambio-clave",
+      "origen": "099"
     }
   }
 }

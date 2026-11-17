@@ -6377,6 +6377,23 @@ export type Database = {
         }
         Returns: string
       }
+      seguridad_cambio_clave_pendientes: {
+        Args: never
+        Returns: {
+          marcado_en: string
+          marcado_por: string
+          user_id: string
+        }[]
+      }
+      seguridad_debo_cambiar_clave: { Args: never; Returns: boolean }
+      seguridad_desmarcar_cambio_clave: {
+        Args: { p_user: string }
+        Returns: boolean
+      }
+      seguridad_marcar_cambio_clave: {
+        Args: { p_user: string }
+        Returns: string
+      }
       sync_pos_tips_to_pool: {
         Args: { p_date: string; p_session_id: string }
         Returns: Json

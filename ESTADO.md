@@ -81,7 +81,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 ### Numeración de migraciones (regla del dueño, 08/11)
 > **Fuente de verdad:** `supabase/migraciones-reservadas.json`, que lee `supabase/migraciones.test.ts`. La bitácora larga de cada número está en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 
-1. **Bloques por rama:** CAJA / operación **087–99** (próximo libre **099**) · CLUB SATORI + puente **100–149** (próximo libre **130**) · PASE A PROD **150–199** (solo renumeraciones del pase; próximo **185**). La **086** queda libre.
+1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **130**) · PASE A PROD **150–199** (solo renumeraciones del pase; próximo **186**). La **086** queda libre.
 2. Cada PR que agrega una migración actualiza esta tabla y el registro. El gate falla si no está registrada, queda fuera del bloque de su rama o repite número.
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199 (nunca a uno de creación), en el mismo PR (archivo, rollback, pruebas, scripts, fila del ledger de staging), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
@@ -110,6 +110,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 096 | → 153 |
 | 097 | → 177 |
 | 098 | → 178 |
+| 099 | → 185 (seguridad: obligar a cambiar la contraseña; PR en borrador, sin firma) |
 | 100 | → 151 |
 | 101 | → 159 |
 | 102 | → 155 |
@@ -172,6 +173,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 182 | ← 127 |
 | 183 | ← 128 |
 | 184 | ← 129 |
+| 185 | ← 099 (en PR, sin firma; entra a prod por merge → Branching) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 

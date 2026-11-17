@@ -52,8 +52,45 @@ extremo puede clasificar mal un conflicto (solo afecta el warning, no el dato).
 - **Orden estricto** por `seq` (autoincremental de IndexedDB): una edición nunca
   se aplica antes que su creación. Un fallo de RED **frena todo el flush** (se
   reintenta después desde el mismo punto).
-- **Rechazo del servidor** (RLS, FK, datos inválidos): la op se **descarta** y se
-  audita + `console.error` — dejarla trabaría la cola para siempre.
+- **Clasificación (A01, 16-nov)** por `status` y `code` de supabase-js, no solo por texto
+  (`classifyServerError`). **Reintenta** (frena el flush, la op queda en la cola): red/timeout
+  (status 0), sesión vencida (401, `PGRST301/302/303`, 403 por JWT: refresca la sesión **una vez** y
+  reintenta la misma op), 408, 425, 429, 5xx, `PGRST000–003`, SQLSTATE `08*`, `53*`, `57*`, `40001`,
+  `40P01`, `25006`, y todo lo que no se puede clasificar. **Rechazo definitivo** (fatal): el resto de
+  los 4xx (regla de negocio `P0001`, constraints `23*`, formato `22*`, permiso `42501` con sesión válida).
+- **Rechazo del servidor → cola de «rechazadas»** (base IndexedDB aparte,
+  `satori-offline-rechazadas`, clave `client_op_id`). La op se guarda ahí **antes** de salir de la cola;
+  si no se puede guardar, no se borra y el flush se frena. Un rechazo **no frena** lo que sigue. La app
+  muestra en rojo «Hay N operaciones que el servidor rechazó: avisá al manager» con «Ver detalle» (qué,
+  cuándo, motivo). Owner/manager pueden «↻ Reintentar» (vuelve a la cola con el mismo `client_op_id`:
+  si ya estaba aplicada rebota como duplicado) o «✓ Ya lo resolví» (queda en el store `audit` del
+  aparato y sale de la lista). La consola solo registra tabla, tipo, id de la op y código: nunca la fila.
+- **Cadenas (verificador #234):** cada op apunta a una fila (`targetKey`: el id del movimiento; en
+  propinas, `(session_id, employee_id)`). Si la fila tiene algo en rechazadas, las ops siguientes de esa
+  fila **no se mandan** (un update/delete de una fila que no existe responde «ok» sin efecto): van a
+  rechazadas con `depends_on` = la raíz. «Reintentar» y «Ya lo resolví» operan sobre la cadena entera en
+  el orden original (`orig_seq`); «Reintentar» se niega si hay algo de esa fila en la cola. Reintentar,
+  resolver y «Pasar a rechazadas» corren con el lock del flush. Si una op está a la vez en la cola y en
+  rechazadas (reintento a medias), se manda y, si entra, sale de rechazadas.
+- **Escrituras con red (cash.ts, tips.ts):** si hay cola pendiente o la fila está en rechazadas, se
+  encolan detrás (y se dispara el flush). Borrar un movimiento pendiente o rechazado se frena con aviso
+  (la RPC de borrado sería un no-op y la cola lo haría aparecer después).
+- **Cola trabada:** tras 5 flushes seguidos frenados (backoff 5 s → 60 s, unos 75 s), aparece
+  «No se pudo sincronizar después de N intentos: <motivo>. Lo pendiente sigue guardado en este aparato.»
+  Un error del servidor que no se arregla solo (un 5xx fijo) traba la cola a propósito, en orden y
+  visible: es preferible a saltear o perder un pago. El contador es por la **misma** primera op. Si el
+  freno es del servidor o desconocido (no red ni sesión), owner/manager tienen «Pasar a rechazadas»: la
+  primera op va a rechazadas (sin borrar) y sus dependientes la siguen en el próximo flush.
+  Un timeout de 15 s con `navigator.onLine=true` (o un 408) es «lento», no «red»: el aviso dice «el
+  servidor tarda en responder esta operación» y también habilita el botón. Las lecturas de IndexedDB que
+  deciden si una escritura con red va a la cola tienen un tope de 1,5 s: si vence, solo un ALTA nueva
+  sigue directo; ediciones y propinas (fila existente) van a la cola, y el borrado se frena con «No se
+  pudo confirmar el orden». Antes de clasificar «lento» se hace un ping corto a `/auth/v1/health`: sin
+  respuesta es «red» (wifi sin internet).
+- **Incierta:** lo que la gerencia pasa a rechazadas no tuvo un rechazo explícito (timeout, 5xx) y puede
+  haber entrado. Queda marcado `incierta` y la app dice «Estado desconocido: puede que ya haya entrado.
+  Tocá «↻ Reintentar» antes de cargarla a mano». Reintentar es idempotente (23505 = ya estaba). La app
+  nunca afirma «no se guardó» sin un rechazo explícito del servidor.
 - **Multi-pestaña**: el flush corre dentro de `navigator.locks`
   (`satori-outbox-flush`, `ifAvailable`) → dos pestañas nunca replyan a la vez.
 

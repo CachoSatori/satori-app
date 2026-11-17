@@ -1,0 +1,225 @@
+// @vitest-environment happy-dom
+// A01: lo que VE el personal cuando el servidor rechaza una op o la cola se traba.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, act, fireEvent } from '@testing-library/react'
+import type { RejectedOp } from './outbox'
+
+const rej: RejectedOp = {
+  client_op_id: 'op-x', table: 'cash_movements', op: 'insert',
+  payload: { amount_crc: 5000, description: 'Pago de ejemplo' },
+  created_at: '2026-11-17T05:30:00.000Z',   // 23:30 del 16/11 en CR
+  rejected_at: '2026-11-17T06:00:00.000Z', reason: 'un dato no cumple una regla de la base', code: '23514', status: 400,
+}
+const state = { lista: null as RejectedOp[] | null, pending: 0, rejected: 0, role: 'cajero' as string, stuck: { attempts: 0 } as { attempts: number; kind?: string; head?: string } }
+const requeue = vi.fn<(id: string) => Promise<void>>(async () => {})
+const force = vi.fn<(id: string, n: number, m: string) => Promise<boolean>>(async () => true)
+const resolve = vi.fn<(id: string, by: string | null) => Promise<void>>(async () => {})
+
+vi.mock('./outbox', async () => {
+  const real = await vi.importActual<typeof import('./outbox')>('./outbox')
+  return {
+    ...real,
+    initOutbox: () => {},
+    flushNow: async () => null,
+    pendingCount: async () => state.pending,
+    rejectedCount: async () => state.rejected,
+    rejectedOps: async () => (state.lista ?? (state.rejected ? [rej] : [])),
+    getStuck: () => state.stuck,
+    requeueRejectedNow: (id: string) => requeue(id),
+    resolveRejectedNow: (id: string, by: string | null) => resolve(id, by),
+    forceRejectHeadNow: (id: string, n: number, m: string) => force(id, n, m),
+  }
+})
+vi.mock('../api/supabase', () => ({ supabase: {} }))
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ profile: { role: state.role }, user: { id: 'u-ficticio' } }) }))
+
+import OfflineBanner from './OfflineBanner'
+
+beforeEach(() => {
+  state.lista = null; state.pending = 0; state.rejected = 0; state.role = 'cajero'; state.stuck = { attempts: 0 }
+  requeue.mockClear(); resolve.mockClear(); force.mockClear()
+})
+const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
+
+describe('A01 — aviso de operaciones rechazadas', () => {
+  it('con rechazadas muestra el texto exacto, aunque no haya cola pendiente', async () => {
+    state.rejected = 2; state.lista = [rej, { ...rej, client_op_id: 'op-y' }]
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.getByRole('alert').textContent).toContain('Hay 2 operaciones que el servidor rechazó: avisá al manager')
+  })
+
+  it('singular', async () => {
+    state.rejected = 1
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.getByRole('alert').textContent).toContain('Hay 1 operación que el servidor rechazó: avisá al manager')
+  })
+
+  it('sin nada pendiente ni rechazado no muestra nada', async () => {
+    const { container } = render(<OfflineBanner />)
+    await flush()
+    expect(container.textContent).toBe('')
+  })
+
+  it('«Ver detalle» muestra qué, cuándo (hora CR) y motivo; el cajero no ve los botones de resolver', async () => {
+    state.rejected = 1
+    render(<OfflineBanner />)
+    await flush()
+    fireEvent.click(screen.getByText('Ver detalle'))
+    await flush()
+    const d = screen.getByRole('dialog')
+    expect(d.textContent).toContain('Movimiento de caja · nuevo · ₡5.000 · Pago de ejemplo')
+    expect(d.textContent).toContain('registrada 16/11 23:30')
+    expect(d.textContent).toContain('un dato no cumple una regla de la base (HTTP 400 · 23514)')
+    expect(d.textContent).toContain('Solo un encargado o el dueño puede resolverlas.')
+    expect(screen.queryByText('↻ Reintentar')).toBeNull()
+  })
+
+  it('el manager puede reintentar', async () => {
+    state.rejected = 1; state.role = 'manager'
+    render(<OfflineBanner />)
+    await flush()
+    fireEvent.click(screen.getByText('Ver detalle'))
+    await flush()
+    fireEvent.click(screen.getByText('↻ Reintentar'))
+    await flush()
+    expect(requeue).toHaveBeenCalledWith('op-x')
+  })
+
+  it('el dueño resuelve solo si confirma', async () => {
+    state.rejected = 1; state.role = 'owner'
+    render(<OfflineBanner />)
+    await flush()
+    fireEvent.click(screen.getByText('Ver detalle'))
+    await flush()
+    const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true)
+    ;(window as unknown as { confirm: unknown }).confirm = confirm
+    fireEvent.click(screen.getByText('✓ Ya lo resolví')); await flush()
+    expect(resolve).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('✓ Ya lo resolví')); await flush()
+    expect(resolve).toHaveBeenCalledWith('op-x', 'u-ficticio')
+    expect(confirm).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('A01 — aviso de cola trabada', () => {
+  it('tras 5 intentos por sesión vencida muestra el motivo', async () => {
+    state.pending = 3; state.stuck = { attempts: 5, kind: 'sesion' }
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.getByRole('status').textContent).toContain(
+      'No se pudo sincronizar después de 5 intentos: la sesión venció. Volvé a iniciar sesión (lo pendiente no se pierde). Lo pendiente sigue guardado en este aparato.')
+  })
+  it('con 4 intentos todavía no avisa', async () => {
+    state.pending = 3; state.stuck = { attempts: 4, kind: 'sesion' }
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(document.body.textContent).toContain('3 operaciones pendientes de sincronizar')
+  })
+})
+
+describe('verificador #234 — «Pasar a rechazadas»', () => {
+  it('manager con cola trabada por el servidor: ve el botón y, si confirma, pasa la primera op', async () => {
+    state.pending = 2; state.role = 'manager'; state.stuck = { attempts: 5, kind: 'servidor', head: 'op-h' }
+    render(<OfflineBanner />)
+    await flush()
+    const confirm = vi.fn().mockReturnValue(true)
+    ;(window as unknown as { confirm: unknown }).confirm = confirm
+    fireEvent.click(screen.getByText('Pasar a rechazadas')); await flush()
+    expect(confirm.mock.calls[0][0]).toContain('No se borra')
+    expect(force).toHaveBeenCalledWith('op-h', 5, 'el servidor no está respondiendo bien; se sigue reintentando')
+  })
+  it('el cajero no ve el botón', async () => {
+    state.pending = 2; state.stuck = { attempts: 5, kind: 'servidor', head: 'op-h' }
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.queryByText('Pasar a rechazadas')).toBeNull()
+  })
+  it('con freno por sesión vencida no se ofrece (se arregla entrando de nuevo)', async () => {
+    state.pending = 2; state.role = 'owner'; state.stuck = { attempts: 5, kind: 'sesion', head: 'op-h' }
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.queryByText('Pasar a rechazadas')).toBeNull()
+  })
+})
+
+describe('verificador #234, 2ª pasada', () => {
+  it('op lenta con red andando: el aviso dice que el servidor tarda (no «sin conexión») y el manager ve el botón', async () => {
+    state.pending = 2; state.role = 'manager'; state.stuck = { attempts: 5, kind: 'lento', head: 'op-h' }
+    render(<OfflineBanner />)
+    await flush()
+    const t = screen.getByRole('status').textContent ?? ''
+    expect(t).toContain('el servidor tarda en responder esta operación')
+    expect(t).not.toContain('conexión')
+    expect(screen.getByText('Pasar a rechazadas')).toBeTruthy()
+  })
+  it('si falla el guardado al «Pasar a rechazadas», avisa y no rompe', async () => {
+    state.pending = 2; state.role = 'owner'; state.stuck = { attempts: 5, kind: 'servidor', head: 'op-h' }
+    force.mockImplementationOnce(async () => { throw new Error('IDB') })
+    render(<OfflineBanner />)
+    await flush()
+    ;(window as unknown as { confirm: unknown }).confirm = vi.fn().mockReturnValue(true)
+    const alert = vi.fn()
+    ;(window as unknown as { alert: unknown }).alert = alert
+    fireEvent.click(screen.getByText('Pasar a rechazadas')); await flush()
+    expect(alert.mock.calls[0][0]).toContain('No se pudo pasar a rechazadas')
+  })
+})
+
+describe('verificador #234, 3ª pasada — op incierta en el detalle', () => {
+  it('muestra «Estado desconocido…» y no afirma que no se guardó; resolver pide confirmar con el aviso fuerte', async () => {
+    state.rejected = 1; state.role = 'manager'
+    const orig = rej.incierta
+    rej.incierta = true
+    try {
+      render(<OfflineBanner />)
+      await flush()
+      fireEvent.click(screen.getByText('Ver detalle')); await flush()
+      const d = screen.getByRole('dialog').textContent ?? ''
+      expect(d).toContain('Estado desconocido: puede que ya haya entrado. Tocá «↻ Reintentar» antes de cargarla a mano')
+      expect(d).not.toContain('No quedó guardada')
+      expect(d).not.toContain('NO quedaron guardadas')
+      const confirm = vi.fn().mockReturnValue(false)
+      ;(window as unknown as { confirm: unknown }).confirm = confirm
+      fireEvent.click(screen.getByText('✓ Ya lo resolví')); await flush()
+      expect(confirm.mock.calls[0][0]).toContain('puede que ya haya entrado')
+      expect(resolve).not.toHaveBeenCalled()
+    } finally { rej.incierta = orig }
+  })
+})
+
+describe('verificador #234, cierre — textos e inciertas en cadena', () => {
+  const raiz: RejectedOp = { ...rej, client_op_id: 'raiz', incierta: true }
+  const dep: RejectedOp = { ...rej, client_op_id: 'dep', op: 'update', payload: { match: { id: 'M' }, updates: { amount_crc: 7000 } }, depends_on: 'raiz', reason: 'depende' }
+  const otra: RejectedOp = { ...rej, client_op_id: 'otra' }
+
+  it('«Ya lo resolví» tocado desde una op que DEPENDE de una incierta pide el aviso fuerte', async () => {
+    state.lista = [raiz, dep]; state.rejected = 2; state.role = 'manager'
+    render(<OfflineBanner />)
+    await flush()
+    fireEvent.click(screen.getByText('Ver detalle')); await flush()
+    const confirm = vi.fn().mockReturnValue(false)
+    ;(window as unknown as { confirm: unknown }).confirm = confirm
+    fireEvent.click(screen.getAllByText('✓ Ya lo resolví')[1]); await flush()   // el botón de «dep»
+    expect(confirm.mock.calls[0][0]).toContain('puede que ya haya entrado')
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('el aviso rojo separa las rechazadas de las no confirmadas', async () => {
+    state.lista = [raiz, dep, otra]; state.rejected = 3
+    render(<OfflineBanner />)
+    await flush()
+    expect(screen.getByRole('alert').textContent).toContain('Hay 1 operación que el servidor rechazó y 2 que no confirmó: avisá al manager')
+  })
+
+  it('solo no confirmadas: no dice «rechazó»', async () => {
+    state.lista = [raiz]; state.rejected = 1
+    render(<OfflineBanner />)
+    await flush()
+    const t = screen.getByRole('alert').textContent ?? ''
+    expect(t).toContain('Hay 1 operación que el servidor no confirmó: avisá al manager')
+    expect(t).not.toContain('rechazó')
+  })
+})

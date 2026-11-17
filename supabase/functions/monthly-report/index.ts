@@ -2,6 +2,9 @@
  * Supabase Edge Function — Reportes Mensuales Satori
  * Ported from SATORI PROPINAS standalone satori_apps_script_v4.1.js
  *
+ * Ventas: del PoS (`ventasPos.ts` + el paquete `ventasPos.gen.js`, la misma lógica que la app). Desde el
+ * 16-nov ya no se lee `ventas_dias` (xls). En dry_run la respuesta trae `control` (razones contra el xls).
+ *
  * Sends TWO emails (same as standalone):
  *   1. 📈 Reporte de Ventas — IRS saloneros, top productos, tendencia semanal
  *   2. 💰 Reporte de Propinas — distribución sector, AM/PM split, top take-home
@@ -24,6 +27,8 @@ import { mesActualCR, type RangoMes } from './fechas.ts'
 import { elegirPeriodo } from './periodo.ts'
 import { buildVentasEmail, buildPropinasEmail } from './plantilla.ts'
 import { destinatarioDe, FALTA_DESTINATARIO } from './destinatario.ts'
+import { diasDelPos, netaDelPeriodo, tipoDeProductos, totalesDelPeriodo, type DiaData } from './ventasPos.ts'
+import { controlContraXls } from './controlXls.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
@@ -78,27 +83,24 @@ interface PropinasCalc {
 }
 
 // `r` = período reportado; `rPrev` = mismo período del mes anterior (mes completo o días 1–14): ver periodo.ts.
-async function calcVentas(supabase: ReturnType<typeof createClient>, r: RangoMes, rPrev: RangoMes): Promise<VentasCalc> {
+// 16-nov (decisión firmada del dueño): las ventas salen del PoS (`ventasPos.ts`), nunca de `ventas_dias`.
+async function calcVentas(supabase: ReturnType<typeof createClient>, r: RangoMes, rPrev: RangoMes): Promise<VentasCalc & { dias: Record<string, DiaData> }> {
 
-  // Fetch ventas_dias for current and previous month
-  const { data: dias, error: eDias } = await supabase.from('ventas_dias' as never)
-    .select('session_date, data')
-    .gte('session_date', r.desde)
-    .lte('session_date', r.hasta) as { error: { message?: string } | null; data: Array<{session_date: string; data: {saloneros: Record<string, {total?:number;iva?:number;serv?:number;pax?:number;iCom?:number;iBeb?:number;esCajero?:boolean;delivery?:number;prods?:[string,number,number][]}>}}> | null }
+  const { dias, pm } = await diasDelPos(supabase, r)
+  const prev = await diasDelPos(supabase, rPrev)
 
-  exigirLectura('ventas_mes', eDias)
-
-  const { data: prevDias, error: ePrev } = await supabase.from('ventas_dias' as never)
-    .select('data').gte('session_date', rPrev.desde).lte('session_date', rPrev.hasta)
-  exigirLectura('ventas_mes_anterior', ePrev)
-
-  // Product classifications
+  // Tipo de producto: el curado (`product_map`) manda; si no tiene, la familia del PoS.
   const { data: prodMap_, error: eProd } = await supabase.from('product_map' as never).select('nombre, tipo')
   exigirLectura('product_map', eProd)
+  const curado: Record<string, { tipo: string }> = {}
+  for (const p of (prodMap_ ?? []) as {nombre: string; tipo: string}[]) curado[p.nombre] = { tipo: p.tipo }
+  const tipos = tipoDeProductos(curado, pm)
   const tipoMap: Record<string, string> = {}
-  for (const p of (prodMap_ ?? []) as {nombre: string; tipo: string}[]) tipoMap[p.nombre.toUpperCase().trim()] = p.tipo
+  for (const [n, i] of Object.entries(tipos)) tipoMap[n.toUpperCase().trim()] = i.tipo
 
-  let total=0, salon=0, caj=0, delivery=0, iva=0, serv=0, pax=0, iCom=0, iBeb=0, diasVentas=0
+  const tot = totalesDelPeriodo(dias)
+  const { total, salon, caj, delivery, iva, serv, pax, diasVentas } = tot
+  let iCom=0, iBeb=0
   const salMap: Record<string, {total:number;pax:number;iCom:number;iBeb:number;dias:Set<string>}> = {}
   const prodAcc: Record<string, {qty:number;monto:number;tipo:string}> = {}
   const semMap: Record<string, {total:number;dias:number}> = {}
@@ -106,38 +108,28 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, r: RangoMes
 
   const DAYS_ES: Record<number, string> = {0:'Domingo',1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado'}
 
-  for (const row of (dias ?? [])) {
-    diasVentas++
-    const dNum = Number(row.session_date.slice(8,10))
+  for (const [fecha, dia] of Object.entries(dias).sort(([a], [b]) => a.localeCompare(b))) {
+    const dayTotal = netaDelPeriodo({ [fecha]: dia })   // venta neta del día (restaurante entero)
+    if (dayTotal <= 0) continue
+    const dNum = Number(fecha.slice(8,10))
     const sem = dNum<=7?'1':dNum<=14?'2':dNum<=21?'3':dNum<=28?'4':'5'
     if (!semMap[sem]) semMap[sem] = {total:0,dias:0}
     semMap[sem].dias++
-    let dayTotal = 0
-    const dow = DAYS_ES[new Date(row.session_date+'T12:00:00').getDay()] ?? ''
-    for (const [nombre, s] of Object.entries(row.data?.saloneros ?? {})) {
-      iva  += s.iva  ?? 0
-      serv += s.serv ?? 0
-      if (s.esCajero) {
-        delivery += s.delivery ?? 0
-        caj      += (s.total ?? 0) - (s.delivery ?? 0)
-        total    += s.total ?? 0
-      } else {
-        const t = s.total ?? 0
-        salon += t; total += t; pax += s.pax ?? 0
-        iCom  += s.iCom ?? 0; iBeb += s.iBeb ?? 0
-        dayTotal += t
-        const k = nombre.toUpperCase().trim()
-        if (!salMap[k]) salMap[k] = {total:0,pax:0,iCom:0,iBeb:0,dias:new Set()}
-        salMap[k].total += t; salMap[k].pax += s.pax ?? 0
-        salMap[k].iCom  += s.iCom ?? 0; salMap[k].iBeb += s.iBeb ?? 0
-        salMap[k].dias.add(row.session_date)
-        for (const [pname,,monto] of (s.prods ?? [])) {
-          const qty = s.prods?.find(p => p[0]===pname)?.[1] ?? 0
-          const pk = String(pname).toUpperCase().trim()
-          const tipo = tipoMap[pk] ?? 'comida'
-          if (!prodAcc[pk]) prodAcc[pk] = {qty:0,monto:0,tipo}
-          prodAcc[pk].qty += qty; prodAcc[pk].monto += monto
-        }
+    const dow = DAYS_ES[new Date(fecha+'T12:00:00').getDay()] ?? ''
+    for (const [nombre, s] of Object.entries(dia.saloneros ?? {})) {
+      if (s.esCajero) continue
+      const t = s.total ?? 0
+      iCom  += s.iCom ?? 0; iBeb += s.iBeb ?? 0
+      const k = nombre.toUpperCase().trim()
+      if (!salMap[k]) salMap[k] = {total:0,pax:0,iCom:0,iBeb:0,dias:new Set()}
+      salMap[k].total += t; salMap[k].pax += s.pax ?? 0
+      salMap[k].iCom  += s.iCom ?? 0; salMap[k].iBeb += s.iBeb ?? 0
+      salMap[k].dias.add(fecha)
+      for (const [pname, qty, monto] of ((s.prods ?? []) as [string, number, number][])) {
+        const pk = String(pname).toUpperCase().trim()
+        const tipo = tipoMap[pk] ?? 'comida'
+        if (!prodAcc[pk]) prodAcc[pk] = {qty:0,monto:0,tipo}
+        prodAcc[pk].qty += qty ?? 0; prodAcc[pk].monto += monto ?? 0
       }
     }
     semMap[sem].total += dayTotal
@@ -145,12 +137,8 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, r: RangoMes
     dowTotals[dow].push(dayTotal)
   }
 
-  // Previous month total
-  let prevNeta = 0
-  type DiaRow = { session_date: string; data: { saloneros: Record<string, { total?: number; iva?: number; serv?: number; pax?: number; iCom?: number; iBeb?: number; esCajero?: boolean; delivery?: number; prods?: [string, number, number][] }> } }
-  for (const row of ((prevDias ?? []) as DiaRow[])) {
-    for (const s of Object.values(row.data?.saloneros ?? {})) prevNeta += s.total ?? 0
-  }
+  // Período anterior: la neta, del PoS con la misma suma.
+  const prevNeta = netaDelPeriodo(prev.dias)
 
   // IRS = 45% ticket/PAX + 35% constancia + 20% PAX prom/servicio
   const salArr = Object.entries(salMap).map(([nombre, d]) => {
@@ -174,6 +162,7 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, r: RangoMes
     .map(([sem,{total,dias}]) => ({sem,total,dias,avg:dias>0?Math.round(total/dias):0}))
 
   return {
+    dias,
     total, salon, caj, delivery, iva, serv, pax, iCom, iBeb, diasVentas, prevNeta,
     topSal:     salArr.sort((a,b)=>b.irs-a.irs).slice(0,8),
     topComida:  allProds.filter(p=>p.tipo!=='bebida').slice(0,5),
@@ -371,8 +360,12 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
     const enviados: string[] = [], sinDatos: string[] = []
 
+    let control: Record<string, number | null> | undefined
     if (tipo === 'ventas' || tipo === 'ambos') {
       const v = await calcVentas(supabase, plan.rango, plan.rangoComparado)
+      // Solo en dry_run: control contra lo que habría mandado el código viejo (`ventas_dias`, xls).
+      // RAZONES y conteos, nunca montos (van al log y a la respuesta).
+      if (dry) control = await controlContraXls(supabase, plan.rango, v.dias)
       if (v.diasVentas > 0) {
         const html = buildVentasEmail(v, plan)
         if (!dry) await send(plan.asuntoVentas, html)
@@ -388,8 +381,8 @@ Deno.serve(async (req) => {
       } else sinDatos.push('propinas')
     }
 
-    console.log(JSON.stringify({ ref, quien, ym: plan.ym, periodo: plan.periodo, desde: plan.rango.desde, hasta: plan.rango.hasta, tipo, dry, enviados, sinDatos }))
-    return responder(200, { ok: true, month: plan.etiqueta, periodo: plan.periodo, dry_run: dry, enviados, sin_datos: sinDatos })
+    console.log(JSON.stringify({ ref, quien, ym: plan.ym, periodo: plan.periodo, desde: plan.rango.desde, hasta: plan.rango.hasta, tipo, dry, enviados, sinDatos, fuente: 'pos', ...(control ? { control } : {}) }))
+    return responder(200, { ok: true, month: plan.etiqueta, periodo: plan.periodo, dry_run: dry, enviados, sin_datos: sinDatos, fuente: 'pos', ...(control ? { control } : {}) })
   } catch (err) {
     console.error(JSON.stringify({ ref, etapa: 'no_controlado', detalle: String(err) }))
     return falla(500, 'interno', 'No se pudo generar el reporte')

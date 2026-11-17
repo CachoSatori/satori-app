@@ -131,7 +131,13 @@ describe('guarda estática: index.ts usa fechas.ts y no ignora errores de lectur
   it('cada lectura de la base revisa su error (supabase-js no tira en un 400)', () => {
     const lecturas = (codigo.match(/await supabase\.from\(/g) ?? []).length
     const chequeos = (codigo.match(/exigirLectura\('/g) ?? []).length
-    expect(lecturas).toBe(7)
+    // 16-nov: las 2 lecturas de `ventas_dias` salieron (ventas del PoS, en ventasPos.ts).
+    expect(lecturas).toBe(5)
     expect(chequeos).toBe(lecturas)
+  })
+  it('ventasPos.ts revisa el error de cada lectura (tickets, líneas, nombres)', () => {
+    const vp = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'ventasPos.ts'), 'utf8')
+    expect(vp).toMatch(/exigir\(etapa, error\)/)          // leerTodo: tickets y líneas
+    expect(vp).toMatch(/exigir\('nombres', error\)/)
   })
 })

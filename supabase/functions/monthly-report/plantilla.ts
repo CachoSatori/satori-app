@@ -79,7 +79,9 @@ export function buildVentasEmail(v: VentasCorreo, plan: Plan): string {
   ]
   if (v.diasVentas > 0) lista.push({ valor: crc(v.total / v.diasVentas), etiqueta: 'promedio por día' })
   if (v.pax > 0) lista.push({ valor: miles(v.pax), etiqueta: 'personas en salón' })
-  if (v.pax > 0 && v.salon > 0) lista.push({ valor: crc(v.salon / v.pax), etiqueta: 'ticket promedio por persona' })
+  // 16-nov (ventas del PoS): el pax incluye las mesas cobradas con login de caja, así que el ticket por
+  // persona es (salón de meseros + salón de caja) ÷ pax — la misma definición que la app (getDayStats).
+  if (v.pax > 0 && v.salon + v.caj > 0) lista.push({ valor: crc((v.salon + v.caj) / v.pax), etiqueta: 'ticket promedio por persona' })
 
   let html = cabecera(reporte, plan.etiqueta) + titulo(tituloPeriodo(plan), bajada) + cifras(lista)
 

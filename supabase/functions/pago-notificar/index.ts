@@ -13,6 +13,7 @@
 // Requiere el secret RESEND_API_KEY. Si falta → no-op 200 ("no enviado"), no rompe nada.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { buildHtml } from './plantilla.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
@@ -53,34 +54,10 @@ interface SupplierRow {
   notificar_pago: string | null
 }
 
-const crc = (n: number) => '₡' + Math.round(n).toLocaleString('es-CR')
-const usd = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fechaCR = (iso: string) =>
   new Date(iso).toLocaleDateString('es-CR', { timeZone: 'America/Costa_Rica', day: '2-digit', month: 'long', year: 'numeric' })
-const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
 
-function buildHtml(m: MovementRow, s: SupplierRow): string {
-  const usdRow = (m.amount_usd && m.amount_usd > 0)
-    ? `<tr><td style="padding:5px 0;color:#666">Monto (USD)</td><td style="padding:5px 0;text-align:right;font-weight:600">${usd(m.amount_usd)}</td></tr>`
-    : ''
-  return `<!doctype html><html><body style="margin:0;background:#faf9f5;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a">
-    <div style="max-width:520px;margin:0 auto;padding:24px">
-      <div style="font-size:20px;font-weight:700;letter-spacing:.5px">Satori Sushi Bar</div>
-      <div style="color:#888;font-size:13px;margin-bottom:16px">Comprobante de pago a proveedor</div>
-      <div style="background:#fff;border:1px solid #eee;border-radius:12px;padding:18px">
-        <div style="font-size:15px;font-weight:600;margin-bottom:10px">${esc(s.name)}</div>
-        <table style="width:100%;font-size:14px;border-collapse:collapse">
-          <tr><td style="padding:5px 0;color:#666">Fecha</td><td style="padding:5px 0;text-align:right">${fechaCR(m.created_at)}</td></tr>
-          <tr><td style="padding:5px 0;color:#666">Monto (CRC)</td><td style="padding:5px 0;text-align:right;font-weight:600">${crc(m.amount_crc)}</td></tr>
-          ${usdRow}
-          <tr><td style="padding:5px 0;color:#666">Método</td><td style="padding:5px 0;text-align:right">${esc(m.method ?? 'Transferencia')}</td></tr>
-          <tr><td style="padding:5px 0;color:#666">Detalle</td><td style="padding:5px 0;text-align:right">${esc(m.description ?? '')}</td></tr>
-        </table>
-      </div>
-      <div style="color:#aaa;font-size:11px;margin-top:16px">Aviso automático de Satori. No respondas a este correo.</div>
-    </div></body></html>`
-}
+// Plantilla del correo (estándar de reportes Satori adaptado a correo): ./plantilla.ts
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)

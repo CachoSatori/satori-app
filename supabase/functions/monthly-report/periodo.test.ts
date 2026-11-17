@@ -129,8 +129,13 @@ describe('guarda estática: index.ts usa el plan para rangos, comparación y asu
   it('asuntos y fila de comparación salen del plan (no texto fijo «vs mes anterior» ni asunto armado a mano)', () => {
     expect(codigo).toMatch(/send\(plan\.asuntoVentas, html\)/)
     expect(codigo).toMatch(/send\(plan\.asuntoPropinas, html\)/)
-    expect(codigo).toMatch(/kRow\(plan\.comparacion,/)
+    // La fila de comparación vive en la plantilla (plantilla.ts, 16-nov): sale de plan.comparacion.
+    const plantilla = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.ts'), 'utf8')
+      .split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+    expect(plantilla).toMatch(/plan\.comparacion/)
+    expect(codigo).toMatch(/buildVentasEmail\(v, plan\)/)
     expect(codigo).not.toMatch(/'vs mes anterior'/)
+    expect(plantilla).not.toMatch(/'vs mes anterior'/)
   })
   it('un período inválido corta con 400 antes de leer la base', () => {
     expect(codigo).toMatch(/if \(!elegido\.ok\) return falla\(400, elegido\.code, elegido\.error\)/)

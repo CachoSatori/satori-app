@@ -147,7 +147,7 @@ function TiposDescuento({ owner }: { owner: boolean }) {
   )
 }
 
-/** LC-DT: descuentos sin artículo por mes, tipo y turno (facturas y monto estimado). Owner y manager. */
+/** LC-DT: descuentos sin artículo por mes, tipo y turno (facturas y monto estimado de TODAS las líneas sin respaldo, 184). Owner y manager. */
 function ReporteDescuentos() {
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' })
   const hace = (d: number) => { const t = new Date(); t.setDate(t.getDate() - d); return t.toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }) }
@@ -166,7 +166,12 @@ function ReporteDescuentos() {
   return (
     <Card>
       <strong>Reporte de descuentos sin artículo</strong>
-      <div style={{ fontSize: '0.82rem', color: C.muted, margin: '4px 0 8px' }}>Por mes, tipo y turno. El monto es estimado (precio habitual − precio cobrado).</div>
+      {/* 184: suma TODAS las líneas con descuento sin respaldo de cada factura, cada una en su tipo (antes, una por factura) */}
+      <div style={{ fontSize: '0.82rem', color: C.muted, margin: '4px 0 8px' }}>
+        <strong>Descuento sin respaldo: todas las líneas.</strong> Suma cada línea de la factura con descuento sin respaldo, en el
+        tipo de su porcentaje. Por mes, tipo y turno. El monto es estimado (precio habitual − precio cobrado). Una factura con
+        líneas de dos tipos cuenta en los dos.
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 8 }}>
         <label><span style={labelStyle}>Desde</span><input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={inputStyle} /></label>
         <label><span style={labelStyle}>Hasta</span><input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={inputStyle} /></label>
@@ -175,7 +180,7 @@ function ReporteDescuentos() {
       {filas === null ? <div style={{ color: C.muted }}>Cargando…</div> : filas.length === 0 ? <div style={{ color: C.muted }}>Sin descuentos en el período.</div> : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
-            <thead><tr style={{ textAlign: 'left', color: C.muted }}><th>Mes</th><th>Tipo</th><th>Turno</th><th>Facturas</th><th>Monto</th></tr></thead>
+            <thead><tr style={{ textAlign: 'left', color: C.muted }}><th>Mes</th><th>Tipo</th><th>Turno</th><th>Facturas</th><th>Monto (todas las líneas)</th></tr></thead>
             <tbody>
               {filas.map(f => (
                 <tr key={`${f.mes}|${f.tipo}|${f.turno}`} style={{ borderTop: `1px solid ${C.panel}`, color: f.tipo === 'sin clasificar' ? C.red : undefined }}>

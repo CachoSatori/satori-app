@@ -470,6 +470,12 @@
       "bloque": "pase",
       "rama": "claude/club-excepciones-abiertas-rapida",
       "origen": "128"
+    },
+    "184": {
+      "nombre": "club_descuentos_todas_lineas",
+      "bloque": "pase",
+      "rama": "claude/club-descuentos-todas-lineas",
+      "origen": "129"
     }
   }
 }

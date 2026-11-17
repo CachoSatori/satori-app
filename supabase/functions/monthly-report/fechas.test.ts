@@ -122,10 +122,11 @@ describe('guarda estática: index.ts usa fechas.ts y no ignora errores de lectur
     expect(codigo).not.toMatch(/setMonth\(/)
     expect(codigo).not.toMatch(/toLocaleString\('en-US'/)
   })
-  it('los rangos salen de rangoMes y el mes por defecto de mesPorDefectoCR', () => {
-    expect(codigo).toMatch(/from '\.\/fechas\.ts'/)
-    expect((codigo.match(/rangoMes\(/g) ?? []).length).toBeGreaterThanOrEqual(3)
-    expect(codigo).toMatch(/ym = mesPorDefectoCR\(new Date\(\)\)/)
+  it('los rangos y el mes por defecto salen de periodo.ts (que usa rangoMes / mesPorDefectoCR de fechas.ts)', () => {
+    expect(codigo).toMatch(/from '\.\/periodo\.ts'/)
+    expect(codigo).toMatch(/elegirPeriodo\(body\.periodo, ym, new Date\(\)\)/)
+    // ninguna fecha armada a mano en index.ts: todo rango viene del plan
+    expect(codigo).not.toMatch(/`\$\{ym\}-\d\d`/)
   })
   it('cada lectura de la base revisa su error (supabase-js no tira en un 400)', () => {
     const lecturas = (codigo.match(/await supabase\.from\(/g) ?? []).length

@@ -9,7 +9,9 @@
  * Triggers:
  *   - pg_cron (día 1 y día 15) con Authorization: Bearer <service_role, desde Vault>
  *   - Botón de Admin (owner activo) con su JWT
- *   - body { "month"?: "YYYY-MM", "tipo"?: "ventas"|"propinas"|"ambos", "dry_run"?: boolean }
+ *   - body { "month"?: "YYYY-MM", "periodo"?: "mes"|"quincena", "tipo"?: "ventas"|"propinas"|"ambos", "dry_run"?: boolean }
+ *     · periodo "mes" (o sin periodo): mes completo vs mes anterior (cron del día 1, botón de Admin).
+ *     · periodo "quincena": días 1–14 del mes vs 1–14 del mes anterior (cron del día 15). Ver periodo.ts.
  *
  * SEC-02 (06/11): exige service_role u owner activo; CORS con allowlist; parámetros validados;
  * la respuesta NO trae montos ni nombres; errores fijos. Deploy A MANO con verify_jwt = true
@@ -18,7 +20,8 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { poolTotalSesion, type PoolEntry } from './pool.ts'
-import { rangoMes, mesAnterior, mesActualCR, mesPorDefectoCR } from './fechas.ts'
+import { mesActualCR, type RangoMes } from './fechas.ts'
+import { elegirPeriodo, type PlanReporte } from './periodo.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
@@ -27,8 +30,6 @@ const TO_EMAIL       = Deno.env.get('REPORT_TO_EMAIL') ?? 'cachorrogp@gmail.com'
 const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
 
 // ── Shared helpers (ported from Apps Script) ─────────────────
-const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const INK = '#0d0d0d', PAPER = '#f5f0e8', GOLD = '#c8a96e'
 const GREEN = '#4a7c59', RED = '#c23b22', BLUE = '#2a4a6b', TEAL = '#2a7a6a'
 const MUTED = '#888'
@@ -52,15 +53,15 @@ function barRow(label: string, val: number, max: number, color: string, note = '
     <td style="padding:5px 0 5px 10px;font-size:11px;font-weight:500;white-space:nowrap">${fi(val)}${note?` <span style="color:#aaa;font-size:10px">${note}</span>`:''}</td>
   </tr>`
 }
-function emailHeader(title: string, mes: string, anio: number): string {
+function emailHeader(title: string, etiqueta: string): string {
   return `<div style="background:${INK};padding:22px 28px 18px">
     <div style="font-family:Georgia,serif;font-size:22px;color:${GOLD};letter-spacing:.08em;font-weight:700">里 SATORI</div>
-    <div style="font-size:10px;color:#555;letter-spacing:.25em;text-transform:uppercase;margin-top:3px">${title} · ${mes} ${anio}</div>
+    <div style="font-size:10px;color:#555;letter-spacing:.25em;text-transform:uppercase;margin-top:3px">${title} · ${etiqueta}</div>
   </div>`
 }
-function emailFooter(mes: string, anio: number): string {
+function emailFooter(etiqueta: string): string {
   return `<div style="padding:12px 28px;background:#f0ece4;border-top:1px solid #e0dbd2">
-    <p style="font-size:10px;color:#aaa;margin:0">Generado automáticamente · Satori Sushi Bar · Santa Teresa, CR · ${mes} ${anio}</p>
+    <p style="font-size:10px;color:#aaa;margin:0">Generado automáticamente · Satori Sushi Bar · Santa Teresa, CR · ${etiqueta}</p>
   </div>`
 }
 
@@ -106,10 +107,8 @@ interface PropinasCalc {
   diasSem: Array<{ dia: string; avg: number; count: number }>
 }
 
-async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string): Promise<VentasCalc> {
-  // Rangos con el último día REAL de cada mes (30, 31, 28 o 29): ver fechas.ts.
-  const r = rangoMes(ym)
-  const rPrev = rangoMes(mesAnterior(ym))
+// `r` = período reportado; `rPrev` = mismo período del mes anterior (mes completo o días 1–14): ver periodo.ts.
+async function calcVentas(supabase: ReturnType<typeof createClient>, r: RangoMes, rPrev: RangoMes): Promise<VentasCalc> {
 
   // Fetch ventas_dias for current and previous month
   const { data: dias, error: eDias } = await supabase.from('ventas_dias' as never)
@@ -213,8 +212,7 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string)
   }
 }
 
-async function calcPropinas(supabase: ReturnType<typeof createClient>, ym: string): Promise<PropinasCalc> {
-  const r = rangoMes(ym)
+async function calcPropinas(supabase: ReturnType<typeof createClient>, r: RangoMes): Promise<PropinasCalc> {
   const { data: sessions, error: eSes } = await supabase.from('tip_sessions')
     .select('id, shift_type, session_date').eq('status','closed')
     .gte('session_date', r.desde).lte('session_date', r.hasta)
@@ -302,7 +300,7 @@ async function calcPropinas(supabase: ReturnType<typeof createClient>, ym: strin
 }
 
 // ── Email builders ────────────────────────────────────────────
-function buildVentasEmail(v: VentasCalc, mes: string, anio: number): string {
+function buildVentasEmail(v: VentasCalc, plan: PlanReporte): string {
   const delta  = v.prevNeta > 0 ? ((v.total-v.prevNeta)/v.prevNeta*100) : null
   const dStr   = delta !== null ? (delta>=0?`+${delta.toFixed(1)}%`:`${delta.toFixed(1)}%`) : null
   const dColor = delta !== null ? (delta>=0 ? GREEN : RED) : MUTED
@@ -311,10 +309,10 @@ function buildVentasEmail(v: VentasCalc, mes: string, anio: number): string {
   const iTotal = v.iCom + v.iBeb
 
   return `<div style="font-family:'DM Mono',monospace,Georgia,sans-serif;max-width:640px;margin:0 auto;background:${PAPER}">
-${emailHeader('Reporte de Ventas', mes, anio)}
+${emailHeader('Reporte de Ventas', plan.etiqueta)}
 <div style="padding:24px 28px">
 
-<h2 style="font-size:14px;color:${BLUE};margin:0 0 14px;border-bottom:2px solid ${BLUE};padding-bottom:8px">📈 Ventas · ${mes} ${anio}</h2>
+<h2 style="font-size:14px;color:${BLUE};margin:0 0 14px;border-bottom:2px solid ${BLUE};padding-bottom:8px">📈 Ventas · ${plan.etiqueta}</h2>
 <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
   ${kRow('Ventas totales restaurante', fi(v.total), true)}
   ${kRow('Salón', fiS(v.salon))}
@@ -324,7 +322,7 @@ ${emailHeader('Reporte de Ventas', mes, anio)}
   ${v.pax>0?kRow('Comensales (PAX)', v.pax.toLocaleString('es-CR')+' personas'):''}
   ${v.pax>0&&v.salon>0?kRow('Ticket promedio / PAX', fi(v.salon/v.pax)):''}
   ${v.diasVentas>0?kRow('Promedio diario', fi(v.total/v.diasVentas)):''}
-  ${dStr?kRow('vs mes anterior',`<span style="color:${dColor};font-weight:700">${dStr}</span>`):''}
+  ${dStr?kRow(plan.comparacion,`<span style="color:${dColor};font-weight:700">${dStr}</span>`):''}
 </table>
 
 ${v.salon+v.caj+v.delivery>0?`
@@ -392,10 +390,10 @@ ${(v.topComida.length>0||v.topBebidas.length>0)?`
     </tr>`}).join('')}
 </table>`:''}
 
-</div>${emailFooter(mes,anio)}</div>`
+</div>${emailFooter(plan.etiqueta)}</div>`
 }
 
-function buildPropinasEmail(p: PropinasCalc, mes: string, anio: number): string {
+function buildPropinasEmail(p: PropinasCalc, plan: PlanReporte): string {
   const maxSem = p.semanas.length>0 ? Math.max(...p.semanas.map(s=>s.avg)) : 1
   const maxDia = p.diasSem.length>0 ? p.diasSem[0].avg : 1
   const maxSec = p.sectores.length>0 ? p.sectores[0].total : 1
@@ -403,10 +401,10 @@ function buildPropinasEmail(p: PropinasCalc, mes: string, anio: number): string 
   const SECCOL: Record<string,string> = {salonero:TEAL,barman:BLUE,cocina:GOLD,runner:GREEN,manager:'#8a8070',cajero:'#6a4a8a',barback:'#8a6a4a'}
 
   return `<div style="font-family:'DM Mono',monospace,Georgia,sans-serif;max-width:640px;margin:0 auto;background:${PAPER}">
-${emailHeader('Reporte de Propinas', mes, anio)}
+${emailHeader('Reporte de Propinas', plan.etiqueta)}
 <div style="padding:24px 28px">
 
-<h2 style="font-size:14px;color:${TEAL};margin:0 0 14px;border-bottom:2px solid ${TEAL};padding-bottom:8px">💰 Propinas · ${mes} ${anio}</h2>
+<h2 style="font-size:14px;color:${TEAL};margin:0 0 14px;border-bottom:2px solid ${TEAL};padding-bottom:8px">💰 Propinas · ${plan.etiqueta}</h2>
 <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
   ${kRow('Turnos registrados', `${p.turnos} (${p.amCount} Mediodía · ${p.pmCount} Noche)`)}
   ${kRow('Pool total distribuido', fi(p.pool), true)}
@@ -453,7 +451,7 @@ ${p.sectores.length>0?`
   ${p.sectores.map(s=>barRow(SECLAB[s.rol]??s.rol,s.total,maxSec,SECCOL[s.rol]??MUTED,s.pct.toFixed(1)+'%')).join('')}
 </table>`:''}
 
-</div>${emailFooter(mes,anio)}</div>`
+</div>${emailFooter(plan.etiqueta)}</div>`
 }
 
 // ── SEC-02 (06/11): autenticación, CORS y validación ─────────────────────────
@@ -532,16 +530,18 @@ Deno.serve(async (req) => {
     }
 
     // 2) Parámetros.
-    const body = await req.json().catch(() => ({})) as { month?: unknown; tipo?: unknown; dry_run?: unknown }
+    const body = await req.json().catch(() => ({})) as { month?: unknown; periodo?: unknown; tipo?: unknown; dry_run?: unknown }
     if (body === null || typeof body !== 'object') return falla(400, 'entrada', 'Datos inválidos')
     let ym = ''
     if (body.month !== undefined && body.month !== null && body.month !== '') {
       if (typeof body.month !== 'string' || !mesValido(body.month)) return falla(400, 'mes', 'Mes inválido (YYYY-MM)')
       ym = body.month
-    } else {
-      // Mes anterior al mes en curso en CR, sin Date#setMonth (desbordaba los días 29–31): ver fechas.ts.
-      ym = mesPorDefectoCR(new Date())
     }
+    // Período: "mes" (por defecto; sin month = mes anterior en CR) o "quincena" (días 1–14; sin month = la
+    // última 1.ª quincena completa en CR, el día 15 = la del mes en curso). Ver periodo.ts.
+    const elegido = elegirPeriodo(body.periodo, ym, new Date())
+    if (!elegido.ok) return falla(400, elegido.code, elegido.error)
+    const plan = elegido.plan
     const tipo = body.tipo === undefined || body.tipo === null || body.tipo === '' ? 'ambos' : body.tipo
     if (tipo !== 'ventas' && tipo !== 'propinas' && tipo !== 'ambos') return falla(400, 'tipo', 'Tipo inválido (ventas, propinas o ambos)')
     if (body.dry_run !== undefined && typeof body.dry_run !== 'boolean') return falla(400, 'dry_run', 'dry_run inválido')
@@ -549,30 +549,27 @@ Deno.serve(async (req) => {
 
     // 3) Reporte. La respuesta dice qué se envió, sin montos ni nombres (van solo en el correo).
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    const [y, m] = ym.split('-')
-    const mes  = MONTHS_ES[Number(m) - 1] ?? m
-    const anio = Number(y)
     const enviados: string[] = [], sinDatos: string[] = []
 
     if (tipo === 'ventas' || tipo === 'ambos') {
-      const v = await calcVentas(supabase, ym)
+      const v = await calcVentas(supabase, plan.rango, plan.rangoComparado)
       if (v.diasVentas > 0) {
-        const html = buildVentasEmail(v, mes, anio)
-        if (!dry) await send(`📈 Satori — Ventas ${mes} ${anio}`, html)
+        const html = buildVentasEmail(v, plan)
+        if (!dry) await send(plan.asuntoVentas, html)
         enviados.push('ventas')
       } else sinDatos.push('ventas')
     }
     if (tipo === 'propinas' || tipo === 'ambos') {
-      const p = await calcPropinas(supabase, ym)
+      const p = await calcPropinas(supabase, plan.rango)
       if (p.turnos > 0) {
-        const html = buildPropinasEmail(p, mes, anio)
-        if (!dry) await send(`💰 Satori — Propinas ${mes} ${anio}`, html)
+        const html = buildPropinasEmail(p, plan)
+        if (!dry) await send(plan.asuntoPropinas, html)
         enviados.push('propinas')
       } else sinDatos.push('propinas')
     }
 
-    console.log(JSON.stringify({ ref, quien, ym, tipo, dry, enviados, sinDatos }))
-    return responder(200, { ok: true, month: `${mes} ${anio}`, dry_run: dry, enviados, sin_datos: sinDatos })
+    console.log(JSON.stringify({ ref, quien, ym: plan.ym, periodo: plan.periodo, desde: plan.rango.desde, hasta: plan.rango.hasta, tipo, dry, enviados, sinDatos }))
+    return responder(200, { ok: true, month: plan.etiqueta, periodo: plan.periodo, dry_run: dry, enviados, sin_datos: sinDatos })
   } catch (err) {
     console.error(JSON.stringify({ ref, etapa: 'no_controlado', detalle: String(err) }))
     return falla(500, 'interno', 'No se pudo generar el reporte')

@@ -118,13 +118,13 @@ Después de cualquiera: repetir el paso 3 (humo) y el 4.
 ## 9. Firma y bitácora
 | Paso | Esperado | Resultado (hora CR) |
 |---|---|---|
-| Firma del dueño (SHA de este PR) | | |
-| §3 antes | 3, 4, 7 · sin corridas de la 7 · launcher 28-may | |
-| §5.2 script | OK + 2 tareas | |
-| §5.3 humo | succeeded ≥ 1 | |
-| §5.4 cierre del humo | OK | |
-| §5.5 después | 3, 4 y la nueva; sin humo | |
-| §5.6 día siguiente | 1 succeeded | |
+| Firma del dueño (SHA de este PR) | | por el chat, 16-nov (cabeza `8088695`; script = `d48a547`) |
+| §3 antes | 3, 4, 7 · sin corridas de la 7 · launcher 28-may | ✅ 17-nov 02:14: igual (corridas: 1, 3, 4; launcher 2026-05-28) |
+| §5.2 script | OK + 2 tareas | ✅ 02:15: `club_socios_mantenimiento` = jobid 8, `club_cron_humo` = jobid 9 |
+| §5.3 humo | succeeded ≥ 1 | ✅ 02:18: 3 `succeeded` |
+| §5.4 cierre del humo | OK | ✅ 02:19: solo `cron.unschedule('club_cron_humo')` (sus filas de `job_run_details` no se borraron) |
+| §5.5 después | 3, 4 y la nueva; sin humo | ✅ 02:19: 3, 4 (sin cambios) y 8 (`15 9 * * *`, active, postgres) |
+| §5.6 día siguiente | 1 succeeded | ⏳ 17-nov después de las 03:16 CR |
 
 ## 10. Aparte (visto durante el diagnóstico, no se toca acá)
 - Log de prod 15-nov 08:00:02 UTC, 2 s después del reporte quincenal (job 4): `date/time field value out of range: "2026-09-31"`.

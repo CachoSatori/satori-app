@@ -17,11 +17,11 @@ período y de comparación** arriba, que se conserva al pasar de una pregunta a 
 
 | Pregunta | Qué contesta |
 |---|---|
-| **¿Cómo voy?** | Venta, personas, venta por persona, meta y proyección, contra una base justa |
-| **¿Qué vende?** | Mix por categoría y producto, lo que sube y lo que baja, ingeniería de menú |
-| **¿Quién vende?** | Saloneros, cajas y canales |
-| **¿Cuándo vendo?** | Día de semana, hora, turno, quincena, temporada, calendario |
-| **¿Cuánto regalo?** | Descuentos, cortesías, consumo del personal y de los dueños |
+| **Resumen** | Venta, personas, venta por persona, meta y proyección, contra una base justa |
+| **Productos** | Mix por categoría y producto, lo que sube y lo que baja, ingeniería de menú |
+| **Equipo** | Saloneros, cajas y canales |
+| **Tiempos** | Día de semana, hora, turno, quincena, temporada, calendario |
+| **Regalías** | Descuentos, cortesías, consumo del personal y de los dueños |
 
 Aparte quedan **En vivo** (el servicio en curso; no lleva selector) y **Ajustes** (metas, catálogo, competencias).
 
@@ -210,7 +210,7 @@ Barra fija en todas: **Local** · **Período** (§3.2) con flechas · **Comparar
 filtros opcionales **Canal** y **Turno**. Debajo, en gris, el período en palabras: «1 al 15 de noviembre (15
 días) contra 1 al 15 de octubre y contra 2 al 16 de noviembre de 2025. Hoy, en curso, no entra.»
 
-### 5.1 ¿Cómo voy?
+### 5.1 Resumen
 
 1. **Bajada:** una frase armada con los datos. «Vas 9 % arriba de octubre a la misma fecha y 7 % abajo del año
    pasado. Entra más gente; gasta casi lo mismo.»
@@ -222,7 +222,7 @@ días) contra 1 al 15 de octubre y contra 2 al 16 de noviembre de 2025. Hoy, en 
 7. **Contabilidad:** la tabla por día de hoy (bruta, IVA, servicio, neta, canales, personas), CSV y reporte del mes.
 8. **Calidad del dato:** aviso solo si algo pasa el umbral (facturas de salón sin pax > 5 %, PoS sin lecturas).
 
-### 5.2 ¿Qué vende?
+### 5.2 Productos
 
 1. **Bajada:** la categoría que más movió el mix.
 2. **Mix por categoría:** participación, cambio en puntos contra A y B, venta y unidades. Se abre a
@@ -234,7 +234,7 @@ días) contra 1 al 15 de octubre y contra 2 al 16 de noviembre de 2025. Hoy, en 
    costos (Fase 4) muestra solo el eje de popularidad y dice cuántos productos tienen costo.
 6. **Canal:** el mismo mix filtrado por salón, delivery o llevar.
 
-### 5.3 ¿Quién vende?
+### 5.3 Equipo
 
 1. **Equipo:** una fila por salonero: venta, personas, venta por persona contra el equipo de su turno, bebidas
    por persona, ICP, días trabajados. Muestra chica en gris.
@@ -243,7 +243,7 @@ días) contra 1 al 15 de octubre y contra 2 al 16 de noviembre de 2025. Hoy, en 
 4. **Cajas y canales:** lo de «Cajeros»: cajas de turno, delivery, cuenta promedio, atribución.
 5. **Competencias:** se mantiene acá, como lista simple (decisión D6).
 
-### 5.4 ¿Cuándo vendo?
+### 5.4 Tiempos
 
 1. **Día de semana:** índice de cada día (100 = día promedio) en el período y en la base.
 2. **Hora y turno:** mapa de calor día × hora (hora CR de la factura; mediodía hasta las 16:59, noche desde
@@ -252,7 +252,7 @@ días) contra 1 al 15 de octubre y contra 2 al 16 de noviembre de 2025. Hoy, en 
 4. **Meses y temporadas:** el comparativo año contra año de hoy, con el mes en curso **a la fecha** y rotulado.
 5. **Calendario:** el detalle por fecha de hoy, con mejor y peor día y fechas especiales.
 
-### 5.5 ¿Cuánto regalo?
+### 5.5 Regalías
 
 1. **Bajada:** % de lo servido que no se cobró a precio de lista.
 2. **Por tipo:** cortesías, personal, dueños, descuentos por programa: valor, % de la venta y A/B.
@@ -272,13 +272,13 @@ No cambia ningún permiso: es el mismo reparto de `ventasTabs.ts`, pasado a las 
 
 | Pantalla | owner | manager | contador |
 |---|---|---|---|
-| ¿Cómo voy? | Sí | Sí | Sí (abre en «Contabilidad») |
-| ¿Qué vende? — mix, suben y bajan | Sí | Sí | Sí |
-| ¿Qué vende? — ingeniería de menú | Sí | Sí | No |
-| ¿Quién vende? — equipo, ficha, por línea, competencias | Sí | Sí | No |
-| ¿Quién vende? — ICP, cajas y canales | Sí | Sí | Sí |
-| ¿Cuándo vendo? | Sí | Sí | Sí |
-| ¿Cuánto regalo? | Sí | Sí | Sí (decisión D7) |
+| Resumen | Sí | Sí | Sí (abre en «Contabilidad») |
+| Productos — mix, suben y bajan | Sí | Sí | Sí |
+| Productos — ingeniería de menú | Sí | Sí | No |
+| Equipo — equipo, ficha, por línea, competencias | Sí | Sí | No |
+| Equipo — ICP, cajas y canales | Sí | Sí | Sí |
+| Tiempos | Sí | Sí | Sí |
+| Regalías | Sí | Sí | Según D7 (recomendado: solo totales) |
 | En vivo | Sí | Sí | Sí |
 | Ajustes — metas | Sí | Sí | Sí |
 | Ajustes — productos, competencias | Sí | Sí | No |
@@ -286,31 +286,31 @@ No cambia ningún permiso: es el mismo reparto de `ventasTabs.ts`, pasado a las 
 El manager solo ve su local (como en el Club, mig. 176); el owner ve todos y el consolidado. Salonero y cajero
 siguen sin entrar a Ventas: lo suyo es «Mi Rendimiento».
 
-**Ritmo sugerido:** cada mañana, «¿Cómo voy?» con **Ayer** · lunes, **Semana** · días 1 y 16, **Quincena** ·
-primer día del mes, **Mes** · con cada cambio de carta, «¿Qué vende?».
+**Ritmo sugerido:** cada mañana, «Resumen» con **Ayer** · lunes, **Semana** · días 1 y 16, **Quincena** ·
+primer día del mes, **Mes** · con cada cambio de carta, «Productos».
 
 ## 7. Mapa viejo → nuevo
 
 | Vista de hoy | Destino | Se pierde |
 |---|---|---|
-| Hoy | «¿Cómo voy?» con período **Ayer** (último día cerrado) + línea «hoy, en curso» que lleva a En vivo. Ranking del día → «¿Quién vende?». Top del día → «¿Qué vende?». El mensaje para WhatsApp se queda | Nada |
+| Hoy | «Resumen» con período **Ayer** (último día cerrado) + línea «hoy, en curso» que lleva a En vivo. Ranking del día → «Equipo». Top del día → «Productos». El mensaje para WhatsApp se queda | Nada |
 | En vivo | En vivo | Nada |
-| Saloneros | «¿Quién vende?» → Equipo | Nada |
-| Por línea | «¿Quién vende?» → Por línea | Nada |
-| Evaluación | «¿Quién vende?» → Ficha del salonero y columnas del equipo | Nada |
-| ICP | «¿Quién vende?» → columna ICP y su tendencia | Nada |
-| Competencias | «¿Quién vende?» → Competencias; alta en Ajustes | Nada |
-| Análisis → Año vs Año | «¿Cuándo vendo?» → Meses y temporadas, a la fecha | El «−X %» engañoso |
-| Análisis → Detalle anual | «¿Cómo voy?» con período Año + «¿Cuándo vendo?» → Quincenas | Nada |
-| Análisis → Proyección | «¿Cómo voy?» → Meta del mes | La proyección anual lineal (§4.3) |
-| Análisis → Prom/PAX explicado | «¿Cómo voy?» → Qué explica el cambio | Nada |
-| Histórico | Rango → selector; indicadores → «¿Cómo voy?»; gráfico → Ficha del salonero; top → «¿Qué vende?» | La pestaña |
-| Calendario | «¿Cuándo vendo?» → Día de semana y Calendario | Nada |
-| Mix (ver y comparar) | «¿Qué vende?»: una sola tabla, siempre con comparación | Comparar 6 meses a la vez pasa a 2 bases; la serie larga va como gráfico de 12 meses por categoría (D5) |
-| Ventas | «¿Cómo voy?» → Contabilidad | Nada |
-| Cajeros | «¿Quién vende?» → Cajas y canales; bloque de día de semana → «¿Cuándo vendo?» | Nada |
-| Ing. Menú | «¿Qué vende?» → Ingeniería de menú | Nada |
-| Metas | Ajustes → Metas; avance en «¿Cómo voy?» | Nada |
+| Saloneros | «Equipo» | Nada |
+| Por línea | «Equipo» → Por línea | Nada |
+| Evaluación | «Equipo» → Ficha del salonero y columnas del equipo | Nada |
+| ICP | «Equipo» → columna ICP y su tendencia | Nada |
+| Competencias | «Equipo» → Competencias; alta en Ajustes | Nada |
+| Análisis → Año vs Año | «Tiempos» → Meses y temporadas, a la fecha | El «−X %» engañoso |
+| Análisis → Detalle anual | «Resumen» con período Año + «Tiempos» → Quincenas | Nada |
+| Análisis → Proyección | «Resumen» → Meta del mes | La proyección anual lineal (§4.3) |
+| Análisis → Prom/PAX explicado | «Resumen» → Qué explica el cambio | Nada |
+| Histórico | Rango → selector; indicadores → «Resumen»; gráfico → Ficha del salonero; top → «Productos» | La pestaña |
+| Calendario | «Tiempos» → Día de semana y Calendario | Nada |
+| Mix (ver y comparar) | «Productos»: una sola tabla, siempre con comparación | Comparar 6 meses a la vez pasa a 2 bases; la serie larga va como gráfico de 12 meses por categoría (D5) |
+| Ventas | «Resumen» → Contabilidad | Nada |
+| Cajeros | «Equipo» → Cajas y canales; bloque de día de semana → «Tiempos» | Nada |
+| Ing. Menú | «Productos» → Ingeniería de menú | Nada |
+| Metas | Ajustes → Metas; avance en «Resumen» | Nada |
 | Productos | Ajustes → Productos | Nada |
 | Cargar XLS, Paridad | Se retiran en `claude/ventas-desde-pos` | Ya decidido |
 
@@ -321,7 +321,7 @@ Los enlaces viejos (`/ventas?tab=mix`) redirigen a la pantalla nueva.
 - **Agregados en la base.** Tres funciones de solo lectura, con rol validado adentro (`role` + `is_active`) y
   local como parámetro, sin medios de pago:
   1. `pos_prompax_agregado` (mig 080, **ya existe**): día × franja × salonero × canal → facturas, personas,
-     neta. Alcanza para «¿Cómo voy?», «¿Quién vende?» y «¿Cuándo vendo?».
+     neta. Alcanza para «Resumen», «Equipo» y «Tiempos».
   2. **Nueva** `pos_ventas_productos`: período × canal → código, nombre, familia, unidades, neta.
   3. **Nueva** `pos_ventas_regalias`: día × tipo × salonero → cantidad y valor.
 - **Catálogo único.** La categoría se resuelve por **código de producto**, no por nombre: una tabla de
@@ -330,7 +330,7 @@ Los enlaces viejos (`/ventas?tab=mix`) redirigen a la pantalla nueva.
 - **Módulos puros con pruebas:** `periodos.ts`, `indicadores.ts`, `proyeccion.ts`, `menuEng.ts`.
 - **Multi-local desde el día uno:** local en la barra, en cada función, en metas y en el catálogo. Nosara
   aparece sola cuando tenga PoS; el consolidado es la suma de locales.
-- **Rendimiento (aceptación):** ninguna pantalla trae líneas crudas; «¿Cómo voy?» con un año de datos abre con
+- **Rendimiento (aceptación):** ninguna pantalla trae líneas crudas; «Resumen» con un año de datos abre con
   3 pedidos o menos.
 - **Sagrados:** no se toca ninguno. `netaVenta.ts` no es sagrado, pero su definición está firmada: no cambia.
 
@@ -338,20 +338,20 @@ Los enlaces viejos (`/ventas?tab=mix`) redirigen a la pantalla nueva.
 
 | Fase | PR | Qué | Toca | ¿Firma? |
 |---|---|---|---|---|
-| 0 | 0.1 | **Arreglo del Mix** (auditoría §3.4) | `VentasMix.tsx` + prueba | OK de merge + validación física |
+| 0 | 0.1 | **Arreglo del Mix** (auditoría §3.4) | **Hecha: #247, en prod y validada 17-nov** | — |
 | 0 | 0.2 | Fechas en hora CR en Análisis (P2-4) y rótulo «Mes en curso — meta» | `VentasAnalisis.tsx` | OK de merge |
 | 1 | 1.1 | `periodos.ts` con pruebas (§3.5). Sin pantalla | Módulo puro | No |
 | 1 | 1.2 | `indicadores.ts`: una sola venta por persona y un solo «salón», con prueba de contrato | Módulo puro | No |
 | 1 | 1.3 | **«A la fecha» en lo que ya existe:** Análisis y Mix → Comparar usan el motor y rotulan | Pantallas actuales | OK + validación física |
-| 2 | 2.1 | Barra global (local, período, comparar) + «¿Cómo voy?» sobre `pos_prompax_agregado` | Pantalla nueva; las viejas siguen | OK + validación física |
+| 2 | 2.1 | Barra global (local, período, comparar) + «Resumen» sobre `pos_prompax_agregado` | Pantalla nueva; las viejas siguen | OK + validación física |
 | 2 | 2.2 | `proyeccion.ts` y bloque de meta | Módulo puro + pantalla | OK |
-| 2 | 2.3 | «¿Cuándo vendo?»: día de semana, hora, quincenas, calendario | Pantalla | OK + validación física |
+| 2 | 2.3 | «Tiempos»: día de semana, hora, quincenas, calendario | Pantalla | OK + validación física |
 | 3 | 3.1 | `pos_ventas_productos` + catálogo único | **Migración** | **Firma** |
-| 3 | 3.2 | «¿Qué vende?» | Pantalla | OK + validación física |
-| 3 | 3.3 | «¿Quién vende?» | Pantalla | OK + validación física |
-| 3 | 3.4 | `pos_ventas_regalias` + «¿Cuánto regalo?» con lo disponible | **Migración** + pantalla | **Firma** |
+| 3 | 3.2 | «Productos» | Pantalla | OK + validación física |
+| 3 | 3.3 | «Equipo» | Pantalla | OK + validación física |
+| 3 | 3.4 | `pos_ventas_regalias` + «Regalías»; incluye descuentos una vez completo el backfill de D9 | **Migración** + pantalla | **Firma** |
 | 3 | 3.5 | Retiro de las vistas viejas, redirecciones y guía `docs/sop-app/6.4` | Navegación + SOP | OK + validación física |
-| 4 | 4.x | Descuento por línea (puente + Edge), costos por producto, margen, costo primo, RevPASH, fechas especiales | Puente, esquema | **Firma** cada uno |
+| 4 | 4.x | Costos por producto, margen, costo primo, RevPASH, fechas especiales | Puente, esquema | **Firma** cada uno |
 
 Cada PR de pantalla dice en concreto qué va a ver el encargado y actualiza la guía SOP en el mismo PR. Las
 pantallas nuevas conviven con las viejas hasta la 3.5.
@@ -359,17 +359,20 @@ pantallas nuevas conviven con las viejas hasta la 3.5.
 ## 10. Decisiones abiertas
 
 **D1 — Estructura por preguntas**
+- **Decidida 17-nov: A**, con los nombres nuevos: Resumen · Productos · Equipo · Tiempos · Regalías (+ En vivo y Ajustes).
 - Opciones: (A) cinco preguntas + En vivo + Ajustes · (B) dejar las 8 entradas de hoy y solo unificar el
   selector · (C) tres: Resumen, Detalle, Equipo.
 - Recomendación: **A.** Es lo pedido y lo que mejor ordena sin perder nada.
 - ¿Firma?: OK del dueño (cambia lo que ve el encargado).
 
 **D2 — Hasta qué día llega «a la fecha»**
+- **Decidida 17-nov: A.**
 - Opciones: (A) hasta ayer, con hoy aparte · (B) incluir hoy, comparando hasta la misma hora.
 - Recomendación: **A.** B depende de que el PoS esté al día y complica cada base.
 - ¿Firma?: OK.
 
 **D3 — Bases que se muestran por defecto**
+- **Decidida 17-nov: A.**
 - Opciones: (A) período anterior equivalente + año anterior alineado por día de semana · (B) período anterior
   equivalente + año anterior mismas fechas (lo del contador) · (C) las tres.
 - Recomendación: **A** en pantalla, con **B** a un clic y en el CSV del contador. Tres columnas de cambio no
@@ -377,6 +380,7 @@ pantallas nuevas conviven con las viejas hasta la 3.5.
 - ¿Firma?: OK; conviene que opine el contador.
 
 **D4 — Venta por persona única**
+- Aclaración: la definición principal ya está firmada en `docs/SPEC-prompax-explicado.md` §5; lo que se decide acá es la variante «limpia».
 - Opciones: (A) la firmada: neta de salón ÷ personas de salón · (B) neta total ÷ personas · (C) solo mesas con pax.
 - Recomendación: **A** como principal y **C** rotulada «limpia» para comparar saloneros. Los números de
   «Análisis» y de «Hoy» van a cambiar un poco: se avisa en el PR.
@@ -392,7 +396,7 @@ pantallas nuevas conviven con las viejas hasta la 3.5.
 - Recomendación: **A**, sin invertir en ella.
 - ¿Firma?: OK.
 
-**D7 — ¿El contador ve «¿Cuánto regalo?»?**
+**D7 — ¿El contador ve «Regalías»?**
 - Opciones: (A) sí · (B) solo totales, sin detalle por salonero.
 - Recomendación: **B.**
 - ¿Firma?: OK.
@@ -404,11 +408,13 @@ pantallas nuevas conviven con las viejas hasta la 3.5.
 - ¿Firma?: **Sí** (esquema).
 
 **D9 — Ingesta del descuento por línea**
+- **En marcha:** agente del PoS (PR #252); backfill la noche del 17-nov.
 - Opciones: (A) ahora, en paralelo a la Fase 2 · (B) en la Fase 4.
 - Recomendación: **A.** Es lo que le falta a la quinta pregunta y además sirve para medir el Club.
 - ¿Firma?: **Sí** (puente, Edge y esquema).
 
 **D10 — Semana**
+- **Decidida 17-nov: A.**
 - Opciones: (A) lunes a domingo · (B) domingo a sábado.
 - Recomendación: **A** (ya es la del motor y la del resumen semanal).
 - ¿Firma?: OK.

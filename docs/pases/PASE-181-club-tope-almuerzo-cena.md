@@ -153,6 +153,6 @@ Leído el 16/11 entre 13:3x y 14:5x -06:00:
 | Alertas por comida y por días (opción A) | dueño | 2026-11-16 14:51 | — |
 | Aplicación en staging (tope) | sesión de CC | 2026-11-16 ~13:46 | `ad50d28` |
 | Aplicación en staging (secciones 5 y 6) | sesión de CC | 2026-11-16 ~15:00 | rama `claude/club-tope-almuerzo-cena` |
-| Firma del dueño (SQL final, prod) | | | |
-| Merge (Branching), ANTES que la 182 | | | |
-| Control §3 | | | |
+| Firma del dueño (SQL final, prod) | dueño (chat) | 2026-11-16 | `34a4627` |
+| Merge (Branching), ANTES que la 182 | sesión de la cola nocturna | 2026-11-16 23:37 | `3794d8d` (cabeza `a6de595` = `34a4627` + main, solo ESTADO) |
+| Control §3 | sesión de la cola nocturna (lectura) | 2026-11-16 23:40 y 2026-11-17 01:35 | ledger 1 fila 181 · 7 md5 = §3 · permisos y humo OK |

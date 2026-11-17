@@ -43,7 +43,7 @@
 ## 4. Pendientes
 
 1. **🔐 Mig 079:** `sops_read` (010, `USING (true)`) y `sops_storage_read` (077) no miran `is_active`. Un usuario inactivo con sesión vigente lee todas las filas de `sops` y los PDF de `sops/*`, salvo el libro de franquicia. Corregir **las dos juntas** con `public.get_my_role() is not null`.
-2. **Rollbacks de la 076 y la 077:** si se corre alguno, quitar también su `.sql` de `main` en el mismo momento. Detalle en ESTADO § Migraciones.
+2. **Rollbacks de la 076 y la 077:** si se corre alguno, quitar también su `.sql` de `main` en el mismo momento. Detalle en `docs/historico/ESTADO-HISTORICO.md` § Migraciones (el ESTADO vivo solo tiene la numeración).
 3. **Contradicciones de reglas** entre los SoP viejos y los nuevos (para el dueño, no bloquean):
    - «¿tienen reserva?»;
    - acompañar «un paso delante» o «al ritmo del cliente»;

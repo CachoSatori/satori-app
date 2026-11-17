@@ -24,7 +24,7 @@ T0_PROD_FIRMADO=2026-07-23 T0_FIRMA_ESPERADA=2026-07-23 \
 ## Lo que hay que saber antes de tocar el ledger
 
 - **Escribir NO se hace desde acá.** `migration repair` y los `UPDATE` de `version` van a mano, con
-  **firma del dueño**, backup previo y el ritual del ref. Ver `ESTADO.md §(c)`.
+  **firma del dueño**, backup previo y el ritual del ref. Ver `ESTADO.md` (reglas 1 y 7) y `docs/historico/ESTADO-HISTORICO.md` §(c).
 - **Nunca `repair --status reverted` sobre algo aplicado.** El CLI lo sugiere; sería mentirle al
   ledger. Pasó con el `035` y con el `009`.
 - **El CLI ordena los archivos por NOMBRE y el ledger por VERSIÓN.** Si los dos órdenes no

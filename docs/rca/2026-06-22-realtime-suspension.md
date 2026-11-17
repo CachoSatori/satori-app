@@ -170,4 +170,4 @@ Asesor: build + lint (81 baseline) + test 122/122 verdes; diff solo en `supabase
 
 **Pendiente (no urgente):** ver §0.1(d) de PROMPT-CONTINUACION — el `SESSION_EXPIRED` transitorio del primer tick del
 arranque (inofensivo por FIX 2). **Logs `[rt-diag]`/`[diag-repro]` siguen ACTIVOS**; se borran en el **pase quirúrgico de
-estabilidad a main** (PROMPT-CONTINUACION §1A).
+estabilidad a main** (`docs/historico/PROMPT-CONTINUACION-HISTORICO.md` §1A).

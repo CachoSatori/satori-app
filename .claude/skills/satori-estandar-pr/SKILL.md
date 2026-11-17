@@ -9,6 +9,8 @@ El repo manda: si esta skill y `ESTADO.md` no coinciden, gana `ESTADO.md` (y se 
 
 ## 0. Antes de tocar nada
 - [ ] Leer `CLAUDE.md`, el bloque ⚡ARRANQUE y las **🛑 Reglas operativas** de `ESTADO.md`, y el handoff que apunta.
+- [ ] Mirar [docs/REGLAS-POR-INCIDENTE.md](../../../docs/REGLAS-POR-INCIDENTE.md) y quedarte con las filas cuyo disparador
+      coincide con lo que vas a tocar (rutas, patrones). Son errores que ya pasaron: no se repiten.
 - [ ] Si la tarea toca plata, esquema, permisos o prod: frenar y pedir la firma del dueño antes (ver
       `satori-migraciones-y-prod`). Sin firma escrita, solo lectura y staging.
 
@@ -31,6 +33,8 @@ Además, sin acuerdo explícito no se reimplementa: la lógica de cierres de caj
 - [ ] Al final: `git hash-object <archivo>` de cada uno = la tabla de ESTADO. Va en el PR.
 
 ## 3. Gate completo, en copia limpia
+Primero lo **barato**, mientras trabajás: `npx tsc -b`, `npx eslint <lo tocado>` y `npx vitest run <lo tocado>`. El gate entero
+va **una vez antes de abrir el PR** (no en cada commit) y otra vez si cambia la cabeza después de una revisión.
 En un clon o `git worktree` limpio de la cabeza del PR (los untracked del árbol de trabajo engañan):
 ```bash
 npm ci
@@ -43,8 +47,10 @@ npx eslint . | tail -1     # cantidad <= la de main medida en el mismo momento, 
 - [ ] Si tocás `club-web/` (páginas, `functions/`, `worker/`) o la API del Club:
       `cd club-web && npm ci && VITE_CLUB_URL=https://club.ejemplo.test npm run build` (sin `VITE_CLUB_URL` el build de
       producción falla a propósito). Sus pruebas corren dentro del `vitest` de la raíz.
-- [ ] El repo no corre pruebas en los PR y `deploy.yml` no corre `vitest`: **este gate es el único**. Va con números
-      en el PR (tests, lint antes/después, hashes de sagrados).
+- [ ] El CI del repo (`.github/workflows/ci.yml`, job «Gate») y `npm test` en `deploy.yml` corren pruebas, pero **no
+      reemplazan este gate**: el PR trae sus propios números (tests, lint antes/después, hashes de sagrados), medidos en
+      copia limpia.
+- [ ] Un test que falla a veces **no se reintenta ni se tapa con `sleep`**: se busca la causa o se reporta (R11).
 
 ## 4. Pruebas que muerden
 - [ ] Toda lógica crítica (plata, caja, propinas, permisos, fechas, migraciones) lleva prueba nueva o ajustada.
@@ -89,7 +95,9 @@ el correo público del negocio, solo en el aviso del Club y su prueba (ver `CLAU
       ahí la revisión es a mano.
 
 ## 10. PR en borrador
-- [ ] Commit con el trailer de la sesión. Push: `git -c push.negotiate=true push -u origin claude/<tema>`.
+- [ ] Commit con el trailer de la sesión **y** el trailer `Verificado:` con uno de: `gate` · `gate+staging` ·
+      `gate+verificador` · `ninguno (motivo)`. Dice la verdad: `gate+verificador` solo si un agente que no vio el
+      trabajo lo revisó sobre ese SHA. Push: `git -c push.negotiate=true push -u origin claude/<tema>`.
 - [ ] PR en **borrador** contra `main` (REST: `gh api repos/CachoSatori/satori-app/pulls … -F draft=true`). Si toca
       plata, esquema o prod, el título empieza con «⛔ NO MERGEAR sin OK —».
 - [ ] Cuerpo: qué y por qué · gate con números · hashes de sagrados · mutaciones · guía SOP · riesgos · vuelta atrás ·
@@ -99,3 +107,23 @@ el correo público del negocio, solo en el aviso del Club y su prueba (ver `CLAU
 ## 11. Reporte final
 Máximo ~200 palabras + **una** tabla (archivo · qué cambió · prueba). Número de PR, gate en una línea, riesgos y dudas
 para el dueño. El detalle va al PR, no al chat.
+
+## 12. Rondas que se apoyan en las anteriores
+- **El autor** corre primero lo barato (§3: tsc, lint y tests de lo tocado) y el gate entero **antes de abrir el PR**. El
+  cuerpo del PR lleva el SHA al que corresponde ese gate.
+- **El verificador** (otro agente, sin haber visto el trabajo) recibe los **hallazgos y el gate ya corridos para ESE SHA**:
+  no los rehace. Excepción: en **plata, esquema y seguridad** recalcula con su propio SQL de solo lectura (ver
+  `satori-revision-pr` §4).
+- **Tope de 3 rondas:** si un check sigue fallando después de 3 rondas (arreglar → correr → revisar), se para y se lo trae
+  al coordinador con la causa que se ve y lo ya descartado. No hay ronda 4 a ciegas.
+- **Test inestable:** no se reintenta ni se agrega `sleep`; se busca la causa o se reporta (R11).
+- **Cada error que llega a prod, al revisor o al gate** suma una fila a `docs/REGLAS-POR-INCIDENTE.md` en el mismo PR que lo arregla.
+
+## 13. Poda periódica de ESTADO y PROMPT-CONTINUACION
+- Cuando `ESTADO.md` o `PROMPT-CONTINUACION.md` pasan los **15 KB** (`wc -c`), la **sesión de cierre** mueve lo viejo al
+  histórico (`docs/historico/ESTADO-HISTORICO.md`, `docs/historico/PROMPT-CONTINUACION-HISTORICO.md`): se **mueve tal cual,
+  no se borra ni se reescribe**, con un puntero desde el original y la lista de secciones movidas en el PR.
+- En `ESTADO.md` se queda lo vivo: ⚡ARRANQUE, reglas operativas vigentes, sagrados, ledgers, estado de Edge, Cloudflare y
+  cron, y punteros. Se mantiene la sección «### Numeración de migraciones» con una fila `| NNN |` por cada número del
+  registro (la exige `supabase/migraciones.test.ts`).
+- Si un link apunta a algo movido, se corrige en el mismo PR (CLAUDE.md, skills, `docs/sop-app/`).

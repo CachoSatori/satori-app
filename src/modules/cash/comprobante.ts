@@ -2,6 +2,7 @@
 // (CashPendientes) y la liquidación de saldo a favor (CreditoModals). Parametrizado por
 // líneas/total/pie — NO conoce la semántica de caja; cada caller arma sus líneas. Solo DISPLAY:
 // no toca plata ni muta amount_crc. El output del pago normal quedó byte-idéntico (defaults).
+import { todayCR } from '../../shared/utils'
 
 // Normaliza un WhatsApp a formato internacional para wa.me (que EXIGE código de país).
 // Local CR = 8 dígitos (ej. 89900324) → 506 + número. Si ya trae 506 (11 díg) o es extranjero, se deja.
@@ -122,7 +123,7 @@ export function comprobantePNGBlob(d: ComprobanteData): Promise<Blob | null> {
 
 /** Nombre de archivo del PNG (compartido por descarga y share). */
 const nombrePNG = (d: ComprobanteData): string =>
-  `comprobante_${d.proveedor.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.png`
+  `comprobante_${d.proveedor.replace(/\s+/g, '_')}_${todayCR()}.png`
 
 /** Comprobante como imagen PNG y dispara la descarga. Byte-idéntico a antes. */
 export function descargarComprobantePNG(d: ComprobanteData): void {

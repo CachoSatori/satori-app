@@ -8,7 +8,8 @@
  *   /s/{codigo9}  QR fijo del socio del Local Club: lo lee la caja; abierto en un navegador, solo un aviso
  *   /alta         autoalta del socio (LC-DES-07): nombre + WhatsApp + mayor de 18 + cumpleaños opcional (D6 A) + aviso
  *                 de privacidad + Turnstile → pendiente
- *   /w/{token}    botón «Canjear» del pase de Wallet (token de pase, CLUB-AUD-69): solo genera el código de canje
+ *   /w/{token}    botón «Canjear» del pase de Wallet (token de pase, CLUB-AUD-69): solo genera el código de canje; el
+ *                 token sale de la barra apenas carga (como /p/ y /b/)
  *   /b/{llave32}  baja del turista (LC-PRIV + 136): borra su contacto con la llave de baja que trae cada mensaje
  *   /privacidad   aviso de privacidad completo (la versión vigente)
  * Todo pasa por /api/* (Pages Function con tope por IP). El DOM se arma sin innerHTML.
@@ -23,7 +24,7 @@ import { modoPortal } from './portalEquipo'
 import { marcarResenaSocio, tarjetaResenaSocio, type ResenaSocio } from './resenaSocio'
 import { leerAvance, textosAvance } from './avance'
 import { leerRetos, textosReto } from './retos'
-import { crearTokenPortal } from './portalToken'
+import { crearTokenPase, crearTokenPortal } from './portalToken'
 import { tarjetaReservar, urlReservaSocio, urlWidgetOpenTable } from './reservar'
 import { botonReservaCupon } from './reservaCupon'
 import { urlReservaAnfitrion } from './reservaAnfitrion'
@@ -707,6 +708,7 @@ function paginaPase(token: string) {
 
 // ── Router ───────────────────────────────────────────────────────────────────
 const tokenPortal = crearTokenPortal(() => { try { return sessionStorage } catch { return null } })
+const tokenPase = crearTokenPase(() => { try { return sessionStorage } catch { return null } })
 
 function ruta() {
   pararReloj()
@@ -717,6 +719,9 @@ function ruta() {
   // #214 hallazgo 2: /p/{token} → /p/ en la barra; el token sigue en memoria y en sessionStorage de esta pestaña
   const tokP = tokenPortal(location.pathname, history)
   if (tokP) return paginaPortal(tokP)
+  // (16-nov) /w/{token} del pase de Wallet → /w/ en la barra, igual que el portal
+  const tokW = tokenPase(location.pathname, history)
+  if (tokW) return paginaPase(tokW)
   const m = location.pathname.match(/^\/([rcpkswb])\/([^/]+)\/?$/)
   if (!m) return pintar(h('h1', {}, t.inicio), h('p', { class: 'sub' }, t.inicio_txt))
   const [, tipo, cod] = m

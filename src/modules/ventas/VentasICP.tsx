@@ -20,7 +20,7 @@
  *   10-13% → good (gold)
  *   < 10%  → needs improvement (red)
  *
- * Las ventas salen de `dias` (FUENTE_VENTAS, las mismas del módulo); las propinas de
+ * Las ventas salen de `dias` (el PoS, las mismas del módulo); las propinas de
  * `tip_entries` (solo lectura), vinculadas por `clavesPropinaDeEmpleado`.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react'

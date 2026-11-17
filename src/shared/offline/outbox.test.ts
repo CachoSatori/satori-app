@@ -6,7 +6,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 vi.mock('../api/supabase', () => ({ supabase: {} }))
 
 import { flushOutbox, supabaseExecutor, shouldFlushOnAuthEvent } from './outbox'
-import type { OutboxOp, OutboxStore, ExecResult } from './outbox'
+import type { OutboxOp, OutboxStore, ExecResult, RejectedOp, RejectedStore } from './outbox'
 import { supabase } from '../api/supabase'
 
 // Store en memoria con el mismo contrato que el de IndexedDB (seq autoincremental)
@@ -29,12 +29,24 @@ const op = (n: number, over: Partial<OutboxOp> = {}): OutboxOp => ({
 
 const noAudit = async () => { /* test */ }
 
+// Cola de rechazadas en memoria (mismo contrato que la de IndexedDB: clave client_op_id)
+function memRejected(): RejectedStore & { items: RejectedOp[] } {
+  const items: RejectedOp[] = []
+  return {
+    items,
+    add: async r => { const i = items.findIndex(x => x.client_op_id === r.client_op_id); if (i >= 0) items[i] = r; else items.push(r) },
+    all: async () => [...items],
+    remove: async id => { const i = items.findIndex(x => x.client_op_id === id); if (i >= 0) items.splice(i, 1) },
+    count: async () => items.length,
+  }
+}
+
 describe('outbox — replay ordenado e idempotente (FASE B)', () => {
   it('replaya en ORDEN estricto de creación (seq) y vacía la cola', async () => {
     const store = memStore()
     await store.add(op(1)); await store.add(op(2)); await store.add(op(3))
     const executed: string[] = []
-    const res = await flushOutbox(store, async o => { executed.push(o.client_op_id); return 'ok' }, noAudit)
+    const res = await flushOutbox(store, async o => { executed.push(o.client_op_id); return 'ok' }, noAudit, memRejected())
     expect(executed).toEqual(['op-1', 'op-2', 'op-3'])
     expect(res).toMatchObject({ applied: 3, remaining: 0, stopped: false })
   })
@@ -42,7 +54,7 @@ describe('outbox — replay ordenado e idempotente (FASE B)', () => {
   it('idempotencia: el duplicado (23505) se descarta de la cola sin duplicar plata', async () => {
     const store = memStore()
     await store.add(op(1)); await store.add(op(2))
-    const res = await flushOutbox(store, async o => (o.client_op_id === 'op-1' ? 'duplicate' : 'ok'), noAudit)
+    const res = await flushOutbox(store, async o => (o.client_op_id === 'op-1' ? 'duplicate' : 'ok'), noAudit, memRejected())
     expect(res).toMatchObject({ applied: 1, duplicates: 1, remaining: 0 })
   })
 
@@ -53,7 +65,7 @@ describe('outbox — replay ordenado e idempotente (FASE B)', () => {
     const res = await flushOutbox(store, async o => {
       executed.push(o.client_op_id)
       return o.client_op_id === 'op-2' ? 'retry' : 'ok'
-    }, noAudit)
+    }, noAudit, memRejected())
     expect(executed).toEqual(['op-1', 'op-2'])           // op-3 ni se intentó
     expect(res).toMatchObject({ applied: 1, stopped: true, remaining: 2 })
     const left = await store.all()
@@ -63,20 +75,24 @@ describe('outbox — replay ordenado e idempotente (FASE B)', () => {
   it('replay doble completo: la segunda pasada no aplica nada (cola ya vacía)', async () => {
     const store = memStore()
     await store.add(op(1))
-    await flushOutbox(store, async () => 'ok', noAudit)
-    const res2 = await flushOutbox(store, async () => 'ok', noAudit)
+    await flushOutbox(store, async () => 'ok', noAudit, memRejected())
+    const res2 = await flushOutbox(store, async () => 'ok', noAudit, memRejected())
     expect(res2).toMatchObject({ applied: 0, remaining: 0 })
   })
 
-  it('rechazo FATAL del servidor: descarta la op, audita y la cola sigue (no se traba)', async () => {
+  it('rechazo FATAL del servidor: pasa a rechazadas (visible), audita y la cola sigue (no se traba)', async () => {
     const store = memStore()
+    const rej = memRejected()
     await store.add(op(1)); await store.add(op(2))
     const audited: string[] = []
     const res = await flushOutbox(store,
       async o => (o.client_op_id === 'op-1' ? 'fatal' : 'ok') as ExecResult,
-      async e => { audited.push(e.op.client_op_id) })
+      async e => { audited.push(e.op.client_op_id) }, rej)
     expect(res).toMatchObject({ applied: 1, fatals: 1, remaining: 0 })
     expect(audited).toEqual(['op-1'])
+    // A01: no se borra en silencio — queda VISIBLE en la cola de rechazadas, con la op completa
+    expect(rej.items.map(r => r.client_op_id)).toEqual(['op-1'])
+    expect(rej.items[0]).toMatchObject({ table: 'cash_movements', op: 'insert', payload: { id: 'id-1' } })
   })
 
   it('una edición encolada DESPUÉS de la creación se replaya después (caso del spec)', async () => {
@@ -84,7 +100,7 @@ describe('outbox — replay ordenado e idempotente (FASE B)', () => {
     await store.add(op(1, { op: 'insert', payload: { id: 'X', amount_crc: 1000 } }))
     await store.add(op(2, { op: 'update', payload: { match: { id: 'X' }, updates: { amount_crc: 2000 } } }))
     const order: string[] = []
-    await flushOutbox(store, async o => { order.push(o.op); return 'ok' }, noAudit)
+    await flushOutbox(store, async o => { order.push(o.op); return 'ok' }, noAudit, memRejected())
     expect(order).toEqual(['insert', 'update'])
   })
 })
@@ -123,7 +139,7 @@ describe('outbox — durabilidad del flush (socket zombi: timeout → retry, nun
     ;(supabase as unknown as Record<string, unknown>).from = () => hangingBuilder()
     const result = supabaseExecutor(op(1))
     await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
-    await expect(result).resolves.toBe('retry')
+    await expect(result).resolves.toMatchObject({ result: 'retry' })
   })
 
   it('GUARDARRAÍL: el timeout es "retry" y NUNCA "fatal" → la op NO se elimina de la cola (plata a salvo)', async () => {
@@ -131,7 +147,7 @@ describe('outbox — durabilidad del flush (socket zombi: timeout → retry, nun
     await store.add(op(1)); await store.add(op(2))
     vi.useFakeTimers()
     ;(supabase as unknown as Record<string, unknown>).from = () => hangingBuilder()
-    const flush = flushOutbox(store, supabaseExecutor, noAudit)
+    const flush = flushOutbox(store, supabaseExecutor, noAudit, memRejected())
     await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
     const res = await flush
     expect(res.stopped).toBe(true)        // frenó el flush, preservando el orden
@@ -146,14 +162,14 @@ describe('outbox — durabilidad del flush (socket zombi: timeout → retry, nun
     // 1ª pasada: la red está zombi → todo se cuelga → retry, nada se drena
     vi.useFakeTimers()
     ;(supabase as unknown as Record<string, unknown>).from = () => hangingBuilder()
-    const flush1 = flushOutbox(store, supabaseExecutor, noAudit)
+    const flush1 = flushOutbox(store, supabaseExecutor, noAudit, memRejected())
     await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
     await flush1
     expect(await store.count()).toBe(2)
     vi.useRealTimers()
     // recuperado: Supabase responde ok → la cola se vacía en orden
     ;(supabase as unknown as Record<string, unknown>).from = () => okBuilder()
-    const res2 = await flushOutbox(store, supabaseExecutor, noAudit)
+    const res2 = await flushOutbox(store, supabaseExecutor, noAudit, memRejected())
     expect(res2).toMatchObject({ applied: 2, remaining: 0, stopped: false })
     expect(await store.count()).toBe(0)
   })

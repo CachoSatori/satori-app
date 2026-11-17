@@ -15,7 +15,7 @@ vi.mock('../../shared/api/ventas', () => ({
   getComps: vi.fn(async () => []),
 }))
 vi.mock('./ventasFuente', () => ({
-  cargarDiasEager: vi.fn(async () => ({ dias: {}, pm: {}, estadoPos: null, ultimoDiaXls: null })),
+  cargarDiasEager: vi.fn(async () => ({ dias: {}, pm: {}, estadoPos: null })),
   cargarHistEager: vi.fn(async () => ({})),
   cargarDeFondo:   vi.fn(() => new Promise(() => {})),
 }))
@@ -23,7 +23,6 @@ vi.mock('./AvisoFuentePos', () => ({ default: () => null }))
 const vista = (n: string) => ({ default: () => <div data-testid="vista">{n}</div> })
 vi.mock('./VentasHoy',            () => vista('hoy'))
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
-vi.mock('./VentasParidad',        () => vista('paridad'))
 vi.mock('./VentasContabilidad',   () => vista('ventas'))
 vi.mock('./VentasSaloneros',      () => vista('saloneros'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
@@ -32,7 +31,6 @@ vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasAnalisis',       () => vista('analisis'))
 vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
-vi.mock('./VentasXLS',            () => vista('xls'))
 vi.mock('./VentasConfig',         () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
 vi.mock('./VentasEvaluacion',     () => vista('evaluacion'))
@@ -75,7 +73,7 @@ describe('VentasModule · navegación', () => {
     expect((await screen.findByTestId('vista')).textContent).toBe(id)
   })
 
-  it('manager con ?tab=paridad (solo owner) cae en «Hoy»', async () => {
+  it('manager con ?tab=paridad (retirada el 16-nov) cae en «Hoy»', async () => {
     role = 'manager'
     abrir('/ventas?tab=paridad')
     expect((await screen.findByTestId('vista')).textContent).toBe('hoy')
@@ -138,6 +136,8 @@ describe('VentasModule · navegación', () => {
 
   it.each([
     ['manager', 'paridad'],
+    ['owner', 'paridad'],
+    ['owner', 'xls'],
     ['owner', 'no-existe'],
   ])('%s con ?tab=%s: se limpia de la URL y abre «Hoy»', async (r, t) => {
     role = r

@@ -69,7 +69,25 @@ vi.mock('../shared/api/club', () => ({
   localActual: () => clubLocalActual,
 }))
 
+// Ventas: del PoS (16-nov). `ventasFalla` simula que la lectura del PoS se cae; `ventasPorDia` son
+// los días que devuelve (DiaData ficticios).
+let ventasFalla = false
+let ventasPorDia: Record<string, unknown> = {}
+let ventasRangos: Array<[string, string]> = []
+vi.mock('../modules/ventas/ventasFuente', () => ({
+  restarDias: (f: string, n: number) => {
+    const [y, m, d] = f.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10)
+  },
+  ventasDelRango: async (desde: string, hasta: string) => {
+    ventasRangos.push([desde, hasta])
+    if (ventasFalla) throw new Error('sin conexión')
+    return { dias: Object.fromEntries(Object.entries(ventasPorDia).filter(([f]) => f >= desde && f <= hasta)), pm: {} }
+  },
+}))
+
 import HomePage from './HomePage'
+import { fi } from '../shared/utils'
 import { olvidarAlertaInicio } from './alertaInicio'
 
 function montar() {
@@ -87,6 +105,9 @@ beforeEach(() => {
   cleanup()
   role = 'owner'
   tablas = { sops: { count: 7 } }
+  ventasFalla = false
+  ventasPorDia = {}
+  ventasRangos = []
   alertaDias = []
   cierresFalla = false
   jornadasFalla = false
@@ -161,9 +182,10 @@ describe('Inicio (B5) · si una lectura falla', () => {
 
   it.each([
     ['tip_sessions'], ['cash_sessions'], ['cash_movements'], ['sops'], ['ingredients'],
-    ['ventas_dias'], ['ventas_metas'],
+    ['ventas del PoS'], ['ventas_metas'],
   ])('falla la lectura de %s: frase de error y «sin comprobar»', async (tabla) => {
-    tablas[tabla] = { error: { message: 'falló' } }
+    if (tabla === 'ventas del PoS') ventasFalla = true
+    else tablas[tabla] = { error: { message: 'falló' } }
     montar()
     await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
     avisoACaja()
@@ -178,7 +200,7 @@ describe('Inicio (B5) · si una lectura falla', () => {
   })
 
   it('la venta del día que no se pudo leer muestra «—» y la píldora, no «Sin datos hoy»', async () => {
-    tablas.ventas_dias = { error: { message: 'falló' } }
+    ventasFalla = true
     montar()
     await waitFor(() => expect(screen.getByText(FRASE)).toBeTruthy())
     expect(screen.queryByText('Sin datos hoy')).toBeNull()
@@ -428,5 +450,31 @@ describe('Inicio · los avisos llevan directo a su vista (15-nov)', () => {
     montarDestinos()
     fireEvent.click(await screen.findByText('Revisar los movimientos de Caja pendientes'))
     await waitFor(() => expect(screen.getByText('destino /caja?vista=pendientes')).toBeTruthy())
+  })
+})
+
+describe('Inicio · la venta de hoy sale del PoS (16-nov)', () => {
+  const diaFicticio = (total: number, pax: number) => ({
+    fileName: 'pos', uploadedAt: '2026-11-17',
+    saloneros: { MESERO_FICTICIO: {
+      pax, total, com: 0, beb: 0, iCom: 0, iBeb: 0, iva: 0, serv: 0, promPax: 0, promPlato: 0,
+      promBebida: 0, ratioCB: 0, ratioU: 0, bebPax: 0, prods: [],
+    } },
+  })
+
+  it('un día sin xls ahora tiene ventas: pide HOY (CR) al PoS y muestra la neta y el pax', async () => {
+    ventasPorDia = { '2026-11-17': diaFicticio(123_000, 9) }
+    montar()
+    await waitFor(() => expect(screen.getByText(fi(123_000))).toBeTruthy())
+    expect(screen.getByText('9 PAX')).toBeTruthy()
+    expect(ventasRangos).toContainEqual(['2026-11-17', '2026-11-17'])
+  })
+
+  it('la meta del mes suma el mes del PoS (1 al 30), sin el día de otro mes', async () => {
+    tablas.ventas_metas = { data: { value: { restaurante: { '2026-11': 1_000_000 } } } }
+    ventasPorDia = { '2026-11-01': diaFicticio(200_000, 1), '2026-11-17': diaFicticio(300_000, 1), '2026-10-31': diaFicticio(999_000, 1) }
+    montar()
+    await waitFor(() => expect(screen.getByText(/meta del mes 50 %/)).toBeTruthy())
+    expect(ventasRangos).toContainEqual(['2026-11-01', '2026-11-30'])
   })
 })

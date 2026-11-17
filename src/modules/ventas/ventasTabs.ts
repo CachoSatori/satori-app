@@ -1,23 +1,23 @@
-// Navegación de Ventas (rediseño A2): las 18 vistas de siempre, agrupadas en entradas.
+// Navegación de Ventas (rediseño A2): las vistas, agrupadas en entradas. «Paridad» y «Cargar XLS»
+// se retiraron el 16-nov (todo del PoS, decisión del dueño): un `?tab=paridad|xls` viejo abre la
+// pestaña de arranque.
 // Solo pantalla: ninguna vista se borra, los roles de cada vista son los mismos de antes y la
 // pestaña de arranque de cada rol no cambia (es la primera vista visible en el orden de `TABS`).
 
 export type Tab =
-  | 'hoy' | 'envivo' | 'paridad' | 'ventas' | 'saloneros' | 'salolineas' | 'evaluacion' | 'icp'
+  | 'hoy' | 'envivo' | 'ventas' | 'saloneros' | 'salolineas' | 'evaluacion' | 'icp'
   | 'cajeros' | 'historico' | 'mix' | 'analisis' | 'calendario' | 'menueng' | 'metas'
-  | 'competencias' | 'xls' | 'config'
+  | 'competencias' | 'config'
 
 export interface TabDef { id: Tab; label: string; roles: string[] }
 
 /**
- * Las 18 vistas, en el MISMO orden que tenían antes del rediseño. El orden importa: la pestaña
+ * Las 16 vistas, en el MISMO orden que tenían antes del rediseño. El orden importa: la pestaña
  * por defecto de cada rol es la primera de esta lista que el rol puede ver.
  */
 export const TABS: TabDef[] = [
   { id: 'hoy',          label: 'Hoy',               roles: ['owner','manager','contador'] },
   { id: 'envivo',       label: 'En vivo',           roles: ['owner','manager','contador'] },
-  // P3, TEMPORAL: diagnóstico para firmar el swap de fuente. Solo owner.
-  { id: 'paridad',      label: 'Paridad (validación)', roles: ['owner'] },
   { id: 'saloneros',    label: 'Saloneros',         roles: ['owner','manager'] },
   { id: 'salolineas',   label: 'Por línea',         roles: ['owner','manager'] },
   { id: 'evaluacion',   label: 'Evaluación',        roles: ['owner','manager'] },
@@ -31,7 +31,6 @@ export const TABS: TabDef[] = [
   { id: 'menueng',      label: 'Ing. Menú',         roles: ['owner','manager'] },
   { id: 'metas',        label: 'Metas',             roles: ['owner','manager','contador'] },
   { id: 'competencias', label: 'Competencias',      roles: ['owner','manager'] },
-  { id: 'xls',          label: 'Cargar XLS',        roles: ['owner','manager'] },
   { id: 'config',       label: 'Productos',         roles: ['owner','manager'] },
 ]
 
@@ -46,7 +45,7 @@ export const ENTRADAS: Entrada[] = [
   { id: 'historico', label: 'Histórico',   vistas: ['historico', 'calendario', 'mix', 'ventas', 'cajeros'] },
   { id: 'menueng',   label: 'Ing. Menú',   vistas: ['menueng'] },
   { id: 'metas',     label: 'Metas',       vistas: ['metas'] },
-  { id: 'ajustes',   label: 'Ajustes',     vistas: ['paridad', 'xls', 'config'] },
+  { id: 'ajustes',   label: 'Ajustes',     vistas: ['config'] },
 ]
 
 const TAB_POR_ID = new Map(TABS.map(t => [t.id, t]))
@@ -94,7 +93,7 @@ export function labelDe(tab: Tab): string {
  * Vistas que no reciben `dias` ni `pm` (leen lo suyo): se pintan sin esperar la carga de los
  * 90 días del PoS.
  */
-export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'paridad', 'salolineas'])
+export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas'])
 
 /**
  * Vistas que pueden mirar más atrás de los 90 días (historia, año contra año, rangos «Todo»,
@@ -105,5 +104,5 @@ export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'parida
  */
 export const VISTAS_CON_FONDO: ReadonlySet<Tab> = new Set<Tab>([
   'analisis', 'historico', 'calendario', 'mix', 'ventas', 'metas', 'menueng', 'evaluacion', 'icp',
-  'saloneros', 'cajeros', 'competencias', 'xls', 'config',
+  'saloneros', 'cajeros', 'competencias', 'config',
 ])

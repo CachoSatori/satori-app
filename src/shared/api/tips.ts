@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import type { TipSession, TipEntry, Employee, RoleTipPoints } from '../types/database'
 import { cachedFetch } from '../offline/cache'
 import { enqueue } from '../offline/outbox'
+import { debeEncolarAhora, tipKey } from '../offline/ordenEscrituras'
 
 // ── Offline (FASE A/B — ver OFFLINE.md) ─────────────────────
 const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false
@@ -197,18 +198,20 @@ export async function upsertTipEntry(entry: {
   covered_role?: string | null
 }): Promise<TipEntry> {
   const row = { ...entry, covered_role: entry.covered_role ?? null }
-  const queueAndReturn = async (): Promise<TipEntry> => {
+  const queueAndReturn = async (kick = false): Promise<TipEntry> => {
     const client_op_id = crypto.randomUUID()
     const now = new Date().toISOString()
     await enqueue({
       client_op_id, table: 'tip_entries', op: 'upsert',
       payload: { onConflict: 'session_id,employee_id', row: { ...row, client_op_id } },
       created_at: now,
-    })
+    }, kick ? { kick } : undefined)
     // Optimista local: el replay del upsert converge por (session_id, employee_id).
     return { id: client_op_id, ...row, points: 0, payout_crc: 0, created_at: now, updated_at: now, _pending: true } as unknown as TipEntry
   }
   if (isOffline()) return queueAndReturn()
+  // A01: con cola pendiente (o la fila en rechazadas), va detrás de la cola para no adelantarse.
+  if (await debeEncolarAhora(tipKey(entry.session_id, entry.employee_id))) return queueAndReturn(true)
   try {
     const { data, error } = await supabase
       .from('tip_entries')
@@ -224,12 +227,13 @@ export async function upsertTipEntry(entry: {
 }
 
 export async function deleteTipEntry(sessionId: string, employeeId: string): Promise<void> {
-  const queueOp = () => enqueue({
+  const queueOp = (kick = false) => enqueue({
     client_op_id: crypto.randomUUID(), table: 'tip_entries', op: 'delete',
     payload: { match: { session_id: sessionId, employee_id: employeeId } },
     created_at: new Date().toISOString(),
-  })
+  }, kick ? { kick } : undefined)
   if (isOffline()) { await queueOp(); return }
+  if (await debeEncolarAhora(tipKey(sessionId, employeeId))) { await queueOp(true); return }   // A01
   try {
     const { error } = await supabase
       .from('tip_entries')

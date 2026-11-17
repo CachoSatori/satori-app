@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './api/supabase'
 import { useAuth } from './hooks/useAuth'
 import { signedUrl, getDocByMovement, type DocumentRow } from './api/documents'
@@ -55,13 +55,26 @@ export default function FacturaVerify({ movement, doc, compact, onVerified }: Pr
     return () => { on = false }
   }, [doc, movement.id])
 
-  // Firmar la URL de la factura cuando hay documento.
+  // (16-nov) La firma se pide recién cuando la fila se ve (o está cerca): con cientos de filas, firmar todas al montar
+  // hacía que Storage respondiera 429/544 y las miniaturas quedaban vacías. Sin IntersectionObserver, al montar.
+  const caja = useRef<HTMLSpanElement | null>(null)
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
   useEffect(() => {
-    if (!linkedDoc) return
+    if (visible || !linkedDoc || !caja.current) return
+    const io = new IntersectionObserver(es => {
+      if (es.some(e => e.isIntersecting)) { setVisible(true); io.disconnect() }
+    }, { rootMargin: '300px' })
+    io.observe(caja.current)
+    return () => io.disconnect()
+  }, [visible, linkedDoc])
+
+  // Firmar la URL de la factura cuando hay documento y la fila está a la vista.
+  useEffect(() => {
+    if (!linkedDoc || !visible) return
     let on = true
     signedUrl(linkedDoc.image_path).then(u => { if (on) setImgUrl(u) }).catch(() => {})
     return () => { on = false }
-  }, [linkedDoc])
+  }, [linkedDoc, visible])
 
   // Resolver el nombre de quién verificó.
   useEffect(() => {
@@ -103,11 +116,11 @@ export default function FacturaVerify({ movement, doc, compact, onVerified }: Pr
   }
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize }}>
+    <span ref={caja} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize }}>
       {imgUrl && (
         <button type="button" onClick={() => setZoom(true)} title="Ver factura"
           style={{ padding: 0, border: '1px solid var(--t-border, #d4cfc4)', borderRadius: 4, overflow: 'hidden', cursor: 'zoom-in', lineHeight: 0, background: '#fff' }}>
-          <img src={imgUrl} alt="Factura" style={{ width: compact ? 26 : 40, height: compact ? 26 : 40, objectFit: 'cover', display: 'block' }} />
+          <img src={imgUrl} alt="Factura" loading="lazy" style={{ width: compact ? 26 : 40, height: compact ? 26 : 40, objectFit: 'cover', display: 'block' }} />
         </button>
       )}
       {verifiedBy ? (

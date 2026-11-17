@@ -69,13 +69,28 @@ function archivos(dir: string): string[] {
 
 const normal = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 
-export function tieneNombre(texto: string): boolean {
+// (16-nov) Memoria por palabra para TODO el escaneo: antes cada archivo volvía a calcular los SHA-256 de las mismas
+// palabras (cientos de miles de hashes) y bajo carga la prueba pasaba los 5 s de vitest y caía por timeout.
+const memoria = new Map<string, Map<string, boolean>>()
+function palabraEs(w: string, objetivo: string): boolean {
+  let m = memoria.get(objetivo)
+  if (!m) { m = new Map(); memoria.set(objetivo, m) }
+  let r = m.get(w)
+  if (r === undefined) {
+    r = false
+    for (let n = 4; n <= Math.min(w.length, 12); n++) if (sha(w.slice(0, n)) === objetivo) { r = true; break }
+    m.set(w, r)
+  }
+  return r
+}
+
+/** `objetivo` = hash de la palabra buscada (por defecto, el nombre de pila del dueño; las pruebas pasan uno ficticio). */
+export function tieneNombre(texto: string, objetivo: string = NOMBRE): boolean {
   const vistas = new Set<string>()
   for (const m of texto.matchAll(/\p{L}+/gu)) {
-    const w = normal(m[0])
-    if (w.length < 4 || vistas.has(w)) continue
-    vistas.add(w)
-    for (let n = 4; n <= Math.min(w.length, 12); n++) if (sha(w.slice(0, n)) === NOMBRE) return true
+    if (m[0].length < 4 || vistas.has(m[0])) continue   // la palabra tal cual: se normaliza una sola vez por archivo
+    vistas.add(m[0])
+    if (palabraEs(normal(m[0]), objetivo)) return true
   }
   return false
 }
@@ -93,6 +108,16 @@ export function correosMalos(rel: string, texto: string): string[] {
   }
   return malos
 }
+
+test('la guarda detecta un nombre (ficticio) también pegado a otra palabra, con tildes y repetido (memoria)', () => {
+  const FICTICIO = sha('zorbalina')
+  expect(tieneNombre('hola Zórbalina', FICTICIO)).toBe(true)
+  expect(tieneNombre('/home/zorbalinax/proyecto', FICTICIO)).toBe(true)       // prefijo pegado (ruta de usuario)
+  expect(tieneNombre('zorba y lina', FICTICIO)).toBe(false)
+  // la memoria es por objetivo: la misma palabra con otro hash no hereda el resultado
+  expect(tieneNombre('zorbalina', sha('otraplabra'))).toBe(false)
+  expect(tieneNombre('zorbalina', FICTICIO)).toBe(true)                       // segunda vez (desde la memoria)
+})
 
 test('la guarda detecta el nombre y los correos (sin escribirlos acá)', () => {
   // Se arman a partir de los hashes conocidos: probamos con valores que NO son el nombre ni los correos reales.
@@ -114,4 +139,4 @@ test('ningún archivo del repo tiene el nombre de pila del dueño ni correos rea
     malos.push(...correosMalos(rel, t))
   }
   expect(malos).toEqual([])
-})
+}, 30_000) // recorre todo el repo: con la memoria tarda ~0,5 s; el tope de 30 s es para máquinas cargadas (antes: 5 s)

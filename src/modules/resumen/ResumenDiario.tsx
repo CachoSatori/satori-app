@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { supabase } from '../../shared/api/supabase'
 import { todayCR, fi } from '../../shared/utils'
+import { CORTE_POS, restarDias, ventasDelRango } from '../ventas/ventasFuente'
+import { totalesDelDia } from '../ventas/totalesVentas'
 
 // ── Types ─────────────────────────────────────────────────────
 interface DaySnapshot {
   date: string
 
-  // Ventas (from ventas_dias)
+  // Ventas (del PoS, día CR de factura; `totalesDelDia` = la misma suma que el módulo Ventas)
   ventaNeta:   number
   ventaBruta:  number
   salon:       number
@@ -16,6 +18,8 @@ interface DaySnapshot {
   pax:         number
   promPax:     number
   hasVentas:   boolean
+  /** La lectura del PoS falló (no es lo mismo que «no hubo ventas»). */
+  ventasError: boolean
 
   // Caja (from cash_sessions + cash_movements)
   cajaIngresos:  number
@@ -35,7 +39,7 @@ interface DaySnapshot {
 
 async function fetchSnapshot(date: string): Promise<DaySnapshot> {
   const snap: DaySnapshot = {
-    date, hasVentas: false, hasCaja: false, hasTips: false,
+    date, hasVentas: false, ventasError: false, hasCaja: false, hasTips: false,
     ventaNeta: 0, ventaBruta: 0, salon: 0, delivery: 0, pax: 0, promPax: 0,
     cajaIngresos: 0, cajaEgresos: 0, cajaSaldo: 0, cajeroName: '', cajaStatus: '',
     tipPool: 0, tipPayout: 0, tipWorkers: 0, tipsStatus: '',
@@ -43,8 +47,8 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
 
   // Run all 3 queries in parallel
   const [ventasRes, cajaRes, tipsRes] = await Promise.allSettled([
-    // Ventas
-    supabase.from('ventas_dias').select('data').eq('session_date', date).maybeSingle(),
+    // Ventas: del PoS (16-nov: nunca más el xls)
+    ventasDelRango(date, date),
 
     // Caja — load ALL sessions for the day (BUG-8 FIX: was only loading latest)
     supabase.from('cash_sessions')
@@ -63,31 +67,17 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
   ])
 
   // Process ventas
-  if (ventasRes.status === 'fulfilled' && ventasRes.value.data) {
-    const d = (ventasRes.value.data as { data: { saloneros: Record<string, {
-      total?: number; iva?: number; serv?: number; pax?: number
-      salon?: number; delivery?: number; esCajero?: boolean
-    }> } }).data
-    let vn = 0, iva = 0, serv = 0, salon = 0, delivery = 0, pax = 0
-    for (const s of Object.values(d.saloneros ?? {})) {
-      vn  += s.total ?? 0
-      iva += s.iva   ?? 0
-      serv+= s.serv  ?? 0
-      if (s.esCajero) {
-        delivery += (s as { delivery?: number }).delivery ?? 0
-        salon    += (s as { salon?: number }).salon ?? 0
-      } else {
-        salon += s.total ?? 0
-        pax   += s.pax   ?? 0
-      }
-    }
-    snap.hasVentas  = vn > 0
-    snap.ventaNeta  = vn
-    snap.ventaBruta = vn + iva + serv
-    snap.salon      = salon
-    snap.delivery   = delivery
-    snap.pax        = pax
-    snap.promPax    = pax > 0 ? salon / pax : 0
+  if (ventasRes.status === 'fulfilled') {
+    const t = totalesDelDia(ventasRes.value.dias[date])
+    snap.hasVentas  = t.ventaNeta > 0
+    snap.ventaNeta  = t.ventaNeta
+    snap.ventaBruta = t.ventaBruta
+    snap.salon      = t.salon
+    snap.delivery   = t.delivery
+    snap.pax        = t.pax
+    snap.promPax    = t.promPax
+  } else {
+    snap.ventasError = true
   }
 
   // Process caja — now handles ALL sessions for the day (BUG-8 FIX)
@@ -158,7 +148,7 @@ function buildShareText(date: string, snap: DaySnapshot): string {
       lines.push(`🛵 Delivery: ${fi(snap.delivery)}  •  Salón: ${fi(snap.salon)}`)
     }
   } else {
-    lines.push('📂 Ventas: sin datos cargados')
+    lines.push('📂 Ventas: sin ventas en el PoS')
   }
   lines.push('━━━━━━━━━━━━━━━━━━━━━')
   if (snap.hasTips) {
@@ -204,22 +194,6 @@ export default function ResumenDiario() {
   const [snap, setSnap]         = useState<DaySnapshot | null>(null)
   const [loading, setLoading]   = useState(true)
   const [copied, setCopied]     = useState(false)
-  // Available dates with ventas data for prev/next navigation
-  const [availDates, setAvailDates] = useState<string[]>([])
-
-  useEffect(() => {
-    // Load available dates once on mount
-    import('../../shared/api/supabase').then(({ supabase }) => {
-      supabase.from('ventas_dias')
-        .select('session_date')
-        .order('session_date', { ascending: true })
-        .then(({ data }) => {
-          const dates = ((data ?? []) as { session_date: string }[]).map(r => r.session_date)
-          setAvailDates(dates)
-        })
-    })
-  }, [])
-
   useEffect(() => {
     setLoading(true)
     fetchSnapshot(date)
@@ -228,11 +202,11 @@ export default function ResumenDiario() {
       .finally(() => setLoading(false))
   }, [date])
 
-  const dateIdx  = availDates.indexOf(date)
-  const hasPrev  = dateIdx > 0
-  const hasNext  = dateIdx < availDates.length - 1 && date < today
-  const goPrev   = () => { if (hasPrev) setDate(availDates[dateIdx - 1]) }
-  const goNext   = () => { if (hasNext) setDate(availDates[dateIdx + 1]) }
+  // Día a día (antes saltaba entre los días con xls cargado; ahora todo día tiene PoS).
+  const hasPrev  = date > CORTE_POS
+  const hasNext  = date < today
+  const goPrev   = () => { if (hasPrev) setDate(restarDias(date, 1)) }
+  const goNext   = () => { if (hasNext) setDate(restarDias(date, -1)) }
   const goToday  = () => setDate(today)
 
   const isOwner = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'contador'
@@ -345,7 +319,7 @@ export default function ResumenDiario() {
                   </div>
                 </div>
               ) : (
-                <div className="resumen-empty-hint">Subí el XLS del turno</div>
+                <div className="resumen-empty-hint">{snap.ventasError ? 'No se pudieron leer las ventas del PoS' : 'El PoS no tiene ventas de este día'}</div>
               )}
             </div>
 

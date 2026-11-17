@@ -129,3 +129,13 @@ Después de cualquiera: repetir el paso 3 (humo) y el 4.
 ## 10. Aparte (visto durante el diagnóstico, no se toca acá)
 - Log de prod 15-nov 08:00:02 UTC, 2 s después del reporte quincenal (job 4): `date/time field value out of range: "2026-09-31"`.
   Parece venir de `monthly-report` armando una fecha «día 31» para septiembre. Vale un hallazgo propio.
+
+## 11. Bitácora staging (16-nov, ~21:45 CR, ref `hwiatgic…`; scripts de d48a547 sin cambios)
+| Paso | Resultado |
+|---|---|
+| Antes | `cron.job`: solo jobid 3 `club_socios_mantenimiento` (`15 9 * * *`, active, postgres); corridas: job 1 = 5, job 2 = 5, job 3 = 9 (última 16-nov 09:15 UTC) |
+| `cron_club_mantenimiento.sql` | OK: `club_socios_mantenimiento` = jobid 170 (`15 9 * * *`, active, postgres, mismo comando), `club_cron_humo` = jobid 171 |
+| Humo (~2 min) | 3 corridas `succeeded` (03:48, 03:49, 03:50 UTC): el planificador recargó su lista |
+| `cron_club_mantenimiento_humo_cierre.sql` | ⏳ **No corrió**: el cliente canceló la confirmación del SQL con `delete` (2 intentos, nada se ejecutó). El humo (jobid 171, `select 1` cada minuto) sigue programado; hay que correr el cierre con OK en una sesión que lo permita |
+| Pendiente | cerrar el humo; verificar el 17-nov ~03:16 CR que el jobid 170 corrió (`succeeded`) |
+

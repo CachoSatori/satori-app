@@ -2,6 +2,10 @@
 
 > Repo público: sin montos, nombres, rutas de la PC ni secretos. Las verificaciones son conteos y huellas (md5).
 
+> **Paquete de ejecución (PowerShell, fail-stop):** [`docs/puente/PASE-D9-AGENTE-bloques.md`](../puente/PASE-D9-AGENTE-bloques.md)
+> (§5 y §7 en bloques: carpeta nueva, `.env` sin mostrarlo, dry-run, cambio de la tarea, vuelta atrás y backfill nocturno
+> que se corta solo a las 05:50). Guía de una página: [`GUIA-D9-agente-descuento.md`](../puente/GUIA-D9-agente-descuento.md).
+
 ## 0. Qué pasa y qué no
 - **Pasa:** el agente del PoS (`pos-bridge/`) empieza a leer `FAC_FacturasDet.Descuento` (₡ por línea) y manda su
   suma por factura en `descuento`. El Edge `ingest-ndf` y la base **ya** lo guardaban en `pos_ndf_tickets.descuento_crc`

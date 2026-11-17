@@ -41,8 +41,19 @@ el bloque A0 para.
 
 ## Consola: preámbulo (en cada consola nueva, antes que nada)
 Fail-stop: cada comando nativo va con `; Ok '<qué>'`; un bloque que tira error **no se sigue**. Cada bloque va
-envuelto en `& { … }`: se pega entero (Ctrl+V o clic derecho) y un error corta **todo** el bloque, no solo una línea. Si se cierra la consola,
-se abre otra, se pega este preámbulo y se sigue con el bloque que tocaba: cada bloque vuelve a leer lo que necesita.
+envuelto en `& { … }`: un error corta **todo** el bloque, no solo una línea. Si se cierra la consola, se abre otra, se
+carga este preámbulo y se sigue con el bloque que tocaba: cada bloque vuelve a leer lo que necesita.
+
+**Cómo se carga (método por defecto por escritorio remoto):** pegar bloques largos con clic derecho en la consola los
+desordena, y Ctrl+C / Ctrl+V no llegan por el escritorio remoto. Se hace así, con el preámbulo y con cada bloque:
+1. Pegar el texto del bloque (sin las líneas de las tres comillas invertidas) en el **Bloc de notas**.
+2. Guardar como `C:\satori\paso.ps1`: *Tipo* = «Todos los archivos», *Codificación* = **UTF-8 con BOM** (sin BOM,
+   PowerShell 5.1 rompe las tildes).
+3. Una sola vez por consola: `Set-ExecutionPolicy -Scope Process Bypass -Force`.
+4. Cargarlo con **punto y espacio** (dot-source): `. C:\satori\paso.ps1`. Así el preámbulo deja sus funciones y
+   variables cargadas en la consola; con `& C:\satori\paso.ps1` o `.\paso.ps1` se perderían al terminar.
+Para el siguiente bloque se reemplaza el contenido de `paso.ps1` (el preámbulo se carga una vez por consola).
+`paso.ps1` no lleva secretos (ningún bloque los trae).
 ```powershell
 $ErrorActionPreference = 'Stop'; Set-StrictMode -Version Latest
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)          # node escribe en UTF-8
@@ -54,6 +65,8 @@ $INV = [Globalization.CultureInfo]::InvariantCulture
 function Ok([string]$que) { if ($LASTEXITCODE -ne 0) { throw "falló «$que» (código $LASTEXITCODE): NO SE SIGUE" } }
 function Carpeta([string]$p) { if (-not [IO.Path]::IsPathRooted($p) -or -not (Test-Path -LiteralPath $p -PathType Container)) { throw "no es una carpeta absoluta existente: $p" }; (Resolve-Path -LiteralPath $p).Path }
 function Archivo([string]$p) { if (-not [IO.Path]::IsPathRooted($p) -or -not (Test-Path -LiteralPath $p -PathType Leaf)) { throw "no es un archivo absoluto existente: $p" }; (Resolve-Path -LiteralPath $p).Path }
+# Vitest/npx en la consola de Windows mete códigos de color (ANSI) y rompen los regex: se apagan y, por las dudas, se quitan.
+function Sin-Ansi([string]$t) { $t -replace "$([char]27)\[[0-9;]*[A-Za-z]", '' }
 function Md5Bytes([string]$p) { (Get-FileHash -Algorithm MD5 -LiteralPath (Archivo $p)).Hash.ToLower() }
 function Bajo([string]$base, [string]$rel) { foreach ($x in ($rel -split '[\\/]')) { if ($x) { $base = Join-Path $base $x } }; $base }
 function Hoy-CR { [DateTime]::UtcNow.AddHours(-6) }                       # Costa Rica = UTC-6, sin horario de verano
@@ -193,20 +206,28 @@ $s = git -C $N status --porcelain; Ok 'status'; if ($s) { throw 'el clon no est�
 }
 ```
 
-## A2 · El `.env`, copiado sin mostrarlo (1 min)
+## A2 · El `.env`, copiado sin mostrarlo (1 min · se puede repetir)
 Se copian los mismos archivos que tiene la carpeta de hoy, idénticos byte a byte. **Nadie abre el `.env`**: el bloque
 solo dice los **nombres** que faltan y mide con el parser del propio agente (archivo que manda, largo, candado de prod).
+**Se puede correr de nuevo:** si la copia ya existe y es **idéntica** al original, no copia y sigue; si existe y
+**difiere**, frena. El script de medición se valida por su **blob de git** (`hash-object --path` contra
+`rev-parse HEAD:<ruta>`), no por el md5 del archivo en disco: en Windows git hace el checkout con CRLF
+(`core.autocrlf`) y el md5 en disco cambia. Además se acepta el md5 con LF (`73c4d9d2…`) o con CRLF (`fcb5f2df…`).
 ```powershell
 & {
 $T = Leer-Tarea; $N = Carpeta $NUEVA
-$copiados = @()
+$copiados = @(); $yaEstaban = @()
 foreach ($e in @('.env', '.env.local', 'pos-bridge/.env')) {
   $o = Bajo $T.Carpeta $e
   if (Test-Path -LiteralPath $o -PathType Leaf) {
     $dd = Bajo $N $e
-    if (Test-Path -LiteralPath $dd) { throw "en la carpeta nueva ya existe $e" }
-    Copy-Item -LiteralPath $o -Destination $dd
-    if ((Md5Bytes $o) -cne (Md5Bytes $dd)) { throw "la copia de $e no es idéntica" }
+    if (Test-Path -LiteralPath $dd) {
+      if ((Md5Bytes $o) -cne (Md5Bytes $dd)) { throw "en la carpeta nueva ya existe $e y DIFIERE del de hoy: no se pisa, se para y se avisa" }
+      $yaEstaban += $e
+    } else {
+      Copy-Item -LiteralPath $o -Destination $dd
+      if ((Md5Bytes $o) -cne (Md5Bytes $dd)) { throw "la copia de $e no es idéntica" }
+    }
     $copiados += $e
   }
 }
@@ -215,8 +236,14 @@ $con = Claves-Env @($copiados | ForEach-Object { Bajo $N $_ })
 $faltan = @(@('LOCAL', 'ENV', 'INGEST_URL', 'INGEST_SECRET', 'POS_DB_HOST', 'POS_DB_USER', 'POS_DB_PASSWORD', 'POS_AGENTE_PROD_FIRMADO') | Where-Object { $con -cnotcontains $_ })
 if ($faltan.Count) { throw "faltan o están vacías (solo nombres): $($faltan -join ', ')" }
 $s = git -C $N status --porcelain; Ok 'status'; if ($s) { throw 'git ve un .env: no está en el .gitignore' }
-$MED = Bajo $N 'scripts/puente/armar_mapa_secretos.mjs'
-if ((Md5Bytes $MED) -cne '73c4d9d207c22c13d5c42498bb63e8ca') { throw 'armar_mapa_secretos.mjs: md5 distinto' }
+# El script de medición: por blob de git (--path aplica el mismo filtro de fin de línea del checkout) y md5 LF o CRLF.
+$REL = 'scripts/puente/armar_mapa_secretos.mjs'
+$MED = Archivo (Bajo $N $REL)
+$bDisco = git -C $N hash-object "--path=$REL" $MED; Ok 'hash-object del script'
+$bRepo = git -C $N rev-parse "HEAD:$REL"; Ok 'rev-parse del script'
+if ("$bDisco".Trim() -cne "$bRepo".Trim()) { throw 'armar_mapa_secretos.mjs: el contenido no es el del commit 578f38c… (blob distinto)' }
+$mm = Md5Bytes $MED
+if (@('73c4d9d207c22c13d5c42498bb63e8ca', 'fcb5f2df5059905a1515d7cd404896f0') -cnotcontains $mm) { throw 'armar_mapa_secretos.mjs: md5 distinto (ni LF ni CRLF)' }
 $rV = 'file:///' + ((Archivo (Bajo $T.Carpeta 'pos-bridge/register.mjs')) -replace '\\', '/')
 $rN = 'file:///' + ((Archivo (Bajo $N 'pos-bridge/register.mjs')) -replace '\\', '/')
 $mV = node --import $rV $MED --agente $T.Carpeta --clon $N --solo-medir; Ok 'medir carpeta de hoy'
@@ -224,13 +251,16 @@ $mN = node --import $rN $MED --agente $N --clon $N --solo-medir; Ok 'medir carpe
 $v = $mV | ConvertFrom-Json; $w = $mN | ConvertFrom-Json
 if ($w.archivo_que_manda -cne $v.archivo_que_manda -or $w.largo_santa_teresa -ne $v.largo_santa_teresa) { throw 'la carpeta nueva no manda lo mismo que la de hoy' }
 if (-not $w.cumple_32) { throw 'PARADA: el secreto mide menos de 32' }
-"A2 ok · copiados idénticos: $($copiados -join ', ') · claves presentes: $($con.Count) (ninguna falta) · las dos carpetas mandan $($w.archivo_que_manda), largo $($w.largo_santa_teresa) · candado ok"
+$fin = if ($mm -ceq '73c4d9d207c22c13d5c42498bb63e8ca') { 'LF' } else { 'CRLF' }
+"A2 ok · idénticos: $($copiados -join ', ') (ya estaban: $($yaEstaban.Count)) · claves presentes: $($con.Count) (ninguna falta) · script = blob del commit ($fin) · las dos carpetas mandan $($w.archivo_que_manda), largo $($w.largo_santa_teresa) · candado ok"
 }
 ```
 
 ## A3 · Dependencias, typecheck y pruebas del puente (6–10 min)
 `npm ci` en la raíz **y dentro de `pos-bridge\`** (tiene su propio `package.json`: sin él falta `mssql` y el agente no
-arranca, lección del 10-nov).
+arranca, lección del 10-nov). La salida de vitest se lee **sin colores**: en la consola de Windows mete códigos ANSI y
+el regex no encontraba el «478» aunque pasaran; por eso `NO_COLOR`/`FORCE_COLOR=0`, `2>&1`, se quitan los escapes y el
+regex usa `\s+`.
 ```powershell
 & {
 $N = Carpeta $NUEVA; $PB = Carpeta (Bajo $N 'pos-bridge')
@@ -241,9 +271,18 @@ Push-Location $PB; try {
   if ("$m".Trim() -cne 'si') { throw 'mssql no carga desde pos-bridge' }
   npm.cmd run typecheck; Ok 'typecheck del puente'
 } finally { Pop-Location }
-Push-Location $N; try { $P = @(npx.cmd vitest run pos-bridge src/shared/ndf); $c = $LASTEXITCODE; $P | Select-Object -Last 6; $global:LASTEXITCODE = $c; Ok 'pruebas del puente' } finally { Pop-Location }
-$t = [regex]::Match(($P -join "`n"), 'Tests\s+(\d+) passed')
-if (-not $t.Success -or [int]$t.Groups[1].Value -ne 478 -or ($P -join "`n") -match '\bfailed\b') { throw 'se esperaban 478 pruebas en verde' }
+$nc = $env:NO_COLOR; $fc = $env:FORCE_COLOR; $eap = $ErrorActionPreference
+$env:NO_COLOR = '1'; $env:FORCE_COLOR = '0'
+Push-Location $N; try {
+  $ErrorActionPreference = 'Continue'   # el stderr de vitest no debe cortar el bloque; el código de salida manda
+  $P = @(npx.cmd vitest run pos-bridge src/shared/ndf 2>&1 | ForEach-Object { Sin-Ansi ([string]$_) }); $c = $LASTEXITCODE
+  $ErrorActionPreference = $eap
+  $P | Select-Object -Last 6; $global:LASTEXITCODE = $c; Ok 'pruebas del puente'
+} finally { $ErrorActionPreference = $eap; Pop-Location; $env:NO_COLOR = $nc; $env:FORCE_COLOR = $fc }
+$txt = $P -join "`n"
+$t = [regex]::Match($txt, 'Tests\s+(\d+)\s+passed')
+if ($txt -match 'Tests\s+\d+\s+failed') { throw 'hay pruebas que fallan' }
+if (-not $t.Success -or [int]$t.Groups[1].Value -ne 478) { throw 'se esperaban 478 pruebas en verde' }
 "A3 ok · dependencias (raíz y pos-bridge) · mssql carga · typecheck ok · 478 pruebas en verde"
 }
 ```
@@ -257,9 +296,10 @@ en solo lectura, como el agente. Se llama a node directo (lo mismo que `npm run 
 $N = Carpeta $NUEVA
 $ay = (Hoy-CR).Date.AddDays(-1); $HASTA = $ay.ToString('yyyy-MM-dd', $INV); $DESDE = $ay.AddDays(-6).ToString('yyyy-MM-dd', $INV)
 $t0 = Get-Date
-Push-Location $N; try { node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts --desde $DESDE --hasta $HASTA --dry-run --pausa-ms 800 | Tee-Object -Variable SAL; Ok 'backfill en seco' } finally { Pop-Location }
+$nc = $env:NO_COLOR; $fc = $env:FORCE_COLOR; $env:NO_COLOR = '1'; $env:FORCE_COLOR = '0'
+Push-Location $N; try { node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts --desde $DESDE --hasta $HASTA --dry-run --pausa-ms 800 | Tee-Object -Variable SAL; Ok 'backfill en seco' } finally { Pop-Location; $env:NO_COLOR = $nc; $env:FORCE_COLOR = $fc }
 $seg = ((Get-Date) - $t0).TotalSeconds
-$R = Resumen-DryRun @($SAL)
+$R = Resumen-DryRun @($SAL | ForEach-Object { Sin-Ansi ([string]$_) })
 if (-not $R.EsDry) { throw 'PARADA: la salida no dice DRY-RUN' }
 if ($R.Guardados -ne 0) { throw 'PARADA: el total dice guardados distinto de 0' }
 if (-not $R.Prod) { throw 'PARADA: el .env no apunta al ingest de prod (yiczgdti…)' }
@@ -398,10 +438,11 @@ foreach ($m in @(Meses-Backfill $DESDE_MIN $hasta)) {
   if ((Hoy-CR) + $dur + [TimeSpan]::FromMinutes(1) -gt $CORTE) { "CORTE 05:50: no se empieza $($m.Mes). Quedó pendiente $DESDE_MIN … $($m.Hasta): mañana a las 00:00, humo antes y este mismo bloque."; break }
   if ((Get-ScheduledTask -TaskName $TAREA).State -ne 'Running' -or -not @(Get-NodeDe $N $T.Cmd).Count) { throw "PARADA: el agente en vivo dejó de correr. Quedó pendiente $DESDE_MIN … $($m.Hasta)" }
   $t0 = Hoy-CR
+  $nc = $env:NO_COLOR; $fc = $env:FORCE_COLOR; $env:NO_COLOR = '1'; $env:FORCE_COLOR = '0'
   Push-Location $N; try {
     node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts --desde $m.Desde --hasta $m.Hasta --pausa-ms 800 | Tee-Object -FilePath $LOG -Append
     if ($LASTEXITCODE -ne 0) { throw "PARADA en $($m.Mes) (código $LASTEXITCODE). Quedó pendiente $DESDE_MIN … $($m.Hasta): re-correr este bloque (reenviar no duplica)" }
-  } finally { Pop-Location }
+  } finally { Pop-Location; $env:NO_COLOR = $nc; $env:FORCE_COLOR = $fc }
   $dur = (Hoy-CR) - $t0; $hechos += $m.Mes
   $sig = ([datetime]::ParseExact($m.Desde, 'yyyy-MM-dd', $INV)).AddDays(-1).ToString('yyyy-MM-dd', $INV)
   $js = (New-Object PSObject -Property ([ordered]@{ ultimo_mes_hecho = $m.Mes; siguiente_hasta = $sig; desde_min = $DESDE_MIN; hora_cr = (Hoy-CR).ToString('yyyy-MM-dd HH:mm', $INV) })) | ConvertTo-Json
@@ -416,7 +457,8 @@ $fin = if ([string]$pg.siguiente_hasta -lt $DESDE_MIN) { 'HISTÓRICO COMPLETO' }
 **Ve:** por cada mes, las líneas del backfill (`tickets=… guardados=… líneas=…`) y `── AAAA-MM ok en N min`. Al final
 `B1 · … HISTÓRICO COMPLETO` o `falta … (sigue la noche siguiente)`.
 **Parada (el bloque para solo):** un mes con error, el agente en vivo que deja de correr. **Además (a ojo):** `inválidos=`
-en alguna línea o `guardados` menor que `tickets` → Ctrl+C y avisar.
+en alguna línea o `guardados` menor que `tickets` → **cerrar la ventana de PowerShell con la X** (corta el backfill; reenviar no
+duplica) y avisar.
 
 **(3) Humo después (Claude, mismo corte):** mismo SQL. Regla del PASE D9 §6/§8: `facturas`, `lineas`, `h_facturas`,
 `h_lineas` y `h_item11_existentes` **iguales**; `descuento_negativo = 0`; `con_descuento` sube (en el histórico completo,
@@ -436,13 +478,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\puente\ensayo_seco_d
 ```
 
 ## Bitácora
+Parte A hecha el 17-nov (preámbulo y bloques cargados por el método del Bloc de notas; A2 y A3 con los ajustes ya incorporados arriba).
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| A0 · hora CR · agente de hoy · latido (SQL §1) | `5da233a…` limpio · Running · late sin error | |
-| A1 · clon | `578f38c…` · árbol `d14d603a…` · 5 archivos | |
-| A2 · `.env` | copiados idénticos · ninguna clave falta · mismo archivo y largo · candado ok | |
-| A3 · dependencias y pruebas | `mssql` carga · typecheck ok · 478 en verde | |
-| A4 · en seco (7 días) | `con_descuento` 15–30 % · nada enviado | |
-| A5 · `HORA_CAMBIO` · segundos detenida | `-06:00` · ~30 s | |
-| A6 · latido ×2 · facturas nuevas con descuento (SQL §2) | late sin error · `descuento_negativo` 0 | |
+| A0 · hora CR · agente de hoy · latido (SQL §1) | `5da233a…` limpio · Running · late sin error | **ok** · 06:56 CR · agente `5da233a` limpio · latido sin error |
+| A1 · clon | `578f38c…` · árbol `d14d603a…` · 5 archivos | **ok** · `578f38c` · árbol `d14d603a` · 5 archivos |
+| A2 · `.env` | copiados idénticos · ninguna clave falta · mismo archivo y largo · candado ok | **ok** tras ajuste de CRLF (el md5 del script en disco difiere por `core.autocrlf`) · 14 claves, ninguna falta · largo 64 · candado ok |
+| A3 · dependencias y pruebas | `mssql` carga · typecheck ok · 478 en verde | **ok** tras ajuste de ANSI (vitest metía colores y el regex no veía el 478) · 478 en verde |
+| A4 · en seco (7 días) | `con_descuento` 15–30 % · nada enviado | **ok** · 7 días (10–16 nov) · 215 facturas · 41 con descuento (19,1 %) · nada enviado · el día 12-nov salió bajo (2,4 %): se mira en el humo |
+| A5 · `HORA_CAMBIO` · segundos detenida | `-06:00` · ~30 s | **ok** · 09:25:34 CR · detenido 21 s |
+| A6 · latido ×2 · facturas nuevas con descuento (SQL §2) | late sin error · `descuento_negativo` 0 | **ok** · primer latido 09:25:17 sin error · segundo 09:45:23 sin error · `descuento_negativo` 0. **Pendiente:** el conteo con facturas cerradas del servicio y al cierre de caja |
 | B · humo antes · B1 (meses, hasta dónde) · humo después | huellas iguales · `con_descuento` sube | |

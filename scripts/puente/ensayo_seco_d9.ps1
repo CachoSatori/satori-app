@@ -50,7 +50,10 @@ foreach ($k in @($B.Keys)) {
   if ($jp.Count) { $malos += 'Join-Path con más de 2 partes' }
   Resultado "$k solo usa lo que tiene PowerShell 5.1" ($malos.Count -eq 0) ($malos -join ', ')
   if ($k -ne 'P') { Resultado "$k va envuelto en & { … }" ($B[$k] -match '^\s*&\s*\{' -and $B[$k].TrimEnd() -match '\}$') }
-  Resultado "$k sin redirecciones 2>&1 ni portapapeles ni transcript" (-not ($B[$k] -match '2>&1|Set-Clipboard|Get-Clipboard|clip\.exe|Start-Transcript|Get-Content[^\r\n]*\.env'))
+  $dosGt = @($B[$k] -split '\r?\n' | Where-Object { $_ -match '2>&1' -and $_ -notmatch 'npx\.cmd vitest' })   # 2>&1 solo en la línea de vitest (A3)
+  Resultado "$k sin redirecciones 2>&1 (salvo vitest) ni portapapeles ni transcript" (-not ($B[$k] -match 'Set-Clipboard|Get-Clipboard|clip\.exe|Start-Transcript|Get-Content[^\r\n]*\.env') -and -not $dosGt.Count)
+  if ($k -in 'A3', 'A4', 'B1') { Resultado "$k apaga el color (NO_COLOR/FORCE_COLOR) y los restaura" ($B[$k] -match "NO_COLOR = '1'" -and $B[$k] -match "FORCE_COLOR = '0'" -and $B[$k] -match 'finally \{[^\r\n]*NO_COLOR = \$nc') }
+  if ($k -eq 'A3') { Resultado 'A3 quita ANSI y el regex usa \s+' ($B[$k] -match 'Sin-Ansi' -and $B[$k] -match [regex]::Escape('Tests\s+(\d+)\s+passed')) }
 }
 
 # ── 2. Dobles (las funciones le ganan a los .exe y a los cmdlets) ──────────────────────────────────────────────────
@@ -70,6 +73,12 @@ function Nuevo-Kit {
     min_por_mes = 2; falla_mes = ''; meses = @(); git = @() }
 }
 function Hoy-CR-Doble { $global:KIT.ahora }
+# Blob de git de un archivo con los fines de línea normalizados a LF (lo que hace «hash-object --path» con core.autocrlf).
+function Blob-Git([string]$f) {
+  $b = [IO.File]::ReadAllBytes($f); $t = [Text.Encoding]::GetEncoding('ISO-8859-1').GetString($b).Replace("`r`n", "`n")
+  $c = [Text.Encoding]::GetEncoding('ISO-8859-1').GetBytes($t); $h = [Text.Encoding]::ASCII.GetBytes("blob $($c.Length)`0")
+  $sha = [Security.Cryptography.SHA1]::Create(); (($sha.ComputeHash([byte[]]($h + $c)) | ForEach-Object { $_.ToString('x2') }) -join '')
+}
 function git {
   $a = @($args | ForEach-Object { [string]$_ }); $global:LASTEXITCODE = 0; $global:KIT.git += ($a -join ' ')
   if ($a[0] -eq '--version') { 'git version 2.47.0 (doble)'; return }
@@ -81,13 +90,14 @@ function git {
   }
   $dir = ''; if ($a[0] -eq '-C') { $dir = $a[1]; $a = @($a[2..($a.Count - 1)]) }
   switch ($a[0]) {
-    'rev-parse' { if ($a[1] -eq 'HEAD:pos-bridge') { $global:KIT.arbol } elseif ($dir -like '*agente-prod-5da233a*') { $global:KIT.sha_viejo } else { '578f38c039ec232d3818c1182d69d7f78f55b371' } }
+    'hash-object' { Blob-Git ($a[-1]) }
+    'rev-parse' { if ($a[1] -like 'HEAD:scripts/*') { Blob-Git $MEDIR_REAL } elseif ($a[1] -eq 'HEAD:pos-bridge') { $global:KIT.arbol } elseif ($dir -like '*agente-prod-5da233a*') { $global:KIT.sha_viejo } else { '578f38c039ec232d3818c1182d69d7f78f55b371' } }
     'diff' { 'pos-bridge/backfill.test.ts'; 'pos-bridge/backfill.ts'; 'pos-bridge/consulta.test.ts'; 'pos-bridge/consulta.ts'; 'pos-bridge/esquema.ts' }
     default { }
   }
 }
 function npm.cmd { $global:LASTEXITCODE = 0; if ($args -contains '--version') { '10.9.0' } }
-function npx.cmd { $global:LASTEXITCODE = 0; ' Test Files  11 passed (11)'; '      Tests  478 passed (478)' }
+function npx.cmd { $global:LASTEXITCODE = 0; $e = [char]27; " Test Files  11 passed (11)"; "$e[2m      Tests$e[22m  $e[1m$e[32m478 passed$e[39m$e[22m (478)" }
 function node {
   $a = @($args | ForEach-Object { [string]$_ }); $global:LASTEXITCODE = 0
   if ($a -contains '--version') { 'v22.18.0'; return }
@@ -153,6 +163,7 @@ Nuevo-Kit
 [void](Espera-Ok 'A1' 'A1 ok')
 Resultado 'A1 hace el checkout en el SHA exacto' (@($global:KIT.git | Where-Object { $_ -match 'checkout --detach 578f38c039ec232d3818c1182d69d7f78f55b371' }).Count -eq 1)
 [void](Espera-Ok 'A2' 'A2 ok')
+[void](Espera-Ok 'A2' 'ya estaban: 1')   # re-ejecutable: las copias idénticas no se copian de nuevo
 Resultado 'A2 copió el .env idéntico' ((Get-FileHash (Join-Path (Join-Path $NUEVA 'pos-bridge') '.env')).Hash -eq (Get-FileHash (Join-Path (Join-Path $global:KIT.vieja 'pos-bridge') '.env')).Hash)
 [void](Espera-Ok 'A3' '478 pruebas en verde')
 $r = Espera-Ok 'A4' 'nada enviado'
@@ -192,6 +203,17 @@ Nuevo-Kit; [void](Correr 'A0'); [void](Correr 'A1')
 $f = Join-Path (Join-Path $global:KIT.vieja 'pos-bridge') '.env'
 [IO.File]::WriteAllText($f, ([IO.File]::ReadAllText($f) -replace "(?m)^INGEST_SECRET=.*$", 'INGEST_SECRET='))
 $r = Espera-Frena 'A2' '.env sin INGEST_SECRET (dice solo el nombre)' 'faltan o están vacías \(solo nombres\): INGEST_SECRET'
+# A2: con el script en disco con CRLF (checkout de Windows) tiene que pasar; con una copia distinta del .env, frenar; con el script alterado, frenar
+Nuevo-Kit; [void](Correr 'A0'); [void](Correr 'A1')
+$sc = Join-Path (Join-Path (Join-Path $NUEVA 'scripts') 'puente') 'armar_mapa_secretos.mjs'
+[IO.File]::WriteAllText($sc, ([IO.File]::ReadAllText($sc) -replace "(?<!\r)\n", "`r`n"))
+[void](Espera-Ok 'A2' 'A2 ok')
+Nuevo-Kit; [void](Correr 'A0'); [void](Correr 'A1'); [void](Correr 'A2')
+$fn = Join-Path (Join-Path $NUEVA 'pos-bridge') '.env'; [IO.File]::AppendAllText($fn, "`r`nOTRA=1")
+Espera-Frena 'A2' 'copia existente que difiere del .env de hoy' 'DIFIERE' | Out-Null
+Nuevo-Kit; [void](Correr 'A0'); [void](Correr 'A1')
+$sc = Join-Path (Join-Path (Join-Path $NUEVA 'scripts') 'puente') 'armar_mapa_secretos.mjs'; [IO.File]::AppendAllText($sc, "`n// alterado")
+Espera-Frena 'A2' 'script de medición alterado (blob distinto)' 'blob distinto' | Out-Null
 foreach ($caso in @(@{ d = @(0, 0, 0, 0, 0, 0, 0); p = 'con_descuento = 0' }, @{ d = @(20, 20, 20, 20, 20, 20, 20); p = '> 50 %' })) {
   Nuevo-Kit; foreach ($k in 'A0', 'A1', 'A2', 'A3') { [void](Correr $k) }; $global:KIT.dry = $caso.d
   Espera-Frena 'A4' $caso.p ([regex]::Escape($caso.p)) | Out-Null

@@ -13,16 +13,23 @@ secreto. La carpeta de hoy queda intacta: es la vuelta atrás.
 **Quiénes:** el **dueño** pega los bloques y lee la última línea. **Control:** la encargada o Claude por chat: compara
 esa línea con «Ve» y corre las consultas de solo lectura. No es la misma persona.
 
-**Cómo:** en la PC del PoS, abrir **Windows PowerShell como administrador** (no el ISE). Pegar primero el
-**preámbulo** (lo vuelve a pegar si abre otra consola). Después cada bloque **entero**. Si un bloque termina en rojo,
-**no se sigue**: se le pasa el mensaje a Claude.
+**Cómo:** en la PC del PoS, abrir **Windows PowerShell como administrador** (no el ISE). Por escritorio remoto,
+pegar con clic derecho desordena los bloques largos y Ctrl+C / Ctrl+V no llegan, así que **el método por defecto es por
+archivo** (con el preámbulo y con cada bloque):
+1. Pegar el bloque en el **Bloc de notas** y guardarlo como `C:\satori\paso.ps1` (*Tipo*: «Todos los archivos»;
+   *Codificación*: **UTF-8 con BOM**).
+2. Una sola vez por consola: `Set-ExecutionPolicy -Scope Process Bypass -Force`.
+3. Cargarlo con punto y espacio: `. C:\satori\paso.ps1` (así el preámbulo queda cargado para los bloques que siguen).
+
+Primero el **preámbulo** (se vuelve a cargar si abre otra consola); después cada bloque **entero**. Si un bloque termina en
+rojo, **no se sigue**: se le pasa el mensaje a Claude. Ningún bloque lleva secretos, así que `paso.ps1` tampoco.
 
 ## Parte A · HOY (nunca entre 15:50 y 19:00) · 25–35 min
 | # | Bloque | Tarda | Qué ve el dueño | Se para si… |
 |---|---|---|---|---|
 | 0 | A0 · comprobaciones (solo mira) | 2 min | `A0 ok · … agente de hoy 5da233a… limpio · tarea Running …`. Claude confirma que el agente late sin error | la tarea no corre, el agente de hoy no está en `5da233a`, o no late |
 | 1 | A1 · clon nuevo | 3–5 min | `A1 ok · … en 578f38c… · solo cambian los 5 archivos de pos-bridge` | otro SHA, otro contenido o la carpeta ya existe |
-| 2 | A2 · copia del `.env` | 1 min | `A2 ok · copiados idénticos … ninguna falta … largo 64 · candado ok` (nunca un valor) | falta una clave (dice solo el nombre) o no manda lo mismo |
+| 2 | A2 · copia del `.env` (se puede repetir: si ya está idéntica, sigue) | 1 min | `A2 ok · copiados idénticos … ninguna falta … largo 64 · candado ok` (nunca un valor) | falta una clave (dice solo el nombre) o no manda lo mismo |
 | 3 | A3 · dependencias y pruebas | 6–10 min | mucho texto de npm y al final `A3 ok · … 478 pruebas en verde` | una prueba falla o `mssql` no carga |
 | 4 | A4 · prueba en seco (7 días, **no envía nada**) | 2–3 min | una línea por día y `A4 ok · … con_descuento N (P %) · nada enviado` | **P = 0 o más de 50 %**. Entre 1–14 % o 31–50 %: sigue solo si Claude dice que sí |
 | 5 | A5 · cambio de la tarea | 2 min (agente detenido ~30 s) | `A5 ok · tarea → …pos-agente-prod-d9.cmd · detenida N s · HORA_CAMBIO …` → **pasársela a Claude** | el agente nuevo no arranca → **A7 ya** |
@@ -35,7 +42,7 @@ Al **cierre de caja** de la noche, Claude repite el conteo de A6: tiene que habe
 | # | Quién | Qué | Qué se ve | Se para si… |
 |---|---|---|---|---|
 | 1 | Claude | **Humo antes** en prod, solo lectura (`descuento_pos_humo.sql`, corte `2026-11-17 00:00 -06:00`) | conteos y huellas (sin montos) | no coinciden con el PASE D9 §6 «Antes» y no se explica |
-| 2 | Dueño | Preámbulo y **B1**. Corre mes por mes, de noviembre 2026 hacia enero 2024, con pausa de 0,8 s entre días | por mes: `── 2026-10 ok en N min`; al final `HISTÓRICO COMPLETO` o `falta … (sigue la noche siguiente)` | un mes con error o el agente en vivo que deja de correr (el bloque para solo y dice dónde quedó). A ojo: `inválidos=` o `guardados` menor que `tickets` → Ctrl+C |
+| 2 | Dueño | Preámbulo y **B1**. Corre mes por mes, de noviembre 2026 hacia enero 2024, con pausa de 0,8 s entre días | por mes: `── 2026-10 ok en N min`; al final `HISTÓRICO COMPLETO` o `falta … (sigue la noche siguiente)` | un mes con error o el agente en vivo que deja de correr (el bloque para solo y dice dónde quedó). A ojo: `inválidos=` o `guardados` menor que `tickets` → **cerrar la ventana de PowerShell con la X** (corta el backfill; reenviar no duplica) |
 | 3 | Claude | **Humo después**, mismo corte | huellas **iguales**; `con_descuento` sube; `descuento_negativo` 0 | cualquier huella distinta: se para y se mira mes por mes |
 
 **Se corta solo:** no empieza un mes que no termine antes de las **05:50**. La noche siguiente: humo antes, **el mismo

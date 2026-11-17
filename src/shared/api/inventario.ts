@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { Ingredient, Recipe, RecipeIngredient, InventoryMovement } from '../types/inventario'
 import { computeDepletion, unitsFromOrderItems, cogsFromDepletion, lowStockCrossings } from '../../modules/inventario/depletion'
+import { todayCR } from '../utils'
 
 // ── Ingredients ──────────────────────────────────────────────────
 
@@ -125,7 +126,7 @@ export async function setStockLevel(ingredientId: string, newLevel: number, curr
     qty_delta:     delta,
     unit,
     unit_cost:     null,
-    reference_id:  new Date().toISOString().slice(0, 10),
+    reference_id:  todayCR(),
     notes:         `Ajuste manual a ${newLevel} ${unit}`,
     created_by:    by,
   })

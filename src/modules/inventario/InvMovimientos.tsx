@@ -6,6 +6,7 @@ import type { Ingredient, InventoryMovement } from '../../shared/types/inventari
 import { MOVEMENT_LABELS } from '../../shared/types/inventario'
 import { addMovement, setStockLevel } from '../../shared/api/inventario'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
+import { todayCR } from '../../shared/utils'
 
 interface Props {
   ingredients: Ingredient[]
@@ -67,7 +68,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
         qty_delta:     q * deltaSign,
         unit:          selectedIng?.unit ?? 'unidad',
         unit_cost:     isPurchase && unitCost ? parseFloat(unitCost) : null,
-        reference_id:  new Date().toISOString().slice(0, 10),
+        reference_id:  todayCR(),
         notes,
         created_by:    profile?.full_name ?? '',
       })

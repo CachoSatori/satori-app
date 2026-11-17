@@ -13,6 +13,7 @@ import { notaEquipoMes } from './equipo'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha, mesActualCR } from './estilos'
 import { esParcial } from './reporteSaldo'
+import { todayCR } from '../../shared/utils'
 
 const n0 = (n: number) => Number(n ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 0 })
 const crc = (n: number) => `₡${n0(n)}`
@@ -85,7 +86,7 @@ export default function Reportes() {
     let filas
     try { filas = await exportarContactosOfertas(local) } catch (e) { setError(aClubError(e).message); return }
     const { contactosCsv } = await import('./reporteHtml')
-    descargarCsv(contactosCsv(filas), `club-satori-contactos-ofertas-${local ?? 'todos'}-${new Date().toISOString().slice(0, 10)}.csv`)
+    descargarCsv(contactosCsv(filas), `club-satori-contactos-ofertas-${local ?? 'todos'}-${todayCR()}.csv`)
   }
   function descargarCsv(txt: string, nombre: string) {
     const a = document.createElement('a')

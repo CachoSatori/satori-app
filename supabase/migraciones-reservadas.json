@@ -261,6 +261,12 @@
       "rama": "claude/club-link-reserva-local",
       "renumerada_a": "180"
     },
+    "128": {
+      "nombre": "club_excepciones_rapida",
+      "bloque": "club",
+      "rama": "claude/club-excepciones-abiertas-rapida",
+      "renumerada_a": "183"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -434,6 +440,12 @@
       "bloque": "pase",
       "rama": "claude/club-link-reserva-local",
       "origen": "125"
+    },
+    "183": {
+      "nombre": "club_excepciones_rapida",
+      "bloque": "pase",
+      "rama": "claude/club-excepciones-abiertas-rapida",
+      "origen": "128"
     }
   }
 }

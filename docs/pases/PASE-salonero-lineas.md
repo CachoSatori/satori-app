@@ -563,18 +563,35 @@ dar igual igual. Si una no coincide, bloque 5 antes y después, y se para.
 ---
 
 ## 10. Firma y bitácora
-- Firma del dueño: _pendiente_ (SHA: ______, fecha y hora −06:00).
-- Bitácora: _pendiente_.
+- **Firma del dueño:** 18-nov-2026 06:22 −06:00, por el chat, sobre `89c5aa42ba7692d3bca421cdc352333946b9e017`.
+- **Control:** Claude (prod, solo lectura). Pase hecho el 18-nov-2026, en la mañana.
 
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| A0 · hora · agente de hoy · latido | `578f38c…` limpio · Running · late sin error | |
-| A1 · clon | SHA firmado · árboles revisados · 8 archivos | |
-| A2 · `.env` | idénticos · ninguna clave falta · candado ok | |
-| A3 · pruebas | `mssql` carga · typecheck ok · 496 en verde | |
-| A4 · en seco (7 días) | `salonero_por_lineas` 3–20 % · nada enviado · `no_salon` mirado | |
-| A5 · `HORA_CAMBIO` | `-06:00` · ~30 s detenido | |
-| A6 · latido ×2 · facturas nuevas | late sin error | |
-| B · humo antes (`CORTE_HUMO` = pase − 2 días, 00:00) | se anotan `facturas`, `lineas`, huellas, `salonero_null`, `registrado_por` | |
-| B1 · meses | histórico completo · errores 0 · `CORTE_HUMO` y N del progreso | |
-| B · humo después | huellas iguales · `salonero_null` baja N · `incoherentes` 0 · ningún login baja | |
+| A0 · hora · agente de hoy · latido | `578f38c…` limpio · Running · late sin error | 06:07 · ok |
+| A1 · clon | SHA firmado · árboles revisados · 8 archivos | ok |
+| A2 · `.env` | idénticos · ninguna clave falta · candado ok | ok |
+| A3 · pruebas | `mssql` carga · typecheck ok · 496 en verde | ok |
+| A4 · en seco (7 días) | `salonero_por_lineas` 3–20 % · nada enviado · `no_salon` mirado | 199 tickets · 26 por líneas = 13,1 % · `no_salon` 0 · nada enviado |
+| A5 · `HORA_CAMBIO` | `-06:00` · ~30 s detenido | 2026-11-18 06:23:43-06:00 · detenida 22 s |
+| A6 · latido ×2 · facturas nuevas | late sin error | ok · latido 06:28:26 sin error |
+| B · humo antes (`CORTE_HUMO` = pase − 2 días, 00:00) | se anotan `facturas`, `lineas`, huellas, `salonero_null`, `registrado_por` | corte 2026-11-16 00:00 −06 · ver «Humo» |
+| B1 · meses | histórico completo · errores 0 · `CORTE_HUMO` y N del progreso | 35 meses · HISTÓRICO COMPLETO · `CORTE_HUMO` 2026-11-16 · N = 11.505 |
+| B · humo después | huellas iguales · `salonero_null` baja N · `incoherentes` 0 · ningún login baja | ok, con una diferencia explicada (ver abajo) |
+
+**Humo (corte 2026-11-16 00:00 −06), antes → después:**
+
+| Medida | Antes → después |
+|---|---|
+| facturas | 41.018 = |
+| líneas | 231.050 = |
+| `h_lineas` | `6df58b04bd5f` = |
+| `salonero_null` | 26.993 → 15.488 (−11.505 = N) |
+| `salon_90d_null` | 370 → 172 |
+| `incoherentes` | 0 |
+| logins | ninguno baja |
+| `h_facturas_sin_salonero` | `1c7e28f57061` → `ebec996c1417`: **solo cambió 2026-04** (`7ea52b58e46f` → `592a4fcebae6`) |
+
+**Explicación de la diferencia de 2026-04:** viene de `clave_fe`, no del salonero. Es un bug preexistente del agente: cruza la clave por número de consecutivo sin filtrar el tipo de documento, y los tiquetes tipo 04 de mar/abr-2026 toman la clave de la factura 01 del mismo consecutivo. No es plata; no cambia importes. Anotado en `HALLAZGOS.md` de `main` (arreglo en curso).
+
+Vuelta atrás (no usada): `C:\satori\agente-d9` @ `578f38c`, con la config en `C:\satori\sal-vuelta`.

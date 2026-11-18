@@ -5,9 +5,7 @@
 > coincide, **se para y se avisa**.
 >
 > - **Vía:** merge → Branching. No se aplica nada a mano.
-> - **Orden:** la **190** (`pos_ventas_resumen`, #290) va **antes** si va a entrar pronto: con la 191 en el ledger,
->   Branching rechaza la 190 (versión menor) y habría que renumerarla. Si la 191 entra primero, la 190 se renumera a la
->   siguiente libre del bloque 150–199 en su PR.
+> - **Orden:** la **190** (`pos_ventas_resumen`) ya entró a prod el 18-nov (#291, `main` `747f474`); la 191 va después.
 > - **Ledger:** exactamente 1 fila `191` con su `name`.
 > - **Responsables:** ejecución = el merge (Branching); control = una persona distinta de quien mergea (§4 y §5).
 
@@ -23,9 +21,11 @@
   el personal, todo lo que compara contra el equipo (saldría con sus propios números). Guía 6.5 al día.
 
 **No pasa:** policies (ni `pos_ndf_*` ni `employees`: regla 6), columnas, datos, `pos_ventas_resumen` (190), sagrados.
+La 190 en prod (leída el 18-nov, solo lectura) valida el rol adentro (owner/manager/contador; el resto 42501), lee
+`pos_ndf_*` directo y **no llama** a ninguna de las funciones que cambia la 191: no la afecta.
 
 ## 2. Prerrequisitos y lecturas previas (prod, 18-nov, solo lectura)
-- Ledger prod = **189** (`cron_ventas_dia_contador`).
+- Ledger prod = **190** (`pos_ventas_resumen`), re-leído el 18-nov tras #291.
 - Las tres funciones de la 067 en prod tienen el mismo `md5(pg_get_functiondef)` que en staging (cuerpo de la 067):
   `pos_ventas_tickets_rango` `ce7245d0…`, `pos_ventas_lineas` `ba41d0d5…`, `pos_ventas_latido` `22ff3225…`.
 - `pos_ndf_tickets`: un solo local (`santa-teresa`). Manager activo: asignado a `santa-teresa` (no cambia lo que ve).
@@ -42,7 +42,7 @@
   y la cancela) y las mutaciones `nombres_todos` y `sin_trim` del runner (están; correrlas con `--local`).
 
 ## 4. Antes del merge (prod, solo lectura, `begin read only` … `rollback`)
-- Ledger: última = **189** (o **190** si entró antes). Si no, **no se mergea**.
+- Ledger: última = **190**. Si no, **no se mergea**.
 - md5 de las tres funciones = los de §2. `to_regprocedure('public.pos_nombres_por_login()')` = null.
 
 ## 5. Después del merge (prod, solo lectura)
@@ -54,7 +54,7 @@
   `pos_nombres_por_login()` como contador ≥ como owner sobre activos, y 0 filas como salonero.
 
 ## 6. Criterios de parada
-- Ledger distinto o md5 distinto: **no se mergea**.
+- Ledger distinto de 190 o md5 distinto: **no se mergea**.
 - Branching en rojo o §5 distinto: se para, se avisa y se decide la vuelta atrás. No se arregla a mano.
 
 ## 7. Vuelta atrás

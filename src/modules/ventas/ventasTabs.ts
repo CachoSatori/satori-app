@@ -7,7 +7,7 @@
 export type Tab =
   | 'hoy' | 'envivo' | 'ventas' | 'saloneros' | 'salolineas' | 'evaluacion' | 'icp'
   | 'cajeros' | 'historico' | 'mix' | 'analisis' | 'calendario' | 'menueng' | 'metas'
-  | 'competencias' | 'config'
+  | 'competencias' | 'config' | 'resumen'
 
 export interface TabDef { id: Tab; label: string; roles: string[] }
 
@@ -32,13 +32,17 @@ export const TABS: TabDef[] = [
   { id: 'metas',        label: 'Metas',             roles: ['owner','manager','contador'] },
   { id: 'competencias', label: 'Competencias',      roles: ['owner','manager'] },
   { id: 'config',       label: 'Productos',         roles: ['owner','manager'] },
+  // Ventas v2 · fase 2.1 (SPEC-ventas-v2 §5.1). Va AL FINAL de la lista a propósito: la pestaña de
+  // arranque de cada rol sigue siendo la de antes («Hoy») mientras conviven las vistas viejas (3.5).
+  { id: 'resumen',      label: 'Resumen',           roles: ['owner','manager','contador'] },
 ]
 
 export interface Entrada { id: string; label: string; vistas: Tab[] }
 
-/** Las entradas del menú de Ventas (`PLAN.md`): 7 + «Ajustes». */
+/** Las entradas del menú de Ventas (`PLAN.md`): 7 + «Resumen» (v2, fase 2.1) + «Ajustes». */
 export const ENTRADAS: Entrada[] = [
   { id: 'hoy',       label: 'Hoy',         vistas: ['hoy'] },
+  { id: 'resumen',   label: 'Resumen',     vistas: ['resumen'] },
   { id: 'envivo',    label: 'En vivo',     vistas: ['envivo'] },
   { id: 'saloneros', label: 'Saloneros',   vistas: ['saloneros', 'salolineas', 'evaluacion', 'icp', 'competencias'] },
   { id: 'analisis',  label: 'Análisis',    vistas: ['analisis'] },
@@ -93,7 +97,7 @@ export function labelDe(tab: Tab): string {
  * Vistas que no reciben `dias` ni `pm` (leen lo suyo): se pintan sin esperar la carga de los
  * 90 días del PoS.
  */
-export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas'])
+export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas', 'resumen'])
 
 /**
  * Vistas que pueden mirar más atrás de los 90 días (historia, año contra año, rangos «Todo»,

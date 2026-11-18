@@ -17,7 +17,6 @@ import {
 } from './periodos'
 import { periodoDeComparacion, periodoMes, type ModoComparacion, type Periodo } from './periodosPromPax'
 import { ventaPorPersonaDeTotales } from './indicadores'
-import { sumarPartesRedondeando, type ParteTotal } from './ventasUtils'
 import { diaLegible } from './temporadas'
 
 // ── El corte: hasta qué día se cuenta ─────────────────────────────────────────────────────────
@@ -123,19 +122,11 @@ export const TOTALES_CERO: Totales = {
 export function totalesEnRango(dias: readonly ContabilidadDay[], r: Rango | null): Totales {
   if (!r) return { ...TOTALES_CERO }
   const t = { ...TOTALES_CERO }
-  const partes: ParteTotal[] = []
   for (const d of dias) {
     if (d.fecha < r.desde || d.fecha > r.hasta) continue
-    partes.push({
-      neta: d.ventaNeta, iva: d.iva, serv: d.serv, delivery: d.delivery, salon: d.salon, bruta: d.ventaBruta,
-      cts: d.crudoCts,
-    })
-    t.pax += d.pax; t.dias += 1
+    t.ventaNeta += d.ventaNeta; t.ventaBruta += d.ventaBruta; t.iva += d.iva; t.serv += d.serv
+    t.salon += d.salon; t.delivery += d.delivery; t.pax += d.pax; t.dias += 1
   }
-  // Decisión del dueño (18-nov, opción A): el total del rango = round(Σ crudo), UNA vez.
-  const s = sumarPartesRedondeando(partes)
-  t.ventaNeta = s.ventaNeta; t.ventaBruta = s.ventaBruta; t.iva = s.iva; t.serv = s.serv
-  t.salon = s.salon; t.delivery = s.delivery
   t.ventaPorPersona = ventaPorPersonaDeTotales(t.salon, t.pax)
   return t
 }

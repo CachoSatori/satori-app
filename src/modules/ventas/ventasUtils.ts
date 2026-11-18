@@ -231,9 +231,9 @@ export function mixPorFamilia(dias: DiasMap, dates: string[]): MixFamilia {
 
 // ── Redondeo de los totales (decisión del dueño 18-nov, opción A) ──────────
 /**
- * Una parte que se suma a un total: un balde del día (en `getDayStats`) o un día del período (en
- * `totalesContabilidad` / `totalesDelRango`). Los campos son los ₡ YA redondeados que se muestran;
- * `cts`, si viene, son los mismos montos crudos en céntimos (solo PoS).
+ * Un balde del día (salonero o caja) que se suma al total del día en `getDayStats`. Los campos son los ₡
+ * YA redondeados que se muestran por persona; `cts`, si viene, son los mismos montos crudos en céntimos
+ * (solo PoS). Los totales del PERÍODO no pasan por acá: son la suma de los días ya redondeados.
  */
 export interface ParteTotal {
   neta: number; iva: number; serv: number; delivery: number; salon: number; bruta: number
@@ -241,8 +241,8 @@ export interface ParteTotal {
 }
 
 /**
- * El total de varias partes, redondeado UNA vez: neta, IVA, servicio y delivery = round(Σ crudo).
- * Antes cada parte (salonero, caja, día) se redondeaba y después se sumaba, así que mover una factura
+ * El total del día, redondeado UNA vez: neta, IVA, servicio y delivery = round(Σ crudo).
+ * Antes cada balde (salonero, caja) se redondeaba y después se sumaba, así que mover una factura
  * de una persona a otra podía mover el total del día ±₡1. Ahora el total no depende del reparto.
  *
  * Salón y bruta NO se redondean otra vez: salen de los anteriores (salón = neta − delivery,
@@ -325,7 +325,6 @@ export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: st
   }
   // UN redondeo para el día, sobre la suma cruda de todos los baldes (no Σ de baldes redondeados).
   const t = sumarPartesRedondeando(partes)
-  const todosConCrudo = partes.length > 0 && partes.every(p => p.cts)
   return {
     fecha:      '',
     ventaBruta: t.ventaBruta,
@@ -336,8 +335,6 @@ export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: st
     delivery:   t.delivery,
     pax,
     promPax:    ventaPorPersonaDeTotales(t.salon, pax) ?? 0,
-    // Solo si TODO el día trae crudo: un día a medias (no pasa hoy) entra al período con sus ₡.
-    ...(todosConCrudo ? { crudoCts: t.crudoCts } : {}),
     saloneroNames,
   }
 }
@@ -646,15 +643,13 @@ export interface TotalesContabilidad {
   salon: number; delivery: number; pax: number; promPax: number
 }
 export function totalesContabilidad(days: readonly ContabilidadDay[]): TotalesContabilidad {
-  // Decisión del dueño (18-nov, opción A): el TOTAL del período = round(Σ crudo de sus días), UNA vez.
-  // Puede diferir en pocos ₡ de la suma de las filas redondeadas (cada fila también es round(Σ crudo)).
-  const r = sumarPartesRedondeando(days.map(d => ({
-    neta: d.ventaNeta, iva: d.iva, serv: d.serv, delivery: d.delivery, salon: d.salon, bruta: d.ventaBruta,
-    cts: d.crudoCts,
-  })))
-  const t = {
-    ventaBruta: r.ventaBruta, iva: r.iva, serv: r.serv, ventaNeta: r.ventaNeta,
-    salon: r.salon, delivery: r.delivery, pax: days.reduce((s, d) => s + d.pax, 0), promPax: 0,
+  // Decisión del dueño (18-nov 08:14, opción A): cada DÍA ya es un solo redondeo de su crudo (`getDayStats`);
+  // el TOTAL del período es la SUMA de esos días tal como se muestran, así la fila TOTAL de la pantalla da lo
+  // mismo que la fórmula de suma del Excel del contador.
+  const t = { ventaBruta: 0, iva: 0, serv: 0, ventaNeta: 0, salon: 0, delivery: 0, pax: 0, promPax: 0 }
+  for (const d of days) {
+    t.ventaBruta += d.ventaBruta; t.iva += d.iva; t.serv += d.serv; t.ventaNeta += d.ventaNeta
+    t.salon += d.salon; t.delivery += d.delivery; t.pax += d.pax
   }
   // Una sola fuente de la cuenta (la misma que la pantalla en Hoy, Calendario y Mix): salón ÷ personas;
   // sin personas → 0 en la fila (la función devuelve null).

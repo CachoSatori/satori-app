@@ -325,11 +325,10 @@ describe('aHistMap / getHistDesdePos — el equivalente de ventas_hist', () => {
     const dia = armar(TODOS, LINEAS, RANGO)['2026-09-05']
     const s = getDayStats(dia)
     const h = aHistDay(dia)
-    // `getDayStats` trae tres campos que `HistDay` no tiene; el resto es idéntico.
+    // `getDayStats` trae dos campos que `HistDay` no tiene; el resto es idéntico.
     const numeros = { ...s } as Partial<typeof s>
     delete numeros.fecha
     delete numeros.saloneroNames
-    delete numeros.crudoCts
     expect(h).toEqual({ ...numeros, source: 'hist' })
   })
 

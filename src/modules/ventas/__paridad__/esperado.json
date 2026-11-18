@@ -205,12 +205,6 @@
    "delivery": 15000,
    "pax": 6,
    "promPax": 10000,
-   "crudoCts": {
-    "neta": 7500000,
-    "iva": 975000,
-    "serv": 500000,
-    "delivery": 1500000
-   },
    "saloneroNames": [
     "MESERO UNO",
     "MESERO DOS"
@@ -226,12 +220,6 @@
    "delivery": 0,
    "pax": 1,
    "promPax": 10000,
-   "crudoCts": {
-    "neta": 1000000,
-    "iva": 130000,
-    "serv": 100000,
-    "delivery": 0
-   },
    "saloneroNames": [
     "MESERO UNO"
    ]

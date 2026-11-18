@@ -217,6 +217,4 @@ export interface ContabilidadDay {
   delivery:   number
   pax:        number
   promPax:    number
-  /** Σ cruda del día en céntimos (solo días del PoS): la usa la fila TOTAL del período. */
-  crudoCts?:  CrudoCts
 }

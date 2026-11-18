@@ -8,7 +8,7 @@
 //   · el pax de los tickets de salón cobrados con login de caja SÍ cuenta.
 import { ventaPorPersonaDeTotales } from './indicadores'
 import type { DiaData, DiasMap } from '../../shared/types/ventas'
-import { getDayStats, sumarPartesRedondeando, type ParteTotal } from './ventasUtils'
+import { getDayStats } from './ventasUtils'
 
 export interface TotalesVentas {
   ventaNeta:  number
@@ -40,20 +40,11 @@ export function totalesDelDia(dia: DiaData | undefined | null): TotalesVentas {
 /** La suma de varios días (cada fecha UNA vez: es un mapa). */
 export function totalesDelRango(dias: DiasMap): TotalesVentas {
   const t = { ...CERO }
-  const partes: ParteTotal[] = []
   for (const dia of Object.values(dias)) {
-    if (!dia) continue
-    const s = getDayStats(dia)
-    partes.push({
-      neta: s.ventaNeta, iva: s.iva, serv: s.serv, delivery: s.delivery, salon: s.salon, bruta: s.ventaBruta,
-      cts: s.crudoCts,
-    })
-    t.pax += s.pax; t.dias += s.ventaNeta > 0 ? 1 : 0
+    const d = totalesDelDia(dia)
+    t.ventaNeta += d.ventaNeta; t.ventaBruta += d.ventaBruta; t.iva += d.iva; t.serv += d.serv
+    t.salon += d.salon; t.delivery += d.delivery; t.pax += d.pax; t.dias += d.dias
   }
-  // Decisión del dueño (18-nov, opción A): el total del rango = round(Σ crudo), UNA vez.
-  const r = sumarPartesRedondeando(partes)
-  t.ventaNeta = r.ventaNeta; t.ventaBruta = r.ventaBruta; t.iva = r.iva; t.serv = r.serv
-  t.salon = r.salon; t.delivery = r.delivery
   t.promPax = ventaPorPersonaDeTotales(t.salon, t.pax) ?? 0
   return t
 }

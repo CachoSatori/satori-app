@@ -128,40 +128,51 @@ describe('total del día = round(Σ crudo), no Σ de baldes redondeados (opción
   })
 })
 
-describe('total del período = round(Σ crudo de sus días), UNA vez', () => {
-  // Dos días, cada uno con una factura de ₡1.000,50: cada fila muestra 1.001; el total es round(2.001) = 2.001.
+describe('total del período = SUMA de los días ya redondeados que se muestran (opción A, 18-nov 08:14)', () => {
+  // Dos días, cada uno con una factura de ₡1.000,50: cada fila muestra 1.001 (un redondeo por día).
   const d1 = dia([ticket({ id: 'a', valor_servido_crc: 1000.5, iva_crc: 0.5, servicio_crc: 0.5 })])
   const d2 = dia([ticket({ id: 'b', valor_servido_crc: 1000.5, iva_crc: 0.5, servicio_crc: 0.5 })])
   const DIAS = { '2026-11-02': d1, '2026-11-03': d2 }
 
-  it('Contabilidad: cada fila = round(Σ crudo del día); la fila TOTAL = round(Σ crudo del período)', () => {
+  it('Contabilidad: la fila TOTAL = Σ de las filas que se ven (igual que la fórmula de suma del Excel)', () => {
     const filas = getContabilidadDays(2026, 11, DIAS, {})
     expect(filas.map(f => f.ventaNeta)).toEqual([1001, 1001])
-    const t = totalesContabilidad(filas)
-    expect(t).toMatchObject({ ventaNeta: 2001, iva: 1, serv: 1, ventaBruta: 2003, salon: 2001, delivery: 0, pax: 4 })
-    // Efecto visible y documentado: el TOTAL puede quedar unos ₡ por debajo/encima de Σ filas.
-    expect(filas.reduce((s, f) => s + f.ventaNeta, 0) - t.ventaNeta).toBe(1)
+    expect(totalesContabilidad(filas)).toMatchObject({ ventaNeta: 2002, iva: 2, serv: 2, ventaBruta: 2006, salon: 2002, delivery: 0, pax: 4 })
   })
 
-  it('Resumen/Inicio (`totalesDelRango`) y «a la fecha» (`totalesEnRango`) dan el mismo total', () => {
-    expect(totalesDelRango(DIAS)).toMatchObject({ ventaNeta: 2001, iva: 1, serv: 1, ventaBruta: 2003, dias: 2 })
+  it('Inicio (`totalesDelRango`) y «a la fecha» (`totalesEnRango`) dan el mismo total que la fila TOTAL', () => {
+    expect(totalesDelRango(DIAS)).toMatchObject({ ventaNeta: 2002, iva: 2, serv: 2, ventaBruta: 2006, dias: 2 })
     const filas = getContabilidadDays(2026, 11, DIAS, {})
     expect(totalesEnRango(filas, { desde: '2026-11-01', hasta: '2026-11-30' }))
-      .toMatchObject({ ventaNeta: 2001, iva: 1, serv: 1, ventaBruta: 2003, dias: 2 })
+      .toMatchObject({ ventaNeta: 2002, iva: 2, serv: 2, ventaBruta: 2006, dias: 2 })
   })
 
-  it('los días sin crudo (.xls / ventas_hist) no se mueven ni un céntimo, ni solos ni mezclados', () => {
-    // Solo hist: la suma de siempre, sin redondear (salón y bruta tal cual, aunque no cierren identidades).
+  it('PROPIEDAD: TOTAL = Σ filas mostradas, y no cambia al reasignar el salonero de cualquier factura (200 períodos)', () => {
+    const r = prng(20261118 + 1)
+    const COLS = ['ventaBruta', 'iva', 'serv', 'ventaNeta', 'salon', 'delivery', 'pax'] as const
+    for (let k = 0; k < 200; k++) {
+      const nDias = 1 + ent(r, 15)
+      const porDia = Array.from({ length: nDias }, () => casoAleatorio(r))
+      const mapa = (ts: TicketNdfConId[][]) => Object.fromEntries(ts.map((x, i) =>
+        [`2026-11-${String(i + 1).padStart(2, '0')}`, dia(x)]))
+      const filas = getContabilidadDays(2026, 11, mapa(porDia), {})
+      const t = totalesContabilidad(filas)
+      for (const c of COLS) expect(t[c], `período ${k}, ${c}`).toBe(filas.reduce((s, f) => s + f[c], 0))
+      expect(totalesDelRango(mapa(porDia)).ventaNeta).toBe(t.ventaNeta)
+      // Reasignar una factura cualquiera de un día cualquiera: ninguna fila ni el TOTAL se mueven.
+      const di = ent(r, nDias), fi = ent(r, porDia[di].length)
+      const otro = LOGINS.find(l => l !== porDia[di][fi].salonero_login)!
+      const movido = porDia.map((x, i) => (i !== di ? x : x.map((tk, j) => (j === fi ? { ...tk, salonero_login: otro } : tk))))
+      const filas2 = getContabilidadDays(2026, 11, mapa(movido), {})
+      expect(filas2.map(f => [f.ventaNeta, f.iva, f.serv, f.delivery])).toEqual(filas.map(f => [f.ventaNeta, f.iva, f.serv, f.delivery]))
+      expect(totalesContabilidad(filas2)).toEqual(t)
+    }
+  })
+
+  it('los días sin crudo (.xls / ventas_hist) se suman tal cual, sin redondear', () => {
     expect(sumarPartesRedondeando([
       { neta: 1000.25, iva: 130, serv: 100, delivery: 50, salon: 900, bruta: 1500.25 },
       { neta: 10.5, iva: 0, serv: 0, delivery: 0, salon: 10.5, bruta: 10.5 },
     ])).toMatchObject({ ventaNeta: 1010.75, ventaBruta: 1510.75, salon: 910.5, delivery: 50 })
-    const hist = { ventaBruta: 1500, ventaNeta: 1000, iva: 130, serv: 100, salon: 900, delivery: 50, pax: 3, promPax: 0 }
-    // Mezclado con un día del PoS: su diferencia de salón (−50) y de bruta (+270) se conserva exacta.
-    const filas = [{ fecha: '2026-11-01', ...hist }, ...getContabilidadDays(2026, 11, DIAS, {})]
-    const t = totalesContabilidad(filas)
-    expect(t.ventaNeta).toBe(Math.round((100000 + 200100) / 100))
-    expect(t.salon).toBe(t.ventaNeta - t.delivery - 50)
-    expect(t.ventaBruta).toBe(t.ventaNeta + t.iva + t.serv + 270)
   })
 })

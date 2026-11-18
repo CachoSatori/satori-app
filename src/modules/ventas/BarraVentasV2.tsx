@@ -2,7 +2,7 @@
 // El estado vive en la URL (`barraVentasV2.ts`); este componente solo lo pinta y lo cambia.
 import type { BaseId, PeriodoV2, TipoPeriodoV2 } from './periodos'
 import { BASES } from './periodos'
-import { OPCIONES_PERIODO, ROTULO_BASE, elegirBase, moverPeriodo, periodoEnPalabras, type EstadoBarra } from './barraVentasV2'
+import { OPCIONES_PERIODO, elegirBase, rotuloBase, moverPeriodo, periodoEnPalabras, type EstadoBarra } from './barraVentasV2'
 import type { LocalVentas } from './resumenV2Datos'
 
 interface Props {
@@ -64,7 +64,7 @@ export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambi
             <span>{cual === 'A' ? 'Comparar con' : 'y con'}</span>
             <select className="date-filter" aria-label={`Base ${cual}`} value={cual === 'A' ? estado.baseA : estado.baseB}
               onChange={e => onCambio(elegirBase(estado, cual, e.target.value as BaseId))}>
-              {BASES.map(id => <option key={id} value={id}>{ROTULO_BASE[id]}</option>)}
+              {BASES.map(id => <option key={id} value={id}>{rotuloBase(periodo, id)}</option>)}
             </select>
           </label>
         ))}

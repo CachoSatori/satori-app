@@ -3,6 +3,8 @@
 // módulo ESM sin dependencias, para la Edge `monthly-report` (Deno no puede importar `src/`).
 //
 //   node scripts/edge/empaquetar-ventas-pos.mjs <salida.js>
+//   node scripts/edge/empaquetar-ventas-pos.mjs --entrada src/modules/ventas/ventasDiaContadorPuro.ts <salida.js>
+//     (la Edge `ventas-dia-contador`: misma lógica + el «Detalle por día» de Contabilidad)
 //
 // · El cliente de Supabase de la app (`shared/api/supabase.ts`, Vite) se reemplaza por un módulo
 //   vacío: lo puro no lo usa, y así el paquete no arrastra supabase-js ni `import.meta.env`.
@@ -24,9 +26,9 @@ const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const ENTRADA = join(RAIZ, 'src/modules/ventas/ventasPosPuro.ts')
 const STUB = '\0satori-supabase-vacio'
 
-export async function empaquetar() {
+export async function empaquetar(entrada = ENTRADA) {
   const b = await rolldown({
-    input: ENTRADA,
+    input: entrada,
     platform: 'neutral',
     treeshake: true,
     plugins: [{
@@ -61,19 +63,23 @@ export async function empaquetar() {
   }).outputText
 }
 
-export function cabecera(codigo) {
+export function cabecera(codigo, entrada = 'src/modules/ventas/ventasPosPuro.ts') {
   let sha = 'desconocido'
   try { sha = execSync('git rev-parse --short HEAD', { cwd: RAIZ }).toString().trim() } catch { /* sin git */ }
   const huella = createHash('sha256').update(codigo).digest('hex')
-  return `// GENERADO — no editar a mano. Fuente: src/modules/ventas/ventasPosPuro.ts @ ${sha}\n` +
-    `// Regenerar: node scripts/edge/empaquetar-ventas-pos.mjs <salida>  ·  sha256(cuerpo) ${huella}\n` +
+  return `// GENERADO — no editar a mano. Fuente: ${entrada} @ ${sha}\n` +
+    `// Regenerar: node scripts/edge/empaquetar-ventas-pos.mjs ${entrada.endsWith('ventasPosPuro.ts') ? '' : `--entrada ${entrada} `}<salida>  ·  sha256(cuerpo) ${huella}\n` +
     `// deno-lint-ignore-file\n// @ts-nocheck\n`
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const salida = process.argv[2]
-  if (!salida) { console.error('uso: node scripts/edge/empaquetar-ventas-pos.mjs <salida.js>'); process.exit(1) }
-  const codigo = await empaquetar()
-  writeFileSync(salida, cabecera(codigo) + codigo)
+  const args = process.argv.slice(2)
+  let entradaRel = 'src/modules/ventas/ventasPosPuro.ts'
+  const i = args.indexOf('--entrada')
+  if (i >= 0) { entradaRel = args[i + 1]; args.splice(i, 2) }
+  const salida = args[0]
+  if (!salida || !entradaRel) { console.error('uso: node scripts/edge/empaquetar-ventas-pos.mjs [--entrada <src/...ts>] <salida.js>'); process.exit(1) }
+  const codigo = await empaquetar(join(RAIZ, entradaRel))
+  writeFileSync(salida, cabecera(codigo, entradaRel) + codigo)
   console.log(`ok: ${salida} (${codigo.length} bytes)`)
 }

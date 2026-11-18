@@ -141,7 +141,7 @@ const PERSONAS: readonly PersonaNdf[] = [
 ]
 
 /**
- * La tabla, solo lectura. La usa la prueba de contrato de la mig 192 (`pos_persona_clave` en la base tiene que tener
+ * La tabla, solo lectura. La usa la prueba de contrato de la mig 194 (`pos_persona_clave` en la base tiene que tener
  * los MISMOS alias y vigencias que esta tabla).
  */
 export const PERSONAS_NDF: readonly PersonaNdf[] = PERSONAS

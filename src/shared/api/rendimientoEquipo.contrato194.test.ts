@@ -1,4 +1,4 @@
-// Contrato de la mig 192 (Mi Rendimiento: el equipo en agregados). Lee el SQL tal cual está en el repo y verifica
+// Contrato de la mig 194 (Mi Rendimiento: el equipo en agregados). Lee el SQL tal cual está en el repo y verifica
 // lo que no se puede romper sin que nadie lo note: permisos, search_path, que no salga nada fuera de la lista blanca,
 // el umbral anti-identificación y que el espejo de personas coincida con `personasNdf.ts`.
 import { describe, expect, it } from 'vitest'
@@ -6,9 +6,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { PERSONAS_NDF } from '../ndf/personasNdf'
 
-const SQL = readFileSync(resolve(__dirname, '../../../supabase/migrations/192_mi_rendimiento_equipo.sql'), 'utf8')
+const SQL = readFileSync(resolve(__dirname, '../../../supabase/migrations/194_mi_rendimiento_equipo.sql'), 'utf8')
 const CODIGO = SQL.split('\n').filter(l => !l.trimStart().startsWith('--')).join('\n')
-const ROLLBACK = readFileSync(resolve(__dirname, '../../../scripts/sql/192_rollback.sql'), 'utf8')
+const ROLLBACK = readFileSync(resolve(__dirname, '../../../scripts/sql/194_rollback.sql'), 'utf8')
 
 const API = ['pos_mi_rendimiento_equipo(text, date, date)', 'pos_mi_competencia(text, text)']
 const INTERNAS = ['pos_persona_clave(text, date)', 'pos_rend_base(text, date, date)', 'pos_rend_productos(text, date, date)', 'pos_rend_yo(text)']
@@ -21,7 +21,7 @@ function cuerpo(nombre: string): string {
   return CODIGO.slice(i, j === -1 ? undefined : j)
 }
 
-describe('192 · permisos y forma', () => {
+describe('194 · permisos y forma', () => {
   it('las seis funciones tienen search_path fijo; las que leen tablas son security definer', () => {
     for (const f of [...API, ...INTERNAS]) {
       const c = cuerpo(f.split('(')[0])
@@ -79,7 +79,7 @@ describe('192 · permisos y forma', () => {
   })
 })
 
-describe('192 · espejo de personasNdf.ts (alias y vigencias)', () => {
+describe('194 · espejo de personasNdf.ts (alias y vigencias)', () => {
   const filas = [...cuerpo('pos_persona_clave').matchAll(/\('([^']+)',\s*'([^']+)',\s*(date '([\d-]+)'|null::date),\s*(date '([\d-]+)'|null::date)\)/g)]
     .map(m => ({ cod: m[1], clave: m[2], desde: (m[4] ?? null) as string | null, hasta: (m[6] ?? null) as string | null }))
 
@@ -94,7 +94,7 @@ describe('192 · espejo de personasNdf.ts (alias y vigencias)', () => {
   })
 })
 
-describe('192 · la app llama a las funciones con los nombres y parámetros de la base', () => {
+describe('194 · la app llama a las funciones con los nombres y parámetros de la base', () => {
   const API_TS = readFileSync(resolve(__dirname, './rendimientoEquipo.ts'), 'utf8')
   it('pos_mi_rendimiento_equipo(p_local, p_desde, p_hasta) y pos_mi_competencia(p_local, p_comp)', () => {
     expect(API_TS).toContain("sb.rpc('pos_mi_rendimiento_equipo', { p_local: local, p_desde: desde, p_hasta: hasta })")

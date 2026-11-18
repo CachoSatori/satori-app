@@ -16,7 +16,7 @@
  * las sub-vistas de ventas. Propinas tiene su propio selector de mes.
  * Solo lectura (sagrados intactos). Desde la 191 el personal lee SOLO sus facturas: las comparaciones con el
  * equipo (ranking, «vs general», «Yo vs restaurante», ICP del equipo, competencias) le llegan ya agregadas de la
- * base (mig 192, `useEquipoAgregado`), sin filas ni montos de otras personas. Gerencia y «Ver como» siguen
+ * base (mig 194, `useEquipoAgregado`), sin filas ni montos de otras personas. Gerencia y «Ver como» siguen
  * comparando con los datos que ya leen.
  */
 import { useState, useMemo } from 'react'
@@ -93,7 +93,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   const [params]    = useSearchParams()
   // Mig 191: el personal (no gerencia) recibe del PoS SOLO sus propias facturas. Lo que compara contra el equipo
   // (general, ranking, «resto», ICP del equipo, competencias) no se puede sacar de ahí: le llega ya agregado de la
-  // base (mig 192). Gerencia y el owner en «Ver como» comparan con los datos que leen (todo el equipo).
+  // base (mig 194). Gerencia y el owner en «Ver como» comparan con los datos que leen (todo el equipo).
   const conEquipo = verComo || ROLES_CON_EQUIPO.includes(perfilLogueado?.role ?? '')
   const delServidor = !conEquipo
   const today       = todayCR()
@@ -152,7 +152,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     return { period: rawPeriod, periodDates: base }
   }, [rawPeriod, periodKind, activeName, today, dias, pm, dates])
 
-  // ── El equipo agregado (mig 192), solo para el personal ──────
+  // ── El equipo agregado (mig 194), solo para el personal ──────
   const desdeP = periodDates.length ? periodDates.reduce((a, b) => (a < b ? a : b)) : ''
   const hastaP = periodDates.length ? periodDates.reduce((a, b) => (a > b ? a : b)) : ''
   const equipoPeriodo = useEquipoAgregado(delServidor && !!activeName, desdeP, hastaP)
@@ -184,7 +184,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     return { pos: idx + 1, of: ranked.length }
   }, [delServidor, equipoPeriodo.datos, activeName, periodDates, allSals, dias, pm])
 
-  // La referencia de «vs general»: la del restaurante, calculada acá (gerencia) o la que devuelve la 192 (personal).
+  // La referencia de «vs general»: la del restaurante, calculada acá (gerencia) o la que devuelve la 194 (personal).
   const refGeneral = useMemo<RefGeneral | null>(() => {
     if (!delServidor) {
       return { promPax: genAgg.promPax, pax: genAgg.pax, comidaPax: genAgg.pax > 0 ? genAgg.iCom / genAgg.pax : 0,
@@ -279,7 +279,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     const teamVentas = equipo.ventas
     const res = icpVsTeam(myGen, myVentas, teamGen, teamVentas)
     if (delServidor) {
-      // Personal: el ICP del equipo viene de la base (192); el suyo, de sus facturas y sus propinas.
+      // Personal: el ICP del equipo viene de la base (194); el suyo, de sus facturas y sus propinas.
       const t = equipoICP.datos?.icp_equipo ?? null
       return { ...res, team: t ?? 0, diff: t === null ? 0 : res.mine - t, teamDisponible: t !== null, myGen, myVentas, teamGen: 0, teamVentas: 0 }
     }
@@ -288,7 +288,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   const avisoICP = delServidor && !icp.teamDisponible
     ? (equipoICP.cargando ? 'Cargando el ICP del equipo…' : textoMotivoEquipo(equipoICP.datos)) : null
 
-  // Competencias: el personal recibe su lugar de la base (192), sin nombres ni puntos de otros.
+  // Competencias: el personal recibe su lugar de la base (194), sin nombres ni puntos de otros.
   const idsComps = useMemo(() => comps.filter(c => c.parts?.includes(activeName)).map(c => c.id), [comps, activeName])
   const misComps = useMisCompetencias(delServidor && !!activeName, idsComps)
 
@@ -434,10 +434,10 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   )
 }
 
-/** Contra qué se mide «vs general»: el restaurante en el período (aggGeneral o la 192). */
+/** Contra qué se mide «vs general»: el restaurante en el período (aggGeneral o la 194). */
 interface RefGeneral { promPax: number; pax: number; comidaPax: number; bebPax: number; promTicket: number }
 
-/** `por_dow` de la 192 → Prom/PAX del restaurante por día de semana (null = grupo chico ese día). */
+/** `por_dow` de la 194 → Prom/PAX del restaurante por día de semana (null = grupo chico ese día). */
 function restDelServidor(porDow: { dow: number; prom_pax: number | null }[] | undefined): Record<number, number | null> {
   const out: Record<number, number | null> = {}
   for (const d of porDow ?? []) out[d.dow] = d.prom_pax
@@ -576,7 +576,7 @@ function ResumenTab({ myAgg, metas, activeName, pm, dayRank, period, refGeneral,
 // ── POR DÍA ───────────────────────────────────────────────────
 function DiaTab({ dowRows, bestDow, maxDowProm, restPorDow, aviso }: {
   dowRows: ReturnType<typeof dowBreakdown>; bestDow: number; maxDowProm: number
-  /** Personal: el Prom/PAX del restaurante por día de semana, de la 192 (`null` = se usa `r.rest`, gerencia). */
+  /** Personal: el Prom/PAX del restaurante por día de semana, de la 194 (`null` = se usa `r.rest`, gerencia). */
   restPorDow: Record<number, number | null> | null
   aviso: string | null
 }) {
@@ -627,7 +627,7 @@ function DiaTab({ dowRows, bestDow, maxDowProm, restPorDow, aviso }: {
         })}
       </div>
 
-      {/* Tabla yo vs restaurante (personal: el restaurante sale agregado de la 192) */}
+      {/* Tabla yo vs restaurante (personal: el restaurante sale agregado de la 194) */}
       {aviso && <div className="mr-icp-sub" role="note" style={{ marginTop: '1.25rem' }}>{aviso}</div>}
       {hayRest && <>
       <div className="vt-sl" style={{ marginTop: '1.25rem' }}>Yo vs restaurante</div>
@@ -1008,7 +1008,7 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
 }
 
 // ── COMPETENCIAS ──────────────────────────────────────────────
-/** El personal: mi posición, mis puntos y (con 4+ participantes) los puntos del líder, sin su nombre (192). */
+/** El personal: mi posición, mis puntos y (con 4+ participantes) los puntos del líder, sin su nombre (194). */
 function CompetenciaPersonal({ mia, myPts }: { mia: MiCompetencia | null | undefined; myPts: number }) {
   const caja = { background: 'var(--c-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' as const }
   const num = { fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1.3rem', fontWeight: 800 }
@@ -1043,7 +1043,7 @@ function CompetenciaPersonal({ mia, myPts }: { mia: MiCompetencia | null | undef
 
 function CompetenciasTab({ comps, activeName, dates, dias, pm, today, delServidor }: {
   comps: Comp[]; activeName: string; dates: string[]; dias: DiasMap; pm: ProductMap; today: string
-  /** Personal: su lugar en cada competencia, de la 192 (por id). `null` = gerencia / «Ver como» (ranking local). */
+  /** Personal: su lugar en cada competencia, de la 194 (por id). `null` = gerencia / «Ver como» (ranking local). */
   delServidor: Record<string, MiCompetencia | null> | null
 }) {
   const conEquipo = delServidor === null

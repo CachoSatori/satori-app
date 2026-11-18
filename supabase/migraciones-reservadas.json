@@ -327,11 +327,17 @@
       "rama": "claude/pos-ventas-solo-lo-suyo",
       "renumerada_a": "191"
     },
-    "136": {
+    "137": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "club",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "renumerada_a": "192"
+    },
+    "138": {
       "nombre": "mi_rendimiento_equipo",
       "bloque": "club",
       "rama": "claude/mi-rendimiento-evolucion",
-      "renumerada_a": "192"
+      "renumerada_a": "194"
     },
     "150": {
       "nombre": "club_satori_esquema",
@@ -574,10 +580,16 @@
       "origen": "135"
     },
     "192": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "pase",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "origen": "137"
+    },
+    "194": {
       "nombre": "mi_rendimiento_equipo",
       "bloque": "pase",
       "rama": "claude/mi-rendimiento-evolucion",
-      "origen": "136"
+      "origen": "138"
     }
   }
 }

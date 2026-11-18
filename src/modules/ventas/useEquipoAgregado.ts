@@ -1,4 +1,4 @@
-// Los agregados del equipo (mig 192) para un rango, con un caché chico por rango: cambiar de pestaña no vuelve a
+// Los agregados del equipo (mig 194) para un rango, con un caché chico por rango: cambiar de pestaña no vuelve a
 // pedir lo mismo. `activo = false` (gerencia o «Ver como», que comparan con sus propios datos) → no pide nada.
 import { useEffect, useState } from 'react'
 import { getEquipoAgregado, getMiCompetencia, type EquipoAgregado, type MiCompetencia } from '../../shared/api/rendimientoEquipo'

@@ -1,13 +1,15 @@
-# Pase a PROD de la mig 192 `mi_rendimiento_equipo` (origen club 136)
+# Pase a PROD de la mig 194 `mi_rendimiento_equipo` (origen club 138) — **número provisorio**
 
 > **⛔ Esquema y permisos: firma del dueño sobre el SHA exacto.** Pedido del dueño del 18-nov 12:55 («quiero que ellos
 > evalúen su propio rendimiento personal […] y poder evaluarlos personalmente además de en equipo»), opción A. Si algo no
 > coincide, **se para y se avisa**.
 >
 > - **Vía:** merge → Branching. No se aplica nada a mano.
-> - **Orden:** la **191** (#292) primero; la 192 usa `pos_mis_logins()` de la 191. Este PR está **apilado sobre #292**:
->   se mergea a `main` después de #292 (al mergear #292, la base de este PR pasa a `main`).
-> - **Ledger:** exactamente 1 fila `192` con su `name`.
+> - **Número provisorio:** 194 (la 193 la reserva #294). **Se fija al mergear**: si al momento del merge el ledger de
+>   prod ya pasó la 194 o la 193 no entró, se renumera al siguiente libre (archivo, registro, ESTADO, PASE, scripts).
+> - **Orden:** después de la 191 (#292, en `main` desde el 18-nov 13:05) y de la 192 (`propinas_cada_uno_lo_suyo`,
+>   #295, en prod 13:41). La 194 usa `pos_mis_logins()` de la 191; no toca la 192 ni la 193.
+> - **Ledger:** exactamente 1 fila `194` con su `name`.
 > - **Responsables:** ejecución = el merge (Branching); control = una persona distinta de quien mergea (§4 y §5).
 
 ## 1. Qué pasa y qué no
@@ -25,39 +27,45 @@
 - **Anti-identificación (K = 4):** con menos de 4 personas con venta en el período no sale ningún agregado del equipo
   (`motivo = 'grupo_chico'`), solo la posición. ₡ redondeados a 100, razones a 2 decimales, ICP a 1. Sin cuartiles.
 - App: pestaña nueva «📈 Mi evolución» (sale de las propias facturas, sin base) y las comparaciones con el equipo de
-  vuelta para el personal, con lo que devuelve la 192. Guía 6.5 al día.
+  vuelta para el personal, con lo que devuelve la 194. Guía 6.5 al día.
 
 **No pasa:** tablas, columnas, policies (regla 6), datos, las funciones de la 067/190/191, sagrados.
 
 ## 2. Prerrequisitos (prod, solo lectura, antes del merge)
-- Ledger prod = **191** (o 190 si #292 entra en el mismo merge). `to_regprocedure('public.pos_mis_logins()')` no null.
+- Ledger prod = **193** (si #294 entró antes) o **192**. `to_regprocedure('public.pos_mis_logins()')` y
+  `to_regprocedure('public.propinas_mis_empleados()')` no null.
 - `to_regprocedure('public.pos_mi_rendimiento_equipo(text,date,date)')` = null.
 - `tip_sessions.location_id` usa los mismos ids que `pos_ndf_tickets.local` (`santa-teresa`).
 
 ## 3. Pruebas en staging (`hwiatgic…`, transacción que termina en ROLLBACK, 18-nov-2026)
-- `scripts/sql/192_pruebas.py --armar --compacto --sin-drops --mutar todas` (la batería y cada mutación encima en la
-  misma transacción; staging no tiene la 191: se crea solo su `pos_mis_logins` tal cual).
-  **18-nov-2026 ~13:45 -06:00: sin mutar 44/44.** Las 9 mutaciones muerden: `sin_k` (caen 6), `sin_ventas_ve` (2),
-  `neta_con_17` (5), `sin_rol` (2), `manager_sin_local` (1), `sin_multiplicador` (3), `delivery_en_salon` (2),
-  `sin_alias` (1), `base_abierta` (1). SQL armado: md5 `6dcb525a…`.
-- Paridad con la app: la fixture ficticia `src/modules/ventas/__paridad__/equipo192.fixture.ts` cargada en staging; la
-  salida de la función (`equipo192.staging.json`) = lo que calcula la app con `armarDiasMap → aggSalonero/aggGeneral`
-  (`equipo192.paridad.test.ts`, 6/6).
+- `scripts/sql/194_pruebas.py --armar --compacto --sin-drops --mutar todas`: la batería y cada mutación encima en la
+  misma transacción. Staging está en 188: **190, 191 y 192 se aplican antes, tal cual, en la misma transacción** (con
+  sus guardas md5). Única diferencia, por el conector (cancela todo `drop`): el `drop policy` + `create policy` de la
+  192 va como `alter policy` de la vieja al mismo predicado (RLS equivalente). Se omitieron sus `comment on`.
+  **18-nov-2026 ~14:30 -06:00: sin mutar 45/45**, incluido «con la 192, el salonero lee de `tip_entries` solo su
+  fila» y el ICP del equipo = 5,0 (con las filas de otros: la 194 es `security definer`, la RLS de la 192 no la
+  corta). Las 9 mutaciones muerden: `sin_k` 6, `sin_ventas_ve` 2, `neta_con_17` 6, `sin_rol` 2,
+  `manager_sin_local` 1, `sin_multiplicador` 3, `delivery_en_salon` 2, `sin_alias` 1, `base_abierta` 1.
+- Sin choques: nombres distintos de `propinas_mis_empleados()` (192), `pos_ventas_resumen` (190) y las de la 191; la
+  194 no reemplaza ninguna función existente ni toca policies.
+- Paridad con la app: la fixture ficticia `src/modules/ventas/__paridad__/equipo194.fixture.ts` cargada en staging; la
+  salida de la función (`equipo194.staging.json`) = lo que calcula la app con `armarDiasMap → aggSalonero/aggGeneral`
+  (`equipo194.paridad.test.ts`, 6/6).
 - **NO PROBADO en staging:** los `drop` de la vuelta atrás (el conector los cancela; caso 09 con `--local`).
 
 ## 4. Antes del merge (prod, solo lectura, `begin read only` … `rollback`)
 - Ledger y funciones de §2. Si no coinciden, **no se mergea**.
 
 ## 5. Después del merge (prod, solo lectura)
-- Ledger: 1 fila `192` / `mi_rendimiento_equipo`; check «Supabase Preview» en success.
+- Ledger: 1 fila `194` / `mi_rendimiento_equipo`; check «Supabase Preview» en success.
 - Las 6 funciones con `search_path=public, pg_temp`; `has_function_privilege('anon', …, 'execute')` = false en las 6;
   `authenticated` = false en las 4 internas.
 - **Humo** (JWT simulado, `begin read only` … `rollback`, este mes): como un salonero activo, la salida tiene solo las
   claves de la lista blanca (sin logins ni nombres) y `ranking.de` = cantidad de personas con venta; como cajero 42501;
   como owner, `personas` igual.
 
-## 6. Vuelta atrás (regla 10: la fila 192 y su `.sql` se quedan)
-`scripts/sql/192_rollback.sql`, sin numerar: se copia a `supabase/migrations/NNN_mi_rendimiento_equipo_fuera.sql` con el
+## 6. Vuelta atrás (regla 10: la fila 194 y su `.sql` se quedan)
+`scripts/sql/194_rollback.sql`, sin numerar: se copia a `supabase/migrations/NNN_mi_rendimiento_equipo_fuera.sql` con el
 siguiente número libre (registro y ESTADO en el mismo PR), con firma, y entra por merge → Branching. Borra las seis
 funciones. La app sigue andando: el personal ve «La comparación con el equipo no está disponible ahora.» y «Mi
 evolución» igual.

@@ -311,7 +311,7 @@ export default function VentasModule() {
               aria-labelledby={entrada && entrada.vistas.length > 1 ? idVista(tab) : idEntrada(entradaDe(tab).id)}
             >
               {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
-              {tab === 'resumen'     && <VentasResumen />}
+              {tab === 'resumen'     && <VentasResumen metas={metas} />}
               {tab === 'envivo'      && <VentasEnVivo       metas={metas} />}
               {tab === 'ventas'      && <VentasContabilidad dias={allDias} hist={hist} metas={metas} pm={pm} />}
               {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}

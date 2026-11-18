@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 192 · Mi Rendimiento: el equipo en AGREGADOS (sin filas ni montos de otras personas)  ║
+-- ║ 194 · Mi Rendimiento: el equipo en AGREGADOS (sin filas ni montos de otras personas)  ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
 -- Pedido del dueño, 18-nov-2026 12:55 -06:00 (opción A; la firma va sobre el SHA final del PR): «quiero que ellos
@@ -24,7 +24,7 @@
 --     parecidas (p. ej. dos rangos que difieren en un día).
 --   · Sin percentiles 25/75 a propósito: con 7 personas, mediana + promedio + cuartiles reconstruyen casi a todos.
 --
--- Mismas reglas que la app (paridad; la cuida src/shared/api/rendimientoEquipo.contrato192.test.ts):
+-- Mismas reglas que la app (paridad; la cuida src/shared/api/rendimientoEquipo.contrato194.test.ts):
 --   · Día = día CR de `fecha_registra` (ventasDiasDesdePos.ts). Solo facturas `C`.
 --   · Neta de la factura (netaVenta.ts, firmada): Σ monto de sus líneas salvo familias 6, 17 y 20 (la línea sin
 --     familia cuenta); sin ninguna línea → valor_servido_crc.
@@ -49,8 +49,8 @@
 -- manager: sus locales (`mis_locales()`). Cualquier otro rol o inactivo: 42501. anon y public: sin EXECUTE.
 -- No lee nada que el usuario no pueda leer hoy por otro lado más que en forma de agregado; no agrega policies
 -- (regla 6), no toca `employees` salvo leer `full_name` para resolver los participantes de una competencia.
--- Vuelta atrás: scripts/sql/192_rollback.sql (migración nueva hacia adelante, regla 10). Pruebas por rol:
--- scripts/sql/192_pruebas.sql (+ 192_pruebas.py; transacción que termina en ROLLBACK).
+-- Vuelta atrás: scripts/sql/194_rollback.sql (migración nueva hacia adelante, regla 10). Pruebas por rol:
+-- scripts/sql/194_pruebas.sql (+ 194_pruebas.py; transacción que termina en ROLLBACK).
 begin;
 
 -- ── 0. Código del PoS → clave de PERSONA (espejo de personasNdf.ts; interno) ────────────────────
@@ -87,7 +87,7 @@ $$;
 revoke all on function public.pos_persona_clave(text, date) from public, anon, authenticated;
 grant execute on function public.pos_persona_clave(text, date) to service_role;
 comment on function public.pos_persona_clave(text, date) is
-  'Mig 192. Código del PoS → clave de persona (espejo de personasNdf.ts: alias y vigencias). Interno.';
+  'Mig 194. Código del PoS → clave de persona (espejo de personasNdf.ts: alias y vigencias). Interno.';
 
 -- ── 1. Base por mesero-día y por balde de caja (interno; SIN EXECUTE para la API) ───────────────
 create or replace function public.pos_rend_base(p_local text, p_desde date, p_hasta date)
@@ -162,7 +162,7 @@ $$;
 revoke all on function public.pos_rend_base(text, date, date) from public, anon, authenticated;
 grant execute on function public.pos_rend_base(text, date, date) to service_role;
 comment on function public.pos_rend_base(text, date, date) is
-  'Mig 192. Base por mesero-día y balde de caja (misma regla que armarDia). Interno: sin EXECUTE para la API.';
+  'Mig 194. Base por mesero-día y balde de caja (misma regla que armarDia). Interno: sin EXECUTE para la API.';
 
 -- ── 2. Productos por mesero en un rango (interno): para el multiplicador y las competencias ─────
 create or replace function public.pos_rend_productos(p_local text, p_desde date, p_hasta date)
@@ -190,7 +190,7 @@ $$;
 revoke all on function public.pos_rend_productos(text, date, date) from public, anon, authenticated;
 grant execute on function public.pos_rend_productos(text, date, date) to service_role;
 comment on function public.pos_rend_productos(text, date, date) is
-  'Mig 192. Unidades por mesero y producto en un rango (Math.round por línea). Interno: sin EXECUTE para la API.';
+  'Mig 194. Unidades por mesero y producto en un rango (Math.round por línea). Interno: sin EXECUTE para la API.';
 
 -- ── 3. Quién soy y qué puedo pedir (interno) ────────────────────────────────────────────────────
 -- Devuelve las claves de persona del usuario (vacío para gerencia sin login). Corta con 42501 a quien no puede.
@@ -361,7 +361,7 @@ $$;
 revoke all on function public.pos_mi_rendimiento_equipo(text, date, date) from public, anon;
 grant execute on function public.pos_mi_rendimiento_equipo(text, date, date) to authenticated;
 comment on function public.pos_mi_rendimiento_equipo(text, date, date) is
-  'Mig 192. Agregados del equipo para Mi Rendimiento (posición, general, mediana/promedio por persona, Prom/PAX por día de semana, ICP del equipo). Sin filas ni montos de otras personas; con menos de 4 personas, sin agregados.';
+  'Mig 194. Agregados del equipo para Mi Rendimiento (posición, general, mediana/promedio por persona, Prom/PAX por día de semana, ICP del equipo). Sin filas ni montos de otras personas; con menos de 4 personas, sin agregados.';
 
 -- ── 5. Mi lugar en una competencia (API) ────────────────────────────────────────────────────────
 -- Los participantes de `ventas_comps.data->'parts'` son NOMBRES (los de la app). Se resuelven a códigos del PoS por
@@ -440,6 +440,6 @@ $$;
 revoke all on function public.pos_mi_competencia(text, text) from public, anon;
 grant execute on function public.pos_mi_competencia(text, text) to authenticated;
 comment on function public.pos_mi_competencia(text, text) is
-  'Mig 192. Mi posición y mis puntos en una competencia; puntos del líder y mediana solo con 4+ participantes y sin nombre.';
+  'Mig 194. Mi posición y mis puntos en una competencia; puntos del líder y mediana solo con 4+ participantes y sin nombre.';
 
 commit;

@@ -523,3 +523,8 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 - **`database.ts` puede mentir la nullability** frente a `supabase.gen.ts`; las lecturas castean la fila cruda.
 - **`navigator.share` es no-opcional en el lib DOM de TS:** chequear con `typeof nav.share === 'function'`.
 - **Para cherry-picks a prod, usar un git worktree aislado**; los untracked del árbol principal bloquean el checkout.
+
+## Movido de ESTADO ⚡ARRANQUE el 18-nov-2026 (poda 15 KB, #296)
+
+- **Entró a `main` el 17–18-nov:** #255–#258, #260, #261, #263, #265, #266, #268 (mig 185), #269, #270, #271–#273 (migs 186–188), #274, #284 (correo del contador y mig 189), #285 (resumen del cierre como función pura, sin Edge) y #282 (guía 6.13 del Club).
+- **Hallazgos nuevos (no es plata):** (1) el agente toma `clave_fe` por número de consecutivo sin filtrar el tipo de documento: tiquetes tipo 04 de mar/abr-2026 quedan con la clave de la factura 01 del mismo consecutivo (675 filas al 18-nov) y crece con cada factura nueva; arreglo en curso. (2) El reporte de ventas redondea por grupo (salonero) y después suma: el total del día puede moverse ±₡1 si cambia el salonero; arreglo propuesto: sumar y redondear por día. Detalle en [HALLAZGOS.md](HALLAZGOS.md).

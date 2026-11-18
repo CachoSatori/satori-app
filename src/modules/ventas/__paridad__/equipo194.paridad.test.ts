@@ -1,17 +1,17 @@
-// Paridad de la 192: lo que calcula `pos_mi_rendimiento_equipo` en la base TIENE que dar lo mismo que las reglas de
+// Paridad de la 194: lo que calcula `pos_mi_rendimiento_equipo` en la base TIENE que dar lo mismo que las reglas de
 // la app (armarDiasMap → aggSalonero / aggGeneral, D4) con los mismos datos. Los datos son la fixture ficticia
-// `equipo192.fixture.ts`; el lado de la base es `equipo192.staging.json`, la salida de la función en staging
+// `equipo194.fixture.ts`; el lado de la base es `equipo194.staging.json`, la salida de la función en staging
 // (transacción con ROLLBACK, 18-nov-2026) para esa misma fixture. Si cambia una regla de la app (neta, PAX, persona,
-// multiplicador, días), esta prueba cae: hay que cambiar la 192 (o una migración nueva) y volver a correr staging.
+// multiplicador, días), esta prueba cae: hay que cambiar la 194 (o una migración nueva) y volver a correr staging.
 import { describe, expect, it } from 'vitest'
 import { writeFileSync } from 'node:fs'
 import { armarDiasMap } from '../ventasDiasDesdePos'
 import { aggGeneral, aggSalonero, allDates, allSaloneros, dayOfWeek, fusionarProductMap } from '../ventasUtils'
 import { claveDeEmpleado } from '../../../shared/ndf/personasNdf'
 import {
-  CURADO_192, DESDE_192, FIXTURE_192, HASTA_192, NOMBRES_192, YO_192, sqlFixture192,
-} from './equipo192.fixture'
-import STAGING from './equipo192.staging.json'
+  CURADO_194, DESDE_194, FIXTURE_194, HASTA_194, NOMBRES_194, YO_194, sqlFixture194,
+} from './equipo194.fixture'
+import STAGING from './equipo194.staging.json'
 
 /** Redondeo «lejos del cero», como `round(numeric, d)` de Postgres. */
 function rnd(x: number | null, d: number): number | null {
@@ -29,17 +29,17 @@ const mediana = (xs: number[]) => {
 const promedio = (xs: number[]) => (xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : null)
 
 function esperadoDesdeLaApp() {
-  const { dias, pm: pmFam } = armarDiasMap(FIXTURE_192.tickets, FIXTURE_192.lineas,
-    { desde: DESDE_192, hasta: HASTA_192 }, { uploadedAt: HASTA_192, nombres: NOMBRES_192, avisar: () => {} })
-  const pm = fusionarProductMap(CURADO_192, pmFam)
+  const { dias, pm: pmFam } = armarDiasMap(FIXTURE_194.tickets, FIXTURE_194.lineas,
+    { desde: DESDE_194, hasta: HASTA_194 }, { uploadedAt: HASTA_194, nombres: NOMBRES_194, avisar: () => {} })
+  const pm = fusionarProductMap(CURADO_194, pmFam)
   const fechas = allDates(dias)
-  const yo = claveDeEmpleado({ full_name: NOMBRES_192[YO_192], pos_login: YO_192 }, NOMBRES_192, allSaloneros(dias))
+  const yo = claveDeEmpleado({ full_name: NOMBRES_194[YO_194], pos_login: YO_194 }, NOMBRES_194, allSaloneros(dias))
   const pers = allSaloneros(dias)
     .map(n => ({ n, a: aggSalonero(n, fechas, dias, pm) }))
     .filter(p => p.a.total > 0)
     .map(({ n, a }) => ({
       n, total: a.total,
-      // Sin PAX no hay venta por persona (la 192 deja afuera, la app pondría 0: ver el encabezado de la 192).
+      // Sin PAX no hay venta por persona (la 194 deja afuera, la app pondría 0: ver el encabezado de la 194).
       prom_pax:    a.pax > 0 ? a.promPax : null,
       beb_pax:     a.pax > 0 ? a.bebPax : null,
       comida_pax:  a.pax > 0 ? a.iCom / a.pax : null,
@@ -75,7 +75,7 @@ function esperadoDesdeLaApp() {
   }
 }
 
-describe('paridad 192: la base calcula como la app', () => {
+describe('paridad 194: la base calcula como la app', () => {
   const app = esperadoDesdeLaApp()
   const db = STAGING as unknown as {
     personas: number; ranking: unknown; general: unknown
@@ -102,8 +102,8 @@ describe('paridad 192: la base calcula como la app', () => {
   it('Prom/PAX del restaurante por día de semana', () => {
     expect(db.por_dow).toEqual(app.por_dow)
   })
-  it.runIf(process.env.PARIDAD192_SQL === '1')('imprime el SQL de la fixture', () => {
-    writeFileSync('/tmp/paridad192.sql', sqlFixture192())
-    writeFileSync('/tmp/paridad192.app.json', JSON.stringify(app, null, 2))
+  it.runIf(process.env.PARIDAD194_SQL === '1')('imprime el SQL de la fixture', () => {
+    writeFileSync('/tmp/paridad194.sql', sqlFixture194())
+    writeFileSync('/tmp/paridad194.app.json', JSON.stringify(app, null, 2))
   })
 })

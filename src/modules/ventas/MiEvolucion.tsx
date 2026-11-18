@@ -3,7 +3,7 @@
  * «que ellos evalúen su propio rendimiento personal, así pueden ver realmente si cambia algo con su esfuerzo».
  *
  * Todo sale de SUS facturas (191) con las reglas de Ventas (`evolucionPersonal.ts`): esta semana y este mes a la
- * fecha contra los mismos días del período anterior, y las últimas 12 semanas. Abajo, su lugar en el equipo (mig 192:
+ * fecha contra los mismos días del período anterior, y las últimas 12 semanas. Abajo, su lugar en el equipo (mig 194:
  * solo posiciones y mediana, nunca la venta de otra persona).
  */
 import { useMemo } from 'react'
@@ -25,7 +25,7 @@ interface Props {
   pm:       ProductMap
   hoy:      string
   propinas: Fila[]
-  /** Mi lugar en el equipo este mes a la fecha (192). `null` = no se muestra (gerencia / «Ver como»). */
+  /** Mi lugar en el equipo este mes a la fecha (194). `null` = no se muestra (gerencia / «Ver como»). */
   equipoMes: EstadoEquipo | null
 }
 

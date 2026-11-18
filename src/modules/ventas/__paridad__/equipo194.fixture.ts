@@ -1,11 +1,11 @@
-// ── Fixture de PARIDAD de la 192 (agregados del equipo en la base vs las reglas de la app) ─────
+// ── Fixture de PARIDAD de la 194 (agregados del equipo en la base vs las reglas de la app) ─────
 //
 // Datos FICTICIOS y deterministas (un LCG con semilla fija): locales, logins y productos inventados.
 // Lo usan dos lados:
-//   · `equipo192.paridad.test.ts` arma con esto el `DiasMap` por el MISMO camino que la app
-//     (`armarDiasMap` → `aggSalonero` / `aggGeneral`) y lo compara con `equipo192.staging.json`, que es lo
+//   · `equipo194.paridad.test.ts` arma con esto el `DiasMap` por el MISMO camino que la app
+//     (`armarDiasMap` → `aggSalonero` / `aggGeneral`) y lo compara con `equipo194.staging.json`, que es lo
 //     que devolvió `pos_mi_rendimiento_equipo` en staging para estos mismos datos (transacción con ROLLBACK).
-//   · `scripts/sql/192_paridad.sql` (lo genera `npx vitest run … -t "imprime el SQL"` con PARIDAD192_SQL=1)
+//   · `scripts/sql/194_paridad.sql` (lo genera `npx vitest run … -t "imprime el SQL"` con PARIDAD194_SQL=1)
 //     inserta exactamente estas filas.
 // Cubre a propósito: alias de persona (038/266), un código con vigencia (0909, dentro y fuera), un login con
 // espacios, cajas, delivery de mesero, facturas X, familias 6/17/20 y sin familia, el artículo PAX, nombres
@@ -14,20 +14,20 @@
 import type { LineaNdfRow, TicketVentaRow } from '../../../shared/api/posNdf'
 import type { ProductMap } from '../../../shared/types/ventas'
 
-export const LOCAL_192 = 'paridad192'
-export const DESDE_192 = '2026-05-08'
-export const HASTA_192 = '2026-05-10'
+export const LOCAL_194 = 'paridad194'
+export const DESDE_194 = '2026-05-08'
+export const HASTA_194 = '2026-05-10'
 /** Mi login (el del usuario que pide). */
-export const YO_192 = 'p1'
+export const YO_194 = 'p1'
 
 /** Nombres por login (lo que la app saca de `employees`). El alias 266 NO tiene: sale por la persona 038. */
-export const NOMBRES_192: Record<string, string> = {
+export const NOMBRES_194: Record<string, string> = {
   p1: 'Persona Uno', p2: 'Persona Dos', p3: 'Persona Tres', p4: 'Persona Cuatro', p5: 'Persona Cinco',
   '038': 'Persona Alias', '0909': 'Persona Vigencia',
 }
 
 /** Bebida clasificada a mano (multiplicador 2) — `product_map`. */
-export const CURADO_192: ProductMap = {
+export const CURADO_194: ProductMap = {
   'TRAGO PARIDAD': { tipo: 'bebida', clasificacion: '', subclasificacion: '', multiplicador: 2, costo_unitario: 0 },
 }
 
@@ -52,7 +52,7 @@ const PRODUCTOS: Array<{ nombre: string | null; codigo: string; familia: number 
 ]
 
 function armar(): { tickets: TicketVentaRow[]; lineas: LineaNdfRow[] } {
-  const r = lcg(192)
+  const r = lcg(192)   // semilla fija: con ella se capturó equipo194.staging.json (no cambiar)
   const tickets: TicketVentaRow[] = []
   const lineas: LineaNdfRow[] = []
   const dias = ['2026-05-08', '2026-05-09', '2026-05-10']
@@ -72,10 +72,10 @@ function armar(): { tickets: TicketVentaRow[]; lineas: LineaNdfRow[] } {
       const estado = r() < 0.06 ? 'X' : 'C'
       const paxArt = r() < 0.7 ? 1 + Math.floor(r() * 4) : 0
       const pax = paxArt > 0 ? paxArt : (r() < 0.5 ? 1 + Math.floor(r() * 3) : 0)
-      const id = `00000000-0000-4000-8192-${String(n).padStart(12, '0')}`
+      const id = `00000000-0000-4000-8194-${String(n).padStart(12, '0')}`
       const sinLineas = r() < 0.04
       tickets.push({
-        id, numero_factura: `P192-${n}`, estado, fecha_registra: `${dia}T${String(hora).padStart(2, '0')}:${String(min).padStart(2, '0')}:00-06:00`,
+        id, numero_factura: `P194-${n}`, estado, fecha_registra: `${dia}T${String(hora).padStart(2, '0')}:${String(min).padStart(2, '0')}:00-06:00`,
         fecha_cierra: null, cajero_login: hora < 16 ? '111' : '222', canal, mesa: null,
         salonero_login: login, registrado_por: esCaja ? 'cajero' : sinPedido ? 'sin_pedido' : 'salonero',
         servicio_crc: 0, total_crc: 0, valor_servido_crc: sinLineas ? 5000 + Math.round(r() * 1000) : 0,
@@ -98,14 +98,14 @@ function armar(): { tickets: TicketVentaRow[]; lineas: LineaNdfRow[] } {
   return { tickets, lineas }
 }
 
-export const FIXTURE_192 = armar()
+export const FIXTURE_194 = armar()
 
 /** El SQL que inserta la fixture (para pegar en staging dentro de la transacción de la batería). */
-export function sqlFixture192(): string {
+export function sqlFixture194(): string {
   const q = (v: string | number | null) => (v === null ? 'null' : typeof v === 'number' ? String(v) : `'${v.replace(/'/g, "''")}'`)
-  const t = FIXTURE_192.tickets.map(x =>
-    `(${q(x.id)},${q(LOCAL_192)},${q(x.numero_factura)},${q(x.fecha_registra)},${q(x.estado)},${q(x.canal)},${q(x.salonero_login)},${q(x.cajero_login)},${q(x.registrado_por)},true,'ok',0,${q(x.valor_servido_crc)},${q(x.pax)},${q(x.pax_articulo)})`)
-  const l = FIXTURE_192.lineas.map(x =>
+  const t = FIXTURE_194.tickets.map(x =>
+    `(${q(x.id)},${q(LOCAL_194)},${q(x.numero_factura)},${q(x.fecha_registra)},${q(x.estado)},${q(x.canal)},${q(x.salonero_login)},${q(x.cajero_login)},${q(x.registrado_por)},true,'ok',0,${q(x.valor_servido_crc)},${q(x.pax)},${q(x.pax_articulo)})`)
+  const l = FIXTURE_194.lineas.map(x =>
     `(${q(x.ticket_id)},${q(x.codigo_producto)},${q(x.nombre)},${q(x.cantidad)},${q(x.monto)},${q(x.familia)})`)
   return [
     'insert into public.pos_ndf_tickets (id, local, numero_factura, fecha_registra, estado, canal, salonero_login, cajero_login, registrado_por, con_servicio, pax_alerta, total_crc, valor_servido_crc, pax, pax_articulo) values',

@@ -1,11 +1,11 @@
-// ── Mi Rendimiento: el equipo en AGREGADOS (mig 192) — SOLO LECTURA ──────────────────────────
+// ── Mi Rendimiento: el equipo en AGREGADOS (mig 194) — SOLO LECTURA ──────────────────────────
 //
 // Desde la 191 el personal lee del PoS solo sus propias facturas. Las comparaciones con el equipo salen de la base,
 // ya agregadas, por estas dos funciones (`security definer`, rol validado adentro). Nunca traen filas, logins,
 // nombres ni montos de otra persona: posición propia, mediana y promedio por persona, el «general» del restaurante
 // y el ICP del equipo, y todo eso solo con 4 o más personas en el período (si no, `motivo = 'grupo_chico'`).
 //
-// Si la función todavía no está (antes de aplicar la 192) o falla, se devuelve `null` y la pantalla lo dice: nunca
+// Si la función todavía no está (antes de aplicar la 194) o falla, se devuelve `null` y la pantalla lo dice: nunca
 // se inventa una comparación.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -13,7 +13,7 @@ import { supabase } from './supabase'
 
 const sb = supabase as unknown as SupabaseClient
 
-/** Los indicadores que se comparan por persona. Las claves son las de la 192. */
+/** Los indicadores que se comparan por persona. Las claves son las de la 194. */
 export interface IndicadoresEquipo {
   prom_pax:    number | null
   beb_pax:     number | null

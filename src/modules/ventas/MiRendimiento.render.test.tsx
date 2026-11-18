@@ -13,7 +13,7 @@ const H = vi.hoisted(() => ({ profile: null as unknown, equipo: null as unknown,
                               llamadas: [] as string[][] }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: H.profile }) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
-// Mig 192: las comparaciones del personal vienen agregadas de la base. Acá se simula lo que devuelve.
+// Mig 194: las comparaciones del personal vienen agregadas de la base. Acá se simula lo que devuelve.
 vi.mock('../../shared/api/rendimientoEquipo', () => ({
   getEquipoAgregado: (local: string, desde: string, hasta: string) => { H.llamadas.push([local, desde, hasta]); return Promise.resolve(H.equipo) },
   getMiCompetencia: () => Promise.resolve(H.comp),
@@ -22,7 +22,7 @@ vi.mock('../../shared/api/rendimientoEquipo', () => ({
 import MiRendimiento from './MiRendimiento'
 import { _vaciarCacheEquipo } from './useEquipoAgregado'
 
-/** Lo que devuelve la 192 con 5 personas (ficticio). Solo agregados: ni nombres ni ventas de otros. */
+/** Lo que devuelve la 194 con 5 personas (ficticio). Solo agregados: ni nombres ni ventas de otros. */
 const EQUIPO_OK = {
   desde: '2026-01-01', hasta: '2026-01-31', k_min: 4, yo: true, personas: 5, motivo: null,
   ranking: { posicion: 2, de: 5 },
@@ -131,15 +131,15 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(queryByText('Ventas')).toBeNull()   // el empleado ya no ve ventas ₡ del local
   })
 
-  // Mig 192: el ranking y «vs general» vuelven, con lo que devuelve la base (agregados).
-  it('Resumen: ranking y «vs general» salen de la 192', async () => {
+  // Mig 194: el ranking y «vs general» vuelven, con lo que devuelve la base (agregados).
+  it('Resumen: ranking y «vs general» salen de la 194', async () => {
     const { container, findByText, findAllByText } = renderHub()
     fireEvent.click(tabsOf(container)[TAB.resumen])
     expect(await findByText(/de 5 en ventas ·/)).toBeTruthy()
     expect((await findAllByText(/vs general/)).length).toBeGreaterThan(0)
   })
 
-  it('Por día: «Yo vs restaurante» con el Prom/PAX del restaurante de la 192', async () => {
+  it('Por día: «Yo vs restaurante» con el Prom/PAX del restaurante de la 194', async () => {
     const { container, findByText, getAllByText } = renderHub()
     fireEvent.click(tabsOf(container)[TAB.dia])
     expect(await findByText(/Yo vs restaurante/)).toBeTruthy()
@@ -156,7 +156,7 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(getAllByText(/Sushi Roll/).length).toBeGreaterThan(0)
   })
 
-  it('Propinas: ICP electrónico propio + benchmark del equipo de la 192', async () => {
+  it('Propinas: ICP electrónico propio + benchmark del equipo de la 194', async () => {
     const { container, getByText, getAllByText, findByText } = renderHub()
     fireEvent.click(tabsOf(container)[TAB.propinas])
     expect(getAllByText(/ICP electrónico/).length).toBeGreaterThan(0)  // no "propinas cobradas"
@@ -191,7 +191,7 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(queryByText(/Equipo \(benchmark\)/)).toBeNull()
   })
 
-  it('sin la 192 (función no aplicada o error): avisa y no inventa comparaciones', async () => {
+  it('sin la 194 (función no aplicada o error): avisa y no inventa comparaciones', async () => {
     H.equipo = null
     const { container, findAllByText, queryAllByText } = renderHub()
     fireEvent.click(tabsOf(container)[TAB.resumen])
@@ -203,7 +203,7 @@ describe('MiRendimiento · render (salonero con match)', () => {
 describe('MiRendimiento · gerencia (manager) ve las comparaciones con el equipo', () => {
   beforeEach(() => { H.profile = { id:'u2', role:'manager', full_name:'ANA' } })
 
-  it('Por día, Resumen, Propinas y Competencias comparan con sus propios datos (sin pedir el período a la 192)', () => {
+  it('Por día, Resumen, Propinas y Competencias comparan con sus propios datos (sin pedir el período a la 194)', () => {
     const { container, getByText, getAllByText } = renderHub()
     fireEvent.click(tabsOf(container)[TAB.resumen])
     expect(getByText(/en ventas ·/)).toBeTruthy()
@@ -214,12 +214,12 @@ describe('MiRendimiento · gerencia (manager) ve las comparaciones con el equipo
     expect(getByText(/Equipo \(benchmark\)/)).toBeTruthy()
     fireEvent.click(tabsOf(container)[TAB.competencias])
     expect(getByText('Líder')).toBeTruthy()
-    // Solo «Tu lugar en el equipo» (mes a la fecha) consulta la 192; el período y el ICP no.
+    // Solo «Tu lugar en el equipo» (mes a la fecha) consulta la 194; el período y el ICP no.
     expect(H.llamadas).toHaveLength(1)
   })
 })
 
-describe('MiRendimiento · «Ver como» (owner) no consulta la 192', () => {
+describe('MiRendimiento · «Ver como» (owner) no consulta la 194', () => {
   beforeEach(() => { H.profile = { id:'u3', role:'owner', full_name:'Dueño' } })
   it('no llama a la función y no muestra «Tu lugar en el equipo»', () => {
     const { container, queryByText } = renderHub({ verComo: true })

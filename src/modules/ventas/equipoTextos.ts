@@ -1,4 +1,4 @@
-// Los textos de Mi Rendimiento cuando la comparación con el equipo (mig 192) no se puede mostrar. Personal: voseo.
+// Los textos de Mi Rendimiento cuando la comparación con el equipo (mig 194) no se puede mostrar. Personal: voseo.
 import type { EquipoAgregado } from '../../shared/api/rendimientoEquipo'
 
 export const AVISO_EQUIPO_NO_DISPONIBLE = 'La comparación con el equipo no está disponible ahora.'

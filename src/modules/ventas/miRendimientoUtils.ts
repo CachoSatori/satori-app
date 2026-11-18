@@ -324,8 +324,5 @@ export function monthLabelLong(ym: string): string {
   return `${MONTHS_LONG[idx] ?? m} ${y}`
 }
 
-/** Roles que leen las ventas del PoS de todo el equipo (mig 191). El resto ve solo lo suyo. */
+/** Roles que leen las ventas del PoS de todo el equipo (mig 191). El resto ve solo lo suyo y el equipo agregado (192). */
 export const ROLES_CON_EQUIPO: readonly string[] = ['owner', 'manager', 'contador']
-
-/** El aviso que reemplaza las comparaciones con el equipo para el personal (mig 191). */
-export const AVISO_SIN_EQUIPO = 'Por ahora ves solo tus números: la comparación con el equipo vuelve pronto, sin mostrar ventas de otros.'

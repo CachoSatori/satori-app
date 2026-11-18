@@ -1,7 +1,7 @@
 /**
  * Wrapper de datos de Mi Rendimiento ("casa del empleado").
  * Carga en paralelo:
- *   - Ventas (365d del PoS, como el módulo Ventas + product_map + metas + comps)
+ *   - Ventas (400 días del PoS: el «mes del año pasado» de Mi evolución llega a ~395; + product_map + metas + comps)
  *   - Propinas (empleado vinculado + historial de asistencia 12m) para la pestaña Propinas
  * Mantiene el bundle separado del VentasModule completo.
  *
@@ -50,7 +50,7 @@ export default function MiRendimientoWrap() {
     // Ventas: no bloquean la vista si fallan (un empleado de cocina igual ve propinas).
     // Los días salen de la MISMA carga que el módulo Ventas (el PoS, `cargarDias`), y el `pm` con
     // la misma fusión curado + familia.
-    const ventasP = Promise.all([cargarDias(365), getProductMap(), getMetas(), getComps()])
+    const ventasP = Promise.all([cargarDias(400), getProductMap(), getMetas(), getComps()])
       .then(([d, p, m, c]) => {
         if (!alive) return
         setDias(d.dias); setPm(fusionarProductMap(p, d.pm)); setMetas(m); setComps(c)

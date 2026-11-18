@@ -339,6 +339,12 @@
       "rama": "claude/propinas-solo-lo-suyo",
       "renumerada_a": "192"
     },
+    "138": {
+      "nombre": "mi_rendimiento_equipo",
+      "bloque": "club",
+      "rama": "claude/mi-rendimiento-evolucion",
+      "renumerada_a": "194"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -590,6 +596,12 @@
       "bloque": "pase",
       "rama": "claude/ventas-v2-23-tiempos",
       "origen": "136"
+    },
+    "194": {
+      "nombre": "mi_rendimiento_equipo",
+      "bloque": "pase",
+      "rama": "claude/mi-rendimiento-evolucion",
+      "origen": "138"
     }
   }
 }

@@ -5,13 +5,11 @@
 > ventas, qué hay en prod y en staging, pendientes de estabilización, seguridad abierta y notas. Más viejo: [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-18 (mañana).** `main` = `00d4e4a` (tras #284, #285 y #282). **Ledger de prod = 189** (cron jobid 10 `satori-ventas-dia-contador`, `0 13 1,16 * *` = 07:00 CR los días 1 y 16; primer envío el 1-dic). Sagrados iguales (tabla de abajo). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (los del 15–18-nov están en el proyecto privado).
-- **Entró a `main` el 17–18-nov:** #255–#258, #260, #261, #263, #265, #266, #268 (mig 185), #269, #270, #271–#273 (migs 186–188), #274, #284 (correo del contador y mig 189), #285 (resumen del cierre como función pura, sin Edge) y #282 (guía 6.13 del Club).
+**Al día: 2026-11-18 (tarde).** `main` = `9c82ee6` (tras #294, mig 193). **Ledger de prod = 193** (190 por #291, 191 por #292, 192 por #295, 193 por #294; la 194 es #296, sin firma). Cron jobid 10 `satori-ventas-dia-contador`, `0 13 1,16 * *` = 07:00 CR los días 1 y 16; primer envío el 1-dic. Sagrados iguales (tabla de abajo). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (los del 15–18-nov están en el proyecto privado).
 - **Edge de prod:** `cierre-email` **v16** (desde `f8b6c2a6`, rama de #283: resumen de ventas en el correo de cierre, remitente propio; ezbr `c222f5df…`; vuelta atrás = `b02d2841` + remitente) · `ventas-dia-contador` **v4** (desde `060b539`, rama de #281; ezbr `439b3914…`; `verify_jwt` on). El resto, como está en la tabla de Edge.
 - **Agente del PoS de prod:** `C:\satori\agente-sal` @ `89c5aa42` (pase #262 hecho el 18-nov: tarea cambiada 06:23:43, re-backfill 2024-01…2026-11 completo, N = 11.505; salón 90 d sin salonero 370 → 172). Vuelta atrás: `C:\satori\agente-d9` @ `578f38c`, con la config en `C:\satori\sal-vuelta`. Bitácora en la rama de #262 (no va a `main`).
 - **Staging:** ledger **188** (185–188 aplicadas el 18-nov 06:04 por la sesión de CC del dueño).
-- **Hallazgos nuevos (no es plata):** (1) el agente toma `clave_fe` por número de consecutivo sin filtrar el tipo de documento: tiquetes tipo 04 de mar/abr-2026 quedan con la clave de la factura 01 del mismo consecutivo (675 filas al 18-nov) y crece con cada factura nueva; arreglo en curso. (2) El reporte de ventas redondea por grupo (salonero) y después suma: el total del día puede moverse ±₡1 si cambia el salonero; arreglo propuesto: sumar y redondear por día. Detalle en [HALLAZGOS.md](HALLAZGOS.md).
-- **Cola (Menor):** `cierre_read` deja leer cierres a cualquier usuario autenticado del local (cualquiera puede disparar el correo con resumen; los datos solo llegan al dueño); la Edge del cierre lee filas crudas de 4 días.
+- Movido tal cual al [histórico](docs/historico/ESTADO-HISTORICO.md) el 18-nov (poda 15 KB): «Entró a `main` el 17–18-nov», «Hallazgos nuevos» y «Cola (Menor)» (`cierre_read`) (detalle en [HALLAZGOS.md](HALLAZGOS.md)).
 - **Abiertos sin firma:** #262 (rama del agente, no va a `main`), #259 (fast-check, 3 hallazgos `it.fails`), #257, #264, #252, #246 (SPEC Ventas v2). **Falta validación física del dueño:** #229 (en servicio), Club 186–188 y Ventas #274 en prod.
 - **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov.
 - **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
@@ -20,7 +18,7 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `00d4e4a` (#282) |
+| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `9c82ee6` (#294) |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 184 (ponerla al día: en cola) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
@@ -82,7 +80,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 ### Numeración de migraciones (regla del dueño, 08/11)
 > **Fuente de verdad:** `supabase/migraciones-reservadas.json`, que lee `supabase/migraciones.test.ts`. La bitácora larga de cada número está en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 
-1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **138**; 134, 135, 136 y 137 se reservaron para pasar directo a 190, 191, 193 y 192) · PASE A PROD **150–199** (solo renumeraciones del pase; la **190** (`pos_ventas_resumen`) está en prod desde el 18-nov; la **191** la toma `claude/pos-ventas-solo-lo-suyo` (#292, sin firma); la **192** la toma `claude/propinas-solo-lo-suyo` (#295, origen 137, sin firma); la **193** la toma `claude/ventas-v2-23-tiempos` (#294, origen 136, sin firma; provisoria: el número se fija al mergear); próximo libre **194**). La **086** queda libre.
+1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **139**; 134, 135, 136, 137 y 138 se reservaron para pasar directo a 190, 191, 193, 192 y 194) · PASE A PROD **150–199** (solo renumeraciones del pase; **190** (`pos_ventas_resumen`), **191** (#292), **192** (#295) y **193** (#294, `pos_ventas_tiempos`) en prod desde el 18-nov (ledger 193); la **194** (definitiva) es de `claude/mi-rendimiento-evolucion` (#296, origen 138, sin firma); próximo libre **195**). La **086** queda libre.
 2. Cada PR que agrega una migración actualiza esta tabla y el registro. El gate falla si no está registrada, queda fuera del bloque de su rama o repite número.
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199 (nunca a uno de creación), en el mismo PR (archivo, rollback, pruebas, scripts, fila del ledger de staging), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
@@ -147,8 +145,9 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | 133 | → 189 (cron del correo quincenal de ventas por día al contador; reservado para pasar directo a 189) |
 | 134 | → 190 (Ventas v2: `pos_ventas_resumen`, solo lectura; reservado para pasar directo a 190) |
 | 135 | → 191 (ventas del PoS: cada uno ve solo lo suyo + `pos_nombres_por_login`; reservado para pasar directo a 191; la 134 → 190 es de `claude/ventas-v2-resumen-fn`) |
-| 136 | → 193 (Ventas v2 «Tiempos»: `pos_ventas_tiempos`, `pos_ventas_internas`, `pos_mesas_internas`; reservado para pasar directo a 193, provisoria) |
+| 136 | → 193 (Ventas v2 «Tiempos»: `pos_ventas_tiempos`, `pos_ventas_internas`, `pos_mesas_internas`; reservado para pasar directo a 193; en prod) |
 | 137 | → 192 (`propinas_cada_uno_lo_suyo`, lectura de `tip_entries`; reservado para pasar directo a 192) |
+| 138 | → 194 (`mi_rendimiento_equipo`; reservado para pasar directo a 194) |
 | 150 | ← 075 |
 | 151 | ← 100 |
 | 153 | ← 096 |
@@ -190,7 +189,8 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | 190 | ← 134 (`pos_ventas_resumen`, Ventas v2 «Resumen»; en prod 18-nov por #291; PASE-190) |
 | 191 | ← 135 (cierra la fuga de la 067: personal solo lo suyo, manager sus locales; + `pos_nombres_por_login`; #292 en borrador, sin firma; PASE-191) |
 | 192 | ← 137 (`propinas_cada_uno_lo_suyo`: lectura de `tip_entries`, cada uno lo suyo; #295 en borrador, firma de permisos pendiente; PASE-192) |
-| 193 | ← 136 (`pos_ventas_tiempos`: horas de todos los canales, tiempo sentado, `pos_mesas_internas` + `pos_ventas_internas`; #294 en borrador, sin firma; provisoria: se fija al mergear; PASE-193) |
+| 193 | ← 136 (`pos_ventas_tiempos`: horas de todos los canales, tiempo sentado, `pos_mesas_internas` + `pos_ventas_internas`; #294, **en prod 18-nov** (ledger 193); PASE-193) |
+| 194 | ← 138 (`mi_rendimiento_equipo`: el equipo en agregados; definitiva, #296 sin firma; PASE-194) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 

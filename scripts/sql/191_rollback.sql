@@ -1,5 +1,5 @@
 -- Vuelta atrás de la 191 (ventas del PoS: cada uno ve solo lo suyo + pos_nombres_por_login).
--- Vuelve las tres funciones de la 067 a su cuerpo EXACTO (el de abajo es el archivo de la 067 tal cual, sin cambios) y
+-- Vuelve las tres funciones de la 067 a su cuerpo EXACTO (el de abajo es el código de la 067 tal cual, sin el encabezado) y
 -- borra las dos funciones nuevas y la fila 191 del ledger. OJO: volver atrás REABRE la fuga (cualquier rol de Mi
 -- Rendimiento ve las facturas de todos). Solo si la 191 rompe algo peor.
 -- EN EL MISMO MOMENTO: un PR que saca supabase/migrations/191_pos_ventas_solo_lo_suyo.sql de main (regla 10: si
@@ -7,35 +7,7 @@
 -- Rendimiento funcionan igual con la 067: la RPC de nombres que falta se ignora; las comparaciones quedan ocultas).
 begin;
 
--- ── Cuerpo de supabase/migrations/067_pos_ventas_lectura_equipo.sql, tal cual ──
--- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 067 · Lectura de ventas del PoS para el EQUIPO (Mi Rendimiento) — sin medios de pago ║
--- ╚══════════════════════════════════════════════════════════════════════════════════════╝
---
--- Firma de Ismael, 2026-10-30 (opción B). Las tablas `pos_ndf_*` NO se abren: sus policies de la
--- 062 (owner/manager/contador) quedan como están. Lo que se agrega son TRES funciones de lectura
--- `security definer` que:
---   · chequean el rol ADENTRO (`get_my_role()`): gerencia + contador + los roles de Mi Rendimiento;
---   · devuelven SOLO las columnas que usa el cálculo de ventas de la app (`getDiasMapDesdePos` →
---     `armarDia`, y las lentes de saloneros), medidas con datos reales y justificadas una por una;
---   · NUNCA devuelven medios de pago (efectivo/tarjeta/electrónico/depósito/cheque), vuelto,
---     dólares, cxc, `numero_pedido`, `total_fuente` ni `ingested_at`;
---   · NO devuelven `clase_ingreso`: el cálculo no lo usa. Las facturas de dueños y las cortesías
---     suman igual que hoy (la neta sale de las líneas), pero desde acá no se puede saber cuáles son.
---
--- La app usa estas funciones para TODOS los roles (un solo camino): owner/manager ven exactamente
--- lo mismo que leyendo las tablas.
---
--- Paginación: `limit`/`offset` van ADENTRO, sobre un orden total (con `id`), porque PostgREST corta
--- en `max_rows` sin avisar y `.range()` sobre el resultado de una función no garantiza el orden.
---
--- Sin acceso (rol fuera de la lista o anónimo) las funciones devuelven 0 filas, como el RLS. Para
--- distinguir «sin acceso» de «PoS vacío», `pos_ventas_latido` devuelve UNA fila a quien tiene
--- acceso (con la hora del último poll, que puede ser null) y CERO a quien no.
---
--- Re-ejecutable: `create or replace` + `revoke`/`grant`.
-
--- ── 1. Tickets cerrados de un rango ────────────────────────────────────────────────────────
+-- ── Código de supabase/migrations/067_pos_ventas_lectura_equipo.sql, tal cual (sin su encabezado de comentarios) ──
 create or replace function public.pos_ventas_tickets_rango(
   p_local  text,
   p_desde  timestamptz,
@@ -84,9 +56,6 @@ as $$
   offset greatest(coalesce(p_offset, 0), 0)
 $$;
 
--- ── 2. Líneas de un conjunto de facturas ───────────────────────────────────────────────────
--- Sin filtro de estado a propósito: «En vivo» también pide las líneas de las facturas en curso
--- (R) para medir lo provisional, y los ids ya vienen de una lectura autorizada.
 create or replace function public.pos_ventas_lineas(
   p_ticket_ids uuid[],
   p_limit      integer default 1000,
@@ -118,9 +87,6 @@ as $$
   offset greatest(coalesce(p_offset, 0), 0)
 $$;
 
--- ── 3. Latido para el equipo: SOLO la hora del último poll ────────────────────────────────
--- Una fila a quien tiene acceso (aunque el local no tenga cursor: `last_poll_at` null), cero a
--- quien no. No devuelve `last_error` ni la última factura.
 create or replace function public.pos_ventas_latido(p_local text)
 returns table (last_poll_at timestamptz)
 language sql
@@ -135,7 +101,6 @@ as $$
         ]::public.user_role[])
 $$;
 
--- ── 4. Permisos: solo usuarios logueados ───────────────────────────────────────────────────
 revoke all on function public.pos_ventas_tickets_rango(text, timestamptz, timestamptz, integer, integer) from public, anon;
 revoke all on function public.pos_ventas_lineas(uuid[], integer, integer)                             from public, anon;
 revoke all on function public.pos_ventas_latido(text)                                                  from public, anon;

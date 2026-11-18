@@ -74,27 +74,53 @@ export interface FilaDiaSemana {
   neta:         number
   /** Neta ÷ días abiertos de ese día de semana. `null` si no abrió ninguno. */
   promedio:     number | null
-  /** 100 = día promedio del período (neta ÷ días abiertos). `null` sin datos. */
-  indice:       number | null
   personas:     number
 }
 
 /** Una fila por día de semana, lunes a domingo, desde los días de Contabilidad del rango. */
 export function porDiaSemana(dias: readonly ContabilidadDay[]): FilaDiaSemana[] {
   const filas = DIAS_SEMANA_LARGO.map((nombre, dow) => ({ dow, nombre, diasAbiertos: 0, neta: 0, personas: 0 }))
-  let netaTot = 0, abiertosTot = 0
   for (const d of dias) {
     const f = filas[diaSemana(d.fecha)]
     f.neta += d.ventaNeta
     f.personas += d.pax
-    if (d.ventaNeta > 0) { f.diasAbiertos += 1; abiertosTot += 1 }
-    netaTot += d.ventaNeta
+    if (d.ventaNeta > 0) f.diasAbiertos += 1
   }
-  const promTot = abiertosTot > 0 ? netaTot / abiertosTot : null
-  return filas.map(f => {
-    const promedio = f.diasAbiertos > 0 ? f.neta / f.diasAbiertos : null
-    return { ...f, promedio, indice: promedio !== null && promTot ? (promedio / promTot) * 100 : null }
-  })
+  return filas.map(f => ({ ...f, promedio: f.diasAbiertos > 0 ? f.neta / f.diasAbiertos : null }))
+}
+
+/**
+ * El % de cada día de semana contra la misma base (pedido del dueño, 18-nov: «pensé que era simplemente poner el %
+ * con respecto a esa estadística»): promedio por día del período ÷ promedio por día del MISMO día de semana en la
+ * base − 1, × 100. `null` («—») si falta cualquiera de los dos promedios o el de la base es 0. El total compara la
+ * venta por día abierto del período con la de la base. Solo presenta: los promedios son los de `porDiaSemana` y
+ * `cifrasDelRango`.
+ */
+export function compararDiaSemana(
+  periodo: readonly FilaDiaSemana[],
+  totalPeriodo: number | null,
+  base: readonly FilaDiaSemana[] | null,
+  totalBase: number | null,
+): { porDia: (number | null)[]; total: number | null } {
+  return {
+    porDia: periodo.map((f, i) => (base ? cambioPct(f.promedio, base[i]?.promedio) : null)),
+    total: base ? cambioPct(totalPeriodo, totalBase) : null,
+  }
+}
+
+/** «+4,2 %» / «−8,0 %» / «0,0 %», un decimal con coma y signo; «—» si no hay con qué comparar. */
+export function fmtPctSigno(x: number | null): string {
+  if (x === null || !Number.isFinite(x)) return '—'
+  const r = Math.round(x * 10) / 10
+  if (r === 0) return '0,0 %'
+  return `${r > 0 ? '+' : '−'}${Math.abs(r).toFixed(1).replace('.', ',')} %`
+}
+
+/** Clase de color del %: verde si sube, rojo si baja, gris si no hay dato o es 0,0 %. */
+export function claseDeCambio(x: number | null): 'sube' | 'baja' | 'gris' {
+  if (x === null || !Number.isFinite(x)) return 'gris'
+  const r = Math.round(x * 10) / 10
+  return r > 0 ? 'sube' : r < 0 ? 'baja' : 'gris'
 }
 
 /**

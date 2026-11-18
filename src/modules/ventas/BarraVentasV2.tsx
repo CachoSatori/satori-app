@@ -1,22 +1,29 @@
-// Ventas v2 · la barra global: Local · Período (con flechas) · Comparar con (dos bases).
+// Ventas v2 · la barra global: Local · Período (con flechas) · Comparar con (uno solo).
 // El estado vive en la URL (`barraVentasV2.ts`); este componente solo lo pinta y lo cambia.
-import type { BaseId, PeriodoV2, TipoPeriodoV2 } from './periodos'
-import { BASES } from './periodos'
-import { OPCIONES_PERIODO, elegirBase, rotuloBase, moverPeriodo, periodoEnPalabras, type EstadoBarra } from './barraVentasV2'
+// Simplificada el 18-nov (pedido del dueño: «lo que más confunde es el menú principal»): un solo «Período»
+// (Semana / Quincena / Mes / Rango; el Resumen suma «Ayer») y un solo «Comparar con» (anterior, año pasado o los dos).
+import type { PeriodoV2, TipoPeriodoV2 } from './periodos'
+import {
+  OPCIONES_COMPARAR, PERIODOS_RESUMEN, ROTULO_PERIODO, basesDe, cambiarTipo, moverPeriodo, periodoEnPalabras,
+  rotuloComparar, type Comparar, type EstadoBarra,
+} from './barraVentasV2'
 import type { LocalVentas } from './resumenV2Datos'
 
 interface Props {
   estado:   EstadoBarra
   periodo:  PeriodoV2
   locales:  LocalVentas[]
+  /** Los períodos que ofrece esta pestaña (por defecto, los del Resumen). */
+  periodos?: readonly TipoPeriodoV2[]
   aviso?:   string | null
   onCambio: (e: EstadoBarra) => void
 }
 
-export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambio }: Props) {
-  const anterior = moverPeriodo(estado, periodo, -1)
-  const siguiente = moverPeriodo(estado, periodo, 1)
+export default function BarraVentasV2({ estado, periodo, locales, periodos = PERIODOS_RESUMEN, aviso, onCambio }: Props) {
+  const anterior = moverPeriodo(estado, periodo, -1, periodos)
+  const siguiente = moverPeriodo(estado, periodo, 1, periodos)
   const local = estado.local ?? locales[0]?.id ?? ''
+  const valorPeriodo = estado.tipo === 'mesALaFecha' ? 'mes' : estado.tipo
   return (
     <div className="vt2-barra" role="group" aria-label="Período y comparación">
       <div className="vt2-barra-fila">
@@ -31,14 +38,9 @@ export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambi
         )}
         <label className="vt2-campo">
           <span>Período</span>
-          <select className="date-filter active" value={estado.tipo} aria-label="Período"
-            onChange={e => {
-              const tipo = e.target.value as TipoPeriodoV2
-              onCambio(tipo === 'rango'
-                ? { ...estado, tipo, dia: undefined, desde: estado.desde ?? periodo.desde, hasta: estado.hasta ?? periodo.hasta }
-                : { ...estado, tipo, dia: undefined, desde: undefined, hasta: undefined })
-            }}>
-            {OPCIONES_PERIODO.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+          <select className="date-filter active" value={valorPeriodo} aria-label="Período"
+            onChange={e => onCambio(cambiarTipo(estado, periodo, e.target.value as TipoPeriodoV2))}>
+            {periodos.map(id => <option key={id} value={id}>{ROTULO_PERIODO[id]}</option>)}
           </select>
         </label>
         <div className="vt2-flechas">
@@ -59,17 +61,17 @@ export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambi
             </label>
           </>
         )}
-        {estado.tipo !== 'hoy' && (['A', 'B'] as const).map(cual => (
-          <label className="vt2-campo" key={cual}>
-            <span>{cual === 'A' ? 'Comparar con' : 'y con'}</span>
-            <select className="date-filter" aria-label={`Base ${cual}`} value={cual === 'A' ? estado.baseA : estado.baseB}
-              onChange={e => onCambio(elegirBase(estado, cual, e.target.value as BaseId))}>
-              {BASES.map(id => <option key={id} value={id}>{rotuloBase(periodo, id)}</option>)}
+        {estado.tipo !== 'hoy' && (
+          <label className="vt2-campo">
+            <span>Comparar con</span>
+            <select className="date-filter" aria-label="Comparar con" value={estado.comparar}
+              onChange={e => onCambio({ ...estado, comparar: e.target.value as Comparar })}>
+              {OPCIONES_COMPARAR.map(c => <option key={c} value={c}>{rotuloComparar(periodo, c)}</option>)}
             </select>
           </label>
-        ))}
+        )}
       </div>
-      <div className="vt2-barra-palabras">{periodoEnPalabras(periodo, estado.baseA, estado.baseB)}</div>
+      <div className="vt2-barra-palabras">{periodoEnPalabras(periodo, basesDe(estado.comparar))}</div>
       {aviso && <div className="vt2-aviso" role="status">{aviso}. Se muestra «Ayer».</div>}
     </div>
   )

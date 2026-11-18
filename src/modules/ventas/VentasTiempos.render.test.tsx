@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 //
 // «Tiempos» v2 en el DOM: la fila TOTAL del día de semana, el turno y cada quincena dan lo mismo que
-// Contabilidad para el mismo período; abre en «Mes a la fecha»; las bases tienen rótulo concreto; si la
-// 080 falla, el resto se ve; «Hoy» manda a En vivo. Datos ficticios. Reloj fijo DE NOCHE en CR
+// Contabilidad para el mismo período; abre en «Mes» (el en curso, a la fecha); el % del día de semana contra el
+// mismo día de semana de cada base, «—» sin datos; la barra simple; si la 080 falla, el resto se ve. Datos ficticios. Reloj fijo DE NOCHE en CR
 // (23:30 del 18-nov = 05:30 UTC del 19).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useEffect } from 'react'
@@ -61,6 +61,8 @@ vi.mock('./tiemposV2Datos', () => ({
 import VentasTiempos from './VentasTiempos'
 import { armarDiasMap } from './ventasDiasDesdePos'
 import { fi, getContabilidadDays, totalesContabilidad } from './ventasUtils'
+import { diaSemana } from './periodos'
+import { fmtPctSigno } from './tiemposV2'
 
 const ultima = { url: '' }
 function Url() {
@@ -70,11 +72,12 @@ function Url() {
 }
 const abrir = (url: string) => render(<MemoryRouter initialEntries={[url]}><VentasTiempos /><Url /></MemoryRouter>)
 
-function contabilidad(desde: string, hasta: string) {
+function diasConta(desde: string, hasta: string) {
   const { dias } = armarDiasMap(fx.tickets, fx.lineas, { desde: '2026-09-01', hasta: '2026-11-17' }, { uploadedAt: 'x', avisar: () => {} })
-  return totalesContabilidad([9, 10, 11].flatMap(m => getContabilidadDays(2026, m, dias, {}))
-    .filter(d => d.fecha >= desde && d.fecha <= hasta))
+  return [9, 10, 11].flatMap(m => getContabilidadDays(2026, m, dias, {})).filter(d => d.fecha >= desde && d.fecha <= hasta)
 }
+const contabilidad = (desde: string, hasta: string) => totalesContabilidad(diasConta(desde, hasta))
+const netaTotal = () => document.querySelector('[data-fila="total"] [data-neta="total"]')!.textContent
 const celdas = (sel: string) => [...document.querySelector(sel)!.querySelectorAll('td')].map(td => td.textContent)
 
 beforeEach(() => {
@@ -94,7 +97,7 @@ describe('VentasTiempos', () => {
     abrir('/ventas?tab=tiempos')
     await screen.findByRole('table', { name: 'Día de semana' })
     const tot = contabilidad('2026-11-01', '2026-11-17')
-    expect(celdas('[data-fila="total"]')[2]).toBe(fi(tot.ventaNeta))
+    expect(netaTotal()).toBe(fi(tot.ventaNeta))
     expect(celdas('[data-fila="total-turno"]')[1]).toBe(fi(tot.ventaNeta))
     expect(document.querySelector('[data-nota="internas"]')).toBeNull()
     expect(document.body.textContent).toContain('Mapa por hora · todos los canales')
@@ -107,9 +110,71 @@ describe('VentasTiempos', () => {
     expect(document.querySelector('[data-dow="0"]')!.textContent).toContain('Lunes')
     expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.arrayContaining([{ desde: '2026-11-01', hasta: '2026-11-17' }]))
     expect(tiempos).toHaveBeenCalledWith('santa-teresa', expect.objectContaining({ desde: '2026-11-01', hasta: '2026-11-17' }))
-    // Rótulos concretos en la barra y en la tabla.
-    expect((screen.getByLabelText('Base A') as HTMLSelectElement).selectedOptions[0].textContent).toBe('Mes anterior a la misma fecha')
-    expect(document.body.textContent).toMatch(/Índice · mes anterior/)
+    // Barra simple: «Mes» elegido, «Los dos» por defecto, con el nombre concreto de cada base.
+    expect((screen.getByLabelText('Período') as HTMLSelectElement).selectedOptions[0].textContent).toBe('Mes')
+    const cmp = screen.getByLabelText('Comparar con') as HTMLSelectElement
+    expect(cmp.selectedOptions[0].textContent).toBe('Los dos')
+    expect([...cmp.options].map(o => o.textContent)).toEqual(['Mes anterior a la misma fecha', 'Año pasado, mismo día de semana', 'Los dos'])
+    expect(screen.queryByLabelText('Base B')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/Índice/)
+  })
+
+  it('día de semana: Día · Promedio por día · vs cada base (%) · Venta por persona; el % es contra el mismo día de semana', async () => {
+    abrir('/ventas?tab=tiempos')
+    const tabla = await screen.findByRole('table', { name: 'Día de semana' })
+    expect([...tabla.querySelectorAll('th')].map(t => t.textContent)).toEqual(
+      ['Día', 'Promedio por día', 'vs mes anterior a la misma fecha', 'vs año pasado, mismo día de semana', 'Venta por persona'])
+    // A mano, desde Contabilidad: promedio por día abierto de cada día de semana, nov 1–17 contra oct 1–17.
+    const prom = (desde: string, hasta: string) => {
+      const ds = diasConta(desde, hasta)
+      return [0, 1, 2, 3, 4, 5, 6].map(dow => {
+        const xs = ds.filter(d => diaSemana(d.fecha) === dow && d.ventaNeta > 0)
+        return xs.length ? xs.reduce((s, d) => s + d.ventaNeta, 0) / xs.length : null
+      })
+    }
+    const nov = prom('2026-11-01', '2026-11-17'), oct = prom('2026-10-01', '2026-10-17')
+    for (let dow = 0; dow < 7; dow++) {
+      const fila = document.querySelector(`[data-dow="${dow}"]`)!
+      const esperado = nov[dow] !== null && oct[dow] ? fmtPctSigno((nov[dow]! / oct[dow]! - 1) * 100) : '—'
+      expect(fila.querySelector('[data-vs="anteriorEquivalente"]')!.textContent).toBe(esperado)
+      // El fixture no tiene 2025: sin datos para comparar → «—», en gris.
+      expect(fila.querySelector('[data-vs="anioMismoDiaSemana"]')!.textContent).toBe('—')
+      expect(fila.querySelector('[data-vs="anioMismoDiaSemana"]')!.className).toContain('gris')
+      expect(fila.querySelector('[data-detalle="dia"]')!.textContent).toMatch(/^\d+ días? abiertos? · venta neta /)
+    }
+    const conSigno = document.querySelector('[data-dow="0"] [data-vs="anteriorEquivalente"]')!
+    expect(conSigno.textContent).toMatch(/^[+−]\d+,\d %$|^0,0 %$|^—$/)
+    expect(conSigno.className).toMatch(conSigno.textContent!.startsWith('+') ? /sube/ : conSigno.textContent!.startsWith('−') ? /baja/ : /gris/)
+    // TOTAL: venta por día abierto del período contra la de la base.
+    const tn = diasConta('2026-11-01', '2026-11-17').filter(d => d.ventaNeta > 0)
+    const to = diasConta('2026-10-01', '2026-10-17').filter(d => d.ventaNeta > 0)
+    const pn = tn.reduce((s, d) => s + d.ventaNeta, 0) / tn.length, po = to.reduce((s, d) => s + d.ventaNeta, 0) / to.length
+    expect(document.querySelector('[data-fila="total"] [data-vs="anteriorEquivalente"]')!.textContent).toBe(fmtPctSigno((pn / po - 1) * 100))
+    expect(document.querySelector('[data-nota="que-compara"]')!.textContent).toBe(
+      'El % compara el promedio por día de cada día de semana con el del mismo día de semana del mes anterior a la misma fecha y del año pasado, mismo día de semana.')
+  })
+
+  it('«Comparar con» una sola base: una sola columna de %, en la URL y sin volver a leer', async () => {
+    abrir('/ventas?tab=tiempos')
+    await screen.findByRole('table', { name: 'Día de semana' })
+    const llamadas = cargar.mock.calls.length
+    fireEvent.change(screen.getByLabelText('Comparar con'), { target: { value: 'anterior' } })
+    await vi.waitFor(() => expect(ultima.url).toContain('c=anterior'))
+    expect(document.querySelectorAll('[data-dow="0"] [data-vs]')).toHaveLength(1)
+    expect(document.querySelector('[data-quincena="2026-11-01"] [data-vs="anioMismoDiaSemana"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('contra el año pasado')
+    expect(cargar.mock.calls.length).toBe(llamadas)
+  })
+
+  it('barra simple: Período = Semana / Quincena / Mes / Rango; Desde y Hasta solo con Rango', async () => {
+    abrir('/ventas?tab=tiempos')
+    await screen.findByRole('table', { name: 'Día de semana' })
+    expect([...(screen.getByLabelText('Período') as HTMLSelectElement).options].map(o => o.textContent)).toEqual(['Semana', 'Quincena', 'Mes', 'Rango'])
+    expect(screen.queryByLabelText('Desde')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Período'), { target: { value: 'rango' } })
+    await vi.waitFor(() => expect(ultima.url).toContain('p=rango'))
+    expect(screen.getByLabelText('Desde')).toBeTruthy()
+    expect(screen.getByLabelText('Hasta')).toBeTruthy()
   })
 
   it('quincenas: 12 filas; la 1.ª de noviembre = Contabilidad del 1 al 15; la de ahora va a la fecha', async () => {
@@ -133,7 +198,7 @@ describe('VentasTiempos', () => {
     expect(document.querySelectorAll('.vt2t-cal .dia.mejor')).toHaveLength(1)
     expect(document.body.textContent).toMatch(/Mejor día: 2026-10-\d\d/)
     const tot = contabilidad('2026-10-01', '2026-10-31')
-    expect(celdas('[data-fila="total"]')[2]).toBe(fi(tot.ventaNeta))
+    expect(netaTotal()).toBe(fi(tot.ventaNeta))
   })
 
   it('sin la 193 (base vieja): turno por la 080 = Contabilidad, mapa solo de salón, sin tiempo sentado', async () => {
@@ -141,7 +206,7 @@ describe('VentasTiempos', () => {
     abrir('/ventas?tab=tiempos')
     await screen.findByRole('table', { name: 'Día de semana' })
     const tot = contabilidad('2026-11-01', '2026-11-17')
-    expect(celdas('[data-fila="total"]')[2]).toBe(fi(tot.ventaNeta))
+    expect(netaTotal()).toBe(fi(tot.ventaNeta))
     expect(celdas('[data-fila="total-turno"]')[1]).toBe(fi(tot.ventaNeta))
     expect(turnos).toHaveBeenCalled()
     expect(document.body.textContent).toContain('Mapa por hora · solo salón')
@@ -157,10 +222,10 @@ describe('VentasTiempos', () => {
     expect(screen.getByRole('table', { name: 'Quincenas' })).toBeTruthy()
   })
 
-  it('«Hoy» no lee nada y lleva a En vivo', async () => {
+  it('un link viejo con «Hoy» o «Temporada» abre en «Mes» (la barra ya no los ofrece)', async () => {
     abrir('/ventas?tab=tiempos&p=hoy')
-    fireEvent.click(await screen.findByRole('button', { name: /Ir a En vivo/ }))
-    expect(cargar).not.toHaveBeenCalled()
-    await vi.waitFor(() => expect(ultima.url).toContain('tab=envivo'))
+    await screen.findByRole('table', { name: 'Día de semana' })
+    expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.arrayContaining([{ desde: '2026-11-01', hasta: '2026-11-17' }]))
+    expect(screen.queryByRole('button', { name: /Ir a En vivo/ })).toBeNull()
   })
 })

@@ -95,20 +95,26 @@ describe('VentasResumen', () => {
     expect((document.querySelector('details.vt2-detalle') as HTMLDetailsElement).open).toBe(false)
   })
 
-  it('«Hoy» no lee nada y lleva a En vivo', async () => {
+  it('un link viejo con «Hoy» abre en «Ayer» (la barra ya no ofrece Hoy: se mira en En vivo)', async () => {
     abrir('/ventas?tab=resumen&p=hoy')
-    fireEvent.click(await screen.findByRole('button', { name: /Ir a En vivo/ }))
-    expect(cargar).not.toHaveBeenCalled()
-    await vi.waitFor(() => expect(ultima.url).toContain('tab=envivo'))
+    await screen.findByText(/Ayer \(2026-11-17\): mesas sin pax/)
+    expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.objectContaining({ tipo: 'ayer' }))
+    expect([...(screen.getByLabelText('Período') as HTMLSelectElement).options].map(o => o.textContent))
+      .toEqual(['Ayer', 'Semana', 'Quincena', 'Mes', 'Rango'])
+    expect((screen.getByRole('button', { name: 'Período siguiente' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('cambiar la base B a «mismas fechas» queda en la URL y cambia el texto, sin volver a leer', async () => {
+  it('«Comparar con» una sola base: cada cifra con un solo %, en la URL y sin volver a leer', async () => {
     abrir('/ventas?tab=resumen&p=mesALaFecha')
     await screen.findByRole('table', { name: 'Detalle por día' })
+    expect(document.querySelectorAll('[data-cifra="ventaNeta"] .vt2-delta')).toHaveLength(2)
     const llamadas = cargar.mock.calls.length
-    fireEvent.change(screen.getByLabelText('Base B'), { target: { value: 'anioMismasFechas' } })
-    await vi.waitFor(() => expect(ultima.url).toContain('b=anioMismasFechas'))
-    expect(document.body.textContent).toContain('contra el año pasado, mismas fechas (1–17 nov 2025)')
+    fireEvent.change(screen.getByLabelText('Comparar con'), { target: { value: 'anterior' } })
+    await vi.waitFor(() => expect(ultima.url).toContain('c=anterior'))
+    expect(document.querySelectorAll('[data-cifra="ventaNeta"] .vt2-delta')).toHaveLength(1)
+    expect(document.querySelector('[data-cifra="ventaNeta"] .vt2-delta')!.textContent).toContain('vs mes anterior a la misma fecha (1–17 oct)')
+    expect(document.body.textContent).not.toContain('contra el año pasado')
+    expect(screen.queryByLabelText('Base B')).toBeNull()
     expect(cargar.mock.calls.length).toBe(llamadas)
   })
 

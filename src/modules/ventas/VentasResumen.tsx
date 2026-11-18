@@ -9,7 +9,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { dayOfWeek, dowLabel, fi } from './ventasUtils'
 import BarraVentasV2 from './BarraVentasV2'
-import { baseConFechas, escribirBarra, fechasDeBase, leerBarra, nombreBase, periodoDeBarra, rotuloBase } from './barraVentasV2'
+import { baseConFechas, basesDe, escribirBarra, fechasDeBase, leerBarra, nombreBase, periodoDeBarra, rotuloBase } from './barraVentasV2'
 import { BASES, fechasCortas, sumarDias, type BaseId } from './periodos'
 import { mesDe, proyectarMes, rangoDeLecturaProyeccion, type Proyeccion } from './proyeccion'
 import type { Meta } from '../../shared/types/ventas'
@@ -40,7 +40,7 @@ export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
   const role = profile?.role ?? ''
   const [sp, setSp] = useSearchParams()
   const estado = useMemo(() => leerBarra(sp), [sp])
-  // El período depende solo de tipo y fechas: cambiar de base (A/B) no lo rehace ni vuelve a leer.
+  // El período depende solo de tipo y fechas: cambiar «Comparar con» no lo rehace ni vuelve a leer.
   const { tipo, dia, desde, hasta } = estado
   const { periodo, aviso } = useMemo(() => periodoDeBarra({ tipo, dia, desde, hasta }), [tipo, dia, desde, hasta])
 
@@ -58,7 +58,6 @@ export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
   const clave = `${local}|${periodo.tipo}|${periodo.desde}|${periodo.hasta}`
   useEffect(() => {
     const p = periodo
-    if (p.tipo === 'hoy') return
     let vivo = true
     cargarLecturaResumen(local, p)
       .then(l => { if (vivo) setLectura({ clave, l }) })
@@ -81,19 +80,6 @@ export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
 
   const barra = <BarraVentasV2 estado={estado} periodo={periodo} locales={locales} aviso={aviso} onCambio={cambiar} />
 
-  if (periodo.tipo === 'hoy') {
-    return (
-      <div className="vt-section">
-        {barra}
-        <div className="vt2-hoy">
-          Hoy está en curso y no entra en las comparaciones. El servicio de hoy, contra la misma hora, se mira en «En vivo».
-          {' '}<button type="button" className="vt-period-btn active"
-            onClick={() => { const n = new URLSearchParams(sp); n.set('tab', 'envivo'); setSp(n) }}>Ir a En vivo →</button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="vt-section">
       {barra}
@@ -103,7 +89,7 @@ export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
           Leyendo las ventas del PoS{periodo.dias > 62 ? ' (período largo: puede tardar unos segundos)' : ''}…
         </div>
       )}
-      {datos && <Contenido periodo={periodo} datos={datos} baseA={estado.baseA} baseB={estado.baseB}
+      {datos && <Contenido periodo={periodo} datos={datos} bases={basesDe(estado.comparar)}
         nombres={lectura?.l.nombres ?? {}} abrirDetalle={role === 'contador'}
         meta={<MetaDelMes local={local} N={periodo.N} ancla={periodo.ancla} metas={metas} />} />}
     </div>
@@ -113,17 +99,20 @@ export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
 interface ContenidoProps {
   periodo: ReturnType<typeof periodoDeBarra>['periodo']
   datos: { p: CifrasRango; bases: Record<BaseId, CifrasRango | null>; alerta: ReturnType<typeof alertaDeAyer> }
-  baseA: BaseId
-  baseB: BaseId
+  /** Las bases que se muestran (una o las dos), en orden. */
+  bases: BaseId[]
   nombres: Record<string, string>
   abrirDetalle: boolean
   meta?: React.ReactNode
 }
 
-function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle, meta }: ContenidoProps) {
+function Contenido({ periodo, datos, bases: visibles, nombres, abrirDetalle, meta }: ContenidoProps) {
   const { p, bases, alerta } = datos
-  const A = bases[baseA], B = bases[baseB]
-  const cmpA = compararCifras(p, A), cmpB = compararCifras(p, B)
+  const cmps = visibles.map(id => ({ id, cmp: compararCifras(p, bases[id]) }))
+  const valores = compararCifras(p, null)
+  // El gráfico dibuja la última base elegida (con «Los dos», la del año pasado, como antes).
+  const baseGrafico = visibles[visibles.length - 1]
+  const enFrase = (id: BaseId) => ({ id, cifras: bases[id], nombre: { ...nombreBase(periodo, id), fechas: fechasDeBase(periodo, id) } })
   const calidad = avisoCalidad(p)
 
   const exportar = () => {
@@ -135,16 +124,14 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle, meta }
 
   return (
     <>
-      <p className="vt2-bajada">{bajada(p,
-        { id: baseA, cifras: A, nombre: { ...nombreBase(periodo, baseA), fechas: fechasDeBase(periodo, baseA) } },
-        { id: baseB, cifras: B, nombre: { ...nombreBase(periodo, baseB), fechas: fechasDeBase(periodo, baseB) } })}</p>
+      <p className="vt2-bajada">{bajada(p, enFrase(visibles[0]), visibles[1] ? enFrase(visibles[1]) : undefined)}</p>
 
       <div className="vt-kpi-grid vt2-cifras">
         {CIFRAS.map((c, i) => (
           <div className={`vt-kpi ${c.id === 'ventaNeta' ? 'green' : ''}`} key={c.id} data-cifra={c.id}>
             <div className="vt-kpi-label">{c.label}</div>
-            <div className="vt-kpi-val">{fmtCifra(c.id, cmpA[i].valor)}</div>
-            {[{ cmp: cmpA[i], id: baseA }, { cmp: cmpB[i], id: baseB }].map(({ cmp, id }) => (
+            <div className="vt-kpi-val">{fmtCifra(c.id, valores[i].valor)}</div>
+            {cmps.map(({ cmp: todas, id }) => ({ cmp: todas[i], id })).map(({ cmp, id }) => (
               <div key={id} className={`vt-kpi-delta vt2-delta ${cmp.cambio === null || cmp.muestraChica || casiCero(cmp.cambio) ? 'gris' : cmp.cambio >= 0 ? 'sube' : 'baja'}`}
                 title={periodo.bases[id]?.rotulo ?? periodo.motivos[id] ?? ''}>
                 {cmp.cambio === null ? 'sin comparación' : `${cmp.muestraChica || casiCero(cmp.cambio) ? '' : cmp.cambio >= 0 ? '▲ ' : '▼ '}${fmtPct(cmp.cambio)}`}
@@ -166,7 +153,7 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle, meta }
         ))}
       </div>
 
-      {[baseA, baseB].map(id => (!periodo.bases[id] || periodo.bases[id]?.notaLargo || periodo.bases[id]?.nota) && (
+      {visibles.map(id => (!periodo.bases[id] || periodo.bases[id]?.notaLargo || periodo.bases[id]?.nota) && (
         <div key={id} className="vt2-nota">
           {rotuloBase(periodo, id)}: {periodo.bases[id]
             ? [periodo.bases[id]!.notaLargo, periodo.bases[id]!.nota].filter(Boolean).join(' · ')
@@ -185,7 +172,7 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle, meta }
 
       <AlertaAyer alerta={alerta} nombres={nombres} dia={periodo.N} />
 
-      <Grafico p={p} base={B} desdeBase={periodo.bases[baseB]?.desde ?? null} rotuloBase={baseConFechas(periodo, baseB)} />
+      <Grafico p={p} base={bases[baseGrafico]} desdeBase={periodo.bases[baseGrafico]?.desde ?? null} rotuloBase={baseConFechas(periodo, baseGrafico)} />
 
       <details className="vt2-detalle" open={abrirDetalle}>
         <summary>Detalle por día (igual que Contabilidad)</summary>

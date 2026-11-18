@@ -54,7 +54,7 @@ describe('rótulos de la base A (período anterior equivalente), período por pe
     const tipos = ['ayer', 'semana', 'quincena', 'mesALaFecha', 'mes', 'anioALaFecha', 'temporada'] as const
     for (const tipo of tipos) {
       const p = per({ tipo })
-      expect(periodoEnPalabras(p, 'anteriorEquivalente', 'anioMismoDiaSemana')).not.toMatch(/período anterior/i)
+      expect(periodoEnPalabras(p, ['anteriorEquivalente', 'anioMismoDiaSemana'])).not.toMatch(/período anterior/i)
     }
   })
 })

@@ -5,26 +5,25 @@
 > ventas, qué hay en prod y en staging, pendientes de estabilización, seguridad abierta y notas. Más viejo: [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-17, ~07:00 hora de Costa Rica.** `main` = `2dd942b` (#254; antes #253 `14cc9bd`, #251 y #250 `c775b3d`). **Ledger de prod = 184** (verificado 17-nov 06:3x). Sagrados iguales (tabla de abajo, sin cambios). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (el del 15/16-nov está en el proyecto privado).
-- **Validación física del dueño OK:** #244, #247, Marcadores «todas las líneas», #234, #238, #225, #226 y #239. **Falta:** #229 (en servicio con un socio real). #222 y #220: a confirmar contra el handoff privado.
-- **Edge en prod:** `monthly-report` v23, `cierre-email` v14, `pago-notificar` v14. Sin prueba funcional hasta el próximo cierre o pago. Los PRs #242, #243, #245 y #241 siguen abiertos: el código de Edge no va a `main` (regla 2; se resuelve con A05).
-- **Cron:** job 4 (quincena) aplicado el 16-nov 22:24, **NO volver a aplicar**. Job 8 (Club, `15 9 * * *`) corrió OK el 17-nov; repetir la verificación el 23-nov.
-- **Método nuevo (#253)** y **guarda de checks protegidos en modo observar (#254)** ya en `main`.
-- **Hoy, agente D9 (#252):** parte A de día, fuera de 15:50–19:00; parte B (backfill del descuento por línea) de 00:00 a 06:00.
-- **Ventas v2 (SPEC en PR #246):** D1 = A con pestañas Resumen · Productos · Equipo · Tiempos · Regalías; D2, D3 y D10 = A. Fase 1.1 en curso. D4–D8 abiertas.
-- **Otros pendientes:** reintentar el `drop` del índice de la v1 de la 183 en staging (`pos_ndf_tickets_local_fecha_efectiva_idx`; va por sesión de CC) · #231, #232 y #235 sin entrar · `extract-document` en staging: falta prueba funcional.
-- Local Club sigue en 15 % hasta el lanzamiento; todo se piensa multi-local.
-- **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403/000): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Workers Builds: satori-club-api».
+**Al día: 2026-11-17, ~23:40 hora de Costa Rica.** `main` = `1554105` (#274). **Ledger de prod = 188** (verificado 17-nov ~23:20). Sagrados iguales (tabla de abajo). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (los del 15–17-nov están en el proyecto privado).
+- **Entró hoy a `main`:** #255, #256, #258 (motor de períodos e indicadores de Ventas v2), #260 (guarda de propinas sin cobrador), #261 y #263 (usuarios de prueba en staging; el clon ya no copia claves), #265 y #266 (cambiar contraseña + medidor), #268 (mig 185, pedir cambio de contraseña), #269 (Daruma e íconos PWA), #270 («¿Olvidaste tu contraseña?»), #271, #272 y #273 (migs 186, 187 y 188 del Club, humo de prod OK en las tres), #274 (Ventas v2 fases 0.2 y 1.3).
+- **Validación física del dueño OK:** #244, #247, Marcadores, #234, #238, #225, #226, #239, #260 (staging) y **#270 en prod** (recupero completo con su correo, 17-nov 23:09). **Falta:** #229 (en servicio), Club 186–188 y Ventas #274 en prod.
+- **Correo:** dominio `satoricostarica.com` **verificado en Resend** (DNS en SiteGround: `resend._domainkey`, MX y SPF de `send`). Supabase Auth de prod usa SMTP propio (remitente `no-responder@`), plantilla «Reset password» en español, enlace de 1 h. **P0:** pasar `pago-notificar`, `cierre-email` y `monthly-report` al remitente propio (ver PROMPT-CONTINUACION 4c).
+- **Agente D9 en la PC del PoS:** `C:\satori\agente-d9` @`578f38c` (vuelta atrás intacta en `agente-prod-5da233a`). Backfill hecho. 17-nov: 13 tickets cerrados, 5 con descuento, 0 negativos o nulos.
+- **Mañana (18-nov), con el dueño:** pase del salonero por líneas (#262) antes de las 14:00 · firma de #276 (correo quincenal al contador, mig 189) + deploy de su Edge · firma del cambio de remitente.
+- **Abiertos sin firma:** #276, #262, #259 (fast-check, 3 hallazgos `it.fails`), #257, #264, #252, #246 (SPEC Ventas v2). Correos #241–#245 y #235: el código de Edge entra con el ítem 11 (A05). #275 cerrado (reemplazado por #276).
+- **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov.
+- **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 
 > **Definition of Done:** ninguna entrega se cierra sin ⚡ARRANQUE al día (mismo PR o PR de docs inmediato). **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se corrige el archivo.
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `2dd942b` (#254) |
-| `staging` | sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 184 |
+| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `1554105` (#274) |
+| `staging` | sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 184 (ponerla al día: en cola) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
-| Gate de `main` (17/11 02:21) | vitest 2653 pasan / 4 skip · eslint 80 (tope 83) · club-web 176 pruebas, build OK |
+| Gate de `main` (17/11 23:23) | vitest 2933 pasan / 4 skip · eslint 80 (tope 83) · build OK |
 | Merges (regla D1) | libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño en el momento |
 
 **Sagrados (por hash de blob):**
@@ -81,7 +80,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 ### Numeración de migraciones (regla del dueño, 08/11)
 > **Fuente de verdad:** `supabase/migraciones-reservadas.json`, que lee `supabase/migraciones.test.ts`. La bitácora larga de cada número está en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 
-1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **130**) · PASE A PROD **150–199** (solo renumeraciones del pase; próximo **186**). La **086** queda libre.
+1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **130**) · PASE A PROD **150–199** (solo renumeraciones del pase; la **189** está tomada por #276, sin firma; próximo libre **190**). La **086** queda libre.
 2. Cada PR que agrega una migración actualiza esta tabla y el registro. El gate falla si no está registrada, queda fuera del bloque de su rama o repite número.
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199 (nunca a uno de creación), en el mismo PR (archivo, rollback, pruebas, scripts, fila del ledger de staging), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
@@ -140,9 +139,9 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 127 | → 182 |
 | 128 | → 183 |
 | 129 | → 184 |
-| 131 | → 187 (retos: un local por reto + tope de 3 armados por año por local; PR en borrador, sin firma; va después de la 186) |
-| 130 | → 186 (cumpleaños: el owner deshace «enviado»; PR en borrador, sin firma) |
-| 132 | → 188 (getEdadSocio por función con control de local; PR en borrador, sin firma; va después de la 186 y la 187) |
+| 130 | → 186 (cumpleaños: el owner deshace «enviado»; #271, en prod 17-nov) |
+| 131 | → 187 (retos: un local por reto + tope de 3 armados por año por local; #272, en prod 17-nov) |
+| 132 | → 188 (getEdadSocio por función con control de local; #273, en prod 17-nov) |
 | 150 | ← 075 |
 | 151 | ← 100 |
 | 153 | ← 096 |
@@ -176,10 +175,10 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 182 | ← 127 |
 | 183 | ← 128 |
 | 184 | ← 129 |
-| 185 | ← 099 (en PR, sin firma; entra a prod por merge → Branching) |
-| 187 | ← 131 (en PR, sin firma; después de la 186; entra a prod por merge → Branching) |
-| 186 | ← 130 (en PR, sin firma; entra a prod por merge → Branching) |
-| 188 | ← 132 (en PR, sin firma; después de la 186 y la 187; entra a prod por merge → Branching) |
+| 185 | ← 099 (#268, en prod 17-nov) |
+| 186 | ← 130 (#271, en prod 17-nov) |
+| 187 | ← 131 (#272, en prod 17-nov) |
+| 188 | ← 132 (#273, en prod 17-nov) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 

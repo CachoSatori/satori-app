@@ -5,13 +5,14 @@
 > ventas, qué hay en prod y en staging, pendientes de estabilización, seguridad abierta y notas. Más viejo: [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-17, ~23:40 hora de Costa Rica.** `main` = `1554105` (#274). **Ledger de prod = 188** (verificado 17-nov ~23:20). Sagrados iguales (tabla de abajo). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (los del 15–17-nov están en el proyecto privado).
+**Al día: 2026-11-18.** `main` = `b3110c0` (#277). **Ledger de prod = 188** (verificado 17-nov ~23:20). Sagrados iguales (tabla de abajo). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (los del 15–17-nov están en el proyecto privado).
 - **Entró hoy a `main`:** #255, #256, #258 (motor de períodos e indicadores de Ventas v2), #260 (guarda de propinas sin cobrador), #261 y #263 (usuarios de prueba en staging; el clon ya no copia claves), #265 y #266 (cambiar contraseña + medidor), #268 (mig 185, pedir cambio de contraseña), #269 (Daruma e íconos PWA), #270 («¿Olvidaste tu contraseña?»), #271, #272 y #273 (migs 186, 187 y 188 del Club, humo de prod OK en las tres), #274 (Ventas v2 fases 0.2 y 1.3).
 - **Validación física del dueño OK:** #244, #247, Marcadores, #234, #238, #225, #226, #239, #260 (staging) y **#270 en prod** (recupero completo con su correo, 17-nov 23:09). **Falta:** #229 (en servicio), Club 186–188 y Ventas #274 en prod.
-- **Correo:** dominio `satoricostarica.com` **verificado en Resend** (DNS en SiteGround: `resend._domainkey`, MX y SPF de `send`). Supabase Auth de prod usa SMTP propio (remitente `no-responder@`), plantilla «Reset password» en español, enlace de 1 h. **P0:** pasar `pago-notificar`, `cierre-email` y `monthly-report` al remitente propio (ver PROMPT-CONTINUACION 4c).
+- **Correo:** dominio `satoricostarica.com` **verificado en Resend** (DNS en SiteGround: `resend._domainkey`, MX y SPF de `send`). Supabase Auth de prod usa SMTP propio (remitente `no-responder@`), plantilla «Reset password» en español, enlace de 1 h. Las tres funciones de correo (`pago-notificar`, `cierre-email`, `monthly-report`) ya salen con el remitente propio en prod (18-nov); el código de sus ramas aún no tiene el FROM nuevo.
 - **Agente D9 en la PC del PoS:** `C:\satori\agente-d9` @`578f38c` (vuelta atrás intacta en `agente-prod-5da233a`). Backfill hecho. 17-nov: 13 tickets cerrados, 5 con descuento, 0 negativos o nulos.
-- **Mañana (18-nov), con el dueño:** pase del salonero por líneas (#262) antes de las 14:00 · firma de #276 (correo quincenal al contador, mig 189) + deploy de su Edge · firma del cambio de remitente.
-- **Abiertos sin firma:** #276, #262, #259 (fast-check, 3 hallazgos `it.fails`), #257, #264, #252, #246 (SPEC Ventas v2). Correos #241–#245 y #235: el código de Edge entra con el ítem 11 (A05). #275 cerrado (reemplazado por #276).
+- **Hoy (18-nov), con el dueño:** pase del salonero por líneas (#262) antes de las 14:00 · #276 rehecho (PR nuevo, unificación) → verificador + firma de deploy, mig 189 y cron · staging 185–188 por su CC.
+- **Abiertos sin firma:** #276, #262, #259 (fast-check, 3 hallazgos `it.fails`), #257, #264, #252, #246 (SPEC Ventas v2). Correos #241–#245 y #235: el código de Edge entra con el ítem 11 (A05). #275 cerrado (reemplazado por #276). **#276 lo reemplaza un PR nuevo** (unificación `totalesContabilidad` ↔ `ventaPorPersonaDeTotales`, en curso).
+- **Aclaración:** las etiquetas «Tu red · club satori · local» son de OpenTable (origen de las reservas), no de la app.
 - **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov.
 - **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 
@@ -19,7 +20,7 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `1554105` (#274) |
+| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `b3110c0` (#277) |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 184 (ponerla al día: en cola) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
@@ -56,18 +57,19 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 ---
 
 ## ☁️ Edge, Cloudflare, cron y agentes (leído 12–17/11; solo lectura)
-`on`/`off` = `verify_jwt`. Confirmar secretos por su lista (nombre + huella); el código, por `ezbr_sha256`
+Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tienen el FROM nuevo (pendiente en cola). `on`/`off` = `verify_jwt`. Confirmar secretos por su lista (nombre + huella); el código, por `ezbr_sha256`
 
 | Función | PROD | STAGING |
 |---|---|---|
-| `monthly-report` | v23 · on (desde `50831a8e`, #245+#241) | v9 · on |
-| `extract-document` | v10 · on (v9 desde `8a8dfb6`; modelo `claude-sonnet-5-5`) | v29 desde `190b5f5` |
-| `cierre-email` | v14 · on (desde `b02d2841`, #242) | v15 · on |
-| `pago-notificar` | v14 · on (desde `588c5593`, #243) | — |
-| `ingest-ndf` | v4 · off (código v3 del 09/11 desde `5da233a`; vive en `claude/puente-item11-prod-v2`) | v21 · off |
+| `monthly-report` | v24 · on (desde `50831a8e`, #245+#241, + remitente propio 18-nov) | v9 · on |
+| `extract-document` | v20 · on (código desde `8a8dfb6`, rama `claude/busy-brown-ssjq4e`, modelo `claude-sonnet-5-5`) | v29 desde `190b5f5` |
+| `cierre-email` | v15 · on (desde `b02d2841`, #242, + remitente propio) | v15 · on |
+| `pago-notificar` | v15 · on (desde `588c5593`, #243, + remitente propio) | — |
+| `ventas-dia-contador` | v1 · on (desde la rama de #276, `11a6097`) | — |
+| `ingest-ndf` | v13 · off (código v3 del 09/11 desde `5da233a`; vive en `claude/puente-item11-prod-v2`) | v21 · off |
 | `ingest-punches` | — | v13 · off |
-| `alta-empleado` | v3 · on (rama `claude/alta-empleado-fn`) | v8 · on |
-| `club-pase` | v6 · off (rama `claude/club-pase-edge` @ `6c5848e`) | v1 · off (`WALLET_ENTORNO` = `stg`) |
+| `alta-empleado` | v12 · on (rama `claude/alta-empleado-fn`) | v8 · on |
+| `club-pase` | v7 · off (rama `claude/club-pase-edge` @ `6c5848e`) | v1 · off (`WALLET_ENTORNO` = `stg`) |
 
 - **Cloudflare:** Pages `satori-club` y Worker `satori-club-api` (Workers Builds desde `main`; secretos a mano; `/api/salud`). **Cron del Club:** jobid 8.
 - **Agentes del PoS:** «Satori PoS Bridge» (staging, @ `14bd278`) y «… PROD» (@ `5da233a` desde el 10/11, cuenta SYSTEM). `biotime-bridge` publica solo a staging (`ingest-punches`).

@@ -72,6 +72,9 @@ describe('Login · ¿Olvidaste tu contraseña?', () => {
     expect(boton.disabled).toBe(true)
     fireEvent.click(boton)
     expect(sb.reset).toHaveBeenCalledTimes(1)
+    // Primero se vacían los efectos pendientes: el setInterval de la cuenta regresiva se registra en un useEffect, y si
+    // el reloj salta antes de que exista, nadie lo escucha y la prueba cae «a veces» según la carga de la máquina (R11).
+    await act(async () => {})
     await act(async () => { vi.advanceTimersByTime(61_000) })
     const otra = await screen.findByRole('button', { name: 'Mandar otro enlace' }) as HTMLButtonElement
     expect(otra.disabled).toBe(false)

@@ -1,7 +1,7 @@
 import { useState, useMemo, lazy, Suspense, Fragment } from 'react'
 import type { DiasMap, HistMap, Meta, ProductMap } from '../../shared/types/ventas'
 import {
-  getContabilidadDays, availableMonths, availableYears,
+  getContabilidadDays, totalesContabilidad, availableMonths, availableYears,
   fi, fmtDate, metaProgress,
   dowAverages, dowLabel, dayOfWeek,
 } from './ventasUtils'
@@ -30,14 +30,16 @@ export default function VentasContabilidad({ dias, hist, metas, pm }: Props) {
     getContabilidadDays(yearNum, monthNum, dias, hist),
   [yearNum, monthNum, dias, hist])
 
-  const totVentaNeta  = days.reduce((s, d) => s + d.ventaNeta, 0)
-  const totVentaBruta = days.reduce((s, d) => s + d.ventaBruta, 0)
-  const totIVA        = days.reduce((s, d) => s + d.iva, 0)
-  const totServ       = days.reduce((s, d) => s + d.serv, 0)
-  const totSalon      = days.reduce((s, d) => s + d.salon, 0)
-  const totDelivery   = days.reduce((s, d) => s + d.delivery, 0)
-  const totPax        = days.reduce((s, d) => s + d.pax, 0)
-  const totPromPax    = totPax > 0 ? totSalon / totPax : 0
+  // Fila TOTAL: la misma función que usa el correo quincenal al contador (Edge `ventas-dia-contador`).
+  const tot = useMemo(() => totalesContabilidad(days), [days])
+  const totVentaNeta  = tot.ventaNeta
+  const totVentaBruta = tot.ventaBruta
+  const totIVA        = tot.iva
+  const totServ       = tot.serv
+  const totSalon      = tot.salon
+  const totDelivery   = tot.delivery
+  const totPax        = tot.pax
+  const totPromPax    = tot.promPax
 
   const progress = !isYear ? metaProgress(metas, dias, hist, selected) : null
 

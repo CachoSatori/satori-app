@@ -291,6 +291,12 @@
       "rama": "claude/club-descuentos-todas-lineas",
       "renumerada_a": "184"
     },
+    "133": {
+      "nombre": "cron_ventas_dia_contador",
+      "bloque": "club",
+      "rama": "claude/correo-contador-ventas-dia",
+      "renumerada_a": "189"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -494,6 +500,12 @@
       "bloque": "pase",
       "rama": "claude/forzar-cambio-clave",
       "origen": "099"
+    },
+    "189": {
+      "nombre": "cron_ventas_dia_contador",
+      "bloque": "pase",
+      "rama": "claude/correo-contador-ventas-dia",
+      "origen": "133"
     }
   }
 }

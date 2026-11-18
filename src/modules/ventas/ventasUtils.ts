@@ -557,6 +557,27 @@ export function getContabilidadDays(year: number, month: number | null, dias: Di
   return result
 }
 
+// ── Totales del «Detalle por día» (Contabilidad) ──────────────
+/**
+ * La fila TOTAL de «Ventas → Contabilidad → Detalle por día». La usan la pantalla y el correo quincenal
+ * al contador (Edge `ventas-dia-contador`, por el paquete de `ventasDiaContadorPuro.ts`): una sola
+ * definición. Prom/PAX del período = Σ salón ÷ Σ pax (como cada día en `getDayStats`), no el promedio
+ * de los Prom/PAX diarios.
+ */
+export interface TotalesContabilidad {
+  ventaBruta: number; iva: number; serv: number; ventaNeta: number
+  salon: number; delivery: number; pax: number; promPax: number
+}
+export function totalesContabilidad(days: readonly ContabilidadDay[]): TotalesContabilidad {
+  const t = { ventaBruta: 0, iva: 0, serv: 0, ventaNeta: 0, salon: 0, delivery: 0, pax: 0, promPax: 0 }
+  for (const d of days) {
+    t.ventaBruta += d.ventaBruta; t.iva += d.iva; t.serv += d.serv; t.ventaNeta += d.ventaNeta
+    t.salon += d.salon; t.delivery += d.delivery; t.pax += d.pax
+  }
+  t.promPax = t.pax > 0 ? t.salon / t.pax : 0
+  return t
+}
+
 // ── Top products ──────────────────────────────────────────────
 export function topProds(
   prods: Record<string, { q: number; m: number }>,

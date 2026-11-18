@@ -15,6 +15,7 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 import { datos } from './resumenV2.fixture'
 import { armarLectura, cifrasDelRango } from './resumenV2'
 import { mesDe, proyectarMes } from './proyeccion'
+import { getLocalesVentas } from './resumenV2Datos'
 import type { Meta } from '../../shared/types/ventas'
 const fx = datos('2026-09-01', 78)
 const cargar = vi.fn(async () => armarLectura(fx.tickets, fx.lineas, { '026': 'SALONERO_A', '027': 'SALONERO_B' }))
@@ -114,16 +115,20 @@ describe('VentasResumen', () => {
     abrir('/ventas?tab=resumen&p=ayer', metas)
     const bloque = await screen.findByText(/Meta de noviembre · a la fecha \(hasta ayer, 1–17 nov\)/)
     expect(bloque).toBeTruthy()
-    // Lee el mes hasta ayer y las 8 semanas de los pesos (56 días que terminan el 17-nov).
-    expect(cargarRango).toHaveBeenCalledWith('santa-teresa', { desde: '2026-09-23', hasta: '2026-11-17' })
-    const rango = { desde: '2026-09-23', hasta: '2026-11-17' }
+    // Lee el mes hasta ayer y las 8 semanas lunes–domingo de los pesos (21-sep a 15-nov) hasta el 17-nov.
+    expect(cargarRango).toHaveBeenCalledWith('santa-teresa', { desde: '2026-09-21', hasta: '2026-11-17' })
+    const rango = { desde: '2026-09-21', hasta: '2026-11-17' }
     const l = armarLectura(fx.tickets, fx.lineas, {})
     const esperado = proyectarMes({ meta: META_NOV, mes: mesDe('2026-11-17'), N: '2026-11-17',
-      netaPorDia: new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, d.ventaNeta])) })
+      netaPorDia: new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, d.ventaNeta])), primerDiaConDatos: '2024-01-05' })
     await vi.waitFor(() => expect(document.querySelector('[data-meta="proyeccion"] .vt-kpi-val')).not.toBeNull())
     expect(document.querySelector('[data-meta="proyeccion"] .vt-kpi-val')!.textContent).toBe(fi(Math.round(esperado.proyeccion)))
     expect(document.querySelector('[data-meta="vendido"] .vt-kpi-val')!.textContent).toBe(fi(Math.round(esperado.vendido)))
     expect(document.querySelector('[data-meta="necesario"]')!.textContent).toContain('13 días que faltan (con hoy)')
+    // El % de la meta aparece una sola vez (en «Vendido»); la proyección dice cuánto sobra o falta.
+    expect(document.querySelector('[data-meta="vendido"]')!.textContent).toMatch(/\d+ % de la meta/)
+    expect(document.querySelector('[data-meta="proyeccion"]')!.textContent).toMatch(/(sobre|debajo de) la meta/)
+    expect(document.querySelector('[data-meta="proyeccion"]')!.textContent).not.toMatch(/\d+ % de la meta/)
     // Lo vendido a la fecha = la tarjeta de «Mes a la fecha» (mismo camino que Contabilidad).
     expect(esperado.vendido).toBe(cifrasDelRango(l, { desde: '2026-11-01', hasta: '2026-11-17' }).totales.ventaNeta)
   })
@@ -132,5 +137,15 @@ describe('VentasResumen', () => {
     abrir('/ventas?tab=resumen&p=ayer', { ...metas, restaurante: {} } as Meta)
     await screen.findByText(/No hay meta cargada para noviembre/)
     expect(cargarRango).not.toHaveBeenCalled()
+  })
+
+  it('meta del mes en otro local: avisa que no tiene meta propia y no lee ni proyecta', async () => {
+    vi.mocked(getLocalesVentas).mockResolvedValue([{ id: 'santa-teresa', nombre: 'Local A' }, { id: 'local-b', nombre: 'Local B' }])
+    abrir('/ventas?tab=resumen&p=ayer&local=local-b', metas)
+    await screen.findByText(/este local todavía no tiene meta propia/)
+    expect(cargarRango).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-meta="proyeccion"]')).toBeNull()
+    expect(cargar).toHaveBeenCalledWith('local-b', expect.objectContaining({ tipo: 'ayer' }))
+    vi.mocked(getLocalesVentas).mockResolvedValue([{ id: 'santa-teresa', nombre: 'Local A' }])
   })
 })

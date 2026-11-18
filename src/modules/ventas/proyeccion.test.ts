@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { desvioRelativo, mesDe, pesosPorDiaSemana, proyectarMes, rangoDeLecturaProyeccion } from './proyeccion'
+import { mesDe, pesosPorDiaSemana, proyectarMes, rangoDeLecturaProyeccion, ruidoDiario, semanasDeHistoria, ultimoDomingoCerrado } from './proyeccion'
 import { diaSemana, sumarDias } from './periodos'
 
 // Datos ficticios. Noviembre 2026: el 1 es domingo. Patrón fijo: viernes y sábado 300, el resto 100.
@@ -81,41 +81,71 @@ describe('proyeccion · ponderada por día de semana (§4.3)', () => {
     expect(r.necesarioPorDia).toBe(0)
   })
 
-  it('con semanas distintas, el rango es lo que falta proyectar × el desvío relativo', () => {
-    // Semanas alternas: ×1 y ×2 (por semana ISO, contando hacia atrás desde N).
+  it('± NO mide la temporada: semanas que suben o bajan enteras (mismo patrón) dan ±0', () => {
+    // Cada semana lunes–domingo 10 % más alta que la anterior: es tendencia, no ruido.
+    const lunes0 = '2026-09-07'
+    const f = (d: string) => patron(d) * 1.1 ** Math.floor((Date.parse(d) - Date.parse(lunes0)) / (7 * 86_400_000))
+    const r = proyectarMes({ meta: 1, mes: MES, N: '2026-11-10', netaPorDia: serie('2026-09-01', '2026-11-10', f) })
+    expect(r.ponderada).toBe(true)
+    expect(r.sigma).toBeCloseTo(0, 9)
+    expect(r.rango).toBeCloseTo(0, 6)
+  })
+
+  it('± con ruido diario: lo que falta × σ × √(1/m + 1/k), y σ = desvío de neta ÷ (peso × nivel de la semana)', () => {
+    // Patrón fijo y un lunes de cada dos con +50 %: eso sí es ruido de un día.
     const N = '2026-11-10'
-    const f = (d: string) => {
-      const semanasAtras = Math.floor((Date.parse(N) - Date.parse(d)) / (7 * 86_400_000))
-      return patron(d) * (semanasAtras % 2 === 0 ? 1 : 2)
-    }
+    let lunes = 0
+    const f = (d: string) => (diaSemana(d) === 0 && lunes++ % 2 === 0 ? patron(d) * 1.5 : patron(d))
     const m = serie('2026-09-01', N, f)
     const r = proyectarMes({ meta: 1, mes: MES, N, netaPorDia: m })
-    const { semanales } = pesosPorDiaSemana(m, N)
-    expect(semanales).toHaveLength(8)
-    expect(r.rango).toBeGreaterThan(0)
-    expect(r.rango).toBeCloseTo((r.proyeccion - r.vendido) * desvioRelativo(semanales), 6)
+    const semanas = semanasDeHistoria(N)
+    const sigma = ruidoDiario(m, semanas, pesosPorDiaSemana(m, semanas))
+    expect(sigma).toBeGreaterThan(0.05)
+    expect(r.sigma).toBeCloseTo(sigma, 12)
+    expect(r.rango).toBeCloseTo((r.proyeccion - r.vendido) * sigma * Math.sqrt(1 / 20 + 1 / 10), 6)
+  })
+
+  it('ritmo × meta = proyección (son la misma lectura: la pantalla no muestra las dos como %)', () => {
+    const r = proyectarMes({ meta: 7777, mes: MES, N: '2026-11-10', netaPorDia: serie('2026-09-01', '2026-11-10') })
+    expect(r.ritmo! * r.meta).toBeCloseTo(r.proyeccion, 6)
   })
 })
 
 describe('proyeccion · piezas', () => {
-  it('pesos: promedio de cada día de semana en las 8 semanas que terminan en N (un día ausente = 0)', () => {
+  it('historia = 8 semanas lunes–domingo que terminan el último domingo cerrado', () => {
+    expect(ultimoDomingoCerrado('2026-11-10')).toBe('2026-11-08') // martes → domingo anterior
+    expect(ultimoDomingoCerrado('2026-11-15')).toBe('2026-11-15') // domingo → él mismo
+    expect(ultimoDomingoCerrado('2026-11-16')).toBe('2026-11-15') // lunes → la víspera
+    const w = semanasDeHistoria('2026-11-10')
+    expect(w).toHaveLength(8)
+    expect(w[0]).toEqual({ desde: '2026-09-14', hasta: '2026-09-20' })
+    expect(w[7]).toEqual({ desde: '2026-11-02', hasta: '2026-11-08' })
+    for (const s of w) expect(diaSemana(s.desde)).toBe(0)
+    // Desde el primer día con datos: solo las semanas completas.
+    expect(semanasDeHistoria('2026-11-10', '2026-10-27')).toHaveLength(1)
+  })
+
+  it('pesos: promedio de cada día de semana en las 8 semanas (un día ausente = 0); lo de esta semana no entra', () => {
     const m = serie('2026-09-01', '2026-11-10')
-    m.delete('2026-11-09') // un lunes sin ventas (cerrado)
-    const { pesos } = pesosPorDiaSemana(m, '2026-11-10')
+    m.delete('2026-11-02') // un lunes sin ventas (cerrado)
+    m.set('2026-11-09', 9_999_999) // lunes de la semana en curso: fuera de la historia
+    const pesos = pesosPorDiaSemana(m, semanasDeHistoria('2026-11-10'))
     expect(pesos[0]).toBeCloseTo((100 * 7) / 8, 9)
     expect(pesos[4]).toBe(300)
     expect(pesos[1]).toBe(100)
   })
 
-  it('desvío relativo: 0 con semanas iguales o con menos de 2; conocido con [100, 300]', () => {
-    expect(desvioRelativo([500, 500, 500])).toBe(0)
-    expect(desvioRelativo([500])).toBe(0)
-    expect(desvioRelativo([100, 300])).toBeCloseTo(Math.SQRT2 / 2, 9)
+  it('sin 8 semanas completas (lo dice la guía) cae a la lineal y sin ±', () => {
+    const r = proyectarMes({ meta: 9000, mes: MES, N: '2026-11-10', netaPorDia: serie('2026-09-01', '2026-11-10'),
+      primerDiaConDatos: '2026-09-15' }) // la semana del 14-sep queda incompleta: 7 semanas
+    expect(r.ponderada).toBe(false)
+    expect(r.rango).toBe(0)
+    expect(r.proyeccion).toBeCloseTo((r.vendido / 10) * 30, 9)
   })
 
-  it('rango de lectura: desde lo más viejo entre el 1.º del mes y N − 55, hasta N', () => {
-    expect(rangoDeLecturaProyeccion(MES, '2026-11-17')).toEqual({ desde: '2026-09-23', hasta: '2026-11-17' })
-    expect(rangoDeLecturaProyeccion(MES, '2026-11-30')).toEqual({ desde: '2026-10-06', hasta: '2026-11-30' })
+  it('rango de lectura: desde el lunes de la 8.ª semana (o el 1.º del mes), hasta N', () => {
+    expect(rangoDeLecturaProyeccion(MES, '2026-11-17')).toEqual({ desde: '2026-09-21', hasta: '2026-11-17' })
+    expect(rangoDeLecturaProyeccion(MES, '2026-11-30')).toEqual({ desde: '2026-10-05', hasta: '2026-11-30' })
   })
 })
 

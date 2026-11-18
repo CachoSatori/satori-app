@@ -3,7 +3,7 @@
 // por día (el de Contabilidad). Lee el PoS por las funciones de la 067 (`resumenV2Datos.ts`); el
 // cálculo es `resumenV2.ts`. Convive con las vistas viejas hasta la fase 3.5.
 // Fase 2.2: bloque «Meta del mes» (`proyeccion.ts`) y bases con nombre concreto y fechas
-// («vs quincena anterior (16–31 oct)», pedido del dueño del 18-nov). Quincenas (2.3), todavía no.
+// («vs mes anterior a la misma fecha (1–17 oct)», pedido del dueño del 18-nov). Quincenas (2.3), todavía no.
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -19,6 +19,7 @@ import {
 } from './resumenV2'
 import { cargarLecturaRango, cargarLecturaResumen, getLocalesVentas, type LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
+import { PRIMERA_JORNADA_POS } from './ventasFuente'
 
 const casiCero = (x: number) => Math.abs(x) < 0.05
 const fmtPct = (x: number) => casiCero(x) ? '0,0 %' : `${x > 0 ? '+' : '−'}${Math.abs(x).toFixed(1).replace('.', ',')} %`
@@ -293,7 +294,7 @@ function MetaDelMes({ local, N, ancla, metas }: { local: string; N: string; ancl
       .then(l => {
         if (!vivo) return
         const netaPorDia = new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, d.ventaNeta]))
-        setR({ clave, p: proyectarMes({ meta, mes, N, netaPorDia }) })
+        setR({ clave, p: proyectarMes({ meta, mes, N, netaPorDia, primerDiaConDatos: PRIMERA_JORNADA_POS }) })
       })
       .catch(e => { if (vivo) setFallo(e instanceof Error ? e.message : 'No se pudo leer el PoS') })
     return () => { vivo = false }
@@ -325,10 +326,11 @@ function MetaDelMes({ local, N, ancla, metas }: { local: string; N: string; ancl
           <div className="vt-kpi-sub">{pct0(p.avancePct ?? 0)} de la meta · {p.diasCerrados} de {p.diasMes} días</div></div>
         {!cerrado && <>
           <div className="vt-kpi" data-meta="ritmo"><div className="vt-kpi-label">Ritmo</div><div className="vt-kpi-val">{ritmoTxt}</div>
-            <div className="vt-kpi-sub">de lo que tocaba a la fecha ({fi(Math.round(p.metaALaFecha ?? 0))})</div></div>
+            <div className="vt-kpi-sub">de lo que tocaba a la fecha ({fi(Math.round(p.metaALaFecha ?? 0))}). Si sigue así, cierra en ese % de la meta</div></div>
           <div className={`vt-kpi ${p.proyeccion >= p.meta ? 'green' : ''}`} data-meta="proyeccion"><div className="vt-kpi-label">Proyección del mes</div>
             <div className="vt-kpi-val">{fi(Math.round(p.proyeccion))}</div>
-            <div className="vt-kpi-sub">± {fi(Math.round(p.rango))} · {pct0((p.proyeccion / p.meta) * 100)} de la meta</div></div>
+            <div className="vt-kpi-sub">{p.ponderada ? `± ${fi(Math.round(p.rango))} · ` : ''}{p.proyeccion >= p.meta
+              ? `${fi(Math.round(p.proyeccion - p.meta))} sobre la meta` : `${fi(Math.round(p.meta - p.proyeccion))} debajo de la meta`}</div></div>
           <div className="vt-kpi" data-meta="necesario"><div className="vt-kpi-label">Necesario por día</div>
             <div className="vt-kpi-val">{fi(Math.round(p.necesarioPorDia ?? 0))}</div>
             <div className="vt-kpi-sub">{p.diasQueFaltan} {p.diasQueFaltan === 1 ? 'día que falta' : 'días que faltan'} (con hoy)</div></div>
@@ -337,8 +339,8 @@ function MetaDelMes({ local, N, ancla, metas }: { local: string; N: string; ancl
       {!cerrado && (
         <p className="vt2-nota">
           {p.ponderada
-            ? 'Proyección: lo vendido más los días que faltan, cada uno con el peso de su día de semana (promedio de las últimas 8 semanas). El ritmo compara lo vendido con la parte de la meta que tocaba a la fecha, repartida con esos mismos pesos. No usa el día de hoy.'
-            : 'Sin historia suficiente para pesar los días de semana: la proyección es lineal (lo vendido por día × los días del mes). No usa el día de hoy.'}
+            ? 'Proyección: lo vendido más los días que faltan, cada uno con el peso de su día de semana (promedio de las últimas 8 semanas cerradas, lunes a domingo). El ritmo compara lo vendido con la parte de la meta que tocaba a la fecha, repartida con esos mismos pesos. El ± es lo que suele apartarse un día de lo esperado, sin contar la temporada. No usa el día de hoy.'
+            : 'Sin 8 semanas cerradas de historia para pesar los días de semana: la proyección es lineal (lo vendido por día × los días del mes) y sin ±. No usa el día de hoy.'}
         </p>
       )}
     </div>

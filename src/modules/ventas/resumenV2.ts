@@ -198,8 +198,8 @@ const tendencia = (c: number | null, mas: string, menos: string, igual: string):
   c === null ? null : Math.abs(c) < 2 ? igual : c > 0 ? mas : menos
 
 /**
- * «Vas 9 % arriba de la quincena anterior (16–31 oct) y 7 % abajo del año pasado, mismo día de semana
- * (2–16 nov 2025). Entra más gente; gasta casi lo mismo.» Con voseo (lo lee la gerencia). El nombre de
+ * «Vas 9 % arriba del mes anterior a la misma fecha (1–15 oct) y 7 % abajo del año pasado, mismo día de
+ * semana (2–16 nov 2025). Entra más gente; gasta casi lo mismo.» Con voseo (lo lee la gerencia). El nombre de
  * cada base lo pone la barra (`nombreBase`); sin él, el genérico. Sin bases: dice que no hay comparación.
  */
 export function bajada(

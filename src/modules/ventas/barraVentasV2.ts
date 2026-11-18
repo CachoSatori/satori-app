@@ -28,7 +28,7 @@ export const ROTULO_BASE: Record<BaseId, string> = {
 
 /** El nombre concreto de una base para un período, con su artículo para armar la frase. */
 export interface NombreBase {
-  /** En minúscula: «quincena anterior», «15 días anteriores». */
+  /** En minúscula: «mes anterior a la misma fecha», «15 días anteriores». */
   texto:    string
   articulo: 'el' | 'la' | 'los'
 }
@@ -75,7 +75,7 @@ export function fechasDeBase(p: PeriodoV2, id: BaseId): string | null {
   return b ? fechasCortas(b, Number(p.ancla.slice(0, 4))) : null
 }
 
-/** «quincena anterior (16–31 oct)»: el nombre con las fechas de la base entre paréntesis. */
+/** «15 días anteriores (17–31 oct)»: el nombre con las fechas de la base entre paréntesis. */
 export function baseConFechas(p: PeriodoV2, id: BaseId): string {
   const f = fechasDeBase(p, id)
   const t = nombreBase(p, id).texto

@@ -1,5 +1,5 @@
-// GENERADO — no editar a mano. Fuente: src/modules/ventas/ventasDiaContadorPuro.ts @ 4170c7c
-// Regenerar: node scripts/edge/empaquetar-ventas-pos.mjs --entrada src/modules/ventas/ventasDiaContadorPuro.ts <salida>  ·  sha256(cuerpo) 1dd92b81e3a26268f9be3d1f33cce184de0bf99382b84121e017c441170376f5
+// GENERADO — no editar a mano. Fuente: src/modules/ventas/ventasDiaContadorPuro.ts @ ce4974e6
+// Regenerar: node scripts/edge/empaquetar-ventas-pos.mjs --entrada src/modules/ventas/ventasDiaContadorPuro.ts <salida>  ·  sha256(cuerpo) b68c506eedb957b6e0322ed79a54dd8001692f9921ef1f41247f22c724b5dabd
 // deno-lint-ignore-file
 // @ts-nocheck
 const CR_OFFSET = "-06:00";
@@ -587,6 +587,12 @@ function armarDia(fecha, entrada, lineas, uploadedAt, nombres = {}) {
             serv: 0,
             delivery: 0,
             ordenes: 0,
+            cts: {
+                neta: 0,
+                iva: 0,
+                serv: 0,
+                delivery: 0
+            },
             prods: new Map()
         };
         e.pax += paxDelTicket(t);
@@ -596,6 +602,11 @@ function armarDia(fecha, entrada, lineas, uploadedAt, nombres = {}) {
         e.ordenes += 1;
         if (esDelivery(t))
             e.delivery += netoDe(t);
+        e.cts.neta += aCts(netoDe(t));
+        e.cts.iva += aCts(n(t.iva_crc));
+        e.cts.serv += aCts(n(t.servicio_crc));
+        if (esDelivery(t))
+            e.cts.delivery += aCts(netoDe(t));
         for (const l of porTicket.get(t.id) ?? []) {
             if (!esFamiliaNeto(l.familia))
                 continue;
@@ -652,7 +663,8 @@ function armarDia(fecha, entrada, lineas, uploadedAt, nombres = {}) {
                 serv: Math.round(e.serv),
                 ordenes: e.ordenes,
                 ticketProm: e.ordenes ? total / e.ordenes : 0,
-                prods
+                prods,
+                crudoCts: e.cts
             };
             continue;
         }
@@ -673,7 +685,8 @@ function armarDia(fecha, entrada, lineas, uploadedAt, nombres = {}) {
             ratioCB: e.beb ? e.com / e.beb : 0,
             ratioU: e.iBeb ? e.iCom / e.iBeb : 0,
             bebPax: e.pax ? e.iBeb / e.pax : 0,
-            prods
+            prods,
+            crudoCts: e.cts
         };
     }
     return {
@@ -693,6 +706,7 @@ function armarDia(fecha, entrada, lineas, uploadedAt, nombres = {}) {
         avisosCatalogo
     };
 }
+const aCts = (crc) => Math.round(crc * 100);
 function nombreSalonero(login, nombres, fecha) {
     return nombreDeCodigo(login, nombres, fecha) ?? `${login} · sin asignar`;
 }
@@ -745,40 +759,105 @@ function fusionarProductMap(curado, familia) {
     }
     return out;
 }
+function sumarPartesRedondeando(partes) {
+    const c = {
+        neta: 0,
+        iva: 0,
+        serv: 0,
+        delivery: 0
+    };
+    let ajusteSalon = 0, ajusteBruta = 0;
+    const lista = [...partes];
+    if (!lista.some((p) => p.cts)) {
+        const t = {
+            ventaNeta: 0,
+            iva: 0,
+            serv: 0,
+            delivery: 0,
+            salon: 0,
+            ventaBruta: 0
+        };
+        for (const p of lista) {
+            t.ventaNeta += p.neta;
+            t.iva += p.iva;
+            t.serv += p.serv;
+            t.delivery += p.delivery;
+            t.salon += p.salon;
+            t.ventaBruta += p.bruta;
+        }
+        return {
+            ...t,
+            crudoCts: c
+        };
+    }
+    for (const p of lista) {
+        c.neta += p.cts ? p.cts.neta : Math.round(p.neta * 100);
+        c.iva += p.cts ? p.cts.iva : Math.round(p.iva * 100);
+        c.serv += p.cts ? p.cts.serv : Math.round(p.serv * 100);
+        c.delivery += p.cts ? p.cts.delivery : Math.round(p.delivery * 100);
+        if (!p.cts) {
+            ajusteSalon += p.salon - (p.neta - p.delivery);
+            ajusteBruta += p.bruta - (p.neta + p.iva + p.serv);
+        }
+    }
+    const ventaNeta = Math.round(c.neta / 100);
+    const iva = Math.round(c.iva / 100);
+    const serv = Math.round(c.serv / 100);
+    const delivery = Math.round(c.delivery / 100);
+    return {
+        ventaNeta,
+        iva,
+        serv,
+        delivery,
+        salon: ventaNeta - delivery + ajusteSalon,
+        ventaBruta: ventaNeta + iva + serv + ajusteBruta,
+        crudoCts: c
+    };
+}
 function getDayStats(dia) {
-    let ventaNeta = 0, iva = 0, serv = 0, salon = 0, delivery = 0, pax = 0;
+    let pax = 0;
     const saloneroNames = [];
+    const partes = [];
     for (const [name, s] of Object.entries(dia.saloneros))
         if (s.esCajero) {
             const c = s;
-            ventaNeta += c.total;
-            iva += c.iva ?? 0;
-            serv += c.serv ?? 0;
-            delivery += c.delivery;
-            salon += c.salon;
+            partes.push({
+                neta: c.total,
+                iva: c.iva ?? 0,
+                serv: c.serv ?? 0,
+                delivery: c.delivery,
+                salon: c.salon,
+                bruta: c.total + (c.iva ?? 0) + (c.serv ?? 0),
+                cts: c.crudoCts
+            });
             pax += c.pax ?? 0;
         }
         else {
             const sl = s;
             const dl = sl.delivery ?? 0;
-            ventaNeta += sl.total;
-            iva += sl.iva ?? 0;
-            serv += sl.serv ?? 0;
-            salon += sl.total - dl;
-            delivery += dl;
+            partes.push({
+                neta: sl.total,
+                iva: sl.iva ?? 0,
+                serv: sl.serv ?? 0,
+                delivery: dl,
+                salon: sl.total - dl,
+                bruta: sl.total + (sl.iva ?? 0) + (sl.serv ?? 0),
+                cts: sl.crudoCts
+            });
             pax += sl.pax ?? 0;
             saloneroNames.push(name);
         }
+    const t = sumarPartesRedondeando(partes);
     return {
         fecha: "",
-        ventaBruta: ventaNeta + iva + serv,
-        ventaNeta,
-        iva,
-        serv,
-        salon,
-        delivery,
+        ventaBruta: t.ventaBruta,
+        ventaNeta: t.ventaNeta,
+        iva: t.iva,
+        serv: t.serv,
+        salon: t.salon,
+        delivery: t.delivery,
         pax,
-        promPax: ventaPorPersonaDeTotales(salon, pax) ?? 0,
+        promPax: ventaPorPersonaDeTotales(t.salon, pax) ?? 0,
         saloneroNames
     };
 }

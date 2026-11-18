@@ -9,15 +9,3 @@ export function destinatarioDe(valor: string | null | undefined): string {
 }
 
 export const FALTA_DESTINATARIO = 'falta destinatario'
-
-// Remitente (18-nov): el dominio propio es configuración y no va escrito en el repo (src/dominioRepo.test.ts,
-// src/privacidadRepo.test.ts). Sale SOLO del secreto REMITENTE_CORREOS, con la forma «Nombre <dir@dominio>» o
-// «dir@dominio». Sin él no se manda nada (igual que sin destinatario).
-export function remitenteDe(valor: string | null | undefined): string {
-  const v = (valor ?? '').trim()
-  const m = /^([^<>@]*?)\s*<([^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+)>$/.exec(v)
-  if (m) return m[1] ? `${m[1]} <${m[2]}>` : m[2]
-  return destinatarioDe(v)
-}
-
-export const FALTA_REMITENTE = 'falta remitente'

@@ -34,6 +34,7 @@ La 190 en prod (leída el 18-nov, solo lectura) valida el rol adentro (owner/man
 
 ## 3. Pruebas en staging (`hwiatgic…`, transacción que termina en ROLLBACK)
 - `scripts/sql/191_pruebas.py --armar --compacto` (casos 01–10, sin la sección 11 de la vuelta atrás): **35/35**.
+- Tras el merge de `main` con la 190 (18-nov): 190 + 191 en la misma transacción, casos 01–10 y 12 (la 190 por rol): **41/41**.
 - **Sin el arreglo** (staging con la 067 tal cual, casos 01–07): **caen 9** (manager ve el local B, salonero ve
   facturas y líneas de otros, barman y cocina sin login ven todo, latido del manager en B).
 - Humo con datos de staging (120 días, primera página): owner/contador/manager 1000 → 1000; salonero real 1000 → 554

@@ -167,6 +167,16 @@ begin
   where p.pronamespace = 'public'::regnamespace and p.prosecdef
     and p.proname in ('pos_ventas_tickets_rango', 'pos_ventas_lineas', 'pos_ventas_latido', 'pos_mis_logins', 'pos_nombres_por_login')
     and p.proconfig @> array['search_path=public, pg_temp'];
+  -- 12 · la 190 (`pos_ventas_resumen`, en prod desde el 18-nov) sigue validando su rol adentro y no la toca la 191.
+  -- Corre solo si la 190 está en la base (staging, al 18-nov, no la tiene: se aplica antes en la misma transacción).
+  if to_regprocedure('public.pos_ventas_resumen(text,date,date)') is not null then
+    perform pg_temp.chk('12 resumen 190: owner lee A', pg_temp.como(c.owner_id, $q$select jsonb_array_length(public.pos_ventas_resumen('prueba191a', '2030-01-10', '2030-01-10')->'facturas')$q$), '3');
+    perform pg_temp.chk('12 resumen 190: contador lee A', pg_temp.como(c.contador, $q$select jsonb_array_length(public.pos_ventas_resumen('prueba191a', '2030-01-10', '2030-01-10')->'facturas')$q$), '3');
+    perform pg_temp.chk('12 resumen 190: manager lee A', pg_temp.como(c.manager_a, $q$select jsonb_array_length(public.pos_ventas_resumen('prueba191a', '2030-01-10', '2030-01-10')->'facturas')$q$), '3');
+    perform pg_temp.chk('12 resumen 190: salonero 42501', pg_temp.como(c.salonero, $q$select public.pos_ventas_resumen('prueba191a', '2030-01-10', '2030-01-10')$q$), '"ERR 42501"');
+    perform pg_temp.chk('12 resumen 190: cajero 42501', pg_temp.como(c.cajero, $q$select public.pos_ventas_resumen('prueba191a', '2030-01-10', '2030-01-10')$q$), '"ERR 42501"');
+    perform pg_temp.chk('12 resumen 190: anon sin permiso', pg_temp.como_anon($q$select public.pos_ventas_resumen('prueba191a', '2030-01-10', '2030-01-10')$q$), '"ERR 42501"');
+  end if;
 end $$;
 
 -- 11 · Vuelta atrás: el rollback devuelve la 067 tal cual (la fuga vuelve) y borra lo nuevo.

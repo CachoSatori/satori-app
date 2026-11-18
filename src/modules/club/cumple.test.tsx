@@ -18,9 +18,9 @@ const TUTEO_VOSEO = new RegExp('(^|[^\\p{L}])(' + [
   'reservá', 'vení', 'celebrá', 'festejá', 'mostrale', 'te esperamos',
 ].join('|') + ')(?=$|[^\\p{L}])', 'iu')
 
-const H = vi.hoisted(() => ({ rpc: vi.fn(), rol: 'cajero' }))
+const H = vi.hoisted(() => ({ rpc: vi.fn(), rol: 'cajero', from: vi.fn() }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: H.rol, full_name: 'Prueba' } }) }))
-vi.mock('../../shared/api/supabase', () => ({ supabase: { rpc: H.rpc, from: vi.fn() } }))
+vi.mock('../../shared/api/supabase', () => ({ supabase: { rpc: H.rpc, from: H.from } }))
 
 import Escanear from './Escanear'
 import { CumplesInicio } from './CumplesInicio'
@@ -179,6 +179,71 @@ describe('Inicio: cumpleaños con WhatsApp', () => {
     const { container } = render(<CumplesInicio rol="owner" />)
     await waitFor(() => expect(H.rpc).toHaveBeenCalled())
     expect(container.textContent).toBe('')
+  })
+})
+
+describe('Inicio: deshacer «enviado» (mig 186, solo owner)', () => {
+  const PROX = { ...CFG, hoy: '2026-12-28', socios: [{ miembro_id: 'm2', nombre: 'Beto Prueba', faltan: 3, con_whatsapp: true }] }
+  const YA = [{ miembro_id: 'm1', nombre: 'Ana Prueba', faltan: 5, enviado_en: '2026-12-28T15:00:00Z' }]
+  let enviados: typeof YA
+  beforeEach(() => {
+    enviados = YA
+    H.rpc.mockReset().mockImplementation(async (fn: string) => {
+      if (fn === 'club_cumple_proximos') return { data: PROX, error: null }
+      if (fn === 'club_cumple_enviados') return { data: enviados, error: null }
+      if (fn === 'club_cumple_deshacer_envio') { enviados = []; return { data: true, error: null } }
+      return { data: null, error: { message: `no simulada: ${fn}` } }
+    })
+  })
+  afterEach(() => { vi.unstubAllGlobals() })
+  it('el owner ve «Ya saludados» y deshace con la nota que escribe; la lista se recarga', async () => {
+    vi.stubGlobal('prompt', vi.fn(() => '  se tocó por error  '))
+    render(<CumplesInicio rol="owner" />)
+    fireEvent.click(await screen.findByLabelText('Deshacer «enviado» del saludo a Ana Prueba'))
+    await waitFor(() => expect(H.rpc.mock.calls.some(c => c[0] === 'club_cumple_deshacer_envio')).toBe(true))
+    expect(H.rpc.mock.calls.find(c => c[0] === 'club_cumple_deshacer_envio')![1]).toMatchObject({ p_miembro: 'm1', p_nota: 'se tocó por error' })
+    await waitFor(() => expect(screen.queryByLabelText('Deshacer «enviado» del saludo a Ana Prueba')).toBeNull())
+    expect(H.rpc.mock.calls.filter(c => c[0] === 'club_cumple_proximos').length).toBe(2)
+  })
+  it('si cancela el motivo, no llama a la base', async () => {
+    vi.stubGlobal('prompt', vi.fn(() => null))
+    render(<CumplesInicio rol="owner" />)
+    fireEvent.click(await screen.findByLabelText('Deshacer «enviado» del saludo a Ana Prueba'))
+    expect(H.rpc.mock.calls.some(c => c[0] === 'club_cumple_deshacer_envio')).toBe(false)
+  })
+  it('si la base rechaza la nota, muestra el motivo', async () => {
+    vi.stubGlobal('prompt', vi.fn(() => 'x'))
+    H.rpc.mockImplementation(async (fn: string) => fn === 'club_cumple_proximos' ? { data: PROX, error: null }
+      : fn === 'club_cumple_enviados' ? { data: YA, error: null }
+      : { data: null, error: { message: 'Escribí una nota (de 3 a 500 caracteres) con el motivo' } })
+    render(<CumplesInicio rol="owner" />)
+    fireEvent.click(await screen.findByLabelText('Deshacer «enviado» del saludo a Ana Prueba'))
+    await screen.findByText(/Escribí una nota/)
+  })
+  it('el manager no ve «Ya saludados» ni llama a club_cumple_enviados', async () => {
+    // el manager pasa por asegurarLocalParaRol: lista de locales (club_config) + mis_locales
+    const datosLocales = { data: [{ location_id: 'local-prueba', nombre: 'Local Prueba', club_activo: true }], error: null }
+    H.from.mockReturnValue({ select: () => ({ order: () => Promise.resolve(datosLocales) }) })
+    const base = H.rpc.getMockImplementation()!
+    H.rpc.mockImplementation(async (fn: string, args: Record<string, unknown>) =>
+      fn === 'mis_locales' ? { data: ['local-prueba'], error: null } : base(fn, args))
+    render(<CumplesInicio rol="manager" />)
+    await screen.findByText('Beto Prueba')
+    expect(screen.queryByText(/Ya saludados/)).toBeNull()
+    expect(H.rpc.mock.calls.some(c => c[0] === 'club_cumple_enviados')).toBe(false)
+  })
+  it('owner sin nadie por saludar pero con saludados: se muestra igual para poder deshacer', async () => {
+    H.rpc.mockImplementation(async (fn: string) => fn === 'club_cumple_proximos' ? { data: { ...PROX, socios: [] }, error: null }
+      : fn === 'club_cumple_enviados' ? { data: YA, error: null } : { data: null, error: { message: 'no simulada' } })
+    render(<CumplesInicio rol="owner" />)
+    await screen.findByLabelText('Deshacer «enviado» del saludo a Ana Prueba')
+  })
+  it('sin la 186 (club_cumple_enviados falla): el Inicio sigue igual', async () => {
+    H.rpc.mockImplementation(async (fn: string) => fn === 'club_cumple_proximos' ? { data: PROX, error: null }
+      : { data: null, error: { message: 'function public.club_cumple_enviados does not exist' } })
+    render(<CumplesInicio rol="owner" />)
+    await screen.findByText('Beto Prueba')
+    expect(screen.queryByText(/Ya saludados/)).toBeNull()
   })
 })
 

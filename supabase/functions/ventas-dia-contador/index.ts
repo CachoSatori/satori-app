@@ -38,7 +38,7 @@ const SUPABASE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ANON_KEY       = Deno.env.get('SUPABASE_ANON_KEY')!
 // El MISMO destino que los reportes automáticos. Sin correo por defecto en el código (repo público).
 const TO_EMAIL       = destinatarioDe(Deno.env.get('REPORT_TO_EMAIL'))
-const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
+const FROM_EMAIL     = 'Satori <no-responder@satoricostarica.com>'
 
 async function send(c: Correo): Promise<void> {
   if (!TO_EMAIL) throw new Error(FALTA_DESTINATARIO)   // nunca manda sin destinatario

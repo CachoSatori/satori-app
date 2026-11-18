@@ -20,8 +20,14 @@ describe('guardas de ventas-dia-contador', () => {
     expect(idx).toMatch(/if \(!TO_EMAIL\) throw new Error\(FALTA_DESTINATARIO\)/)
     expect(destinatarioDe(undefined)).toBe('')
   })
-  it('ningún correo escrito en el código (salvo el remitente de Resend)', () => {
-    for (const f of fuentes) expect(leer(f), f).not.toMatch(/[^\s'"`<]+@(?!resend\.dev)[a-z0-9-]+\.[a-z]{2,}/i)
+  it('ningún correo escrito en el código (salvo el remitente propio, solo en index.ts — decisión del dueño 18-nov)', () => {
+    // Por partes: lo cuidan src/privacidadRepo.test.ts y src/dominioRepo.test.ts (2.ª excepción de CLAUDE.md).
+    const REMITENTE = 'no-responder' + '@' + ['satori', 'costarica', '.com'].join('')
+    expect(idx).toContain(`const FROM_EMAIL     = 'Satori <${REMITENTE}>'`)
+    for (const f of fuentes) {
+      const t = f === 'index.ts' ? leer(f).split(REMITENTE).join('') : leer(f)
+      expect(t, f).not.toMatch(/[^\s'"`<]+@(?!resend\.dev)[a-z0-9-]+\.[a-z]{2,}/i)
+    }
   })
   it('ventas solo del PoS (R18) y sin leer employees', () => {
     for (const f of fuentes) {

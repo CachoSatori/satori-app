@@ -69,6 +69,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | `ingest-punches` | — | v13 · off |
 | `alta-empleado` | v3 · on (rama `claude/alta-empleado-fn`) | v8 · on |
 | `club-pase` | v6 · off (rama `claude/club-pase-edge` @ `6c5848e`) | v1 · off (`WALLET_ENTORNO` = `stg`) |
+| `ventas-dia-contador` | — (nueva; deploy a mano con firma desde `claude/correo-contador-ventas-dia`, PASE-189) | — |
 
 - **Cloudflare:** Pages `satori-club` y Worker `satori-club-api` (Workers Builds desde `main`; secretos a mano; `/api/salud`). **Cron del Club:** jobid 8.
 - **Agentes del PoS:** «Satori PoS Bridge» (staging, @ `14bd278`) y «… PROD» (@ `5da233a` desde el 10/11, cuenta SYSTEM). `biotime-bridge` publica solo a staging (`ingest-punches`).
@@ -140,6 +141,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 127 | → 182 |
 | 128 | → 183 |
 | 129 | → 184 |
+| 133 | → 189 (cron del correo quincenal de ventas por día al contador; reservado para pasar directo a 189) |
 | 150 | ← 075 |
 | 151 | ← 100 |
 | 153 | ← 096 |
@@ -174,6 +176,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 183 | ← 128 |
 | 184 | ← 129 |
 | 185 | ← 099 (en PR, sin firma; entra a prod por merge → Branching) |
+| 189 | ← 133 (cron `satori-ventas-dia-contador`, 1 y 16 a las 07:00 CR; en PR, sin firma; va DESPUÉS de 186–188 y de desplegar la Edge `ventas-dia-contador`; PASE-189) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 

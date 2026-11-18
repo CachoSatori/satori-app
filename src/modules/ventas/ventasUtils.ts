@@ -5,6 +5,8 @@ import type {
 } from '../../shared/types/ventas'
 import { fi, isCajeroName, todayCR } from '../../shared/utils'
 import { claveCajeroDeTurno } from './baldesNoMesero'
+// Venta por persona: UNA fórmula (D4) para toda la app, en `indicadores.ts`.
+import { netaSalonDeSalonero, ventaPorPersonaDeTotales } from './indicadores'
 
 // ── Cajeros detection ────────────────────────────────────────
 export function esCajero(name: string): boolean { return isCajeroName(name) }
@@ -270,14 +272,14 @@ export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: st
     salon,
     delivery,
     pax,
-    promPax:    pax > 0 ? salon / pax : 0,
+    promPax:    ventaPorPersonaDeTotales(salon, pax) ?? 0,
     saloneroNames,
   }
 }
 
 // ── aggSalonero ──────────────────────────────────────────────
 export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: ProductMap): AggSalonero {
-  let total = 0, com = 0, beb = 0, pax = 0, iCom = 0, iBeb = 0, iva = 0, serv = 0
+  let total = 0, salon = 0, com = 0, beb = 0, pax = 0, iCom = 0, iBeb = 0, iva = 0, serv = 0
   let days = 0
   const prods: Record<string, { q: number; m: number }> = {}
 
@@ -289,6 +291,7 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
     const s = raw as SaloneroDay
     days++
     total += s.total
+    salon += netaSalonDeSalonero(s)
     com   += s.com
     beb   += s.beb
     pax   += s.pax ?? 0
@@ -324,7 +327,8 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
     pax,
     iCom,
     iBeb:       iBebAdj,
-    promPax:    pax > 0 ? total / pax : 0,
+    // D4: su neta de SALÓN ÷ sus personas (antes `total / pax`: sumaba su delivery).
+    promPax:    ventaPorPersonaDeTotales(salon, pax) ?? 0,
     promPlato:  iCom > 0 ? com / iCom : 0,
     promBebida: iBebAdj > 0 ? beb / iBebAdj : 0,
     ratioCB:    beb > 0 ? com / beb : 0,
@@ -337,7 +341,7 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
 
 // ── aggGeneral ───────────────────────────────────────────────
 export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggGeneral {
-  let total = 0, cajTotal = 0, cajDelivery = 0, cajSalon = 0
+  let total = 0, salonMeseros = 0, cajTotal = 0, cajDelivery = 0, cajSalon = 0
   // DOS contadores de pax, a propósito (ver `AggGeneral.paxSaloneros`):
   //   · `pax`          = todos los comensales del día, caja incluida. Es "cuánta gente vino".
   //   · `paxSaloneros` = solo los de meseros. Es el denominador de `promPax`/`bebPax`, cuyos
@@ -361,6 +365,7 @@ export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggG
       } else {
         const sl = s as SaloneroDay
         total += sl.total
+        salonMeseros += netaSalonDeSalonero(sl)
         pax          += sl.pax ?? 0
         paxSaloneros += sl.pax ?? 0
         iCom  += sl.iCom ?? 0
@@ -387,12 +392,14 @@ export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggG
     cajDelivery,
     cajSalon,
     totalRest,
-    salon:      total + cajSalon,
+    // Salón = lo de salón de meseros (sin su delivery) + lo de salón de caja.
+    salon:      salonMeseros + cajSalon,
     pax,
     paxSaloneros,
-    // Sobre `paxSaloneros` y no sobre `pax`: los dos numeradores son de meseros. Es el mismo
-    // valor que devolvían antes de que `pax` pasara a contar también el de caja.
-    promPax:    paxSaloneros > 0 ? total / paxSaloneros : 0,
+    // D4 (firmada 17-nov, «un solo número en todos lados»): la venta por persona del DÍA es la de
+    // todo el salón —meseros y caja— ÷ todas sus personas, la misma de `getDayStats`. Antes era
+    // `total / paxSaloneros` (solo meseros, con su delivery). Cada mesero se compara contra esta.
+    promPax:    ventaPorPersonaDeTotales(salonMeseros + cajSalon, pax) ?? 0,
     iCom,
     iBeb,
     ratioCB:    beb > 0 ? com / beb : 0,

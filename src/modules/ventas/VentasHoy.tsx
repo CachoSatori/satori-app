@@ -11,6 +11,7 @@ import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import { esPostCorte } from '../cash/cierrePozo'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { ventaPorPersonaDeTotales } from './indicadores'
 
 interface Props {
   dias:   DiasMap
@@ -83,7 +84,8 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     if (!sameD.length) return null
     const vals  = sameD.map(d => aggGeneral([d], dias, pm)).filter(g => g.pax > 0)
     if (!vals.length) return null
-    const avgPP = vals.reduce((s,g) => s + g.promPax, 0) / vals.length
+    // D4: Σ salón ÷ Σ personas de los 4 días (no el promedio de los 4 promedios).
+    const avgPP = ventaPorPersonaDeTotales(vals.reduce((s,g) => s + g.salon, 0), vals.reduce((s,g) => s + g.pax, 0)) ?? 0
     const avgVt = vals.reduce((s,g) => s + g.total, 0)   / vals.length
     return { promPax: avgPP, total: avgVt, n: vals.length, dow }
   }, [activeDate, allDates, dias, pm])

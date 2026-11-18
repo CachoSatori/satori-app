@@ -119,15 +119,14 @@ describe('aritmética de días (sin reloj)', () => {
   })
 })
 
-// Guardia del módulo: que el patrón no vuelva a Ventas. Queda un uso que no es «hoy» de un rango
-// (VentasConfig.tsx pasó a todayCR() el 16-nov; la guarda de todo src/ es src/fechaHoyCR.test.ts):
-//   · VentasPromPaxExplicado.tsx: usa `fechaCR()` y la fecha UTC solo si aquella devuelve null.
+// Guardia del módulo: que el patrón no vuelva a Ventas (VentasConfig.tsx pasó a todayCR() el 16-nov y
+// VentasPromPaxExplicado.tsx el 17-nov, fase 1.3; la guarda de todo src/ es src/fechaHoyCR.test.ts).
 describe('guardia: Ventas no calcula «hoy» con la fecha UTC', () => {
   it('ningún archivo nuevo de src/modules/ventas usa new Date().toISOString().slice(0, 10)', async () => {
     const { readFileSync, readdirSync } = await import('node:fs')
     // En happy-dom `import.meta.url` no es una ruta del disco: se parte de la raíz del repo.
     const dir = `${process.cwd()}/src/modules/ventas/`
-    const PERMITIDOS = ['VentasPromPaxExplicado.tsx']
+    const PERMITIDOS: string[] = []
     const conPatron = readdirSync(dir)
       .filter(n => /\.(ts|tsx)$/.test(n) && !/\.test\.(ts|tsx)$/.test(n))
       .filter(n => /new Date\(\)\.toISOString\(\)\.slice\(0, ?10\)/.test(readFileSync(dir + n, 'utf8')))

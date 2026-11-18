@@ -8,6 +8,7 @@ import {
   alertaMesasSinPax, diaCRDeFactura, esMesaDeDuenos, esRegaliaTotal, FAMILIA_DUENOS, estimadorPorNeta, facturasDesdePos,
   franjaDeHora, HORA_FIN_NOCHE, personasCargadas, rangoAyer, rangoDeLecturaParaEstimar,
   turnoPorHora, ubicarFactura, ubicarFacturas, ventaPorPersona, ventaPorPersonaPorSalonero,
+  netaSalonDeSalonero, ventaPorPersonaDeTotales,
   type EstimadorPersonas, type FacturaIndicador, type Ubicacion,
 } from './indicadores'
 import { sumarDias } from './periodosPromPax'
@@ -517,5 +518,48 @@ describe('mesas de dueños (decisión 17/11): fuera de la venta por persona y de
       ],
     )
     expect(fs.map(f => [f.neta, f.neta_duenos, esMesaDeDuenos(f)])).toEqual([[15_000, 12_000, true], [9_000, 0, false]])
+  })
+})
+
+// ── Fase 1.3: una sola venta por persona también para las pantallas que leen totales ─────────
+describe('ventaPorPersonaDeTotales (contrato «una sola venta por persona»)', () => {
+  it('con los mismos datos da EXACTO lo de ventaPorPersona sin estimar', () => {
+    const fs = [
+      fac('2026-11-17 13:00', { neta: 30_000, pax_articulo: 2 }),
+      fac('2026-11-17 20:00', { neta: 50_000, pax: 3 }),
+      fac('2026-11-18 20:30', { neta: 12_000 }),                       // sin pax: neta adentro, sin personas
+      fac('2026-11-18 21:00', { neta: 40_000, canal: 'delivery' }),   // delivery: fuera de todo
+    ]
+    const v = ventaPorPersona(fs, SEMANA, { estimador: NULO })
+    const salon = fs.filter(f => f.canal === 'salon').reduce((s, f) => s + f.neta, 0)
+    const personas = fs.reduce((s, f) => s + (f.canal === 'salon' ? personasCargadas(f) : 0), 0)
+    expect(ventaPorPersonaDeTotales(salon, personas)).toBe(v.valor)
+    expect(v.valor).toBeCloseTo(92_000 / 5, 9)
+  })
+  it('numerador = salón (nunca la neta total): mutación «neta total» cae acá', () => {
+    // Un día: 800 de salón + 200 de delivery, 10 personas → 80 (con la neta total serían 100).
+    expect(ventaPorPersonaDeTotales(800, 10)).toBe(80)
+  })
+  it('sin personas → null (la pantalla muestra «—», nunca 0 ni infinito)', () => {
+    expect(ventaPorPersonaDeTotales(5_000, 0)).toBeNull()
+    expect(ventaPorPersonaDeTotales(5_000, Number.NaN)).toBeNull()
+  })
+  it('salón de un salonero = su total sin su delivery (días del .xls sin el campo: todo salón)', () => {
+    expect(netaSalonDeSalonero({ total: 10_000, delivery: 2_500 })).toBe(7_500)
+    expect(netaSalonDeSalonero({ total: 10_000 })).toBe(10_000)
+  })
+})
+
+// Fuera de `indicadores.ts` nadie divide «venta ÷ pax» por su cuenta en las pantallas migradas (fase 1.3).
+describe('guardia: las pantallas migradas usan la fórmula única', () => {
+  const MIGRADOS = [
+    'src/modules/ventas/VentasAnalisis.tsx', 'src/modules/ventas/VentasCalendario.tsx', 'src/modules/ventas/VentasHoy.tsx',
+    'src/modules/ventas/ReporteMensual.tsx', 'src/modules/ventas/VentasContabilidad.tsx', 'src/modules/ventas/totalesVentas.ts',
+    'src/modules/resumen/ReporteMensual.tsx', 'src/modules/resumen/ResumenSemanal.tsx', 'src/modules/resumen/ventasSemana.ts',
+  ]
+  it.each(MIGRADOS)('%s no divide por pax a mano', (archivo) => {
+    const src = readFileSync(archivo, 'utf8')
+    // `x / pax`, `a.salon / a.pax`, `b.sum / b.paxSum`, `totSal / totPax`, `vn/pax` (rótulos como «Prom/PAX» no cuentan).
+    expect(src.match(/[\w.)\]]\s*\/\s*[\w.]*\b(?:pax|(?!promPax)[a-z]\w*(?:Pax|PAX)\w*)\b/g) ?? []).toEqual([])
   })
 })

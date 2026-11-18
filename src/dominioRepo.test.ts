@@ -19,10 +19,19 @@ function archivos(dir: string): string[] {
   })
 }
 
+// Excepción (decisión del dueño 18-nov, CLAUDE.md «Repo público»): el remitente genérico del negocio, SOLO en la Edge
+// del cierre. Se quita esa dirección exacta antes de buscar: cualquier otra mención del dominio en ese archivo cae igual.
+const REMITENTE = ['no-responder', ['satori', 'costarica', '.com'].join('')].join('@')
+const PERMITIDOS_REMITENTE = new Set(['supabase/functions/cierre-email/index.ts'])
+const texto = (p: string) => {
+  const t = readFileSync(p, 'utf8')
+  return PERMITIDOS_REMITENTE.has(relative(RAIZ, p)) ? t.split(`<${REMITENTE}>`).join('') : t
+}
+
 test('el dominio del Club no está escrito en ningún archivo del repo (salvo docs)', () => {
   const con = archivos(RAIZ)
     .filter(p => !p.endsWith('.md') && !BINARIOS.test(p) && statSync(p).size < 5_000_000)
-    .filter(p => PATRON.test(readFileSync(p, 'utf8')))
+    .filter(p => PATRON.test(texto(p)))
     .map(p => relative(RAIZ, p))
   expect(con).toEqual([])
 })

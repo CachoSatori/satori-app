@@ -32,6 +32,11 @@ const DUENO = '010039fad6aca99cbdb47a302143bad29853b81bc3e18c0483c2c491dd662e97'
 
 const PERMITIDOS_NEGOCIO = new Set(['club-web/src/i18n.ts', 'club-web/src/aviso.test.ts'])
 
+// Remitente genérico del negocio, decisión del dueño 18-nov (CLAUDE.md, «Repo público»): la dirección «no-responder»
+// del dominio propio, SOLO como remitente de la Edge del cierre y en la regla de CLAUDE.md. Por hash, como los demás.
+const REMITENTE = '314e8bd4c0f438086a8201054810a2bb8a4d2869ae08dfc3cc43e38933f737b6'
+const PERMITIDOS_REMITENTE = new Set(['supabase/functions/cierre-email/index.ts', 'CLAUDE.md'])
+
 const PENDIENTES: Record<string, string[]> = {
   // La regla misma de «Repo público» nombra el correo del negocio: la redacción la decide el dueño.
   'CLAUDE.md': [NEGOCIO],
@@ -103,6 +108,7 @@ export function correosMalos(rel: string, texto: string): string[] {
     if (DOMINIO_FICTICIO.test(dominio) || GENERICOS.has(c)) continue
     const h = sha(`${local.split('+')[0]}@${dominio}`)
     if (h === NEGOCIO && PERMITIDOS_NEGOCIO.has(rel)) continue
+    if (h === REMITENTE && PERMITIDOS_REMITENTE.has(rel)) continue
     if (PENDIENTES[rel]?.includes(h)) continue
     malos.push(`${rel}: correo ${h === NEGOCIO ? 'del negocio' : h === DUENO ? 'del dueño' : 'no ficticio'} (${h.slice(0, 8)})`)
   }
@@ -126,6 +132,10 @@ test('la guarda detecta el nombre y los correos (sin escribirlos acá)', () => {
   // Armados por partes para que el escaneo no encuentre este archivo.
   expect(correosMalos('x.md', 'escribir a alguien' + '@' + 'gmail.com')).toHaveLength(1)
   expect(correosMalos('x.md', 'jefe' + '@' + 'dominio-real.cr')).toHaveLength(1)
+  // El remitente del negocio vale SOLO en sus dos lugares (armado por partes).
+  const remitente = ['no-responder', ['satori', 'costarica', '.com'].join('')].join('@')
+  expect(correosMalos('supabase/functions/cierre-email/index.ts', `Satori <${remitente}>`)).toEqual([])
+  expect(correosMalos('supabase/functions/pago-notificar/index.ts', `Satori <${remitente}>`)).toHaveLength(1)
 })
 
 test('ningún archivo del repo tiene el nombre de pila del dueño ni correos reales fuera de lo permitido', () => {

@@ -31,3 +31,7 @@ montos reales. Los ejemplos usan datos ficticios.
 **Única excepción (decisión del dueño, 09-nov):** el correo público del negocio, `satorisushibar@gmail.com`, que es el
 contacto del aviso de privacidad del Club (Ley 8968). Puede aparecer **solo** en el texto del aviso
 (`club-web/src/i18n.ts`) y en sus pruebas (`club-web/src/aviso.test.ts`). Ningún otro correo, y este en ningún otro lugar.
+
+**Segunda excepción (decisión del dueño, 18-nov):** el remitente genérico del negocio, `Satori <no-responder@satoricostarica.com>`,
+**solo** como remitente de la Edge del cierre (`supabase/functions/cierre-email/index.ts`) y en esta regla. Lo cuidan
+`src/privacidadRepo.test.ts` y `src/dominioRepo.test.ts` (por archivo: en cualquier otro lugar cae).

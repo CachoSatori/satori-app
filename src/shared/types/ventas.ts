@@ -22,6 +22,22 @@ export interface SaloneroDay {
    * (`?? 0`). Sirve para que `getDayStats` no cuente como salón el delivery de un mesero.
    */
   delivery?:   number
+  /**
+   * Los mismos montos SIN redondear, en céntimos enteros (Σ por ticket de `round(valor × 100)`).
+   * OPCIONAL: solo `armarDia` (PoS) lo llena. Existe para que el TOTAL del día y del período se
+   * redondee UNA vez sobre la suma cruda (decisión del dueño 18-nov, opción A) y no dependa de
+   * cómo se reparten las facturas entre personas. Los campos redondeados de arriba siguen siendo
+   * los que se muestran por persona.
+   */
+  crudoCts?:   CrudoCts
+}
+
+/** Montos crudos de un balde (o de un día) en céntimos enteros. Ver `SaloneroDay.crudoCts`. */
+export interface CrudoCts {
+  neta:     number
+  iva:      number
+  serv:     number
+  delivery: number
 }
 
 export interface CajeroDay {
@@ -46,6 +62,14 @@ export interface CajeroDay {
   ordenes:    number
   ticketProm: number
   prods:      [string, number, number][]
+  /**
+   * Los mismos montos SIN redondear, en céntimos enteros (Σ por ticket de `round(valor × 100)`).
+   * OPCIONAL: solo `armarDia` (PoS) lo llena. Existe para que el TOTAL del día y del período se
+   * redondee UNA vez sobre la suma cruda (decisión del dueño 18-nov, opción A) y no dependa de
+   * cómo se reparten las facturas entre personas. Los campos redondeados de arriba siguen siendo
+   * los que se muestran por persona.
+   */
+  crudoCts?:   CrudoCts
 }
 
 export interface DiaData {

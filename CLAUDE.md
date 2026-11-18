@@ -19,6 +19,7 @@ ESTADO y PROMPT-CONTINUACION se podan al pasar los 15 KB (ver `satori-estandar-p
 - `satori-estandar-pr`: al arrancar cualquier cambio que termina en un PR (rama, sagrados, gate, pruebas, guía, privacidad, reporte).
 - `satori-revision-pr`: para revisar un PR que hizo otra sesión: checklist por disparador (solo las filas que el diff toca), hallazgos Importante / Menor / Preexistente y veredicto (listo / cambios / bloquea).
 - `satori-migraciones-y-prod`: antes de crear una migración, tocar una base, una Edge Function o un secreto.
+- `satori-verificar`: para verificar en staging, por rol y con capturas, un cambio que ve el personal o un cliente, antes de pedir la validación física al dueño (tabla «pantalla · rol · qué se ve · OK/no»).
 - `satori-merge-y-deploy`: con el OK del dueño para mergear a `main`: ventana horaria (regla D1: libre de 23:30 a 15:50, bloqueado de 15:50 a 19:00, de 19:00 a 23:30 solo con OK explícito del dueño), merge y verificación del deploy.
 
 Si una skill y `ESTADO.md` no coinciden, gana `ESTADO.md` y se corrige la skill.

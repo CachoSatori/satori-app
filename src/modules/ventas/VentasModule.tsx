@@ -34,6 +34,7 @@ const VentasCalendario   = lazy(() => import('./VentasCalendario'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
 // Ventas v2 · fase 2.1: lee el PoS por su cuenta (no usa `dias`), con la barra global.
 const VentasResumen      = lazy(() => import('./VentasResumen'))
+const VentasTiempos      = lazy(() => import('./VentasTiempos'))
 
 /** Ids de ARIA: cada pestaña controla el mismo panel de contenido. */
 const PANEL_ID = 'vt-panel'
@@ -312,6 +313,7 @@ export default function VentasModule() {
             >
               {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
               {tab === 'resumen'     && <VentasResumen />}
+              {tab === 'tiempos'     && <VentasTiempos />}
               {tab === 'envivo'      && <VentasEnVivo       metas={metas} />}
               {tab === 'ventas'      && <VentasContabilidad dias={allDias} hist={hist} metas={metas} pm={pm} />}
               {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}

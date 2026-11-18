@@ -26,6 +26,11 @@ import { PRIMERA_JORNADA_POS } from './ventasFuente'
 export function tramosDeLectura(p: PeriodoV2): Rango[] {
   const pedidos: Rango[] = [{ desde: p.desde, hasta: p.hasta }, { desde: p.N, hasta: p.N }]
   for (const b of Object.values(p.bases)) if (b) pedidos.push({ desde: b.desde, hasta: b.hasta })
+  return tramosDeRangos(pedidos)
+}
+
+/** Cualquier lista de rangos, estirados para el estimador (`rangoDeLecturaParaEstimar`) y juntados. */
+export function tramosDeRangos(pedidos: readonly Rango[]): Rango[] {
   const estirados = pedidos
     .map(rangoDeLecturaParaEstimar)
     .map(r => ({ desde: r.desde < PRIMERA_JORNADA_POS ? PRIMERA_JORNADA_POS : r.desde, hasta: r.hasta }))
@@ -133,8 +138,19 @@ function leerTramoAgregado(local: string, r: Rango): Promise<ParteAgregada> {
 
 /** Todo lo que el Resumen necesita para un período, sin facturas repetidas entre tramos. */
 export async function cargarLecturaResumen(local: string, p: PeriodoV2): Promise<Lectura> {
+  return cargarLecturaDeTramos(local, tramosDeLectura(p))
+}
+
+/**
+ * Lo mismo para una lista cualquiera de rangos («Tiempos»: el período, sus bases y las últimas
+ * quincenas con las suyas). Mismo camino rápido (190) y mismo respaldo (067).
+ */
+export async function cargarLecturaDeRangos(local: string, rangos: readonly Rango[]): Promise<Lectura> {
+  return cargarLecturaDeTramos(local, tramosDeRangos(rangos))
+}
+
+async function cargarLecturaDeTramos(local: string, tramos: Rango[]): Promise<Lectura> {
   const nombres = getSaloneroNombres().catch(() => ({} as Record<string, string>))
-  const tramos = tramosDeLectura(p)
   if (!funcionAusente) {
     try {
       const partes = await Promise.all(tramos.flatMap(r => partirTramo(r)).map(r => leerTramoAgregado(local, r)))

@@ -25,6 +25,28 @@ export const ROTULO_BASE: Record<BaseId, string> = {
   anioMismoDiaSemana:  'Año anterior, mismo día de semana',
 }
 
+/**
+ * El rótulo CONCRETO de una base para un tipo de período: «Mes anterior», «Misma quincena del mes
+ * anterior», «Semana anterior»… La regla de fechas es la de `periodos.ts` (§3.3); acá solo se nombra.
+ * Sin tipo (o con uno que no la tiene) cae al rótulo genérico de `ROTULO_BASE`.
+ */
+export function rotuloBase(tipo: TipoPeriodoV2 | undefined, id: BaseId): string {
+  if (id === 'anioMismasFechas') return ROTULO_BASE.anioMismasFechas
+  if (id === 'anioMismoDiaSemana') return tipo === 'hoy' || tipo === 'ayer'
+    ? 'Mismo día de semana, hace 52 semanas' : ROTULO_BASE.anioMismoDiaSemana
+  switch (tipo) {
+    case 'hoy':
+    case 'ayer':        return 'Mismo día de la semana pasada'
+    case 'semana':      return 'Semana anterior'
+    case 'quincena':    return 'Misma quincena del mes anterior'
+    case 'mesALaFecha':
+    case 'mes':         return 'Mes anterior'
+    case 'temporada':   return 'Temporada anterior'
+    case 'rango':       return 'Rango anterior (mismo largo)'
+    default:            return ROTULO_BASE.anteriorEquivalente
+  }
+}
+
 /** El período por defecto del Resumen: el ritmo de cada mañana es «Ayer» (§6). */
 export const PERIODO_POR_DEFECTO: TipoPeriodoV2 = 'ayer'
 
@@ -45,14 +67,14 @@ const esBase = (s: string | null): s is BaseId => !!s && (BASES as readonly stri
 const dia = (s: string | null) => (s && RE_DIA.test(s) ? s : undefined)
 
 /** Lee la barra de la URL. Lo que no se entiende cae al valor por defecto (nunca rompe). */
-export function leerBarra(sp: URLSearchParams): EstadoBarra {
+export function leerBarra(sp: URLSearchParams, porDefecto: TipoPeriodoV2 = PERIODO_POR_DEFECTO): EstadoBarra {
   const p = sp.get('p')
   let baseA: BaseId = esBase(sp.get('a')) ? (sp.get('a') as BaseId) : BASES_POR_DEFECTO[0]
   let baseB: BaseId = esBase(sp.get('b')) ? (sp.get('b') as BaseId) : BASES_POR_DEFECTO[1]
   if (baseA === baseB) { baseA = BASES_POR_DEFECTO[0]; baseB = BASES_POR_DEFECTO[1] }
   return {
     local: sp.get('local') || null,
-    tipo:  esTipo(p) ? p : PERIODO_POR_DEFECTO,
+    tipo:  esTipo(p) ? p : porDefecto,
     dia:   dia(sp.get('d')),
     desde: dia(sp.get('desde')),
     hasta: dia(sp.get('hasta')),

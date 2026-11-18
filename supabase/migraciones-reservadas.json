@@ -291,6 +291,12 @@
       "rama": "claude/club-descuentos-todas-lineas",
       "renumerada_a": "184"
     },
+    "131": {
+      "nombre": "club_reto_un_local",
+      "bloque": "club",
+      "rama": "claude/club-4-arreglos-retos",
+      "renumerada_a": "187"
+    },
     "130": {
       "nombre": "club_cumple_deshacer_envio",
       "bloque": "club",
@@ -500,6 +506,12 @@
       "bloque": "pase",
       "rama": "claude/forzar-cambio-clave",
       "origen": "099"
+    },
+    "187": {
+      "nombre": "club_reto_un_local",
+      "bloque": "pase",
+      "rama": "claude/club-4-arreglos-retos",
+      "origen": "131"
     },
     "186": {
       "nombre": "club_cumple_deshacer_envio",

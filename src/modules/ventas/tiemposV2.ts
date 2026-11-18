@@ -16,9 +16,9 @@
 //   Si la 080 y Contabilidad difieren en más de ₡1 un día, se avisa (no se tapa).
 // · Hora y turno con la 193 (`pos_ventas_tiempos`): TODOS los canales, por hora CR, en céntimos. Sin la 193
 //   (base vieja): el turno sale de la 080 y el mapa es SOLO SALÓN (lo que trae la 190), y se rotula así.
-// · MESAS INTERNAS (decisión del dueño 18-nov; Ajustes → «Mesas internas»): no son venta real. Salen del día de
-//   semana, de la hora, del turno y del tiempo sentado; la tabla lo dice con su monto. Quincenas y calendario
-//   son la venta de Contabilidad (fiscal), con las internas adentro.
+// · MESAS INTERNAS (Ajustes → «Mesas internas»): son VENTA (decisión del dueño 18-nov 13:45: «si se cerraron con
+//   IVA es porque se vendió»). Están en todo lo de acá; solo salen del TIEMPO SENTADO (lo hace la 193) y de la
+//   alerta de mesas sin pax del Resumen.
 
 import type { FilaPromPaxRpc } from '../../shared/api/posNdf'
 import type { ContabilidadDay } from '../../shared/types/ventas'
@@ -27,7 +27,7 @@ import { diaCRDeFactura, esFacturaDeSalon, estimadorPorNeta, horaCRDeFactura, fr
 import { calcularPeriodo, diaSemana, periodoAnterior, type BaseId, type PeriodoV2, type Rango } from './periodos'
 import { cambioPct, cifrasDelRango, type CifrasRango, type Lectura } from './resumenV2'
 import { turnoDeFranja, type TurnoPromPax } from './ventasPromPaxExplicado'
-import type { HoraRpc, InternasDia } from './tiemposV2Rpc'
+import type { HoraRpc } from './tiemposV2Rpc'
 
 /** Lunes a domingo (D10: semana ISO). Índice 0 = lunes, como `diaSemana`. */
 export const DIAS_SEMANA_LARGO = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] as const
@@ -79,29 +79,16 @@ export interface FilaDiaSemana {
   personas:     number
 }
 
-/**
- * La venta REAL de un día: la de Contabilidad menos sus mesas internas (redondeadas una vez, al colón).
- * Sin internas = la de Contabilidad.
- */
-export function ventaRealDelDia(d: Pick<ContabilidadDay, 'fecha' | 'ventaNeta'>, internas?: ReadonlyMap<string, InternasDia>): number {
-  const i = internas?.get(d.fecha)
-  return i ? d.ventaNeta - Math.round(i.netaCts / 100) : d.ventaNeta
-}
-
-/**
- * Una fila por día de semana, lunes a domingo, desde los días de Contabilidad del rango, SIN las mesas internas
- * (`internas`, por día). Σ filas + Σ internas (al colón por día) = la venta de Contabilidad.
- */
-export function porDiaSemana(dias: readonly ContabilidadDay[], internas?: ReadonlyMap<string, InternasDia>): FilaDiaSemana[] {
+/** Una fila por día de semana, lunes a domingo, desde los días de Contabilidad del rango. */
+export function porDiaSemana(dias: readonly ContabilidadDay[]): FilaDiaSemana[] {
   const filas = DIAS_SEMANA_LARGO.map((nombre, dow) => ({ dow, nombre, diasAbiertos: 0, neta: 0, personas: 0 }))
   let netaTot = 0, abiertosTot = 0
   for (const d of dias) {
     const f = filas[diaSemana(d.fecha)]
-    const real = ventaRealDelDia(d, internas)
-    f.neta += real
-    f.personas += d.pax - (internas?.get(d.fecha)?.pax ?? 0)
-    if (real > 0) { f.diasAbiertos += 1; abiertosTot += 1 }
-    netaTot += real
+    f.neta += d.ventaNeta
+    f.personas += d.pax
+    if (d.ventaNeta > 0) { f.diasAbiertos += 1; abiertosTot += 1 }
+    netaTot += d.ventaNeta
   }
   const promTot = abiertosTot > 0 ? netaTot / abiertosTot : null
   return filas.map(f => {
@@ -148,7 +135,7 @@ export function mapaHoras(facturas: readonly FacturaIndicador[], r: Rango, abier
   const usadas = new Set<number>()
   let totalSalon = 0
   for (const f of facturas) {
-    if (!esFacturaDeSalon(f) || f.interna) continue
+    if (!esFacturaDeSalon(f)) continue
     const dia = diaCRDeFactura(f.fecha_registra)
     if (!dia || dia < r.desde || dia > r.hasta) continue
     const h = horaCRDeFactura(f.fecha_registra)
@@ -165,7 +152,7 @@ export function mapaHoras(facturas: readonly FacturaIndicador[], r: Rango, abier
 }
 
 /**
- * Mapa día de semana × hora con la 193: TODOS los canales, sin mesas internas (ya vienen afuera). Misma forma que
+ * Mapa día de semana × hora con la 193: TODOS los canales (mesas internas incluidas: son venta). Misma forma que
  * `mapaHoras`; `totalSalon` acá es el total de todos los canales.
  */
 export function mapaHorasTodos(horas: readonly HoraRpc[], r: Rango, abiertos: readonly number[]): MapaHoras {
@@ -186,14 +173,13 @@ export function mapaHorasTodos(horas: readonly HoraRpc[], r: Rango, abiertos: re
 }
 
 /**
- * Turno con la 193: mediodía = round(Σ céntimos de 06–16 / 100) por día; noche = venta REAL del día − mediodía.
- * Mediodía + noche = Contabilidad − mesas internas, al colón. Descuadre: el día en que Σ horas difiere de la venta
- * real en más de ₡1 (no debería: misma regla de neta que la 190).
+ * Turno con la 193: mediodía = round(Σ céntimos de 06–16 / 100) por día; noche = venta del día (Contabilidad) −
+ * mediodía. Mediodía + noche = Contabilidad, al colón. Descuadre: el día en que Σ horas difiere de la venta del día en
+ * más de ₡1 (no debería: misma regla de neta que la 190).
  */
 export function porTurnoHoras(
   dias: readonly ContabilidadDay[],
   horas: readonly HoraRpc[],
-  internas: ReadonlyMap<string, InternasDia> | undefined,
   vpp: Record<TurnoPromPax, VentaPorPersona>,
 ): Turnos {
   const porDia = new Map<string, { m: number; t: number }>()
@@ -206,7 +192,7 @@ export function porTurnoHoras(
   let man = 0, noche = 0
   const descuadres: string[] = []
   for (const d of dias) {
-    const real = ventaRealDelDia(d, internas)
+    const real = d.ventaNeta
     const e = porDia.get(d.fecha) ?? { m: 0, t: 0 }
     if (Math.abs(e.t / 100 - real) > 1) descuadres.push(d.fecha)
     const m = Math.min(Math.max(Math.round(e.m / 100), 0), Math.max(real, 0))

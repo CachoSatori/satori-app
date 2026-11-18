@@ -108,9 +108,9 @@ grant select on _o193 to anon, authenticated;
 
 -- 01. horas: todos los canales, sin internas, sin la X ni el otro local; neta en céntimos con la regla de la 190.
 insert into _r193 (caso, ok, detalle)
-select '01 horas del 5-oct: Σ céntimos = salón + delivery sin internas (familia 20 fuera, delivery sin líneas por valor servido)',
+select '01 horas del 5-oct: Σ céntimos = todas las facturas C del local y del día, internas incluidas (familia 20 fuera, delivery sin líneas por valor servido)',
        (select sum((x->>2)::numeric) from jsonb_array_elements(d5->'horas') x)
-         = (1000000 + 1500025 + 900010 + 700050 + 400000 + 300000 + 800000 + 200000 + 600000),
+         = (1000000 + 1500025 + 900010 + 3000000 + 500000 + 700050 + 400000 + 300000 + 800000 + 200000 + 600000),
        (d5->'horas')::text from _o193;
 insert into _r193 (caso, ok, detalle)
 select '02 horas por hora CR: a las 13 hay 2 facturas (T02, T03) y 2.400.035 céntimos; a las 21 delivery + T14',
@@ -151,8 +151,8 @@ select '07 permisos: salonero 42501 · anon sin permiso · manager de otro local
        and pg_temp.err_como(c.owner_id, format('public.pos_ventas_tiempos(%L, date %L, date %L)', c.loc, '2024-01-01', '2026-10-05')) = '22023',
        null from _c193 c;
 insert into _r193 (caso, ok, detalle)
-select '08 los helpers no se llaman desde la API',
-       pg_temp.err_como(c.owner_id, format('public.pos_es_mesa_interna(%L, %L, %L)', c.loc, '51', '51')) = '42501'
+select '08 el helper no se llama desde la API (y el de la mesa ya no existe: va en línea)',
+       to_regprocedure('public.pos_es_mesa_interna(text, text, text)') is null
        and pg_temp.err_como(c.owner_id, format('public.pos_ventas_tiempos_porton(%L, date %L, date %L)', c.loc, '2026-10-05', '2026-10-05')) = '42501',
        null from _c193 c;
 -- 09. la tabla: leer gerencia; agregar y quitar solo el owner; formato de mesa.

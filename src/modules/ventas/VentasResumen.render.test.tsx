@@ -134,7 +134,7 @@ describe('VentasResumen', () => {
     expect(esperado.vendido).toBe(cifrasDelRango(l, { desde: '2026-11-01', hasta: '2026-11-17' }).totales.ventaNeta)
   })
 
-  it('meta del mes con mesas internas (decisión del dueño 18-nov, «A»): lo vendido y la proyección van sin ellas', async () => {
+  it('meta del mes con mesas internas marcadas (decisión del dueño 18-nov 13:45): lo vendido es el de Contabilidad, igual', async () => {
     const base = armarLectura(fx.tickets, fx.lineas, {})
     const elegidas = base.facturas.filter(f => f.canal === 'salon' && f.fecha_registra.startsWith('2026-11-1')).slice(0, 3)
     const internas = elegidas.map(f => ({ id: f.id, dia: f.fecha_registra.slice(0, 10), hora: 20, canal: 'salon', netaCts: Math.round(f.neta * 100), pax: 2 }))
@@ -142,9 +142,7 @@ describe('VentasResumen', () => {
     abrir('/ventas?tab=resumen&p=ayer', metas)
     await vi.waitFor(() => expect(document.querySelector('[data-meta="vendido"] .vt-kpi-val')).not.toBeNull())
     const conta = cifrasDelRango(base, { desde: '2026-11-01', hasta: '2026-11-17' }).totales.ventaNeta
-    const sinInt = conta - internas.reduce((s, i) => s + Math.round(i.netaCts / 100), 0)
-    expect(sinInt).toBeLessThan(conta)
-    expect(document.querySelector('[data-meta="vendido"] .vt-kpi-val')!.textContent).toBe(fi(sinInt))
+    expect(document.querySelector('[data-meta="vendido"] .vt-kpi-val')!.textContent).toBe(fi(conta))
   })
 
   it('meta del mes: sin meta cargada lo dice y no lee nada de más', async () => {

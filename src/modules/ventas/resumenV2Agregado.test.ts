@@ -179,6 +179,27 @@ describe('cargarLecturaResumen', () => {
     expect(rpc.mock.calls.length).toBe(llamadas)
   })
 
+  it('si el resumen falla, la lectura de mesas internas (que va en paralelo) no deja una promesa sin atender', async () => {
+    const sueltas: unknown[] = []
+    const oir = (e: unknown) => { sueltas.push(e) }
+    process.on('unhandledRejection', oir)
+    try {
+      rpc.mockImplementation(async (fn: string) => fn === 'pos_ventas_internas'
+        ? { data: null, error: { code: '42501', message: 'No autorizado (internas)' } }
+        : { data: null, error: { code: '42501', message: 'No autorizado' } })
+      await expect(cargarLecturaResumen('santa-teresa', p)).rejects.toThrow('No autorizado')
+      await new Promise(r => setTimeout(r, 0))
+      expect(sueltas).toEqual([])
+    } finally { process.off('unhandledRejection', oir) }
+  })
+
+  it('si solo fallan las mesas internas, el error llega (no se tapa)', async () => {
+    rpc.mockImplementation(async (fn: string) => fn === 'pos_ventas_internas'
+      ? { data: null, error: { code: '42501', message: 'No autorizado (internas)' } }
+      : { data: { dias: [], facturas: [], lotes: [] }, error: null })
+    await expect(cargarLecturaResumen('santa-teresa', p)).rejects.toThrow('No autorizado (internas)')
+  })
+
   it('otro error (42501) no se tapa con el camino viejo', async () => {
     rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'No autorizado' } })
     await expect(cargarLecturaResumen('santa-teresa', p)).rejects.toThrow('No autorizado')

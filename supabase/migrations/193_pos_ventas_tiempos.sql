@@ -10,9 +10,10 @@
 -- de md5 (R13 aplica al REEMPLAZAR una función viva) y es re-ejecutable.
 --
 -- 1. `pos_mesas_internas` (local, mesa): las mesas INTERNAS de cada local (dueños, regalías, errores). Valor
---    inicial: 51, 52 y 53 en santa-teresa. Sus facturas NO cuentan para los indicadores de venta real (venta
---    por persona, promedios, alertas de pax, día de semana, hora, tiempo sentado) y SÍ siguen en Contabilidad y
---    en el correo del contador (tienen IVA: son venta fiscal). La edita el owner (Ajustes → «Mesas internas»);
+--    inicial: 51, 52 y 53 en santa-teresa. Decisión del dueño (18-nov 13:45): sus facturas SON VENTA («si se
+--    cerraron con IVA es porque se vendió») y siguen en todo (Contabilidad, venta por persona, promedios, horas,
+--    meta). Solo salen del TIEMPO SENTADO y de la ALERTA de mesas sin pax: ahí no se sientan clientes ni se cargan
+--    personas. La edita el owner (Ajustes → «Mesas internas»);
 --    la leen owner, manager y contador activos. La mesa se compara sin espacios ni ceros a la izquierda contra
 --    la mesa del pedido (`mesa`) Y la de la factura (`mesa_factura`): basta con que una coincida. El área no se
 --    mira (las mesas internas tienen número propio).
@@ -20,12 +21,12 @@
 -- 2. `pos_ventas_internas(p_local, p_desde, p_hasta)` → jsonb, lista de facturas C de mesas internas en la
 --    MISMA ventana que la 190 ([desde − 1 día, hasta + 2 días) por `fecha_registra`, hora CR):
 --      [id, dia, hora, canal, neta_cts, pax]
---    La app marca esas facturas (`interna`) y las resta de lo que no es fiscal.
+--    La app marca esas facturas (`interna`) y las saca SOLO de la alerta de mesas sin pax.
 --
 -- 3. `pos_ventas_tiempos(p_local, p_desde, p_hasta)` → jsonb:
---    · `horas`    — por (día CR de la factura, hora CR), SOLO de [desde, hasta], TODOS los canales, SIN mesas
---                   internas: [dia, hora, neta_cts, facturas, pax]. Misma neta que la 190 (Σ por factura de
---                   round(₡ × 100)), así Σ horas + Σ internas del día = `neta_cts` del día de la 190, al céntimo.
+--    · `horas`    — por (día CR de la factura, hora CR), SOLO de [desde, hasta], TODOS los canales (mesas internas
+--                   incluidas: son venta): [dia, hora, neta_cts, facturas, pax]. Misma neta que la 190 (Σ por
+--                   factura de round(₡ × 100)), así Σ horas del día = `neta_cts` del día de la 190, al céntimo.
 --    · `sentados` — tiempo que la gente está sentada, por tamaño de mesa: [tamano, n, mediana_min, promedio_min].
 --                   Tamaños: '2' = 1–2 personas · '4' = 3–4 · '6' = 5–6 · '7+' = 7 o más.
 --                   Unidad = el PEDIDO (`numero_pedido` + `pedido_abierto_en`, la clave completa: el número se
@@ -58,7 +59,7 @@ create table if not exists public.pos_mesas_internas (
   primary key (local, mesa)
 );
 comment on table public.pos_mesas_internas is
-  'Mig 193. Mesas internas por local (dueños, regalías, errores): fuera de los indicadores de venta real, dentro de Contabilidad. Mesa sin ceros a la izquierda.';
+  'Mig 193. Mesas internas por local (dueños, regalías, errores): son venta y cuentan en todo; solo salen del tiempo sentado y de la alerta de mesas sin pax. Mesa sin ceros a la izquierda.';
 
 alter table public.pos_mesas_internas enable row level security;
 
@@ -83,23 +84,6 @@ grant select, insert, delete on table public.pos_mesas_internas to authenticated
 insert into public.pos_mesas_internas (local, mesa, creado_por)
 values ('santa-teresa', '51', null), ('santa-teresa', '52', null), ('santa-teresa', '53', null)
 on conflict (local, mesa) do nothing;
-
--- ── Helper interno: ¿la factura es de una mesa interna del local? ─────────────────────────
-create or replace function public.pos_es_mesa_interna(p_local text, p_mesa text, p_mesa_factura text)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public, pg_temp
-as $$
-  select exists (
-    select 1 from public.pos_mesas_internas mi
-    where mi.local = p_local
-      and mi.mesa in (nullif(ltrim(btrim(p_mesa), '0'), ''), nullif(ltrim(btrim(p_mesa_factura), '0'), ''))
-  )
-$$;
-revoke all on function public.pos_es_mesa_interna(text, text, text) from public, anon, authenticated;
-grant execute on function public.pos_es_mesa_interna(text, text, text) to service_role;
 
 -- ── Helper interno: el portón de las dos funciones ───────────────────────────────────────
 create or replace function public.pos_ventas_tiempos_porton(p_local text, p_desde date, p_hasta date)
@@ -150,7 +134,9 @@ begin
       and tk.estado = 'C'
       and tk.fecha_registra >= ((p_desde - 1)::timestamp at time zone 'America/Costa_Rica')
       and tk.fecha_registra <  ((p_hasta + 2)::timestamp at time zone 'America/Costa_Rica')
-      and public.pos_es_mesa_interna(p_local, tk.mesa, tk.mesa_factura)
+      and exists (select 1 from public.pos_mesas_internas mi   -- en línea (no en una función aparte: el planificador la mete en la consulta)
+                  where mi.local = p_local
+                    and mi.mesa in (nullif(ltrim(btrim(tk.mesa), '0'), ''), nullif(ltrim(btrim(tk.mesa_factura), '0'), '')))
   ),
   l as (
     select ln.ticket_id, count(*) as n,
@@ -194,7 +180,9 @@ begin
     select tk.id, tk.canal, tk.pax, tk.pax_articulo, tk.valor_servido_crc, tk.fecha_registra,
            tk.numero_pedido, tk.pedido_abierto_en,
            (tk.fecha_registra at time zone 'America/Costa_Rica') as ts_cr,
-           public.pos_es_mesa_interna(p_local, tk.mesa, tk.mesa_factura) as interna
+           exists (select 1 from public.pos_mesas_internas mi   -- en línea (no en una función aparte: el planificador la mete en la consulta)
+                  where mi.local = p_local
+                    and mi.mesa in (nullif(ltrim(btrim(tk.mesa), '0'), ''), nullif(ltrim(btrim(tk.mesa_factura), '0'), ''))) as interna
     from public.pos_ndf_tickets tk
     where tk.local = p_local
       and tk.estado = 'C'
@@ -217,7 +205,7 @@ begin
   h as (
     select dia, hora, sum(neta_cts) as neta_cts, count(*) as facturas, sum(pax_d) as pax
     from f
-    where dia between p_desde and p_hasta and not interna
+    where dia between p_desde and p_hasta
     group by dia, hora
   ),
   -- Tiempo sentado: salón, por pedido.
@@ -272,4 +260,4 @@ $function$;
 revoke all on function public.pos_ventas_tiempos(text, date, date) from public, anon;
 grant execute on function public.pos_ventas_tiempos(text, date, date) to authenticated;
 comment on function public.pos_ventas_tiempos(text, date, date) is
-  'Mig 193. Ventas v2 Tiempos: horas (día × hora CR, todos los canales, sin mesas internas, céntimos), tiempo sentado por tamaño de mesa (pedido = numero_pedido + pedido_abierto_en; 5–240 min) y descartes. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';
+  'Mig 193. Ventas v2 Tiempos: horas (día × hora CR, todos los canales, céntimos), tiempo sentado por tamaño de mesa (pedido = numero_pedido + pedido_abierto_en; 5–240 min) y descartes. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';

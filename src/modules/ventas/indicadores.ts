@@ -41,8 +41,6 @@
 // referencia del estimador y de la alerta de mesas sin pax, y se cuentan aparte:
 //   · Mesas de dueños («no tienen que tener pax ni contabilizarse en el prom/pax»): `esMesaDeDuenos`.
 //   · Regalías totales (total 0): `esRegaliaTotal`.
-//   · Mesas internas (decisión del dueño 18-nov: 51, 52 y 53 en santa-teresa; configurable en Ajustes):
-//     `interna` en la factura. También salen de la referencia del estimador.
 // Siguen sumando en la venta total del local: `netaVenta.ts` (firmada) no cambia.
 
 import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
@@ -80,9 +78,9 @@ export interface FacturaIndicador {
   /** Parte de `neta` de la familia 28 (dueños). Si falta, se decide por `clase_ingreso`. */
   neta_duenos?:   number
   /**
-   * Factura de una MESA INTERNA del local (decisión del dueño 18-nov: 51, 52 y 53 en santa-teresa; lista en
-   * Ajustes → «Mesas internas», tabla `pos_mesas_internas`). La marca la lectura (`pos_ventas_internas`).
-   * Sale ENTERA de los indicadores de venta real; sigue en Contabilidad (tiene IVA: es venta fiscal).
+   * Factura de una MESA INTERNA del local (Ajustes → «Mesas internas», tabla `pos_mesas_internas`, mig 193; 51, 52
+   * y 53 en santa-teresa). Decisión del dueño (18-nov 13:45): es VENTA (se cerró con IVA) y sigue en todo, incluida
+   * esta venta por persona. Solo sale de la ALERTA de mesas sin pax: en esas mesas no se cargan personas.
    */
   interna?:       boolean
 }
@@ -183,11 +181,10 @@ export function esMesaDeDuenos(f: Pick<FacturaIndicador, 'clase_ingreso' | 'neta
   return f.clase_ingreso === 'duenos'
 }
 
-/** ¿Sale ENTERA de la venta por persona y de la alerta? Mesa interna, mesa de dueños o regalía total. */
+/** ¿Sale ENTERA de la venta por persona y de la alerta? Mesa de dueños o regalía total. */
 export function quedaFueraDelIndicador(
-  f: Pick<FacturaIndicador, 'clase_ingreso' | 'neta' | 'neta_duenos' | 'total_crc' | 'interna'>,
-): 'interna' | 'duenos' | 'regalia' | null {
-  if (f.interna) return 'interna'
+  f: Pick<FacturaIndicador, 'clase_ingreso' | 'neta' | 'neta_duenos' | 'total_crc'>,
+): 'duenos' | 'regalia' | null {
   if (esMesaDeDuenos(f)) return 'duenos'
   if (esRegaliaTotal(f)) return 'regalia'
   return null
@@ -341,9 +338,6 @@ export interface VentaPorPersona {
   /** Mesas de dueños. Fuera del numerador y del denominador. */
   mesasDuenos:           number
   netaMesasDuenos:       number
-  /** Facturas de mesas internas (Ajustes). Fuera del numerador y del denominador. */
-  mesasInternas:         number
-  netaMesasInternas:     number
   /** Facturas cuyo día y turno salieron del reloj (sin caja 111/222). */
   turnosInferidos:       number
   /** Facturas de salón sin salonero (sin pedido, caja o sistema). */
@@ -375,7 +369,6 @@ export function ventaPorPersona(
   let netaSalon = 0, netaConPax = 0, cargadas = 0, estimadas = 0
   let facturasSalon = 0, sinPax = 0, sinRef = 0, netaSinRef = 0
   let regalias = 0, netaRegalias = 0, duenos = 0, netaDuenos = 0, inferidos = 0, sinSalonero = 0
-  let internas = 0, netaInternas = 0
   for (const f of facturas) {
     if (!esFacturaDeSalon(f)) continue
     const u = ubic.get(f)
@@ -387,7 +380,6 @@ export function ventaPorPersona(
     if (u.inferido) inferidos += 1
     if (!f.salonero_login) sinSalonero += 1
     const fuera = quedaFueraDelIndicador(f)
-    if (fuera === 'interna') { internas += 1; netaInternas += neta; continue }
     if (fuera === 'duenos') { duenos += 1; netaDuenos += neta; continue }
     if (fuera === 'regalia') { regalias += 1; netaRegalias += neta; continue }
     netaSalon += neta
@@ -422,8 +414,6 @@ export function ventaPorPersona(
     netaRegaliasTotales:   netaRegalias,
     mesasDuenos:           duenos,
     netaMesasDuenos:       netaDuenos,
-    mesasInternas:         internas,
-    netaMesasInternas:     netaInternas,
     turnosInferidos:       inferidos,
     facturasSinSalonero:   sinSalonero,
     estimador:             estimador.id,
@@ -495,7 +485,7 @@ export interface AlertaMesasSinPax {
   regaliasTotales: number
   /** Mesas de dueños del rango: fuera de la alerta, contadas aparte. */
   mesasDuenos:     number
-  /** Facturas de mesas internas del rango: fuera de la alerta, contadas aparte. */
+  /** Facturas de mesas internas (Ajustes) del rango: fuera de la alerta (ahí no se cargan personas), contadas aparte. */
   mesasInternas:   number
 }
 
@@ -511,8 +501,8 @@ export function alertaMesasSinPax(facturas: readonly FacturaIndicador[], r: Rang
     if (!esFacturaDeSalon(f)) continue
     const u = ubic.get(f)
     if (!u || !enRango(u.dia, r)) continue
+    if (f.interna) { internas += 1; continue }
     const fuera = quedaFueraDelIndicador(f)
-    if (fuera === 'interna') { internas += 1; continue }
     if (fuera === 'duenos') { duenos += 1; continue }
     if (fuera === 'regalia') { regalias += 1; continue }
     const falta = personasCargadas(f) <= 0 ? 1 : 0

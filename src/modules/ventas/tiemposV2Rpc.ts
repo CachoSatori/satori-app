@@ -1,9 +1,9 @@
 // ── Ventas v2 · lo que devuelven `pos_ventas_tiempos` y `pos_ventas_internas` (mig 193) — PURO ──────────
 //
 // · `pos_ventas_internas` → facturas de MESAS INTERNAS (Ajustes → «Mesas internas»; 51, 52 y 53 en santa-teresa):
-//   [id, dia, hora, canal, neta_cts, pax]. La app las marca `interna` y las saca de los indicadores de venta real.
-//   Siguen en Contabilidad y en el correo del contador (decisión del dueño 18-nov: tienen IVA, son venta fiscal).
-// · `pos_ventas_tiempos` → `horas` (día × hora CR, TODOS los canales, sin internas, céntimos), `sentados` (tiempo
+//   [id, dia, hora, canal, neta_cts, pax]. La app las marca `interna`. Son VENTA (decisión del dueño 18-nov 13:45)
+//   y siguen en todo; solo salen de la alerta de mesas sin pax (y la 193 las saca del tiempo sentado).
+// · `pos_ventas_tiempos` → `horas` (día × hora CR, TODOS los canales, internas incluidas, céntimos), `sentados` (tiempo
 //   sentado por tamaño de mesa) y `descartes`.
 
 /** Una factura de mesa interna. */
@@ -98,22 +98,4 @@ export function marcarInternas<T extends { id: string }>(facturas: readonly T[],
   if (internas.length === 0) return [...facturas]
   const ids = new Set(internas.map(i => i.id))
   return facturas.map(f => (ids.has(f.id) ? { ...f, interna: true } : f))
-}
-
-/** Céntimos de mesas internas por día CR, de un rango. */
-export interface InternasDia { netaCts: number; facturas: number; pax: number }
-
-export function internasPorDia(internas: readonly InternaRpc[], desde: string, hasta: string): Map<string, InternasDia> {
-  const out = new Map<string, InternasDia>()
-  const vistos = new Set<string>()
-  for (const i of internas) {
-    if (i.dia < desde || i.dia > hasta || vistos.has(i.id)) continue
-    vistos.add(i.id)
-    const e = out.get(i.dia) ?? { netaCts: 0, facturas: 0, pax: 0 }
-    e.netaCts += i.netaCts
-    e.facturas += 1
-    e.pax += i.pax
-    out.set(i.dia, e)
-  }
-  return out
 }

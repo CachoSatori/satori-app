@@ -1,7 +1,7 @@
 // ── Ventas v2 · «Tiempos» (SPEC-ventas-v2 §5.4, fase 2.3) ──────────────────────────────────────
 // Barra global (la misma del Resumen, en la URL) + día de semana + hora y turno + quincenas +
 // tiempo sentado + calendario. El cálculo es `tiemposV2.ts`; la lectura, `tiemposV2Datos.ts` (190 + 193; sin la
-// 193, la 080 y el mapa solo de salón). Las mesas internas (Ajustes) no cuentan como venta real.
+// 193, la 080 y el mapa solo de salón). Las mesas internas (Ajustes) son venta: solo salen del tiempo sentado.
 // Convive con «Calendario» y «Análisis» hasta la fase 3.5.
 // Queda para después: «Meses y temporadas» (§5.4 ítem 4) y las fechas especiales del calendario (fase 3).
 import { useEffect, useMemo, useState } from 'react'
@@ -19,7 +19,7 @@ import {
   porTurnoHoras, rangosDeTiempos, ultimasQuincenas, vppPorDiaSemana,
 } from './tiemposV2'
 import { cargarLecturaDeRangos, cargarTiempos, cargarTurnos, getLocalesVentas } from './tiemposV2Datos'
-import { internasPorDia, TAMANOS, type TiemposRpc } from './tiemposV2Rpc'
+import { TAMANOS, type TiemposRpc } from './tiemposV2Rpc'
 import type { LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
 
@@ -118,9 +118,7 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
     const estimador = estimadorPorNeta(l.facturas)
     const p = cifrasDelRango(l, periodo)
     const ra = periodo.bases[baseA], rb = periodo.bases[baseB]
-    const ints = (r: { desde: string; hasta: string }) => internasPorDia(l.internas ?? [], r.desde, r.hasta)
-    const intP = ints(periodo)
-    const semana = porDiaSemana(p.dias, intP)
+    const semana = porDiaSemana(p.dias)
     const vppTurno = {
       'mañana': ventaPorPersona(l.facturas, periodo, { estimador, turno: 'mañana' }),
       noche: ventaPorPersona(l.facturas, periodo, { estimador, turno: 'noche' }),
@@ -128,11 +126,11 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
     const abiertos = semana.map(s => s.diasAbiertos)
     return {
       p, semana,
-      semanaA: ra ? porDiaSemana(cifrasDelRango(l, ra).dias, ints(ra)) : null,
-      semanaB: rb ? porDiaSemana(cifrasDelRango(l, rb).dias, ints(rb)) : null,
+      semanaA: ra ? porDiaSemana(cifrasDelRango(l, ra).dias) : null,
+      semanaB: rb ? porDiaSemana(cifrasDelRango(l, rb).dias) : null,
       vppSemana: vppPorDiaSemana(l, periodo, estimador),
       mapa: tiempos ? mapaHorasTodos(tiempos.horas, periodo, abiertos) : mapaHoras(l.facturas, periodo, abiertos),
-      turnos: tiempos ? porTurnoHoras(p.dias, tiempos.horas, intP, vppTurno)
+      turnos: tiempos ? porTurnoHoras(p.dias, tiempos.horas, vppTurno)
         : turnos ? porTurno(p.dias, turnos, vppTurno) : null,
       quincenas: filasQuincenas(l, quincenas, baseA, baseB),
       cal: calendario(p.dias, periodo),
@@ -143,10 +141,6 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
   const qCerrada = { tipo: 'quincena' as const, enCurso: false, dias: 15 }
   const qA = rotuloBase(qCerrada, baseA), qB = rotuloBase(qCerrada, baseB)
   const sumaSemana = d.semana.reduce((s, f) => s + f.neta, 0)
-  const sinInternas = l.internas === null || l.internas === undefined
-  const fueraInternas = d.p.internas.facturas > 0
-    ? `Sin ${d.p.internas.facturas} ${d.p.internas.facturas === 1 ? 'factura de mesa interna' : 'facturas de mesas internas'} (${fi(d.p.totales.ventaNeta - sumaSemana)}): siguen en Contabilidad, que da ${fi(d.p.totales.ventaNeta)}.`
-    : null
 
   return (
     <>
@@ -181,9 +175,7 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
             </tbody>
           </table>
         </div>
-        <p className="vt2-nota">La venta es la de Contabilidad (día de la factura) sin las mesas internas. La venta por persona es la de siempre (D4: el día lo pone la caja que estaba abierta); en gris, con menos de {MUESTRA_CHICA_PERSONAS} personas.</p>
-        {fueraInternas && <p className="vt2-nota" data-nota="internas">{fueraInternas}</p>}
-        {sinInternas && <p className="vt2-nota">Las mesas internas todavía no se pueden separar (falta la función de la base): la tabla las incluye.</p>}
+        <p className="vt2-nota">La venta es la de Contabilidad (día de la factura). La venta por persona es la de siempre (D4: el día lo pone la caja que estaba abierta); en gris, con menos de {MUESTRA_CHICA_PERSONAS} personas.</p>
       </section>
 
       {/* 2. Hora y turno */}
@@ -205,7 +197,7 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
                 </tr>
               </tbody>
             </table>
-            <p className="vt2-nota">Todos los canales, sin las mesas internas. La venta va por la hora de la factura; la venta por persona, por el turno de la caja (D4). Lo de la madrugada va a la noche.</p>
+            <p className="vt2-nota">Todos los canales. La venta va por la hora de la factura; la venta por persona, por el turno de la caja (D4). Lo de la madrugada va a la noche.</p>
             {d.turnos.descuadres.length > 0 && (
               <div className="vt2-aviso" role="status">
                 El reparto por turno no cuadra con Contabilidad en {d.turnos.descuadres.length} {d.turnos.descuadres.length === 1 ? 'día' : 'días'} ({d.turnos.descuadres.slice(0, 5).join(', ')}{d.turnos.descuadres.length > 5 ? '…' : ''}). Avisá al owner.
@@ -216,7 +208,7 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
 
         <div className="vt-sl" style={{ marginTop: '1rem' }}>{tiempos ? 'Mapa por hora · todos los canales' : 'Mapa por hora · solo salón'}</div>
         <p className="vt2-nota">{tiempos
-          ? 'Venta neta promedio por día abierto, por día de semana y hora de la factura, sin las mesas internas.'
+          ? 'Venta neta promedio por día abierto, por día de semana y hora de la factura.'
           : 'Venta neta de salón promedio por día abierto, por día de semana y hora de la factura. Barra, delivery y llevar no traen la hora todavía.'}</p>
         {d.mapa.horas.length === 0 ? <p className="vt2-nota">Sin ventas de salón en el período.</p> : (
           <div style={{ overflowX: 'auto' }}>
@@ -267,7 +259,7 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
             <p className="vt2-nota">
               Salón, desde que se abre el pedido hasta que se cobra su última factura (una mesa partida en varias cuentas es una sola mesa, con la suma de sus personas).
               Quedan afuera: {tiempos.descartes.sin_pedido} cuentas sin pedido (divididas o de caja), {tiempos.descartes.sin_pax} mesas sin pax,
-              {' '}{tiempos.descartes.menos_de_5} de menos de 5 min, {tiempos.descartes.mas_de_240} de más de 4 horas (pedido que quedó abierto) y {tiempos.descartes.internas} de mesas internas.
+              {' '}{tiempos.descartes.menos_de_5} de menos de 5 min, {tiempos.descartes.mas_de_240} de más de 4 horas (pedido que quedó abierto) y {tiempos.descartes.internas} de mesas internas (Ajustes: ahí no se sientan clientes).
             </p>
           </>
         )}

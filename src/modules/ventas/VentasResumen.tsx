@@ -18,8 +18,6 @@ import {
   UMBRAL_SIN_PAX_PCT, type CifrasRango, type Lectura,
 } from './resumenV2'
 import { cargarLecturaRango, cargarLecturaResumen, getLocalesVentas, type LocalVentas } from './resumenV2Datos'
-import { ventaRealDelDia } from './tiemposV2'
-import { internasPorDia } from './tiemposV2Rpc'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
 import { PRIMERA_JORNADA_POS } from './ventasFuente'
 
@@ -27,9 +25,8 @@ const casiCero = (x: number) => Math.abs(x) < 0.05
 const fmtPct = (x: number) => casiCero(x) ? '0,0 %' : `${x > 0 ? '+' : '−'}${Math.abs(x).toFixed(1).replace('.', ',')} %`
 const fmtNum = (x: number) => Math.round(x).toLocaleString('es-CR')
 /** «Sin 2 mesas de dueños ni 1 regalía total.» Solo lo que hay. */
-function fueraTxt(duenos: number, regalias: number, internas = 0): string {
+function fueraTxt(duenos: number, regalias: number): string {
   const partes = [
-    internas > 0 ? `${internas} ${internas === 1 ? 'factura de mesa interna' : 'facturas de mesas internas'}` : null,
     duenos > 0 ? `${duenos} ${duenos === 1 ? 'mesa' : 'mesas'} de dueños` : null,
     regalias > 0 ? `${regalias} ${regalias === 1 ? 'regalía total' : 'regalías totales'}` : null,
   ].filter(Boolean)
@@ -157,16 +154,11 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle, meta }
             {c.id === 'ventaPorPersona' && (
               <div className="vt-kpi-sub">
                 Neta de salón ÷ personas de salón; incluye {p.vpp.pctEstimado.toFixed(1).replace('.', ',')} % estimado.
-                {fueraTxt(p.vpp.mesasDuenos, p.vpp.regaliasTotales, p.vpp.mesasInternas)}
+                {fueraTxt(p.vpp.mesasDuenos, p.vpp.regaliasTotales)}
               </div>
             )}
             {c.id === 'personas' && <div className="vt-kpi-sub">PAX cargado (como Contabilidad).</div>}
-            {c.id === 'cuentaPromedio' && (
-              <div className="vt-kpi-sub">
-                {fmtNum(p.facturas - p.internas.facturas)} facturas
-                {p.internas.facturas > 0 && ` (sin ${p.internas.facturas} de mesas internas, ${fi(Math.round(p.internas.neta))}: siguen en la venta neta)`}
-              </div>
-            )}
+            {c.id === 'cuentaPromedio' && <div className="vt-kpi-sub">{fmtNum(p.facturas)} facturas</div>}
             {c.id === 'ventaNeta' && p.ventaPorDiaAbierto !== null && (
               <div className="vt-kpi-sub">{fi(Math.round(p.ventaPorDiaAbierto))} por día abierto ({p.diasAbiertos} días)</div>
             )}
@@ -235,6 +227,7 @@ function AlertaAyer({ alerta, nombres, dia }: { alerta: ReturnType<typeof alerta
           ? 'Todas las mesas de salón de ayer tienen pax.'
           : `${alerta.total.sinPax} de ${alerta.total.facturasSalon} mesas de salón sin pax (${alerta.total.pct.toFixed(1).replace('.', ',')} %).`}
         {' '}{desdeCaja > 0 && `${desdeCaja === 1 ? '1 mesa se cargó entera' : `${desdeCaja} mesas se cargaron enteras`} desde la caja (sin salonero)${alerta.sinSalonero.sinPax > 0 ? `, ${alerta.sinSalonero.sinPax} sin pax` : ''}.`}
+        {alerta.mesasInternas > 0 && ` No cuenta ${alerta.mesasInternas === 1 ? '1 factura de mesa interna' : `${alerta.mesasInternas} facturas de mesas internas`} (Ajustes): ahí no se cargan personas.`}
       </p>
       {conFalta.length > 0 && (
         <ul>
@@ -301,9 +294,7 @@ function MetaDelMes({ local, N, ancla, metas }: { local: string; N: string; ancl
     cargarLecturaRango(local, rango)
       .then(l => {
         if (!vivo) return
-        // Venta REAL por día: sin las mesas internas (decisión del dueño 18-nov, «A»). Contabilidad no cambia.
-        const ints = internasPorDia(l.internas ?? [], rango.desde, rango.hasta)
-        const netaPorDia = new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, ventaRealDelDia(d, ints)]))
+        const netaPorDia = new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, d.ventaNeta]))
         setR({ clave, p: proyectarMes({ meta, mes, N, netaPorDia, primerDiaConDatos: PRIMERA_JORNADA_POS }) })
       })
       .catch(e => { if (vivo) setFallo(e instanceof Error ? e.message : 'No se pudo leer el PoS') })

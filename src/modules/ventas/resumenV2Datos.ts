@@ -162,7 +162,10 @@ export async function cargarLecturaRango(local: string, r: Rango): Promise<Lectu
 
 async function cargarLecturaDeTramos(local: string, tramos: Rango[]): Promise<Lectura> {
   const nombres = getSaloneroNombres().catch(() => ({} as Record<string, string>))
-  const internas = cargarInternasDeTramos(local, tramos)
+  // Las mesas internas se piden en paralelo. Su resultado (o su error) se atiende SIEMPRE: si el resumen falla
+  // primero, la falla de esta promesa no puede quedar sin atender (verificador de #294).
+  const internas: Promise<{ ok: true; v: InternaRpc[] | null } | { ok: false; e: unknown }> =
+    cargarInternasDeTramos(local, tramos).then(v => ({ ok: true as const, v }), e => ({ ok: false as const, e }))
   let l: Lectura | null = null
   if (!funcionAusente) {
     try {
@@ -177,10 +180,12 @@ async function cargarLecturaDeTramos(local: string, tramos: Rango[]): Promise<Le
     const partes = await Promise.all(tramos.map(r => leerTramo(local, r)))
     l = armarLectura(...juntarPartes(partes), await nombres)
   }
-  return conInternas(l, await internas)
+  const i = await internas
+  if (!i.ok) throw i.e
+  return conInternas(l, i.v)
 }
 
-// ── Mesas internas (mig 193): fuera de los indicadores de venta real, dentro de Contabilidad ────────────
+// ── Mesas internas (mig 193): son venta; solo salen de la alerta de mesas sin pax ─────────────────────────────────
 
 const cacheInternas = new Map<string, Promise<InternaRpc[]>>()
 let internasAusente = false

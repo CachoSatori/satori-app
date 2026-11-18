@@ -49,9 +49,9 @@ export default function VentasMesasInternas() {
     <div className="vt-section">
       <div className="vt-sl">Mesas internas</div>
       <p className="vt2-nota">
-        Mesas de uso interno (dueños, regalías, errores). Sus facturas no cuentan como venta real: quedan fuera de la
-        venta por persona, la cuenta promedio, la alerta de mesas sin pax y «Tiempos» (día de semana, hora, turno y
-        tiempo sentado). Siguen en Contabilidad y en el correo del contador: tienen IVA, son venta fiscal.
+        Mesas de uso interno (dueños, regalías, errores). Sus facturas son venta y cuentan en todo: Contabilidad, el
+        Resumen, la venta por persona, la meta y «Tiempos». Esta lista sirve para dos cosas: que no aparezcan en la
+        alerta de mesas sin pax (en esas mesas no se cargan personas) y que no entren en el tiempo sentado.
       </p>
       {locales.length > 1 && (
         <label className="vt2-campo"><span>Local</span>
@@ -63,7 +63,7 @@ export default function VentasMesasInternas() {
       {error && <div className="vt2-aviso" role="alert">{error}</div>}
       {mesas === null ? <div className="vt2-cargando" role="status">Leyendo…</div> : (
         <ul aria-label="Mesas internas" data-lista="mesas-internas">
-          {mesas.length === 0 && <li>Ninguna: todas las mesas cuentan como venta real.</li>}
+          {mesas.length === 0 && <li>Ninguna: todas las mesas entran en la alerta de pax y en el tiempo sentado.</li>}
           {mesas.map(m => (
             <li key={m}>
               Mesa {m}

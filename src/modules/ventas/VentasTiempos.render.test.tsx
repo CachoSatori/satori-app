@@ -32,12 +32,10 @@ const internas: InternaRpc[] = ['2026-11-03', '2026-11-04', '2026-11-05'].map(di
   return { id: f.id, dia, hora: horaCRDeFactura(f.fecha_registra), canal: 'salon', netaCts: Math.round(f.neta * 100), pax: personasCargadas(f) }
 })
 const lectInt = conInternas(lect, internas)
-// Lo que devolvería la 193: horas de todos los canales sin las internas, en céntimos.
+// Lo que devolvería la 193: horas de todos los canales (internas incluidas: son venta), en céntimos.
 const horasRpc: HoraRpc[] = (() => {
-  const ids = new Set(internas.map(i => i.id))
   const m = new Map<string, HoraRpc>()
   for (const f of lect.facturas) {
-    if (ids.has(f.id)) continue
     const dia = diaCRDeFactura(f.fecha_registra), hora = horaCRDeFactura(f.fecha_registra)
     const e = m.get(`${dia}|${hora}`) ?? { dia, hora, netaCts: 0, facturas: 0, pax: 0 }
     e.netaCts += Math.round(f.neta * 100); e.facturas += 1
@@ -92,16 +90,13 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('VentasTiempos', () => {
-  it('abre en «Mes a la fecha» (1 al 17-nov): TOTAL del día de semana y del turno = Contabilidad − mesas internas', async () => {
+  it('abre en «Mes a la fecha» (1 al 17-nov), con mesas internas marcadas: TOTAL del día de semana y del turno = Contabilidad', async () => {
     abrir('/ventas?tab=tiempos')
     await screen.findByRole('table', { name: 'Día de semana' })
     const tot = contabilidad('2026-11-01', '2026-11-17')
-    const sinInternas = tot.ventaNeta - internas.reduce((s, i) => s + Math.round(i.netaCts / 100), 0)
-    expect(sinInternas).toBeLessThan(tot.ventaNeta)
-    expect(celdas('[data-fila="total"]')[2]).toBe(fi(sinInternas))
-    expect(celdas('[data-fila="total-turno"]')[1]).toBe(fi(sinInternas))
-    expect(document.querySelector('[data-nota="internas"]')!.textContent)
-      .toBe(`Sin 3 facturas de mesas internas (${fi(tot.ventaNeta - sinInternas)}): siguen en Contabilidad, que da ${fi(tot.ventaNeta)}.`)
+    expect(celdas('[data-fila="total"]')[2]).toBe(fi(tot.ventaNeta))
+    expect(celdas('[data-fila="total-turno"]')[1]).toBe(fi(tot.ventaNeta))
+    expect(document.querySelector('[data-nota="internas"]')).toBeNull()
     expect(document.body.textContent).toContain('Mapa por hora · todos los canales')
     expect(turnos).not.toHaveBeenCalled() // con la 193 el turno sale de sus horas
     // Tiempo sentado por tamaño, con N y lo descartado.
@@ -150,7 +145,6 @@ describe('VentasTiempos', () => {
     expect(celdas('[data-fila="total-turno"]')[1]).toBe(fi(tot.ventaNeta))
     expect(turnos).toHaveBeenCalled()
     expect(document.body.textContent).toContain('Mapa por hora · solo salón')
-    expect(document.body.textContent).toContain('Las mesas internas todavía no se pueden separar')
     expect(screen.queryByRole('table', { name: 'Tiempo sentado' })).toBeNull()
   })
 

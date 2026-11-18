@@ -1,8 +1,8 @@
-// ── Ventas · «Mesas internas» (Ajustes): la lista de mesas que no son venta real (mig 193) ──────────────
+// ── Ventas · «Mesas internas» (Ajustes): mesas fuera de la alerta de pax y del tiempo sentado (mig 193) ──────────────
 //
-// Decisión del dueño (18-nov): las mesas 51, 52 y 53 de santa-teresa son internas (dueños, regalías, errores).
-// Sus facturas no cuentan para los indicadores de venta real (venta por persona, promedios, alertas de pax, día
-// de semana, hora, tiempo sentado) y SÍ siguen en Contabilidad y en el correo del contador (tienen IVA).
+// Decisión del dueño (18-nov 13:45): las mesas 51, 52 y 53 de santa-teresa son internas (dueños, regalías, errores),
+// pero sus facturas SON VENTA («si se cerraron con IVA es porque se vendió») y cuentan en todo. La lista solo las saca
+// de la alerta de mesas sin pax y del tiempo sentado.
 // La lista vive en `pos_mesas_internas` (local, mesa). Lee owner, manager y contador; agrega y quita solo el
 // owner (la base lo hace cumplir con RLS: acá solo se esconde el botón).
 import { supabase } from '../../shared/api/supabase'

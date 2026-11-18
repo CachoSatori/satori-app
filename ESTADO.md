@@ -146,6 +146,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | 132 | → 188 (getEdadSocio por función con control de local; #273, en prod 17-nov) |
 | 133 | → 189 (cron del correo quincenal de ventas por día al contador; reservado para pasar directo a 189) |
 | 134 | → 190 (Ventas v2: `pos_ventas_resumen`, solo lectura; reservado para pasar directo a 190) |
+| 137 | → 193 (`propinas_cada_uno_lo_suyo`; 135 y 136 los toman #292 y otro PR en curso; número final se fija al mergear) |
 | 150 | ← 075 |
 | 151 | ← 100 |
 | 153 | ← 096 |
@@ -185,6 +186,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | 188 | ← 132 (#273, en prod 17-nov) |
 | 189 | ← 133 (cron `satori-ventas-dia-contador`, 1 y 16 a las 07:00 CR; en prod 18-nov, jobid 10; PASE-189) |
 | 190 | ← 134 (`pos_ventas_resumen`, Ventas v2 «Resumen»; PR en borrador, firma de esquema pendiente; PASE-190) |
+| 193 | ← 137 (`propinas_cada_uno_lo_suyo`: lectura de `tip_entries`, cada uno lo suyo; PR en borrador, firma de permisos pendiente; PASE-193; provisional, se fija al mergear) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 

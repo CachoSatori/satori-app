@@ -321,6 +321,12 @@
       "rama": "claude/ventas-v2-resumen-fn",
       "renumerada_a": "190"
     },
+    "137": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "club",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "renumerada_a": "193"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -554,6 +560,12 @@
       "bloque": "pase",
       "rama": "claude/ventas-v2-resumen-fn",
       "origen": "134"
+    },
+    "193": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "pase",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "origen": "137"
     }
   }
 }

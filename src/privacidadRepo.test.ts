@@ -5,7 +5,8 @@
 //      Ojo: un hash de un nombre común se puede adivinar con un diccionario; esto evita el texto plano, no es un secreto.
 //   2. Un correo que no sea ficticio. Ficticios: dominios `.test`, `ejemplo.*`, `example.*`, la cuenta de servicio de
 //      mentira y unos pocos genéricos (placeholders y remitentes de servicios). El correo público del negocio (también
-//      con alias `+algo`) solo vale en el aviso del Club y su prueba.
+//      con alias `+algo`) solo vale en el aviso del Club y su prueba. El remitente propio del dominio verificado en
+//      Resend (decisión del dueño, 18-nov) solo vale en el código de las Edge de correo y sus pruebas.
 // Fuera del escaneo: `supabase/migrations/` (ya aplicadas: el ledger y Branching dependen de su texto) y los lockfiles
 // (metadatos de terceros).
 // PENDIENTES: lugares conocidos donde el valor se USA en ejecución (cambiarlo cambia comportamiento) o que decide el
@@ -31,6 +32,12 @@ const NEGOCIO = 'c1ad5654de04a3946d9fa483f888055f7731eab4870e0374227719a5d2cbcc6
 const DUENO = '010039fad6aca99cbdb47a302143bad29853b81bc3e18c0483c2c491dd662e97'
 
 const PERMITIDOS_NEGOCIO = new Set(['club-web/src/i18n.ts', 'club-web/src/aviso.test.ts'])
+
+// (18-nov, decisión del dueño: segunda excepción de «Repo público» en CLAUDE.md) Hash del remitente propio
+// (`no-responder@` del dominio del negocio, verificado en Resend). Vale SOLO en el código `.ts` de las Edge que mandan
+// correo y en sus pruebas; en cualquier otro archivo (docs, src/, scripts, club-web) cae.
+const REMITENTE = '314e8bd4c0f438086a8201054810a2bb8a4d2869ae08dfc3cc43e38933f737b6'
+const PERMITIDOS_REMITENTE = /^supabase\/functions\/(?:cierre-email|monthly-report|pago-notificar|ventas-dia-contador)\/[^/]+\.tsx?$/
 
 const PENDIENTES: Record<string, string[]> = {
   // La regla misma de «Repo público» nombra el correo del negocio: la redacción la decide el dueño.
@@ -103,6 +110,7 @@ export function correosMalos(rel: string, texto: string): string[] {
     if (DOMINIO_FICTICIO.test(dominio) || GENERICOS.has(c)) continue
     const h = sha(`${local.split('+')[0]}@${dominio}`)
     if (h === NEGOCIO && PERMITIDOS_NEGOCIO.has(rel)) continue
+    if (h === REMITENTE && PERMITIDOS_REMITENTE.test(rel)) continue
     if (PENDIENTES[rel]?.includes(h)) continue
     malos.push(`${rel}: correo ${h === NEGOCIO ? 'del negocio' : h === DUENO ? 'del dueño' : 'no ficticio'} (${h.slice(0, 8)})`)
   }
@@ -126,6 +134,22 @@ test('la guarda detecta el nombre y los correos (sin escribirlos acá)', () => {
   // Armados por partes para que el escaneo no encuentre este archivo.
   expect(correosMalos('x.md', 'escribir a alguien' + '@' + 'gmail.com')).toHaveLength(1)
   expect(correosMalos('x.md', 'jefe' + '@' + 'dominio-real.cr')).toHaveLength(1)
+})
+
+test('el remitente propio vale solo en el código de las Edge de correo y sus pruebas (18-nov)', () => {
+  const dom = ['satori', 'costarica', '.com'].join('')   // por partes: lo cuida src/dominioRepo.test.ts
+  const rem = 'Satori <no-responder' + '@' + dom + '>'
+  expect(correosMalos('supabase/functions/ventas-dia-contador/index.ts', rem)).toEqual([])
+  expect(correosMalos('supabase/functions/cierre-email/index.ts', rem)).toEqual([])
+  expect(correosMalos('supabase/functions/ventas-dia-contador/proceso.test.ts', rem)).toEqual([])
+  // fuera de esas Edge, o en otro tipo de archivo, cae
+  expect(correosMalos('supabase/functions/extract-document/index.ts', rem)).toHaveLength(1)
+  expect(correosMalos('supabase/functions/ventas-dia-contador/README.md', rem)).toHaveLength(1)
+  expect(correosMalos('src/modules/ventas/VentasContabilidad.tsx', rem)).toHaveLength(1)
+  expect(correosMalos('docs/pases/PASE-189-correo-contador.md', rem)).toHaveLength(1)
+  expect(correosMalos('club-web/src/i18n.ts', rem)).toHaveLength(1)
+  // otra cuenta del mismo dominio no entra por esta excepción
+  expect(correosMalos('supabase/functions/ventas-dia-contador/index.ts', 'otra' + '@' + dom)).toHaveLength(1)
 })
 
 test('ningún archivo del repo tiene el nombre de pila del dueño ni correos reales fuera de lo permitido', () => {

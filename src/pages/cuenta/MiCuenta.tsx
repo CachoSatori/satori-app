@@ -7,8 +7,11 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCambioClave } from '../../shared/hooks/useCambioClave'
 import {
-  PASSWORD_MIN_CAMBIO, validarCambio, evaluarPassword, FUERZA_TEXTO, MOTIVO_DEBIL, MENSAJE_FALLO, cambiarMiPassword,
+  PASSWORD_MIN_CAMBIO, validarCambio, validarNueva, evaluarPassword, FUERZA_TEXTO, MOTIVO_DEBIL, MENSAJE_FALLO,
+  cambiarMiPassword, cambiarPasswordRecuperacion,
 } from '../../shared/api/miPassword'
+import { supabase } from '../../shared/api/supabase'
+import { useModoRecuperacion, terminarRecuperacion, avisarEnlaceVencido } from '../../shared/api/recuperarClave'
 
 function useEnLinea(): boolean {
   const [enLinea, setEnLinea] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
@@ -28,6 +31,9 @@ export default function MiCuenta() {
   const { user, profile, signOut } = useAuth()
   // Cambio obligatorio (mig 185): el owner lo pidió; las rutas solo dejan estar acá hasta cambiarla.
   const { debe: obligado, recargar } = useCambioClave()
+  // Modo recuperación: entró con el enlace de «¿Olvidaste tu contraseña?» (evento PASSWORD_RECOVERY de ESTE usuario).
+  // No sabe la contraseña actual: no se le pide.
+  const recuperacion = useModoRecuperacion(user?.id)
   const navigate = useNavigate()
   const enLinea = useEnLinea()
   const [actual, setActual] = useState('')
@@ -36,6 +42,7 @@ export default function MiCuenta() {
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [listo, setListo] = useState<Listo | null>(null)
+  const [vencido, setVencido] = useState(false)
 
   const evaluada = nueva ? evaluarPassword(nueva) : null
   const fuerza = evaluada?.fuerza ?? null
@@ -44,16 +51,18 @@ export default function MiCuenta() {
     e.preventDefault()
     if (guardando || !enLinea) return
     setError(null)
-    const msg = validarCambio(actual, nueva, nueva2)
+    const msg = recuperacion ? validarNueva(nueva, nueva2) : validarCambio(actual, nueva, nueva2)
     if (msg) { setError(msg); return }
     setGuardando(true)
-    const r = await cambiarMiPassword(user?.email, actual, nueva)
+    const r = recuperacion ? await cambiarPasswordRecuperacion(nueva) : await cambiarMiPassword(user?.email, actual, nueva)
     setGuardando(false)
     if (!r.ok) {
       setError(MENSAJE_FALLO[r.motivo])
       if (r.motivo === 'actual_incorrecta') setActual('')
+      if (r.motivo === 'enlace_vencido') { setVencido(true); setNueva(''); setNueva2('') }
       return
     }
+    if (recuperacion) terminarRecuperacion()
     // Hecho: los campos se vacían para que la contraseña no quede en pantalla ni en memoria del formulario.
     setActual(''); setNueva(''); setNueva2('')
     // Si estaba obligado, se vuelve a preguntar a la base: con la contraseña nueva la marca se borra y se libera.
@@ -61,18 +70,33 @@ export default function MiCuenta() {
     setListo({ otrasSesionesCerradas: r.otrasSesionesCerradas })
   }
 
+  // Enlace vencido: se cierra la sesión de ESTE equipo (la del enlace ya no sirve) y el login abre
+  // «¿Olvidaste tu contraseña?» con el aviso, para pedir otro.
+  const pedirOtroEnlace = async () => {
+    terminarRecuperacion()
+    avisarEnlaceVencido()
+    try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* igual se va al login */ }
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="login-container mi-cuenta">
       <div className="login-card">
         <header className="login-header">
           <img src={`${import.meta.env.BASE_URL}marca/daruma.png`} alt="" className="login-daruma" width={58} height={64} />
-          <h1>Cambiar mi contraseña</h1>
+          <h1>{recuperacion ? 'Crear contraseña nueva' : 'Cambiar mi contraseña'}</h1>
           <p className="login-subtitle">
             {profile?.full_name ?? ''}{user?.email ? ` · ${user.email}` : ''}
           </p>
         </header>
 
-        {obligado && !listo && (
+        {recuperacion && !listo && (
+          <p className="mi-cuenta-ayuda" data-testid="aviso-recuperacion">
+            Entraste con el enlace del correo: elegí tu contraseña nueva. No hace falta la anterior.
+          </p>
+        )}
+
+        {obligado && !listo && !recuperacion && (
           <p className="login-error" role="alert" data-testid="aviso-cambio-obligatorio">
             Por seguridad tenés que cambiar tu contraseña antes de seguir.
           </p>
@@ -90,11 +114,13 @@ export default function MiCuenta() {
           </div>
         ) : (
           <form onSubmit={enviar} className="login-form" noValidate>
-            <div className="field">
-              <label htmlFor="mc-actual">Contraseña actual</label>
-              <input id="mc-actual" type="password" autoComplete="current-password" value={actual}
-                onChange={e => setActual(e.target.value)} disabled={guardando} />
-            </div>
+            {!recuperacion && (
+              <div className="field">
+                <label htmlFor="mc-actual">Contraseña actual</label>
+                <input id="mc-actual" type="password" autoComplete="current-password" value={actual}
+                  onChange={e => setActual(e.target.value)} disabled={guardando} />
+              </div>
+            )}
             <div className="field">
               <label htmlFor="mc-nueva">Contraseña nueva (mínimo {PASSWORD_MIN_CAMBIO})</label>
               <input id="mc-nueva" type="password" autoComplete="new-password" value={nueva}
@@ -120,9 +146,15 @@ export default function MiCuenta() {
               y difícil de adivinar. No uses la misma contraseña de otro lado.
             </p>
             {error && <p className="login-error" role="alert">{error}</p>}
-            <button type="submit" className="login-btn" disabled={guardando || !enLinea}>
-              {!enLinea ? 'Necesitás conexión' : guardando ? 'Guardando…' : 'Cambiar contraseña'}
-            </button>
+            {vencido ? (
+              <button type="button" className="login-btn" onClick={() => { void pedirOtroEnlace() }}>
+                Pedir otro enlace
+              </button>
+            ) : (
+              <button type="submit" className="login-btn" disabled={guardando || !enLinea}>
+                {!enLinea ? 'Necesitás conexión' : guardando ? 'Guardando…' : 'Cambiar contraseña'}
+              </button>
+            )}
             {obligado ? (
               <button type="button" className="login-btn secundario" style={{ marginTop: '0.5rem' }}
                 onClick={() => { void signOut() }} disabled={guardando}>Cerrar sesión</button>

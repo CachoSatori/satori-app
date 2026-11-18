@@ -297,6 +297,12 @@
       "rama": "claude/club-4-arreglos-retos",
       "renumerada_a": "187"
     },
+    "130": {
+      "nombre": "club_cumple_deshacer_envio",
+      "bloque": "club",
+      "rama": "claude/club-4-arreglos",
+      "renumerada_a": "186"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -506,6 +512,12 @@
       "bloque": "pase",
       "rama": "claude/club-4-arreglos-retos",
       "origen": "131"
+    },
+    "186": {
+      "nombre": "club_cumple_deshacer_envio",
+      "bloque": "pase",
+      "rama": "claude/club-4-arreglos",
+      "origen": "130"
     }
   }
 }

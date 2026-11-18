@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Arma (y opcionalmente corre) scripts/sql/193_pruebas.sql: llena los marcadores con el cuerpo de la 193 y el de su
+Arma (y opcionalmente corre) scripts/sql/192_pruebas.sql: llena los marcadores con el cuerpo de la 192 y el de su
 rollback, todo dentro de una transacción que termina en ROLLBACK. Sale 1 si algún caso falla o no hay resultado.
 
-  python3 scripts/sql/193_pruebas.py --armar [--compacto] [--mutar X]  # solo imprime el SQL (no conecta a nada)
-  python3 scripts/sql/193_pruebas.py --local "<dsn>" [--mutar X|todas]  # psql contra un Postgres LOCAL (nunca prod), con 193_preludio_local.sql
+  python3 scripts/sql/192_pruebas.py --armar [--compacto] [--mutar X]  # solo imprime el SQL (no conecta a nada)
+  python3 scripts/sql/192_pruebas.py --local "<dsn>" [--mutar X|todas]  # psql contra un Postgres LOCAL (nunca prod), con 192_preludio_local.sql
 
 En staging se corre pegando el SQL armado en una sola consulta (termina en ROLLBACK). Cada mutación rompe el arreglo
 a propósito: los casos de su lista TIENEN que caer.
@@ -14,12 +14,12 @@ import json, subprocess, sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
-MIG = RAIZ / 'supabase/migrations/193_propinas_cada_uno_lo_suyo.sql'
-ROLLBACK = RAIZ / 'scripts/sql/193_rollback.sql'
-BATERIA = RAIZ / 'scripts/sql/193_pruebas.sql'
-PRELUDIO_LOCAL = RAIZ / 'scripts/sql/193_preludio_local.sql'  # solo --local: la base local como prod
+MIG = RAIZ / 'supabase/migrations/192_propinas_cada_uno_lo_suyo.sql'
+ROLLBACK = RAIZ / 'scripts/sql/192_rollback.sql'
+BATERIA = RAIZ / 'scripts/sql/192_pruebas.sql'
+PRELUDIO_LOCAL = RAIZ / 'scripts/sql/192_preludio_local.sql'  # solo --local: la base local como prod
 
-# nombre → ([(texto de la 193, reemplazo, veces)], prefijos de casos que tienen que caer)
+# nombre → ([(texto de la 192, reemplazo, veces)], prefijos de casos que tienen que caer)
 MUTACIONES: dict[str, tuple] = {
     # el personal vuelve a ver todo (la fuga de la 085)
     'personal_todo': ([("  using (employee_id in (select unnest(public.propinas_mis_empleados())));",
@@ -43,9 +43,9 @@ MUTACIONES: dict[str, tuple] = {
                      {'07 helper: anon'}),
     # la guarda no compara (siempre pasa)
     'guarda_floja': ([("       is distinct from r.esperado then\n", "       is distinct from r.esperado and false then\n", 1),
-                      ("  if n <> 2 then\n    raise exception '193: tip_entries", "  if false then\n    raise exception '193: tip_entries", 1),
-                      ("  if to_regprocedure('public.propinas_mis_empleados()') is not null then\n    raise exception '193: propinas",
-                       "  if false then\n    raise exception '193: propinas", 1)],
+                      ("  if n <> 2 then\n    raise exception '192: tip_entries", "  if false then\n    raise exception '192: tip_entries", 1),
+                      ("  if to_regprocedure('public.propinas_mis_empleados()') is not null then\n    raise exception '192: propinas",
+                       "  if false then\n    raise exception '192: propinas", 1)],
                      {'08'}),
 }
 
@@ -62,14 +62,14 @@ def armar(mutar: str | None, local: bool = False) -> str:
                 sys.exit(f'mutación {mutar}: el ancla aparece {mig.count(viejo)} veces (se esperaban {veces})')
             mig = mig.replace(viejo, nuevo)
     bat = BATERIA.read_text(encoding='utf-8')
-    for marca in ('-- @@193@@', '-- @@193R@@', '-- @@193G@@'):
+    for marca in ('-- @@192@@', '-- @@192R@@', '-- @@192G@@'):
         if bat.count(marca) != 1:
             sys.exit(f'falta el marcador {marca}')
-    i = mig.index('do $guarda193$'); j = mig.index('$guarda193$;', i) + len('$guarda193$;')
-    guarda = mig[i:j].replace('$guarda193$', '$g$')  # dentro de la función: el bloque do tal cual, con otro dólar
-    bat = bat.replace('-- @@193G@@', 'execute ' + "$q$" + guarda.rstrip(';') + "$q$;")
-    bat = bat.replace('-- @@193@@', _sin_beg_com(mig))
-    bat = bat.replace('-- @@193R@@', _sin_beg_com(ROLLBACK.read_text(encoding='utf-8')))
+    i = mig.index('do $guarda192$'); j = mig.index('$guarda192$;', i) + len('$guarda192$;')
+    guarda = mig[i:j].replace('$guarda192$', '$g$')  # dentro de la función: el bloque do tal cual, con otro dólar
+    bat = bat.replace('-- @@192G@@', 'execute ' + "$q$" + guarda.rstrip(';') + "$q$;")
+    bat = bat.replace('-- @@192@@', _sin_beg_com(mig))
+    bat = bat.replace('-- @@192R@@', _sin_beg_com(ROLLBACK.read_text(encoding='utf-8')))
     if local:
         bat = bat.replace('begin;\n', 'begin;\n' + PRELUDIO_LOCAL.read_text(encoding='utf-8') + '\n', 1)
     return bat

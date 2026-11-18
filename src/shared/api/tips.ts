@@ -311,7 +311,7 @@ export async function getRoleTipPoints(): Promise<RoleTipPoints[]> {
 }
 
 // ── Historial de asistencia (horas por turno) ──
-// Mig 193: la base (RLS de tip_entries) le entrega a owner/manager/cajero/contador las filas de TODOS los
+// Mig 192: la base (RLS de tip_entries) le entrega a owner/manager/cajero/contador las filas de TODOS los
 // empleados; a cualquier otro rol, SOLO las suyas. La misma llamada sirve a los dos.
 
 export interface AttendanceRow {

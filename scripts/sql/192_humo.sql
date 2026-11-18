@@ -1,4 +1,4 @@
--- 193_humo · SOLO LECTURA (begin read only … rollback). Se corre en prod ANTES y DESPUÉS de la 193 (regla: después =
+-- 192_humo · SOLO LECTURA (begin read only … rollback). Se corre en prod ANTES y DESPUÉS de la 192 (regla: después =
 -- antes salvo lo esperado). Devuelve solo conteos y huellas: ningún monto, nombre ni id.
 -- Esperado ANTES: 2 policies (lectura md5 a4d0a0e9…, op_write md5 da4dc6bf…), helper ausente, salonero_ve = total.
 -- Esperado DESPUÉS: 3 policies (op_write igual), helper presente, salonero_ve = salonero_propias < total, total igual.

@@ -59,8 +59,8 @@ export default function MiRendimientoWrap() {
       .catch(() => { /* ventas opcionales para roles sin venta individual */ })
 
     // Propinas: empleado vinculado (o el elegido por el owner) + su historial. getAttendanceHistory trae
-    // todas las filas solo a gerencia (owner/manager; el owner en «Ver como»); al personal la base le da
-    // SOLO las suyas (mig 193). Null-safe si no hay perfil.
+    // todas las filas a owner, manager, cajero y contador (el owner también en «Ver como»); al personal la
+    // base le da SOLO las suyas (mig 192). Null-safe si no hay perfil.
     const propinasP = (async () => {
       if (!profile) { setNoLink(true); return }
       try {

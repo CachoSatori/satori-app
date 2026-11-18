@@ -34,7 +34,7 @@ const porTicket = new Map<string, LineaNdfRow[]>()
 for (const l of lineas) { const a = porTicket.get(l.ticket_id); if (a) a.push(l); else porTicket.set(l.ticket_id, [l]) }
 
 const CASOS = { ayer: ['f_ayer_a', 'f_ayer_b'], mesALaFecha: ['f_mtd_a', 'f_mtd_b'], anioALaFecha: ['f_ytd_a', 'f_ytd_b'] } as const
-const sinNombres = (d: object) => { const { saloneroNames: _s, ...r } = d as { saloneroNames?: unknown }; return r }
+const sinNombres = (d: object) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'saloneroNames'))
 
 describe.skipIf(!RAW)('paridad 190 con datos de prod', () => {
 it('ayer, mes a la fecha y año a la fecha: igual que el camino de filas', () => {

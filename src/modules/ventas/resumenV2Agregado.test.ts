@@ -85,7 +85,7 @@ function lecturaAgregada(tickets: TicketVentaRow[], lineas: LineaNdfRow[], p: Pe
   return armarLecturaAgregada(partes)
 }
 
-const sinNombres = <T extends object>(d: T) => { const { saloneroNames: _s, ...resto } = d as T & { saloneroNames?: unknown }; return resto }
+const sinNombres = (d: object) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'saloneroNames'))
 
 function compararPeriodo(tickets: TicketVentaRow[], lineas: LineaNdfRow[], p: PeriodoV2, max?: number) {
   const a = lecturaFilas(tickets, lineas, p)

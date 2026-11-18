@@ -1,5 +1,5 @@
 // ── Ventas v2 · «Tiempos» (SPEC-ventas-v2 §5.4, fase 2.3) ──────────────────────────────────────
-// Barra global (la misma del Resumen, en la URL; acá sin «Ayer») + día de semana + hora y turno + quincenas +
+// Barra global (la misma del Resumen, en la URL) + día de semana + hora y turno + quincenas +
 // tiempo sentado + calendario. El cálculo es `tiemposV2.ts`; la lectura, `tiemposV2Datos.ts` (190 + 193; sin la
 // 193, la 080 y el mapa solo de salón). Las mesas internas (Ajustes) son venta: solo salen del tiempo sentado.
 // Convive con «Calendario» y «Análisis» hasta la fase 3.5.
@@ -10,7 +10,7 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import type { FilaPromPaxRpc } from '../../shared/api/posNdf'
 import { fi } from './ventasUtils'
 import BarraVentasV2 from './BarraVentasV2'
-import { BASE_ANIO, BASE_ANTERIOR, basesDe, conArticulo, nombreBase, escribirBarra, leerBarra, PERIODOS_SIMPLES, periodoDeBarra, rotuloBase } from './barraVentasV2'
+import { basesALeer, basesDe, conArticulo, nombreBase, escribirBarra, leerBarra, periodoDeBarra, rotuloBase } from './barraVentasV2'
 import { estimadorPorNeta, ventaPorPersona } from './indicadores'
 import type { BaseId, PeriodoV2 } from './periodos'
 import { cifrasDelRango, MUESTRA_CHICA_PERSONAS, type Lectura } from './resumenV2'
@@ -35,10 +35,9 @@ export default function VentasTiempos() {
   const { profile } = useAuth()
   const role = profile?.role ?? ''
   const [sp, setSp] = useSearchParams()
-  const estado = useMemo(() => leerBarra(sp, PERIODO_TIEMPOS, PERIODOS_SIMPLES), [sp])
+  const estado = useMemo(() => leerBarra(sp, PERIODO_TIEMPOS), [sp])
   const { tipo, dia, desde, hasta, comparar } = estado
-  // Se leen siempre las dos bases: cambiar «Comparar con» solo cambia qué columnas se ven (no vuelve a leer).
-  const baseA = BASE_ANTERIOR, baseB = BASE_ANIO
+  const [baseA, baseB] = basesALeer(comparar)
   const { periodo, aviso } = useMemo(() => periodoDeBarra({ tipo, dia, desde, hasta }), [tipo, dia, desde, hasta])
   const quincenas = useMemo(() => ultimasQuincenas(periodo), [periodo])
 
@@ -51,10 +50,11 @@ export default function VentasTiempos() {
   const local = estado.local && (locales.length === 0 || locales.some(l => l.id === estado.local))
     ? estado.local : (locales[0]?.id ?? LOCAL_POR_DEFECTO)
 
-  const clave = `${local}|${periodo.tipo}|${periodo.desde}|${periodo.hasta}`
+  const clave = `${local}|${periodo.tipo}|${periodo.desde}|${periodo.hasta}|${baseA}|${baseB}`
   const [lectura, setLectura] = useState<{ clave: string; l: Lectura; turnos: FilaPromPaxRpc[] | null; tiempos: TiemposRpc | null } | null>(null)
   const [fallo, setFallo] = useState<{ clave: string; msg: string } | null>(null)
   useEffect(() => {
+    if (periodo.tipo === 'hoy') return
     let vivo = true
     const rangos = rangosDeTiempos(periodo, baseA, baseB, quincenas)
     Promise.all([
@@ -72,8 +72,21 @@ export default function VentasTiempos() {
   }, [clave, local, periodo, quincenas, baseA, baseB])
 
   const error = fallo && fallo.clave === clave ? fallo.msg : null
-  const barra = <BarraVentasV2 estado={estado} periodo={periodo} locales={locales} aviso={aviso} periodos={PERIODOS_SIMPLES}
+  const barra = <BarraVentasV2 estado={estado} periodo={periodo} locales={locales} aviso={aviso}
     onCambio={e => setSp(escribirBarra(sp, e))} />
+
+  if (periodo.tipo === 'hoy') {
+    return (
+      <div className="vt-section">
+        {barra}
+        <div className="vt2-hoy">
+          Hoy está en curso y no entra en «Tiempos». El ritmo por hora de hoy se mira en «En vivo».
+          {' '}<button type="button" className="vt-period-btn active"
+            onClick={() => { const n = new URLSearchParams(sp); n.set('tab', 'envivo'); setSp(n) }}>Ir a En vivo →</button>
+        </div>
+      </div>
+    )
+  }
 
   const listo = lectura && lectura.clave === clave ? lectura : null
   return (
@@ -85,7 +98,7 @@ export default function VentasTiempos() {
           Leyendo las ventas del PoS (el período, sus bases y las últimas 12 quincenas)…
         </div>
       )}
-      {listo && <Contenido periodo={periodo} quincenas={quincenas} l={listo.l} turnos={listo.turnos} tiempos={listo.tiempos} bases={basesDe(comparar)} />}
+      {listo && <Contenido periodo={periodo} quincenas={quincenas} l={listo.l} turnos={listo.turnos} tiempos={listo.tiempos} bases={basesDe(comparar)} leidas={[baseA, baseB]} />}
     </div>
   )
 }
@@ -98,10 +111,11 @@ interface ContenidoProps {
   tiempos:   TiemposRpc | null
   /** Las bases que se muestran (una o las dos), en orden. */
   bases:     BaseId[]
+  /** Las dos bases que se leyeron (`basesALeer`): las que se muestran salen de acá. */
+  leidas:    [BaseId, BaseId]
 }
 
-function Contenido({ periodo, quincenas, l, turnos, tiempos, bases }: ContenidoProps) {
-  const baseA = BASE_ANTERIOR, baseB = BASE_ANIO
+function Contenido({ periodo, quincenas, l, turnos, tiempos, bases, leidas: [baseA, baseB] }: ContenidoProps) {
   const d = useMemo(() => {
     const estimador = estimadorPorNeta(l.facturas)
     const p = cifrasDelRango(l, periodo)

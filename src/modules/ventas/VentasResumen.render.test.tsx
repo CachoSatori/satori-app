@@ -95,13 +95,35 @@ describe('VentasResumen', () => {
     expect((document.querySelector('details.vt2-detalle') as HTMLDetailsElement).open).toBe(false)
   })
 
-  it('un link viejo con «Hoy» abre en «Ayer» (la barra ya no ofrece Hoy: se mira en En vivo)', async () => {
+  it('«Hoy» (repuesto) no lee nada y lleva a En vivo; el Período tiene todas las opciones', async () => {
     abrir('/ventas?tab=resumen&p=hoy')
-    await screen.findByText(/Ayer \(2026-11-17\): mesas sin pax/)
-    expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.objectContaining({ tipo: 'ayer' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Ir a En vivo/ }))
+    expect(cargar).not.toHaveBeenCalled()
     expect([...(screen.getByLabelText('Período') as HTMLSelectElement).options].map(o => o.textContent))
-      .toEqual(['Ayer', 'Semana', 'Quincena', 'Mes', 'Rango'])
-    expect((screen.getByRole('button', { name: 'Período siguiente' }) as HTMLButtonElement).disabled).toBe(true)
+      .toEqual(['Hoy', 'Ayer', 'Semana', 'Quincena', 'Mes', 'Año a la fecha', 'Temporada', 'Rango'])
+    expect(screen.queryByLabelText('Comparar con')).toBeNull()
+    await vi.waitFor(() => expect(ultima.url).toContain('tab=envivo'))
+  })
+
+  it('períodos repuestos: «Año a la fecha» y «Temporada» leen su período', async () => {
+    abrir('/ventas?tab=resumen&p=anioALaFecha')
+    await screen.findByRole('table', { name: 'Detalle por día' })
+    expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.objectContaining({ tipo: 'anioALaFecha', desde: '2026-01-01', hasta: '2026-11-17' }))
+    cleanup(); cargar.mockClear()
+    abrir('/ventas?tab=resumen&p=temporada')
+    await screen.findByRole('table', { name: 'Detalle por día' })
+    expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.objectContaining({ tipo: 'temporada' }))
+  })
+
+  it('«Comparar con» = «Año pasado, mismas fechas» (repuesta): un solo %, con su nombre y fechas, sin volver a leer', async () => {
+    abrir('/ventas?tab=resumen&p=mesALaFecha')
+    await screen.findByRole('table', { name: 'Detalle por día' })
+    const llamadas = cargar.mock.calls.length
+    fireEvent.change(screen.getByLabelText('Comparar con'), { target: { value: 'anioFechas' } })
+    await vi.waitFor(() => expect(ultima.url).toContain('c=anioFechas'))
+    expect(document.querySelectorAll('[data-cifra="ventaNeta"] .vt2-delta')).toHaveLength(1)
+    expect(document.body.textContent).toContain('contra el año pasado, mismas fechas (1–17 nov 2025)')
+    expect(cargar.mock.calls.length).toBe(llamadas)
   })
 
   it('«Comparar con» una sola base: cada cifra con un solo %, en la URL y sin volver a leer', async () => {

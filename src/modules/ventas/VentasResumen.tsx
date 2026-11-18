@@ -58,6 +58,7 @@ export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
   const clave = `${local}|${periodo.tipo}|${periodo.desde}|${periodo.hasta}`
   useEffect(() => {
     const p = periodo
+    if (p.tipo === 'hoy') return
     let vivo = true
     cargarLecturaResumen(local, p)
       .then(l => { if (vivo) setLectura({ clave, l }) })
@@ -79,6 +80,19 @@ export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
   }, [lectura, clave, periodo])
 
   const barra = <BarraVentasV2 estado={estado} periodo={periodo} locales={locales} aviso={aviso} onCambio={cambiar} />
+
+  if (periodo.tipo === 'hoy') {
+    return (
+      <div className="vt-section">
+        {barra}
+        <div className="vt2-hoy">
+          Hoy está en curso y no entra en las comparaciones. El servicio de hoy, contra la misma hora, se mira en «En vivo».
+          {' '}<button type="button" className="vt-period-btn active"
+            onClick={() => { const n = new URLSearchParams(sp); n.set('tab', 'envivo'); setSp(n) }}>Ir a En vivo →</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="vt-section">

@@ -1,8 +1,8 @@
 // Ventas v2 · la barra global: estado en la URL, flechas, un solo «Comparar con» y los períodos que ofrece cada
-// pestaña (barra simple, pedido del dueño del 18-nov).
+// pestaña (estructura simple, pedido del dueño del 18-nov; todas las opciones, decisión de las 17:11).
 import { describe, it, expect } from 'vitest'
 import {
-  basesDe, cambiarTipo, escribirBarra, leerBarra, moverPeriodo, PERIODOS_SIMPLES, periodoDeBarra, periodoEnPalabras,
+  basesALeer, basesDe, cambiarTipo, escribirBarra, leerBarra, moverPeriodo, PERIODOS, periodoDeBarra, periodoEnPalabras,
   rotuloComparar, type EstadoBarra,
 } from './barraVentasV2'
 
@@ -28,23 +28,42 @@ describe('barra de Ventas v2', () => {
     expect(escribirBarra(new URLSearchParams(''), { ...e, comparar: 'ambos' }).has('c')).toBe(false)
   })
 
-  it('«Comparar con»: una base, la otra o las dos, en orden', () => {
+  it('«Comparar con»: cada base sola (las tres, con «mismas fechas» repuesta) o «Los dos», en orden', () => {
     expect(basesDe('anterior')).toEqual(['anteriorEquivalente'])
     expect(basesDe('anio')).toEqual(['anioMismoDiaSemana'])
+    expect(basesDe('anioFechas')).toEqual(['anioMismasFechas'])
     expect(basesDe('ambos')).toEqual(['anteriorEquivalente', 'anioMismoDiaSemana'])
     const { periodo } = periodoDeBarra({ tipo: 'mesALaFecha' }, ANCLA)
     expect(rotuloComparar(periodo, 'anterior')).toBe('Mes anterior a la misma fecha')
     expect(rotuloComparar(periodo, 'anio')).toBe('Año pasado, mismo día de semana')
+    expect(rotuloComparar(periodo, 'anioFechas')).toBe('Año pasado, mismas fechas')
     expect(rotuloComparar(periodo, 'ambos')).toBe('Los dos')
+    expect(leerBarra(new URLSearchParams('c=anioFechas')).comparar).toBe('anioFechas')
+    // Lo que se lee: el par de siempre para anterior / año / los dos (cambiar entre ellos no relee); «mismas fechas» sola.
+    expect(basesALeer('anterior')).toEqual(basesALeer('ambos'))
+    expect(basesALeer('anio')).toEqual(['anteriorEquivalente', 'anioMismoDiaSemana'])
+    expect(basesALeer('anioFechas')).toEqual(['anioMismasFechas', 'anioMismasFechas'])
   })
 
-  it('valores raros caen al defecto; un período que la pestaña no ofrece (link viejo) también', () => {
+  it('«Período» ofrece todas las opciones de antes (decisión del dueño 18-nov 17:11), y cada una se lee de la URL', () => {
+    expect(PERIODOS).toEqual(['hoy', 'ayer', 'semana', 'quincena', 'mes', 'anioALaFecha', 'temporada', 'rango'])
+    for (const t of [...PERIODOS, 'mesALaFecha'] as const) expect(leerBarra(new URLSearchParams(`p=${t}`)).tipo).toBe(t)
+  })
+
+  it('cada período repuesto funciona: Hoy, Año a la fecha y Temporada dan su período y sus bases', () => {
+    expect(periodoDeBarra({ tipo: 'hoy' }, ANCLA).periodo).toMatchObject({ tipo: 'hoy', desde: ANCLA, hasta: ANCLA })
+    const anio = periodoDeBarra({ tipo: 'anioALaFecha' }, ANCLA).periodo
+    expect(anio).toMatchObject({ desde: '2026-01-01', hasta: '2026-11-15', enCurso: true })
+    expect(periodoEnPalabras(anio, basesDe('anioFechas'))).toMatch(/contra el año anterior a la fecha \(1 ene – 15 nov 2025\)/)
+    const temp = periodoDeBarra({ tipo: 'temporada' }, ANCLA).periodo
+    expect(temp.tramo).toBeTruthy()
+    expect(temp.hasta <= '2026-11-15').toBe(true)
+    expect(periodoEnPalabras(temp, basesDe('anterior'))).toMatch(/contra la temporada anterior/)
+  })
+
+  it('valores raros caen al defecto; «Mes a la fecha» de links viejos se sigue leyendo', () => {
     expect(leerBarra(new URLSearchParams('p=nada&c=zzz'))).toMatchObject({ tipo: 'ayer', comparar: 'ambos' })
-    expect(leerBarra(new URLSearchParams('p=temporada')).tipo).toBe('ayer')
-    expect(leerBarra(new URLSearchParams('p=hoy')).tipo).toBe('ayer')
-    expect(leerBarra(new URLSearchParams('p=ayer'), 'mesALaFecha', PERIODOS_SIMPLES).tipo).toBe('mesALaFecha')
-    // «Mes a la fecha» (links viejos) cuenta como «Mes».
-    expect(leerBarra(new URLSearchParams('p=mesALaFecha'), 'semana', PERIODOS_SIMPLES).tipo).toBe('mesALaFecha')
+    expect(leerBarra(new URLSearchParams(''), 'mesALaFecha').tipo).toBe('mesALaFecha')
   })
 
   it('caso de la auditoría: 16-nov, mes a la fecha = 1–15 nov contra 1–15 oct y 2–16 nov 2025; con una sola base, una sola', () => {
@@ -63,11 +82,13 @@ describe('barra de Ventas v2', () => {
     expect(moverPeriodo(e, periodo, 1)).toBeNull()
   })
 
-  it('flecha › desde «Ayer» = ayer: «Hoy» no se ofrece, así que no hay a dónde ir', () => {
+  it('flechas desde «Ayer»: › va a «Hoy», ‹ al día anterior; desde «Hoy», › no tiene a dónde ir', () => {
     const e = leerBarra(new URLSearchParams('p=ayer'))
     const { periodo } = periodoDeBarra(e, ANCLA)
-    expect(moverPeriodo(e, periodo, 1)).toBeNull()
+    expect(moverPeriodo(e, periodo, 1)).toMatchObject({ tipo: 'hoy' })
     expect(moverPeriodo(e, periodo, -1)).toMatchObject({ tipo: 'ayer', dia: '2026-11-14' })
+    const hoy = leerBarra(new URLSearchParams('p=hoy'))
+    expect(moverPeriodo(hoy, periodoDeBarra(hoy, ANCLA).periodo, 1)).toBeNull()
   })
 
   it('cambiar de tipo: el nuevo período contiene el último día del que se miraba', () => {
@@ -79,6 +100,8 @@ describe('barra de Ventas v2', () => {
     const mesEnCurso = cambiarTipo(ayer, periodoDeBarra(ayer, ANCLA).periodo, 'mes')
     expect(periodoDeBarra(mesEnCurso, ANCLA).periodo).toMatchObject({ desde: '2026-11-01', hasta: '2026-11-15', enCurso: true })
     expect(cambiarTipo(e, periodo, 'rango')).toMatchObject({ tipo: 'rango', desde: '2026-10-05', hasta: '2026-10-11' })
+    expect(cambiarTipo(e, periodo, 'hoy')).toMatchObject({ tipo: 'hoy', dia: undefined })
+    expect(periodoDeBarra(cambiarTipo(e, periodo, 'anioALaFecha'), ANCLA).periodo).toMatchObject({ desde: '2026-01-01', hasta: '2026-11-15' })
   })
 
   it('rango incompleto o después de ayer: cae a «Ayer» con el motivo (no rompe la pantalla)', () => {

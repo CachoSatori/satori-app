@@ -1,10 +1,10 @@
 // Ventas v2 · la barra global: Local · Período (con flechas) · Comparar con (uno solo).
 // El estado vive en la URL (`barraVentasV2.ts`); este componente solo lo pinta y lo cambia.
-// Simplificada el 18-nov (pedido del dueño: «lo que más confunde es el menú principal»): un solo «Período»
-// (Semana / Quincena / Mes / Rango; el Resumen suma «Ayer») y un solo «Comparar con» (anterior, año pasado o los dos).
+// Simplificada el 18-nov (pedido del dueño: «lo que más confunde es el menú principal»): un solo «Período» y un solo
+// «Comparar con» (una base o «Los dos»); Desde y Hasta solo con Rango. Las opciones son todas las de antes (17:11).
 import type { PeriodoV2, TipoPeriodoV2 } from './periodos'
 import {
-  OPCIONES_COMPARAR, PERIODOS_RESUMEN, ROTULO_PERIODO, basesDe, cambiarTipo, moverPeriodo, periodoEnPalabras,
+  OPCIONES_COMPARAR, PERIODOS, ROTULO_PERIODO, basesDe, cambiarTipo, moverPeriodo, periodoEnPalabras,
   rotuloComparar, type Comparar, type EstadoBarra,
 } from './barraVentasV2'
 import type { LocalVentas } from './resumenV2Datos'
@@ -13,15 +13,13 @@ interface Props {
   estado:   EstadoBarra
   periodo:  PeriodoV2
   locales:  LocalVentas[]
-  /** Los períodos que ofrece esta pestaña (por defecto, los del Resumen). */
-  periodos?: readonly TipoPeriodoV2[]
   aviso?:   string | null
   onCambio: (e: EstadoBarra) => void
 }
 
-export default function BarraVentasV2({ estado, periodo, locales, periodos = PERIODOS_RESUMEN, aviso, onCambio }: Props) {
-  const anterior = moverPeriodo(estado, periodo, -1, periodos)
-  const siguiente = moverPeriodo(estado, periodo, 1, periodos)
+export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambio }: Props) {
+  const anterior = moverPeriodo(estado, periodo, -1)
+  const siguiente = moverPeriodo(estado, periodo, 1)
   const local = estado.local ?? locales[0]?.id ?? ''
   const valorPeriodo = estado.tipo === 'mesALaFecha' ? 'mes' : estado.tipo
   return (
@@ -40,7 +38,7 @@ export default function BarraVentasV2({ estado, periodo, locales, periodos = PER
           <span>Período</span>
           <select className="date-filter active" value={valorPeriodo} aria-label="Período"
             onChange={e => onCambio(cambiarTipo(estado, periodo, e.target.value as TipoPeriodoV2))}>
-            {periodos.map(id => <option key={id} value={id}>{ROTULO_PERIODO[id]}</option>)}
+            {PERIODOS.map(id => <option key={id} value={id}>{ROTULO_PERIODO[id]}</option>)}
           </select>
         </label>
         <div className="vt2-flechas">

@@ -114,7 +114,7 @@ describe('VentasTiempos', () => {
     expect((screen.getByLabelText('Período') as HTMLSelectElement).selectedOptions[0].textContent).toBe('Mes')
     const cmp = screen.getByLabelText('Comparar con') as HTMLSelectElement
     expect(cmp.selectedOptions[0].textContent).toBe('Los dos')
-    expect([...cmp.options].map(o => o.textContent)).toEqual(['Mes anterior a la misma fecha', 'Año pasado, mismo día de semana', 'Los dos'])
+    expect([...cmp.options].map(o => o.textContent)).toEqual(['Mes anterior a la misma fecha', 'Año pasado, mismo día de semana', 'Año pasado, mismas fechas', 'Los dos'])
     expect(screen.queryByLabelText('Base B')).toBeNull()
     expect(document.body.textContent).not.toMatch(/Índice/)
   })
@@ -166,10 +166,36 @@ describe('VentasTiempos', () => {
     expect(cargar.mock.calls.length).toBe(llamadas)
   })
 
-  it('barra simple: Período = Semana / Quincena / Mes / Rango; Desde y Hasta solo con Rango', async () => {
+  it('«Comparar con» = «Año pasado, mismas fechas» (repuesta): lee esa base y la muestra sola', async () => {
     abrir('/ventas?tab=tiempos')
     await screen.findByRole('table', { name: 'Día de semana' })
-    expect([...(screen.getByLabelText('Período') as HTMLSelectElement).options].map(o => o.textContent)).toEqual(['Semana', 'Quincena', 'Mes', 'Rango'])
+    fireEvent.change(screen.getByLabelText('Comparar con'), { target: { value: 'anioFechas' } })
+    await vi.waitFor(() => expect(ultima.url).toContain('c=anioFechas'))
+    await vi.waitFor(() => expect(document.querySelector('[data-dow="0"] [data-vs="anioMismasFechas"]')).not.toBeNull())
+    expect(document.querySelectorAll('[data-dow="0"] [data-vs]')).toHaveLength(1)
+    expect(cargar).toHaveBeenLastCalledWith('santa-teresa', expect.arrayContaining([{ desde: '2025-11-01', hasta: '2025-11-17' }]))
+    expect(document.body.textContent).toContain('contra el año pasado, mismas fechas (1–17 nov 2025)')
+    expect(document.querySelector('[data-dow="0"] [data-vs="anioMismasFechas"]')!.textContent).toBe('—') // el fixture no tiene 2025
+  })
+
+  it('períodos repuestos: «Año a la fecha» y «Temporada» leen su período y muestran la tabla', async () => {
+    abrir('/ventas?tab=tiempos&p=anioALaFecha')
+    await screen.findByRole('table', { name: 'Día de semana' })
+    expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.arrayContaining([{ desde: '2026-01-01', hasta: '2026-11-17' }]))
+    expect((screen.getByLabelText('Período') as HTMLSelectElement).selectedOptions[0].textContent).toBe('Año a la fecha')
+    cleanup(); cargar.mockClear()
+    abrir('/ventas?tab=tiempos&p=temporada')
+    await screen.findByRole('table', { name: 'Día de semana' })
+    expect((screen.getByLabelText('Período') as HTMLSelectElement).selectedOptions[0].textContent).toBe('Temporada')
+    expect(cargar).toHaveBeenCalled()
+    expect(document.body.textContent).toMatch(/temporada anterior/)
+  })
+
+  it('una sola barra: Período con todas las opciones; Desde y Hasta solo con Rango', async () => {
+    abrir('/ventas?tab=tiempos')
+    await screen.findByRole('table', { name: 'Día de semana' })
+    expect([...(screen.getByLabelText('Período') as HTMLSelectElement).options].map(o => o.textContent))
+      .toEqual(['Hoy', 'Ayer', 'Semana', 'Quincena', 'Mes', 'Año a la fecha', 'Temporada', 'Rango'])
     expect(screen.queryByLabelText('Desde')).toBeNull()
     fireEvent.change(screen.getByLabelText('Período'), { target: { value: 'rango' } })
     await vi.waitFor(() => expect(ultima.url).toContain('p=rango'))
@@ -222,10 +248,14 @@ describe('VentasTiempos', () => {
     expect(screen.getByRole('table', { name: 'Quincenas' })).toBeTruthy()
   })
 
-  it('un link viejo con «Hoy» o «Temporada» abre en «Mes» (la barra ya no los ofrece)', async () => {
+  it('«Hoy» (repuesto) no lee nada y lleva a En vivo; «Ayer» (repuesto) lee ese día', async () => {
     abrir('/ventas?tab=tiempos&p=hoy')
+    fireEvent.click(await screen.findByRole('button', { name: /Ir a En vivo/ }))
+    expect(cargar).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(ultima.url).toContain('tab=envivo'))
+    cleanup()
+    abrir('/ventas?tab=tiempos&p=ayer')
     await screen.findByRole('table', { name: 'Día de semana' })
-    expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.arrayContaining([{ desde: '2026-11-01', hasta: '2026-11-17' }]))
-    expect(screen.queryByRole('button', { name: /Ir a En vivo/ })).toBeNull()
+    expect(cargar).toHaveBeenCalledWith('santa-teresa', expect.arrayContaining([{ desde: '2026-11-17', hasta: '2026-11-17' }]))
   })
 })

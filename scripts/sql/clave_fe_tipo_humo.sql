@@ -9,7 +9,8 @@
 -- `consecutivo_fe` NO cambia (es el bueno).
 --
 -- Regla: después = antes en `facturas`, `lineas`, `h_facturas_sin_clave`, `h_consecutivo` y `h_lineas`.
---        `colisiones` → 0 · `clave_null` sube EXACTAMENTE lo que valía `colisiones` antes.
+--        `colisiones` → 0 · `clave_null` sube EXACTAMENTE N = Σ `fe_sin_clave` de B1 (días < corte), no lo que
+--        valían las colisiones antes (el PoS puede pisar más entre una medición y otra). Las sin consecutivo no cambian.
 -- Corte: CERRADO, dos días antes del pase a las 00:00 −06:00 (el agente en vivo relee 36 h).
 -- Una clave de Hacienda CR lleva el consecutivo entero en las posiciones 22–41 (tipo de documento: 30–31).
 

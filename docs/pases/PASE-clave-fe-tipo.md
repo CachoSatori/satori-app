@@ -48,7 +48,7 @@ Prerrequisito extra: el pase salonero cerrado (la tarea corre `C:\satori\agente-
 | `h_facturas_sin_clave` (todo salvo `id`, `ingested_at`, `clave_fe`) | _(se anota)_ | **=** |
 | `h_consecutivo` · `h_lineas` | _(se anota)_ | **=** |
 | `colisiones` · `tipo_distinto` | ~675 | **0** |
-| `clave_null` | _(se anota, hoy 0)_ | **sube exactamente** lo que valía `colisiones` antes |
+| `clave_null` | _(se anota; 18-nov: **810**, las facturas `C` sin consecutivo FE, que **no cambian**)_ | **sube exactamente N** = Σ `fe_sin_clave` de B1 en los días anteriores al corte (B1 lo imprime, sin duplicar meses) |
 | Bloque 2 (por mes) | 2026-03 / 2026-04 | **sin filas** |
 
 **Cambios esperados:** `clave_fe` (→ null en las colisiones), `ingested_at` y los `id` de las líneas. Cualquier otra
@@ -62,7 +62,8 @@ $ARBOL = '74abcd401b5ff50370c635cc0d8a949e36e25fe4'; $ARBOL_NDF = '244b0d0530676
 $RAMA = 'claude/puente-clave-fe-tipo'; $PRUEBAS = 499
 $NUEVA = 'C:\satori\agente-fe'; $CMD_NUEVO = 'C:\satori\pos-agente-prod-fe.cmd'; $VUELTA = 'C:\satori\fe-vuelta'
 ```
-- **A0:** el mensaje de error dice `89c5aa4…` en vez de `578f38c…` (el chequeo usa `$SHA_PROD`, no cambia el código).
+- **A0:** en los textos, `578f38c…` pasa a `89c5aa4…` (el chequeo ya usa `$SHA_PROD`): el error queda «el agente de hoy
+  está en $hh y no en 89c5aa4…» y la línea final «A0 ok · … agente de hoy 89c5aa4… limpio (`C:\satori\agente-sal`) · …».
 - **A1:** `git -C $N fetch origin $RAMA claude/puente-salonero-lineas` y
   `$esp = 'pos-bridge/backfill.test.ts,pos-bridge/backfill.ts,pos-bridge/consultaAgente.test.ts,pos-bridge/consultaAgente.ts'`
   (el mensaje final dice «4 archivos»).
@@ -72,14 +73,18 @@ $NUEVA = 'C:\satori\agente-fe'; $CMD_NUEVO = 'C:\satori\pos-agente-prod-fe.cmd';
   1. **Últimos 7 días:** `fe_sin_clave = 0` todos los días (no se descarta ninguna clave buena). **Parada** si > 0.
   2. **`--desde 2026-04-10 --hasta 2026-04-16`:** Σ `fe_sin_clave` **≥ 194** (lo que hoy tiene prod en esos días;
      puede ser más si el PoS pisó más). **Parada** si da 0.
-- **A7 (vuelta atrás):** idéntico; vuelve a `C:\satori\agente-sal` (`89c5aa42`). Renombra `fe-vuelta-usada-…`.
+- **A7 (vuelta atrás):** vuelve a `C:\satori\agente-sal` (`89c5aa42`). Cambian dos textos del bloque: el `Rename-Item`
+  usa `('fe-vuelta-usada-' + (Hoy-CR).ToString('yyyyMMdd-HHmm', $INV))` en vez de `'sal-vuelta-usada-'`, y la línea final
+  dice `A7 ok · tarea → … (89c5aa4…)` en vez de `(578f38c…)`.
 - **B1:** idéntico salvo `$DESDE_MIN = '2026-03-01'` y, en el conteo por mes, la regex
   `'(\d{4}-\d{2}-\d{2})\s+tickets=\d+\s+guardados=\d+.*?fe_sin_clave=(\d+)'` (N = Σ `fe_sin_clave` de los días
   anteriores a `CORTE_HUMO`). Son ~9 meses: entra en una ventana.
 
 ## 6. Parada, riesgos y vuelta atrás
 - **Parar** si cambia `facturas`, `lineas`, `h_facturas_sin_clave`, `h_consecutivo` o `h_lineas`; si `colisiones` no
-  queda en 0; si `clave_null` no sube exactamente lo que valían las colisiones (y N de B1); o si el agente deja de latir.
+  queda en 0; si `clave_null` no sube **exactamente N** (Σ `fe_sin_clave` de B1 en los días anteriores al corte; no se
+  compara contra las colisiones de antes, porque el PoS puede haber pisado más claves entre una medición y otra); si
+  las 810 sin consecutivo cambian; o si el agente deja de latir.
 - **Riesgo · se pierde la clave del 04:** el PoS no tiene la clave buena de esos tiquetes en `ClaveElectronica` (la
   pisó). Queda null en vez de equivocada. Recuperarla pide leer el XML de Hacienda del PoS (hoy fuera del puente por
   privacidad): decisión aparte.
@@ -92,7 +97,7 @@ $NUEVA = 'C:\satori\agente-fe'; $CMD_NUEVO = 'C:\satori\pos-agente-prod-fe.cmd';
 
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| A0 · agente de hoy · latido | `89c5aa4…` limpio · Running · late sin error | |
+| A0 · agente de hoy · latido | `89c5aa4…` en `agente-sal`, limpio · Running · late sin error | |
 | A1 · clon | SHA firmado · árboles del PR · 4 archivos | |
 | A2 · `.env` | idénticos · ninguna clave falta · candado ok | |
 | A3 · pruebas | `mssql` carga · typecheck ok · 499 en verde | |
@@ -100,4 +105,4 @@ $NUEVA = 'C:\satori\agente-fe'; $CMD_NUEVO = 'C:\satori\pos-agente-prod-fe.cmd';
 | A5 · A6 | `HORA_CAMBIO` −06:00 · late sin error | |
 | B · humo antes | se anotan facturas, líneas, huellas, `colisiones`, `clave_null` | |
 | B1 · meses | 2026-03 → ayer · errores 0 · N | |
-| B · humo después | huellas iguales · `colisiones` 0 · `clave_null` sube N | |
+| B · humo después | huellas iguales · `colisiones` 0 · `clave_null` sube exactamente N de B1 | |

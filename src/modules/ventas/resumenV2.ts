@@ -19,6 +19,7 @@ import type { ContabilidadDay } from '../../shared/types/ventas'
 import { alertaMesasSinPax, facturasDesdePos, ventaPorPersona, diaCRDeFactura,
   type AlertaMesasSinPax, type FacturaIndicador, type VentaPorPersona } from './indicadores'
 import type { BaseId, PeriodoV2, Rango } from './periodos'
+import { contabilidadDayDeAgregado, juntarAgregados, type DiaAgregado, type ParteAgregada } from './resumenV2Agregado'
 import { armarDiasMap } from './ventasDiasDesdePos'
 import { getDayStats, totalesContabilidad, type TotalesContabilidad } from './ventasUtils'
 
@@ -28,12 +29,18 @@ export const MUESTRA_CHICA_PERSONAS = 100
 /** Aviso de calidad del dato: más de este % de facturas de salón sin pax (§5.1, ítem 8). */
 export const UMBRAL_SIN_PAX_PCT = 5
 
-/** Las facturas y líneas leídas (ya sin repetidos), y las facturas del indicador armadas una vez. */
+/**
+ * Las facturas y líneas leídas (ya sin repetidos), y las facturas del indicador armadas una vez.
+ * Con la función de la 190 (`pos_ventas_resumen`) no hay facturas ni líneas sueltas: vienen los
+ * días ya sumados (`dias`) y las facturas de salón con las anclas de lote (`facturas`).
+ */
 export interface Lectura {
   tickets:   readonly TicketVentaRow[]
   lineas:    readonly LineaNdfRow[]
   facturas:  readonly FacturaIndicador[]
   nombres:   Record<string, string>
+  /** Solo por la 190: los días CR de factura, en céntimos crudos. */
+  dias?:     ReadonlyMap<string, DiaAgregado>
 }
 
 export function armarLectura(
@@ -62,18 +69,46 @@ export interface CifrasRango {
   vpp:                VentaPorPersona
 }
 
-/** Las cifras de UN rango (período o base). */
-export function cifrasDelRango(l: Lectura, rango: Rango): CifrasRango {
+/** La lectura desde la función de la 190: los tramos ya juntados, sin facturas ni líneas sueltas. */
+export function armarLecturaAgregada(
+  partes: readonly ParteAgregada[],
+  nombres: Record<string, string> = {},
+): Lectura {
+  const { dias, facturas } = juntarAgregados(partes)
+  return { tickets: [], lineas: [], facturas, nombres, dias }
+}
+
+/** Días y facturas del rango desde la 190: la misma fila por día que `getDayStats`. */
+function diasDesdeAgregado(dias: ReadonlyMap<string, DiaAgregado>, rango: Rango) {
+  const out: ContabilidadDay[] = []
+  let facturas = 0
+  for (const f of [...dias.keys()].sort()) {
+    if (f < rango.desde || f > rango.hasta) continue
+    const d = dias.get(f)!
+    out.push(contabilidadDayDeAgregado(d))
+    facturas += d.facturas
+  }
+  return { dias: out, facturas }
+}
+
+/** Días y facturas del rango desde las filas de la 067 (el camino de siempre). */
+function diasDesdeFilas(l: Lectura, rango: Rango) {
   const { dias: mapa } = armarDiasMap([...l.tickets], [...l.lineas], rango,
     { uploadedAt: rango.hasta, nombres: l.nombres, avisar: () => {} })
   const dias: ContabilidadDay[] = Object.keys(mapa).sort().map(f => ({ ...getDayStats(mapa[f]), fecha: f }))
-  const totales = totalesContabilidad(dias)
   let facturas = 0
   for (const t of l.tickets) {
     if (t.estado !== 'C') continue
     const d = diaCRDeFactura(t.fecha_registra)
     if (d >= rango.desde && d <= rango.hasta) facturas += 1
   }
+  return { dias, facturas }
+}
+
+/** Las cifras de UN rango (período o base). */
+export function cifrasDelRango(l: Lectura, rango: Rango): CifrasRango {
+  const { dias, facturas } = l.dias ? diasDesdeAgregado(l.dias, rango) : diasDesdeFilas(l, rango)
+  const totales = totalesContabilidad(dias)
   const diasAbiertos = dias.filter(d => d.ventaNeta > 0).length
   return {
     rango, dias, totales, facturas, diasAbiertos,

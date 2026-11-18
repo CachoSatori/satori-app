@@ -1,5 +1,5 @@
-// GENERADO — no editar a mano. Fuente: src/modules/ventas/ventasDiaContadorPuro.ts @ f4c31002
-// Regenerar: node scripts/edge/empaquetar-ventas-pos.mjs --entrada src/modules/ventas/ventasDiaContadorPuro.ts <salida>  ·  sha256(cuerpo) de4e4f1c17961e8b410a9002eb65d189e48ae8655d73f47de855843eacb77eda
+// GENERADO — no editar a mano. Fuente: src/modules/ventas/ventasDiaContadorPuro.ts @ 4170c7c
+// Regenerar: node scripts/edge/empaquetar-ventas-pos.mjs --entrada src/modules/ventas/ventasDiaContadorPuro.ts <salida>  ·  sha256(cuerpo) 1dd92b81e3a26268f9be3d1f33cce184de0bf99382b84121e017c441170376f5
 // deno-lint-ignore-file
 // @ts-nocheck
 const CR_OFFSET = "-06:00";
@@ -366,13 +366,13 @@ const FAMILIAS_CATALOGO = [
     28,
     29
 ];
-const n$1 = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+const n$2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
 function esLineaDeVenta(familia) {
     return familia === null || familia === void 0 || !FAMILIAS_NO_VENTA.includes(familia);
 }
 function netaDelTicket(t, lineas, avisos) {
     if (!lineas || lineas.length === 0) {
-        const vs = n$1(t.valor_servido_crc);
+        const vs = n$2(t.valor_servido_crc);
         if (avisos && vs !== 0)
             avisos.push({
                 tipo: "sin_lineas",
@@ -388,7 +388,7 @@ function netaDelTicket(t, lineas, avisos) {
     for (const l of lineas) {
         if (!esLineaDeVenta(l.familia))
             continue;
-        const monto = n$1(l.monto);
+        const monto = n$2(l.monto);
         neta += monto;
         if (!avisos || monto === 0)
             continue;
@@ -420,6 +420,11 @@ function resumirAvisos(avisos) {
         acc.set(a.tipo, e);
     }
     return [...acc.entries()].map(([tipo, e]) => `${tipo}: ${e.n} (₡${Math.round(e.monto)}; ej. ${[...e.ejemplos].join(", ")})`).join(" · ");
+}
+const n$1 = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+function ventaPorPersonaDeTotales(netaSalon, personas) {
+    const p = n$1(personas);
+    return p > 0 ? n$1(netaSalon) / p : null;
 }
 const CATALOGO = [
     {
@@ -773,7 +778,7 @@ function getDayStats(dia) {
         salon,
         delivery,
         pax,
-        promPax: pax > 0 ? salon / pax : 0,
+        promPax: ventaPorPersonaDeTotales(salon, pax) ?? 0,
         saloneroNames
     };
 }
@@ -830,7 +835,7 @@ function totalesContabilidad(days) {
         t.delivery += d.delivery;
         t.pax += d.pax;
     }
-    t.promPax = t.pax > 0 ? t.salon / t.pax : 0;
+    t.promPax = ventaPorPersonaDeTotales(t.salon, t.pax) ?? 0;
     return t;
 }
 function dentro(fecha, r) {

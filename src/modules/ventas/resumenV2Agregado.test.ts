@@ -157,16 +157,19 @@ describe('cargarLecturaResumen', () => {
   beforeEach(() => { limpiarCacheResumen(); rpc.mockReset(); getTicketsRango.mockReset(); getLineasDeTickets.mockReset() })
 
   it('con la función: un pedido por tramo y ninguna lectura de filas', async () => {
-    rpc.mockResolvedValue({ data: { dias: [['2026-11-17', 1_000_000, 0, 0, 0, 2, 1]], facturas: [], lotes: [] }, error: null })
+    rpc.mockImplementation(async (fn: string) => fn === 'pos_ventas_internas' ? { data: [], error: null }
+      : { data: { dias: [['2026-11-17', 1_000_000, 0, 0, 0, 2, 1]], facturas: [], lotes: [] }, error: null })
     const lec = await cargarLecturaResumen('santa-teresa', p)
-    expect(rpc).toHaveBeenCalledTimes(tramosDeLectura(p).length)
-    expect(rpc.mock.calls[0][0]).toBe('pos_ventas_resumen')
+    const deResumen = rpc.mock.calls.filter(c => c[0] === 'pos_ventas_resumen')
+    expect(deResumen).toHaveLength(tramosDeLectura(p).length)
+    // Y las mesas internas (193), un pedido por tramo.
+    expect(rpc.mock.calls.filter(c => c[0] === 'pos_ventas_internas')).toHaveLength(tramosDeLectura(p).length)
     expect(getTicketsRango).not.toHaveBeenCalled()
     expect(cifrasDelRango(lec, p).totales.ventaNeta).toBe(10_000)
   })
 
   it('sin la función (base sin la 190): cae a la 067 y no la vuelve a pedir', async () => {
-    rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.pos_ventas_resumen' } })
+    rpc.mockImplementation(async (fn: string) => ({ data: null, error: { code: 'PGRST202', message: `Could not find the function public.${fn}` } }))
     getTicketsRango.mockResolvedValue([t({ id: 'a1', fecha_registra: '2026-11-17T19:00:00-06:00' })])
     getLineasDeTickets.mockResolvedValue([l('a1', 7_000)])
     const lec = await cargarLecturaResumen('santa-teresa', p)
@@ -174,6 +177,27 @@ describe('cargarLecturaResumen', () => {
     const llamadas = rpc.mock.calls.length
     await cargarLecturaResumen('santa-teresa', calcularPeriodo({ tipo: 'semana', ancla: ANCLA }))
     expect(rpc.mock.calls.length).toBe(llamadas)
+  })
+
+  it('si el resumen falla, la lectura de mesas internas (que va en paralelo) no deja una promesa sin atender', async () => {
+    const sueltas: unknown[] = []
+    const oir = (e: unknown) => { sueltas.push(e) }
+    process.on('unhandledRejection', oir)
+    try {
+      rpc.mockImplementation(async (fn: string) => fn === 'pos_ventas_internas'
+        ? { data: null, error: { code: '42501', message: 'No autorizado (internas)' } }
+        : { data: null, error: { code: '42501', message: 'No autorizado' } })
+      await expect(cargarLecturaResumen('santa-teresa', p)).rejects.toThrow('No autorizado')
+      await new Promise(r => setTimeout(r, 0))
+      expect(sueltas).toEqual([])
+    } finally { process.off('unhandledRejection', oir) }
+  })
+
+  it('si solo fallan las mesas internas, el error llega (no se tapa)', async () => {
+    rpc.mockImplementation(async (fn: string) => fn === 'pos_ventas_internas'
+      ? { data: null, error: { code: '42501', message: 'No autorizado (internas)' } }
+      : { data: { dias: [], facturas: [], lotes: [] }, error: null })
+    await expect(cargarLecturaResumen('santa-teresa', p)).rejects.toThrow('No autorizado (internas)')
   })
 
   it('otro error (42501) no se tapa con el camino viejo', async () => {

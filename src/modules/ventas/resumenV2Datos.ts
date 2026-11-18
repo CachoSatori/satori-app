@@ -20,12 +20,18 @@ import { rangoDeLecturaParaEstimar } from './indicadores'
 import { sumarDias, type PeriodoV2, type Rango } from './periodos'
 import { armarLectura, armarLecturaAgregada, type Lectura } from './resumenV2'
 import { parsearResumenAgregado, type ParteAgregada } from './resumenV2Agregado'
+import { esFuncionAusente, marcarInternas, parsearInternas, type InternaRpc } from './tiemposV2Rpc'
 import { PRIMERA_JORNADA_POS } from './ventasFuente'
 
 /** Los rangos que hay que leer para un período: él, sus tres bases y ayer, estirados y juntados. */
 export function tramosDeLectura(p: PeriodoV2): Rango[] {
   const pedidos: Rango[] = [{ desde: p.desde, hasta: p.hasta }, { desde: p.N, hasta: p.N }]
   for (const b of Object.values(p.bases)) if (b) pedidos.push({ desde: b.desde, hasta: b.hasta })
+  return tramosDeRangos(pedidos)
+}
+
+/** Cualquier lista de rangos, estirados para el estimador (`rangoDeLecturaParaEstimar`) y juntados. */
+export function tramosDeRangos(pedidos: readonly Rango[]): Rango[] {
   const estirados = pedidos
     .map(rangoDeLecturaParaEstimar)
     .map(r => ({ desde: r.desde < PRIMERA_JORNADA_POS ? PRIMERA_JORNADA_POS : r.desde, hasta: r.hasta }))
@@ -43,7 +49,7 @@ export function tramosDeLectura(p: PeriodoV2): Rango[] {
 const cache = new Map<string, Promise<{ tickets: TicketVentaRow[]; lineas: LineaNdfRow[] }>>()
 
 /** Para las pruebas. */
-export function limpiarCacheResumen(): void { cache.clear(); cacheAgregado.clear(); funcionAusente = false }
+export function limpiarCacheResumen(): void { cache.clear(); cacheAgregado.clear(); funcionAusente = false; limpiarCacheInternas() }
 
 function leerTramo(local: string, r: Rango) {
   const k = `${local}|${r.desde}|${r.hasta}`
@@ -133,7 +139,15 @@ function leerTramoAgregado(local: string, r: Rango): Promise<ParteAgregada> {
 
 /** Todo lo que el Resumen necesita para un período, sin facturas repetidas entre tramos. */
 export async function cargarLecturaResumen(local: string, p: PeriodoV2): Promise<Lectura> {
-  return leerTramos(local, tramosDeLectura(p))
+  return cargarLecturaDeTramos(local, tramosDeLectura(p))
+}
+
+/**
+ * Lo mismo para una lista cualquiera de rangos («Tiempos»: el período, sus bases y las últimas
+ * quincenas con las suyas). Mismo camino rápido (190) y mismo respaldo (067).
+ */
+export async function cargarLecturaDeRangos(local: string, rangos: readonly Rango[]): Promise<Lectura> {
+  return cargarLecturaDeTramos(local, tramosDeRangos(rangos))
 }
 
 /**
@@ -143,22 +157,85 @@ export async function cargarLecturaResumen(local: string, p: PeriodoV2): Promise
 export async function cargarLecturaRango(local: string, r: Rango): Promise<Lectura> {
   const e = rangoDeLecturaParaEstimar(r)
   const desde = e.desde < PRIMERA_JORNADA_POS ? PRIMERA_JORNADA_POS : e.desde
-  return leerTramos(local, desde <= e.hasta ? [{ desde, hasta: e.hasta }] : [])
+  return cargarLecturaDeTramos(local, desde <= e.hasta ? [{ desde, hasta: e.hasta }] : [])
 }
 
-async function leerTramos(local: string, tramos: Rango[]): Promise<Lectura> {
+async function cargarLecturaDeTramos(local: string, tramos: Rango[]): Promise<Lectura> {
   const nombres = getSaloneroNombres().catch(() => ({} as Record<string, string>))
+  // Las mesas internas se piden en paralelo. Su resultado (o su error) se atiende SIEMPRE: si el resumen falla
+  // primero, la falla de esta promesa no puede quedar sin atender (verificador de #294).
+  const internas: Promise<{ ok: true; v: InternaRpc[] | null } | { ok: false; e: unknown }> =
+    cargarInternasDeTramos(local, tramos).then(v => ({ ok: true as const, v }), e => ({ ok: false as const, e }))
+  let l: Lectura | null = null
   if (!funcionAusente) {
     try {
       const partes = await Promise.all(tramos.flatMap(r => partirTramo(r)).map(r => leerTramoAgregado(local, r)))
-      return armarLecturaAgregada(partes, await nombres)
+      l = armarLecturaAgregada(partes, await nombres)
     } catch (e) {
       if (!(e instanceof SinFuncionResumen)) throw e
       funcionAusente = true
     }
   }
-  const partes = await Promise.all(tramos.map(r => leerTramo(local, r)))
-  return armarLectura(...juntarPartes(partes), await nombres)
+  if (!l) {
+    const partes = await Promise.all(tramos.map(r => leerTramo(local, r)))
+    l = armarLectura(...juntarPartes(partes), await nombres)
+  }
+  const i = await internas
+  if (!i.ok) throw i.e
+  return conInternas(l, i.v)
+}
+
+// ── Mesas internas (mig 193): son venta; solo salen de la alerta de mesas sin pax ─────────────────────────────────
+
+const cacheInternas = new Map<string, Promise<InternaRpc[]>>()
+let internasAusente = false
+
+/** Para las pruebas. */
+export function limpiarCacheInternas(): void { cacheInternas.clear(); internasAusente = false }
+
+function leerInternas(local: string, r: Rango): Promise<InternaRpc[]> {
+  const k = `${local}|${r.desde}|${r.hasta}`
+  let p = cacheInternas.get(k)
+  if (!p) {
+    p = (async () => {
+      const { data, error } = await (supabase as unknown as {
+        rpc: (f: string, a: object) => PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }>
+      }).rpc('pos_ventas_internas', { p_local: local, p_desde: r.desde, p_hasta: r.hasta })
+      if (error) {
+        if (esFuncionAusente(error, 'pos_ventas_internas')) throw new SinFuncionInternas(error.message)
+        throw new Error(error.message)
+      }
+      return parsearInternas(data)
+    })()
+    p.catch(() => cacheInternas.delete(k))
+    cacheInternas.set(k, p)
+  }
+  return p
+}
+
+class SinFuncionInternas extends Error {}
+
+/**
+ * Las facturas de mesas internas de los tramos, sin repetir. `null` = la base todavía no tiene la 193
+ * (entonces no se separa nada, como antes). Cualquier otro error se propaga.
+ */
+export async function cargarInternasDeTramos(local: string, tramos: readonly Rango[]): Promise<InternaRpc[] | null> {
+  if (internasAusente) return null
+  try {
+    const partes = await Promise.all(tramos.flatMap(r => partirTramo(r)).map(r => leerInternas(local, r)))
+    const vistas = new Set<string>()
+    return partes.flat().filter(i => (vistas.has(i.id) ? false : (vistas.add(i.id), true)))
+  } catch (e) {
+    if (!(e instanceof SinFuncionInternas)) throw e
+    internasAusente = true
+    return null
+  }
+}
+
+/** La lectura con las facturas de mesas internas marcadas (`interna`) y la lista guardada. */
+export function conInternas(l: Lectura, internas: InternaRpc[] | null): Lectura {
+  if (internas === null) return { ...l, internas: null }
+  return { ...l, facturas: marcarInternas(l.facturas, internas), internas }
 }
 
 export interface LocalVentas { id: string; nombre: string }

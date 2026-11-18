@@ -227,6 +227,7 @@ function AlertaAyer({ alerta, nombres, dia }: { alerta: ReturnType<typeof alerta
           ? 'Todas las mesas de salón de ayer tienen pax.'
           : `${alerta.total.sinPax} de ${alerta.total.facturasSalon} mesas de salón sin pax (${alerta.total.pct.toFixed(1).replace('.', ',')} %).`}
         {' '}{desdeCaja > 0 && `${desdeCaja === 1 ? '1 mesa se cargó entera' : `${desdeCaja} mesas se cargaron enteras`} desde la caja (sin salonero)${alerta.sinSalonero.sinPax > 0 ? `, ${alerta.sinSalonero.sinPax} sin pax` : ''}.`}
+        {alerta.mesasInternas > 0 && ` No cuenta ${alerta.mesasInternas === 1 ? '1 factura de mesa interna' : `${alerta.mesasInternas} facturas de mesas internas`} (Ajustes): ahí no se cargan personas.`}
       </p>
       {conFalta.length > 0 && (
         <ul>

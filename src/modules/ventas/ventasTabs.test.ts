@@ -6,18 +6,18 @@ import { TABS, ENTRADAS, tabPorDefecto, resolverTab, entradasVisibles, entradaDe
 const ROLES = ['owner', 'manager', 'contador'] as const
 
 describe('ventasTabs', () => {
-  it('las 16 vistas siguen ahí (+ «Resumen» v2) y cada una está en exactamente una entrada', () => {
-    expect(TABS).toHaveLength(17)
+  it('las 16 vistas siguen ahí (+ «Resumen» y «Tiempos» v2) y cada una está en exactamente una entrada', () => {
+    expect(TABS).toHaveLength(19)
     const enEntradas = ENTRADAS.flatMap(e => e.vistas)
-    expect(enEntradas).toHaveLength(17)
+    expect(enEntradas).toHaveLength(19)
     expect(new Set(enEntradas)).toEqual(new Set(TABS.map(t => t.id)))
   })
 
-  it('7 entradas + «Resumen» (v2, fase 2.1) + «Ajustes», con los grupos del PLAN', () => {
-    expect(ENTRADAS.map(e => e.id)).toEqual(['hoy','resumen','envivo','saloneros','analisis','historico','menueng','metas','ajustes'])
+  it('7 entradas + «Resumen» y «Tiempos» (v2, fases 2.1 y 2.3) + «Ajustes», con los grupos del PLAN', () => {
+    expect(ENTRADAS.map(e => e.id)).toEqual(['hoy','resumen','tiempos','envivo','saloneros','analisis','historico','menueng','metas','ajustes'])
     expect(ENTRADAS.find(e => e.id === 'saloneros')!.vistas).toEqual(['saloneros','salolineas','evaluacion','icp','competencias'])
     expect(ENTRADAS.find(e => e.id === 'historico')!.vistas).toEqual(['historico','calendario','mix','ventas','cajeros'])
-    expect(ENTRADAS.find(e => e.id === 'ajustes')!.vistas).toEqual(['config'])
+    expect(ENTRADAS.find(e => e.id === 'ajustes')!.vistas).toEqual(['config', 'internas'])
   })
 
   it('los roles de cada vista son los de antes del rediseño', () => {
@@ -27,12 +27,12 @@ describe('ventasTabs', () => {
       hoy: omc, envivo: omc, saloneros: om, salolineas: om, evaluacion: om,
       icp: omc, cajeros: omc, ventas: omc, historico: omc, mix: omc, analisis: omc,
       calendario: omc, menueng: om, metas: omc, competencias: om, config: om,
-      resumen: omc,
+      resumen: omc, tiempos: omc, internas: om,
     })
   })
 
-  it('«Resumen» va al final de TABS: no cambia la pestaña de arranque de nadie (conviven hasta la 3.5)', () => {
-    expect(TABS[TABS.length - 1].id).toBe('resumen')
+  it('«Resumen» y «Tiempos» van al final de TABS: no cambian la pestaña de arranque de nadie (conviven hasta la 3.5)', () => {
+    expect(TABS.slice(-3).map(t => t.id)).toEqual(['resumen', 'tiempos', 'internas'])
   })
 
   it.each(ROLES)('pestaña por defecto de %s: «Hoy», como antes', role => {
@@ -68,8 +68,8 @@ describe('ventasTabs', () => {
       expect(resolverTab(role, 'paridad')).toBe('hoy')
       expect(resolverTab(role, 'xls')).toBe('hoy')
     }
-    expect(entradasVisibles('manager').find(x => x.id === 'ajustes')!.vistas).toEqual(['config'])
-    expect(entradasVisibles('owner').find(x => x.id === 'ajustes')!.vistas).toEqual(['config'])
+    expect(entradasVisibles('manager').find(x => x.id === 'ajustes')!.vistas).toEqual(['config', 'internas'])
+    expect(entradasVisibles('owner').find(x => x.id === 'ajustes')!.vistas).toEqual(['config', 'internas'])
   })
 
   it('cada vista sabe a qué entrada pertenece', () => {

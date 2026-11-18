@@ -70,3 +70,16 @@ button.vt-subnav-tab.active { font-weight: 600; }
 .vt2-detalle { margin-top: 1rem; }
 .vt2-detalle summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .vt2-total td { font-weight: 700; }
+
+/* Ventas v2 · fase 2.3: «Tiempos». Solo clases vt2t-* nuevas. */
+.vt2t-bloque { margin: 1.25rem 0; }
+.vt2t-mapa { border-collapse: collapse; font-size: 0.7rem; }
+.vt2t-mapa th, .vt2t-mapa td { padding: 0.2rem 0.3rem; text-align: center; min-width: 2.2rem; }
+.vt2t-mapa td { color: var(--c-tinta, inherit); }
+.vt2t-cal { display: grid; grid-template-columns: repeat(7, minmax(2.6rem, 1fr)); gap: 2px; font-size: 0.7rem; max-width: 34rem; }
+.vt2t-cal .cab { font-weight: 600; text-align: center; color: var(--c-gris); }
+.vt2t-cal .dia { border: 1px solid var(--c-linea, #ddd); border-radius: 3px; padding: 0.2rem; min-height: 2.6rem; }
+.vt2t-cal .dia.mejor { outline: 2px solid var(--c-musgo); }
+.vt2t-cal .dia.peor { outline: 2px solid var(--c-laca); }
+.vt2t-cal .num { font-weight: 600; }
+.vt2t-meses { display: flex; flex-wrap: wrap; gap: 1.5rem; }

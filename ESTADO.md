@@ -65,7 +65,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | `extract-document` | v20 · on (código desde `8a8dfb6`, rama `claude/busy-brown-ssjq4e`, modelo `claude-sonnet-5-5`) | v29 desde `190b5f5` |
 | `cierre-email` | v15 · on (desde `b02d2841`, #242, + remitente propio) | v15 · on |
 | `pago-notificar` | v15 · on (desde `588c5593`, #243, + remitente propio) | — |
-| `ventas-dia-contador` | v1 · on (desde la rama de #276, `11a6097`) | — |
+| `ventas-dia-contador` | v1 · on (desde la rama de #276, `11a6097`; según su commit, firma 18-nov 03:22). Fuente nueva en `claude/correo-contador-ventas-dia-v3` (solo el paquete: cuenta única de Prom/PAX), sin desplegar · PASE-189 | — |
 | `ingest-ndf` | v13 · off (código v3 del 09/11 desde `5da233a`; vive en `claude/puente-item11-prod-v2`) | v21 · off |
 | `ingest-punches` | — | v13 · off |
 | `alta-empleado` | v12 · on (rama `claude/alta-empleado-fn`) | v8 · on |
@@ -82,7 +82,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 ### Numeración de migraciones (regla del dueño, 08/11)
 > **Fuente de verdad:** `supabase/migraciones-reservadas.json`, que lee `supabase/migraciones.test.ts`. La bitácora larga de cada número está en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 
-1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **130**) · PASE A PROD **150–199** (solo renumeraciones del pase; la **189** está tomada por #276, sin firma; próximo libre **190**). La **086** queda libre.
+1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **130**) · PASE A PROD **150–199** (solo renumeraciones del pase; la **189** está tomada por #276 → `claude/correo-contador-ventas-dia-v3`, sin firma; próximo libre **190**). La **086** queda libre.
 2. Cada PR que agrega una migración actualiza esta tabla y el registro. El gate falla si no está registrada, queda fuera del bloque de su rama o repite número.
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199 (nunca a uno de creación), en el mismo PR (archivo, rollback, pruebas, scripts, fila del ledger de staging), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
@@ -144,6 +144,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | 130 | → 186 (cumpleaños: el owner deshace «enviado»; #271, en prod 17-nov) |
 | 131 | → 187 (retos: un local por reto + tope de 3 armados por año por local; #272, en prod 17-nov) |
 | 132 | → 188 (getEdadSocio por función con control de local; #273, en prod 17-nov) |
+| 133 | → 189 (cron del correo quincenal de ventas por día al contador; reservado para pasar directo a 189) |
 | 150 | ← 075 |
 | 151 | ← 100 |
 | 153 | ← 096 |
@@ -181,6 +182,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | 186 | ← 130 (#271, en prod 17-nov) |
 | 187 | ← 131 (#272, en prod 17-nov) |
 | 188 | ← 132 (#273, en prod 17-nov) |
+| 189 | ← 133 (cron `satori-ventas-dia-contador`, 1 y 16 a las 07:00 CR; en PR, sin firma; 186–188 ya en prod; va después de desplegar la Edge `ventas-dia-contador`; PASE-189) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 

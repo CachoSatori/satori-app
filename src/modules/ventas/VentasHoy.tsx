@@ -9,7 +9,8 @@ import {
 } from './ventasUtils'
 import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
-import { esPostCorte } from '../cash/cierrePozo'
+import { bloqueoACaja, bloqueoPorTurno, AVISO_A_CAJA } from './aCaja'
+import { todayCR } from '../../shared/utils'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { ventaPorPersonaDeTotales } from './indicadores'
 
@@ -175,6 +176,8 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   // «Delivery», el mensaje 📤 y «→ Caja» salen todos de acá, no de la suma por persona (`gen`).
   const stats      = getDayStats(dia)
   const hasCajeros = hayCaja
+  // «→ Caja» solo para la jornada en curso y antes del corte del pozo (ver `aCaja.ts`).
+  const bloqueoCaja = bloqueoACaja(activeDate, todayCR())
 
   // ▲/▼ delta vs día anterior
   function delta(cur: number, prev: number | undefined, isInt = false): React.ReactNode {
@@ -272,25 +275,25 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           {(profile?.role === 'owner' || profile?.role === 'manager') && gen && stats.ventaNeta > 0 && (
             <button
               className="vt-range-btn"
-              disabled={registrando}
-              title="Crea un movimiento de ingreso en la Caja con el total de ventas del día"
-              style={{ fontSize: '0.68rem', borderColor: 'var(--vt-green)', color: 'var(--vt-green)' }}
+              disabled={registrando || bloqueoCaja !== null}
+              aria-describedby={bloqueoCaja ? 'vt-acaja-aviso' : undefined}
+              title={bloqueoCaja ? AVISO_A_CAJA[bloqueoCaja] : 'Crea un movimiento de ingreso en la Caja con el total de ventas del día'}
+              style={{ fontSize: '0.68rem', borderColor: 'var(--vt-green)', color: 'var(--vt-green)',
+                ...(bloqueoCaja ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}
               onClick={async () => {
                 if (!profile) return
+                // ⚠️ Dos llaves antes de escribir plata (ver `aCaja.ts`):
+                // 1) el día elegido es HOY (jornada en curso, hora CR) y es anterior al corte del pozo
+                //    (desde el corte la venta entra por el Cierre del Día: este atajo la duplicaría);
+                // 2) el turno abierto es de ESE día. Si no, la venta de una fecha caería en la caja de otra.
+                const b1 = bloqueoACaja(activeDate, todayCR())
+                if (b1) { setRegMsg(`⚠ ${AVISO_A_CAJA[b1]}`); return }
                 setRegistrando(true); setRegMsg(null)
                 try {
-                  // ⚠️ CANAL DUPLICADO — bloqueado desde el corte del pozo.
-                  // Este botón crea un ingreso de la venta del día en `Registradora`, y el
-                  // Cierre crea otro por la MISMA venta en `Caja Fuerte`. Con el modelo viejo
-                  // no chocaban (saldoCajaFuerte ignora Registradora); con el pozo las dos
-                  // cajas suman, así que la venta entraría DOS VECES. Post-corte la venta
-                  // entra por un solo canal: las ventas brutas del Cierre del Día.
-                  if (esPostCorte(activeDate)) {
-                    setRegMsg('⚠ Desde el pozo, las ventas entran por el Cierre del Día (ventas brutas). Este atajo duplicaría el ingreso.')
-                    return
-                  }
                   const cashSession = await getOpenCashSession()
                   if (!cashSession) { setRegMsg('⚠ No hay turno de caja abierto'); return }
+                  const b2 = bloqueoPorTurno(activeDate, cashSession.session_date)
+                  if (b2) { setRegMsg(`⚠ ${AVISO_A_CAJA[b2]}`); return }
                   await createCashMovement({
                     session_id:    cashSession.id,
                     created_by:    profile.id,
@@ -319,6 +322,12 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           )}
         </div>
       </div>
+      {(profile?.role === 'owner' || profile?.role === 'manager') && gen && stats.ventaNeta > 0 && bloqueoCaja && !regMsg && (
+        <div id="vt-acaja-aviso" data-testid="acaja-aviso"
+          style={{ fontSize: '0.72rem', padding: '0.3rem 0', color: 'var(--c-gris)' }}>
+          {AVISO_A_CAJA[bloqueoCaja]}
+        </div>
+      )}
       {regMsg && (
         <div style={{ fontSize: '0.78rem', padding: '0.4rem 0', color: regMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)' }}>
           {regMsg}

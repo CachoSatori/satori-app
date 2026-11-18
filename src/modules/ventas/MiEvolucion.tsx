@@ -3,8 +3,9 @@
  * «que ellos evalúen su propio rendimiento personal, así pueden ver realmente si cambia algo con su esfuerzo».
  *
  * Todo sale de SUS facturas (191) con las reglas de Ventas (`evolucionPersonal.ts`): esta semana y este mes a la
- * fecha contra los mismos días del período anterior, y las últimas 12 semanas. Abajo, su lugar en el equipo (mig 194:
- * solo posiciones y mediana, nunca la venta de otra persona).
+ * fecha contra los mismos días del período anterior y contra la misma semana/mes del año pasado (−364 días, mismo día
+ * de semana), y las últimas 12 semanas. Las proporciones del local (siempre) y su lugar en el equipo (con 4+
+ * personas) salen de la mig 194: nunca la venta de otra persona.
  */
 import { useMemo } from 'react'
 import type { DiasMap, ProductMap } from '../../shared/types/ventas'
@@ -13,8 +14,9 @@ import {
   comparacionesPersonales, semanasPersonales, tendenciaVentaPersona, variacionPct,
   type MisIndicadores,
 } from './evolucionPersonal'
-import type { EstadoEquipo } from './useEquipoAgregado'
-import { textoMotivoEquipo } from './equipoTextos'
+import { useEquipoAgregado, type EstadoEquipo } from './useEquipoAgregado'
+import { SIN_DATOS_ANIO_PASADO, textoMotivoEquipo } from './equipoTextos'
+import type { ProporcionesLocal } from '../../shared/api/rendimientoEquipo'
 
 type Fila = { session_date: string; tip_amount_crc?: number | null; tip_amount_usd?: number | null; exchange_rate?: number | null }
 
@@ -25,8 +27,8 @@ interface Props {
   pm:       ProductMap
   hoy:      string
   propinas: Fila[]
-  /** Mi lugar en el equipo este mes a la fecha (194). `null` = no se muestra (gerencia / «Ver como»). */
-  equipoMes: EstadoEquipo | null
+  /** Consultar la 194 (proporciones del local y lugar en el equipo). `false` en «Ver como». */
+  consultarEquipo: boolean
 }
 
 const IND: { k: keyof MisIndicadores; label: string; fmt: (v: number) => string }[] = [
@@ -53,8 +55,12 @@ const val = (m: MisIndicadores | null, k: keyof MisIndicadores): number | null =
   return typeof v === 'number' ? v : null
 }
 
-export default function MiEvolucion({ nombre, fechas, dias, pm, hoy, propinas, equipoMes }: Props) {
+export default function MiEvolucion({ nombre, fechas, dias, pm, hoy, propinas, consultarEquipo }: Props) {
   const comps = useMemo(() => comparacionesPersonales(nombre, fechas, dias, pm, hoy, propinas), [nombre, fechas, dias, pm, hoy, propinas])
+  // Las proporciones del local (y su año pasado) de los mismos dos períodos: semana y mes a la fecha.
+  const eqSemana = useEquipoAgregado(consultarEquipo, comps[0].rango.desde, comps[0].rango.hasta)
+  const eqMes    = useEquipoAgregado(consultarEquipo, comps[1].rango.desde, comps[1].rango.hasta)
+  const equipos  = [eqSemana, eqMes]
   const semanas = useMemo(() => semanasPersonales(nombre, fechas, dias, pm, hoy, 12, propinas), [nombre, fechas, dias, pm, hoy, propinas])
   const tendencia = useMemo(() => tendenciaVentaPersona(semanas), [semanas])
   const conDatos = semanas.filter(s => s.dias > 0)
@@ -66,7 +72,7 @@ export default function MiEvolucion({ nombre, fechas, dias, pm, hoy, propinas, e
         Te comparás con vos mismo, con las mismas reglas de Ventas: hasta ayer, y la base se corta a los mismos días.
       </div>
 
-      {comps.map(c => (
+      {comps.map((c, ci) => (
         <div key={c.titulo} className="mr-card" data-testid="evo-comparacion">
           <div style={{ fontWeight: 800, color: 'var(--c-tinta)' }}>{c.titulo}</div>
           <div className="mr-icp-sub" style={{ marginBottom: '0.5rem' }}>
@@ -78,17 +84,23 @@ export default function MiEvolucion({ nombre, fechas, dias, pm, hoy, propinas, e
           ) : (
             <div className="mr-tbl-wrap" style={{ marginBottom: 0 }}>
               <table className="mr-tbl">
-                <thead><tr><th>Indicador</th><th className="r">Ahora</th><th className="r">Antes</th><th className="r">Cambio</th></tr></thead>
+                <thead><tr>
+                  <th>Indicador</th><th className="r">Ahora</th><th className="r">Antes</th><th className="r">Cambio</th>
+                  <th className="r">Hace un año</th><th className="r">Cambio</th>
+                </tr></thead>
                 <tbody>
-                  <tr><td>Días trabajados</td><td className="r">{c.ahora.dias}</td><td className="r muted">{c.antes?.dias ?? '—'}</td><td className="r" /></tr>
+                  <tr><td>Días trabajados</td><td className="r">{c.ahora.dias}</td><td className="r muted">{c.antes?.dias ?? '—'}</td><td className="r" />
+                      <td className="r muted">{c.anioPasado?.dias ?? '—'}</td><td className="r" /></tr>
                   {IND.map(i => {
-                    const a = val(c.ahora, i.k), b = val(c.antes, i.k)
+                    const a = val(c.ahora, i.k), b = val(c.antes, i.k), y = val(c.anioPasado, i.k)
                     return (
                       <tr key={i.k}>
                         <td>{i.label}</td>
                         <td className="r" style={{ fontWeight: 700 }}>{a === null ? '—' : i.fmt(a)}</td>
                         <td className="r muted">{b === null ? '—' : i.fmt(b)}</td>
                         <td className="r"><Cambio pct={variacionPct(a, b)} /></td>
+                        <td className="r muted">{y === null ? '—' : i.fmt(y)}</td>
+                        <td className="r"><Cambio pct={variacionPct(a, y)} /></td>
                       </tr>
                     )
                   })}
@@ -96,6 +108,11 @@ export default function MiEvolucion({ nombre, fechas, dias, pm, hoy, propinas, e
               </table>
             </div>
           )}
+          <div className="mr-icp-sub" data-testid="evo-anio">
+            {c.tituloAnio}{c.rotuloAnio ? ` · ${c.rotuloAnio}` : ''}
+            {!c.anioPasado || c.anioPasado.dias === 0 ? ` · ${SIN_DATOS_ANIO_PASADO}` : ''}
+          </div>
+          {consultarEquipo && <ProporcionesDelLocal estado={equipos[ci]} titulo={c.tituloAnio} />}
         </div>
       ))}
 
@@ -136,12 +153,45 @@ export default function MiEvolucion({ nombre, fechas, dias, pm, hoy, propinas, e
         </div>
       )}
 
-      {equipoMes && <MiLugarEnElEquipo estado={equipoMes} />}
+      {consultarEquipo && <MiLugarEnElEquipo estado={eqMes} />}
     </>
   )
 }
 
-/** Mi lugar en el equipo este mes a la fecha: posiciones y mediana, sin ventas de nadie. */
+const PROP: { k: keyof ProporcionesLocal; label: string; fmt: (v: number) => string }[] = [
+  { k: 'prom_pax',    label: 'Venta por PAX',  fmt: v => fi(v) },
+  { k: 'beb_pax',     label: 'Bebidas / PAX',  fmt: v => v.toFixed(2) },
+  { k: 'prom_ticket', label: 'Ticket / ítem',  fmt: v => fi(v) },
+]
+
+/** Las proporciones del local en estos días y en los mismos del año pasado (siempre; sin plata total ni posición). */
+function ProporcionesDelLocal({ estado, titulo }: { estado: EstadoEquipo; titulo: string }) {
+  if (estado.cargando || !estado.datos?.general) return null
+  const g = estado.datos.general
+  const y = estado.datos.anio_pasado?.general ?? null
+  return (
+    <div className="mr-tbl-wrap" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+      <table className="mr-tbl" data-testid="evo-local">
+        <thead><tr><th>El local</th><th className="r">Ahora</th><th className="r">{titulo}</th><th className="r">Cambio</th></tr></thead>
+        <tbody>
+          {PROP.map(p => {
+            const a = g[p.k], b = y ? y[p.k] : null
+            return (
+              <tr key={p.k}>
+                <td>{p.label}</td>
+                <td className="r">{a === null ? '—' : p.fmt(a)}</td>
+                <td className="r muted">{b === null ? (y ? '—' : SIN_DATOS_ANIO_PASADO) : p.fmt(b)}</td>
+                <td className="r"><Cambio pct={variacionPct(a, b)} /></td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** Mi lugar en el equipo este mes a la fecha: posiciones y mediana, sin ventas de nadie. Solo con 4+ personas. */
 function MiLugarEnElEquipo({ estado }: { estado: EstadoEquipo }) {
   const d = estado.datos
   if (estado.cargando) return <div className="mr-icp-sub">Cargando la comparación con el equipo…</div>
@@ -157,6 +207,7 @@ function MiLugarEnElEquipo({ estado }: { estado: EstadoEquipo }) {
   return (
     <>
       <div className="vt-sl">Tu lugar en el equipo · este mes a la fecha</div>
+      {!d?.ranking && !eq && !aviso && <div className="mr-icp-sub">Sin datos del equipo para este mes.</div>}
       {d?.ranking && (
         <div className="mr-card accent" data-testid="evo-ranking">
           <strong>{d.ranking.posicion}.º de {d.ranking.de}</strong> en ventas
@@ -180,7 +231,7 @@ function MiLugarEnElEquipo({ estado }: { estado: EstadoEquipo }) {
       )}
       {aviso && <div className="mr-icp-sub" role="note">{aviso}</div>}
       <div className="mr-icp-sub" style={{ marginTop: '0.25rem' }}>
-        Solo posiciones y medianas del equipo: nadie ve las ventas de otra persona.
+        Solo posiciones y medianas del equipo, y solo con 4 o más personas: nadie ve las ventas de otra persona.
       </div>
     </>
   )

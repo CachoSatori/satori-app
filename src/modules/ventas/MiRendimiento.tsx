@@ -38,7 +38,6 @@ import {
 import MiEvolucion from './MiEvolucion'
 import { useEquipoAgregado, useMisCompetencias } from './useEquipoAgregado'
 import { textoMotivoEquipo } from './equipoTextos'
-import { calcularPeriodo } from './periodos'
 import type { MiCompetencia } from '../../shared/api/rendimientoEquipo'
 import { todayCR } from '../../shared/utils'
 import { ROLE_LABELS } from '../../shared/constants'
@@ -156,9 +155,6 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   const desdeP = periodDates.length ? periodDates.reduce((a, b) => (a < b ? a : b)) : ''
   const hastaP = periodDates.length ? periodDates.reduce((a, b) => (a > b ? a : b)) : ''
   const equipoPeriodo = useEquipoAgregado(delServidor && !!activeName, desdeP, hastaP)
-  // «Este mes a la fecha» (hasta ayer, como Ventas) para «Tu lugar en el equipo» de Mi evolución.
-  const mesALaFecha = useMemo(() => calcularPeriodo({ tipo: 'mesALaFecha', ancla: today }), [today])
-  const equipoMes = useEquipoAgregado(!verComo && !!activeName, mesALaFecha.desde, mesALaFecha.hasta)
 
   // ── Agregados de ventas del período ──────────────────────────
   const myAgg  = useMemo(
@@ -192,7 +188,8 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     }
     const g = equipoPeriodo.datos?.general
     if (!g) return null
-    return { promPax: g.prom_pax ?? 0, pax: g.pax ?? 0, comidaPax: g.comida_pax ?? 0, bebPax: g.beb_pax ?? 0, promTicket: g.prom_ticket ?? 0 }
+    // Personal: solo proporciones del local (sin PAX total ni plata; decisión del dueño 18-nov, opción C).
+    return { promPax: g.prom_pax ?? 0, comidaPax: g.comida_pax ?? 0, bebPax: g.beb_pax ?? 0, promTicket: g.prom_ticket ?? 0 }
   }, [delServidor, genAgg, equipoPeriodo.datos])
   const avisoPeriodo = delServidor ? (equipoPeriodo.cargando ? 'Cargando la comparación con el equipo…' : textoMotivoEquipo(equipoPeriodo.datos)) : null
 
@@ -382,7 +379,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
         {tab === 'evolucion' && (
           activeName
             ? <MiEvolucion nombre={activeName} fechas={dates} dias={dias} pm={pm} hoy={today}
-                           propinas={myAttendance} equipoMes={verComo ? null : equipoMes} />
+                           propinas={myAttendance} consultarEquipo={!verComo} />
             : <div className="mr-empty"><div className="mr-empty-icon">📈</div><div className="mr-empty-title">Sin ventas individuales</div><div className="mr-empty-sub">Tu evolución se arma con tus ventas. Mirá tus propinas en <strong>¥ Propinas</strong>.</div></div>
         )}
 
@@ -435,7 +432,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
 }
 
 /** Contra qué se mide «vs general»: el restaurante en el período (aggGeneral o la 194). */
-interface RefGeneral { promPax: number; pax: number; comidaPax: number; bebPax: number; promTicket: number }
+interface RefGeneral { promPax: number; pax?: number; comidaPax: number; bebPax: number; promTicket: number }
 
 /** `por_dow` de la 194 → Prom/PAX del restaurante por día de semana (null = grupo chico ese día). */
 function restDelServidor(porDow: { dow: number; prom_pax: number | null }[] | undefined): Record<number, number | null> {
@@ -1008,7 +1005,7 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
 }
 
 // ── COMPETENCIAS ──────────────────────────────────────────────
-/** El personal: mi posición, mis puntos y (con 4+ participantes) los puntos del líder, sin su nombre (194). */
+/** El personal: mi posición, mis puntos y el líder con su nombre y sus puntos (194; decisión del dueño «A»). */
 function CompetenciaPersonal({ mia, myPts }: { mia: MiCompetencia | null | undefined; myPts: number }) {
   const caja = { background: 'var(--c-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' as const }
   const num = { fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1.3rem', fontWeight: 800 }
@@ -1028,15 +1025,13 @@ function CompetenciaPersonal({ mia, myPts }: { mia: MiCompetencia | null | undef
           <div style={{ ...num, color: 'var(--c-oro-texto)' }}>{myPts}</div>
         </div>
         <div style={caja}>
-          <div style={{ fontSize: '0.58rem', color: 'var(--c-gris)' }}>Puntos del líder</div>
-          <div style={{ ...num, color: 'var(--c-gris)' }}>{mia?.lider_puntos ?? '—'}</div>
+          <div style={{ fontSize: '0.58rem', color: 'var(--c-gris)' }}>Líder</div>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--c-gris)', marginTop: 4 }}>{mia?.lider_nombre ?? '—'}</div>
+          <div style={{ fontSize: '0.66rem', color: 'var(--c-gris)' }}>{mia?.lider_puntos ?? 0} pts</div>
         </div>
       </div>
       {mia === null && <div className="mr-icp-sub" role="note">La posición en la competencia no está disponible ahora.</div>}
-      {mia?.motivo === 'grupo_chico' && (
-        <div className="mr-icp-sub" role="note">Con menos de 4 participantes se muestra solo tu posición (así no se identifica a nadie).</div>
-      )}
-      <div className="mr-icp-sub">Sin nombres ni puntos de otras personas.</div>
+      <div className="mr-icp-sub">Se muestra el líder; no la tabla con los puntos de cada uno.</div>
     </>
   )
 }

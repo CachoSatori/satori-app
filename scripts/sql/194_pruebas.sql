@@ -13,6 +13,8 @@
 --   d (p194d): neta 6.000 de salón (1 «otro» ₡6.000, pax 1) + 2.000 de DELIVERY (1 «otro 2», pax 0)
 --   caja: una factura de cajero en salón, ₡4.000, pax 2.
 -- Martes 07-01-2020: a ₡5.000 (1 roll, pax 1) y b ₡7.000 (1 «otro», pax 1): solo 2 personas → grupo chico.
+-- Miércoles 08-01-2020: a ₡3.000 (pax 1), b ₡4.000 (pax 2), c ₡5.000 (pax 1): 3 personas → tampoco posición ni promedios.
+-- Lunes 07-01-2019 (= 06-01-2020 − 364 días, mismo día de semana): b ₡9.000, pax 2 → «el local el año pasado».
 begin;
 -- @@191@@
 -- @@194@@
@@ -77,7 +79,11 @@ insert into public.pos_ndf_tickets (id, local, numero_factura, fecha_registra, e
   ('00000000-0000-4000-8194-00000000a006', 'prueba194', 'F194-6', '2020-01-06 19:25-06', 'C', 'delivery', 'p194d',  '222', 'salonero', true, 'ok', 0, 0, 0),
   ('00000000-0000-4000-8194-00000000a007', 'prueba194', 'F194-7', '2020-01-06 19:30-06', 'C', 'salon',    null,     '222', 'cajero',   true, 'ok', 0, 2, 0),
   ('00000000-0000-4000-8194-00000000b001', 'prueba194', 'F194-8', '2020-01-07 19:00-06', 'C', 'salon',    'p194a',  '222', 'salonero', true, 'ok', 0, 1, 0),
-  ('00000000-0000-4000-8194-00000000b002', 'prueba194', 'F194-9', '2020-01-07 19:05-06', 'C', 'salon',    'p194b',  '222', 'salonero', true, 'ok', 0, 1, 0);
+  ('00000000-0000-4000-8194-00000000b002', 'prueba194', 'F194-9', '2020-01-07 19:05-06', 'C', 'salon',    'p194b',  '222', 'salonero', true, 'ok', 0, 1, 0),
+  ('00000000-0000-4000-8194-00000000c001', 'prueba194', 'F194-10', '2020-01-08 19:00-06', 'C', 'salon',   'p194a',  '222', 'salonero', true, 'ok', 0, 1, 0),
+  ('00000000-0000-4000-8194-00000000c002', 'prueba194', 'F194-11', '2020-01-08 19:05-06', 'C', 'salon',   'p194b',  '222', 'salonero', true, 'ok', 0, 2, 0),
+  ('00000000-0000-4000-8194-00000000c003', 'prueba194', 'F194-12', '2020-01-08 19:10-06', 'C', 'salon',   ' p194c ', '222', 'salonero', true, 'ok', 0, 1, 0),
+  ('00000000-0000-4000-8194-00000000d001', 'prueba194', 'F194-13', '2019-01-07 19:00-06', 'C', 'salon',   'p194b',  '222', 'salonero', true, 'ok', 0, 2, 0);
 insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia) values
   ('00000000-0000-4000-8194-00000000a001', '1', 'Roll Ficticio 194',  2,   6000, 3),
   ('00000000-0000-4000-8194-00000000a001', '2', 'BEBIDA FICTICIA 194', 2,  4000, 5),
@@ -92,7 +98,11 @@ insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, can
   ('00000000-0000-4000-8194-00000000a006', '7', 'OTRO 2 FICTICIO 194', 1,  2000, 16),
   ('00000000-0000-4000-8194-00000000a007', '6', 'OTRO FICTICIO 194',   1,  4000, 3),
   ('00000000-0000-4000-8194-00000000b001', '1', 'ROLL FICTICIO 194',   1,  5000, 3),
-  ('00000000-0000-4000-8194-00000000b002', '6', 'OTRO FICTICIO 194',   1,  7000, 3);
+  ('00000000-0000-4000-8194-00000000b002', '6', 'OTRO FICTICIO 194',   1,  7000, 3),
+  ('00000000-0000-4000-8194-00000000c001', '1', 'ROLL FICTICIO 194',   1,  3000, 3),
+  ('00000000-0000-4000-8194-00000000c002', '6', 'OTRO FICTICIO 194',   1,  4000, 3),
+  ('00000000-0000-4000-8194-00000000c003', '1', 'ROLL FICTICIO 194',   1,  5000, 3),
+  ('00000000-0000-4000-8194-00000000d001', '6', 'OTRO FICTICIO 194',   1,  9000, 3);
 
 -- Propinas: una sesión CERRADA el lunes (yo ₡1.000 + US$1 × 120 = ₡1.120; c ₡1.680 → equipo ₡2.800) y una ABIERTA
 -- que no cuenta. Con la 192 el salonero lee de `tip_entries` SOLO su fila: el ICP del equipo sale igual (definer).
@@ -180,7 +190,9 @@ begin
   perform pg_temp.chk('02 yo: personas',                 e->'personas', '4');
   perform pg_temp.chk('02 yo: ranking 2.º de 4',          e->'ranking', '{"de": 4, "posicion": 2}');
   perform pg_temp.chk('02 yo: general',                   e->'general',
-    '{"pax": 10, "beb_pax": 0.88, "prom_pax": 5800, "comida_pax": 0.80, "prom_ticket": 3700}');
+    '{"beb_pax": 0.88, "prom_pax": 5800, "comida_pax": 0.80, "prom_ticket": 3700}');
+  perform pg_temp.chk('02 yo: año pasado = la misma ventana −364 días (mismo día de semana)', e->'anio_pasado',
+    '{"desde": "2019-01-07", "hasta": "2019-01-07", "general": {"beb_pax": 0.00, "prom_pax": 4500, "comida_pax": 0.50, "prom_ticket": 9000}}');
   perform pg_temp.chk('02 yo: mediana del equipo',        e->'equipo'->'mediana',
     '{"pax_dia": 2.0, "beb_pax": 1.00, "prom_pax": 5500, "comida_pax": 1.00, "prom_ticket": 3000}');
   perform pg_temp.chk('02 yo: promedio del equipo',       e->'equipo'->'promedio',
@@ -196,18 +208,29 @@ begin
   perform pg_temp.chk('02 yo: motivo null',               e->'motivo', 'null');
   -- 03 · lo que sale es SOLO la lista blanca; ni logins, ni nombres, ni montos de otros
   perform pg_temp.chk('03 lista blanca de claves', to_jsonb(pg_temp.claves(e)),
-    '"[],beb_pax,comida_pax,de,desde,dow,equipo,general,hasta,icp_equipo,k_min,mediana,mi_posicion,motivo,pax,pax_dia,personas,por_dow,posicion,prom_pax,prom_ticket,promedio,ranking,ventas,yo"');
+    '"[],anio_pasado,beb_pax,comida_pax,de,desde,dow,equipo,general,hasta,icp_equipo,k_min,mediana,mi_posicion,motivo,pax_dia,personas,por_dow,posicion,prom_pax,prom_ticket,promedio,ranking,ventas,yo"');
   insert into _r194 (caso, ok, detalle)
   select '03 sin logins, nombres ni montos ajenos', not (e::text ~ '(p194|Salonero|30000|8000|6000|2000)'), e::text;
 
-  -- 04 · grupo chico (martes: 2 personas) → solo la posición
+  -- 04 · grupo chico (martes: 2 personas): proporciones del local SÍ; posición, promedios e ICP del equipo NO
   s := pg_temp.como(c.yo, pg_temp.q_eq('prueba194', '2020-01-07', '2020-01-07'));
   perform pg_temp.chk('04 chico: motivo',     s->'motivo', '"grupo_chico"');
-  perform pg_temp.chk('04 chico: ranking',    s->'ranking', '{"de": 2, "posicion": 2}');
-  perform pg_temp.chk('04 chico: sin general', s->'general', 'null');
+  perform pg_temp.chk('04 chico: sin posición', s->'ranking', 'null');
+  perform pg_temp.chk('04 chico: proporciones del local siempre', s->'general',
+    '{"beb_pax": 0.00, "prom_pax": 6000, "comida_pax": 1.00, "prom_ticket": 6000}');
   perform pg_temp.chk('04 chico: sin equipo',  s->'equipo', 'null');
   perform pg_temp.chk('04 chico: sin ICP',     s->'icp_equipo', 'null');
-  perform pg_temp.chk('04 chico: martes sin Prom/PAX', (select x->'prom_pax' from jsonb_array_elements(s->'por_dow') x where x->>'dow' = '2'), 'null');
+  perform pg_temp.chk('04 chico: martes con Prom/PAX del local', (select x->'prom_pax' from jsonb_array_elements(s->'por_dow') x where x->>'dow' = '2'), '6000');
+  perform pg_temp.chk('04 chico: año pasado sin datos', s->'anio_pasado', '{"desde": "2019-01-08", "hasta": "2019-01-08", "general": null}');
+  -- 04b · 3 personas (miércoles): todavía NO salen posición ni promedios (ni en la API)
+  s := pg_temp.como(c.yo, pg_temp.q_eq('prueba194', '2020-01-08', '2020-01-08'));
+  perform pg_temp.chk('04b tres: personas', s->'personas', '3');
+  perform pg_temp.chk('04b tres: sin posición', s->'ranking', 'null');
+  perform pg_temp.chk('04b tres: sin promedios ni mediana', s->'equipo', 'null');
+  insert into _r194 (caso, ok, detalle)
+  select '04b tres: ni la palabra en la respuesta', not (s::text ~ '(posicion|mediana|promedio|mi_posicion)'), s::text;
+  perform pg_temp.chk('04b tres: proporciones del local', s->'general',
+    '{"beb_pax": 0.00, "prom_pax": 3000, "comida_pax": 0.75, "prom_ticket": 4000}');
 
   -- 05 · sin ventas en el período → nada del equipo
   g := pg_temp.como(c.salonero_sin_ventas, pg_temp.q_eq('prueba194', '2020-01-06', '2020-01-07'));
@@ -230,10 +253,10 @@ begin
   perform pg_temp.chk('06 interna yo: sin EXECUTE',    pg_temp.como(c.yo, $q$select public.pos_rend_yo('prueba194')$q$), '"ERR 42501"');
 
   -- 07 · competencias
-  perform pg_temp.chk('07 comp 4: yo 1.º de 4 (empate), líder y mediana sin nombre', pg_temp.como(c.yo, pg_temp.q_comp('c194-4')),
-    '{"de": 4, "motivo": null, "posicion": 1, "mis_puntos": 6, "lider_puntos": 6, "sin_resolver": 0, "mediana_puntos": 4, "participa": true}');
-  perform pg_temp.chk('07 comp 3: grupo chico, sin líder', pg_temp.como(c.yo, pg_temp.q_comp('c194-3')),
-    '{"de": 3, "motivo": "grupo_chico", "posicion": 1, "mis_puntos": 6, "lider_puntos": null, "sin_resolver": 1, "mediana_puntos": null, "participa": true}');
+  perform pg_temp.chk('07 comp 4: yo 1.º de 4 (empate), líder con nombre (decisión A) y mediana', pg_temp.como(c.yo, pg_temp.q_comp('c194-4')),
+    '{"de": 4, "motivo": null, "posicion": 1, "mis_puntos": 6, "lider_nombre": "Salonero 194 A", "lider_puntos": 6, "sin_resolver": 0, "mediana_puntos": 4, "participa": true}');
+  perform pg_temp.chk('07 comp 3: grupo chico, líder sí, sin mediana', pg_temp.como(c.yo, pg_temp.q_comp('c194-3')),
+    '{"de": 3, "motivo": "grupo_chico", "posicion": 1, "mis_puntos": 6, "lider_nombre": "Salonero 194 A", "lider_puntos": 6, "sin_resolver": 1, "mediana_puntos": null, "participa": true}');
   perform pg_temp.chk('07 comp: no participa', pg_temp.como(c.salonero_sin_ventas, pg_temp.q_comp('c194-4')),
     '{"motivo": "no_participa", "participa": false}');
   perform pg_temp.chk('07 comp: cajero 42501',  pg_temp.como(c.cajero, pg_temp.q_comp('c194-4')), '"ERR 42501"');
@@ -257,6 +280,7 @@ select set_config('t194.tag', '', true);
 
 select json_object_agg(tag, r order by tag) from (
   select tag, json_build_object('total', count(*), 'ok', count(*) filter (where ok),
-           'fallan', coalesce(json_agg(case when tag = 'sin mutar' then json_build_object('caso', caso, 'detalle', detalle) else to_json(caso) end order by n) filter (where not ok), '[]'::json)) as r
-  from _r194 group by tag) x;
+           'fallan', coalesce(json_agg(case when tag = 'sin mutar' then json_build_object('caso', caso, 'detalle', detalle) else to_json(caso) end order by n) filter (where not ok), '[]'::json),
+           'paridad', (select detalle::json from _r194 x where x.tag = t.tag and x.caso = 'paridad: salida' limit 1)) as r
+  from _r194 t group by tag) x;
 rollback;

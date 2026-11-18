@@ -62,13 +62,32 @@ describe('194 · permisos y forma', () => {
     expect(CODIGO.match(/k_min constant integer := 4;/g)).toHaveLength(2)
   })
 
+  it('opción C: posición, equipo e ICP del equipo SOLO con K; las proporciones del local, siempre', () => {
+    const c = cuerpo('pos_mi_rendimiento_equipo')
+    expect(c).toContain("'ranking', case when coalesce(c.soy, false) and c.n >= k_min then")
+    expect(c).toContain("'equipo', case when c.n >= k_min then (")
+    expect(c).toContain("'icp_equipo', case when c.n >= k_min then (")
+    expect(c).toMatch(/'general', \(\n/)            // sin «case when c.n >= k_min»
+    expect(c).not.toMatch(/'pax',\s+round\(g\.pax\)/) // sin PAX total del local
+  })
+
+  it('año pasado: la misma ventana corrida 364 días (mismo día de semana)', () => {
+    const c = cuerpo('pos_mi_rendimiento_equipo')
+    expect(c).toContain('public.pos_rend_base(p_local, p_desde - 364, p_hasta - 364)')
+    expect(c).toContain("'desde', p_desde - 364, 'hasta', p_hasta - 364")
+  })
+
+  it('competencias: el líder con su nombre (decisión A)', () => {
+    expect(cuerpo('pos_mi_competencia')).toContain("'lider_nombre', (select nombre from puntos order by pts desc, nombre limit 1)")
+  })
+
   it('lista blanca: lo que devuelve la función del equipo son solo estas claves', () => {
     const c = cuerpo('pos_mi_rendimiento_equipo')
     const claves = new Set([...c.matchAll(/'([a-z_]+)',\s/g)].map(m => m[1]).filter(k => !['bebida', 'closed', 'owner', 'contador'].includes(k)))
     expect([...claves].sort()).toEqual([
-      'beb_pax', 'comida_pax', 'de', 'desde', 'dow', 'equipo', 'general', 'hasta', 'icp_equipo', 'k_min', 'mediana',
-      'mi_posicion', 'motivo', 'pax', 'pax_dia', 'personas', 'por_dow', 'posicion', 'prom_pax', 'prom_ticket',
-      'promedio', 'ranking', 'yo',
+      'anio_pasado', 'beb_pax', 'comida_pax', 'de', 'desde', 'dow', 'equipo', 'general', 'hasta', 'icp_equipo',
+      'k_min', 'mediana', 'mi_posicion', 'motivo', 'pax_dia', 'personas', 'por_dow', 'posicion', 'prom_pax',
+      'prom_ticket', 'promedio', 'ranking', 'yo',
     ].sort())
     // Ni logins, ni claves de persona, ni nombres en la salida.
     expect(c).not.toMatch(/'(clave|login|nombre|salonero_login|full_name)'/)

@@ -93,11 +93,19 @@ export function variacionPct(ahora: number | null, antes: number | null): number
 
 export interface Comparacion {
   titulo:      string
+  /** «Misma semana del año pasado» / «Mismo mes del año pasado». */
+  tituloAnio:  string
+  /** El período (para pedir las proporciones del local de esos mismos días). */
+  rango:       Rango
   rotulo:      string
   rotuloBase:  string | null
   notaLargo:   string | null
   ahora:       MisIndicadores
   antes:       MisIndicadores | null
+  /** Decisión del dueño 18-nov 13:58 (d): el mismo período corrido 364 días (mismo día de semana). */
+  rangoAnio:   Rango | null
+  rotuloAnio:  string | null
+  anioPasado:  MisIndicadores | null
 }
 
 /** «Esta semana» y «este mes» a la fecha, contra los mismos días del período anterior (motor de Ventas). */
@@ -106,11 +114,22 @@ export function comparacionesPersonales(
   propinas: readonly FilaPropina[] = [],
 ): Comparacion[] {
   const out: Comparacion[] = []
-  for (const [tipo, titulo] of [['semana', 'Esta semana vs la semana pasada'], ['mesALaFecha', 'Este mes vs el mes pasado']] as const) {
+  const PERIODOS = [
+    ['semana', 'Esta semana vs la semana pasada', 'Misma semana del año pasado'],
+    ['mesALaFecha', 'Este mes vs el mes pasado', 'Mismo mes del año pasado'],
+  ] as const
+  for (const [tipo, titulo, tituloAnio] of PERIODOS) {
     const p = calcularPeriodo({ tipo, ancla: hoy })
     const b = p.bases.anteriorEquivalente
+    // «Año anterior, mismo día de semana» del motor = el período corrido 364 días.
+    const a = p.bases.anioMismoDiaSemana
     out.push({
       titulo,
+      tituloAnio,
+      rango:      { desde: p.desde, hasta: p.hasta },
+      rangoAnio:  a ? { desde: a.desde, hasta: a.hasta } : null,
+      rotuloAnio: a?.rotulo ?? null,
+      anioPasado: a ? misIndicadores(nombre, fechas, a, dias, pm, propinas) : null,
       rotulo:     p.rotulo,
       rotuloBase: b?.rotulo ?? null,
       notaLargo:  b?.notaLargo ?? null,

@@ -26,7 +26,8 @@ import { _vaciarCacheEquipo } from './useEquipoAgregado'
 const EQUIPO_OK = {
   desde: '2026-01-01', hasta: '2026-01-31', k_min: 4, yo: true, personas: 5, motivo: null,
   ranking: { posicion: 2, de: 5 },
-  general: { prom_pax: 9000, pax: 120, comida_pax: 2.5, beb_pax: 0.9, prom_ticket: 3100 },
+  general: { prom_pax: 9000, comida_pax: 2.5, beb_pax: 0.9, prom_ticket: 3100 },
+  anio_pasado: { desde: '2025-01-01', hasta: '2025-01-31', general: { prom_pax: 8000, comida_pax: 2.2, beb_pax: 0.7, prom_ticket: 2900 } },
   equipo: { de: 5,
     mediana:  { prom_pax: 9500, beb_pax: 0.8, comida_pax: 2.4, prom_ticket: 3000, pax_dia: 12.0 },
     promedio: { prom_pax: 9800, beb_pax: 0.85, comida_pax: 2.5, prom_ticket: 3050, pax_dia: 11.5 },
@@ -34,9 +35,11 @@ const EQUIPO_OK = {
   por_dow: [0, 1, 2, 3, 4, 5, 6].map(dow => ({ dow, prom_pax: 8800 })),
   icp_equipo: 3.4,
 }
-const EQUIPO_CHICO = { ...EQUIPO_OK, personas: 2, motivo: 'grupo_chico', ranking: { posicion: 1, de: 2 },
-  general: null, equipo: null, icp_equipo: null, por_dow: [0, 1, 2, 3, 4, 5, 6].map(dow => ({ dow, prom_pax: null })) }
-const COMP_OK = { participa: true, motivo: null, de: 4, posicion: 2, mis_puntos: 26, lider_puntos: 40, mediana_puntos: 20, sin_resolver: 0 }
+// Opción C (dueño 18-nov 13:58): con <4 personas la 194 NO devuelve posición ni equipo; las proporciones, siempre.
+const EQUIPO_CHICO = { ...EQUIPO_OK, personas: 3, motivo: 'grupo_chico', ranking: null, equipo: null, icp_equipo: null,
+  anio_pasado: { desde: '2025-01-01', hasta: '2025-01-31', general: null } }
+const COMP_OK = { participa: true, motivo: null, de: 4, posicion: 2, mis_puntos: 26, lider_nombre: 'Persona Líder Ficticia',
+  lider_puntos: 40, mediana_puntos: 20, sin_resolver: 0 }
 
 // ── Fixtures ──────────────────────────────────────────────────
 function sal(o: Partial<SaloneroDay>): SaloneroDay {
@@ -109,6 +112,23 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(await findByText('Últimas 12 semanas')).toBeTruthy()
   })
 
+  it('Mi evolución: misma semana/mes del año pasado (−364 días) y «sin datos del año pasado» si no trabajó', async () => {
+    const { findAllByTestId, findAllByText } = renderHub()
+    const anio = await findAllByTestId('evo-anio')
+    expect(anio[0].textContent).toMatch(/Misma semana del año pasado/)
+    expect(anio[1].textContent).toMatch(/Mismo mes del año pasado/)
+    expect(anio[0].textContent).toMatch(/sin datos del año pasado/)   // la fixture no tiene ventas de hace un año
+    expect((await findAllByText('Hace un año')).length).toBe(2)
+  })
+
+  it('Mi evolución: proporciones del local, ahora y el año pasado (siempre, sin plata total ni posición)', async () => {
+    const { findAllByTestId } = renderHub()
+    const local = await findAllByTestId('evo-local')
+    expect(local[0].textContent).toContain('Venta por PAX')
+    expect(local[0].textContent).toContain('₡9.000')
+    expect(local[0].textContent).toContain('₡8.000')
+  })
+
   it('Mi evolución: «Tu lugar en el equipo» con posiciones y mediana, sin nombres de otros', async () => {
     const { findByTestId, getByTestId, queryByText } = renderHub()
     expect((await findByTestId('evo-ranking')).textContent).toContain('2.º de 5')
@@ -167,26 +187,28 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(() => fireEvent.click(getByText(/Mes ant\./))).not.toThrow()
   })
 
-  it('Competencias: mi posición y los puntos del líder SIN su nombre ni la tabla de otros', async () => {
+  it('Competencias: mi posición y el líder CON su nombre (decisión A), sin la tabla de otros', async () => {
     const { container, getByText, findByText, queryByText } = renderHub()
     fireEvent.click(tabsOf(container)[TAB.competencias])
     expect(getByText('Reto Sushi')).toBeTruthy()
     expect(getByText('Mis puntos')).toBeTruthy()
     expect(await findByText('de 4')).toBeTruthy()
-    expect(getByText('40')).toBeTruthy()
-    expect(queryByText('BETO')).toBeNull()
-    expect(queryByText('Líder')).toBeNull()
+    expect(getByText('Persona Líder Ficticia')).toBeTruthy()
+    expect(getByText('40 pts')).toBeTruthy()
+    expect(queryByText('BETO')).toBeNull()   // la tabla del resto no aparece
   })
 
-  it('grupo chico: solo la posición; sin «vs general», sin restaurante y con el aviso', async () => {
+  it('3 personas (grupo chico): sin posición ni promedios; las proporciones del local («vs general») sí', async () => {
     H.equipo = EQUIPO_CHICO
-    const { container, findByText, queryAllByText, queryByText, findAllByText } = renderHub()
+    const { container, findAllByText, queryByText, findByText, queryByTestId } = renderHub()
+    expect(queryByTestId('evo-ranking')).toBeNull()
+    expect(queryByTestId('evo-equipo')).toBeNull()
     fireEvent.click(tabsOf(container)[TAB.resumen])
-    expect(await findByText(/de 2 en ventas ·/)).toBeTruthy()
-    expect(queryAllByText(/vs general/)).toHaveLength(0)
+    expect((await findAllByText(/vs general/)).length).toBeGreaterThan(0)
+    expect(queryByText(/en ventas ·/)).toBeNull()
     expect((await findAllByText(/al menos 4 personas/)).length).toBeGreaterThan(0)
     fireEvent.click(tabsOf(container)[TAB.dia])
-    expect(queryByText(/Yo vs restaurante/)).toBeNull()
+    expect(await findByText(/Yo vs restaurante/)).toBeTruthy()
     fireEvent.click(tabsOf(container)[TAB.propinas])
     expect(queryByText(/Equipo \(benchmark\)/)).toBeNull()
   })
@@ -214,8 +236,9 @@ describe('MiRendimiento · gerencia (manager) ve las comparaciones con el equipo
     expect(getByText(/Equipo \(benchmark\)/)).toBeTruthy()
     fireEvent.click(tabsOf(container)[TAB.competencias])
     expect(getByText('Líder')).toBeTruthy()
-    // Solo «Tu lugar en el equipo» (mes a la fecha) consulta la 194; el período y el ICP no.
-    expect(H.llamadas).toHaveLength(1)
+    // Solo «Mi evolución» (semana y mes a la fecha) consulta la 194; el período y el ICP no.
+    expect(H.llamadas.length).toBeGreaterThanOrEqual(1)
+    expect(H.llamadas.length).toBeLessThanOrEqual(2)
   })
 })
 

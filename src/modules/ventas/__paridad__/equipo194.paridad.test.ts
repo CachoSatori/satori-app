@@ -1,7 +1,7 @@
 // Paridad de la 194: lo que calcula `pos_mi_rendimiento_equipo` en la base TIENE que dar lo mismo que las reglas de
 // la app (armarDiasMap → aggSalonero / aggGeneral, D4) con los mismos datos. Los datos son la fixture ficticia
 // `equipo194.fixture.ts`; el lado de la base es `equipo194.staging.json`, la salida de la función en staging
-// (transacción con ROLLBACK, 18-nov-2026) para esa misma fixture. Si cambia una regla de la app (neta, PAX, persona,
+// (transacción con ROLLBACK, 18-nov-2026 ~15:10, `194_pruebas.py --paridad`) para esa misma fixture. Si cambia una regla de la app (neta, PAX, persona,
 // multiplicador, días), esta prueba cae: hay que cambiar la 194 (o una migración nueva) y volver a correr staging.
 import { describe, expect, it } from 'vitest'
 import { writeFileSync } from 'node:fs'
@@ -58,13 +58,15 @@ function esperadoDesdeLaApp() {
     const ds = fechas.filter(f => dayOfWeek(f) === dow)
     const gd = aggGeneral(ds, dias, pm)
     const n = allSaloneros(dias).filter(s => aggSalonero(s, ds, dias, pm).total > 0).length
-    return { dow, prom_pax: n >= 4 && gd.pax > 0 ? rnd(gd.promPax, -2) : null }
+    // Opción C: el Prom/PAX del local por día de semana sale siempre (n queda como dato de la fixture).
+    void n
+    return { dow, prom_pax: gd.pax > 0 ? rnd(gd.promPax, -2) : null }
   })
   return {
     personas: pers.length,
     ranking: { posicion: pos('total'), de: pers.length },
     general: {
-      prom_pax: rnd(g.promPax, -2), pax: g.pax, comida_pax: rnd(g.pax > 0 ? g.iCom / g.pax : null, 2),
+      prom_pax: rnd(g.promPax, -2), comida_pax: rnd(g.pax > 0 ? g.iCom / g.pax : null, 2),
       beb_pax: rnd(g.bebPax, 2), prom_ticket: rnd(g.promTicket, -2),
     },
     mediana: resumen(mediana),

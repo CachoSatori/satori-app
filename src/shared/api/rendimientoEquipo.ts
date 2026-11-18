@@ -1,9 +1,10 @@
 // ── Mi Rendimiento: el equipo en AGREGADOS (mig 194) — SOLO LECTURA ──────────────────────────
 //
 // Desde la 191 el personal lee del PoS solo sus propias facturas. Las comparaciones con el equipo salen de la base,
-// ya agregadas, por estas dos funciones (`security definer`, rol validado adentro). Nunca traen filas, logins,
-// nombres ni montos de otra persona: posición propia, mediana y promedio por persona, el «general» del restaurante
-// y el ICP del equipo, y todo eso solo con 4 o más personas en el período (si no, `motivo = 'grupo_chico'`).
+// ya agregadas, por estas dos funciones (`security definer`, rol validado adentro). Nunca traen filas, logins ni
+// montos de otra persona. Siempre: las proporciones del local (también del año pasado, −364 días). Solo con 4 o más
+// personas en el período: posición propia, mediana y promedio por persona e ICP del equipo (si no, `grupo_chico`).
+// En competencias el líder sale con su nombre (decisión del dueño, «A»).
 //
 // Si la función todavía no está (antes de aplicar la 194) o falla, se devuelve `null` y la pantalla lo dice: nunca
 // se inventa una comparación.
@@ -33,6 +34,10 @@ export interface PosicionesEquipo {
 
 export type MotivoEquipo = 'grupo_chico' | 'sin_ventas' | null
 
+export interface ProporcionesLocal {
+  prom_pax: number | null; comida_pax: number | null; beb_pax: number | null; prom_ticket: number | null
+}
+
 /** Lo que devuelve `pos_mi_rendimiento_equipo`. */
 export interface EquipoAgregado {
   desde:    string
@@ -42,10 +47,10 @@ export interface EquipoAgregado {
   personas: number | null
   motivo:   MotivoEquipo
   ranking?: { posicion: number; de: number } | null
-  general?: {
-    prom_pax: number | null; pax: number | null; comida_pax: number | null
-    beb_pax: number | null; prom_ticket: number | null
-  } | null
+  /** Proporciones del local: siempre (sin plata total ni posición). */
+  general?: ProporcionesLocal | null
+  /** Las mismas proporciones en la ventana corrida 364 días. `general` null = sin datos del año pasado. */
+  anio_pasado?: { desde: string; hasta: string; general: ProporcionesLocal | null } | null
   equipo?: {
     de: number
     mediana:     IndicadoresEquipo
@@ -63,6 +68,8 @@ export interface MiCompetencia {
   de?:             number
   posicion?:       number
   mis_puntos?:     number
+  /** Decisión del dueño 18-nov («A»): el líder con su nombre. */
+  lider_nombre?:   string | null
   lider_puntos?:   number | null
   mediana_puntos?: number | null
   sin_resolver?:   number

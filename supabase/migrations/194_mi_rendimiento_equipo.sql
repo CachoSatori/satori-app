@@ -7,19 +7,20 @@
 --
 -- Desde la 191 el personal lee SOLO sus facturas; las comparaciones contra el equipo de Mi Rendimiento quedaron
 -- ocultas. Esta migración devuelve esas comparaciones calculadas EN LA BASE y entregadas solo como agregados:
---   · pos_mi_rendimiento_equipo(local, desde, hasta) → jsonb: posición propia en ventas («3.º de 7»), el «general»
---     del restaurante (venta por persona D4, PAX, comida/PAX, bebida/PAX, ticket/ítem), mediana y promedio del
---     equipo por persona y mi posición en cada indicador, el Prom/PAX del restaurante por día de semana y el ICP
---     electrónico del equipo. Nunca una fila, un login, un nombre ni un monto de otra persona.
---   · pos_mi_competencia(id) → jsonb: en una competencia, mi posición, de cuántos, mis puntos y (con grupo grande)
---     los puntos del líder y la mediana, SIN su nombre.
+--   · pos_mi_rendimiento_equipo(local, desde, hasta) → jsonb: las proporciones del local (venta por PAX D4,
+--     comida/PAX, bebidas/PAX, ticket/ítem; también por día de semana y en la misma ventana del año pasado) y, con 4 o
+--     más personas, mi posición en ventas («3.º de 7»), la mediana y el promedio del equipo por persona, mi posición en
+--     cada indicador y el ICP del equipo. Nunca una fila, un login, un nombre ni un monto de otra persona.
+--   · pos_mi_competencia(local, id) → jsonb: en una competencia, mi posición, de cuántos, mis puntos y el líder con su
+--     nombre y sus puntos (decisión «A»); la mediana solo con 4 o más participantes.
 --
--- Anti-identificación (decisión a confirmar por el dueño; constante K = 4):
---   · Todo agregado del equipo o del restaurante sale solo si en el período hay al menos K personas con venta
---     (yo incluido). Con menos, sale `null` y `motivo = 'grupo_chico'`: con 2 o 3 personas el «general» menos lo mío
---     es casi la venta del otro. Lo mismo por día de semana (K personas en esos días) y en las competencias (puntos
---     del líder y mediana solo con K participantes).
---   · La POSICIÓN propia sale con 2 o más personas: es un orden, no un monto (antes de la 191 ya se mostraba).
+-- Qué sale y cuándo (decisión del dueño 18-nov 13:58, opción C; K = 4):
+--   · SIEMPRE: las proporciones del local (venta por PAX D4, comida/PAX, bebidas/PAX, ticket/ítem), también por día
+--     de semana y en la misma ventana del año pasado (−364 días, mismo día de semana). Sin plata total, sin PAX total.
+--   · SOLO con K o más personas con venta en el período (yo incluido): mi POSICIÓN («2.º de N»), la mediana y el
+--     promedio por persona y mi posición en cada indicador, y el ICP del equipo. Con menos, la función NO devuelve esos
+--     campos (null) y `motivo = 'grupo_chico'`.
+--   · Competencias (decisión «A»): mi posición, mis puntos y el líder CON su nombre y sus puntos; la mediana solo con K.
 --   · Los ₡ van redondeados a ₡100, las razones a 2 decimales y el ICP a 1: corta la resta exacta entre consultas
 --     parecidas (p. ej. dos rangos que difieren en un día).
 --   · Sin percentiles 25/75 a propósito: con 7 personas, mediana + promedio + cuartiles reconstruyen casi a todos.
@@ -290,6 +291,17 @@ begin
            coalesce(sum(ibeb) filter (where es_mesero), 0) as ibeb
     from base
   ),
+  -- La misma ventana corrida 364 días (52 semanas: mismo día de semana), solo para las proporciones del local.
+  gen_ap as (
+    select count(*) as filas,
+           coalesce(sum(total) filter (where es_mesero), 0) as total,
+           coalesce(sum(total - delivery), 0) as salon_todo,
+           coalesce(sum(pax), 0) as pax,
+           coalesce(sum(pax) filter (where es_mesero), 0) as pax_sal,
+           coalesce(sum(icom) filter (where es_mesero), 0) as icom,
+           coalesce(sum(ibeb) filter (where es_mesero), 0) as ibeb
+    from public.pos_rend_base(p_local, p_desde - 364, p_hasta - 364)
+  ),
   tips as (
     select coalesce(sum(coalesce(e.tip_amount_crc, 0) + coalesce(e.tip_amount_usd, 0) * coalesce(s.exchange_rate, 0)), 0) as gen
     from public.tip_sessions s join public.tip_entries e on e.session_id = s.id
@@ -320,16 +332,27 @@ begin
       'yo', coalesce(c.soy, false),
       'personas', c.n,
       'motivo', case when c.n < k_min then 'grupo_chico' end,
-      'ranking', case when coalesce(c.soy, false) and c.n >= 2 then
+      -- Posición y equipo (mediana/promedio): SOLO con K o más personas (decisión del dueño 18-nov 13:58, opción C).
+      'ranking', case when coalesce(c.soy, false) and c.n >= k_min then
           jsonb_build_object('posicion', (select ventas from pos), 'de', c.n) end,
-      'general', case when c.n >= k_min then (
+      -- Proporciones del local: SIEMPRE (sin plata total, sin posición).
+      'general', (
           select jsonb_build_object(
             'prom_pax',    case when g.pax > 0 then round(g.salon_todo / g.pax, -2) end,
-            'pax',         round(g.pax),
             'comida_pax',  case when g.pax > 0 then round(g.icom / g.pax, 2) end,
             'beb_pax',     case when g.pax_sal > 0 then round(g.ibeb / g.pax_sal, 2) end,
             'prom_ticket', case when g.icom + g.ibeb > 0 then round(g.total / (g.icom + g.ibeb), -2) end)
-          from gen g) end,
+          from gen g),
+      -- Las mismas proporciones, misma ventana del año pasado (−364 días). `general` null = sin datos del año pasado.
+      'anio_pasado', (
+          select jsonb_build_object(
+            'desde', p_desde - 364, 'hasta', p_hasta - 364,
+            'general', case when g.filas > 0 then jsonb_build_object(
+              'prom_pax',    case when g.pax > 0 then round(g.salon_todo / g.pax, -2) end,
+              'comida_pax',  case when g.pax > 0 then round(g.icom / g.pax, 2) end,
+              'beb_pax',     case when g.pax_sal > 0 then round(g.ibeb / g.pax_sal, 2) end,
+              'prom_ticket', case when g.icom + g.ibeb > 0 then round(g.total / (g.icom + g.ibeb), -2) end) end)
+          from gen_ap g),
       'equipo', case when c.n >= k_min then (
           select jsonb_build_object(
             'de', c.n,
@@ -348,7 +371,7 @@ begin
             'mi_posicion', case when coalesce(c.soy, false) then (select to_jsonb(pos) from pos) end)
           from pers p) end,
       'por_dow', (select coalesce(jsonb_agg(jsonb_build_object('dow', d.dow,
-                     'prom_pax', case when d.personas >= k_min and d.pax > 0 then round(d.salon_todo / d.pax, -2) end)
+                     'prom_pax', case when d.pax > 0 then round(d.salon_todo / d.pax, -2) end)
                      order by d.dow), '[]'::jsonb) from dow d),
       'icp_equipo', case when c.n >= k_min then (
           select case when g.total > 0 then round(t.gen / g.total * 100, 1) end from gen g, tips t) end)
@@ -427,7 +450,9 @@ begin
            'de', r.n,
            'posicion', 1 + (select count(*) from puntos where not soy and pts > r.mis),
            'mis_puntos', r.mis,
-           'lider_puntos', case when r.n >= k_min then (select max(pts) from puntos) end,
+           -- Decisión del dueño 18-nov 13:58 («A»): el líder se muestra CON su nombre (es el juego del local; son puntos).
+           'lider_nombre', (select nombre from puntos order by pts desc, nombre limit 1),
+           'lider_puntos', (select max(pts) from puntos),
            'mediana_puntos', case when r.n >= k_min then (select percentile_cont(0.5) within group (order by pts) from puntos) end,
            'sin_resolver', r.sin_res,
            'motivo', case when r.n < k_min then 'grupo_chico' end)

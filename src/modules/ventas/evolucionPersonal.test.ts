@@ -92,6 +92,31 @@ describe('comparacionesPersonales (regla de días de Ventas)', () => {
   })
 })
 
+describe('el mismo período del año pasado (decisión del dueño 18-nov 13:58, «d»)', () => {
+  it('corrido 364 días: mismo día de semana (miércoles 18-nov-2026 → la semana del lunes 17-nov-2025)', () => {
+    const dias: DiasMap = {
+      '2026-11-16': dia(1_200_000), '2026-11-17': dia(1_200_000),
+      '2025-11-17': dia(1_000_000), '2025-11-18': dia(1_000_000),   // lunes y martes, 364 días antes
+      '2025-11-16': dia(9_000_000),                                 // domingo: queda afuera
+    }
+    const [semana] = comparacionesPersonales(YO, Object.keys(dias), dias, PM, HOY)
+    expect(semana.rangoAnio).toEqual({ desde: '2025-11-17', hasta: '2025-11-18' })
+    expect(new Date('2025-11-17T12:00:00Z').getUTCDay()).toBe(1)   // lunes, como el 16-nov-2026
+    expect(semana.anioPasado?.dias).toBe(2)
+    expect(semana.anioPasado?.ventas).toBe(20000)
+    expect(semana.tituloAnio).toBe('Misma semana del año pasado')
+    expect(variacionPct(semana.ahora.ventas, semana.anioPasado!.ventas)).toBeCloseTo(20)
+  })
+
+  it('sin turnos ese período del año pasado: 0 días (la pantalla dice «sin datos del año pasado»)', () => {
+    const dias: DiasMap = { '2026-11-17': dia(1_000_000) }
+    const [semana, mes] = comparacionesPersonales(YO, Object.keys(dias), dias, PM, HOY)
+    expect(semana.anioPasado?.dias).toBe(0)
+    expect(mes.tituloAnio).toBe('Mismo mes del año pasado')
+    expect(mes.rangoAnio).toEqual({ desde: '2025-11-02', hasta: '2025-11-18' })
+  })
+})
+
 describe('semanasPersonales y tendencia', () => {
   it('12 semanas ISO, la más nueva primero, la en curso cortada a ayer', () => {
     const dias: DiasMap = { '2026-11-17': dia(100_000), '2026-11-18': dia(100_000) }

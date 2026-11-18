@@ -24,8 +24,10 @@
   `pos_rend_base`, `pos_rend_productos`, `pos_rend_yo`.
 - Quién: personal activo con login del PoS (solo si vendió en el período: si no, `motivo = 'sin_ventas'` y nada más);
   owner/contador cualquier local; manager sus locales. Cajero, inactivos, personal sin login: 42501.
-- **Anti-identificación (K = 4):** con menos de 4 personas con venta en el período no sale ningún agregado del equipo
-  (`motivo = 'grupo_chico'`), solo la posición. ₡ redondeados a 100, razones a 2 decimales, ICP a 1. Sin cuartiles.
+- **Decisión del dueño 18-nov 13:58 (opción C, K = 4):** siempre las proporciones del local (venta por PAX, comida/PAX,
+  bebidas/PAX, ticket/ítem; también por día de semana y en la ventana corrida −364 días, `anio_pasado`). Posición,
+  mediana/promedio y ICP del equipo **solo con 4 o más** personas: con menos, la función no los devuelve
+  (`motivo = 'grupo_chico'`). Competencias: el líder con su nombre (decisión «A»). ₡ a 100, razones a 2 decimales.
 - App: pestaña nueva «📈 Mi evolución» (sale de las propias facturas, sin base) y las comparaciones con el equipo de
   vuelta para el personal, con lo que devuelve la 194. Guía 6.5 al día.
 
@@ -42,10 +44,12 @@
   misma transacción. Staging está en 188: **190, 191 y 192 se aplican antes, tal cual, en la misma transacción** (con
   sus guardas md5). Única diferencia, por el conector (cancela todo `drop`): el `drop policy` + `create policy` de la
   192 va como `alter policy` de la vieja al mismo predicado (RLS equivalente). Se omitieron sus `comment on`.
-  **18-nov-2026 ~14:30 -06:00: sin mutar 45/45**, incluido «con la 192, el salonero lee de `tip_entries` solo su
-  fila» y el ICP del equipo = 5,0 (con las filas de otros: la 194 es `security definer`, la RLS de la 192 no la
-  corta). Las 9 mutaciones muerden: `sin_k` 6, `sin_ventas_ve` 2, `neta_con_17` 6, `sin_rol` 2,
-  `manager_sin_local` 1, `sin_multiplicador` 3, `delivery_en_salon` 2, `sin_alias` 1, `base_abierta` 1.
+  **18-nov-2026 ~15:10 -06:00 (opción C): sin mutar 53/53** (incluye: con 3 personas no salen posición ni promedios,
+  ni la palabra en la respuesta; con 4 sí; año pasado sin datos; corrimiento de 364 días; con la 192 el salonero lee
+  solo su fila de `tip_entries` y el ICP del equipo sale igual). Las 10 mutaciones muerden: `sin_k` 8,
+  `corrido_365` 2, `sin_ventas_ve` 2, `neta_con_17` 6, `sin_rol` 2, `manager_sin_local` 1, `sin_multiplicador` 3,
+  `delivery_en_salon` 2, `sin_alias` 1, `base_abierta` 1. En la misma corrida (`--paridad`) se capturó
+  `equipo194.staging.json`.
 - Sin choques: nombres distintos de `propinas_mis_empleados()` (192), `pos_ventas_resumen` (190) y las de la 191; la
   194 no reemplaza ninguna función existente ni toca policies.
 - Paridad con la app: la fixture ficticia `src/modules/ventas/__paridad__/equipo194.fixture.ts` cargada en staging; la

@@ -29,7 +29,11 @@ BATERIA = RAIZ / 'scripts/sql/194_pruebas.sql'
 # nombre → ([(texto de la 194, reemplazo, veces)], prefijos de casos que tienen que caer)
 MUTACIONES: dict[str, tuple] = {
     # sin umbral anti-identificación (K = 1): con 2 personas sale el «general» y el equipo
-    'sin_k': ([('k_min constant integer := 4;', 'k_min constant integer := 1;', 2)], {'04 chico', '07 comp 3'}),
+    'sin_k': ([('k_min constant integer := 4;', 'k_min constant integer := 1;', 2)], {'04 chico: sin posición', '04b tres', '07 comp 3'}),
+    # el año pasado corrido 365 días (deja de coincidir el día de semana)
+    'corrido_365': ([('pos_rend_base(p_local, p_desde - 364, p_hasta - 364)', 'pos_rend_base(p_local, p_desde - 365, p_hasta - 365)', 1),
+                     ("'desde', p_desde - 364, 'hasta', p_hasta - 364", "'desde', p_desde - 365, 'hasta', p_hasta - 365", 1)],
+                    {'02 yo: año pasado'}),
     # el personal sin ventas en el período igual recibe los agregados
     'sin_ventas_ve': ([("    when not v_gerencia and not coalesce(c.soy, false) then\n", "    when false then\n", 1)],
                       {'05 sin ventas'}),
@@ -78,7 +82,7 @@ def _sin_beg_com(txt: str) -> str:
     return '\n'.join(l for l in txt.splitlines() if l.strip().lower() not in ('begin;', 'commit;'))
 
 
-def armar(mutar: str | None, todas: bool = False, sin_drops: bool = False) -> str:
+def armar(mutar: str | None, todas: bool = False, sin_drops: bool = False, paridad: str | None = None) -> str:
     mig = MIG.read_text(encoding='utf-8')
     if mutar:
         for viejo, nuevo, veces in MUTACIONES[mutar][0]:
@@ -110,6 +114,26 @@ def armar(mutar: str | None, todas: bool = False, sin_drops: bool = False) -> st
     # La 194 (mutada o no) viaja UNA vez, como texto en una tabla temporal, y se aplica con execute.
     bat = bat.replace('-- @@194@@', "create temp table _m194 on commit drop as select $m194$" + _norm(_sin_beg_com(mig))
                       + "$m194$::text as sql;\ndo $x$ declare q text; begin select m.sql into q from _m194 m; execute q; end $x$;")
+    # Con --paridad <archivo>: la fixture de `equipo194.fixture.ts` (SQL que imprime su prueba con PARIDAD194_SQL=1)
+    # se carga en el local `paridad194` y la salida de la función, como un salonero ficticio con login p1, va como un
+    # caso más («paridad: salida», ok) con el JSON en el detalle: es lo que se copia a `equipo194.staging.json`.
+    if paridad:
+        fx = Path(paridad).read_text(encoding='utf-8')
+        bloque = (
+            "insert into public.locations (id, name) values ('paridad194', 'Local Paridad 194') on conflict (id) do nothing;\n"
+            "insert into auth.users (id, raw_user_meta_data) values ('00000000-0000-4000-8194-0000000000f1', '{\"full_name\":\"Persona Uno\"}');\n"
+            "select set_config('request.jwt.claims', json_build_object('sub', (select owner_id from _c194), 'role', 'authenticated')::text, true);\n"
+            "update public.profiles set role = 'salonero', is_active = true where id = '00000000-0000-4000-8194-0000000000f1';\n"
+            "select set_config('request.jwt.claims', '', true);\n"
+            "insert into public.employees (full_name, role, profile_id, is_active, pos_login, created_at) values "
+            "('Persona Uno', 'salonero', '00000000-0000-4000-8194-0000000000f1', true, 'p1', now());\n"
+            "insert into public.product_map (nombre, tipo, multiplicador) values ('TRAGO PARIDAD', 'bebida', 2) "
+            "on conflict (nombre) do update set tipo = excluded.tipo, multiplicador = excluded.multiplicador;\n"
+            + fx + "\n"
+            "insert into _r194 (caso, ok, detalle) select 'paridad: salida', true, "
+            "pg_temp.como('00000000-0000-4000-8194-0000000000f1', $q$select public.pos_mi_rendimiento_equipo('paridad194', '2026-05-08', '2026-05-10')$q$)::text;\n"
+        )
+        bat = bat.replace('-- @@MUTACIONES@@', bloque + '-- @@MUTACIONES@@')
     # Con «todas»: en la MISMA transacción, cada mutación se aplica encima (create or replace) con replace() del lado
     # del servidor y se vuelven a correr los casos con su etiqueta. Al final se reaplica la 194 sin mutar.
     if todas:
@@ -142,7 +166,8 @@ def main() -> int:
     if mutar and mutar not in MUTACIONES and mutar != 'todas':
         sys.exit(f'mutaciones: {", ".join(MUTACIONES)} o todas')
     if '--armar' in args:
-        sql = armar(mutar if mutar != 'todas' else None, todas=mutar == 'todas', sin_drops='--sin-drops' in args)
+        paridad = args[args.index('--paridad') + 1] if '--paridad' in args else None
+        sql = armar(mutar if mutar != 'todas' else None, todas=mutar == 'todas', sin_drops='--sin-drops' in args, paridad=paridad)
         if '--compacto' in args:
             sql = _norm(sql)
         print(sql)

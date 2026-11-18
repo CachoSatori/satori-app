@@ -327,6 +327,12 @@
       "rama": "claude/pos-ventas-solo-lo-suyo",
       "renumerada_a": "191"
     },
+    "136": {
+      "nombre": "mi_rendimiento_equipo",
+      "bloque": "club",
+      "rama": "claude/mi-rendimiento-evolucion",
+      "renumerada_a": "192"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -566,6 +572,12 @@
       "bloque": "pase",
       "rama": "claude/pos-ventas-solo-lo-suyo",
       "origen": "135"
+    },
+    "192": {
+      "nombre": "mi_rendimiento_equipo",
+      "bloque": "pase",
+      "rama": "claude/mi-rendimiento-evolucion",
+      "origen": "136"
     }
   }
 }

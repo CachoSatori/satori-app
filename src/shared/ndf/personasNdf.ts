@@ -140,6 +140,12 @@ const PERSONAS: readonly PersonaNdf[] = [
   { id: '02',   rol: 'generico', etiqueta: 'Login compartido (xx)', codigos: ['02'] },
 ]
 
+/**
+ * La tabla, solo lectura. La usa la prueba de contrato de la mig 192 (`pos_persona_clave` en la base tiene que tener
+ * los MISMOS alias y vigencias que esta tabla).
+ */
+export const PERSONAS_NDF: readonly PersonaNdf[] = PERSONAS
+
 /** `código → persona`. Se arma una sola vez; incluye TODOS los alias, no solo el canónico. */
 const POR_CODIGO: ReadonlyMap<string, PersonaNdf> = new Map(
   PERSONAS.flatMap(p => p.codigos.map(c => [c, Object.freeze(p)] as const)),

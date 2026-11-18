@@ -1,0 +1,255 @@
+-- 192_pruebas · Mi Rendimiento: agregados del equipo sin filas de otros. Por rol, con JWT simulado (regla 4).
+-- Corre en STAGING (o Postgres local con la base armada) DENTRO de una transacción que termina en ROLLBACK: no deja
+-- nada. Se arma con scripts/sql/192_pruebas.py (--armar [--mutar X]); el runner llena los marcadores:
+--   marcador 191  → cuerpo de la 191 (staging no la tiene todavía; la 192 usa su pos_mis_logins). Si ya está, se salta.
+--   marcador 192  → cuerpo de supabase/migrations/192_… sin begin/commit (con --mutar, con el arreglo roto a propósito)
+--   marcador 192R → cuerpo de scripts/sql/192_rollback.sql sin begin/commit (prueba que la vuelta atrás borra todo)
+-- Todo es FICTICIO: local prueba192 / prueba192b, logins p192*, facturas de enero de 2020 (en un local que no existe en
+-- el PoS), usuarios 00000000-…-8192-….
+-- Cuentas a mano (las espera cada caso), lunes 06-01-2020, local prueba192:
+--   a (YO, p192a): neta 10.000 (2 rolls ₡6.000 + 2 bebidas ₡4.000; una línea de familia 17 de ₡999 NO es venta), pax 2
+--   b (p192b): neta 8.000 (1 roll ₡4.000 + 1,5 bebidas → 2 uds ₡4.000), pax 2. Una factura X de ₡50.000 NO cuenta.
+--   c (p192c): neta 30.000 (3 rolls ₡21.000 + 3 tragos ₡9.000; el trago tiene multiplicador 2 en product_map), pax 3
+--   d (p192d): neta 6.000 de salón (1 «otro» ₡6.000, pax 1) + 2.000 de DELIVERY (1 «otro 2», pax 0)
+--   caja: una factura de cajero en salón, ₡4.000, pax 2.
+-- Martes 07-01-2020: a ₡5.000 (1 roll, pax 1) y b ₡7.000 (1 «otro», pax 1): solo 2 personas → grupo chico.
+begin;
+-- @@191@@
+-- @@192@@
+create temp table _r192 (n serial, tag text not null default coalesce(nullif(current_setting('t192.tag', true), ''), 'sin mutar'), caso text, ok boolean, detalle text) on commit drop;
+grant all on _r192 to anon, authenticated;
+grant usage on sequence _r192_n_seq to anon, authenticated;
+
+create temp table _c192 on commit drop as
+select (select p.id from public.profiles p where p.is_active and p.role::text = 'owner' order by p.id limit 1) as owner_id,
+       '00000000-0000-4000-8192-0000000000a1'::uuid as manager_a,
+       '00000000-0000-4000-8192-0000000000a2'::uuid as manager_b,
+       '00000000-0000-4000-8192-0000000000c1'::uuid as cajero,
+       '00000000-0000-4000-8192-0000000000d1'::uuid as contador,
+       '00000000-0000-4000-8192-0000000000e1'::uuid as yo,
+       '00000000-0000-4000-8192-0000000000e2'::uuid as barman_sin_login,
+       '00000000-0000-4000-8192-0000000000e3'::uuid as salonero_inactivo,
+       '00000000-0000-4000-8192-0000000000e5'::uuid as salonero_sin_ventas;
+grant select on _c192 to anon, authenticated;
+
+insert into public.locations (id, name) values ('prueba192', 'Local Ficticio 192'), ('prueba192b', 'Local Ficticio 192 B')
+on conflict (id) do nothing;
+
+insert into auth.users (id, raw_user_meta_data) values
+  ((select manager_a from _c192),           '{"full_name":"Manager Ficticio 192"}'),
+  ((select manager_b from _c192),           '{"full_name":"Manager Ficticio 192 B"}'),
+  ((select cajero from _c192),              '{"full_name":"Cajero Ficticio 192"}'),
+  ((select contador from _c192),            '{"full_name":"Contador Ficticio 192"}'),
+  ((select yo from _c192),                  '{"full_name":"Salonero 192 A"}'),
+  ((select barman_sin_login from _c192),    '{"full_name":"Barman Ficticio 192"}'),
+  ((select salonero_inactivo from _c192),   '{"full_name":"Salonero 192 Inactivo"}'),
+  ((select salonero_sin_ventas from _c192), '{"full_name":"Salonero 192 E"}');
+select set_config('request.jwt.claims', json_build_object('sub', (select owner_id from _c192), 'role', 'authenticated')::text, true);
+update public.profiles set role = 'manager',  is_active = true  where id in ((select manager_a from _c192), (select manager_b from _c192));
+update public.profiles set role = 'cajero',   is_active = true  where id = (select cajero from _c192);
+update public.profiles set role = 'contador', is_active = true  where id = (select contador from _c192);
+update public.profiles set role = 'salonero', is_active = true  where id in ((select yo from _c192), (select salonero_sin_ventas from _c192));
+update public.profiles set role = 'barman',   is_active = true  where id = (select barman_sin_login from _c192);
+update public.profiles set role = 'salonero', is_active = false where id = (select salonero_inactivo from _c192);
+select set_config('request.jwt.claims', '', true);
+insert into public.profile_locations (profile_id, location_id, principal) values
+  ((select manager_a from _c192), 'prueba192', true), ((select manager_b from _c192), 'prueba192b', true);
+
+insert into public.employees (full_name, role, profile_id, is_active, pos_login, created_at) values
+  ('Salonero 192 A',        'salonero', (select yo from _c192),                  true,  'p192a', now()),
+  ('Salonero 192 B',        'salonero', null,                                    true,  'p192b', now()),
+  ('Salonero 192 C',        'salonero', null,                                    true,  'p192c', now()),
+  ('Salonero 192 D',        'salonero', null,                                    true,  'p192d', now()),
+  ('Salonero 192 E',        'salonero', (select salonero_sin_ventas from _c192), true,  'p192e', now()),
+  ('Salonero 192 Inactivo', 'salonero', (select salonero_inactivo from _c192),   true,  'p192i', now()),
+  ('Barman Ficticio 192',   'barman',   (select barman_sin_login from _c192),    true,  null,    now());
+
+insert into public.product_map (nombre, tipo, multiplicador) values ('TRAGO FICTICIO 192', 'bebida', 2)
+on conflict (nombre) do update set tipo = excluded.tipo, multiplicador = excluded.multiplicador;
+
+insert into public.pos_ndf_tickets (id, local, numero_factura, fecha_registra, estado, canal, salonero_login, cajero_login,
+                                    registrado_por, con_servicio, pax_alerta, total_crc, pax, pax_articulo) values
+  ('00000000-0000-4000-8192-00000000a001', 'prueba192', 'F192-1', '2020-01-06 19:00-06', 'C', 'salon',    'p192a',  '222', 'salonero', true, 'ok', 0, 0, 2),
+  ('00000000-0000-4000-8192-00000000a002', 'prueba192', 'F192-2', '2020-01-06 19:05-06', 'C', 'salon',    'p192b',  '222', 'salonero', true, 'ok', 0, 2, 0),
+  ('00000000-0000-4000-8192-00000000a003', 'prueba192', 'F192-3', '2020-01-06 19:10-06', 'X', 'salon',    'p192b',  '222', 'salonero', true, 'ok', 0, 9, 0),
+  ('00000000-0000-4000-8192-00000000a004', 'prueba192', 'F192-4', '2020-01-06 19:15-06', 'C', 'salon',    ' p192c ', '222', 'salonero', true, 'ok', 0, 3, 0),
+  ('00000000-0000-4000-8192-00000000a005', 'prueba192', 'F192-5', '2020-01-06 19:20-06', 'C', 'salon',    'p192d',  '222', 'salonero', true, 'ok', 0, 1, 0),
+  ('00000000-0000-4000-8192-00000000a006', 'prueba192', 'F192-6', '2020-01-06 19:25-06', 'C', 'delivery', 'p192d',  '222', 'salonero', true, 'ok', 0, 0, 0),
+  ('00000000-0000-4000-8192-00000000a007', 'prueba192', 'F192-7', '2020-01-06 19:30-06', 'C', 'salon',    null,     '222', 'cajero',   true, 'ok', 0, 2, 0),
+  ('00000000-0000-4000-8192-00000000b001', 'prueba192', 'F192-8', '2020-01-07 19:00-06', 'C', 'salon',    'p192a',  '222', 'salonero', true, 'ok', 0, 1, 0),
+  ('00000000-0000-4000-8192-00000000b002', 'prueba192', 'F192-9', '2020-01-07 19:05-06', 'C', 'salon',    'p192b',  '222', 'salonero', true, 'ok', 0, 1, 0);
+insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia) values
+  ('00000000-0000-4000-8192-00000000a001', '1', 'Roll Ficticio 192',  2,   6000, 3),
+  ('00000000-0000-4000-8192-00000000a001', '2', 'BEBIDA FICTICIA 192', 2,  4000, 5),
+  ('00000000-0000-4000-8192-00000000a001', '3', 'CORTESIA FICTICIA',   1,   999, 17),
+  ('00000000-0000-4000-8192-00000000a001', '4', 'PAX',                 2,     0, 3),
+  ('00000000-0000-4000-8192-00000000a002', '1', 'ROLL FICTICIO 192',   1,  4000, 3),
+  ('00000000-0000-4000-8192-00000000a002', '2', 'BEBIDA FICTICIA 192', 1.5, 4000, 5),
+  ('00000000-0000-4000-8192-00000000a003', '1', 'ROLL FICTICIO 192',   9, 50000, 3),
+  ('00000000-0000-4000-8192-00000000a004', '1', 'ROLL FICTICIO 192',   3, 21000, 3),
+  ('00000000-0000-4000-8192-00000000a004', '5', 'TRAGO FICTICIO 192',  3,  9000, 5),
+  ('00000000-0000-4000-8192-00000000a005', '6', 'OTRO FICTICIO 192',   1,  6000, 3),
+  ('00000000-0000-4000-8192-00000000a006', '7', 'OTRO 2 FICTICIO 192', 1,  2000, 16),
+  ('00000000-0000-4000-8192-00000000a007', '6', 'OTRO FICTICIO 192',   1,  4000, 3),
+  ('00000000-0000-4000-8192-00000000b001', '1', 'ROLL FICTICIO 192',   1,  5000, 3),
+  ('00000000-0000-4000-8192-00000000b002', '6', 'OTRO FICTICIO 192',   1,  7000, 3);
+
+-- Propinas: una sesión CERRADA el lunes (₡1.000 + US$1 × 120 = ₡1.120) y una ABIERTA que no cuenta.
+insert into public.tip_sessions (id, session_date, opened_by, status, exchange_rate, shift_type, location_id) values
+  ('00000000-0000-4000-8192-0000000005a1', '2020-01-06', (select owner_id from _c192), 'closed', 120, 'PM', 'prueba192'),
+  ('00000000-0000-4000-8192-0000000005a2', '2020-01-06', (select owner_id from _c192), 'open',   120, 'AM', 'prueba192');
+insert into public.tip_entries (session_id, employee_id, hours_worked, tip_amount_crc, tip_amount_usd)
+select '00000000-0000-4000-8192-0000000005a1'::uuid, e.id, 8, 1000, 1 from public.employees e where e.pos_login = 'p192a'
+union all
+select '00000000-0000-4000-8192-0000000005a2'::uuid, e.id, 8, 90000, 0 from public.employees e where e.pos_login = 'p192b';
+
+-- Competencias: 4 participantes (ROLL × 2 pts) y otra con 3. Puntos: a = (2 + 1) × 2 = 6 · b = 2 · c = 6 · d = 0.
+insert into public.ventas_comps (data) values
+  ('{"id":"c192-4","nombre":"Comp ficticia","tipo":"especial","inicio":"2020-01-06","fin":"2020-01-07","premio":"",
+     "prods":[{"name":"ROLL FICTICIO 192","pts":2}],
+     "parts":["Salonero 192 A","Salonero 192 B","Salonero 192 C","Salonero 192 D"]}'),
+  ('{"id":"c192-3","nombre":"Comp chica","tipo":"especial","inicio":"2020-01-06","fin":"2020-01-07","premio":"",
+     "prods":[{"name":"ROLL FICTICIO 192","pts":2}],
+     "parts":["Salonero 192 A","Salonero 192 B","Nombre Que No Existe 192"]}');
+
+create function pg_temp.como(p_uid uuid, p_sql text) returns jsonb language plpgsql as $f$
+declare r jsonb;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  execute 'select to_jsonb((' || p_sql || '))' into r;
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  return r;
+exception when others then
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  return to_jsonb('ERR ' || sqlstate);
+end $f$;
+create function pg_temp.como_anon(p_sql text) returns jsonb language plpgsql as $f$
+declare r jsonb;
+begin
+  perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
+  set local role anon;
+  execute 'select to_jsonb((' || p_sql || '))' into r;
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  return r;
+exception when others then
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  return to_jsonb('ERR ' || sqlstate);
+end $f$;
+create function pg_temp.q_eq(p_local text, p_desde text, p_hasta text) returns text language sql immutable as $f$
+  select format($q$select public.pos_mi_rendimiento_equipo(%L, %L, %L)$q$, p_local, p_desde, p_hasta) $f$;
+create function pg_temp.q_comp(p_id text) returns text language sql immutable as $f$
+  select format($q$select public.pos_mi_competencia('prueba192', %L)$q$, p_id) $f$;
+create function pg_temp.chk(p_caso text, p_got jsonb, p_esperado jsonb) returns void language sql as $f$
+  insert into _r192 (tag, caso, ok, detalle) values (coalesce(nullif(current_setting('t192.tag', true), ''), 'sin mutar'), p_caso, coalesce(p_got, 'null'::jsonb) is not distinct from coalesce(p_esperado, 'null'::jsonb),
+    'got ' || coalesce(p_got::text, 'null') || ' · esperado ' || coalesce(p_esperado::text, 'null')) $f$;
+-- Todas las claves (a cualquier profundidad) de un jsonb, ordenadas: la lista blanca de lo que sale.
+create function pg_temp.claves(j jsonb) returns text language sql immutable as $f$
+  with recursive r(v, k) as (
+    select j, null::text
+    union all
+    select x.v, x.k from r cross join lateral (
+      select e.value as v, e.key as k from jsonb_each(case when jsonb_typeof(r.v) = 'object' then r.v else '{}'::jsonb end) e
+      union all
+      select a.value, '[]' from jsonb_array_elements(case when jsonb_typeof(r.v) = 'array' then r.v else '[]'::jsonb end) a
+    ) x
+  )
+  select string_agg(distinct k collate "C", ',' order by k collate "C") from r where k is not null $f$;
+
+create function pg_temp.casos() returns void language plpgsql as $cas$
+declare c record; e jsonb; s jsonb; g jsonb;
+begin
+  select * into c from _c192;
+  -- 01 · persona del PoS (espejo de personasNdf.ts)
+  perform pg_temp.chk('01 clave: alias 266 → 038',          to_jsonb(public.pos_persona_clave('266', null)), '"038"');
+  perform pg_temp.chk('01 clave: alias 235 → 01',           to_jsonb(public.pos_persona_clave(' 235 ', '2026-01-01')), '"01"');
+  perform pg_temp.chk('01 clave: 0909 dentro de vigencia',  to_jsonb(public.pos_persona_clave('0909', '2025-06-01')), '"0909"');
+  perform pg_temp.chk('01 clave: 0909 fuera de vigencia',   to_jsonb(public.pos_persona_clave('0909', '2026-06-01')), '"login 0909"');
+  perform pg_temp.chk('01 clave: desconocido = su código',  to_jsonb(public.pos_persona_clave(' 444 ', null)), '"444"');
+  perform pg_temp.chk('01 clave: vacío = null',             to_jsonb(public.pos_persona_clave('  ', null)), 'null');
+
+  -- 02 · yo (salonero) el lunes: 4 personas → todo, en agregados
+  e := pg_temp.como(c.yo, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06'));
+  perform pg_temp.chk('02 yo: personas',                 e->'personas', '4');
+  perform pg_temp.chk('02 yo: ranking 2.º de 4',          e->'ranking', '{"de": 4, "posicion": 2}');
+  perform pg_temp.chk('02 yo: general',                   e->'general',
+    '{"pax": 10, "beb_pax": 0.88, "prom_pax": 5800, "comida_pax": 0.80, "prom_ticket": 3700}');
+  perform pg_temp.chk('02 yo: mediana del equipo',        e->'equipo'->'mediana',
+    '{"pax_dia": 2.0, "beb_pax": 1.00, "prom_pax": 5500, "comida_pax": 1.00, "prom_ticket": 3000}');
+  perform pg_temp.chk('02 yo: promedio del equipo',       e->'equipo'->'promedio',
+    '{"pax_dia": 2.0, "beb_pax": 1.00, "prom_pax": 6300, "comida_pax": 1.13, "prom_ticket": 3100}');
+  perform pg_temp.chk('02 yo: mi posición por indicador', e->'equipo'->'mi_posicion',
+    '{"ventas": 2, "beb_pax": 2, "pax_dia": 2, "prom_pax": 3, "comida_pax": 2, "prom_ticket": 4}');
+  perform pg_temp.chk('02 yo: ICP del equipo (solo cerradas)', e->'icp_equipo', '2.0');
+  perform pg_temp.chk('02 yo: Prom/PAX del lunes',        (select x->'prom_pax' from jsonb_array_elements(e->'por_dow') x where x->>'dow' = '1'), '5800');
+  perform pg_temp.chk('02 yo: motivo null',               e->'motivo', 'null');
+  -- 03 · lo que sale es SOLO la lista blanca; ni logins, ni nombres, ni montos de otros
+  perform pg_temp.chk('03 lista blanca de claves', to_jsonb(pg_temp.claves(e)),
+    '"[],beb_pax,comida_pax,de,desde,dow,equipo,general,hasta,icp_equipo,k_min,mediana,mi_posicion,motivo,pax,pax_dia,personas,por_dow,posicion,prom_pax,prom_ticket,promedio,ranking,ventas,yo"');
+  insert into _r192 (caso, ok, detalle)
+  select '03 sin logins, nombres ni montos ajenos', not (e::text ~ '(p192|Salonero|30000|8000|6000|2000)'), e::text;
+
+  -- 04 · grupo chico (martes: 2 personas) → solo la posición
+  s := pg_temp.como(c.yo, pg_temp.q_eq('prueba192', '2020-01-07', '2020-01-07'));
+  perform pg_temp.chk('04 chico: motivo',     s->'motivo', '"grupo_chico"');
+  perform pg_temp.chk('04 chico: ranking',    s->'ranking', '{"de": 2, "posicion": 2}');
+  perform pg_temp.chk('04 chico: sin general', s->'general', 'null');
+  perform pg_temp.chk('04 chico: sin equipo',  s->'equipo', 'null');
+  perform pg_temp.chk('04 chico: sin ICP',     s->'icp_equipo', 'null');
+  perform pg_temp.chk('04 chico: martes sin Prom/PAX', (select x->'prom_pax' from jsonb_array_elements(s->'por_dow') x where x->>'dow' = '2'), 'null');
+
+  -- 05 · sin ventas en el período → nada del equipo
+  g := pg_temp.como(c.salonero_sin_ventas, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-07'));
+  perform pg_temp.chk('05 sin ventas: solo yo=false', to_jsonb(pg_temp.claves(g)), '"desde,hasta,k_min,motivo,personas,yo"');
+  perform pg_temp.chk('05 sin ventas: motivo', g->'motivo', '"sin_ventas"');
+
+  -- 06 · permisos
+  perform pg_temp.chk('06 owner: agregados (sin yo)',  pg_temp.como(c.owner_id, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06'))->'personas', '4');
+  perform pg_temp.chk('06 contador: agregados',        pg_temp.como(c.contador, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06'))->'personas', '4');
+  perform pg_temp.chk('06 manager de su local',        pg_temp.como(c.manager_a, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06'))->'personas', '4');
+  perform pg_temp.chk('06 manager de otro local: 42501', pg_temp.como(c.manager_b, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06')), '"ERR 42501"');
+  perform pg_temp.chk('06 cajero: 42501',              pg_temp.como(c.cajero, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06')), '"ERR 42501"');
+  perform pg_temp.chk('06 barman sin login: 42501',    pg_temp.como(c.barman_sin_login, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06')), '"ERR 42501"');
+  perform pg_temp.chk('06 salonero inactivo: 42501',   pg_temp.como(c.salonero_inactivo, pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06')), '"ERR 42501"');
+  perform pg_temp.chk('06 anon: sin permiso',          pg_temp.como_anon(pg_temp.q_eq('prueba192', '2020-01-06', '2020-01-06')), '"ERR 42501"');
+  perform pg_temp.chk('06 rango > 401 días: 22023',    pg_temp.como(c.yo, pg_temp.q_eq('prueba192', '2019-01-01', '2020-03-01')), '"ERR 22023"');
+  perform pg_temp.chk('06 interna base: sin EXECUTE',  pg_temp.como(c.yo, $q$select count(*) from public.pos_rend_base('prueba192', '2020-01-06', '2020-01-06')$q$), '"ERR 42501"');
+  perform pg_temp.chk('06 interna productos: sin EXECUTE', pg_temp.como(c.yo, $q$select count(*) from public.pos_rend_productos('prueba192', '2020-01-06', '2020-01-06')$q$), '"ERR 42501"');
+  perform pg_temp.chk('06 interna clave: sin EXECUTE', pg_temp.como(c.yo, $q$select public.pos_persona_clave('1', null)$q$), '"ERR 42501"');
+  perform pg_temp.chk('06 interna yo: sin EXECUTE',    pg_temp.como(c.yo, $q$select public.pos_rend_yo('prueba192')$q$), '"ERR 42501"');
+
+  -- 07 · competencias
+  perform pg_temp.chk('07 comp 4: yo 1.º de 4 (empate), líder y mediana sin nombre', pg_temp.como(c.yo, pg_temp.q_comp('c192-4')),
+    '{"de": 4, "motivo": null, "posicion": 1, "mis_puntos": 6, "lider_puntos": 6, "sin_resolver": 0, "mediana_puntos": 4, "participa": true}');
+  perform pg_temp.chk('07 comp 3: grupo chico, sin líder', pg_temp.como(c.yo, pg_temp.q_comp('c192-3')),
+    '{"de": 3, "motivo": "grupo_chico", "posicion": 1, "mis_puntos": 6, "lider_puntos": null, "sin_resolver": 1, "mediana_puntos": null, "participa": true}');
+  perform pg_temp.chk('07 comp: no participa', pg_temp.como(c.salonero_sin_ventas, pg_temp.q_comp('c192-4')),
+    '{"motivo": "no_participa", "participa": false}');
+  perform pg_temp.chk('07 comp: cajero 42501',  pg_temp.como(c.cajero, pg_temp.q_comp('c192-4')), '"ERR 42501"');
+  perform pg_temp.chk('07 comp: anon sin permiso', pg_temp.como_anon(pg_temp.q_comp('c192-4')), '"ERR 42501"');
+
+  -- 08 · search_path fijo y security definer en las seis
+  insert into _r192 (caso, ok, detalle)
+  select '08 search_path fijo en las 6', count(*) = 6, string_agg(p.proname, ',')
+  from pg_proc p
+  where p.pronamespace = 'public'::regnamespace
+    and p.proname in ('pos_persona_clave', 'pos_rend_base', 'pos_rend_productos', 'pos_rend_yo', 'pos_mi_rendimiento_equipo', 'pos_mi_competencia')
+    and p.proconfig @> array['search_path=public, pg_temp'];
+end $cas$;
+select pg_temp.casos();
+-- @@MUTACIONES@@
+
+-- 09 · Vuelta atrás: borra las seis. (En staging el conector cancela los `drop`: se arma con --sin-drops y el caso
+-- queda NO PROBADO ahí; corre con --local.)
+select set_config('t192.tag', '', true);
+-- @@192R@@
+
+select json_object_agg(tag, r order by tag) from (
+  select tag, json_build_object('total', count(*), 'ok', count(*) filter (where ok),
+           'fallan', coalesce(json_agg(case when tag = 'sin mutar' then json_build_object('caso', caso, 'detalle', detalle) else to_json(caso) end order by n) filter (where not ok), '[]'::json)) as r
+  from _r192 group by tag) x;
+rollback;

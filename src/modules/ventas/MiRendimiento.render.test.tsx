@@ -9,10 +9,34 @@ import type { Employee } from '../../shared/types/database'
 import type { AttendanceRow } from '../../shared/api/tips'
 
 // useAuth mutable vía vi.hoisted → permite cambiar el perfil entre tests.
-const H = vi.hoisted(() => ({ profile: null as unknown }))
+const H = vi.hoisted(() => ({ profile: null as unknown, equipo: null as unknown, comp: null as unknown,
+                              llamadas: [] as string[][] }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: H.profile }) }))
+vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
+// Mig 192: las comparaciones del personal vienen agregadas de la base. Acá se simula lo que devuelve.
+vi.mock('../../shared/api/rendimientoEquipo', () => ({
+  getEquipoAgregado: (local: string, desde: string, hasta: string) => { H.llamadas.push([local, desde, hasta]); return Promise.resolve(H.equipo) },
+  getMiCompetencia: () => Promise.resolve(H.comp),
+}))
 
 import MiRendimiento from './MiRendimiento'
+import { _vaciarCacheEquipo } from './useEquipoAgregado'
+
+/** Lo que devuelve la 192 con 5 personas (ficticio). Solo agregados: ni nombres ni ventas de otros. */
+const EQUIPO_OK = {
+  desde: '2026-01-01', hasta: '2026-01-31', k_min: 4, yo: true, personas: 5, motivo: null,
+  ranking: { posicion: 2, de: 5 },
+  general: { prom_pax: 9000, pax: 120, comida_pax: 2.5, beb_pax: 0.9, prom_ticket: 3100 },
+  equipo: { de: 5,
+    mediana:  { prom_pax: 9500, beb_pax: 0.8, comida_pax: 2.4, prom_ticket: 3000, pax_dia: 12.0 },
+    promedio: { prom_pax: 9800, beb_pax: 0.85, comida_pax: 2.5, prom_ticket: 3050, pax_dia: 11.5 },
+    mi_posicion: { prom_pax: 1, beb_pax: 3, comida_pax: 2, prom_ticket: 4, pax_dia: 2, ventas: 2 } },
+  por_dow: [0, 1, 2, 3, 4, 5, 6].map(dow => ({ dow, prom_pax: 8800 })),
+  icp_equipo: 3.4,
+}
+const EQUIPO_CHICO = { ...EQUIPO_OK, personas: 2, motivo: 'grupo_chico', ranking: { posicion: 1, de: 2 },
+  general: null, equipo: null, icp_equipo: null, por_dow: [0, 1, 2, 3, 4, 5, 6].map(dow => ({ dow, prom_pax: null })) }
+const COMP_OK = { participa: true, motivo: null, de: 4, posicion: 2, mis_puntos: 26, lider_puntos: 40, mediana_puntos: 20, sin_resolver: 0 }
 
 // ── Fixtures ──────────────────────────────────────────────────
 function sal(o: Partial<SaloneroDay>): SaloneroDay {
@@ -68,51 +92,63 @@ function renderHub(props?: Partial<React.ComponentProps<typeof MiRendimiento>>) 
 }
 
 const tabsOf = (c: HTMLElement) => Array.from(c.querySelectorAll('.cd-nav-tab')) as HTMLElement[]
+const TAB = { evolucion: 0, resumen: 1, dia: 2, productos: 3, semana: 4, propinas: 5, competencias: 6 } as const
+
+beforeEach(() => { _vaciarCacheEquipo(); H.llamadas = []; H.equipo = EQUIPO_OK; H.comp = COMP_OK })
 
 describe('MiRendimiento · render (salonero con match)', () => {
   beforeEach(() => { H.profile = { id:'u1', role:'salonero', full_name:'ANA' } })
 
-  it('monta el hub y muestra header + 6 pestañas', () => {
-    const { container, getAllByText } = renderHub()
+  it('monta el hub, arranca en «Mi evolución» y muestra 7 pestañas', async () => {
+    const { container, getAllByText, findByText } = renderHub()
     expect(getAllByText(/Mi Rendimiento/).length).toBeGreaterThan(0)
-    expect(tabsOf(container)).toHaveLength(6)
+    expect(tabsOf(container)).toHaveLength(7)
+    expect(tabsOf(container)[TAB.evolucion].className).toContain('active')
+    expect(await findByText('Esta semana vs la semana pasada')).toBeTruthy()
+    expect(await findByText('Este mes vs el mes pasado')).toBeTruthy()
+    expect(await findByText('Últimas 12 semanas')).toBeTruthy()
+  })
+
+  it('Mi evolución: «Tu lugar en el equipo» con posiciones y mediana, sin nombres de otros', async () => {
+    const { findByTestId, getByTestId, queryByText } = renderHub()
+    expect((await findByTestId('evo-ranking')).textContent).toContain('2.º de 5')
+    expect(getByTestId('evo-equipo').textContent).toContain('1.º de 5')   // venta por persona
+    expect(getByTestId('evo-equipo').textContent).toContain('₡9.500')     // mediana
+    expect(queryByText('BETO')).toBeNull()
   })
 
   it('recorre TODAS las pestañas sin reventar (incluye fixtures null-safe)', () => {
     const { container } = renderHub()
-    const tabs = tabsOf(container)
-    expect(() => {
-      for (const t of tabs) fireEvent.click(t)
-    }).not.toThrow()
+    expect(() => { for (const t of tabsOf(container)) fireEvent.click(t) }).not.toThrow()
   })
 
   it('Resumen muestra KPIs de unidades/promedios (sin Ventas ₡)', () => {
     const { container, getByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[0])
+    fireEvent.click(tabsOf(container)[TAB.resumen])
     expect(getByText('Prom/PAX')).toBeTruthy()
     expect(getByText('Comida/PAX (uds)')).toBeTruthy()
     expect(getByText('Bebida/PAX (uds)')).toBeTruthy()
     expect(queryByText('Ventas')).toBeNull()   // el empleado ya no ve ventas ₡ del local
   })
 
-  // Mig 191: el salonero recibe del PoS SOLO sus facturas → nada que compare contra el equipo.
-  it('Por día: el salonero NO ve «Yo vs restaurante»; ve el aviso', () => {
-    const { container, getByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[1])
-    expect(queryByText(/Yo vs restaurante/)).toBeNull()
-    expect(getByText(/Por ahora ves solo tus números/)).toBeTruthy()
+  // Mig 192: el ranking y «vs general» vuelven, con lo que devuelve la base (agregados).
+  it('Resumen: ranking y «vs general» salen de la 192', async () => {
+    const { container, findByText, findAllByText } = renderHub()
+    fireEvent.click(tabsOf(container)[TAB.resumen])
+    expect(await findByText(/de 5 en ventas ·/)).toBeTruthy()
+    expect((await findAllByText(/vs general/)).length).toBeGreaterThan(0)
   })
 
-  it('Resumen: el salonero no ve ranking ni «vs general»', () => {
-    const { container, queryByText, queryAllByText } = renderHub()
-    fireEvent.click(tabsOf(container)[0])
-    expect(queryByText(/en ventas ·/)).toBeNull()
-    expect(queryAllByText(/vs general/)).toHaveLength(0)
+  it('Por día: «Yo vs restaurante» con el Prom/PAX del restaurante de la 192', async () => {
+    const { container, findByText, getAllByText } = renderHub()
+    fireEvent.click(tabsOf(container)[TAB.dia])
+    expect(await findByText(/Yo vs restaurante/)).toBeTruthy()
+    expect(getAllByText('₡8.800').length).toBeGreaterThan(0)
   })
 
   it('Productos separa Comidas / Bebidas en unidades (sin toggle ₡/uds)', () => {
     const { container, getByText, getAllByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[2])
+    fireEvent.click(tabsOf(container)[TAB.productos])
     expect(getByText('Comidas')).toBeTruthy()
     expect(getByText('Bebidas')).toBeTruthy()
     expect(queryByText('Ver por')).toBeNull()          // toggle removido: siempre unidades
@@ -120,41 +156,76 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(getAllByText(/Sushi Roll/).length).toBeGreaterThan(0)
   })
 
-  it('Propinas muestra ICP electrónico (sin benchmark del equipo) y navega meses', () => {
-    const { container, getByText, getAllByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[4])
+  it('Propinas: ICP electrónico propio + benchmark del equipo de la 192', async () => {
+    const { container, getByText, getAllByText, findByText } = renderHub()
+    fireEvent.click(tabsOf(container)[TAB.propinas])
     expect(getAllByText(/ICP electrónico/).length).toBeGreaterThan(0)  // no "propinas cobradas"
     expect(getByText(/generado/)).toBeTruthy()                          // numerador = generado
     expect(getByText(/Total cobrado/)).toBeTruthy()                     // take-home (payout) intacto
-    expect(queryByText(/Equipo \(benchmark\)/)).toBeNull()         // mig 191: sin benchmark para el salonero
+    expect(await findByText(/Equipo \(benchmark\)/)).toBeTruthy()
+    expect(getByText('3.4%')).toBeTruthy()
     expect(() => fireEvent.click(getByText(/Mes ant\./))).not.toThrow()
   })
 
-  it('Competencias lista la competencia del empleado, con sus puntos y sin el ranking de otros', () => {
-    const { container, getByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[5])
+  it('Competencias: mi posición y los puntos del líder SIN su nombre ni la tabla de otros', async () => {
+    const { container, getByText, findByText, queryByText } = renderHub()
+    fireEvent.click(tabsOf(container)[TAB.competencias])
     expect(getByText('Reto Sushi')).toBeTruthy()
     expect(getByText('Mis puntos')).toBeTruthy()
-    expect(queryByText('Líder')).toBeNull()
+    expect(await findByText('de 4')).toBeTruthy()
+    expect(getByText('40')).toBeTruthy()
     expect(queryByText('BETO')).toBeNull()
+    expect(queryByText('Líder')).toBeNull()
+  })
+
+  it('grupo chico: solo la posición; sin «vs general», sin restaurante y con el aviso', async () => {
+    H.equipo = EQUIPO_CHICO
+    const { container, findByText, queryAllByText, queryByText, findAllByText } = renderHub()
+    fireEvent.click(tabsOf(container)[TAB.resumen])
+    expect(await findByText(/de 2 en ventas ·/)).toBeTruthy()
+    expect(queryAllByText(/vs general/)).toHaveLength(0)
+    expect((await findAllByText(/al menos 4 personas/)).length).toBeGreaterThan(0)
+    fireEvent.click(tabsOf(container)[TAB.dia])
+    expect(queryByText(/Yo vs restaurante/)).toBeNull()
+    fireEvent.click(tabsOf(container)[TAB.propinas])
+    expect(queryByText(/Equipo \(benchmark\)/)).toBeNull()
+  })
+
+  it('sin la 192 (función no aplicada o error): avisa y no inventa comparaciones', async () => {
+    H.equipo = null
+    const { container, findAllByText, queryAllByText } = renderHub()
+    fireEvent.click(tabsOf(container)[TAB.resumen])
+    expect((await findAllByText(/no está disponible ahora/)).length).toBeGreaterThan(0)
+    expect(queryAllByText(/vs general/)).toHaveLength(0)
   })
 })
 
 describe('MiRendimiento · gerencia (manager) ve las comparaciones con el equipo', () => {
   beforeEach(() => { H.profile = { id:'u2', role:'manager', full_name:'ANA' } })
 
-  it('Por día, Resumen, Propinas y Competencias siguen comparando contra el equipo', () => {
-    const { container, getByText, getAllByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[0])
+  it('Por día, Resumen, Propinas y Competencias comparan con sus propios datos (sin pedir el período a la 192)', () => {
+    const { container, getByText, getAllByText } = renderHub()
+    fireEvent.click(tabsOf(container)[TAB.resumen])
     expect(getByText(/en ventas ·/)).toBeTruthy()
     expect(getAllByText(/vs general/).length).toBeGreaterThan(0)
-    fireEvent.click(tabsOf(container)[1])
+    fireEvent.click(tabsOf(container)[TAB.dia])
     expect(getByText(/Yo vs restaurante/)).toBeTruthy()
-    expect(queryByText(/Por ahora ves solo tus números/)).toBeNull()
-    fireEvent.click(tabsOf(container)[4])
+    fireEvent.click(tabsOf(container)[TAB.propinas])
     expect(getByText(/Equipo \(benchmark\)/)).toBeTruthy()
-    fireEvent.click(tabsOf(container)[5])
+    fireEvent.click(tabsOf(container)[TAB.competencias])
     expect(getByText('Líder')).toBeTruthy()
+    // Solo «Tu lugar en el equipo» (mes a la fecha) consulta la 192; el período y el ICP no.
+    expect(H.llamadas).toHaveLength(1)
+  })
+})
+
+describe('MiRendimiento · «Ver como» (owner) no consulta la 192', () => {
+  beforeEach(() => { H.profile = { id:'u3', role:'owner', full_name:'Dueño' } })
+  it('no llama a la función y no muestra «Tu lugar en el equipo»', () => {
+    const { container, queryByText } = renderHub({ verComo: true })
+    fireEvent.click(tabsOf(container)[TAB.evolucion])
+    expect(queryByText(/Tu lugar en el equipo/)).toBeNull()
+    expect(H.llamadas).toHaveLength(0)
   })
 })
 
@@ -163,11 +234,10 @@ describe('MiRendimiento · rol propinas-primero (cocina, sin match de ventas)', 
 
   it('arranca en Propinas y las sub-vistas de ventas invitan a ir a propinas', () => {
     const { container, getAllByText, getByText } = renderHub()
-    // Sin match: la pestaña Propinas es la activa por defecto → muestra totales de propinas
     expect(getAllByText(/Total cobrado/).length).toBeGreaterThan(0)
-    // Ir a Resumen (ventas) → estado que empuja a propinas, sin romper
-    expect(() => fireEvent.click(tabsOf(container)[0])).not.toThrow()
+    expect(() => fireEvent.click(tabsOf(container)[TAB.resumen])).not.toThrow()
     expect(getByText(/Tu rol trabaja con propinas/)).toBeTruthy()
+    expect(H.llamadas).toHaveLength(0)   // sin ventas propias no se pide nada al equipo
   })
 })
 

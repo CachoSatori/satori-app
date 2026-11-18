@@ -1,4 +1,4 @@
-// Ventas → Ajustes → «Mesas internas» (mig 192). El owner agrega y quita; el manager la ve.
+// Ventas → Ajustes → «Mesas internas» (mig 193). El owner agrega y quita; el manager la ve.
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getLocalesVentas, type LocalVentas } from './resumenV2Datos'

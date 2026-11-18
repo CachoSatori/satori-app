@@ -18,6 +18,8 @@ import {
   UMBRAL_SIN_PAX_PCT, type CifrasRango, type Lectura,
 } from './resumenV2'
 import { cargarLecturaRango, cargarLecturaResumen, getLocalesVentas, type LocalVentas } from './resumenV2Datos'
+import { ventaRealDelDia } from './tiemposV2'
+import { internasPorDia } from './tiemposV2Rpc'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
 import { PRIMERA_JORNADA_POS } from './ventasFuente'
 
@@ -299,7 +301,9 @@ function MetaDelMes({ local, N, ancla, metas }: { local: string; N: string; ancl
     cargarLecturaRango(local, rango)
       .then(l => {
         if (!vivo) return
-        const netaPorDia = new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, d.ventaNeta]))
+        // Venta REAL por día: sin las mesas internas (decisión del dueño 18-nov, «A»). Contabilidad no cambia.
+        const ints = internasPorDia(l.internas ?? [], rango.desde, rango.hasta)
+        const netaPorDia = new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, ventaRealDelDia(d, ints)]))
         setR({ clave, p: proyectarMes({ meta, mes, N, netaPorDia, primerDiaConDatos: PRIMERA_JORNADA_POS }) })
       })
       .catch(e => { if (vivo) setFallo(e instanceof Error ? e.message : 'No se pudo leer el PoS') })

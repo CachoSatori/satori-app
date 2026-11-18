@@ -1,4 +1,4 @@
-// ── Ventas v2 · lo que devuelven `pos_ventas_tiempos` y `pos_ventas_internas` (mig 192) — PURO ──────────
+// ── Ventas v2 · lo que devuelven `pos_ventas_tiempos` y `pos_ventas_internas` (mig 193) — PURO ──────────
 //
 // · `pos_ventas_internas` → facturas de MESAS INTERNAS (Ajustes → «Mesas internas»; 51, 52 y 53 en santa-teresa):
 //   [id, dia, hora, canal, neta_cts, pax]. La app las marca `interna` y las saca de los indicadores de venta real.
@@ -85,7 +85,7 @@ export function parsearTiempos(json: unknown): TiemposRpc {
   }
 }
 
-/** ¿El error es «la función no existe» (base sin la 192)? Solo ahí se sigue sin ella. */
+/** ¿El error es «la función no existe» (base sin la 193)? Solo ahí se sigue sin ella. */
 export function esFuncionAusente(e: { code?: string; message?: string } | null | undefined, nombre: string): boolean {
   if (!e) return false
   if (e.code === 'PGRST202' || e.code === '42883') return true

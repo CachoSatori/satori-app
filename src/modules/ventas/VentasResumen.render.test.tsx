@@ -15,6 +15,7 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 import { datos } from './resumenV2.fixture'
 import { armarLectura, cifrasDelRango } from './resumenV2'
 import { mesDe, proyectarMes } from './proyeccion'
+import { marcarInternas } from './tiemposV2Rpc'
 import { getLocalesVentas } from './resumenV2Datos'
 import type { Meta } from '../../shared/types/ventas'
 const fx = datos('2026-09-01', 78)
@@ -131,6 +132,19 @@ describe('VentasResumen', () => {
     expect(document.querySelector('[data-meta="proyeccion"]')!.textContent).not.toMatch(/\d+ % de la meta/)
     // Lo vendido a la fecha = la tarjeta de «Mes a la fecha» (mismo camino que Contabilidad).
     expect(esperado.vendido).toBe(cifrasDelRango(l, { desde: '2026-11-01', hasta: '2026-11-17' }).totales.ventaNeta)
+  })
+
+  it('meta del mes con mesas internas (decisión del dueño 18-nov, «A»): lo vendido y la proyección van sin ellas', async () => {
+    const base = armarLectura(fx.tickets, fx.lineas, {})
+    const elegidas = base.facturas.filter(f => f.canal === 'salon' && f.fecha_registra.startsWith('2026-11-1')).slice(0, 3)
+    const internas = elegidas.map(f => ({ id: f.id, dia: f.fecha_registra.slice(0, 10), hora: 20, canal: 'salon', netaCts: Math.round(f.neta * 100), pax: 2 }))
+    cargarRango.mockResolvedValueOnce({ ...base, facturas: marcarInternas(base.facturas, internas), internas })
+    abrir('/ventas?tab=resumen&p=ayer', metas)
+    await vi.waitFor(() => expect(document.querySelector('[data-meta="vendido"] .vt-kpi-val')).not.toBeNull())
+    const conta = cifrasDelRango(base, { desde: '2026-11-01', hasta: '2026-11-17' }).totales.ventaNeta
+    const sinInt = conta - internas.reduce((s, i) => s + Math.round(i.netaCts / 100), 0)
+    expect(sinInt).toBeLessThan(conta)
+    expect(document.querySelector('[data-meta="vendido"] .vt-kpi-val')!.textContent).toBe(fi(sinInt))
   })
 
   it('meta del mes: sin meta cargada lo dice y no lee nada de más', async () => {

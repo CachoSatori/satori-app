@@ -14,7 +14,7 @@
 //   de la 080), no por la caja (§5.4, «trampa conocida»). Para que el turno cuadre con la venta del
 //   día: mediodía = la parte de mediodía de la 080 redondeada; noche = la venta del día − mediodía.
 //   Si la 080 y Contabilidad difieren en más de ₡1 un día, se avisa (no se tapa).
-// · Hora y turno con la 192 (`pos_ventas_tiempos`): TODOS los canales, por hora CR, en céntimos. Sin la 192
+// · Hora y turno con la 193 (`pos_ventas_tiempos`): TODOS los canales, por hora CR, en céntimos. Sin la 193
 //   (base vieja): el turno sale de la 080 y el mapa es SOLO SALÓN (lo que trae la 190), y se rotula así.
 // · MESAS INTERNAS (decisión del dueño 18-nov; Ajustes → «Mesas internas»): no son venta real. Salen del día de
 //   semana, de la hora, del turno y del tiempo sentado; la tabla lo dice con su monto. Quincenas y calendario
@@ -165,7 +165,7 @@ export function mapaHoras(facturas: readonly FacturaIndicador[], r: Rango, abier
 }
 
 /**
- * Mapa día de semana × hora con la 192: TODOS los canales, sin mesas internas (ya vienen afuera). Misma forma que
+ * Mapa día de semana × hora con la 193: TODOS los canales, sin mesas internas (ya vienen afuera). Misma forma que
  * `mapaHoras`; `totalSalon` acá es el total de todos los canales.
  */
 export function mapaHorasTodos(horas: readonly HoraRpc[], r: Rango, abiertos: readonly number[]): MapaHoras {
@@ -186,7 +186,7 @@ export function mapaHorasTodos(horas: readonly HoraRpc[], r: Rango, abiertos: re
 }
 
 /**
- * Turno con la 192: mediodía = round(Σ céntimos de 06–16 / 100) por día; noche = venta REAL del día − mediodía.
+ * Turno con la 193: mediodía = round(Σ céntimos de 06–16 / 100) por día; noche = venta REAL del día − mediodía.
  * Mediodía + noche = Contabilidad − mesas internas, al colón. Descuadre: el día en que Σ horas difiere de la venta
  * real en más de ₡1 (no debería: misma regla de neta que la 190).
  */

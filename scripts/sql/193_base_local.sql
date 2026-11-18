@@ -1,5 +1,5 @@
--- 192_base_local · SOLO para correr scripts/sql/192_pruebas.sql en un Postgres VACÍO (local, efímero), sin staging.
--- Arma lo mínimo que la 192 y su batería usan, con las mismas firmas que en Supabase: roles anon / authenticated /
+-- 193_base_local · SOLO para correr scripts/sql/193_pruebas.sql en un Postgres VACÍO (local, efímero), sin staging.
+-- Arma lo mínimo que la 193 y su batería usan, con las mismas firmas que en Supabase: roles anon / authenticated /
 -- service_role, auth.uid() por `request.jwt.claims`, auth.users → profiles, get_my_role() con is_active, locations,
 -- profile_locations, mis_locales() / puede_ver_local() (091) y las columnas de pos_ndf_tickets / pos_ndf_ticket_lines
 -- (062, 063, 081). NUNCA contra staging ni prod: ahí todo esto ya existe.

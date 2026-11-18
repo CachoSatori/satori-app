@@ -2,11 +2,11 @@
 //
 // · Lo diario (días, personas, facturas de salón con su hora): `cargarLecturaDeRangos`, el mismo
 //   camino del Resumen (función de la 190, con la 067 de respaldo) y la misma caché por tramo.
-// · Horas de todos los canales, tiempo sentado y descartes: `pos_ventas_tiempos` (mig 192). Si la base todavía
+// · Horas de todos los canales, tiempo sentado y descartes: `pos_ventas_tiempos` (mig 193). Si la base todavía
 //   no la tiene, `cargarTiempos` devuelve `null` y la pantalla usa lo de antes:
 // · el turno por hora de TODOS los canales por `pos_prompax_agregado` (mig 080, ya en prod), en pedidos de
 //   ≤ 366 días, y el mapa solo de salón.
-// · Las mesas internas las marca `cargarLecturaDeRangos` (`pos_ventas_internas`, 192).
+// · Las mesas internas las marca `cargarLecturaDeRangos` (`pos_ventas_internas`, 193).
 import { supabase } from '../../shared/api/supabase'
 import { getPromPaxAgregado, type FilaPromPaxRpc } from '../../shared/api/posNdf'
 import { esFuncionAusente, parsearTiempos, type SentadoRpc, type TiemposRpc } from './tiemposV2Rpc'
@@ -83,7 +83,7 @@ export function juntarTiempos(partes: readonly TiemposRpc[]): TiemposRpc {
   }
 }
 
-/** Horas, tiempo sentado y descartes del rango. `null` = la base no tiene la 192 (la pantalla usa lo de antes). */
+/** Horas, tiempo sentado y descartes del rango. `null` = la base no tiene la 193 (la pantalla usa lo de antes). */
 export async function cargarTiempos(local: string, r: Rango): Promise<TiemposRpc | null> {
   if (tiemposAusente) return null
   try {

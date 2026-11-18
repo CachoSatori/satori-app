@@ -180,7 +180,7 @@ async function cargarLecturaDeTramos(local: string, tramos: Rango[]): Promise<Le
   return conInternas(l, await internas)
 }
 
-// ── Mesas internas (mig 192): fuera de los indicadores de venta real, dentro de Contabilidad ────────────
+// ── Mesas internas (mig 193): fuera de los indicadores de venta real, dentro de Contabilidad ────────────
 
 const cacheInternas = new Map<string, Promise<InternaRpc[]>>()
 let internasAusente = false
@@ -211,7 +211,7 @@ function leerInternas(local: string, r: Rango): Promise<InternaRpc[]> {
 class SinFuncionInternas extends Error {}
 
 /**
- * Las facturas de mesas internas de los tramos, sin repetir. `null` = la base todavía no tiene la 192
+ * Las facturas de mesas internas de los tramos, sin repetir. `null` = la base todavía no tiene la 193
  * (entonces no se separa nada, como antes). Cualquier otro error se propaga.
  */
 export async function cargarInternasDeTramos(local: string, tramos: readonly Rango[]): Promise<InternaRpc[] | null> {

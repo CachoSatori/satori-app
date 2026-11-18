@@ -1,9 +1,9 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 192 · Ventas v2 «Tiempos»: horas de todos los canales, tiempo sentado y mesas internas ║
+-- ║ 193 · Ventas v2 «Tiempos»: horas de todos los canales, tiempo sentado y mesas internas ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
 -- Decisiones del dueño, 18-nov-2026 13:08 -06:00 (la firma final va sobre el SHA del PR, #294 «294 B»).
--- El NÚMERO se fija al mergear: hay otros PRs con migración en curso. Si al mergear 192 ya está tomado, se
+-- El NÚMERO se fija al mergear: hay otros PRs con migración en curso. Si al mergear 193 ya está tomado, se
 -- renumera al siguiente libre del bloque de pase (archivo, rollback, pruebas, registro y ESTADO en el mismo PR).
 --
 -- NO toca la 190 ni la 191: agrega una tabla y dos funciones HERMANAS de solo lectura. Por eso no lleva guarda
@@ -46,8 +46,8 @@
 -- Permisos: owner / manager / contador ACTIVOS (`get_my_role()` exige `is_active`); el manager, además, solo de
 -- sus locales (`puede_ver_local`, 091). El resto → 42501. Rango máximo: 731 días. Devuelve jsonb (sin tope de filas).
 --
--- Vuelta atrás: una migración NUEVA hacia adelante (scripts/sql/192_rollback.sql, sin numerar; regla 10).
--- Pruebas: scripts/sql/192_pruebas.sql (transacción que termina en ROLLBACK).
+-- Vuelta atrás: una migración NUEVA hacia adelante (scripts/sql/193_rollback.sql, sin numerar; regla 10).
+-- Pruebas: scripts/sql/193_pruebas.sql (transacción que termina en ROLLBACK).
 
 -- ── 1. Mesas internas por local ──────────────────────────────────────────────────────────
 create table if not exists public.pos_mesas_internas (
@@ -58,7 +58,7 @@ create table if not exists public.pos_mesas_internas (
   primary key (local, mesa)
 );
 comment on table public.pos_mesas_internas is
-  'Mig 192. Mesas internas por local (dueños, regalías, errores): fuera de los indicadores de venta real, dentro de Contabilidad. Mesa sin ceros a la izquierda.';
+  'Mig 193. Mesas internas por local (dueños, regalías, errores): fuera de los indicadores de venta real, dentro de Contabilidad. Mesa sin ceros a la izquierda.';
 
 alter table public.pos_mesas_internas enable row level security;
 
@@ -174,7 +174,7 @@ $function$;
 revoke all on function public.pos_ventas_internas(text, date, date) from public, anon;
 grant execute on function public.pos_ventas_internas(text, date, date) to authenticated;
 comment on function public.pos_ventas_internas(text, date, date) is
-  'Mig 192. Facturas C de mesas internas (pos_mesas_internas) en la ventana de la 190: [id, dia, hora, canal, neta_cts, pax]. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';
+  'Mig 193. Facturas C de mesas internas (pos_mesas_internas) en la ventana de la 190: [id, dia, hora, canal, neta_cts, pax]. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';
 
 -- ── 3. Horas de todos los canales y tiempo sentado ───────────────────────────────────────
 create or replace function public.pos_ventas_tiempos(p_local text, p_desde date, p_hasta date)
@@ -272,4 +272,4 @@ $function$;
 revoke all on function public.pos_ventas_tiempos(text, date, date) from public, anon;
 grant execute on function public.pos_ventas_tiempos(text, date, date) to authenticated;
 comment on function public.pos_ventas_tiempos(text, date, date) is
-  'Mig 192. Ventas v2 Tiempos: horas (día × hora CR, todos los canales, sin mesas internas, céntimos), tiempo sentado por tamaño de mesa (pedido = numero_pedido + pedido_abierto_en; 5–240 min) y descartes. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';
+  'Mig 193. Ventas v2 Tiempos: horas (día × hora CR, todos los canales, sin mesas internas, céntimos), tiempo sentado por tamaño de mesa (pedido = numero_pedido + pedido_abierto_en; 5–240 min) y descartes. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';

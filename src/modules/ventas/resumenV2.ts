@@ -43,7 +43,7 @@ export interface Lectura {
   /** Solo por la 190: los días CR de factura, en céntimos crudos. */
   dias?:     ReadonlyMap<string, DiaAgregado>
   /**
-   * Facturas de mesas internas (mig 192). `null` = la base no tiene la 192: no se separa nada (como antes).
+   * Facturas de mesas internas (mig 193). `null` = la base no tiene la 193: no se separa nada (como antes).
    * Sin el campo (pruebas viejas, lecturas armadas a mano) = ninguna.
    */
   internas?: readonly InternaRpc[] | null

@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-Arma y corre scripts/sql/192_pruebas.sql (pos_mesas_internas, pos_ventas_internas, pos_ventas_tiempos): llena el
-marcador con el cuerpo de la 192, todo en una transacción que termina en ROLLBACK.
+Arma y corre scripts/sql/193_pruebas.sql (pos_mesas_internas, pos_ventas_internas, pos_ventas_tiempos): llena el
+marcador con el cuerpo de la 193, todo en una transacción que termina en ROLLBACK.
 
-  python3 scripts/sql/192_pruebas.py --armar [--mutar X]            # imprime el SQL armado
-  python3 scripts/sql/192_pruebas.py --psql "<conexión>" [--mutar todas]  # corre con psql y dice si muerde
+  python3 scripts/sql/193_pruebas.py --armar [--mutar X]            # imprime el SQL armado
+  python3 scripts/sql/193_pruebas.py --psql "<conexión>" [--mutar todas]  # corre con psql y dice si muerde
 
 La batería usa un local ficticio y sus propias facturas: corre en staging o en un Postgres vacío al que antes se le
-cargó scripts/sql/192_base_local.sql. Nunca contra PROD (ref yiczgdti…).
+cargó scripts/sql/193_base_local.sql. Nunca contra PROD (ref yiczgdti…).
 """
 from __future__ import annotations
 import re, subprocess, sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
-MIG = RAIZ / 'supabase/migrations/192_pos_ventas_tiempos.sql'
-BATERIA = RAIZ / 'scripts/sql/192_pruebas.sql'
+MIG = RAIZ / 'supabase/migrations/193_pos_ventas_tiempos.sql'
+BATERIA = RAIZ / 'scripts/sql/193_pruebas.sql'
 
-# nombre → ([(texto de la 192, reemplazo)], casos que tienen que caer)
+# nombre → ([(texto de la 193, reemplazo)], casos que tienen que caer)
 MUTACIONES: dict[str, tuple] = {
     'internas_en_horas': ([("where dia between p_desde and p_hasta and not interna\n", "where dia between p_desde and p_hasta\n")], {'01'}),
     'sin_ceros': ([("nullif(ltrim(btrim(p_mesa), '0'), '')", "nullif(btrim(p_mesa), '')")], {'03', '01'}),
@@ -43,7 +43,7 @@ def armar(mutar: str | None = None) -> str:
             if viejo not in cuerpo:
                 raise SystemExit(f'mutación {mutar}: no encuentro el texto')
             cuerpo = cuerpo.replace(viejo, nuevo, 1)
-    return BATERIA.read_text().replace('-- @@192@@   (aquí va el cuerpo de la 192)', cuerpo, 1)
+    return BATERIA.read_text().replace('-- @@193@@   (aquí va el cuerpo de la 193)', cuerpo, 1)
 
 
 def correr(conn: str, sql: str) -> dict[str, bool]:

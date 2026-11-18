@@ -37,7 +37,7 @@ export const TABS: TabDef[] = [
   { id: 'resumen',      label: 'Resumen',           roles: ['owner','manager','contador'] },
   // Ventas v2 · fase 2.3 (SPEC-ventas-v2 §5.4). También al final, por la misma razón.
   { id: 'tiempos',      label: 'Tiempos',           roles: ['owner','manager','contador'] },
-  // Ajustes → «Mesas internas» (mig 192; decisión del dueño 18-nov). Edita solo el owner.
+  // Ajustes → «Mesas internas» (mig 193; decisión del dueño 18-nov). Edita solo el owner.
   { id: 'internas',     label: 'Mesas internas',    roles: ['owner','manager'] },
 ]
 

@@ -1,4 +1,4 @@
-// ── Ventas · «Mesas internas» (Ajustes): la lista de mesas que no son venta real (mig 192) ──────────────
+// ── Ventas · «Mesas internas» (Ajustes): la lista de mesas que no son venta real (mig 193) ──────────────
 //
 // Decisión del dueño (18-nov): las mesas 51, 52 y 53 de santa-teresa son internas (dueños, regalías, errores).
 // Sus facturas no cuentan para los indicadores de venta real (venta por persona, promedios, alertas de pax, día

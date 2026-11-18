@@ -1,7 +1,7 @@
 // ── Ventas v2 · «Tiempos» (SPEC-ventas-v2 §5.4, fase 2.3) ──────────────────────────────────────
 // Barra global (la misma del Resumen, en la URL) + día de semana + hora y turno + quincenas +
-// tiempo sentado + calendario. El cálculo es `tiemposV2.ts`; la lectura, `tiemposV2Datos.ts` (190 + 192; sin la
-// 192, la 080 y el mapa solo de salón). Las mesas internas (Ajustes) no cuentan como venta real.
+// tiempo sentado + calendario. El cálculo es `tiemposV2.ts`; la lectura, `tiemposV2Datos.ts` (190 + 193; sin la
+// 193, la 080 y el mapa solo de salón). Las mesas internas (Ajustes) no cuentan como venta real.
 // Convive con «Calendario» y «Análisis» hasta la fase 3.5.
 // Queda para después: «Meses y temporadas» (§5.4 ítem 4) y las fechas especiales del calendario (fase 3).
 import { useEffect, useMemo, useState } from 'react'
@@ -63,7 +63,7 @@ export default function VentasTiempos() {
       cargarTiempos(local, periodo).then(t => ({ t, ok: true }), () => ({ t: null, ok: false })),
     ])
       .then(async ([l, { t, ok }]) => {
-        // Sin la 192 (base vieja): el turno por la 080, como antes.
+        // Sin la 193 (base vieja): el turno por la 080, como antes.
         const turnos = t === null && ok ? await cargarTurnos(local, periodo).catch(() => null) : null
         if (vivo) setLectura({ clave, l, turnos, tiempos: t })
       })

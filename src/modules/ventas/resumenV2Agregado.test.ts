@@ -162,7 +162,7 @@ describe('cargarLecturaResumen', () => {
     const lec = await cargarLecturaResumen('santa-teresa', p)
     const deResumen = rpc.mock.calls.filter(c => c[0] === 'pos_ventas_resumen')
     expect(deResumen).toHaveLength(tramosDeLectura(p).length)
-    // Y las mesas internas (192), un pedido por tramo.
+    // Y las mesas internas (193), un pedido por tramo.
     expect(rpc.mock.calls.filter(c => c[0] === 'pos_ventas_internas')).toHaveLength(tramosDeLectura(p).length)
     expect(getTicketsRango).not.toHaveBeenCalled()
     expect(cifrasDelRango(lec, p).totales.ventaNeta).toBe(10_000)

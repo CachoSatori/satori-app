@@ -22,7 +22,7 @@
 //     o bajada de temporada (una semana entera más alta no es ruido). `σ` = desvío de esos `e` (≈ 1).
 //   · ± = lo que falta proyectar × σ × √(1/m + 1/k), con m = días que faltan y k = días cerrados del mes:
 //     el ruido de los m días que vienen más el error de estimar el nivel con k días. Es ≈ 1 desvío
-//     (≈ 2 de cada 3 meses caen adentro). Con el mes cerrado, ±0.
+//     (≈ 2 de cada 3, si no cambia la temporada). Con el mes cerrado, ±0.
 //
 // Sin 8 semanas completas de historia (contadas desde `primerDiaConDatos`) se cae a la lineal: cada día
 // pesa 1. Es la misma cuenta que «Análisis → Proyección» para el mes en curso (`vendido ÷ k × días del

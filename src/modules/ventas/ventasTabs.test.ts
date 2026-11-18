@@ -7,9 +7,9 @@ const ROLES = ['owner', 'manager', 'contador'] as const
 
 describe('ventasTabs', () => {
   it('las 16 vistas siguen ahí (+ «Resumen» y «Tiempos» v2) y cada una está en exactamente una entrada', () => {
-    expect(TABS).toHaveLength(18)
+    expect(TABS).toHaveLength(19)
     const enEntradas = ENTRADAS.flatMap(e => e.vistas)
-    expect(enEntradas).toHaveLength(18)
+    expect(enEntradas).toHaveLength(19)
     expect(new Set(enEntradas)).toEqual(new Set(TABS.map(t => t.id)))
   })
 
@@ -17,7 +17,7 @@ describe('ventasTabs', () => {
     expect(ENTRADAS.map(e => e.id)).toEqual(['hoy','resumen','tiempos','envivo','saloneros','analisis','historico','menueng','metas','ajustes'])
     expect(ENTRADAS.find(e => e.id === 'saloneros')!.vistas).toEqual(['saloneros','salolineas','evaluacion','icp','competencias'])
     expect(ENTRADAS.find(e => e.id === 'historico')!.vistas).toEqual(['historico','calendario','mix','ventas','cajeros'])
-    expect(ENTRADAS.find(e => e.id === 'ajustes')!.vistas).toEqual(['config'])
+    expect(ENTRADAS.find(e => e.id === 'ajustes')!.vistas).toEqual(['config', 'internas'])
   })
 
   it('los roles de cada vista son los de antes del rediseño', () => {
@@ -27,12 +27,12 @@ describe('ventasTabs', () => {
       hoy: omc, envivo: omc, saloneros: om, salolineas: om, evaluacion: om,
       icp: omc, cajeros: omc, ventas: omc, historico: omc, mix: omc, analisis: omc,
       calendario: omc, menueng: om, metas: omc, competencias: om, config: om,
-      resumen: omc, tiempos: omc,
+      resumen: omc, tiempos: omc, internas: om,
     })
   })
 
   it('«Resumen» y «Tiempos» van al final de TABS: no cambian la pestaña de arranque de nadie (conviven hasta la 3.5)', () => {
-    expect(TABS.slice(-2).map(t => t.id)).toEqual(['resumen', 'tiempos'])
+    expect(TABS.slice(-3).map(t => t.id)).toEqual(['resumen', 'tiempos', 'internas'])
   })
 
   it.each(ROLES)('pestaña por defecto de %s: «Hoy», como antes', role => {
@@ -68,8 +68,8 @@ describe('ventasTabs', () => {
       expect(resolverTab(role, 'paridad')).toBe('hoy')
       expect(resolverTab(role, 'xls')).toBe('hoy')
     }
-    expect(entradasVisibles('manager').find(x => x.id === 'ajustes')!.vistas).toEqual(['config'])
-    expect(entradasVisibles('owner').find(x => x.id === 'ajustes')!.vistas).toEqual(['config'])
+    expect(entradasVisibles('manager').find(x => x.id === 'ajustes')!.vistas).toEqual(['config', 'internas'])
+    expect(entradasVisibles('owner').find(x => x.id === 'ajustes')!.vistas).toEqual(['config', 'internas'])
   })
 
   it('cada vista sabe a qué entrada pertenece', () => {

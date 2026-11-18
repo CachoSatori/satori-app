@@ -157,16 +157,19 @@ describe('cargarLecturaResumen', () => {
   beforeEach(() => { limpiarCacheResumen(); rpc.mockReset(); getTicketsRango.mockReset(); getLineasDeTickets.mockReset() })
 
   it('con la función: un pedido por tramo y ninguna lectura de filas', async () => {
-    rpc.mockResolvedValue({ data: { dias: [['2026-11-17', 1_000_000, 0, 0, 0, 2, 1]], facturas: [], lotes: [] }, error: null })
+    rpc.mockImplementation(async (fn: string) => fn === 'pos_ventas_internas' ? { data: [], error: null }
+      : { data: { dias: [['2026-11-17', 1_000_000, 0, 0, 0, 2, 1]], facturas: [], lotes: [] }, error: null })
     const lec = await cargarLecturaResumen('santa-teresa', p)
-    expect(rpc).toHaveBeenCalledTimes(tramosDeLectura(p).length)
-    expect(rpc.mock.calls[0][0]).toBe('pos_ventas_resumen')
+    const deResumen = rpc.mock.calls.filter(c => c[0] === 'pos_ventas_resumen')
+    expect(deResumen).toHaveLength(tramosDeLectura(p).length)
+    // Y las mesas internas (192), un pedido por tramo.
+    expect(rpc.mock.calls.filter(c => c[0] === 'pos_ventas_internas')).toHaveLength(tramosDeLectura(p).length)
     expect(getTicketsRango).not.toHaveBeenCalled()
     expect(cifrasDelRango(lec, p).totales.ventaNeta).toBe(10_000)
   })
 
   it('sin la función (base sin la 190): cae a la 067 y no la vuelve a pedir', async () => {
-    rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.pos_ventas_resumen' } })
+    rpc.mockImplementation(async (fn: string) => ({ data: null, error: { code: 'PGRST202', message: `Could not find the function public.${fn}` } }))
     getTicketsRango.mockResolvedValue([t({ id: 'a1', fecha_registra: '2026-11-17T19:00:00-06:00' })])
     getLineasDeTickets.mockResolvedValue([l('a1', 7_000)])
     const lec = await cargarLecturaResumen('santa-teresa', p)

@@ -21,8 +21,9 @@ const casiCero = (x: number) => Math.abs(x) < 0.05
 const fmtPct = (x: number) => casiCero(x) ? '0,0 %' : `${x > 0 ? '+' : '−'}${Math.abs(x).toFixed(1).replace('.', ',')} %`
 const fmtNum = (x: number) => Math.round(x).toLocaleString('es-CR')
 /** «Sin 2 mesas de dueños ni 1 regalía total.» Solo lo que hay. */
-function fueraTxt(duenos: number, regalias: number): string {
+function fueraTxt(duenos: number, regalias: number, internas = 0): string {
   const partes = [
+    internas > 0 ? `${internas} ${internas === 1 ? 'factura de mesa interna' : 'facturas de mesas internas'}` : null,
     duenos > 0 ? `${duenos} ${duenos === 1 ? 'mesa' : 'mesas'} de dueños` : null,
     regalias > 0 ? `${regalias} ${regalias === 1 ? 'regalía total' : 'regalías totales'}` : null,
   ].filter(Boolean)
@@ -146,11 +147,16 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle }: Cont
             {c.id === 'ventaPorPersona' && (
               <div className="vt-kpi-sub">
                 Neta de salón ÷ personas de salón; incluye {p.vpp.pctEstimado.toFixed(1).replace('.', ',')} % estimado.
-                {fueraTxt(p.vpp.mesasDuenos, p.vpp.regaliasTotales)}
+                {fueraTxt(p.vpp.mesasDuenos, p.vpp.regaliasTotales, p.vpp.mesasInternas)}
               </div>
             )}
             {c.id === 'personas' && <div className="vt-kpi-sub">PAX cargado (como Contabilidad).</div>}
-            {c.id === 'cuentaPromedio' && <div className="vt-kpi-sub">{fmtNum(p.facturas)} facturas</div>}
+            {c.id === 'cuentaPromedio' && (
+              <div className="vt-kpi-sub">
+                {fmtNum(p.facturas - p.internas.facturas)} facturas
+                {p.internas.facturas > 0 && ` (sin ${p.internas.facturas} de mesas internas, ${fi(Math.round(p.internas.neta))}: siguen en la venta neta)`}
+              </div>
+            )}
             {c.id === 'ventaNeta' && p.ventaPorDiaAbierto !== null && (
               <div className="vt-kpi-sub">{fi(Math.round(p.ventaPorDiaAbierto))} por día abierto ({p.diasAbiertos} días)</div>
             )}

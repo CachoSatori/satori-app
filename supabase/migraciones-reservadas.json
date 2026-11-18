@@ -327,6 +327,12 @@
       "rama": "claude/pos-ventas-solo-lo-suyo",
       "renumerada_a": "191"
     },
+    "136": {
+      "nombre": "pos_ventas_tiempos",
+      "bloque": "club",
+      "rama": "claude/ventas-v2-23-tiempos",
+      "renumerada_a": "192"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -566,6 +572,12 @@
       "bloque": "pase",
       "rama": "claude/pos-ventas-solo-lo-suyo",
       "origen": "135"
+    },
+    "192": {
+      "nombre": "pos_ventas_tiempos",
+      "bloque": "pase",
+      "rama": "claude/ventas-v2-23-tiempos",
+      "origen": "136"
     }
   }
 }

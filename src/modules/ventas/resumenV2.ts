@@ -20,6 +20,7 @@ import { alertaMesasSinPax, facturasDesdePos, ventaPorPersona, diaCRDeFactura,
   type AlertaMesasSinPax, type FacturaIndicador, type VentaPorPersona } from './indicadores'
 import type { BaseId, PeriodoV2, Rango } from './periodos'
 import { contabilidadDayDeAgregado, juntarAgregados, type DiaAgregado, type ParteAgregada } from './resumenV2Agregado'
+import { internasPorDia, type InternaRpc } from './tiemposV2Rpc'
 import { armarDiasMap } from './ventasDiasDesdePos'
 import { getDayStats, totalesContabilidad, type TotalesContabilidad } from './ventasUtils'
 
@@ -41,6 +42,11 @@ export interface Lectura {
   nombres:   Record<string, string>
   /** Solo por la 190: los días CR de factura, en céntimos crudos. */
   dias?:     ReadonlyMap<string, DiaAgregado>
+  /**
+   * Facturas de mesas internas (mig 192). `null` = la base no tiene la 192: no se separa nada (como antes).
+   * Sin el campo (pruebas viejas, lecturas armadas a mano) = ninguna.
+   */
+  internas?: readonly InternaRpc[] | null
 }
 
 export function armarLectura(
@@ -61,8 +67,13 @@ export interface CifrasRango {
   facturas:           number
   /** Días con venta neta > 0. */
   diasAbiertos:       number
-  /** Neta ÷ facturas. `null` sin facturas. */
+  /**
+   * (Neta − neta de mesas internas) ÷ (facturas − facturas de mesas internas). Las internas son venta fiscal
+   * (siguen en `totales`), no venta real (decisión del dueño 18-nov). `null` sin facturas.
+   */
   cuentaPromedio:     number | null
+  /** Facturas de mesas internas del rango y su neta (₡). Ya están dentro de `totales` y `facturas`. */
+  internas:           { facturas: number; neta: number }
   /** Neta ÷ días abiertos. `null` sin días abiertos. */
   ventaPorDiaAbierto: number | null
   /** LA venta por persona (D4). */
@@ -110,9 +121,13 @@ export function cifrasDelRango(l: Lectura, rango: Rango): CifrasRango {
   const { dias, facturas } = l.dias ? diasDesdeAgregado(l.dias, rango) : diasDesdeFilas(l, rango)
   const totales = totalesContabilidad(dias)
   const diasAbiertos = dias.filter(d => d.ventaNeta > 0).length
+  let intF = 0, intCts = 0
+  for (const v of internasPorDia(l.internas ?? [], rango.desde, rango.hasta).values()) { intF += v.facturas; intCts += v.netaCts }
+  const realF = facturas - intF
   return {
     rango, dias, totales, facturas, diasAbiertos,
-    cuentaPromedio:     facturas > 0 ? totales.ventaNeta / facturas : null,
+    internas:           { facturas: intF, neta: intCts / 100 },
+    cuentaPromedio:     realF > 0 ? (totales.ventaNeta - intCts / 100) / realF : null,
     ventaPorDiaAbierto: diasAbiertos > 0 ? totales.ventaNeta / diasAbiertos : null,
     vpp:                ventaPorPersona(l.facturas, rango),
   }
@@ -212,7 +227,7 @@ export interface AvisoCalidad { pctSinPax: number; supera: boolean }
 
 /** % de facturas de salón sin pax (sin mesas de dueños ni regalías totales) del rango. */
 export function avisoCalidad(c: CifrasRango): AvisoCalidad {
-  const base = c.vpp.facturasSalon - c.vpp.mesasDuenos - c.vpp.regaliasTotales
+  const base = c.vpp.facturasSalon - c.vpp.mesasDuenos - c.vpp.regaliasTotales - c.vpp.mesasInternas
   const pct = base > 0 ? (c.vpp.facturasSinPax / base) * 100 : 0
   return { pctSinPax: pct, supera: pct > UMBRAL_SIN_PAX_PCT }
 }

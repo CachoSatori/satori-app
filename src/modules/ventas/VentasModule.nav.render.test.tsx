@@ -39,6 +39,7 @@ vi.mock('./VentasCalendario',     () => vista('calendario'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
 vi.mock('./VentasResumen',        () => vista('resumen'))
 vi.mock('./VentasTiempos',        () => vista('tiempos'))
+vi.mock('./VentasMesasInternas',  () => vista('internas'))
 
 import VentasModule from './VentasModule'
 import { TABS } from './ventasTabs'

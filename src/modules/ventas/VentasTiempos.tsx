@@ -1,7 +1,8 @@
 // ── Ventas v2 · «Tiempos» (SPEC-ventas-v2 §5.4, fase 2.3) ──────────────────────────────────────
 // Barra global (la misma del Resumen, en la URL) + día de semana + hora y turno + quincenas +
-// calendario. El cálculo es `tiemposV2.ts`; la lectura, `tiemposV2Datos.ts` (190 + 080, sin
-// migraciones). Convive con «Calendario» y «Análisis» hasta la fase 3.5.
+// tiempo sentado + calendario. El cálculo es `tiemposV2.ts`; la lectura, `tiemposV2Datos.ts` (190 + 192; sin la
+// 192, la 080 y el mapa solo de salón). Las mesas internas (Ajustes) no cuentan como venta real.
+// Convive con «Calendario» y «Análisis» hasta la fase 3.5.
 // Queda para después: «Meses y temporadas» (§5.4 ítem 4) y las fechas especiales del calendario (fase 3).
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -14,10 +15,11 @@ import { estimadorPorNeta, ventaPorPersona } from './indicadores'
 import type { BaseId, PeriodoV2 } from './periodos'
 import { cifrasDelRango, MUESTRA_CHICA_PERSONAS, type Lectura } from './resumenV2'
 import {
-  calendario, DIAS_SEMANA_LARGO, filasQuincenas, mapaHoras, nombreQuincena, porDiaSemana, porTurno,
-  rangosDeTiempos, ultimasQuincenas, vppPorDiaSemana,
+  calendario, DIAS_SEMANA_LARGO, filasQuincenas, mapaHoras, mapaHorasTodos, nombreQuincena, porDiaSemana, porTurno,
+  porTurnoHoras, rangosDeTiempos, ultimasQuincenas, vppPorDiaSemana,
 } from './tiemposV2'
-import { cargarLecturaDeRangos, cargarTurnos, getLocalesVentas } from './tiemposV2Datos'
+import { cargarLecturaDeRangos, cargarTiempos, cargarTurnos, getLocalesVentas } from './tiemposV2Datos'
+import { internasPorDia, TAMANOS, type TiemposRpc } from './tiemposV2Rpc'
 import type { LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
 
@@ -49,7 +51,7 @@ export default function VentasTiempos() {
     ? estado.local : (locales[0]?.id ?? LOCAL_POR_DEFECTO)
 
   const clave = `${local}|${periodo.tipo}|${periodo.desde}|${periodo.hasta}|${baseA}|${baseB}`
-  const [lectura, setLectura] = useState<{ clave: string; l: Lectura; turnos: FilaPromPaxRpc[] | null } | null>(null)
+  const [lectura, setLectura] = useState<{ clave: string; l: Lectura; turnos: FilaPromPaxRpc[] | null; tiempos: TiemposRpc | null } | null>(null)
   const [fallo, setFallo] = useState<{ clave: string; msg: string } | null>(null)
   useEffect(() => {
     if (periodo.tipo === 'hoy') return
@@ -57,10 +59,14 @@ export default function VentasTiempos() {
     const rangos = rangosDeTiempos(periodo, baseA, baseB, quincenas)
     Promise.all([
       cargarLecturaDeRangos(local, rangos),
-      // El turno es un extra: si la 080 falla, el resto de la pestaña se ve igual.
-      cargarTurnos(local, periodo).catch(() => null),
+      // Horas, turno y tiempo sentado son un extra: si fallan, el resto de la pestaña se ve igual.
+      cargarTiempos(local, periodo).then(t => ({ t, ok: true }), () => ({ t: null, ok: false })),
     ])
-      .then(([l, turnos]) => { if (vivo) setLectura({ clave, l, turnos }) })
+      .then(async ([l, { t, ok }]) => {
+        // Sin la 192 (base vieja): el turno por la 080, como antes.
+        const turnos = t === null && ok ? await cargarTurnos(local, periodo).catch(() => null) : null
+        if (vivo) setLectura({ clave, l, turnos, tiempos: t })
+      })
       .catch(e => { if (vivo) setFallo({ clave, msg: e instanceof Error ? e.message : 'No se pudo leer el PoS' }) })
     return () => { vivo = false }
   }, [clave, local, periodo, quincenas, baseA, baseB])
@@ -92,7 +98,7 @@ export default function VentasTiempos() {
           Leyendo las ventas del PoS (el período, sus bases y las últimas 12 quincenas)…
         </div>
       )}
-      {listo && <Contenido periodo={periodo} quincenas={quincenas} l={listo.l} turnos={listo.turnos} baseA={baseA} baseB={baseB} />}
+      {listo && <Contenido periodo={periodo} quincenas={quincenas} l={listo.l} turnos={listo.turnos} tiempos={listo.tiempos} baseA={baseA} baseB={baseB} />}
     </div>
   )
 }
@@ -102,34 +108,44 @@ interface ContenidoProps {
   quincenas: PeriodoV2[]
   l:         Lectura
   turnos:    FilaPromPaxRpc[] | null
+  tiempos:   TiemposRpc | null
   baseA:     BaseId
   baseB:     BaseId
 }
 
-function Contenido({ periodo, quincenas, l, turnos, baseA, baseB }: ContenidoProps) {
+function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: ContenidoProps) {
   const d = useMemo(() => {
     const estimador = estimadorPorNeta(l.facturas)
     const p = cifrasDelRango(l, periodo)
     const ra = periodo.bases[baseA], rb = periodo.bases[baseB]
-    const semana = porDiaSemana(p.dias)
+    const ints = (r: { desde: string; hasta: string }) => internasPorDia(l.internas ?? [], r.desde, r.hasta)
+    const intP = ints(periodo)
+    const semana = porDiaSemana(p.dias, intP)
+    const vppTurno = {
+      'mañana': ventaPorPersona(l.facturas, periodo, { estimador, turno: 'mañana' }),
+      noche: ventaPorPersona(l.facturas, periodo, { estimador, turno: 'noche' }),
+    }
+    const abiertos = semana.map(s => s.diasAbiertos)
     return {
       p, semana,
-      semanaA: ra ? porDiaSemana(cifrasDelRango(l, ra).dias) : null,
-      semanaB: rb ? porDiaSemana(cifrasDelRango(l, rb).dias) : null,
+      semanaA: ra ? porDiaSemana(cifrasDelRango(l, ra).dias, ints(ra)) : null,
+      semanaB: rb ? porDiaSemana(cifrasDelRango(l, rb).dias, ints(rb)) : null,
       vppSemana: vppPorDiaSemana(l, periodo, estimador),
-      mapa: mapaHoras(l.facturas, periodo, semana.map(s => s.diasAbiertos)),
-      turnos: turnos ? porTurno(p.dias, turnos, {
-        'mañana': ventaPorPersona(l.facturas, periodo, { estimador, turno: 'mañana' }),
-        noche: ventaPorPersona(l.facturas, periodo, { estimador, turno: 'noche' }),
-      }) : null,
+      mapa: tiempos ? mapaHorasTodos(tiempos.horas, periodo, abiertos) : mapaHoras(l.facturas, periodo, abiertos),
+      turnos: tiempos ? porTurnoHoras(p.dias, tiempos.horas, intP, vppTurno)
+        : turnos ? porTurno(p.dias, turnos, vppTurno) : null,
       quincenas: filasQuincenas(l, quincenas, baseA, baseB),
       cal: calendario(p.dias, periodo),
     }
-  }, [l, periodo, quincenas, turnos, baseA, baseB])
+  }, [l, periodo, quincenas, turnos, tiempos, baseA, baseB])
 
   const rA = rotuloBase(periodo.tipo, baseA), rB = rotuloBase(periodo.tipo, baseB)
   const qA = rotuloBase('quincena', baseA), qB = rotuloBase('quincena', baseB)
   const sumaSemana = d.semana.reduce((s, f) => s + f.neta, 0)
+  const sinInternas = l.internas === null || l.internas === undefined
+  const fueraInternas = d.p.internas.facturas > 0
+    ? `Sin ${d.p.internas.facturas} ${d.p.internas.facturas === 1 ? 'factura de mesa interna' : 'facturas de mesas internas'} (${fi(d.p.totales.ventaNeta - sumaSemana)}): siguen en Contabilidad, que da ${fi(d.p.totales.ventaNeta)}.`
+    : null
 
   return (
     <>
@@ -164,7 +180,9 @@ function Contenido({ periodo, quincenas, l, turnos, baseA, baseB }: ContenidoPro
             </tbody>
           </table>
         </div>
-        <p className="vt2-nota">La venta es la de Contabilidad (día de la factura). La venta por persona es la de siempre (D4: el día lo pone la caja que estaba abierta); en gris, con menos de {MUESTRA_CHICA_PERSONAS} personas.</p>
+        <p className="vt2-nota">La venta es la de Contabilidad (día de la factura) sin las mesas internas. La venta por persona es la de siempre (D4: el día lo pone la caja que estaba abierta); en gris, con menos de {MUESTRA_CHICA_PERSONAS} personas.</p>
+        {fueraInternas && <p className="vt2-nota" data-nota="internas">{fueraInternas}</p>}
+        {sinInternas && <p className="vt2-nota">Las mesas internas todavía no se pueden separar (falta la función de la base): la tabla las incluye.</p>}
       </section>
 
       {/* 2. Hora y turno */}
@@ -186,7 +204,7 @@ function Contenido({ periodo, quincenas, l, turnos, baseA, baseB }: ContenidoPro
                 </tr>
               </tbody>
             </table>
-            <p className="vt2-nota">Todos los canales. La venta va por la hora de la factura; la venta por persona, por el turno de la caja (D4). Lo de la madrugada va a la noche.</p>
+            <p className="vt2-nota">Todos los canales, sin las mesas internas. La venta va por la hora de la factura; la venta por persona, por el turno de la caja (D4). Lo de la madrugada va a la noche.</p>
             {d.turnos.descuadres.length > 0 && (
               <div className="vt2-aviso" role="status">
                 El reparto por turno no cuadra con Contabilidad en {d.turnos.descuadres.length} {d.turnos.descuadres.length === 1 ? 'día' : 'días'} ({d.turnos.descuadres.slice(0, 5).join(', ')}{d.turnos.descuadres.length > 5 ? '…' : ''}). Avisá al owner.
@@ -195,8 +213,10 @@ function Contenido({ periodo, quincenas, l, turnos, baseA, baseB }: ContenidoPro
           </>
         ) : <div className="vt2-aviso" role="status">No se pudo leer el reparto por turno. El resto de la pestaña está bien.</div>}
 
-        <div className="vt-sl" style={{ marginTop: '1rem' }}>Mapa por hora · solo salón</div>
-        <p className="vt2-nota">Venta neta de salón promedio por día abierto, por día de semana y hora de la factura. Barra, delivery y llevar no traen la hora todavía.</p>
+        <div className="vt-sl" style={{ marginTop: '1rem' }}>{tiempos ? 'Mapa por hora · todos los canales' : 'Mapa por hora · solo salón'}</div>
+        <p className="vt2-nota">{tiempos
+          ? 'Venta neta promedio por día abierto, por día de semana y hora de la factura, sin las mesas internas.'
+          : 'Venta neta de salón promedio por día abierto, por día de semana y hora de la factura. Barra, delivery y llevar no traen la hora todavía.'}</p>
         {d.mapa.horas.length === 0 ? <p className="vt2-nota">Sin ventas de salón en el período.</p> : (
           <div style={{ overflowX: 'auto' }}>
             <table className="vt2t-mapa" aria-label="Mapa por hora">
@@ -220,6 +240,35 @@ function Contenido({ periodo, quincenas, l, turnos, baseA, baseB }: ContenidoPro
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+
+      {/* Tiempo sentado */}
+      <section className="vt2t-bloque" data-bloque="sentados">
+        <div className="vt-sl">Tiempo sentado, por tamaño de mesa</div>
+        {!tiempos ? <p className="vt2-nota">Todavía no disponible (falta la función de la base).</p> : (
+          <>
+            <table className="vt-tbl" aria-label="Tiempo sentado">
+              <thead><tr><th>Mesa de</th><th>Mesas (N)</th><th>Mediana</th><th>Promedio</th></tr></thead>
+              <tbody>
+                {TAMANOS.map(t => {
+                  const s = tiempos.sentados.find(x => x.tamano === t.id)
+                  return (
+                    <tr key={t.id} data-tamano={t.id}>
+                      <td>{t.label}</td><td>{s?.n ?? 0}</td>
+                      <td>{s && Number.isFinite(s.mediana) ? `${Math.round(s.mediana)} min` : '—'}</td>
+                      <td>{s ? `${Math.round(s.promedio)} min` : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <p className="vt2-nota">
+              Salón, desde que se abre el pedido hasta que se cobra su última factura (una mesa partida en varias cuentas es una sola mesa, con la suma de sus personas).
+              Quedan afuera: {tiempos.descartes.sin_pedido} cuentas sin pedido (divididas o de caja), {tiempos.descartes.sin_pax} mesas sin pax,
+              {' '}{tiempos.descartes.menos_de_5} de menos de 5 min, {tiempos.descartes.mas_de_240} de más de 4 horas (pedido que quedó abierto) y {tiempos.descartes.internas} de mesas internas.
+            </p>
+          </>
         )}
       </section>
 

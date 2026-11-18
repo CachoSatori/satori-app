@@ -171,6 +171,8 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     )
   }
 
+  // LA cuenta del día (opción A, 18-nov): un solo redondeo del crudo. «Venta Total Restaurante», «Salón»,
+  // «Delivery», el mensaje 📤 y «→ Caja» salen todos de acá, no de la suma por persona (`gen`).
   const stats      = getDayStats(dia)
   const hasCajeros = hayCaja
 
@@ -241,7 +243,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             </button>
           )}
           {/* Share / Compartir */}
-          {gen && gen.totalRest > 0 && (() => {
+          {gen && stats.ventaNeta > 0 && (() => {
             const dayLabel = new Date(activeDate + 'T12:00:00').toLocaleDateString('es-CR', { weekday:'short', day:'numeric', month:'short' })
             const sorted = [...salAggs].sort((a,b) => b.promPax - a.promPax)
             const topLines = sorted.slice(0,3).map((s,i) =>
@@ -250,9 +252,9 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             const text = [
               `🍣 *SATORI — ${dayLabel}*`,
               '━━━━━━━━━━━━━━━━━━━━',
-              `💰 Ventas: *${fi(gen.totalRest)}*`,
+              `💰 Ventas: *${fi(stats.ventaNeta)}*`,
               gen.pax > 0 ? `👥 PAX: ${gen.pax}  •  Prom/PAX: *${fi(gen.promPax)}*` : '',
-              gen.cajDelivery > 0 ? `🛵 Delivery: ${fi(gen.cajDelivery)}` : '',
+              stats.delivery > 0 ? `🛵 Delivery: ${fi(stats.delivery)}` : '',
               `🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${ratioCB.toFixed(1)}`,
               topLines ? '━━━━━━━━━━━━━━━━━━━━\n' + topLines : '',
               '━━━━━━━━━━━━━━━━━━━━',
@@ -267,7 +269,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             )
           })()}
           {/* Auto-register ventas in Caja */}
-          {(profile?.role === 'owner' || profile?.role === 'manager') && gen && gen.totalRest > 0 && (
+          {(profile?.role === 'owner' || profile?.role === 'manager') && gen && stats.ventaNeta > 0 && (
             <button
               className="vt-range-btn"
               disabled={registrando}
@@ -293,7 +295,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
                     session_id:    cashSession.id,
                     created_by:    profile.id,
                     movement_type: 'ingreso',
-                    amount_crc:    Math.round(gen.totalRest),
+                    amount_crc:    Math.round(stats.ventaNeta),   // = «Venta Total Restaurante» (en días del PoS ya es entero)
                     amount_usd:    0,
                     currency:      'CRC',
                     exchange_rate: null,
@@ -303,7 +305,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
                     caja_origen:   'Registradora',
                     shift:         cashSession.shift_type ?? '',
                   })
-                  setRegMsg(`✓ ₡${Math.round(gen.totalRest).toLocaleString('es-CR')} registrado en Caja`)
+                  setRegMsg(`✓ ₡${Math.round(stats.ventaNeta).toLocaleString('es-CR')} registrado en Caja`)
                   setTimeout(() => setRegMsg(null), 4000)
                 } catch (e) {
                   setRegMsg(`✗ ${e instanceof Error ? e.message : 'Error'}`)
@@ -337,13 +339,13 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             </div>
             <div className="vt-kpi">
               <div className="vt-kpi-label">Salón</div>
-              <div className="vt-kpi-val">{fi(gen.total + gen.cajSalon)}</div>
-              <div className="vt-kpi-sub">{gen.totalRest > 0 ? ((gen.total + gen.cajSalon) / gen.totalRest * 100).toFixed(1) : 0}%</div>
+              <div className="vt-kpi-val">{fi(stats.salon)}</div>
+              <div className="vt-kpi-sub">{stats.ventaNeta > 0 ? (stats.salon / stats.ventaNeta * 100).toFixed(1) : 0}%</div>
             </div>
             <div className="vt-kpi blue">
               <div className="vt-kpi-label">Delivery</div>
-              <div className="vt-kpi-val">{fi(gen.cajDelivery)}</div>
-              <div className="vt-kpi-sub">{gen.totalRest > 0 ? (gen.cajDelivery / gen.totalRest * 100).toFixed(1) : 0}%</div>
+              <div className="vt-kpi-val">{fi(stats.delivery)}</div>
+              <div className="vt-kpi-sub">{stats.ventaNeta > 0 ? (stats.delivery / stats.ventaNeta * 100).toFixed(1) : 0}%</div>
             </div>
             {cajAggs.filter(c => c.total !== 0).map(c => (
               <div key={c.nombre} className="vt-kpi">

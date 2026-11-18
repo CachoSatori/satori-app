@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import { armarDia } from './ventasEnVivoDatos'
-import { getDayStats, totalesContabilidad, getContabilidadDays, sumarPartesRedondeando } from './ventasUtils'
+import { diaConCajasDeTurno, getDayStats, totalesContabilidad, getContabilidadDays, sumarPartesRedondeando } from './ventasUtils'
 import { totalesDelRango } from './totalesVentas'
 import { totalesEnRango } from './aLaFecha'
 import type { TicketNdfConId } from '../../shared/api/posNdf'
@@ -174,5 +174,27 @@ describe('total del período = SUMA de los días ya redondeados que se muestran 
       { neta: 1000.25, iva: 130, serv: 100, delivery: 50, salon: 900, bruta: 1500.25 },
       { neta: 10.5, iva: 0, serv: 0, delivery: 0, salon: 10.5, bruta: 10.5 },
     ])).toMatchObject({ ventaNeta: 1010.75, ventaBruta: 1510.75, salon: 910.5, delivery: 50 })
+  })
+})
+
+describe('`sumarCajeroDay` (vía `diaConCajasDeTurno`) funde también el crudo', () => {
+  const caja = (total: number, cts: number): CajeroDay => ({
+    esCajero: true, total, salon: 0, delivery: total, iva: 0, serv: 0, ordenes: 1, ticketProm: total, prods: [],
+    crudoCts: { neta: cts, iva: 0, serv: 0, delivery: cts },
+  })
+  // Dos nombres del MISMO turno (como los trae el .xls) que se funden en «Cajero turno mañana».
+  // Cada uno: ₡500,50 crudo → 501 redondeado. Fundidos: round(1.001,00) = 1.001, no 1.002.
+  const d: DiaData = {
+    fileName: 'ndf 2026-09-01', uploadedAt: '2026-09-02',
+    saloneros: { 'Cajero turno mañana': caja(501, 50050), 'cajero turno manana': caja(501, 50050) },
+  }
+
+  it('el balde fundido lleva la suma del crudo y el total del día no cambia al fundir', () => {
+    const fundido = diaConCajasDeTurno(d)
+    const claves = Object.keys(fundido.saloneros)
+    expect(claves).toHaveLength(1)
+    expect((fundido.saloneros[claves[0]] as CajeroDay).crudoCts).toEqual({ neta: 100100, iva: 0, serv: 0, delivery: 100100 })
+    expect(getDayStats(fundido)).toMatchObject({ ventaNeta: 1001, delivery: 1001, salon: 0 })
+    for (const c of CAMPOS) expect(getDayStats(fundido)[c], c).toBe(getDayStats(d)[c])
   })
 })

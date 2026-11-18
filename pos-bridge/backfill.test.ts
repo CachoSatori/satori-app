@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import {
-  conteoSalonero, correrBackfill, correrDia, leerDiaBackfill, payloadBackfill, rangoEfectivo,
+  conteoFeSinClave, conteoSalonero, correrBackfill, correrDia, leerDiaBackfill, payloadBackfill, rangoEfectivo,
   type PuertosBackfill,
 } from './backfill.ts'
 import { enumerarDias, parsearArgs } from './backfillPlan.ts'
@@ -160,6 +160,32 @@ describe('correrDia', () => {
     const log2: string[] = []
     await correrDia({ ...p, async enviar(payload) { return respuesta(payload) }, log(l) { log2.push(l) } }, LOCAL, '2026-08-20', false)
     expect(log2.join(' ')).toContain('salonero_por_lineas=3')
+  })
+
+  it('cuenta fe_sin_clave: el 04 con la clave del 01 de mismo número viaja sin clave y se cuenta', async () => {
+    const claveDe = (cons: string) => `506150426${'0'.repeat(12)}${cons}112345678`
+    const base = (numero: string) => mapTicket({
+      numero_factura: numero, fecha_hora: '2026-04-15 19:42:07', estado: 'C', tipo: 'M',
+      area: 'SALON 1', login_cajero: '222', usuario_registra: '026', salonero_nombre: null,
+      personas: 0, medios: { efectivo: 1000 }, items: [],
+    })
+    const c04 = '00200001040000011300', c01 = '00200001010000011300'
+    const tickets = [
+      aTicketIngest(base('1'), { consecutivo_fe: c04, clave_fe: claveDe(c04) }),  // su clave
+      aTicketIngest(base('2'), { consecutivo_fe: c01, clave_fe: claveDe(c01) }),  // su clave
+      aTicketIngest(base('3'), { consecutivo_fe: c04, clave_fe: claveDe(c01) }),  // la del 01 → null
+      aTicketIngest(base('4')),                                                   // sin FE: no cuenta
+    ]
+    expect(tickets.map((t) => t.clave_fe)).toEqual([claveDe(c04), claveDe(c01), null, null])
+    expect(conteoFeSinClave(tickets)).toBe(1)
+    const log: string[] = []
+    await correrDia({
+      async leerDia() { return { tickets, avisos: [] } },
+      async enviar(payload) { return respuesta(payload) },
+      async pausar() {},
+      log(l) { log.push(l) },
+    }, LOCAL, '2026-04-15', false)
+    expect(log.join(' ')).toContain('fe_sin_clave=1')
   })
 
   it('un día que falla se anota y NO tira', async () => {

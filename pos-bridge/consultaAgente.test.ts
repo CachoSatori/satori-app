@@ -4,6 +4,7 @@ import {
   agruparProductos,
   extrasPorFactura,
   soloDigitos,
+  claveDelConsecutivo,
   aTicketIngest,
   leerAbiertas,
   leerCerradas,
@@ -844,15 +845,44 @@ describe('ítem 11 · campos nuevos de la factura', () => {
     personas: 0, imp_servicio: 1200, medios: { efectivo: 15000, vuelto: 3000 }, items: [],
   })
 
+  // Clave ficticia con la forma de Hacienda CR: país (3) · fecha DDMMAA (6) · cédula (12, en ceros)
+  // · consecutivo (20) · situación (1) · código de seguridad (8).
+  const claveDe = (consecutivo: string, fecha = '051126', seguridad = '12345678') =>
+    `506${fecha}${'0'.repeat(12)}${consecutivo}1${seguridad}`
+
   it('pega la mesa de la factura, el consecutivo, la clave y la apertura (con zona)', () => {
+    const clave = claveDe('00200001040000016012')
     const i = aTicketIngest(t, {
-      area_factura: ' 3 ', mesa_factura: ' 19 ', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
+      area_factura: ' 3 ', mesa_factura: ' 19 ', consecutivo_fe: '00200001040000016012', clave_fe: clave,
       pedido_abierto_en: '2026-11-05 18:39:48',
     })
     expect(i).toMatchObject({
-      area_factura: '3', mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
+      area_factura: '3', mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: clave,
       pedido_abierto_en: '2026-11-05T18:39:48-06:00',
     })
+  })
+
+  // 18-nov: el PoS dejó en tiquetes 04 la clave de la factura 01 con el mismo número (las series se
+  // solapan en la misma terminal). Cada uno se queda con SU clave; la ajena viaja en null.
+  it('un 04 y un 01 con el mismo número: cada uno su clave, la clave del 01 no se le pega al 04', () => {
+    const cons04 = '00200001040000011300'
+    const cons01 = '00200001010000011300'
+    const clave04 = claveDe(cons04, '150426', '11111111')
+    const clave01 = claveDe(cons01, '200426', '22222222')
+    expect(aTicketIngest(t, { consecutivo_fe: cons04, clave_fe: clave04 }).clave_fe).toBe(clave04)
+    expect(aTicketIngest(t, { consecutivo_fe: cons01, clave_fe: clave01 }).clave_fe).toBe(clave01)
+    // El caso de prod: el 04 trae la clave del 01. El consecutivo se queda (es el bueno), la clave no.
+    const cruzado = aTicketIngest(t, { consecutivo_fe: cons04, clave_fe: clave01 })
+    expect(cruzado).toMatchObject({ consecutivo_fe: cons04, clave_fe: null, total: 12000 })
+    expect(aTicketIngest(t, { consecutivo_fe: cons01, clave_fe: clave04 }).clave_fe).toBeNull()
+  })
+
+  it('claveDelConsecutivo: mismo número y tipo pero otra terminal tampoco es la suya', () => {
+    expect(claveDelConsecutivo(claveDe('99900001010000011300'), '00200001010000011300')).toBeNull()
+    expect(claveDelConsecutivo(claveDe('00200001010000011301'), '00200001010000011300')).toBeNull()
+    // Sin consecutivo no hay contra qué comparar: pasa la clave si tiene la forma (como antes).
+    expect(claveDelConsecutivo(claveDe('00200001010000011300'), null)).toBe(claveDe('00200001010000011300'))
+    expect(claveDelConsecutivo('abc', '00200001010000011300')).toBeNull()
   })
 
   it('un consecutivo o una clave con otra forma viajan en null; la venta entra igual', () => {

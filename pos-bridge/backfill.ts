@@ -114,6 +114,14 @@ export function conteoSalonero(
   return { porLineas, porLineasFueraSalon, sinSalonero }
 }
 
+/**
+ * Clave FE por consecutivo y tipo (18-nov): cuántas facturas traen consecutivo FE pero viajan SIN clave
+ * (la del PoS no era de ese comprobante, ver `claveDelConsecutivo`). Solo un conteo: es el humo del pase.
+ */
+export function conteoFeSinClave(tickets: readonly Pick<TicketIngest, 'consecutivo_fe' | 'clave_fe'>[]): number {
+  return tickets.filter((t) => t.consecutivo_fe != null && t.clave_fe == null).length
+}
+
 /** Un día: leer, mandar, contar. Nunca tira — el error vuelve en `ResultadoDia`. */
 export async function correrDia(
   puertos: PuertosBackfill,
@@ -136,11 +144,12 @@ export async function correrDia(
     // Salonero por líneas (17-nov): cuántas facturas toman el salonero de las líneas y cuántas
     // quedan sin salonero. Solo conteos: es el humo del pase en la PC del PoS.
     const { porLineas, sinSalonero, porLineasFueraSalon } = conteoSalonero(tickets)
+    const feSinClave = conteoFeSinClave(tickets)
     if (dryRun) {
       puertos.log(
         `    ${fecha}  tickets=${tickets.length} líneas=${lineas} con_descuento=${conDescuento} ` +
         `salonero_por_lineas=${porLineas} salonero_por_lineas_no_salon=${porLineasFueraSalon} ` +
-        `salonero_null=${sinSalonero}  (dry-run: NO se envía)`,
+        `salonero_null=${sinSalonero} fe_sin_clave=${feSinClave}  (dry-run: NO se envía)`,
       )
       return { fecha, tickets: tickets.length, guardados: 0, lineas, error: null }
     }
@@ -150,7 +159,7 @@ export async function correrDia(
     puertos.log(
       `    ${fecha}  tickets=${tickets.length} guardados=${res.tickets_guardados} ` +
       `líneas=${res.lineas_guardadas}${res.invalid ? ` inválidos=${res.invalid}` : ''} ` +
-      `salonero_por_lineas=${porLineas}`,
+      `salonero_por_lineas=${porLineas} fe_sin_clave=${feSinClave}`,
     )
     return {
       fecha,

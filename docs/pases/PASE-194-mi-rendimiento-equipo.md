@@ -51,9 +51,9 @@
 
 ## 3. Pruebas en staging (`hwiatgic…`, transacción que termina en ROLLBACK, 18-nov-2026)
 - `scripts/sql/194_pruebas.py --armar --compacto --sin-drops --mutar todas`: la batería y cada mutación encima en la
-  misma transacción. Staging está en 188: **190, 191 y 192 se aplican antes, tal cual, en la misma transacción** (con
+  misma transacción. Staging está en 188: **190, 191, 192 y (desde `aaa3e1b`+1) 193 se aplican antes, tal cual, en la misma transacción**, como va a quedar en prod (con
   sus guardas md5). Única diferencia, por el conector (cancela todo `drop`): el `drop policy` + `create policy` de la
-  192 va como `alter policy` de la vieja al mismo predicado (RLS equivalente). Se omitieron sus `comment on`.
+  192 va como `alter policy` de la vieja al mismo predicado (RLS equivalente), y los 3 `drop policy if exists` de la 193 (sobre su tabla recién creada, no-op) se sacan. Las corridas de abajo son **sin** la 193; con la 193 debajo la corre el dueño con su CC. Se omitieron sus `comment on`.
   **18-nov-2026 ~16:00 -06:00 (ronda 4, decisiones de las 15:03): sin mutar 56/56, las 13 mutaciones muerden:**
   `sin_k` 9, `corrido_365` 2, `sin_ventas_ve` 2, `neta_con_17` 6, `sin_rol` 2, `locales_libres` 2,
   `personal_sin_local` 1, `icp_con_k` 1, `personas_sin_k` 2, `sin_multiplicador` 3, `delivery_en_salon` 2,

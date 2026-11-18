@@ -1,7 +1,7 @@
 -- 194_pruebas · Mi Rendimiento: agregados del equipo sin filas de otros. Por rol, con JWT simulado (regla 4).
 -- Corre en STAGING (o Postgres local con la base armada) DENTRO de una transacción que termina en ROLLBACK: no deja
 -- nada. Se arma con scripts/sql/194_pruebas.py (--armar [--mutar X]); el runner llena los marcadores:
---   marcador 191  → 190, 191 y 192 tal cual, cada una solo si falta (staging al 18-nov está en 188).
+--   marcador 191  → 190, 191, 192 y 193 tal cual, cada una solo si falta (staging al 18-nov está en 188).
 --   marcador 194  → cuerpo de supabase/migrations/194_… sin begin/commit (con --mutar, con el arreglo roto a propósito)
 --   marcador 194R → cuerpo de scripts/sql/194_rollback.sql sin begin/commit (prueba que la vuelta atrás borra todo)
 -- Todo es FICTICIO: local prueba194 / prueba194b, logins p194*, facturas de enero de 2020 (en un local que no existe en

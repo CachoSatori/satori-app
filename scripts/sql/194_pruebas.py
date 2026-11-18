@@ -21,6 +21,7 @@ PREVIAS = [
     ('190_pos_ventas_resumen.sql', 'public.pos_ventas_resumen(text,date,date)'),
     ('191_pos_ventas_solo_lo_suyo.sql', 'public.pos_mis_logins()'),
     ('192_propinas_cada_uno_lo_suyo.sql', 'public.propinas_mis_empleados()'),
+    ('193_pos_ventas_tiempos.sql', 'public.pos_ventas_tiempos(text,date,date)'),  # en prod desde el 18-nov (#294)
 ]
 MIG = RAIZ / 'supabase/migrations/194_mi_rendimiento_equipo.sql'
 ROLLBACK = RAIZ / 'scripts/sql/194_rollback.sql'
@@ -103,7 +104,7 @@ def armar(mutar: str | None, todas: bool = False, sin_drops: bool = False, parid
     for marca in ('-- @@191@@', '-- @@194@@', '-- @@194G@@', '-- @@194R@@', '-- @@MUTACIONES@@'):
         if bat.count(marca) != 1:
             sys.exit(f'falta el marcador {marca}')
-    # Staging puede no tener 190–192 (al 18-nov está en 188): se aplican antes, TAL CUAL, en la misma transacción,
+    # Staging puede no tener 190–193 (al 18-nov está en 188): se aplican antes, TAL CUAL, en la misma transacción,
     # cada una solo si falta (la 191 trae su guarda md5 de la 067 y la 192 la de las policies de tip_entries).
     previas = []
     for archivo, sonda in PREVIAS:
@@ -119,6 +120,12 @@ def armar(mutar: str | None, todas: bool = False, sin_drops: bool = False, parid
             if cuerpo.count(viejo) != 1:
                 sys.exit('192: no encuentro el drop/create policy para el modo --sin-drops')
             cuerpo = cuerpo.replace(viejo, 'alter policy "Todos ven entradas de propinas" on public.tip_entries\nto authenticated\nusing (')
+        if sin_drops and archivo.startswith('193_'):
+            # Mismo motivo: los `drop policy if exists` de la 193 van sobre su tabla recién creada (no-op); se sacan.
+            n = cuerpo.count('drop policy if exists pos_mesas_internas_')
+            if n != 3:
+                sys.exit(f'193: esperaba 3 drop policy if exists, hay {n}')
+            cuerpo = '\n'.join(l for l in cuerpo.split('\n') if not l.startswith('drop policy if exists pos_mesas_internas_'))
         previas.append(f"do $si$ begin if to_regprocedure('{sonda}') is null then execute {tag}{cuerpo}{tag}; end if; end $si$;")
     bat = bat.replace('-- @@191@@', '\n'.join(previas))
     # La 194 (mutada o no) viaja UNA vez, como texto en una tabla temporal, y se aplica con execute.

@@ -434,7 +434,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
 /** Contra qué se mide «vs general»: el restaurante en el período (aggGeneral o la 194). */
 interface RefGeneral { promPax: number; pax?: number; comidaPax: number; bebPax: number; promTicket: number }
 
-/** `por_dow` de la 194 → Prom/PAX del restaurante por día de semana (null = grupo chico ese día). */
+/** `por_dow` de la 194 → Prom/PAX del restaurante por día de semana (sale siempre, decisión del dueño; null solo si ese día no hubo PAX). */
 function restDelServidor(porDow: { dow: number; prom_pax: number | null }[] | undefined): Record<number, number | null> {
   const out: Record<number, number | null> = {}
   for (const d of porDow ?? []) out[d.dow] = d.prom_pax

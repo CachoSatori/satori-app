@@ -140,9 +140,27 @@ export function aTicketIngest(
     area_factura:      texto(extra.area_factura),
     mesa_factura:      texto(extra.mesa_factura),
     consecutivo_fe:    soloDigitos(extra.consecutivo_fe, 20),
-    clave_fe:          soloDigitos(extra.clave_fe, 50),
+    clave_fe:          claveDelConsecutivo(extra.clave_fe, extra.consecutivo_fe),
     pedido_abierto_en: cierreConZona(extra.pedido_abierto_en),
   }
+}
+
+/**
+ * La clave FE (50 dígitos) solo si es la de ESTE comprobante: la clave de Hacienda CR lleva
+ * adentro el consecutivo entero (posiciones 22–41: sucursal, terminal, TIPO de documento y número).
+ * Si el consecutivo de la factura no coincide, la clave es de OTRO documento y viaja en null.
+ *
+ * Por qué (18-nov): en el PoS, tiquetes 04 de mar–abr-2026 traen en `ClaveElectronica` la clave
+ * de la factura 01 con el mismo número (las series 01 y 04 de la terminal 00200001 se solapan
+ * entre ~10.957 y ~11.892). El puente lee la columna tal cual; el cruce sin tipo pasa en el PoS.
+ * Sin consecutivo no hay contra qué comparar y la clave pasa como antes (solo la forma).
+ */
+export function claveDelConsecutivo(clave: unknown, consecutivo: unknown): string | null {
+  const c = soloDigitos(clave, 50)
+  if (c === null) return null
+  const cons = soloDigitos(consecutivo, 20)
+  if (cons === null) return c
+  return c.slice(21, 41) === cons ? c : null
 }
 
 /** El texto si son exactamente `largo` dígitos (sin espacios alrededor); si no, null. */

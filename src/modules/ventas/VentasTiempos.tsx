@@ -139,8 +139,9 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
     }
   }, [l, periodo, quincenas, turnos, tiempos, baseA, baseB])
 
-  const rA = rotuloBase(periodo.tipo, baseA), rB = rotuloBase(periodo.tipo, baseB)
-  const qA = rotuloBase('quincena', baseA), qB = rotuloBase('quincena', baseB)
+  const rA = rotuloBase(periodo, baseA), rB = rotuloBase(periodo, baseB)
+  const qCerrada = { tipo: 'quincena' as const, enCurso: false, dias: 15 }
+  const qA = rotuloBase(qCerrada, baseA), qB = rotuloBase(qCerrada, baseB)
   const sumaSemana = d.semana.reduce((s, f) => s + f.neta, 0)
   const sinInternas = l.internas === null || l.internas === undefined
   const fueraInternas = d.p.internas.facturas > 0

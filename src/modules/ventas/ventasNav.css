@@ -62,6 +62,7 @@ button.vt-subnav-tab.active { font-weight: 600; }
 .vt2-delta.gris { color: var(--c-gris); }
 .vt2-delta-base { color: var(--c-gris); }
 .vt2-nota { font-size: 0.75rem; color: var(--c-gris); margin: 0.25rem 0; }
+.vt2-meta { margin: 1rem 0; }
 .vt2-alerta { margin: 1rem 0; font-size: 0.85rem; }
 .vt2-alerta ul { margin: 0.25rem 0 0 1rem; }
 .vt2-grafico { margin: 1rem 0; }

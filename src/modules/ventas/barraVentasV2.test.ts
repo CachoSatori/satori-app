@@ -28,7 +28,7 @@ describe('barra de Ventas v2', () => {
   it('caso de la auditoría: 16-nov, mes a la fecha = 1–15 nov contra 1–15 oct y 2–16 nov 2025', () => {
     const { periodo } = periodoDeBarra(leerBarra(new URLSearchParams('p=mesALaFecha')), ANCLA)
     expect(periodoEnPalabras(periodo, 'anteriorEquivalente', 'anioMismoDiaSemana')).toBe(
-      '1 al 15 de noviembre (15 días) contra 1 al 15 de octubre (15 días) y contra 2 al 16 de noviembre de 2025 (15 días). Hoy, en curso, no entra.')
+      '1 al 15 de noviembre (15 días) contra el mes anterior a la misma fecha (1–15 oct) y contra el año pasado, mismo día de semana (2–16 nov 2025). Hoy, en curso, no entra.')
   })
 
   it('flechas: ‹ va al mes anterior entero; › desde el mes en curso no tiene a dónde ir', () => {

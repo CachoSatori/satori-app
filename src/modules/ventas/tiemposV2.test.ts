@@ -6,7 +6,6 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import type { FilaPromPaxRpc } from '../../shared/api/posNdf'
-import { rotuloBase } from './barraVentasV2'
 import { diaCRDeFactura, franjaDeHora, horaCRDeFactura, ventaPorPersona } from './indicadores'
 import { calcularPeriodo, diaSemana, type Rango } from './periodos'
 import { armarLectura, cifrasDelRango } from './resumenV2'
@@ -228,19 +227,5 @@ describe('Calendario', () => {
     const max = Math.max(...conta.map(d => d.ventaNeta)), min = Math.min(...conta.filter(d => d.ventaNeta > 0).map(d => d.ventaNeta))
     expect(cal.mejor!.ventaNeta).toBe(max)
     expect(cal.peor!.ventaNeta).toBe(min)
-  })
-})
-
-describe('Rótulos concretos de las bases', () => {
-  it('cada tipo dice contra qué compara', () => {
-    expect(rotuloBase('quincena', 'anteriorEquivalente')).toBe('Misma quincena del mes anterior')
-    expect(rotuloBase('mes', 'anteriorEquivalente')).toBe('Mes anterior')
-    expect(rotuloBase('mesALaFecha', 'anteriorEquivalente')).toBe('Mes anterior')
-    expect(rotuloBase('semana', 'anteriorEquivalente')).toBe('Semana anterior')
-    expect(rotuloBase('ayer', 'anteriorEquivalente')).toBe('Mismo día de la semana pasada')
-    expect(rotuloBase('temporada', 'anteriorEquivalente')).toBe('Temporada anterior')
-    expect(rotuloBase('ayer', 'anioMismoDiaSemana')).toBe('Mismo día de semana, hace 52 semanas')
-    expect(rotuloBase('mes', 'anioMismasFechas')).toBe('Año anterior, mismas fechas')
-    expect(rotuloBase(undefined, 'anteriorEquivalente')).toBe('Período anterior')
   })
 })

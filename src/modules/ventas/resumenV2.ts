@@ -188,12 +188,24 @@ export const NOMBRE_BASE: Record<BaseId, string> = {
   anioMismoDiaSemana:  'año pasado (mismo día de semana)',
 }
 
+/** Cómo se nombra una base en la frase: el nombre concreto y sus fechas cortas (de la barra). */
+export interface NombreEnFrase {
+  texto:    string
+  articulo: 'el' | 'la' | 'los'
+  /** «16–31 oct». Va entre paréntesis después del nombre. */
+  fechas?:  string | null
+}
+
+const genericoDe = (id: BaseId): NombreEnFrase => ({ texto: NOMBRE_BASE[id], articulo: 'el' })
+const deArt = (n: NombreEnFrase) => (n.articulo === 'el' ? 'del' : `de ${n.articulo}`)
+const conFechas = (n: NombreEnFrase) => (n.fechas ? `${n.texto} (${n.fechas})` : n.texto)
+
 const pctTxt = (x: number) => `${Math.round(Math.abs(x))} %`
 
-function tramoBajada(c: number | null, base: BaseId): string | null {
+function tramoBajada(c: number | null, n: NombreEnFrase): string | null {
   if (c === null) return null
-  if (Math.abs(c) < 1) return `parejo con el ${NOMBRE_BASE[base]}`
-  return `${pctTxt(c)} ${c > 0 ? 'arriba' : 'abajo'} del ${NOMBRE_BASE[base]}`
+  if (Math.abs(c) < 1) return `parejo con ${n.articulo} ${conFechas(n)}`
+  return `${pctTxt(c)} ${c > 0 ? 'arriba' : 'abajo'} ${deArt(n)} ${conFechas(n)}`
 }
 
 /** Más de 2 % es «más/menos»; menos, «casi lo mismo». */
@@ -201,18 +213,19 @@ const tendencia = (c: number | null, mas: string, menos: string, igual: string):
   c === null ? null : Math.abs(c) < 2 ? igual : c > 0 ? mas : menos
 
 /**
- * «Vas 9 % arriba del período anterior y 7 % abajo del año pasado (mismo día de semana). Entra más
- * gente; gasta casi lo mismo.» Con voseo (lo lee la gerencia). Sin bases: dice que no hay comparación.
+ * «Vas 9 % arriba del mes anterior a la misma fecha (1–15 oct) y 7 % abajo del año pasado, mismo día de
+ * semana (2–16 nov 2025). Entra más gente; gasta casi lo mismo.» Con voseo (lo lee la gerencia). El nombre de
+ * cada base lo pone la barra (`nombreBase`); sin él, el genérico. Sin bases: dice que no hay comparación.
  */
 export function bajada(
   p: CifrasRango,
-  a: { id: BaseId; cifras: CifrasRango | null },
-  b: { id: BaseId; cifras: CifrasRango | null },
+  a: { id: BaseId; cifras: CifrasRango | null; nombre?: NombreEnFrase },
+  b: { id: BaseId; cifras: CifrasRango | null; nombre?: NombreEnFrase },
 ): string {
   if (p.totales.ventaNeta <= 0) return 'No hay ventas del PoS en este período.'
   const ca = a.cifras ? cambioPct(p.totales.ventaNeta, a.cifras.totales.ventaNeta) : null
   const cb = b.cifras ? cambioPct(p.totales.ventaNeta, b.cifras.totales.ventaNeta) : null
-  const tramos = [tramoBajada(ca, a.id), tramoBajada(cb, b.id)].filter((t): t is string => !!t)
+  const tramos = [tramoBajada(ca, a.nombre ?? genericoDe(a.id)), tramoBajada(cb, b.nombre ?? genericoDe(b.id))].filter((t): t is string => !!t)
   if (tramos.length === 0) return 'Sin comparación para este período: no hay ventas del PoS en las bases.'
   const ref = a.cifras && ca !== null ? a.cifras : b.cifras
   const gente = ref ? tendencia(cambioPct(p.totales.pax, ref.totales.pax), 'Entra más gente', 'Entra menos gente', 'Entra la misma gente') : null

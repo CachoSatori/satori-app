@@ -102,6 +102,22 @@ export function rotuloRango(r: Rango, anioRef: number): string {
   return `${a.d} de ${MESES[a.m]} de ${a.a} al ${b.d} de ${MESES[b.m]} de ${b.a} ${n}`
 }
 
+const MESES_CORTOS = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'] as const
+
+/**
+ * Las fechas de un rango en corto, para ir entre paréntesis: «16–31 oct», «28 oct – 3 nov»,
+ * «11 nov». El año va solo si no es `anioRef`: «2–16 nov 2025», «28 dic 2025 – 3 ene».
+ */
+export function fechasCortas(r: Rango, anioRef: number): string {
+  const a = partes(r.desde)
+  const b = partes(r.hasta)
+  const anio = (x: number) => (x === anioRef ? '' : ` ${x}`)
+  if (r.desde === r.hasta) return `${a.d} ${MESES_CORTOS[a.m]}${anio(a.a)}`
+  if (a.a === b.a && a.m === b.m) return `${a.d}–${b.d} ${MESES_CORTOS[b.m]}${anio(b.a)}`
+  if (a.a === b.a) return `${a.d} ${MESES_CORTOS[a.m]} – ${b.d} ${MESES_CORTOS[b.m]}${anio(b.a)}`
+  return `${a.d} ${MESES_CORTOS[a.m]} ${a.a} – ${b.d} ${MESES_CORTOS[b.m]}${anio(b.a)}`
+}
+
 // ── Contenedores naturales ───────────────────────────────────────────────────────────────────
 
 const anioDe = (d: string) => Number(d.slice(0, 4))

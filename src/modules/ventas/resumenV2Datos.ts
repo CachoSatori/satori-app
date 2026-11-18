@@ -150,6 +150,16 @@ export async function cargarLecturaDeRangos(local: string, rangos: readonly Rang
   return cargarLecturaDeTramos(local, tramosDeRangos(rangos))
 }
 
+/**
+ * Un solo rango (la meta del mes: el mes hasta ayer y las 8 semanas de los pesos), estirado como los
+ * del período. Mismo camino y misma memoria que el Resumen.
+ */
+export async function cargarLecturaRango(local: string, r: Rango): Promise<Lectura> {
+  const e = rangoDeLecturaParaEstimar(r)
+  const desde = e.desde < PRIMERA_JORNADA_POS ? PRIMERA_JORNADA_POS : e.desde
+  return cargarLecturaDeTramos(local, desde <= e.hasta ? [{ desde, hasta: e.hasta }] : [])
+}
+
 async function cargarLecturaDeTramos(local: string, tramos: Rango[]): Promise<Lectura> {
   const nombres = getSaloneroNombres().catch(() => ({} as Record<string, string>))
   const internas = cargarInternasDeTramos(local, tramos)

@@ -55,7 +55,9 @@ update public.profiles set role = 'barman',   is_active = true  where id = (sele
 update public.profiles set role = 'salonero', is_active = false where id = (select salonero_inactivo from _c194);
 select set_config('request.jwt.claims', '', true);
 insert into public.profile_locations (profile_id, location_id, principal) values
-  ((select manager_a from _c194), 'prueba194', true), ((select manager_b from _c194), 'prueba194b', true);
+  ((select manager_a from _c194), 'prueba194', true), ((select manager_b from _c194), 'prueba194b', true),
+  ((select yo from _c194), 'prueba194', true), ((select salonero_sin_ventas from _c194), 'prueba194', true),
+  ((select cajero from _c194), 'prueba194', true);   -- el cajero en el local: el 42501 tiene que salir por el ROL
 
 insert into public.employees (full_name, role, profile_id, is_active, pos_login, created_at) values
   ('Salonero 194 A',        'salonero', (select yo from _c194),                  true,  'p194a', now()),
@@ -219,12 +221,13 @@ begin
   perform pg_temp.chk('04 chico: proporciones del local siempre', s->'general',
     '{"beb_pax": 0.00, "prom_pax": 6000, "comida_pax": 1.00, "prom_ticket": 6000}');
   perform pg_temp.chk('04 chico: sin equipo',  s->'equipo', 'null');
-  perform pg_temp.chk('04 chico: sin ICP',     s->'icp_equipo', 'null');
+  perform pg_temp.chk('04 chico: ICP del equipo siempre', s->'icp_equipo', '0.0');
+  perform pg_temp.chk('04 chico: cuántas personas, no', s->'personas', 'null');
   perform pg_temp.chk('04 chico: martes con Prom/PAX del local', (select x->'prom_pax' from jsonb_array_elements(s->'por_dow') x where x->>'dow' = '2'), '6000');
   perform pg_temp.chk('04 chico: año pasado sin datos', s->'anio_pasado', '{"desde": "2019-01-08", "hasta": "2019-01-08", "general": null}');
   -- 04b · 3 personas (miércoles): todavía NO salen posición ni promedios (ni en la API)
   s := pg_temp.como(c.yo, pg_temp.q_eq('prueba194', '2020-01-08', '2020-01-08'));
-  perform pg_temp.chk('04b tres: personas', s->'personas', '3');
+  perform pg_temp.chk('04b tres: personas (no sale con 3)', s->'personas', 'null');
   perform pg_temp.chk('04b tres: sin posición', s->'ranking', 'null');
   perform pg_temp.chk('04b tres: sin promedios ni mediana', s->'equipo', 'null');
   insert into _r194 (caso, ok, detalle)
@@ -242,6 +245,7 @@ begin
   perform pg_temp.chk('06 contador: agregados',        pg_temp.como(c.contador, pg_temp.q_eq('prueba194', '2020-01-06', '2020-01-06'))->'personas', '4');
   perform pg_temp.chk('06 manager de su local',        pg_temp.como(c.manager_a, pg_temp.q_eq('prueba194', '2020-01-06', '2020-01-06'))->'personas', '4');
   perform pg_temp.chk('06 manager de otro local: 42501', pg_temp.como(c.manager_b, pg_temp.q_eq('prueba194', '2020-01-06', '2020-01-06')), '"ERR 42501"');
+  perform pg_temp.chk('06 salonero de otro local: 42501', pg_temp.como(c.yo, pg_temp.q_eq('prueba194b', '2020-01-06', '2020-01-06')), '"ERR 42501"');
   perform pg_temp.chk('06 cajero: 42501',              pg_temp.como(c.cajero, pg_temp.q_eq('prueba194', '2020-01-06', '2020-01-06')), '"ERR 42501"');
   perform pg_temp.chk('06 barman sin login: 42501',    pg_temp.como(c.barman_sin_login, pg_temp.q_eq('prueba194', '2020-01-06', '2020-01-06')), '"ERR 42501"');
   perform pg_temp.chk('06 salonero inactivo: 42501',   pg_temp.como(c.salonero_inactivo, pg_temp.q_eq('prueba194', '2020-01-06', '2020-01-06')), '"ERR 42501"');
@@ -271,6 +275,17 @@ begin
     and p.proconfig @> array['search_path=public, pg_temp'];
 end $cas$;
 select pg_temp.casos();
+
+-- 10 · La guarda R13: con las funciones ya creadas, una segunda pasada aborta sin tocar nada.
+create function pg_temp.guarda_aborta() returns text language plpgsql as $f$
+begin
+  -- @@194G@@
+  return 'no abortó';
+exception when others then
+  return sqlstate || ' ' || left(sqlerrm, 30);
+end $f$;
+insert into _r194 (caso, ok, detalle)
+select '10 guarda: segunda pasada aborta', g like 'P0001 194: public.pos_persona_clave%', g from pg_temp.guarda_aborta() g;
 -- @@MUTACIONES@@
 
 -- 09 · Vuelta atrás: borra las seis. (En staging el conector cancela los `drop`: se arma con --sin-drops y el caso

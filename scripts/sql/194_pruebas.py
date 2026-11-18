@@ -43,8 +43,18 @@ MUTACIONES: dict[str, tuple] = {
     'sin_rol': ([("  if v_rol is null or v_rol not in ('owner', 'contador', 'manager', 'salonero', 'barman', 'barback', 'runner', 'cocina') then\n",
                   "  if v_rol is null then\n", 1)], {'06 cajero', '07 comp: cajero'}),
     # el manager pide cualquier local
-    'manager_sin_local': ([("  if v_rol = 'manager' and not (p_local = any (public.mis_locales())) then\n",
-                            "  if false then\n", 1)], {'06 manager de otro local'}),
+    'locales_libres': ([("  if v_rol not in ('owner', 'contador') and not (p_local = any (public.mis_locales())) then\n",
+                         "  if false then\n", 1)], {'06 manager de otro local', '06 salonero de otro local'}),
+    # el control de local solo para el manager (como estaba antes del verificador)
+    'personal_sin_local': ([("  if v_rol not in ('owner', 'contador') and not (p_local = any (public.mis_locales())) then\n",
+                             "  if v_rol = 'manager' and not (p_local = any (public.mis_locales())) then\n", 1)],
+                           {'06 salonero de otro local'}),
+    # el ICP del equipo vuelve a esconderse con menos de K (decisión B: siempre)
+    'icp_con_k': ([("'icp_equipo', (select case when g.total > 0 then round(t.gen / g.total * 100, 1) end from gen g, tips t))",
+                    "'icp_equipo', case when c.n >= k_min then (select case when g.total > 0 then round(t.gen / g.total * 100, 1) end from gen g, tips t) end)", 1)],
+                  {'04 chico: ICP del equipo siempre'}),
+    # cuántas personas sale aunque sean menos de K
+    'personas_sin_k': ([("'personas', case when c.n >= k_min then c.n end,", "'personas', c.n,", 1)], {'04b tres: personas'}),
     # sin el multiplicador de las bebidas clasificadas a mano
     'sin_multiplicador': ([("case when coalesce(adj.q, 0) <> 0 then adj.q else por.ibeb end", "por.ibeb", 1)],
                           {'02 yo: mi posición', '02 yo: promedio'}),
@@ -90,7 +100,7 @@ def armar(mutar: str | None, todas: bool = False, sin_drops: bool = False, parid
                 sys.exit(f'mutación {mutar}: el ancla aparece {mig.count(viejo)} veces (se esperaban {veces})')
             mig = mig.replace(viejo, nuevo)
     bat = BATERIA.read_text(encoding='utf-8')
-    for marca in ('-- @@191@@', '-- @@194@@', '-- @@194R@@', '-- @@MUTACIONES@@'):
+    for marca in ('-- @@191@@', '-- @@194@@', '-- @@194G@@', '-- @@194R@@', '-- @@MUTACIONES@@'):
         if bat.count(marca) != 1:
             sys.exit(f'falta el marcador {marca}')
     # Staging puede no tener 190–192 (al 18-nov está en 188): se aplican antes, TAL CUAL, en la misma transacción,
@@ -112,7 +122,11 @@ def armar(mutar: str | None, todas: bool = False, sin_drops: bool = False, parid
         previas.append(f"do $si$ begin if to_regprocedure('{sonda}') is null then execute {tag}{cuerpo}{tag}; end if; end $si$;")
     bat = bat.replace('-- @@191@@', '\n'.join(previas))
     # La 194 (mutada o no) viaja UNA vez, como texto en una tabla temporal, y se aplica con execute.
-    bat = bat.replace('-- @@194@@', "create temp table _m194 on commit drop as select $m194$" + _norm(_sin_beg_com(mig))
+    # La guarda R13 de la 194 corre UNA vez, tal cual; el texto que se reaplica (mutaciones) va sin ella.
+    i = mig.index('do $guarda194$'); j = mig.index('$guarda194$;', i) + len('$guarda194$;')
+    guarda, sin_guarda = mig[i:j], mig[:i] + mig[j:]
+    bat = bat.replace('-- @@194G@@', 'execute ' + '$q$' + _norm(guarda.replace('$guarda194$', '$g$')).rstrip().rstrip(';') + '$q$;')
+    bat = bat.replace('-- @@194@@', _norm(guarda) + "create temp table _m194 on commit drop as select $m194$" + _norm(_sin_beg_com(sin_guarda))
                       + "$m194$::text as sql;\ndo $x$ declare q text; begin select m.sql into q from _m194 m; execute q; end $x$;")
     # Con --paridad <archivo>: la fixture de `equipo194.fixture.ts` (SQL que imprime su prueba con PARIDAD194_SQL=1)
     # se carga en el local `paridad194` y la salida de la función, como un salonero ficticio con login p1, va como un
@@ -125,6 +139,7 @@ def armar(mutar: str | None, todas: bool = False, sin_drops: bool = False, parid
             "select set_config('request.jwt.claims', json_build_object('sub', (select owner_id from _c194), 'role', 'authenticated')::text, true);\n"
             "update public.profiles set role = 'salonero', is_active = true where id = '00000000-0000-4000-8194-0000000000f1';\n"
             "select set_config('request.jwt.claims', '', true);\n"
+            "insert into public.profile_locations (profile_id, location_id, principal) values ('00000000-0000-4000-8194-0000000000f1', 'paridad194', true);\n"
             "insert into public.employees (full_name, role, profile_id, is_active, pos_login, created_at) values "
             "('Persona Uno', 'salonero', '00000000-0000-4000-8194-0000000000f1', true, 'p1', now());\n"
             "insert into public.product_map (nombre, tipo, multiplicador) values ('TRAGO PARIDAD', 'bebida', 2) "

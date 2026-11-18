@@ -8,19 +8,24 @@
 -- Desde la 191 el personal lee SOLO sus facturas; las comparaciones contra el equipo de Mi Rendimiento quedaron
 -- ocultas. Esta migración devuelve esas comparaciones calculadas EN LA BASE y entregadas solo como agregados:
 --   · pos_mi_rendimiento_equipo(local, desde, hasta) → jsonb: las proporciones del local (venta por PAX D4,
---     comida/PAX, bebidas/PAX, ticket/ítem; también por día de semana y en la misma ventana del año pasado) y, con 4 o
---     más personas, mi posición en ventas («3.º de 7»), la mediana y el promedio del equipo por persona, mi posición en
---     cada indicador y el ICP del equipo. Nunca una fila, un login, un nombre ni un monto de otra persona.
+--     comida/PAX, bebidas/PAX, ticket/ítem; también por día de semana y en la misma ventana del año pasado) y el ICP del
+--     equipo, siempre; con 4 o más personas, además mi posición en ventas («3.º de 7»), la mediana y el promedio del
+--     equipo por persona y mi posición en cada indicador. Nunca una fila, un login ni un monto de otra persona.
 --   · pos_mi_competencia(local, id) → jsonb: en una competencia, mi posición, de cuántos, mis puntos y el líder con su
---     nombre y sus puntos (decisión «A»); la mediana solo con 4 o más participantes.
+--     nombre y sus puntos, siempre (decisiones «A» y «B»); la mediana de puntos solo con 4 o más participantes.
 --
 -- Qué sale y cuándo (decisión del dueño 18-nov 13:58, opción C; K = 4):
 --   · SIEMPRE: las proporciones del local (venta por PAX D4, comida/PAX, bebidas/PAX, ticket/ítem), también por día
 --     de semana y en la misma ventana del año pasado (−364 días, mismo día de semana). Sin plata total, sin PAX total.
+--   · SIEMPRE también el ICP electrónico del equipo (decisión del dueño 18-nov 15:03, «B»).
 --   · SOLO con K o más personas con venta en el período (yo incluido): mi POSICIÓN («2.º de N»), la mediana y el
---     promedio por persona y mi posición en cada indicador, y el ICP del equipo. Con menos, la función NO devuelve esos
---     campos (null) y `motivo = 'grupo_chico'`.
---   · Competencias (decisión «A»): mi posición, mis puntos y el líder CON su nombre y sus puntos; la mediana solo con K.
+--     promedio por persona, mi posición en cada indicador y cuántas personas son. Con menos, la función NO devuelve
+--     esos campos (null) y `motivo = 'grupo_chico'`.
+--   · Competencias (decisiones «A» y «B»): mi posición, mis puntos y el líder CON su nombre y sus puntos, siempre; la
+--     mediana de puntos solo con K.
+--   · RIESGO ACEPTADO por el dueño (18-nov 15:03, «B»): llamando a mano a la API con dos rangos que difieren en un día
+--     y restando, se puede despejar el PAX y la venta de un compañero en una noche de 2 personas (las proporciones del
+--     local salen siempre). El redondeo a ₡100 lo dificulta, no lo impide.
 --   · Los ₡ van redondeados a ₡100, las razones a 2 decimales y el ICP a 1: corta la resta exacta entre consultas
 --     parecidas (p. ej. dos rangos que difieren en un día).
 --   · Sin percentiles 25/75 a propósito: con 7 personas, mediana + promedio + cuartiles reconstruyen casi a todos.
@@ -46,13 +51,28 @@
 --     promedio de venta por persona / bebida por PAX (la app le pondría 0); sí cuenta en el ranking de ventas.
 --
 -- Permisos: `security definer`, search_path fijo, rol validado ADENTRO. Personal (salonero, barman, barback, runner,
--- cocina) activo y con login del PoS: los agregados, solo si vendió en el período. owner / contador: cualquier local;
--- manager: sus locales (`mis_locales()`). Cualquier otro rol o inactivo: 42501. anon y public: sin EXECUTE.
+-- cocina) activo y con login del PoS: los agregados, solo si vendió en el período y solo de sus locales
+-- (`mis_locales()`). owner / contador: cualquier local; manager: sus locales. Cualquier otro rol o inactivo: 42501. anon y public: sin EXECUTE.
 -- No lee nada que el usuario no pueda leer hoy por otro lado más que en forma de agregado; no agrega policies
 -- (regla 6), no toca `employees` salvo leer `full_name` para resolver los participantes de una competencia.
 -- Vuelta atrás: scripts/sql/194_rollback.sql (migración nueva hacia adelante, regla 10). Pruebas por rol:
 -- scripts/sql/194_pruebas.sql (+ 194_pruebas.py; transacción que termina en ROLLBACK).
 begin;
+
+-- ── Guarda (R13): ninguna de las seis funciones puede existir ya (con otro cuerpo, se pisaría sin saberlo) ────────
+do $guarda194$
+declare
+  f text;
+begin
+  foreach f in array array['public.pos_persona_clave(text,date)', 'public.pos_rend_base(text,date,date)',
+                           'public.pos_rend_productos(text,date,date)', 'public.pos_rend_yo(text)',
+                           'public.pos_mi_rendimiento_equipo(text,date,date)', 'public.pos_mi_competencia(text,text)'] loop
+    if to_regprocedure(f) is not null then
+      raise exception '194: % ya existe: se para sin tocar nada', f;
+    end if;
+  end loop;
+end
+$guarda194$;
 
 -- ── 0. Código del PoS → clave de PERSONA (espejo de personasNdf.ts; interno) ────────────────────
 -- Solo los códigos con alias o con vigencia; el resto es su propio código. Fuera de la vigencia: «login XXXX».
@@ -209,7 +229,8 @@ begin
   if v_rol is null or v_rol not in ('owner', 'contador', 'manager', 'salonero', 'barman', 'barback', 'runner', 'cocina') then
     raise exception 'sin permiso' using errcode = '42501';
   end if;
-  if v_rol = 'manager' and not (p_local = any (public.mis_locales())) then
+  -- manager y personal: solo sus locales (`mis_locales()`, 091: sin asignación = santa-teresa). owner/contador: todos.
+  if v_rol not in ('owner', 'contador') and not (p_local = any (public.mis_locales())) then
     raise exception 'sin permiso para ese local' using errcode = '42501';
   end if;
   select coalesce(array_agg(distinct public.pos_persona_clave(x, null)), array[]::text[])
@@ -330,7 +351,8 @@ begin
     else jsonb_build_object(
       'desde', p_desde, 'hasta', p_hasta, 'k_min', k_min,
       'yo', coalesce(c.soy, false),
-      'personas', c.n,
+      -- Cuántas personas: solo con K o más (con menos, el número solo ayudaría a despejar a alguien).
+      'personas', case when c.n >= k_min then c.n end,
       'motivo', case when c.n < k_min then 'grupo_chico' end,
       -- Posición y equipo (mediana/promedio): SOLO con K o más personas (decisión del dueño 18-nov 13:58, opción C).
       'ranking', case when coalesce(c.soy, false) and c.n >= k_min then
@@ -373,8 +395,8 @@ begin
       'por_dow', (select coalesce(jsonb_agg(jsonb_build_object('dow', d.dow,
                      'prom_pax', case when d.pax > 0 then round(d.salon_todo / d.pax, -2) end)
                      order by d.dow), '[]'::jsonb) from dow d),
-      'icp_equipo', case when c.n >= k_min then (
-          select case when g.total > 0 then round(t.gen / g.total * 100, 1) end from gen g, tips t) end)
+      -- ICP del equipo: SIEMPRE (decisión del dueño 18-nov 15:03, «B»), es una proporción del local.
+      'icp_equipo', (select case when g.total > 0 then round(t.gen / g.total * 100, 1) end from gen g, tips t))
     end
   into v_out
   from cuenta c;
@@ -384,7 +406,7 @@ $$;
 revoke all on function public.pos_mi_rendimiento_equipo(text, date, date) from public, anon;
 grant execute on function public.pos_mi_rendimiento_equipo(text, date, date) to authenticated;
 comment on function public.pos_mi_rendimiento_equipo(text, date, date) is
-  'Mig 194. Agregados del equipo para Mi Rendimiento (posición, general, mediana/promedio por persona, Prom/PAX por día de semana, ICP del equipo). Sin filas ni montos de otras personas; con menos de 4 personas, sin agregados.';
+  'Mig 194. Agregados del equipo para Mi Rendimiento (posición, general, mediana/promedio por persona, Prom/PAX por día de semana, ICP del equipo). Sin filas ni montos de otras personas. Siempre: proporciones del local, año pasado, Prom/PAX por día e ICP del equipo; con menos de 4 personas, sin posición, sin cuántas son y sin promedio/mediana.';
 
 -- ── 5. Mi lugar en una competencia (API) ────────────────────────────────────────────────────────
 -- Los participantes de `ventas_comps.data->'parts'` son NOMBRES (los de la app). Se resuelven a códigos del PoS por
@@ -450,7 +472,7 @@ begin
            'de', r.n,
            'posicion', 1 + (select count(*) from puntos where not soy and pts > r.mis),
            'mis_puntos', r.mis,
-           -- Decisión del dueño 18-nov 13:58 («A»): el líder se muestra CON su nombre (es el juego del local; son puntos).
+           -- Decisiones del dueño 18-nov 13:58 («A») y 15:03 («B»): el líder con su nombre y sus puntos, SIEMPRE.
            'lider_nombre', (select nombre from puntos order by pts desc, nombre limit 1),
            'lider_puntos', (select max(pts) from puntos),
            'mediana_puntos', case when r.n >= k_min then (select percentile_cont(0.5) within group (order by pts) from puntos) end,
@@ -465,6 +487,6 @@ $$;
 revoke all on function public.pos_mi_competencia(text, text) from public, anon;
 grant execute on function public.pos_mi_competencia(text, text) to authenticated;
 comment on function public.pos_mi_competencia(text, text) is
-  'Mig 194. Mi posición y mis puntos en una competencia; puntos del líder y mediana solo con 4+ participantes y sin nombre.';
+  'Mig 194. Mi posición y mis puntos en una competencia; nombre y puntos del líder siempre (decisiones A y B, 18-nov); mediana de puntos solo con 4+ participantes.';
 
 commit;

@@ -2,9 +2,9 @@
 //
 // Desde la 191 el personal lee del PoS solo sus propias facturas. Las comparaciones con el equipo salen de la base,
 // ya agregadas, por estas dos funciones (`security definer`, rol validado adentro). Nunca traen filas, logins ni
-// montos de otra persona. Siempre: las proporciones del local (también del año pasado, −364 días). Solo con 4 o más
-// personas en el período: posición propia, mediana y promedio por persona e ICP del equipo (si no, `grupo_chico`).
-// En competencias el líder sale con su nombre (decisión del dueño, «A»).
+// montos de otra persona. Siempre: las proporciones del local (también del año pasado, −364 días) y el ICP del equipo.
+// Solo con 4 o más personas en el período: posición propia, cuántas son, mediana y promedio por persona (si no,
+// `grupo_chico`). En competencias el líder sale con su nombre y sus puntos, siempre (decisiones del dueño A y B).
 //
 // Si la función todavía no está (antes de aplicar la 194) o falla, se devuelve `null` y la pantalla lo dice: nunca
 // se inventa una comparación.

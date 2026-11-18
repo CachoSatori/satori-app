@@ -36,7 +36,8 @@ const EQUIPO_OK = {
   icp_equipo: 3.4,
 }
 // Opción C (dueño 18-nov 13:58): con <4 personas la 194 NO devuelve posición ni equipo; las proporciones, siempre.
-const EQUIPO_CHICO = { ...EQUIPO_OK, personas: 3, motivo: 'grupo_chico', ranking: null, equipo: null, icp_equipo: null,
+// El ICP del equipo sale siempre (decisión B, 18-nov 15:03); `personas`, solo con 4+.
+const EQUIPO_CHICO = { ...EQUIPO_OK, personas: null, motivo: 'grupo_chico', ranking: null, equipo: null, icp_equipo: 2.9,
   anio_pasado: { desde: '2025-01-01', hasta: '2025-01-31', general: null } }
 const COMP_OK = { participa: true, motivo: null, de: 4, posicion: 2, mis_puntos: 26, lider_nombre: 'Persona Líder Ficticia',
   lider_puntos: 40, mediana_puntos: 20, sin_resolver: 0 }
@@ -198,7 +199,7 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(queryByText('BETO')).toBeNull()   // la tabla del resto no aparece
   })
 
-  it('3 personas (grupo chico): sin posición ni promedios; las proporciones del local («vs general») sí', async () => {
+  it('3 personas (grupo chico): sin posición ni promedios; proporciones del local e ICP del equipo sí', async () => {
     H.equipo = EQUIPO_CHICO
     const { container, findAllByText, queryByText, findByText, queryByTestId } = renderHub()
     expect(queryByTestId('evo-ranking')).toBeNull()
@@ -210,7 +211,8 @@ describe('MiRendimiento · render (salonero con match)', () => {
     fireEvent.click(tabsOf(container)[TAB.dia])
     expect(await findByText(/Yo vs restaurante/)).toBeTruthy()
     fireEvent.click(tabsOf(container)[TAB.propinas])
-    expect(queryByText(/Equipo \(benchmark\)/)).toBeNull()
+    expect(await findByText(/Equipo \(benchmark\)/)).toBeTruthy()   // el ICP del equipo, siempre
+    expect(queryByText('2.9%')).toBeTruthy()
   })
 
   it('sin la 194 (función no aplicada o error): avisa y no inventa comparaciones', async () => {

@@ -47,7 +47,8 @@ describe('194 · permisos y forma', () => {
   it('el rol se valida ADENTRO (42501) y el manager queda en sus locales', () => {
     const yo = cuerpo('pos_rend_yo')
     expect(yo).toMatch(/v_rol not in \('owner', 'contador', 'manager', 'salonero', 'barman', 'barback', 'runner', 'cocina'\)/)
-    expect(yo).toContain("v_rol = 'manager' and not (p_local = any (public.mis_locales()))")
+    // manager y personal: solo sus locales (hallazgo del verificador); owner/contador, todos.
+    expect(yo).toContain("v_rol not in ('owner', 'contador') and not (p_local = any (public.mis_locales()))")
     expect(yo).toContain("errcode = '42501'")
     expect(cuerpo('pos_mi_rendimiento_equipo')).toContain('v_yo := public.pos_rend_yo(p_local);')
     expect(cuerpo('pos_mi_competencia')).toContain('v_yo := public.pos_rend_yo(p_local);')
@@ -62,11 +63,12 @@ describe('194 · permisos y forma', () => {
     expect(CODIGO.match(/k_min constant integer := 4;/g)).toHaveLength(2)
   })
 
-  it('opción C: posición, equipo e ICP del equipo SOLO con K; las proporciones del local, siempre', () => {
+  it('opción C: posición, equipo y cuántas personas SOLO con K; proporciones del local e ICP del equipo, siempre', () => {
     const c = cuerpo('pos_mi_rendimiento_equipo')
     expect(c).toContain("'ranking', case when coalesce(c.soy, false) and c.n >= k_min then")
     expect(c).toContain("'equipo', case when c.n >= k_min then (")
-    expect(c).toContain("'icp_equipo', case when c.n >= k_min then (")
+    expect(c).toContain("'personas', case when c.n >= k_min then c.n end,")
+    expect(c).toContain("'icp_equipo', (select case when g.total > 0")   // decisión B: sin K
     expect(c).toMatch(/'general', \(\n/)            // sin «case when c.n >= k_min»
     expect(c).not.toMatch(/'pax',\s+round\(g\.pax\)/) // sin PAX total del local
   })
@@ -77,8 +79,19 @@ describe('194 · permisos y forma', () => {
     expect(c).toContain("'desde', p_desde - 364, 'hasta', p_hasta - 364")
   })
 
-  it('competencias: el líder con su nombre (decisión A)', () => {
-    expect(cuerpo('pos_mi_competencia')).toContain("'lider_nombre', (select nombre from puntos order by pts desc, nombre limit 1)")
+  it('competencias: el líder con su nombre y sus puntos, siempre (decisiones A y B)', () => {
+    const c = cuerpo('pos_mi_competencia')
+    expect(c).toContain("'lider_nombre', (select nombre from puntos order by pts desc, nombre limit 1)")
+    expect(c).toContain("'lider_puntos', (select max(pts) from puntos)")
+  })
+
+  it('guarda R13: antes de crear nada, aborta si alguna de las seis ya existe', () => {
+    const i = CODIGO.indexOf('do $guarda194$')
+    expect(i).toBeGreaterThan(-1)
+    expect(i).toBeLessThan(CODIGO.indexOf('create or replace function'))
+    const g = CODIGO.slice(i, CODIGO.indexOf('$guarda194$;', i + 15))
+    for (const f of [...API, ...INTERNAS]) expect(g).toContain(`'public.${f.replace(/, /g, ',')}'`)
+    expect(g).toContain('if to_regprocedure(f) is not null then')
   })
 
   it('lista blanca: lo que devuelve la función del equipo son solo estas claves', () => {

@@ -285,7 +285,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   const avisoICP = delServidor && !icp.teamDisponible
     ? (equipoICP.cargando ? 'Cargando el ICP del equipo…' : textoMotivoEquipo(equipoICP.datos)) : null
 
-  // Competencias: el personal recibe su lugar de la base (194), sin nombres ni puntos de otros.
+  // Competencias: el personal recibe su lugar de la base (194), con el nombre y los puntos del líder (decisiones A y B, 18-nov); del resto, nada.
   const idsComps = useMemo(() => comps.filter(c => c.parts?.includes(activeName)).map(c => c.id), [comps, activeName])
   const misComps = useMisCompetencias(delServidor && !!activeName, idsComps)
 

@@ -13,11 +13,16 @@ vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { role
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import { datos } from './resumenV2.fixture'
-import { armarLectura } from './resumenV2'
+import { armarLectura, cifrasDelRango } from './resumenV2'
+import { mesDe, proyectarMes } from './proyeccion'
+import { getLocalesVentas } from './resumenV2Datos'
+import type { Meta } from '../../shared/types/ventas'
 const fx = datos('2026-09-01', 78)
 const cargar = vi.fn(async () => armarLectura(fx.tickets, fx.lineas, { '026': 'SALONERO_A', '027': 'SALONERO_B' }))
+const cargarRango = vi.fn(async () => armarLectura(fx.tickets, fx.lineas, {}))
 vi.mock('./resumenV2Datos', () => ({
   cargarLecturaResumen: (...a: unknown[]) => cargar(...(a as [])),
+  cargarLecturaRango: (...a: unknown[]) => cargarRango(...(a as [])),
   getLocalesVentas: vi.fn(async () => [{ id: 'santa-teresa', nombre: 'Local A' }]),
 }))
 
@@ -31,7 +36,9 @@ function Url() {
   useEffect(() => { ultima.url = l.pathname + l.search }, [l])
   return null
 }
-const abrir = (url: string) => render(<MemoryRouter initialEntries={[url]}><VentasResumen /><Url /></MemoryRouter>)
+const abrir = (url: string, metas?: Meta) => render(<MemoryRouter initialEntries={[url]}><VentasResumen metas={metas} /><Url /></MemoryRouter>)
+const META_NOV = 5_000_000 // ficticia
+const metas = { restaurante: { '2026-11': META_NOV }, margen: {}, global: {}, salMetas: {} } as unknown as Meta
 
 function contabilidad(anio: number, mes: number) {
   const { dias } = armarDiasMap(fx.tickets, fx.lineas, { desde: '2026-09-01', hasta: '2026-11-17' }, { uploadedAt: 'x', avisar: () => {} })
@@ -43,6 +50,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-11-19T05:30:00Z'))
   role = 'owner'
   cargar.mockClear()
+  cargarRango.mockClear()
 })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
@@ -57,8 +65,11 @@ describe('VentasResumen', () => {
     expect(celdas).toEqual(['TOTAL', '', fi(tot.ventaBruta), fi(tot.iva), fi(tot.serv), fi(tot.ventaNeta),
       fi(tot.salon), fi(tot.delivery), String(tot.pax)])
     // Barra en palabras y la bajada con datos.
-    expect(document.body.textContent).toContain('1 al 31 de octubre (31 días) contra 1 al 30 de septiembre')
-    expect(document.body.textContent).toMatch(/Vas \d+ % (arriba|abajo) del período anterior/)
+    expect(document.body.textContent).toContain('1 al 31 de octubre (31 días) contra el mes anterior (1–30 sep)')
+    expect(document.body.textContent).toMatch(/Vas \d+ % (arriba|abajo) del mes anterior \(1–30 sep\)/)
+    // Las tarjetas nombran la base con sus fechas (pedido del dueño del 18-nov), no «período anterior».
+    expect(document.querySelector('[data-cifra="ventaNeta"]')!.textContent).toContain('vs mes anterior (1–30 sep): ₡')
+    expect(document.body.textContent).not.toMatch(/período anterior/i)
     // Personas = PAX de Contabilidad; venta por persona con su rótulo de estimadas.
     expect(document.querySelector('[data-cifra="personas"] .vt-kpi-val')!.textContent).toBe(tot.pax.toLocaleString('es-CR'))
     expect(document.querySelector('[data-cifra="ventaPorPersona"]')!.textContent).toMatch(/incluye \d+,\d % estimado/)
@@ -96,7 +107,45 @@ describe('VentasResumen', () => {
     const llamadas = cargar.mock.calls.length
     fireEvent.change(screen.getByLabelText('Base B'), { target: { value: 'anioMismasFechas' } })
     await vi.waitFor(() => expect(ultima.url).toContain('b=anioMismasFechas'))
-    expect(document.body.textContent).toContain('contra 1 al 17 de noviembre de 2025')
+    expect(document.body.textContent).toContain('contra el año pasado, mismas fechas (1–17 nov 2025)')
     expect(cargar.mock.calls.length).toBe(llamadas)
+  })
+
+  it('meta del mes: noviembre a la fecha (hasta ayer, 1–17 nov), con la proyección de `proyeccion.ts`', async () => {
+    abrir('/ventas?tab=resumen&p=ayer', metas)
+    const bloque = await screen.findByText(/Meta de noviembre · a la fecha \(hasta ayer, 1–17 nov\)/)
+    expect(bloque).toBeTruthy()
+    // Lee el mes hasta ayer y las 8 semanas lunes–domingo de los pesos (21-sep a 15-nov) hasta el 17-nov.
+    expect(cargarRango).toHaveBeenCalledWith('santa-teresa', { desde: '2026-09-21', hasta: '2026-11-17' })
+    const rango = { desde: '2026-09-21', hasta: '2026-11-17' }
+    const l = armarLectura(fx.tickets, fx.lineas, {})
+    const esperado = proyectarMes({ meta: META_NOV, mes: mesDe('2026-11-17'), N: '2026-11-17',
+      netaPorDia: new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, d.ventaNeta])), primerDiaConDatos: '2024-01-05' })
+    await vi.waitFor(() => expect(document.querySelector('[data-meta="proyeccion"] .vt-kpi-val')).not.toBeNull())
+    expect(document.querySelector('[data-meta="proyeccion"] .vt-kpi-val')!.textContent).toBe(fi(Math.round(esperado.proyeccion)))
+    expect(document.querySelector('[data-meta="vendido"] .vt-kpi-val')!.textContent).toBe(fi(Math.round(esperado.vendido)))
+    expect(document.querySelector('[data-meta="necesario"]')!.textContent).toContain('13 días que faltan (con hoy)')
+    // El % de la meta aparece una sola vez (en «Vendido»); la proyección dice cuánto sobra o falta.
+    expect(document.querySelector('[data-meta="vendido"]')!.textContent).toMatch(/\d+ % de la meta/)
+    expect(document.querySelector('[data-meta="proyeccion"]')!.textContent).toMatch(/(sobre|debajo de) la meta/)
+    expect(document.querySelector('[data-meta="proyeccion"]')!.textContent).not.toMatch(/\d+ % de la meta/)
+    // Lo vendido a la fecha = la tarjeta de «Mes a la fecha» (mismo camino que Contabilidad).
+    expect(esperado.vendido).toBe(cifrasDelRango(l, { desde: '2026-11-01', hasta: '2026-11-17' }).totales.ventaNeta)
+  })
+
+  it('meta del mes: sin meta cargada lo dice y no lee nada de más', async () => {
+    abrir('/ventas?tab=resumen&p=ayer', { ...metas, restaurante: {} } as Meta)
+    await screen.findByText(/No hay meta cargada para noviembre/)
+    expect(cargarRango).not.toHaveBeenCalled()
+  })
+
+  it('meta del mes en otro local: avisa que no tiene meta propia y no lee ni proyecta', async () => {
+    vi.mocked(getLocalesVentas).mockResolvedValue([{ id: 'santa-teresa', nombre: 'Local A' }, { id: 'local-b', nombre: 'Local B' }])
+    abrir('/ventas?tab=resumen&p=ayer&local=local-b', metas)
+    await screen.findByText(/este local todavía no tiene meta propia/)
+    expect(cargarRango).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-meta="proyeccion"]')).toBeNull()
+    expect(cargar).toHaveBeenCalledWith('local-b', expect.objectContaining({ tipo: 'ayer' }))
+    vi.mocked(getLocalesVentas).mockResolvedValue([{ id: 'santa-teresa', nombre: 'Local A' }])
   })
 })

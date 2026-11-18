@@ -2,20 +2,24 @@
 // Barra global + bajada + cuatro cifras con dos bases + gráfico por día + alerta de ayer + detalle
 // por día (el de Contabilidad). Lee el PoS por las funciones de la 067 (`resumenV2Datos.ts`); el
 // cálculo es `resumenV2.ts`. Convive con las vistas viejas hasta la fase 3.5.
-// Meta y proyección (2.2) y quincenas (2.3) no están en esta fase.
+// Fase 2.2: bloque «Meta del mes» (`proyeccion.ts`) y bases con nombre concreto y fechas
+// («vs mes anterior a la misma fecha (1–17 oct)», pedido del dueño del 18-nov). Quincenas (2.3), todavía no.
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { dayOfWeek, dowLabel, fi } from './ventasUtils'
 import BarraVentasV2 from './BarraVentasV2'
-import { escribirBarra, leerBarra, periodoDeBarra, ROTULO_BASE } from './barraVentasV2'
-import { BASES, sumarDias, type BaseId } from './periodos'
+import { baseConFechas, escribirBarra, fechasDeBase, leerBarra, nombreBase, periodoDeBarra, rotuloBase } from './barraVentasV2'
+import { BASES, fechasCortas, sumarDias, type BaseId } from './periodos'
+import { mesDe, proyectarMes, rangoDeLecturaProyeccion, type Proyeccion } from './proyeccion'
+import type { Meta } from '../../shared/types/ventas'
 import {
   alertaDeAyer, avisoCalidad, bajada, cifrasDelRango, compararCifras, csvResumen, CIFRAS,
   UMBRAL_SIN_PAX_PCT, type CifrasRango, type Lectura,
 } from './resumenV2'
-import { cargarLecturaResumen, getLocalesVentas, type LocalVentas } from './resumenV2Datos'
+import { cargarLecturaRango, cargarLecturaResumen, getLocalesVentas, type LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
+import { PRIMERA_JORNADA_POS } from './ventasFuente'
 
 const casiCero = (x: number) => Math.abs(x) < 0.05
 const fmtPct = (x: number) => casiCero(x) ? '0,0 %' : `${x > 0 ? '+' : '−'}${Math.abs(x).toFixed(1).replace('.', ',')} %`
@@ -31,7 +35,7 @@ function fueraTxt(duenos: number, regalias: number): string {
 const fmtCifra = (id: string, v: number | null) =>
   v === null ? '—' : id === 'personas' ? fmtNum(v) : fi(Math.round(v))
 
-export default function VentasResumen() {
+export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
   const { profile } = useAuth()
   const role = profile?.role ?? ''
   const [sp, setSp] = useSearchParams()
@@ -100,7 +104,8 @@ export default function VentasResumen() {
         </div>
       )}
       {datos && <Contenido periodo={periodo} datos={datos} baseA={estado.baseA} baseB={estado.baseB}
-        nombres={lectura?.l.nombres ?? {}} abrirDetalle={role === 'contador'} />}
+        nombres={lectura?.l.nombres ?? {}} abrirDetalle={role === 'contador'}
+        meta={<MetaDelMes local={local} N={periodo.N} ancla={periodo.ancla} metas={metas} />} />}
     </div>
   )
 }
@@ -112,9 +117,10 @@ interface ContenidoProps {
   baseB: BaseId
   nombres: Record<string, string>
   abrirDetalle: boolean
+  meta?: React.ReactNode
 }
 
-function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle }: ContenidoProps) {
+function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle, meta }: ContenidoProps) {
   const { p, bases, alerta } = datos
   const A = bases[baseA], B = bases[baseB]
   const cmpA = compararCifras(p, A), cmpB = compararCifras(p, B)
@@ -129,7 +135,9 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle }: Cont
 
   return (
     <>
-      <p className="vt2-bajada">{bajada(p, { id: baseA, cifras: A }, { id: baseB, cifras: B })}</p>
+      <p className="vt2-bajada">{bajada(p,
+        { id: baseA, cifras: A, nombre: { ...nombreBase(periodo, baseA), fechas: fechasDeBase(periodo, baseA) } },
+        { id: baseB, cifras: B, nombre: { ...nombreBase(periodo, baseB), fechas: fechasDeBase(periodo, baseB) } })}</p>
 
       <div className="vt-kpi-grid vt2-cifras">
         {CIFRAS.map((c, i) => (
@@ -140,7 +148,7 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle }: Cont
               <div key={id} className={`vt-kpi-delta vt2-delta ${cmp.cambio === null || cmp.muestraChica || casiCero(cmp.cambio) ? 'gris' : cmp.cambio >= 0 ? 'sube' : 'baja'}`}
                 title={periodo.bases[id]?.rotulo ?? periodo.motivos[id] ?? ''}>
                 {cmp.cambio === null ? 'sin comparación' : `${cmp.muestraChica || casiCero(cmp.cambio) ? '' : cmp.cambio >= 0 ? '▲ ' : '▼ '}${fmtPct(cmp.cambio)}`}
-                <span className="vt2-delta-base"> vs {ROTULO_BASE[id].toLowerCase()} ({fmtCifra(c.id, cmp.base)})</span>
+                <span className="vt2-delta-base"> vs {baseConFechas(periodo, id)}: {fmtCifra(c.id, cmp.base)}</span>
               </div>
             ))}
             {c.id === 'ventaPorPersona' && (
@@ -160,7 +168,7 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle }: Cont
 
       {[baseA, baseB].map(id => (!periodo.bases[id] || periodo.bases[id]?.notaLargo || periodo.bases[id]?.nota) && (
         <div key={id} className="vt2-nota">
-          {ROTULO_BASE[id]}: {periodo.bases[id]
+          {rotuloBase(periodo, id)}: {periodo.bases[id]
             ? [periodo.bases[id]!.notaLargo, periodo.bases[id]!.nota].filter(Boolean).join(' · ')
             : periodo.motivos[id]}
         </div>
@@ -173,9 +181,11 @@ function Contenido({ periodo, datos, baseA, baseB, nombres, abrirDetalle }: Cont
         </div>
       )}
 
+      {meta}
+
       <AlertaAyer alerta={alerta} nombres={nombres} dia={periodo.N} />
 
-      <Grafico p={p} base={B} desdeBase={periodo.bases[baseB]?.desde ?? null} rotuloBase={ROTULO_BASE[baseB]} />
+      <Grafico p={p} base={B} desdeBase={periodo.bases[baseB]?.desde ?? null} rotuloBase={baseConFechas(periodo, baseB)} />
 
       <details className="vt2-detalle" open={abrirDetalle}>
         <summary>Detalle por día (igual que Contabilidad)</summary>
@@ -251,7 +261,88 @@ function Grafico({ p, base, desdeBase, rotuloBase }: { p: CifrasRango; base: Cif
         ))}
         {linea && <polyline points={linea} fill="none" stroke="var(--c-azul)" strokeWidth={2} />}
       </svg>
-      <figcaption>Barras: venta neta por día. Línea: {rotuloBase.toLowerCase()}, alineada día por día.</figcaption>
+      <figcaption>Barras: venta neta por día. Línea: {rotuloBase}, alineada día por día.</figcaption>
     </figure>
+  )
+}
+
+// ── Meta del mes (SPEC §4.3, fase 2.2) ──────────────────────────────────────────────────────
+
+const MESES_LARGOS = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+  'septiembre', 'octubre', 'noviembre', 'diciembre'] as const
+const pct0 = (x: number) => `${Math.round(x)} %`
+
+/**
+ * El mes de AYER (`N`), a la fecha: lo mismo que el resto del Resumen (hoy no entra). Siempre el mes
+ * en curso, sea cual sea el período elegido arriba. La meta es la de «Metas» (una por mes, del local
+ * principal): en otro local no se muestra.
+ */
+function MetaDelMes({ local, N, ancla, metas }: { local: string; N: string; ancla: string; metas?: Meta }) {
+  const mes = useMemo(() => mesDe(N), [N])
+  const ym = N.slice(0, 7)
+  const nombreMes = MESES_LARGOS[Number(N.slice(5, 7))]
+  const meta = metas?.restaurante?.[ym] ?? 0
+  const esPrincipal = local === LOCAL_POR_DEFECTO
+  const [r, setR] = useState<{ clave: string; p: Proyeccion } | null>(null)
+  const [fallo, setFallo] = useState<string | null>(null)
+  const clave = `${local}|${N}|${meta}`
+  useEffect(() => {
+    if (!esPrincipal || meta <= 0) return
+    let vivo = true
+    const rango = rangoDeLecturaProyeccion(mes, N)
+    cargarLecturaRango(local, rango)
+      .then(l => {
+        if (!vivo) return
+        const netaPorDia = new Map(cifrasDelRango(l, rango).dias.map(d => [d.fecha, d.ventaNeta]))
+        setR({ clave, p: proyectarMes({ meta, mes, N, netaPorDia, primerDiaConDatos: PRIMERA_JORNADA_POS }) })
+      })
+      .catch(e => { if (vivo) setFallo(e instanceof Error ? e.message : 'No se pudo leer el PoS') })
+    return () => { vivo = false }
+  }, [clave, esPrincipal, local, meta, mes, N])
+
+  const titulo = <div className="vt-sl">Meta de {nombreMes}</div>
+  if (!esPrincipal) {
+    return <div className="vt2-meta" data-bloque="meta-mes">{titulo}<p className="vt2-nota">Las metas de «Metas» son del local principal: este local todavía no tiene meta propia.</p></div>
+  }
+  if (meta <= 0) {
+    return <div className="vt2-meta" data-bloque="meta-mes">{titulo}<p className="vt2-nota">No hay meta cargada para {nombreMes}. Se carga en «Metas».</p></div>
+  }
+  if (fallo) return <div className="vt2-meta" data-bloque="meta-mes">{titulo}<p className="vt2-nota">No se pudo calcular la meta: {fallo}</p></div>
+  const p = r && r.clave === clave ? r.p : null
+  if (!p) return <div className="vt2-meta" data-bloque="meta-mes">{titulo}<p className="vt2-nota" role="status">Calculando la meta del mes…</p></div>
+  if (p.estado === 'sinDiasCerrados') {
+    return <div className="vt2-meta" data-bloque="meta-mes">{titulo}<p className="vt2-nota">{nombreMes[0].toUpperCase() + nombreMes.slice(1)} todavía no tiene días cerrados.</p></div>
+  }
+  const anio = Number(ancla.slice(0, 4))
+  const aLaFecha = p.cerrados ? fechasCortas(p.cerrados, anio) : ''
+  const cerrado = p.estado === 'mesCerrado'
+  const ritmoTxt = p.ritmo === null ? '—' : pct0(p.ritmo * 100)
+  return (
+    <div className="vt2-meta" data-bloque="meta-mes">
+      <div className="vt-sl">Meta de {nombreMes} · {cerrado ? `mes cerrado (${aLaFecha})` : `a la fecha (hasta ayer, ${aLaFecha})`}</div>
+      <div className="vt-kpi-grid">
+        <div className="vt-kpi" data-meta="meta"><div className="vt-kpi-label">Meta del mes</div><div className="vt-kpi-val">{fi(Math.round(p.meta))}</div></div>
+        <div className="vt-kpi" data-meta="vendido"><div className="vt-kpi-label">Vendido</div><div className="vt-kpi-val">{fi(Math.round(p.vendido))}</div>
+          <div className="vt-kpi-sub">{pct0(p.avancePct ?? 0)} de la meta · {p.diasCerrados} de {p.diasMes} días</div></div>
+        {!cerrado && <>
+          <div className="vt-kpi" data-meta="ritmo"><div className="vt-kpi-label">Ritmo</div><div className="vt-kpi-val">{ritmoTxt}</div>
+            <div className="vt-kpi-sub">de lo que tocaba a la fecha ({fi(Math.round(p.metaALaFecha ?? 0))}). Si sigue así, cierra en ese % de la meta</div></div>
+          <div className={`vt-kpi ${p.proyeccion >= p.meta ? 'green' : ''}`} data-meta="proyeccion"><div className="vt-kpi-label">Proyección del mes</div>
+            <div className="vt-kpi-val">{fi(Math.round(p.proyeccion))}</div>
+            <div className="vt-kpi-sub">{p.ponderada ? `± ${fi(Math.round(p.rango))} · ` : ''}{p.proyeccion >= p.meta
+              ? `${fi(Math.round(p.proyeccion - p.meta))} sobre la meta` : `${fi(Math.round(p.meta - p.proyeccion))} debajo de la meta`}</div></div>
+          <div className="vt-kpi" data-meta="necesario"><div className="vt-kpi-label">Necesario por día</div>
+            <div className="vt-kpi-val">{fi(Math.round(p.necesarioPorDia ?? 0))}</div>
+            <div className="vt-kpi-sub">{p.diasQueFaltan} {p.diasQueFaltan === 1 ? 'día que falta' : 'días que faltan'} (con hoy)</div></div>
+        </>}
+      </div>
+      {!cerrado && (
+        <p className="vt2-nota">
+          {p.ponderada
+            ? 'Proyección: lo vendido más los días que faltan, cada uno con el peso de su día de semana (promedio de las últimas 8 semanas cerradas, lunes a domingo). El ritmo compara lo vendido con la parte de la meta que tocaba a la fecha, repartida con esos mismos pesos. El ± es lo que suele apartarse un día de lo esperado, sin contar la temporada. No usa el día de hoy.'
+            : 'Sin 8 semanas cerradas de historia para pesar los días de semana: la proyección es lineal (lo vendido por día × los días del mes) y sin ±. No usa el día de hoy.'}
+        </p>
+      )}
+    </div>
   )
 }

@@ -133,8 +133,21 @@ function leerTramoAgregado(local: string, r: Rango): Promise<ParteAgregada> {
 
 /** Todo lo que el Resumen necesita para un período, sin facturas repetidas entre tramos. */
 export async function cargarLecturaResumen(local: string, p: PeriodoV2): Promise<Lectura> {
+  return leerTramos(local, tramosDeLectura(p))
+}
+
+/**
+ * Un solo rango (la meta del mes: el mes hasta ayer y las 8 semanas de los pesos), estirado como los
+ * del período. Mismo camino y misma memoria que el Resumen.
+ */
+export async function cargarLecturaRango(local: string, r: Rango): Promise<Lectura> {
+  const e = rangoDeLecturaParaEstimar(r)
+  const desde = e.desde < PRIMERA_JORNADA_POS ? PRIMERA_JORNADA_POS : e.desde
+  return leerTramos(local, desde <= e.hasta ? [{ desde, hasta: e.hasta }] : [])
+}
+
+async function leerTramos(local: string, tramos: Rango[]): Promise<Lectura> {
   const nombres = getSaloneroNombres().catch(() => ({} as Record<string, string>))
-  const tramos = tramosDeLectura(p)
   if (!funcionAusente) {
     try {
       const partes = await Promise.all(tramos.flatMap(r => partirTramo(r)).map(r => leerTramoAgregado(local, r)))

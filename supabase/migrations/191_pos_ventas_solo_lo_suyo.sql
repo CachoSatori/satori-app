@@ -30,9 +30,33 @@
 -- Función nueva para la API (decisión del dueño 18-nov 11:50, «C»): pos_nombres_por_login() → (login, nombre), solo
 -- owner/manager/contador (§5).
 --
--- Re-ejecutable. Rollback: scripts/sql/191_rollback.sql (vuelve EXACTO al cuerpo de la 067). Pruebas por rol:
--- scripts/sql/191_pruebas.sql (+ 191_pruebas.py; transacción que termina en ROLLBACK).
+-- Guarda (R13, como la 183): antes de reemplazar nada, exige que las tres funciones vivas sean EXACTAMENTE las de la
+-- 067 (md5 de pg_get_functiondef, leído en prod y en staging el 18-nov). Si alguna no coincide, aborta sin tocar nada.
+-- Por eso NO es re-ejecutable: una segunda pasada encuentra el cuerpo de la 191 y para.
+-- Vuelta atrás: una migración NUEVA hacia adelante (scripts/sql/191_rollback.sql, sin numerar; regla 10). Pruebas
+-- por rol: scripts/sql/191_pruebas.sql (+ 191_pruebas.py; transacción que termina en ROLLBACK).
 begin;
+
+-- ── Guarda: las tres funciones tienen que ser las de la 067 ───────────────────────────────
+do $guarda191$
+declare
+  r record;
+begin
+  for r in select * from (values
+    ('public.pos_ventas_tickets_rango(text,timestamptz,timestamptz,integer,integer)', 'ce7245d0f7d960d89e3ebc58ebec3813'),
+    ('public.pos_ventas_lineas(uuid[],integer,integer)',                               'ba41d0d5d0336ec079877a730ee804dd'),
+    ('public.pos_ventas_latido(text)',                                                 '22ff3225d2cee25ec2228b9598570dce')
+  ) as x(fn, esperado) loop
+    if to_regprocedure(r.fn) is null then
+      raise exception '191: falta % : se para sin tocar nada', r.fn;
+    end if;
+    if md5(pg_get_functiondef(to_regprocedure(r.fn))) <> r.esperado then
+      raise exception '191: % no es la de la 067 (md5 %, se esperaba %): se para sin tocar nada',
+        r.fn, md5(pg_get_functiondef(to_regprocedure(r.fn))), r.esperado;
+    end if;
+  end loop;
+end
+$guarda191$;
 
 -- ── 0. Mis logins del PoS ─────────────────────────────────────────────────────────────────
 create or replace function public.pos_mis_logins()

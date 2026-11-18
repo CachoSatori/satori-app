@@ -2,6 +2,7 @@
 -- (regla 4). Corre en STAGING (o Postgres local con la base armada) DENTRO de una transacción que termina en ROLLBACK:
 -- no deja nada. Se arma con scripts/sql/191_pruebas.py (--armar [--mutar X]); el runner llena los marcadores:
 --   marcador 191  → cuerpo de supabase/migrations/191_… sin begin/commit (con --mutar, con el arreglo roto a propósito)
+--   marcador 191G  → la guarda de la 191 (su bloque do, como sentencia dentro de una función)
 --   marcador 191R → cuerpo de scripts/sql/191_rollback.sql sin begin/commit (prueba que la vuelta atrás reabre la 067)
 -- Todo es FICTICIO: locales prueba191a / prueba191b, logins p191*, facturas del año 2030, usuarios 00000000-…-8191-….
 -- Necesita un owner ACTIVO en la base (el de staging; en local lo crea --semilla-local).
@@ -45,8 +46,8 @@ select set_config('request.jwt.claims', '', true);
 insert into public.profile_locations (profile_id, location_id, principal) values ((select manager_a from _c191), 'prueba191a', true);
 
 -- Empleados ficticios: el salonero tiene DOS filas (una vieja inactiva con otro login, con espacios a propósito);
--- el barman no tiene login. El caso «login reciclado» (dos filas con el mismo pos_login: gana la activa) NO SE PRUEBA
--- acá: staging tiene `employees_pos_login_key` (unique) y prod no (deriva de esquema, 18-nov). NO PROBADO en staging.
+-- el barman no tiene login. Dos filas con el MISMO pos_login no pueden existir (prod y staging tienen
+-- `employees_pos_login_key`, único parcial, sin btrim): el caso ' p191x1 ' cubre el recorte.
 insert into public.employees (full_name, role, profile_id, is_active, pos_login, created_at) values
   ('Salonero Ficticio Uno',      'salonero', (select salonero from _c191),          true,  'p191s1',    now()),
   ('Salonero Ficticio Uno Viejo','salonero', (select salonero from _c191),          false, ' p191x1 ',  now() - interval '400 days'),
@@ -178,6 +179,17 @@ begin
     perform pg_temp.chk('12 resumen 190: anon sin permiso', pg_temp.como_anon($q$select public.pos_ventas_resumen('prueba191a', '2030-01-10', '2030-01-10')$q$), '"ERR 42501"');
   end if;
 end $$;
+
+-- 13 · La guarda de la 191 (R13): con las funciones ya cambiadas, una segunda pasada aborta sin tocar nada.
+create function pg_temp.guarda_aborta() returns text language plpgsql as $f$
+begin
+  -- @@191G@@
+  return 'no abortó';
+exception when others then
+  return sqlstate || ' ' || left(sqlerrm, 40);
+end $f$;
+insert into _r191 (caso, ok, detalle)
+select '13 guarda: segunda pasada aborta', g like 'P0001 191: public.pos_ventas_tickets_rango%', g from pg_temp.guarda_aborta() g;
 
 -- 11 · Vuelta atrás: el rollback devuelve la 067 tal cual (la fuga vuelve) y borra lo nuevo.
 -- @@191R@@

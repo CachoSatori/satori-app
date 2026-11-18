@@ -1,10 +1,11 @@
--- Vuelta atrás de la 191 (ventas del PoS: cada uno ve solo lo suyo + pos_nombres_por_login).
--- Vuelve las tres funciones de la 067 a su cuerpo EXACTO (el de abajo es el código de la 067 tal cual, sin el encabezado) y
--- borra las dos funciones nuevas y la fila 191 del ledger. OJO: volver atrás REABRE la fuga (cualquier rol de Mi
--- Rendimiento ve las facturas de todos). Solo si la 191 rompe algo peor.
--- EN EL MISMO MOMENTO: un PR que saca supabase/migrations/191_pos_ventas_solo_lo_suyo.sql de main (regla 10: si
--- queda, Branching la vuelve a aplicar). Y revertir el código de la app de este PR (getSaloneroNombres y Mi
--- Rendimiento funcionan igual con la 067: la RPC de nombres que falta se ignora; las comparaciones quedan ocultas).
+-- Vuelta atrás de la 191, como MIGRACIÓN NUEVA HACIA ADELANTE (regla 10 de ESTADO: la fila 191 del ledger y el archivo
+-- supabase/migrations/191_pos_ventas_solo_lo_suyo.sql se QUEDAN; nunca se borran ni se revierten).
+-- Listo para usar, SIN NUMERAR: si hace falta, se copia a supabase/migrations/NNN_pos_ventas_vuelve_067.sql con el
+-- siguiente número libre del bloque de pase (registro + ESTADO en el mismo PR) y entra por merge → Branching, con firma.
+-- Vuelve las tres funciones al código EXACTO de la 067 (lo verifica por md5 al final) y borra las dos funciones nuevas.
+-- OJO: REABRE la fuga (cualquier rol de Mi Rendimiento ve las facturas de todos). Solo si la 191 rompe algo peor.
+-- La app de #292 funciona igual con la 067: la RPC de nombres que falta se ignora; las comparaciones quedan ocultas
+-- hasta revertir también el código (revert del merge; el .sql de la 191 se queda).
 begin;
 
 -- ── Código de supabase/migrations/067_pos_ventas_lectura_equipo.sql, tal cual (sin su encabezado de comentarios) ──
@@ -119,6 +120,22 @@ comment on function public.pos_ventas_latido(text) is
 drop function if exists public.pos_nombres_por_login();
 drop function if exists public.pos_mis_logins();
 
-delete from supabase_migrations.schema_migrations where version = '191';
+-- Verificación: las tres quedaron byte a byte como la 067 (mismo md5 que la guarda de la 191) y las nuevas no están.
+do $$
+declare r record;
+begin
+  for r in select * from (values
+    ('public.pos_ventas_tickets_rango(text,timestamptz,timestamptz,integer,integer)', 'ce7245d0f7d960d89e3ebc58ebec3813'),
+    ('public.pos_ventas_lineas(uuid[],integer,integer)',                               'ba41d0d5d0336ec079877a730ee804dd'),
+    ('public.pos_ventas_latido(text)',                                                 '22ff3225d2cee25ec2228b9598570dce')
+  ) as x(fn, esperado) loop
+    if md5(pg_get_functiondef(to_regprocedure(r.fn))) <> r.esperado then
+      raise exception 'vuelta atrás de la 191: % no quedó como la 067', r.fn;
+    end if;
+  end loop;
+  if to_regprocedure('public.pos_nombres_por_login()') is not null or to_regprocedure('public.pos_mis_logins()') is not null then
+    raise exception 'vuelta atrás de la 191: quedaron funciones de la 191';
+  end if;
+end $$;
 
 commit;

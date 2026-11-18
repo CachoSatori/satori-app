@@ -11,6 +11,7 @@
 
 ## 1. Qué pasa y qué no
 **Pasa:**
+- Guarda (R13, como la 183): antes de reemplazar, exige el md5 de la 067 en las tres funciones vivas; si no, aborta.
 - `pos_ventas_tickets_rango`, `pos_ventas_lineas`, `pos_ventas_latido` (067): **misma firma, mismas columnas**, nuevo
   criterio: owner/contador activos → todo; manager activo → solo `mis_locales()`; salonero/barman/barback/runner/cocina
   activos → solo las facturas con `btrim(salonero_login)` en sus `employees.pos_login`; el resto → nada. Las líneas,
@@ -30,7 +31,7 @@ La 190 en prod (leída el 18-nov, solo lectura) valida el rol adentro (owner/man
   `pos_ventas_tickets_rango` `ce7245d0…`, `pos_ventas_lineas` `ba41d0d5…`, `pos_ventas_latido` `22ff3225…`.
 - `pos_ndf_tickets`: un solo local (`santa-teresa`). Manager activo: asignado a `santa-teresa` (no cambia lo que ve).
 - Personal activo con perfil: todos con `pos_login` cargado (si falta, ese usuario deja de ver ventas en Mi Rendimiento).
-- `employees` en prod **no** tiene `unique (pos_login)` (staging sí: deriva). Un login con dos filas → gana la activa.
+- `employees` en prod (y en staging) tiene `employees_pos_login_key`: índice único parcial sobre `pos_login` (`where pos_login is not null`), **sin `btrim`**. Dos filas con el mismo login exacto no pueden existir; sí `'X'` y `' X '`, que la 191 junta (gana la activa).
 
 ## 3. Pruebas en staging (`hwiatgic…`, transacción que termina en ROLLBACK)
 - `scripts/sql/191_pruebas.py --armar --compacto` (casos 01–10, sin la sección 11 de la vuelta atrás): **35/35**.
@@ -39,8 +40,11 @@ La 190 en prod (leída el 18-nov, solo lectura) valida el rol adentro (owner/man
   facturas y líneas de otros, barman y cocina sin login ven todo, latido del manager en B).
 - Humo con datos de staging (120 días, primera página): owner/contador/manager 1000 → 1000; salonero real 1000 → 554
   (= sus facturas); barman y cocina sin login 1000 → 0.
-- **NO PROBADO en staging:** la sección 11 (vuelta atrás dentro de la batería: el conector pide confirmación para `drop`
-  y la cancela) y las mutaciones `nombres_todos` y `sin_trim` del runner (están; correrlas con `--local`).
+- Con la guarda md5 (R13), tras traer la 190: 190 + 191 + casos 01–13 + la vuelta atrás sin los `drop` (el conector los
+  cancela): **46/46**. La guarda pasa con la 067, una segunda pasada aborta (P0001) y la vuelta atrás deja las tres
+  funciones con el md5 exacto de la 067.
+- **NO PROBADO en staging:** los `drop` de la vuelta atrás y las mutaciones `nombres_todos`, `sin_trim` y
+  `guarda_floja` del runner (están; correrlas con `--local`).
 
 ## 4. Antes del merge (prod, solo lectura, `begin read only` … `rollback`)
 - Ledger: última = **190**. Si no, **no se mergea**.
@@ -58,9 +62,13 @@ La 190 en prod (leída el 18-nov, solo lectura) valida el rol adentro (owner/man
 - Ledger distinto de 190 o md5 distinto: **no se mergea**.
 - Branching en rojo o §5 distinto: se para, se avisa y se decide la vuelta atrás. No se arregla a mano.
 
-## 7. Vuelta atrás
-`scripts/sql/191_rollback.sql` (cuerpo exacto de la 067 + borra las dos funciones nuevas y la fila `191`). **Reabre la
-fuga.** En el mismo momento, un PR que saca el `.sql` de `main` (regla 10) y revierte la app.
+## 7. Vuelta atrás (regla 10: la fila 191 y su `.sql` se QUEDAN)
+Una **migración nueva hacia adelante**, ya escrita y sin numerar: `scripts/sql/191_rollback.sql`. Si hace falta, se copia
+a `supabase/migrations/NNN_pos_ventas_vuelve_067.sql` con el siguiente número libre del bloque de pase (registro y ESTADO
+en el mismo PR), con firma, y entra por merge → Branching. Vuelve las tres funciones al código exacto de la 067 (lo
+verifica por md5 al final) y borra `pos_nombres_por_login` y `pos_mis_logins`. **Reabre la fuga.** La app de este PR
+funciona con la 067 (la RPC de nombres que falta se ignora); si además se quiere devolver las comparaciones, revert del
+código (el `.sql` de la 191 se queda).
 
 ## 8. Firma y bitácora
 | Cuándo (-06:00) | Quién | Qué |

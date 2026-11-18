@@ -33,6 +33,8 @@ MUTACIONES: dict[str, tuple] = {
     'nombres_todos': ([("  where public.get_my_role() in ('owner', 'manager', 'contador')\n    and nullif(btrim(e.pos_login)",
                         "  where public.get_my_role() is not null\n    and nullif(btrim(e.pos_login)", 1)],
                       {'08 salonero'}),
+    # la guarda no compara (siempre pasa)
+    'guarda_floja': ([("    if md5(pg_get_functiondef(to_regprocedure(r.fn))) <> r.esperado then\n", "    if false then\n", 1)], {'13'}),
     # sin recortar el login (los espacios del PoS dejan afuera facturas propias)
     'sin_trim': ([("and btrim(t.salonero_login) = any (yo.logins)", "and t.salonero_login = any (yo.logins)", 2)],
                  {'04 salonero ve solo lo suyo A', '06 salonero'}),
@@ -51,9 +53,12 @@ def armar(mutar: str | None) -> str:
                 sys.exit(f'mutación {mutar}: el ancla aparece {mig.count(viejo)} veces (se esperaban {veces})')
             mig = mig.replace(viejo, nuevo)
     bat = BATERIA.read_text(encoding='utf-8')
-    for marca in ('-- @@191@@', '-- @@191R@@'):
+    for marca in ('-- @@191@@', '-- @@191R@@', '-- @@191G@@'):
         if bat.count(marca) != 1:
             sys.exit(f'falta el marcador {marca}')
+    i = mig.index('do $guarda191$'); j = mig.index('$guarda191$;', i) + len('$guarda191$;')
+    guarda = mig[i:j].replace('$guarda191$', '$g$')  # dentro de la función: el bloque do tal cual, con otro dólar
+    bat = bat.replace('-- @@191G@@', 'execute ' + "$q$" + guarda.rstrip(';') + "$q$;")
     bat = bat.replace('-- @@191@@', _sin_beg_com(mig))
     return bat.replace('-- @@191R@@', _sin_beg_com(ROLLBACK.read_text(encoding='utf-8')))
 

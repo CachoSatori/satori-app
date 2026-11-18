@@ -62,3 +62,22 @@ describe('mig 191 — cada uno ve lo suyo', () => {
     expect(codigo).not.toMatch(/create policy|alter table/i)   // regla 6: pos_ndf_* sin policy nueva; employees tampoco
   })
 })
+
+describe('mig 191 — guarda md5 (R13) y vuelta atrás hacia adelante (regla 10)', () => {
+  const MD5_067 = ['ce7245d0f7d960d89e3ebc58ebec3813', 'ba41d0d5d0336ec079877a730ee804dd', '22ff3225d2cee25ec2228b9598570dce']
+  const rollback = fs.readFileSync(path.resolve(__dirname, '../../../scripts/sql/191_rollback.sql'), 'utf8')
+
+  it('la guarda va ANTES del primer create or replace y exige el md5 de la 067 en las tres', () => {
+    const codigo = sinComentarios(m191)
+    const guarda = codigo.indexOf('do $guarda191$')
+    expect(guarda).toBeGreaterThan(0)
+    expect(guarda).toBeLessThan(codigo.indexOf('create or replace function'))
+    for (const h of MD5_067) expect(codigo.slice(guarda, codigo.indexOf('$guarda191$;'))).toContain(h)
+  })
+
+  it('la vuelta atrás no toca el ledger y verifica el md5 de la 067 al final', () => {
+    const codigo = sinComentarios(rollback)
+    expect(codigo).not.toMatch(/schema_migrations/i)
+    for (const h of MD5_067) expect(codigo).toContain(h)
+  })
+})

@@ -327,6 +327,12 @@
       "rama": "claude/pos-ventas-solo-lo-suyo",
       "renumerada_a": "191"
     },
+    "137": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "club",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "renumerada_a": "192"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -566,6 +572,12 @@
       "bloque": "pase",
       "rama": "claude/pos-ventas-solo-lo-suyo",
       "origen": "135"
+    },
+    "192": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "pase",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "origen": "137"
     }
   }
 }

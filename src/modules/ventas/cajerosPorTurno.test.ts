@@ -203,6 +203,11 @@ describe('REAGRUPA, NO RECALCULA: el día no se mueve', () => {
       iva: x.iva + y.iva, serv: x.serv + y.serv, ordenes,
       ticketProm: ordenes > 0 ? Math.round(total / ordenes) : 0,
       prods: [...prods.entries()].map(([nom, [q, m]]) => [nom, q, m] as [string, number, number]),
+      // El crudo en céntimos (opción A, 18-nov) también se funde: es lo que suma el día.
+      ...(x.crudoCts && y.crudoCts ? { crudoCts: {
+        neta: x.crudoCts.neta + y.crudoCts.neta, iva: x.crudoCts.iva + y.crudoCts.iva,
+        serv: x.crudoCts.serv + y.crudoCts.serv, delivery: x.crudoCts.delivery + y.crudoCts.delivery,
+      } } : {}),
     }
   }
   const antes = (): DiaData => {

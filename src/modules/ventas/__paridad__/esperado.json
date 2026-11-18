@@ -34,7 +34,13 @@
        2,
        4000
       ]
-     ]
+     ],
+     "crudoCts": {
+      "neta": 2000000,
+      "iva": 260000,
+      "serv": 200000,
+      "delivery": 0
+     }
     },
     "Cajero turno mañana": {
      "esCajero": true,
@@ -57,7 +63,13 @@
        1,
        2000
       ]
-     ]
+     ],
+     "crudoCts": {
+      "neta": 1000000,
+      "iva": 130000,
+      "serv": 0,
+      "delivery": 0
+     }
     },
     "MESERO DOS": {
      "pax": 3,
@@ -86,7 +98,13 @@
        3,
        6000
       ]
-     ]
+     ],
+     "crudoCts": {
+      "neta": 4500000,
+      "iva": 585000,
+      "serv": 300000,
+      "delivery": 1500000
+     }
     }
    }
   },
@@ -115,7 +133,13 @@
        5,
        10000
       ]
-     ]
+     ],
+     "crudoCts": {
+      "neta": 1000000,
+      "iva": 130000,
+      "serv": 100000,
+      "delivery": 0
+     }
     }
    }
   }
@@ -181,6 +205,12 @@
    "delivery": 15000,
    "pax": 6,
    "promPax": 10000,
+   "crudoCts": {
+    "neta": 7500000,
+    "iva": 975000,
+    "serv": 500000,
+    "delivery": 1500000
+   },
    "saloneroNames": [
     "MESERO UNO",
     "MESERO DOS"
@@ -196,6 +226,12 @@
    "delivery": 0,
    "pax": 1,
    "promPax": 10000,
+   "crudoCts": {
+    "neta": 1000000,
+    "iva": 130000,
+    "serv": 100000,
+    "delivery": 0
+   },
    "saloneroNames": [
     "MESERO UNO"
    ]

@@ -173,10 +173,10 @@ describe('paridad de FORMA con armarDia / «En vivo»', () => {
     for (const e of entradas) {
       if ('esCajero' in e && e.esCajero) {
         expect(Object.keys(e).sort()).toEqual(
-          ['delivery', 'esCajero', 'iva', 'ordenes', 'prods', 'salon', 'serv', 'ticketProm', 'total'])
+          ['crudoCts', 'delivery', 'esCajero', 'iva', 'ordenes', 'prods', 'salon', 'serv', 'ticketProm', 'total'])
       } else {
         expect(Object.keys(e).sort()).toEqual(
-          ['bebPax', 'beb', 'com', 'iBeb', 'iCom', 'iva', 'pax', 'promBebida', 'promPax',
+          ['bebPax', 'beb', 'com', 'crudoCts', 'iBeb', 'iCom', 'iva', 'pax', 'promBebida', 'promPax',
            'promPlato', 'prods', 'ratioCB', 'ratioU', 'serv', 'total'].sort())
       }
       expect(Array.isArray(e.prods)).toBe(true)
@@ -325,10 +325,11 @@ describe('aHistMap / getHistDesdePos — el equivalente de ventas_hist', () => {
     const dia = armar(TODOS, LINEAS, RANGO)['2026-09-05']
     const s = getDayStats(dia)
     const h = aHistDay(dia)
-    // `getDayStats` trae dos campos que `HistDay` no tiene; el resto es idéntico.
+    // `getDayStats` trae tres campos que `HistDay` no tiene; el resto es idéntico.
     const numeros = { ...s } as Partial<typeof s>
     delete numeros.fecha
     delete numeros.saloneroNames
+    delete numeros.crudoCts
     expect(h).toEqual({ ...numeros, source: 'hist' })
   })
 

@@ -1,4 +1,4 @@
-import type { CajeroDay, DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
+import type { CajeroDay, CrudoCts, DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
 import {
   businessDateDe, getLineasDeTickets, getMesasAbiertas, getTicketsDeJornadas,
   getPedidosCerradosJornada, getSaloneroNombres, getTicketsJornada, getUltimoPollPoS,
@@ -278,6 +278,7 @@ export function armarDia(
       esCajero: !esMesero,
       pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, iva: 0, serv: 0,
       delivery: 0, ordenes: 0,
+      cts: { neta: 0, iva: 0, serv: 0, delivery: 0 },
       prods: new Map<string, { q: number; m: number }>(),
     }
     e.pax     += paxDelTicket(t)
@@ -288,6 +289,13 @@ export function armarDia(
     // Para TODOS los baldes, meseros incluidos: así `getDayStats` separa el delivery también en
     // la venta de un salonero (antes solo lo hacía en los baldes de caja).
     if (esDelivery(t)) e.delivery += netoDe(t)
+    // Lo mismo, crudo y en céntimos enteros (decisión del dueño 18-nov, opción A): el TOTAL del
+    // día se redondea UNA vez sobre esta suma en `getDayStats`, así no depende de a qué persona
+    // le tocó cada factura. Céntimos enteros: la suma no arrastra ruido de coma flotante.
+    e.cts.neta += aCts(netoDe(t))
+    e.cts.iva  += aCts(n(t.iva_crc))
+    e.cts.serv += aCts(n(t.servicio_crc))
+    if (esDelivery(t)) e.cts.delivery += aCts(netoDe(t))
 
     for (const l of porTicket.get(t.id) ?? []) {
       // El "artículo pax" cuenta comensales, no es algo que se venda: fuera del mix, igual
@@ -347,6 +355,7 @@ export function armarDia(
         ordenes:    e.ordenes,
         ticketProm: e.ordenes ? total / e.ordenes : 0,
         prods,
+        crudoCts:   e.cts,
       }
       continue
     }
@@ -371,6 +380,7 @@ export function armarDia(
       ratioU:     e.iBeb ? e.iCom  / e.iBeb : 0,
       bebPax:     e.pax  ? e.iBeb  / e.pax  : 0,
       prods,
+      crudoCts:   e.cts,
     }
   }
 
@@ -391,8 +401,13 @@ interface AccEntrada {
   esCajero: boolean
   pax: number; total: number; com: number; beb: number; iCom: number; iBeb: number
   iva: number; serv: number; delivery: number; ordenes: number
+  /** Neta, IVA, servicio y delivery crudos, en céntimos enteros (ver `SaloneroDay.crudoCts`). */
+  cts: CrudoCts
   prods: Map<string, { q: number; m: number }>
 }
+
+/** ₡ → céntimos enteros. El único redondeo por factura, a 0,01 ₡ (no a 1 ₡). */
+const aCts = (crc: number): number => Math.round(crc * 100)
 
 /**
  * El login del PoS → cómo se muestra. Es la CLAVE del ranking: todo lo que agrupa por salonero

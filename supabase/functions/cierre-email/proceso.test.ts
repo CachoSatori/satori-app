@@ -21,6 +21,7 @@ function deps(over: Partial<DepsCierre> = {}, cierre: CierreFila | null = CIERRE
     usuarioValido: async () => true,
     hayResend: true,
     hayDestinatario: true,
+    hayRemitente: true,
     leerCierre: async () => ({ data: cierre, error: errorRls }),
     resumen: (c) => resumenParaCierre(c, {
       logica: edge as unknown as LogicaResumen,
@@ -106,6 +107,16 @@ describe('procesarCierre', () => {
     expect(r.status).toBe(500)
     expect(leido).toBe(false)
     expect(lecturasPos).toEqual([])
+  })
+
+  it('sin remitente → 500 y no lee el cierre ni el PoS', async () => {
+    let leido = false
+    const { d, lecturasPos, logs } = deps({ hayRemitente: false, leerCierre: async () => { leido = true; return { data: CIERRE, error: null } } })
+    const r = await procesarCierre({ cierre_id: 'c1' }, d)
+    expect(r.body).toMatchObject({ code: 'falta_remitente' })
+    expect(leido).toBe(false)
+    expect(lecturasPos).toEqual([])
+    expect(logs).toContainEqual({ etapa: 'falta remitente', secreto: 'REMITENTE_CORREOS' })
   })
 
   it('falta cierre_id → 400', async () => {

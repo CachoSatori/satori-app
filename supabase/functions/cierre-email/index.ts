@@ -23,7 +23,7 @@
  * (prod va en el pase, con firma — NO tocar prod acá.)
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { destinatarioDe } from './destinatario.ts'
+import { destinatarioDe, remitenteDe } from './destinatario.ts'
 import { procesarCierre, type CierreFila } from './proceso.ts'
 import { resumenParaCierre, type LogicaResumen } from './resumen.ts'
 import { leerNombres, leerVentanaJornada, logica } from './lecturaPos.ts'
@@ -36,7 +36,8 @@ const SERVICE_KEY    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 // Mismo destinatario/config que monthly-report (en prod ya existe por ese reporte).
 // Sin correo por defecto en el código (firma del dueño, 16-nov): sin REPORT_TO_EMAIL no se manda nada.
 const TO_EMAIL       = destinatarioDe(Deno.env.get('REPORT_TO_EMAIL'))
-const FROM_EMAIL     = 'Satori <no-responder@satoricostarica.com>'
+// Remitente propio (dominio verificado en Resend): del secreto REMITENTE_CORREOS, no escrito en el repo.
+const FROM_EMAIL     = remitenteDe(Deno.env.get('REMITENTE_CORREOS'))
 
 const ALLOWED_ORIGINS = new Set([
   'https://cachosatori.github.io',    // prod — GitHub Pages (base /satori-app/)
@@ -78,6 +79,7 @@ Deno.serve(async (req) => {
       usuarioValido: async () => !!(await userClient!.auth.getUser()).data?.user,
       hayResend: !!RESEND_API_KEY,
       hayDestinatario: !!TO_EMAIL,
+      hayRemitente: !!FROM_EMAIL,
       // 4) Releer la fila del cierre CON el cliente del usuario → el RLS es el portón.
       //    Solo cierres COMPLETOS: un parcial no tiene resumen final que enviar.
       leerCierre: async (id) => {

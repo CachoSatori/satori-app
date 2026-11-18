@@ -291,6 +291,12 @@
       "rama": "claude/club-descuentos-todas-lineas",
       "renumerada_a": "184"
     },
+    "132": {
+      "nombre": "club_socio_edad",
+      "bloque": "club",
+      "rama": "claude/club-4-arreglos-edad",
+      "renumerada_a": "188"
+    },
     "131": {
       "nombre": "club_reto_un_local",
       "bloque": "club",
@@ -506,6 +512,12 @@
       "bloque": "pase",
       "rama": "claude/forzar-cambio-clave",
       "origen": "099"
+    },
+    "188": {
+      "nombre": "club_socio_edad",
+      "bloque": "pase",
+      "rama": "claude/club-4-arreglos-edad",
+      "origen": "132"
     },
     "187": {
       "nombre": "club_reto_un_local",

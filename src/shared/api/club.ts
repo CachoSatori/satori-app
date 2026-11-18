@@ -726,6 +726,12 @@ export const getCumpleProximos = () => llamar<CumpleProximos>('club_cumple_proxi
 /** Marca «enviado» (una por socio y año del cumpleaños) y devuelve lo necesario para armar el WhatsApp. Queda auditado. */
 export type CumpleEnvio = CumpleConfig & { nombre: string; whatsapp: string; cumple: string; desde: string; hasta: string }
 export const enviarCumple = (miembro: string) => llamar<CumpleEnvio>('club_cumple_enviar', { p_miembro: miembro, p_location: localClub })
+/** Mig 186: «Ya saludados» del Inicio (solo owner): socios del local con la marca «enviado» de su próximo cumpleaños. */
+export interface CumpleEnviado { miembro_id: string; nombre: string; faltan: number; enviado_en: string }
+export const getCumplesEnviados = () => llamar<CumpleEnviado[]>('club_cumple_enviados', { p_location: localClub })
+/** Mig 186: el owner deshace la marca «enviado» (nota obligatoria, 3 a 500 caracteres). Queda auditado. */
+export const deshacerEnvioCumple = (miembro: string, nota: string) =>
+  llamar<boolean>('club_cumple_deshacer_envio', { p_miembro: miembro, p_nota: nota, p_location: localClub })
 /** Caja: ¿hoy cae en la ventana de su cumpleaños? Nunca devuelve la fecha. Mig 175: `ya_uso` = ya usó el beneficio del
  *  año de este cumpleaños (en cualquier local); sin la 175 no viene. */
 export type CumpleEnCaja = { aplica: false } | ({ aplica: true; ya_uso?: boolean } & Pick<CumpleConfig,

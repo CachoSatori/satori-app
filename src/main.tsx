@@ -2,6 +2,11 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { iniciarRecuperacion } from './shared/api/recuperarClave'
+
+// «¿Olvidaste tu contraseña?»: el oyente de PASSWORD_RECOVERY tiene que estar puesto en esta misma pasada (antes de
+// que supabase-js termine de leer el enlace de la URL). Ver shared/api/recuperarClave.ts.
+iniciarRecuperacion()
 
 // Auto-actualización del PWA: al detectar versión nueva, el SW nuevo toma control
 // (skipWaiting/clientsClaim) y acá se recarga UNA vez para servir la versión actual.

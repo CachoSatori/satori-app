@@ -140,6 +140,8 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 127 | → 182 |
 | 128 | → 183 |
 | 129 | → 184 |
+| 131 | → 187 (retos: un local por reto + tope de 3 armados por año por local; PR en borrador, sin firma; va después de la 186) |
+| 130 | → 186 (cumpleaños: el owner deshace «enviado»; PR en borrador, sin firma) |
 | 132 | → 188 (getEdadSocio por función con control de local; PR en borrador, sin firma; va después de la 186 y la 187) |
 | 150 | ← 075 |
 | 151 | ← 100 |
@@ -175,6 +177,8 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | 183 | ← 128 |
 | 184 | ← 129 |
 | 185 | ← 099 (en PR, sin firma; entra a prod por merge → Branching) |
+| 187 | ← 131 (en PR, sin firma; después de la 186; entra a prod por merge → Branching) |
+| 186 | ← 130 (en PR, sin firma; entra a prod por merge → Branching) |
 | 188 | ← 132 (en PR, sin firma; después de la 186 y la 187; entra a prod por merge → Branching) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.

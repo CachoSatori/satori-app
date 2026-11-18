@@ -315,6 +315,12 @@
       "rama": "claude/correo-contador-ventas-dia",
       "renumerada_a": "189"
     },
+    "134": {
+      "nombre": "pos_ventas_resumen",
+      "bloque": "club",
+      "rama": "claude/ventas-v2-resumen-fn",
+      "renumerada_a": "190"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -542,6 +548,12 @@
       "bloque": "pase",
       "rama": "claude/correo-contador-ventas-dia",
       "origen": "133"
+    },
+    "190": {
+      "nombre": "pos_ventas_resumen",
+      "bloque": "pase",
+      "rama": "claude/ventas-v2-resumen-fn",
+      "origen": "134"
     }
   }
 }

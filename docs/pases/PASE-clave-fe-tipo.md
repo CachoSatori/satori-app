@@ -31,7 +31,8 @@
 ## 2. SHA y huellas
 - Rama `claude/puente-clave-fe-tipo`, base `claude/puente-salonero-lineas` @ `89c5aa42ba7692d3bca421cdc352333946b9e017`.
 - La firma va sobre el **SHA de la cabeza del PR** (§7). Árboles a la fecha de este archivo (se recalculan si el PR
-  cambia): ver el cuerpo del PR (`git rev-parse HEAD:pos-bridge` y `HEAD:src/shared/ndf`). `src/shared/ndf` no cambia.
+  cambia): `pos-bridge` `74abcd401b5ff50370c635cc0d8a949e36e25fe4` · `src/shared/ndf`
+  `244b0d0530676e3da8c7fa0835ca901354671045` (no cambia contra `89c5aa4`; `pos-bridge` en `89c5aa4` era `acbef1f2…`).
 - Contra `89c5aa4` cambian solo 4 archivos de código: `pos-bridge/{backfill.ts, backfill.test.ts, consultaAgente.ts,
   consultaAgente.test.ts}` (más este PASE y `scripts/sql/clave_fe_tipo_humo.sql`, que no corren en la PC).
 
@@ -57,7 +58,7 @@ diferencia es parada.
 **Preámbulo** — cambiar solo estos valores (el resto, idéntico):
 ```powershell
 $SHA = 'PEGAR-ACA-EL-SHA-FIRMADO'; $SHA_PROD = '89c5aa42ba7692d3bca421cdc352333946b9e017'
-$ARBOL = 'PEGAR-ARBOL-pos-bridge-DEL-PR'; $ARBOL_NDF = 'PEGAR-ARBOL-src/shared/ndf-DEL-PR'
+$ARBOL = '74abcd401b5ff50370c635cc0d8a949e36e25fe4'; $ARBOL_NDF = '244b0d0530676e3da8c7fa0835ca901354671045'
 $RAMA = 'claude/puente-clave-fe-tipo'; $PRUEBAS = 499
 $NUEVA = 'C:\satori\agente-fe'; $CMD_NUEVO = 'C:\satori\pos-agente-prod-fe.cmd'; $VUELTA = 'C:\satori\fe-vuelta'
 ```

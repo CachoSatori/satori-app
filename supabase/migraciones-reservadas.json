@@ -327,6 +327,12 @@
       "rama": "claude/pos-ventas-solo-lo-suyo",
       "renumerada_a": "191"
     },
+    "136": {
+      "nombre": "pos_ventas_tiempos",
+      "bloque": "club",
+      "rama": "claude/ventas-v2-23-tiempos",
+      "renumerada_a": "193"
+    },
     "137": {
       "nombre": "propinas_cada_uno_lo_suyo",
       "bloque": "club",
@@ -584,6 +590,12 @@
       "bloque": "pase",
       "rama": "claude/propinas-solo-lo-suyo",
       "origen": "137"
+    },
+    "193": {
+      "nombre": "pos_ventas_tiempos",
+      "bloque": "pase",
+      "rama": "claude/ventas-v2-23-tiempos",
+      "origen": "136"
     },
     "194": {
       "nombre": "mi_rendimiento_equipo",

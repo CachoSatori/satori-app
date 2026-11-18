@@ -108,14 +108,14 @@ const esBase = (s: string | null): s is BaseId => !!s && (BASES as readonly stri
 const dia = (s: string | null) => (s && RE_DIA.test(s) ? s : undefined)
 
 /** Lee la barra de la URL. Lo que no se entiende cae al valor por defecto (nunca rompe). */
-export function leerBarra(sp: URLSearchParams): EstadoBarra {
+export function leerBarra(sp: URLSearchParams, porDefecto: TipoPeriodoV2 = PERIODO_POR_DEFECTO): EstadoBarra {
   const p = sp.get('p')
   let baseA: BaseId = esBase(sp.get('a')) ? (sp.get('a') as BaseId) : BASES_POR_DEFECTO[0]
   let baseB: BaseId = esBase(sp.get('b')) ? (sp.get('b') as BaseId) : BASES_POR_DEFECTO[1]
   if (baseA === baseB) { baseA = BASES_POR_DEFECTO[0]; baseB = BASES_POR_DEFECTO[1] }
   return {
     local: sp.get('local') || null,
-    tipo:  esTipo(p) ? p : PERIODO_POR_DEFECTO,
+    tipo:  esTipo(p) ? p : porDefecto,
     dia:   dia(sp.get('d')),
     desde: dia(sp.get('desde')),
     hasta: dia(sp.get('hasta')),

@@ -1,12 +1,12 @@
-# Pase a PROD de la mig 194 `mi_rendimiento_equipo` (origen club 138) — **número provisorio**
+# Pase a PROD de la mig 194 `mi_rendimiento_equipo` (origen club 138) — **número definitivo**
 
 > **⛔ Esquema y permisos: firma del dueño sobre el SHA exacto.** Pedido del dueño del 18-nov 12:55 («quiero que ellos
 > evalúen su propio rendimiento personal […] y poder evaluarlos personalmente además de en equipo»), opción A. Si algo no
 > coincide, **se para y se avisa**.
 >
 > - **Vía:** merge → Branching. No se aplica nada a mano.
-> - **Número provisorio:** 194 (la 193 la reserva #294). **Se fija al mergear**: si al momento del merge el ledger de
->   prod ya pasó la 194 o la 193 no entró, se renumera al siguiente libre (archivo, registro, ESTADO, PASE, scripts).
+> - **Número definitivo:** 194 (la 193 entró con #294; ledger de prod = 193 el 18-nov). Si al momento del merge el ledger de
+>   prod ya pasó la 194, se para y se renumera al siguiente libre (archivo, registro, ESTADO, PASE, scripts).
 > - **Orden:** después de la 191 (#292, en `main` desde el 18-nov 13:05) y de la 192 (`propinas_cada_uno_lo_suyo`,
 >   #295, en prod 13:41). La 194 usa `pos_mis_logins()` de la 191; no toca la 192 ni la 193.
 > - **Ledger:** exactamente 1 fila `194` con su `name`.
@@ -44,7 +44,7 @@
 **No pasa:** tablas, columnas, policies (regla 6), datos, las funciones de la 067/190/191, sagrados.
 
 ## 2. Prerrequisitos (prod, solo lectura, antes del merge)
-- Ledger prod = **193** (si #294 entró antes) o **192**. `to_regprocedure('public.pos_mis_logins()')` y
+- Ledger prod = **193** (#294 entró el 18-nov). `to_regprocedure('public.pos_mis_logins()')` y
   `to_regprocedure('public.propinas_mis_empleados()')` no null.
 - `to_regprocedure('public.pos_mi_rendimiento_equipo(text,date,date)')` = null.
 - `tip_sessions.location_id` usa los mismos ids que `pos_ndf_tickets.local` (`santa-teresa`).

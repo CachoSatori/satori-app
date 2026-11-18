@@ -20,6 +20,7 @@ import { alertaMesasSinPax, facturasDesdePos, ventaPorPersona, diaCRDeFactura,
   type AlertaMesasSinPax, type FacturaIndicador, type VentaPorPersona } from './indicadores'
 import type { BaseId, PeriodoV2, Rango } from './periodos'
 import { contabilidadDayDeAgregado, juntarAgregados, type DiaAgregado, type ParteAgregada } from './resumenV2Agregado'
+import type { InternaRpc } from './tiemposV2Rpc'
 import { armarDiasMap } from './ventasDiasDesdePos'
 import { getDayStats, totalesContabilidad, type TotalesContabilidad } from './ventasUtils'
 
@@ -41,6 +42,11 @@ export interface Lectura {
   nombres:   Record<string, string>
   /** Solo por la 190: los días CR de factura, en céntimos crudos. */
   dias?:     ReadonlyMap<string, DiaAgregado>
+  /**
+   * Facturas de mesas internas (mig 193), ya marcadas `interna` en `facturas`. Solo las saca la alerta de mesas sin
+   * pax (decisión del dueño 18-nov 13:45: son venta y siguen en todo lo demás). `null` = la base no tiene la 193.
+   */
+  internas?: readonly InternaRpc[] | null
 }
 
 export function armarLectura(

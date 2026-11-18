@@ -29,10 +29,13 @@ Si una skill y `ESTADO.md` no coinciden, gana `ESTADO.md` y se corrige la skill.
 Nunca al repo: nombres de personas, clientes o proveedores, teléfonos, correos, cédulas, contraseñas, llaves o
 montos reales. Los ejemplos usan datos ficticios.
 
-**Única excepción (decisión del dueño, 09-nov):** el correo público del negocio, `satorisushibar@gmail.com`, que es el
-contacto del aviso de privacidad del Club (Ley 8968). Puede aparecer **solo** en el texto del aviso
-(`club-web/src/i18n.ts`) y en sus pruebas (`club-web/src/aviso.test.ts`). Ningún otro correo, y este en ningún otro lugar.
+**Excepciones (solo estas dos):**
 
-**Segunda excepción (decisión del dueño, 18-nov):** el remitente genérico del negocio, `Satori <no-responder@satoricostarica.com>`,
-**solo** como remitente de la Edge del cierre (`supabase/functions/cierre-email/index.ts`) y en esta regla. Lo cuidan
-`src/privacidadRepo.test.ts` y `src/dominioRepo.test.ts` (por archivo: en cualquier otro lugar cae).
+1. **Decisión del dueño, 09-nov:** el correo público del negocio, `satorisushibar@gmail.com`, que es el
+   contacto del aviso de privacidad del Club (Ley 8968). Puede aparecer **solo** en el texto del aviso
+   (`club-web/src/i18n.ts`) y en sus pruebas (`club-web/src/aviso.test.ts`).
+2. **Decisión del dueño, 18-nov:** el remitente propio de los correos automáticos, la cuenta `no-responder` del
+   dominio `satoricostarica.com` (verificado en Resend). Puede aparecer **solo** en el código `.ts` de las Edge de
+   correo (`supabase/functions/{cierre-email,monthly-report,pago-notificar,ventas-dia-contador}/`) y en sus pruebas.
+
+Ningún otro correo, y estos dos en ningún otro lugar. Lo cuida `src/privacidadRepo.test.ts`.

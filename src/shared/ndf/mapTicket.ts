@@ -28,7 +28,11 @@ export type PaxAlerta = 'ok' | 'falta_nativo' | 'falta_articulo' | 'difiere' | '
 /** Corte del Excel: caja de la mañana / caja de la noche. */
 export type Turno = 'mañana' | 'noche'
 
-/** Quién registró el pedido. Solo `salonero` entra al breakdown de mesero. */
+/**
+ * A quién se le acredita el ticket. Solo `salonero` entra al breakdown de mesero.
+ * `salonero` también cuando el pedido era de cajero/sistema o no había pedido pero las líneas
+ * son de UN solo mesero (ver `resolverSalonero` y `salonero_origen`).
+ */
 export type RegistradoPor = 'salonero' | 'cajero' | 'sistema' | 'sin_pedido'
 
 /**
@@ -264,6 +268,47 @@ export function mapSalonero(usuarioRegistra: unknown): string | null {
   if (esCajeroTurno(l)) return null
   if (esLoginSistema(l)) return null
   return l
+}
+
+/**
+ * De dónde salió el salonero del ticket.
+ *   · `'pedido'` — `FAC_Pedidos.UsuarioRegistra` (el `MIN` si la factura juntó varios pedidos).
+ *   · `'lineas'` — el pedido no traía salonero (cuenta dividida sin pedido, o lo registró un
+ *                  cajero/sistema) y TODAS las líneas con mesero son de UNO solo.
+ */
+export type SaloneroOrigen = 'pedido' | 'lineas'
+
+export interface SaloneroResuelto {
+  login:  string | null
+  origen: SaloneroOrigen | null
+}
+
+/**
+ * El salonero del ticket, con su origen. **La única función que lo decide**: la usan el agente
+ * en vivo y el backfill (los dos pasan por `mapTicket`), así que no pueden quedar distintos.
+ *
+ * Decisión del dueño (17-nov): cuando el salonero del PEDIDO falta o es un cajero/sistema
+ * (lo que `mapSalonero` ya descarta: 111, 222, 388, 002, 01, 02), se mira `UsuarioRegistra` de
+ * las LÍNEAS (`FAC_FacturasDet`). Si entre las líneas con mesero hay **exactamente uno**, ese
+ * es el salonero. Dos o más, o ninguno → `null`: no se adivina.
+ *
+ * Si el pedido YA trae un salonero válido, manda el pedido aunque las líneas digan otro (el
+ * caso del `MIN` con varios pedidos se mide aparte, no se toca acá).
+ */
+export function resolverSalonero(
+  registraPedido: unknown,
+  lineas: readonly { usuario_registra?: unknown }[],
+): SaloneroResuelto {
+  const delPedido = mapSalonero(registraPedido)
+  if (delPedido !== null) return { login: delPedido, origen: 'pedido' }
+
+  const enLineas = new Set<string>()
+  for (const l of lineas) {
+    const s = mapSalonero(l.usuario_registra)
+    if (s !== null) enLineas.add(s)
+  }
+  if (enLineas.size === 1) return { login: [...enLineas][0], origen: 'lineas' }
+  return { login: null, origen: null }
 }
 
 export interface TurnoInput {
@@ -622,8 +667,17 @@ export interface TicketMapeado {
   area:            string | null
   /** El login que registró el pedido, tal cual (incluye 111/222 y sistema). */
   usuario_registra: string | null
-  /** Solo si es un mesero de verdad. `null` para cajero/sistema/sin pedido. */
+  /**
+   * Solo si es un mesero de verdad. Sale del pedido o, si el pedido no lo trae (sin pedido o
+   * de cajero/sistema), de las líneas cuando todas son de UN mesero. Si no, `null`.
+   */
   salonero_login:  string | null
+  /**
+   * De dónde salió `salonero_login` (`null` si no hay salonero). Viaja en el lote pero el Edge
+   * NO lo guarda todavía: persistirlo pide una columna nueva (migración aparte).
+   * Opcional en el tipo para que un lote de un agente viejo siga siendo válido.
+   */
+  salonero_origen?: SaloneroOrigen | null
   salonero_nombre: string | null
   /** Clave con la que aparece en `DiaData.saloneros`. */
   salonero:        string
@@ -726,7 +780,8 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
 
   const registra = texto(t.usuario_registra)
   const cajero   = texto(t.login_cajero)
-  const salonero_login = mapSalonero(registra)
+  // El salonero: el del pedido o, si falta o es de cajero/sistema, el ÚNICO de las líneas.
+  const { login: salonero_login, origen: salonero_origen } = resolverSalonero(registra, items)
   // El turno lo decide 111/222 mire donde mire; si ninguno lo es, manda el reloj.
   const loginTurno = [cajero, registra].find(esCajeroTurno) ?? cajero ?? registra
   const turno = mapTurno({ cajeroLogin: loginTurno, fechaRegistra: t.fecha_hora })
@@ -737,7 +792,10 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
     : esLoginSistema(registra) ? 'sistema'
     : 'sin_pedido'
 
-  const nombre = texto(t.salonero_nombre)
+  // `salonero_nombre` viene del JOIN con FAC_Empleados por el login del PEDIDO: si el salonero
+  // salió de las líneas, ese nombre es el del cajero (o null) y NO se usa.
+  const nombreEmpleado = salonero_origen === 'pedido' ? texto(t.salonero_nombre) : null
+  const nombre = nombreEmpleado
     ?? (salonero_login !== null ? SALONEROS_CONOCIDOS[salonero_login] ?? null : null)
 
   const salonero =
@@ -755,6 +813,7 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
     area:             texto(t.area),
     usuario_registra: registra,
     salonero_login,
+    salonero_origen,
     salonero_nombre:  registrado_por === 'salonero' ? nombre : null,
     salonero,
     registrado_por,

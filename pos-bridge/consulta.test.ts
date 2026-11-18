@@ -252,6 +252,27 @@ describe('armarTickets', () => {
     expect(avisos.join(' ')).toContain('sin pedido')
   })
 
+  it('cuenta dividida (sin pedido) con un solo mesero en las líneas → salonero por líneas, y aviso', () => {
+    const { tickets, avisos } = armarTickets(
+      [filaFactura({ usuario_registra: null, usuario_max: null, salonero_nombre: null, personas: null, pedidos: 0 })],
+      [filaDetalle({ usuario_registra: '032' }), filaDetalle({ codigo: '200', usuario_registra: '032' })],
+    )
+    expect(tickets[0].salonero_login).toBe('032')
+    expect(tickets[0].salonero_origen).toBe('lineas')
+    expect(tickets[0].registrado_por).toBe('salonero')
+    expect(avisos.join(' ')).toContain('1 factura(s) con el salonero tomado de las líneas')
+  })
+
+  it('registrada por cajero con dos meseros en las líneas → sin salonero y sin aviso de líneas', () => {
+    const { tickets, avisos } = armarTickets(
+      [filaFactura({ usuario_registra: '111', usuario_max: '111', salonero_nombre: null })],
+      [filaDetalle({ usuario_registra: '032' }), filaDetalle({ codigo: '200', usuario_registra: '026' })],
+    )
+    expect(tickets[0].salonero_login).toBeNull()
+    expect(tickets[0].registrado_por).toBe('cajero')
+    expect(avisos.join(' ')).not.toContain('tomado de las líneas')
+  })
+
   it('factura sin detalle avisa (su 10% quedaría en 0)', () => {
     const { avisos } = armarTickets([filaFactura()], [])
     expect(avisos.join(' ')).toContain('sin líneas de detalle')

@@ -377,7 +377,7 @@ export function armarTickets(
     else porFactura.set(clave, [d])
   }
 
-  let sinDetalle = 0, sinPedido = 0, sinFamilia = 0, variosSaloneros = 0
+  let sinDetalle = 0, sinPedido = 0, sinFamilia = 0, variosSaloneros = 0, porLineas = 0
   const tickets = facturas.map(f => {
     const clave = String(f.numero_factura)
     const lineas = porFactura.get(clave) ?? []
@@ -438,11 +438,14 @@ export function armarTickets(
       },
       items,
     }
-    return mapTicket(crudo)
+    const t = mapTicket(crudo)
+    if (t.salonero_origen === 'lineas') porLineas++
+    return t
   })
 
   if (sinDetalle)       avisos.push(`${sinDetalle} factura(s) sin líneas de detalle: su mix y su 10% quedan en 0.`)
-  if (sinPedido)        avisos.push(`${sinPedido} factura(s) sin pedido (histórico): salonero null y pax 0.`)
+  if (sinPedido)        avisos.push(`${sinPedido} factura(s) sin pedido (cuenta dividida o histórico): pax 0; el salonero sale de las líneas si son de uno solo.`)
+  if (porLineas)        avisos.push(`${porLineas} factura(s) con el salonero tomado de las líneas (pedido sin salonero o de cajero/sistema).`)
   if (variosSaloneros)  avisos.push(`${variosSaloneros} factura(s) consolidan pedidos de más de un usuario: se acredita el menor.`)
   if (sinFamilia)       avisos.push(`${sinFamilia} línea(s) sin familia: caen en la categoría "otro" del mix.`)
 

@@ -29,7 +29,7 @@ import {
 import {
   resolvePeriod, datesInPeriod, dowBreakdown, bestDowIndex,
   icpVsTeam, icpEquipoDelMes, sumElectronicTips, shiftMonth, monthLabelLong, lastWorkedDate,
-  dailyPromPaxSeries, movingAverage,
+  dailyPromPaxSeries, movingAverage, ROLES_CON_EQUIPO, AVISO_SIN_EQUIPO,
   type PeriodKind,
 } from './miRendimientoUtils'
 import { todayCR } from '../../shared/utils'
@@ -83,6 +83,10 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   )
   const navigate    = useNavigate()
   const [params]    = useSearchParams()
+  // Mig 191: el personal (no gerencia) recibe del PoS SOLO sus propias facturas. Con eso, todo lo que compara contra
+  // el equipo (general, ranking, «resto», ICP del equipo, ranking de competencias) saldría con sus propios números:
+  // se oculta en vez de mostrar una comparación falsa. El owner en «Ver como» sigue viendo el equipo (lee todo).
+  const conEquipo = verComo || ROLES_CON_EQUIPO.includes(perfilLogueado?.role ?? '')
   const today       = todayCR()
 
   const allSals = useMemo(() => allSaloneros(dias), [dias])
@@ -149,7 +153,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   // Ranking del período — posición del empleado por ventas totales del período
   // (Hoy/Semana/Mes/Rango). Es una POSICIÓN, no expone el monto.
   const dayRank = useMemo(() => {
-    if (!activeName || periodDates.length === 0) return null
+    if (!conEquipo || !activeName || periodDates.length === 0) return null
     const ranked = allSals
       .map(n => ({ n, total: aggSalonero(n, periodDates, dias, pm).total }))
       .filter(r => r.total > 0)
@@ -157,7 +161,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     const idx = ranked.findIndex(r => r.n === activeName)
     if (idx < 0) return null
     return { pos: idx + 1, of: ranked.length }
-  }, [activeName, periodDates, allSals, dias, pm])
+  }, [conEquipo, activeName, periodDates, allSals, dias, pm])
 
   // ── Por día de la semana ─────────────────────────────────────
   const dowRows = useMemo(
@@ -329,12 +333,12 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
 
         {/* ══════════════ RESUMEN ══════════════ */}
         {tab === 'resumen' && activeName && (
-          <ResumenTab myAgg={myAgg} genAgg={genAgg} metas={metas} activeName={activeName} pm={pm} dayRank={dayRank} period={period} />
+          <ResumenTab myAgg={myAgg} genAgg={genAgg} metas={metas} activeName={activeName} pm={pm} dayRank={dayRank} period={period} conEquipo={conEquipo} />
         )}
 
         {/* ══════════════ POR DÍA ══════════════ */}
         {tab === 'dia' && activeName && (
-          <DiaTab dowRows={dowRows} bestDow={bestDow} maxDowProm={maxDowProm} />
+          <DiaTab dowRows={dowRows} bestDow={bestDow} maxDowProm={maxDowProm} conEquipo={conEquipo} />
         )}
 
         {/* ══════════════ PRODUCTOS ══════════════ */}
@@ -355,7 +359,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
             noLink={noLink} employee={employee}
             byMonth={byMonth} monthsWithData={monthsWithData}
             selMonth={selMonth} setSelMonth={setSelMonth} today={today}
-            icp={icp} activeName={activeName}
+            icp={icp} activeName={activeName} conEquipo={conEquipo}
             totals={{ curEarn, totalShifts, totalHours, totalEarned }}
           />
         )}
@@ -363,7 +367,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
         {/* ══════════════ COMPETENCIAS ══════════════ */}
         {tab === 'competencias' && (
           activeName
-            ? <CompetenciasTab comps={comps} activeName={activeName} dates={dates} dias={dias} pm={pm} today={today} />
+            ? <CompetenciasTab comps={comps} activeName={activeName} dates={dates} dias={dias} pm={pm} today={today} conEquipo={conEquipo} />
             : <div className="mr-empty"><div className="mr-empty-icon">🏆</div><div className="mr-empty-title">Sin competencias</div><div className="mr-empty-sub">Las competencias aplican a roles con venta individual.</div></div>
         )}
       </div>
@@ -417,7 +421,8 @@ function Kpi({ label, value, accent, delta, meta, sub }: {
 }
 
 // ── RESUMEN ───────────────────────────────────────────────────
-function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
+function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period, conEquipo = true }: {
+  conEquipo?: boolean
   myAgg: ReturnType<typeof aggSalonero> | null
   genAgg: ReturnType<typeof aggGeneral>
   metas?: Meta; activeName: string; pm: ProductMap
@@ -433,7 +438,7 @@ function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
       </div>
     )
   }
-  const delta = (mine: number, gen: number) => (gen > 0 ? { pct: (mine - gen) / gen * 100, ref: 'vs general' } : null)
+  const delta = (mine: number, gen: number) => (conEquipo && gen > 0 ? { pct: (mine - gen) / gen * 100, ref: 'vs general' } : null)
   const metaChip = (metric: 'promPax' | 'bebPax' | 'ratioCB' | 'ventas' | 'ticketItem', actual: number) => {
     if (!metas) return null
     const m = getMeta(metas, activeName, metric)
@@ -473,8 +478,9 @@ function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
         <Kpi label="Prom/Plato"     value={fi(myAgg.promPlato)} />
         <Kpi label="Prom/Bebida"    value={fi(myAgg.promBebida)} />
         <Kpi label="Ticket / ítem"  value={fi(myAgg.promTicket)} meta={metaChip('ticketItem', myAgg.promTicket)}
-             delta={genAgg.promTicket > 0 ? { pct: (myAgg.promTicket - genAgg.promTicket) / genAgg.promTicket * 100, ref: 'vs general' } : null} />
+             delta={delta(myAgg.promTicket, genAgg.promTicket)} />
       </div>
+      {!conEquipo && <div className="mr-icp-sub" role="note">{AVISO_SIN_EQUIPO}</div>}
 
       {top5.length > 0 && (
         <>
@@ -498,8 +504,8 @@ function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
 }
 
 // ── POR DÍA ───────────────────────────────────────────────────
-function DiaTab({ dowRows, bestDow, maxDowProm }: {
-  dowRows: ReturnType<typeof dowBreakdown>; bestDow: number; maxDowProm: number
+function DiaTab({ dowRows, bestDow, maxDowProm, conEquipo = true }: {
+  dowRows: ReturnType<typeof dowBreakdown>; bestDow: number; maxDowProm: number; conEquipo?: boolean
 }) {
   const worked = dowRows.filter(r => r.days > 0)
   if (worked.length === 0) {
@@ -546,7 +552,9 @@ function DiaTab({ dowRows, bestDow, maxDowProm }: {
         })}
       </div>
 
-      {/* Tabla yo vs resto del restaurante */}
+      {/* Tabla yo vs resto del restaurante (solo con datos del equipo: mig 191) */}
+      {!conEquipo && <div className="mr-icp-sub" role="note" style={{ marginTop: '1.25rem' }}>{AVISO_SIN_EQUIPO}</div>}
+      {conEquipo && <>
       <div className="vt-sl" style={{ marginTop: '1.25rem' }}>Yo vs restaurante</div>
       <div className="mr-tbl-wrap">
         <table className="mr-tbl">
@@ -577,6 +585,7 @@ function DiaTab({ dowRows, bestDow, maxDowProm }: {
           </tbody>
         </table>
       </div>
+      </>}
     </>
   )
 }
@@ -772,7 +781,8 @@ function SemanaTab({ weekData, series, today }: {
 }
 
 // ── PROPINAS ──────────────────────────────────────────────────
-function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setSelMonth, today, icp, activeName, totals }: {
+function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setSelMonth, today, icp, activeName, totals, conEquipo = true }: {
+  conEquipo?: boolean
   noLink: boolean; employee: Employee | null
   byMonth: Record<string, { q1Days: number; q1Hours: number; q1Earn: number; q2Days: number; q2Hours: number; q2Earn: number }>
   monthsWithData: string[]
@@ -834,6 +844,7 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
               <div className="mr-icp-val">{icp.mine.toFixed(1)}%</div>
               <div className="mr-icp-sub">{fi(icp.myGen)} generado / {fi(icp.myVentas)} ventas</div>
             </div>
+            {conEquipo && (
             <div className="mr-icp-card team">
               <div className="mr-icp-label">Equipo (benchmark)</div>
               <div className="mr-icp-val">{icp.team.toFixed(1)}%</div>
@@ -841,7 +852,9 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
                 {icp.diff >= 0 ? '▲ +' : '▼ '}{Math.abs(icp.diff).toFixed(1)} pts vs equipo
               </div>
             </div>
+            )}
           </div>
+          {!conEquipo && <div className="mr-icp-sub" role="note" style={{ marginBottom: '0.75rem' }}>{AVISO_SIN_EQUIPO}</div>}
           <div className="mr-icp-sub" style={{ marginTop: '-0.5rem', marginBottom: '1.25rem' }}>
             Mide la propina <strong>electrónica</strong> que generaste (tarjeta/SINPE), no lo cobrado del reparto del pool (eso es tu take-home, arriba).
           </div>
@@ -919,8 +932,8 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
 }
 
 // ── COMPETENCIAS ──────────────────────────────────────────────
-function CompetenciasTab({ comps, activeName, dates, dias, pm, today }: {
-  comps: Comp[]; activeName: string; dates: string[]; dias: DiasMap; pm: ProductMap; today: string
+function CompetenciasTab({ comps, activeName, dates, dias, pm, today, conEquipo = true }: {
+  comps: Comp[]; activeName: string; dates: string[]; dias: DiasMap; pm: ProductMap; today: string; conEquipo?: boolean
 }) {
   const myComps = comps.filter(c => c.parts?.includes(activeName))
   if (myComps.length === 0) {
@@ -968,6 +981,16 @@ function CompetenciasTab({ comps, activeName, dates, dias, pm, today }: {
               </div>
               <span style={{ fontSize: '0.66rem', color: statusColor, fontWeight: 700 }}>{statusLabel}</span>
             </div>
+            {!conEquipo && (
+              <>
+                <div style={{ background: 'var(--c-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.58rem', color: 'var(--c-gris)' }}>Mis puntos</div>
+                  <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: '1.3rem', fontWeight: 800, color: 'var(--c-oro-texto)' }}>{myPts}</div>
+                </div>
+                <div className="mr-icp-sub" role="note">{AVISO_SIN_EQUIPO}</div>
+              </>
+            )}
+            {conEquipo && <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
               <div style={{ background: 'var(--c-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.58rem', color: 'var(--c-gris)' }}>Mi posición</div>
@@ -1001,6 +1024,7 @@ function CompetenciasTab({ comps, activeName, dates, dias, pm, today }: {
                 </table>
               </div>
             )}
+            </>}
           </div>
         )
       })}

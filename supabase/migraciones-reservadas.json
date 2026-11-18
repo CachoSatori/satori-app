@@ -321,6 +321,12 @@
       "rama": "claude/ventas-v2-resumen-fn",
       "renumerada_a": "190"
     },
+    "135": {
+      "nombre": "pos_ventas_solo_lo_suyo",
+      "bloque": "club",
+      "rama": "claude/pos-ventas-solo-lo-suyo",
+      "renumerada_a": "191"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -554,6 +560,12 @@
       "bloque": "pase",
       "rama": "claude/ventas-v2-resumen-fn",
       "origen": "134"
+    },
+    "191": {
+      "nombre": "pos_ventas_solo_lo_suyo",
+      "bloque": "pase",
+      "rama": "claude/pos-ventas-solo-lo-suyo",
+      "origen": "135"
     }
   }
 }

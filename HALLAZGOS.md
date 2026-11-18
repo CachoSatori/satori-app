@@ -7,6 +7,14 @@
 
 ---
 
+## 🧾 Noviembre 2026 (18-nov) — dos hallazgos de ventas, sin plata en juego
+
+- **`clave_fe` por consecutivo sin tipo de documento (preexistente, agente del PoS):** el agente cruza la clave electrónica por número de consecutivo sin filtrar el tipo de documento. Los tiquetes tipo 04 de mar/abr-2026 quedan con la clave de la factura 01 del mismo consecutivo: 675 filas al 18-nov, y crece con cada factura nueva. No cambia importes. Se vio en el humo del pase del salonero (el hash de `facturas_sin_salonero` solo cambió en 2026-04). Arreglo en curso.
+- **Redondeo por grupo en el reporte de ventas:** se redondea cada grupo (salonero) y después se suma, así que el total del día puede moverse ±₡1 si cambia el salonero. Arreglo propuesto: sumar y redondear por día.
+- **Cola (Menor):** `cierre_read` deja leer cierres a cualquier usuario autenticado del local (cualquiera puede disparar el correo con resumen; los datos solo llegan al dueño); la Edge del cierre lee filas crudas de 4 días.
+
+---
+
 ## 🔐 Noviembre 2026 — SEC-02: `monthly-report` respondía ventas y mandaba los correos a cualquiera (✅ prod, 06/11)
 
 - **Qué es SEC-02:** la Edge Function `monthly-report` (prod v9, `verify_jwt` off) usaba service_role **sin pedir nada**. Cualquiera, sin token o con la anon key (que es pública), podía:

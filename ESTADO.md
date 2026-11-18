@@ -5,14 +5,14 @@
 > ventas, qué hay en prod y en staging, pendientes de estabilización, seguridad abierta y notas. Más viejo: [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-18.** `main` = `b3110c0` (#277). **Ledger de prod = 188** (verificado 17-nov ~23:20). Sagrados iguales (tabla de abajo). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (los del 15–17-nov están en el proyecto privado).
-- **Entró hoy a `main`:** #255, #256, #258 (motor de períodos e indicadores de Ventas v2), #260 (guarda de propinas sin cobrador), #261 y #263 (usuarios de prueba en staging; el clon ya no copia claves), #265 y #266 (cambiar contraseña + medidor), #268 (mig 185, pedir cambio de contraseña), #269 (Daruma e íconos PWA), #270 («¿Olvidaste tu contraseña?»), #271, #272 y #273 (migs 186, 187 y 188 del Club, humo de prod OK en las tres), #274 (Ventas v2 fases 0.2 y 1.3).
-- **Validación física del dueño OK:** #244, #247, Marcadores, #234, #238, #225, #226, #239, #260 (staging) y **#270 en prod** (recupero completo con su correo, 17-nov 23:09). **Falta:** #229 (en servicio), Club 186–188 y Ventas #274 en prod.
-- **Correo:** dominio `satoricostarica.com` **verificado en Resend** (DNS en SiteGround: `resend._domainkey`, MX y SPF de `send`). Supabase Auth de prod usa SMTP propio (remitente `no-responder@`), plantilla «Reset password» en español, enlace de 1 h. Las tres funciones de correo (`pago-notificar`, `cierre-email`, `monthly-report`) ya salen con el remitente propio en prod (18-nov); el código de sus ramas aún no tiene el FROM nuevo.
-- **Agente D9 en la PC del PoS:** `C:\satori\agente-d9` @`578f38c` (vuelta atrás intacta en `agente-prod-5da233a`). Backfill hecho. 17-nov: 13 tickets cerrados, 5 con descuento, 0 negativos o nulos.
-- **Hoy (18-nov), con el dueño:** pase del salonero por líneas (#262) antes de las 14:00 · #276 rehecho (PR nuevo, unificación) → verificador + firma de deploy, mig 189 y cron · staging 185–188 por su CC.
-- **Abiertos sin firma:** #276, #262, #259 (fast-check, 3 hallazgos `it.fails`), #257, #264, #252, #246 (SPEC Ventas v2). Correos #241–#245 y #235: el código de Edge entra con el ítem 11 (A05). #275 cerrado (reemplazado por #276). **#276 lo reemplaza un PR nuevo** (unificación `totalesContabilidad` ↔ `ventaPorPersonaDeTotales`, en curso).
-- **Aclaración:** las etiquetas «Tu red · club satori · local» son de OpenTable (origen de las reservas), no de la app.
+**Al día: 2026-11-18 (mañana).** `main` = `00d4e4a` (tras #284, #285 y #282). **Ledger de prod = 189** (cron jobid 10 `satori-ventas-dia-contador`, `0 13 1,16 * *` = 07:00 CR los días 1 y 16; primer envío el 1-dic). Sagrados iguales (tabla de abajo). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (los del 15–18-nov están en el proyecto privado).
+- **Entró a `main` el 17–18-nov:** #255–#258, #260, #261, #263, #265, #266, #268 (mig 185), #269, #270, #271–#273 (migs 186–188), #274, #284 (correo del contador y mig 189), #285 (resumen del cierre como función pura, sin Edge) y #282 (guía 6.13 del Club).
+- **Edge de prod:** `cierre-email` **v16** (desde `f8b6c2a6`, rama de #283: resumen de ventas en el correo de cierre, remitente propio; ezbr `c222f5df…`; vuelta atrás = `b02d2841` + remitente) · `ventas-dia-contador` **v4** (desde `060b539`, rama de #281; ezbr `439b3914…`; `verify_jwt` on). El resto, como está en la tabla de Edge.
+- **Agente del PoS de prod:** `C:\satori\agente-sal` @ `89c5aa42` (pase #262 hecho el 18-nov: tarea cambiada 06:23:43, re-backfill 2024-01…2026-11 completo, N = 11.505; salón 90 d sin salonero 370 → 172). Vuelta atrás: `C:\satori\agente-d9` @ `578f38c`, con la config en `C:\satori\sal-vuelta`. Bitácora en la rama de #262 (no va a `main`).
+- **Staging:** ledger **188** (185–188 aplicadas el 18-nov 06:04 por la sesión de CC del dueño).
+- **Hallazgos nuevos (no es plata):** (1) el agente toma `clave_fe` por número de consecutivo sin filtrar el tipo de documento: tiquetes tipo 04 de mar/abr-2026 quedan con la clave de la factura 01 del mismo consecutivo (675 filas al 18-nov) y crece con cada factura nueva; arreglo en curso. (2) El reporte de ventas redondea por grupo (salonero) y después suma: el total del día puede moverse ±₡1 si cambia el salonero; arreglo propuesto: sumar y redondear por día. Detalle en [HALLAZGOS.md](HALLAZGOS.md).
+- **Cola (Menor):** `cierre_read` deja leer cierres a cualquier usuario autenticado del local (cualquiera puede disparar el correo con resumen; los datos solo llegan al dueño); la Edge del cierre lee filas crudas de 4 días.
+- **Abiertos sin firma:** #262 (rama del agente, no va a `main`), #259 (fast-check, 3 hallazgos `it.fails`), #257, #264, #252, #246 (SPEC Ventas v2). **Falta validación física del dueño:** #229 (en servicio), Club 186–188 y Ventas #274 en prod.
 - **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov.
 - **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 
@@ -20,7 +20,7 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `b3110c0` (#277) |
+| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `00d4e4a` (#282) |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 184 (ponerla al día: en cola) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
@@ -63,16 +63,16 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 |---|---|---|
 | `monthly-report` | v24 · on (desde `50831a8e`, #245+#241, + remitente propio 18-nov) | v9 · on |
 | `extract-document` | v20 · on (código desde `8a8dfb6`, rama `claude/busy-brown-ssjq4e`, modelo `claude-sonnet-5-5`) | v29 desde `190b5f5` |
-| `cierre-email` | v15 · on (desde `b02d2841`, #242, + remitente propio) | v15 · on |
+| `cierre-email` | v16 · on (desde `f8b6c2a6`, rama de #283, + remitente propio) | v15 · on |
 | `pago-notificar` | v15 · on (desde `588c5593`, #243, + remitente propio) | — |
-| `ventas-dia-contador` | v1 · on (desde la rama de #276, `11a6097`; según su commit, firma 18-nov 03:22). Fuente nueva en `claude/correo-contador-ventas-dia-v3` (solo el paquete: cuenta única de Prom/PAX), sin desplegar · PASE-189 | — |
+| `ventas-dia-contador` | v4 · on (desde `060b539`, rama de #281; ezbr `439b3914…`) | — |
 | `ingest-ndf` | v13 · off (código v3 del 09/11 desde `5da233a`; vive en `claude/puente-item11-prod-v2`) | v21 · off |
 | `ingest-punches` | — | v13 · off |
 | `alta-empleado` | v12 · on (rama `claude/alta-empleado-fn`) | v8 · on |
 | `club-pase` | v7 · off (rama `claude/club-pase-edge` @ `6c5848e`) | v1 · off (`WALLET_ENTORNO` = `stg`) |
 
 - **Cloudflare:** Pages `satori-club` y Worker `satori-club-api` (Workers Builds desde `main`; secretos a mano; `/api/salud`). **Cron del Club:** jobid 8.
-- **Agentes del PoS:** «Satori PoS Bridge» (staging, @ `14bd278`) y «… PROD» (@ `5da233a` desde el 10/11, cuenta SYSTEM). `biotime-bridge` publica solo a staging (`ingest-punches`).
+- **Agentes del PoS:** «Satori PoS Bridge» (staging, @ `14bd278`) y «… PROD» (`C:\satori\agente-sal` @ `89c5aa42` desde el 18/11, cuenta SYSTEM). `biotime-bridge` publica solo a staging (`ingest-punches`).
 - **Ventas = solo PoS** (firmado 16/11): ninguna pantalla lee `ventas_dias`; `ventas_hist` solo antes del 2024-01-05. Guarda: `src/ventasSoloPos.test.ts`.
 
 ---
@@ -87,7 +87,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199 (nunca a uno de creación), en el mismo PR (archivo, rollback, pruebas, scripts, fila del ledger de staging), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
 
-**Ledger de prod: 184** (150–184 por merge → Branching, 11–17/11; PASE de cada una en `docs/pases/`). Staging: 184; le faltan las filas viejas 065 y 066.
+**Ledger de prod: 189** (150–189 por merge → Branching, 11/11–18/11; PASE de cada una en `docs/pases/`). Staging: 188; le faltan las filas viejas 065 y 066.
 
 | Número | Detalle (nombre en el registro JSON; `←` origen, `→` renumerada) |
 |---|---|
@@ -182,7 +182,7 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | 186 | ← 130 (#271, en prod 17-nov) |
 | 187 | ← 131 (#272, en prod 17-nov) |
 | 188 | ← 132 (#273, en prod 17-nov) |
-| 189 | ← 133 (cron `satori-ventas-dia-contador`, 1 y 16 a las 07:00 CR; en PR, sin firma; 186–188 ya en prod; va después de desplegar la Edge `ventas-dia-contador`; PASE-189) |
+| 189 | ← 133 (cron `satori-ventas-dia-contador`, 1 y 16 a las 07:00 CR; en prod 18-nov, jobid 10; PASE-189) |
 
 083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 

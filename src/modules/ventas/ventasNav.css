@@ -44,3 +44,28 @@ button.vt-subnav-tab.active { font-weight: 600; }
 @media (max-width: 760px) {
   .vt-subnav { padding: 0.5rem 0.75rem; }
 }
+
+/* Ventas v2 · fase 2.1: barra global y «Resumen». Solo clases vt2-* nuevas. */
+.vt2-barra { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
+.vt2-barra-fila { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; }
+.vt2-campo { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.7rem; color: var(--c-gris); }
+.vt2-campo select, .vt2-campo input { min-height: 44px; }
+.vt2-flechas { display: flex; gap: 0.25rem; }
+.vt2-flechas button { min-width: 44px; min-height: 44px; }
+.vt2-barra-palabras { font-size: 0.8rem; color: var(--c-gris); }
+.vt2-aviso { font-size: 0.8rem; color: var(--c-laca); margin: 0.5rem 0; }
+.vt2-cargando, .vt2-hoy { padding: 1.5rem 0; color: var(--c-gris); }
+.vt2-bajada { font-family: var(--font-serif); font-size: 1.05rem; margin: 0.25rem 0 1rem; }
+.vt2-delta { font-size: 0.75rem; }
+.vt2-delta.sube { color: var(--c-musgo); }
+.vt2-delta.baja { color: var(--c-laca); }
+.vt2-delta.gris { color: var(--c-gris); }
+.vt2-delta-base { color: var(--c-gris); }
+.vt2-nota { font-size: 0.75rem; color: var(--c-gris); margin: 0.25rem 0; }
+.vt2-alerta { margin: 1rem 0; font-size: 0.85rem; }
+.vt2-alerta ul { margin: 0.25rem 0 0 1rem; }
+.vt2-grafico { margin: 1rem 0; }
+.vt2-grafico figcaption { font-size: 0.75rem; color: var(--c-gris); }
+.vt2-detalle { margin-top: 1rem; }
+.vt2-detalle summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.vt2-total td { font-weight: 700; }

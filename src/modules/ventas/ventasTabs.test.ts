@@ -6,15 +6,15 @@ import { TABS, ENTRADAS, tabPorDefecto, resolverTab, entradasVisibles, entradaDe
 const ROLES = ['owner', 'manager', 'contador'] as const
 
 describe('ventasTabs', () => {
-  it('las 16 vistas siguen ahí y cada una está en exactamente una entrada', () => {
-    expect(TABS).toHaveLength(16)
+  it('las 16 vistas siguen ahí (+ «Resumen» v2) y cada una está en exactamente una entrada', () => {
+    expect(TABS).toHaveLength(17)
     const enEntradas = ENTRADAS.flatMap(e => e.vistas)
-    expect(enEntradas).toHaveLength(16)
+    expect(enEntradas).toHaveLength(17)
     expect(new Set(enEntradas)).toEqual(new Set(TABS.map(t => t.id)))
   })
 
-  it('7 entradas más «Ajustes», con los grupos del PLAN', () => {
-    expect(ENTRADAS.map(e => e.id)).toEqual(['hoy','envivo','saloneros','analisis','historico','menueng','metas','ajustes'])
+  it('7 entradas + «Resumen» (v2, fase 2.1) + «Ajustes», con los grupos del PLAN', () => {
+    expect(ENTRADAS.map(e => e.id)).toEqual(['hoy','resumen','envivo','saloneros','analisis','historico','menueng','metas','ajustes'])
     expect(ENTRADAS.find(e => e.id === 'saloneros')!.vistas).toEqual(['saloneros','salolineas','evaluacion','icp','competencias'])
     expect(ENTRADAS.find(e => e.id === 'historico')!.vistas).toEqual(['historico','calendario','mix','ventas','cajeros'])
     expect(ENTRADAS.find(e => e.id === 'ajustes')!.vistas).toEqual(['config'])
@@ -27,7 +27,12 @@ describe('ventasTabs', () => {
       hoy: omc, envivo: omc, saloneros: om, salolineas: om, evaluacion: om,
       icp: omc, cajeros: omc, ventas: omc, historico: omc, mix: omc, analisis: omc,
       calendario: omc, menueng: om, metas: omc, competencias: om, config: om,
+      resumen: omc,
     })
+  })
+
+  it('«Resumen» va al final de TABS: no cambia la pestaña de arranque de nadie (conviven hasta la 3.5)', () => {
+    expect(TABS[TABS.length - 1].id).toBe('resumen')
   })
 
   it.each(ROLES)('pestaña por defecto de %s: «Hoy», como antes', role => {

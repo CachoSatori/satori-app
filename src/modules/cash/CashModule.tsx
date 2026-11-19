@@ -108,6 +108,9 @@ export default function CashModule() {
   }, [veAlerta])
 
   useEffect(() => { loadAll() }, [loadAll])
+  // (19-nov) Refresco SIN spinner para Pendientes y Proveedores: el spinner de `loading` desmonta la pestaña y se
+  // perdía el comprobante recién armado (post-pago y liquidación de crédito). Mismos datos, solo no tapa la pantalla.
+  const refrescarSilencioso = useCallback(() => { void loadAll({ silent: true }) }, [loadAll])
 
   // Ventas del PoS por jornada (ventana de 60 días o desde el corte): carga aparte, sin bloquear.
   useEffect(() => {
@@ -229,7 +232,8 @@ export default function CashModule() {
             movements={allMovements}
             credits={credits}
             applications={creditApps}
-            onRefresh={loadAll}
+            sessions={sessions}
+            onRefresh={refrescarSilencioso}
           />
         )}
         {tab === 'pendientes' && (
@@ -239,7 +243,7 @@ export default function CashModule() {
             suppliers={suppliers}
             credits={credits}
             applications={creditApps}
-            onRefresh={loadAll}
+            onRefresh={refrescarSilencioso}
           />
         )}
         {tab === 'resumen' && (

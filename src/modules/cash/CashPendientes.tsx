@@ -8,6 +8,7 @@ import { useManagerOverride } from '../../shared/ManagerOverride'
 import { saldoResidual, saldoCredito, facturaAplicado } from './supplierCredits'
 import { RegistrarCreditoModal, AplicarCreditoModal } from './CreditoModals'
 import { waNumber, descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
+import { comprobantePago } from './comprobanteProveedor'
 
 interface Props {
   movements: CashMovement[]
@@ -190,29 +191,9 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
   }
 
   // ── Comprobante (PNG + texto WhatsApp) — vía el módulo compartido ./comprobante ──
-  // Arma el ComprobanteData del grupo: MISMAS líneas/total que antes (residual + desglose del
-  // crédito), ahora renderizado por el generador compartido. Output del pago normal SIN cambios.
-  // Arma el ComprobanteData a partir de un set EXPLÍCITO de filas (para snapshots post-pago).
-  const comprobanteDeRows = (g: Group, rows: Row[]): ComprobanteData => {
-    // Comprobante = lo transferido = Σ RESIDUAL (amount_crc − crédito aplicado). NO muta amount_crc.
-    const sumCRC = rows.reduce((s, r) => s + r.residual, 0)
-    const sumUSD = rows.reduce((s, r) => s + r.usd, 0)
-    return {
-      tituloTexto: 'Comprobante de pago',
-      tituloPNG: g.esPropinas ? 'Comprobante de pago de propinas' : 'Comprobante de pago a proveedor',
-      proveedor: g.name,
-      lineas: rows.map(r => ({
-        fecha: r.fecha,
-        nota: r.ref,
-        monto: r.residual ? fi(r.residual) : (r.usd ? fd(r.usd) : '—'),
-        // Desglose del crédito aplicado (mig 053). El texto lleva "= pagado Z"; el PNG no (espaciado).
-        subnotaTexto: r.aplicado > 0 ? `facturado ${fi(r.crc)} − crédito ${fi(r.aplicado)} = pagado ${fi(r.residual)}` : undefined,
-        subnotaPNG:   r.aplicado > 0 ? `facturado ${fi(r.crc)}  −  crédito ${fi(r.aplicado)}` : undefined,
-      })),
-      totalTexto: `${sumCRC ? fi(sumCRC) : ''}${sumUSD ? (sumCRC ? ' · ' : '') + fd(sumUSD) : ''}`,
-      totalPNG:   `${sumCRC ? fi(sumCRC) : ''}${sumUSD ? (sumCRC ? '  ·  ' : '') + fd(sumUSD) : ''}`,
-    }
-  }
+  // Arma el ComprobanteData a partir de un set EXPLÍCITO de filas (también para snapshots post-pago). (19-nov) El armado
+  // vive en ./comprobanteProveedor (lo reusa el reenvío desde Historial de pagos); mismas líneas y total que antes.
+  const comprobanteDeRows = (g: Group, rows: Row[]): ComprobanteData => comprobantePago(g.name, g.esPropinas, rows)
   const comprobanteDeGrupo = (g: Group, onlySelected: boolean): ComprobanteData =>
     comprobanteDeRows(g, onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows)
   const descargarComprobante = (g: Group, onlySelected: boolean) => {
@@ -226,17 +207,65 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
     void compartirComprobanteWhatsApp(comprobanteDeGrupo(g, onlySelected), supOfGroup(g)?.whatsapp ?? '')
   }
 
-  if (!totalCount) {
-    return (
-      <div className="tips-empty-state">
-        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>✓</div>
-        <p className="tips-empty-text">Sin facturas pendientes</p>
-      </div>
-    )
-  }
+  // Modales y comprobante post-pago: se dibujan también con la pantalla vacía (19-nov). Al pagar o saldar con crédito
+  // la ÚLTIMA factura, la lista queda vacía y el comprobante tiene que seguir a la vista hasta «Cerrar».
+  const modales = (
+    <>
+      {regModal && (
+        <RegistrarCreditoModal supplier={regModal} movements={movements}
+          onDone={onRefresh} onClose={() => setRegModal(null)} />
+      )}
+      {aplModal && (
+        <AplicarCreditoModal supplier={aplModal} credits={credits} applications={applications}
+          pendientes={movements.filter(m => m.supplier_id === aplModal.id && m.status === 'pendiente')}
+          onDone={onRefresh} onClose={() => setAplModal(null)} />
+      )}
 
+      {/* Comprobante POST-pago: el grupo ya salió de Pendientes, pero el snapshot deja emitirlo. Cierra solo con «Cerrar». */}
+      {pagoResultado && (
+        <div className="cd-modal-overlay">
+          <div className="cd-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-modal-title">Comprobante de pago · {pagoResultado.data.proveedor}</div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--c-gris)', marginBottom: '0.6rem' }}>Pago registrado ✓</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: 260, overflowY: 'auto' }}>
+              {pagoResultado.data.lineas.map((l, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {l.fecha || '—'}{l.nota ? <> · <span style={{ color: 'var(--c-gris)' }}>{l.nota}</span></> : null}
+                  </span>
+                  <strong style={{ whiteSpace: 'nowrap' }}>{l.monto}</strong>
+                </div>
+              ))}
+            </div>
+            <div style={{ margin: '0.75rem 0', fontSize: '0.85rem' }}>
+              Total pagado: <strong style={{ color: 'var(--c-teal)' }}>{pagoResultado.data.totalTexto}</strong>
+            </div>
+            <div className="cd-modal-actions">
+              <button className="tips-btn-ghost" onClick={() => descargarComprobantePNG(pagoResultado.data)}>📷 Descargar comprobante</button>
+              {(pagoResultado.whatsapp || compartirArchivos) && (
+                <button className="tips-btn-ghost"
+                  onClick={() => { void compartirComprobanteWhatsApp(pagoResultado.data, pagoResultado.whatsapp ?? '') }}>
+                  💬 WhatsApp
+                </button>
+              )}
+              <button className="tips-btn-teal" onClick={() => setPagoResultado(null)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+
+  // Un solo árbol con `modales` SIEMPRE en el mismo lugar: si la pantalla vacía devolviera otro árbol, React desmontaría
+  // el modal de crédito y se perdería su comprobante (lo prueba CashModule.comprobante.test.tsx).
   return (
     <div>
+      {!totalCount ? (
+        <div className="tips-empty-state">
+          <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>✓</div>
+          <p className="tips-empty-text">Sin facturas pendientes</p>
+        </div>
+      ) : (<>
       {/* Resumen global */}
       <div className="cd-pend-summary" style={{ marginBottom: '1.25rem' }}>
         <div>
@@ -393,49 +422,9 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
           </div>
         )
       })}
+      </>)}
 
-      {regModal && (
-        <RegistrarCreditoModal supplier={regModal} movements={movements}
-          onDone={onRefresh} onClose={() => setRegModal(null)} />
-      )}
-      {aplModal && (
-        <AplicarCreditoModal supplier={aplModal} credits={credits} applications={applications}
-          pendientes={movements.filter(m => m.supplier_id === aplModal.id && m.status === 'pendiente')}
-          onDone={onRefresh} onClose={() => setAplModal(null)} />
-      )}
-
-      {/* Comprobante POST-pago: el grupo ya salió de Pendientes, pero el snapshot deja emitirlo. */}
-      {pagoResultado && (
-        <div className="cd-modal-overlay" onClick={() => setPagoResultado(null)}>
-          <div className="cd-modal" onClick={e => e.stopPropagation()}>
-            <div className="cd-modal-title">Comprobante de pago · {pagoResultado.data.proveedor}</div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--c-gris)', marginBottom: '0.6rem' }}>Pago registrado ✓</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: 260, overflowY: 'auto' }}>
-              {pagoResultado.data.lineas.map((l, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
-                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {l.fecha || '—'}{l.nota ? <> · <span style={{ color: 'var(--c-gris)' }}>{l.nota}</span></> : null}
-                  </span>
-                  <strong style={{ whiteSpace: 'nowrap' }}>{l.monto}</strong>
-                </div>
-              ))}
-            </div>
-            <div style={{ margin: '0.75rem 0', fontSize: '0.85rem' }}>
-              Total pagado: <strong style={{ color: 'var(--c-teal)' }}>{pagoResultado.data.totalTexto}</strong>
-            </div>
-            <div className="cd-modal-actions">
-              <button className="tips-btn-ghost" onClick={() => descargarComprobantePNG(pagoResultado.data)}>📷 Descargar comprobante</button>
-              {(pagoResultado.whatsapp || compartirArchivos) && (
-                <button className="tips-btn-ghost"
-                  onClick={() => { void compartirComprobanteWhatsApp(pagoResultado.data, pagoResultado.whatsapp ?? '') }}>
-                  💬 WhatsApp
-                </button>
-              )}
-              <button className="tips-btn-teal" onClick={() => setPagoResultado(null)}>Cerrar</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {modales}
     </div>
   )
 }

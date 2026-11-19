@@ -7,7 +7,7 @@
 export type Tab =
   | 'hoy' | 'envivo' | 'ventas' | 'saloneros' | 'salolineas' | 'evaluacion' | 'icp'
   | 'cajeros' | 'historico' | 'mix' | 'analisis' | 'calendario' | 'menueng' | 'metas'
-  | 'competencias' | 'config'
+  | 'competencias' | 'config' | 'resumen' | 'tiempos' | 'internas'
 
 export interface TabDef { id: Tab; label: string; roles: string[] }
 
@@ -32,20 +32,29 @@ export const TABS: TabDef[] = [
   { id: 'metas',        label: 'Metas',             roles: ['owner','manager','contador'] },
   { id: 'competencias', label: 'Competencias',      roles: ['owner','manager'] },
   { id: 'config',       label: 'Productos',         roles: ['owner','manager'] },
+  // Ventas v2 · fase 2.1 (SPEC-ventas-v2 §5.1). Va AL FINAL de la lista a propósito: la pestaña de
+  // arranque de cada rol sigue siendo la de antes («Hoy») mientras conviven las vistas viejas (3.5).
+  { id: 'resumen',      label: 'Resumen',           roles: ['owner','manager','contador'] },
+  // Ventas v2 · fase 2.3 (SPEC-ventas-v2 §5.4). También al final, por la misma razón.
+  { id: 'tiempos',      label: 'Tiempos',           roles: ['owner','manager','contador'] },
+  // Ajustes → «Mesas internas» (mig 193; decisión del dueño 18-nov). Edita solo el owner.
+  { id: 'internas',     label: 'Mesas internas',    roles: ['owner','manager'] },
 ]
 
 export interface Entrada { id: string; label: string; vistas: Tab[] }
 
-/** Las entradas del menú de Ventas (`PLAN.md`): 7 + «Ajustes». */
+/** Las entradas del menú de Ventas (`PLAN.md`): 7 + «Resumen» y «Tiempos» (v2, fases 2.1 y 2.3) + «Ajustes». */
 export const ENTRADAS: Entrada[] = [
   { id: 'hoy',       label: 'Hoy',         vistas: ['hoy'] },
+  { id: 'resumen',   label: 'Resumen',     vistas: ['resumen'] },
+  { id: 'tiempos',   label: 'Tiempos',     vistas: ['tiempos'] },
   { id: 'envivo',    label: 'En vivo',     vistas: ['envivo'] },
   { id: 'saloneros', label: 'Saloneros',   vistas: ['saloneros', 'salolineas', 'evaluacion', 'icp', 'competencias'] },
   { id: 'analisis',  label: 'Análisis',    vistas: ['analisis'] },
   { id: 'historico', label: 'Histórico',   vistas: ['historico', 'calendario', 'mix', 'ventas', 'cajeros'] },
   { id: 'menueng',   label: 'Ing. Menú',   vistas: ['menueng'] },
   { id: 'metas',     label: 'Metas',       vistas: ['metas'] },
-  { id: 'ajustes',   label: 'Ajustes',     vistas: ['config'] },
+  { id: 'ajustes',   label: 'Ajustes',     vistas: ['config', 'internas'] },
 ]
 
 const TAB_POR_ID = new Map(TABS.map(t => [t.id, t]))
@@ -93,7 +102,7 @@ export function labelDe(tab: Tab): string {
  * Vistas que no reciben `dias` ni `pm` (leen lo suyo): se pintan sin esperar la carga de los
  * 90 días del PoS.
  */
-export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas'])
+export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas', 'resumen', 'tiempos', 'internas'])
 
 /**
  * Vistas que pueden mirar más atrás de los 90 días (historia, año contra año, rangos «Todo»,

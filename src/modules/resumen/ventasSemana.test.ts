@@ -24,7 +24,14 @@ describe('ventasDeLaSemana', () => {
   it('la caja no entra al ranking de saloneros', () => {
     const r = ventasDeLaSemana({ '2026-11-02': dia(100_000, 5, 20_000) })
     expect(Object.keys(r.salMap)).toEqual(['MESERO UNO'])
-    expect(r.salMap['MESERO UNO']).toEqual({ total: 100_000, pax: 5, days: 1 })
+    expect(r.salMap['MESERO UNO']).toEqual({ total: 100_000, salon: 100_000, pax: 5, days: 1 })
+  })
+
+  it('venta por persona = salón ÷ personas (D4): el delivery de caja no entra (antes neta total ÷ pax)', () => {
+    const r = ventasDeLaSemana({ '2026-11-02': dia(100_000, 5, 20_000) })
+    expect(r.salon).toBe(100_000)
+    expect(r.promPax).toBe(20_000)          // con la neta total sería 120.000 ÷ 5 = 24.000
+    expect(ventasDeLaSemana({}).promPax).toBe(0)
   })
 
   it('semana sin ventas → ceros', () => {

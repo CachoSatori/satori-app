@@ -327,6 +327,7 @@ function montarConRutas() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/club" element={<Destino />} />
+        <Route path="/mi-cuenta" element={<Destino />} />
       </Routes>
     </MemoryRouter>)
 }
@@ -476,5 +477,15 @@ describe('Inicio · la venta de hoy sale del PoS (16-nov)', () => {
     montar()
     await waitFor(() => expect(screen.getByText(/meta del mes 50 %/)).toBeTruthy())
     expect(ventasRangos).toContainEqual(['2026-11-01', '2026-11-30'])
+  })
+})
+
+// «Cambiar mi contraseña»: el botón del encabezado del Inicio, para cualquier rol (también los que no tienen menú).
+describe('Inicio · «Contraseña» (llave)', () => {
+  it.each([['owner'], ['barman']])('%s: lleva a /mi-cuenta', async (r) => {
+    role = r
+    montarConRutas()
+    fireEvent.click(screen.getByRole('button', { name: 'Cambiar mi contraseña' }))
+    await waitFor(() => expect(screen.getByText('destino /mi-cuenta')).toBeTruthy())
   })
 })

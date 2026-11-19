@@ -6,6 +6,7 @@
 // Ojo, diferencias contra las sumas viejas (los días del PoS traen dos datos que el xls no tenía):
 //   · el delivery de un mesero va a delivery, no a salón;
 //   · el pax de los tickets de salón cobrados con login de caja SÍ cuenta.
+import { ventaPorPersonaDeTotales } from './indicadores'
 import type { DiaData, DiasMap } from '../../shared/types/ventas'
 import { getDayStats } from './ventasUtils'
 
@@ -17,7 +18,7 @@ export interface TotalesVentas {
   salon:      number
   delivery:   number
   pax:        number
-  /** salón / pax (la definición de la app). */
+  /** Venta por persona: salón ÷ personas (D4, `indicadores.ts`). */
   promPax:    number
   /** Días con venta neta > 0. */
   dias:       number
@@ -44,6 +45,6 @@ export function totalesDelRango(dias: DiasMap): TotalesVentas {
     t.ventaNeta += d.ventaNeta; t.ventaBruta += d.ventaBruta; t.iva += d.iva; t.serv += d.serv
     t.salon += d.salon; t.delivery += d.delivery; t.pax += d.pax; t.dias += d.dias
   }
-  t.promPax = t.pax > 0 ? t.salon / t.pax : 0
+  t.promPax = ventaPorPersonaDeTotales(t.salon, t.pax) ?? 0
   return t
 }

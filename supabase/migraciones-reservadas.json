@@ -111,6 +111,12 @@
       "rama": "claude/esquema-columnas-caja-faltantes",
       "renumerada_a": "178"
     },
+    "099": {
+      "nombre": "seguridad_cambio_clave",
+      "bloque": "caja",
+      "rama": "claude/forzar-cambio-clave",
+      "renumerada_a": "185"
+    },
     "100": {
       "nombre": "club_catalogo_locales",
       "bloque": "club",
@@ -284,6 +290,60 @@
       "bloque": "club",
       "rama": "claude/club-descuentos-todas-lineas",
       "renumerada_a": "184"
+    },
+    "132": {
+      "nombre": "club_socio_edad",
+      "bloque": "club",
+      "rama": "claude/club-4-arreglos-edad",
+      "renumerada_a": "188"
+    },
+    "131": {
+      "nombre": "club_reto_un_local",
+      "bloque": "club",
+      "rama": "claude/club-4-arreglos-retos",
+      "renumerada_a": "187"
+    },
+    "130": {
+      "nombre": "club_cumple_deshacer_envio",
+      "bloque": "club",
+      "rama": "claude/club-4-arreglos",
+      "renumerada_a": "186"
+    },
+    "133": {
+      "nombre": "cron_ventas_dia_contador",
+      "bloque": "club",
+      "rama": "claude/correo-contador-ventas-dia",
+      "renumerada_a": "189"
+    },
+    "134": {
+      "nombre": "pos_ventas_resumen",
+      "bloque": "club",
+      "rama": "claude/ventas-v2-resumen-fn",
+      "renumerada_a": "190"
+    },
+    "135": {
+      "nombre": "pos_ventas_solo_lo_suyo",
+      "bloque": "club",
+      "rama": "claude/pos-ventas-solo-lo-suyo",
+      "renumerada_a": "191"
+    },
+    "136": {
+      "nombre": "pos_ventas_tiempos",
+      "bloque": "club",
+      "rama": "claude/ventas-v2-23-tiempos",
+      "renumerada_a": "193"
+    },
+    "137": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "club",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "renumerada_a": "192"
+    },
+    "138": {
+      "nombre": "mi_rendimiento_equipo",
+      "bloque": "club",
+      "rama": "claude/mi-rendimiento-evolucion",
+      "renumerada_a": "194"
     },
     "150": {
       "nombre": "club_satori_esquema",
@@ -482,6 +542,66 @@
       "bloque": "pase",
       "rama": "claude/club-descuentos-todas-lineas",
       "origen": "129"
+    },
+    "185": {
+      "nombre": "seguridad_cambio_clave",
+      "bloque": "pase",
+      "rama": "claude/forzar-cambio-clave",
+      "origen": "099"
+    },
+    "188": {
+      "nombre": "club_socio_edad",
+      "bloque": "pase",
+      "rama": "claude/club-4-arreglos-edad",
+      "origen": "132"
+    },
+    "187": {
+      "nombre": "club_reto_un_local",
+      "bloque": "pase",
+      "rama": "claude/club-4-arreglos-retos",
+      "origen": "131"
+    },
+    "186": {
+      "nombre": "club_cumple_deshacer_envio",
+      "bloque": "pase",
+      "rama": "claude/club-4-arreglos",
+      "origen": "130"
+    },
+    "189": {
+      "nombre": "cron_ventas_dia_contador",
+      "bloque": "pase",
+      "rama": "claude/correo-contador-ventas-dia",
+      "origen": "133"
+    },
+    "190": {
+      "nombre": "pos_ventas_resumen",
+      "bloque": "pase",
+      "rama": "claude/ventas-v2-resumen-fn",
+      "origen": "134"
+    },
+    "191": {
+      "nombre": "pos_ventas_solo_lo_suyo",
+      "bloque": "pase",
+      "rama": "claude/pos-ventas-solo-lo-suyo",
+      "origen": "135"
+    },
+    "192": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "pase",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "origen": "137"
+    },
+    "193": {
+      "nombre": "pos_ventas_tiempos",
+      "bloque": "pase",
+      "rama": "claude/ventas-v2-23-tiempos",
+      "origen": "136"
+    },
+    "194": {
+      "nombre": "mi_rendimiento_equipo",
+      "bloque": "pase",
+      "rama": "claude/mi-rendimiento-evolucion",
+      "origen": "138"
     }
   }
 }

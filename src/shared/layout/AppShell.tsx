@@ -131,6 +131,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="shell-usuario">
           <span className="shell-usuario-nombre">{profile.full_name}</span>
           <span className="shell-usuario-rol">{ROLE_LABELS[role] ?? role}</span>
+          <Link to="/mi-cuenta" className="shell-salir shell-cuenta">Cambiar contraseña</Link>
           <button type="button" className="shell-salir" onClick={signOut}>Cerrar sesión</button>
         </div>
       </nav>

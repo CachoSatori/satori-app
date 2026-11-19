@@ -91,6 +91,7 @@
   cursor: pointer;
 }
 .shell-salir:hover { color: var(--c-tinta); }
+.shell-cuenta { display: inline-flex; align-items: center; }   /* «Cambiar contraseña» es un enlace: mismo alto táctil */
 
 /* ── Barra inferior (celular y tablet) ──────────────────── */
 .shell-barra {

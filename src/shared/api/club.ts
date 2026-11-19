@@ -640,10 +640,11 @@ export interface EdadSocio {
   estado: 'pendiente' | 'activo' | 'baja'; baja_por: 'socio' | 'gerencia' | null; alta_por: string
   validado_en: string | null; mayor_edad_en: string | null
 }
-/** Rol de socio de una persona (null si no es socio). Lectura directa: la RLS deja leer los roles a owner, manager y cajero. */
+/** Rol de socio de una persona (null si no es socio). Mig 188: por función de la base (`club_socio_edad`; owner, manager,
+ *  cajero, contador), con control de local: al manager, una ficha de otro local le da «Ficha de otro local» (error) en
+ *  vez de un «no es socio» silencioso. Quien la llama, ante un error, muestra la casilla de mayor de 18 (`undefined`). */
 export const getEdadSocio = async (miembro: string): Promise<EdadSocio | null> =>
-  (await leer(from<EdadSocio>('club_miembro_roles').select('estado,baja_por,alta_por,validado_en,mayor_edad_en')
-    .eq('miembro_id', miembro).eq('rol', 'socio').limit(1)))[0] ?? null
+  (await llamar<EdadSocio | null>('club_socio_edad', { p_miembro: miembro })) ?? null
 /** Confirmar un alta provisional (owner o manager distinto de quien la cargó). */
 export const socioConfirmar = (miembro: string, nota: string) =>
   llamar<boolean>('club_socio_confirmar', { p_miembro: miembro, p_nota: nota })
@@ -725,6 +726,12 @@ export const getCumpleProximos = () => llamar<CumpleProximos>('club_cumple_proxi
 /** Marca «enviado» (una por socio y año del cumpleaños) y devuelve lo necesario para armar el WhatsApp. Queda auditado. */
 export type CumpleEnvio = CumpleConfig & { nombre: string; whatsapp: string; cumple: string; desde: string; hasta: string }
 export const enviarCumple = (miembro: string) => llamar<CumpleEnvio>('club_cumple_enviar', { p_miembro: miembro, p_location: localClub })
+/** Mig 186: «Ya saludados» del Inicio (solo owner): socios del local con la marca «enviado» de su próximo cumpleaños. */
+export interface CumpleEnviado { miembro_id: string; nombre: string; faltan: number; enviado_en: string }
+export const getCumplesEnviados = () => llamar<CumpleEnviado[]>('club_cumple_enviados', { p_location: localClub })
+/** Mig 186: el owner deshace la marca «enviado» (nota obligatoria, 3 a 500 caracteres). Queda auditado. */
+export const deshacerEnvioCumple = (miembro: string, nota: string) =>
+  llamar<boolean>('club_cumple_deshacer_envio', { p_miembro: miembro, p_nota: nota, p_location: localClub })
 /** Caja: ¿hoy cae en la ventana de su cumpleaños? Nunca devuelve la fecha. Mig 175: `ya_uso` = ya usó el beneficio del
  *  año de este cumpleaños (en cualquier local); sin la 175 no viene. */
 export type CumpleEnCaja = { aplica: false } | ({ aplica: true; ya_uso?: boolean } & Pick<CumpleConfig,

@@ -11,6 +11,9 @@ import { availableMonths, availableYears, fi } from './ventasUtils'
 // Caja de turno con la regla central: sin mayúsculas ni tildes, y reconoce los nombres del
 // .xls («Cajero Turno Mañana», «cajero turno tarde»), que la clave exacta dejaba afuera.
 import { esCajaDeTurno } from './baldesNoMesero'
+// «A la fecha» (Ventas v2, fase 1.3): si un período elegido está en curso, llega hasta ayer y los
+// demás del mismo tipo se cortan a los mismos días (motor `periodos.ts`).
+import { alinearPeriodosMix, corteDe, type PeriodoComparado } from './aLaFecha'
 
 // ── Types ─────────────────────────────────────────────────────────
 interface PMItem {
@@ -235,15 +238,19 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
   }, [verPM, verTots, canal])
 
   // ── COMPARAR mode data ─────────────────────────────────────────
+  const corte = useMemo(() => corteDe(), [])
+  const cmpAlineado = useMemo(() => alinearPeriodosMix(cmpPeriods, corte), [cmpPeriods, corte])
   const cmpData = useMemo(() => {
-    return cmpPeriods.map(key => {
-      const dates = datesForPeriod(key, dias, hist).filter(d => dias[d])
+    return cmpAlineado.periodos.map(p => {
+      const r     = p.rango
+      const dates = r ? datesForPeriod(p.key, dias, hist).filter(d => dias[d] && d >= r.desde && d <= r.hasta) : []
       const PM    = buildPMRaw(dates, dias, pm, canal)
       const CM    = groupPM(PM)
       const tots  = calcTotals(PM, canal)
-      return { key, label: labelPeriod(key), PM, CM, tots }
+      const label = `${labelPeriod(p.key)}${p.enCurso ? ' · a la fecha' : p.recortado ? ' · mismos días' : ''}`
+      return { key: p.key, label, periodo: p, PM, CM, tots }
     })
-  }, [cmpPeriods, dias, hist, pm, canal, allMonths])
+  }, [cmpAlineado, dias, hist, pm, canal])
 
   // Union PM for comparar table
   const masterPM = useMemo(() => {
@@ -358,6 +365,11 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
             </div>
           ) : (
             <>
+              {cmpAlineado.aviso && (
+                <div data-testid="mix-aviso-a-la-fecha" style={{ fontSize:'0.75rem', color:'var(--c-gris)', marginBottom:'0.6rem' }}>
+                  {cmpAlineado.aviso}
+                </div>
+              )}
               {/* Multi-period KPI table */}
               <CmpKPIs cmpData={cmpData} />
 
@@ -528,7 +540,7 @@ function CmpSelector({ allYears, allMonths, cmpPeriods, onToggle, onClear }: {
 // ═══════════════════════════════════════════════════════════════
 // Comparar KPI table
 // ═══════════════════════════════════════════════════════════════
-function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; PM: Record<string, PMItem>; tots: Tots }> }) {
+function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; periodo: PeriodoComparado; PM: Record<string, PMItem>; tots: Tots }> }) {
   const metrics: Array<{ label: string; fn: (t: Tots) => number }> = [
     { label:'Total ventas', fn: t => t.totG },
     { label:'Bebidas',      fn: t => t.totBeb },
@@ -545,6 +557,9 @@ function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; PM:
             {cmpData.map((c, i) => (
               <th key={c.key} style={{ textAlign:'right', padding:'0.4rem 0.625rem', fontSize:'0.65rem', color:CMP_COLORS[i%CMP_COLORS.length], fontWeight:700, whiteSpace:'nowrap' }}>
                 ({i+1}) {c.label}
+                <div data-testid="mix-rango" style={{ fontWeight:400, color:'var(--c-gris)', fontSize:'0.6rem' }}>
+                  {c.periodo.rotulo}{c.periodo.notaLargo ? ` · ${c.periodo.notaLargo}` : ''}
+                </div>
               </th>
             ))}
             {cmpData.length > 1 && (
@@ -567,7 +582,8 @@ function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; PM:
                 {cmpData.length > 1 && (
                   <td style={{ padding:'0.45rem 0.625rem', textAlign:'right', whiteSpace:'nowrap' }}>
                     {vals.slice(1).map((v, i) => {
-                      if (!base) return <span key={i} style={{ color:'var(--c-gris-claro)' }}>—</span>
+                      // Sin base o sin días cerrados todavía: «—», nunca −100 %.
+                      if (!base || !cmpData[i + 1].periodo.rango) return <span key={i} style={{ color:'var(--c-gris-claro)' }}>—</span>
                       const pct = (v - base) / Math.abs(base) * 100
                       const col = pct > 0 ? 'var(--c-musgo)' : pct < 0 ? 'var(--c-laca)' : 'var(--c-gris)'
                       return <span key={i} style={{ color:col, fontSize:'0.68rem', fontWeight:700, marginLeft: i > 0 ? '0.3rem' : 0 }}>

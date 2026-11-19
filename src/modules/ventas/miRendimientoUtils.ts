@@ -323,3 +323,6 @@ export function monthLabelLong(ym: string): string {
   const idx = Number(m) - 1
   return `${MONTHS_LONG[idx] ?? m} ${y}`
 }
+
+/** Roles que leen las ventas del PoS de todo el equipo (mig 191). El resto ve solo lo suyo y el equipo agregado (192). */
+export const ROLES_CON_EQUIPO: readonly string[] = ['owner', 'manager', 'contador']

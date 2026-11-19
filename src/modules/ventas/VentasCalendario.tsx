@@ -5,6 +5,8 @@
 import { useState, useMemo } from 'react'
 import type { DiasMap, HistMap, ProductMap } from '../../shared/types/ventas'
 import { getContabilidadDays, fi } from './ventasUtils'
+// Venta por persona: la de `indicadores.ts` (D4): salón ÷ personas (antes, neta total ÷ personas).
+import { ventaPorPersonaDeTotales } from './indicadores'
 
 interface Props { dias: DiasMap; hist: HistMap; pm?: ProductMap }
 
@@ -28,11 +30,12 @@ export default function VentasCalendario({ dias, hist }: Props) {
 
   // ── Day-of-week averages ──────────────────────────────────────
   const dowAvgs = useMemo(() => {
-    const byDow: Record<number, { sum: number; paxSum: number; cnt: number }> = {}
+    const byDow: Record<number, { sum: number; salonSum: number; paxSum: number; cnt: number }> = {}
     for (const d of allDays) {
       const dow = safeDOW(d.fecha)
-      if (!byDow[dow]) byDow[dow] = { sum: 0, paxSum: 0, cnt: 0 }
+      if (!byDow[dow]) byDow[dow] = { sum: 0, salonSum: 0, paxSum: 0, cnt: 0 }
       byDow[dow].sum    += d.ventaNeta
+      byDow[dow].salonSum += d.salon
       byDow[dow].paxSum += d.pax
       byDow[dow].cnt++
     }
@@ -42,7 +45,7 @@ export default function VentasCalendario({ dias, hist }: Props) {
       if (!b || !b.cnt) { avgs[d] = null; continue }
       avgs[d] = {
         neta:    Math.round(b.sum / b.cnt),
-        promPax: b.paxSum > 0 ? Math.round(b.sum / b.paxSum) : 0,
+        promPax: Math.round(ventaPorPersonaDeTotales(b.salonSum, b.paxSum) ?? 0),
         cnt:     b.cnt,
       }
     }
@@ -127,6 +130,7 @@ export default function VentasCalendario({ dias, hist }: Props) {
           const days       = byMonth[mk]
           const monthTotal = days.reduce((s,d) => s + d.ventaNeta, 0)
           const monthPAX   = days.reduce((s,d) => s + d.pax, 0)
+          const monthVPP   = ventaPorPersonaDeTotales(days.reduce((s,d) => s + d.salon, 0), monthPAX)
           const sortedByTotal = [...days].sort((a,b) => b.ventaNeta - a.ventaNeta)
           const bestDate   = sortedByTotal[0]?.fecha
           const worstDate  = sortedByTotal.length > 1 ? sortedByTotal[sortedByTotal.length-1]?.fecha : undefined
@@ -168,7 +172,7 @@ export default function VentasCalendario({ dias, hist }: Props) {
                         const isWorst = d.fecha === worstDate && days.length > 1
                         const dow     = safeDOW(d.fecha)
                         const [, ,dd] = d.fecha.split('-')
-                        const ppax    = d.pax > 0 ? d.ventaNeta / d.pax : 0
+                        const ppax    = ventaPorPersonaDeTotales(d.salon, d.pax) ?? 0
                         let color = 'inherit'
                         let badge = ''
                         let rowBg = i % 2 === 0 ? 'transparent' : 'var(--c-panel)'
@@ -194,7 +198,7 @@ export default function VentasCalendario({ dias, hist }: Props) {
                         <td colSpan={2}>TOTAL {monthLabel}</td>
                         <td className="r">{fi(monthTotal)}</td>
                         <td className="r">{monthPAX > 0 ? monthPAX.toLocaleString('es-CR') : '—'}</td>
-                        <td className="r">{monthPAX > 0 ? fi(monthTotal / monthPAX) : '—'}</td>
+                        <td className="r">{monthVPP === null ? '—' : fi(monthVPP)}</td>
                       </tr>
                     </tfoot>
                   </table>

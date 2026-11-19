@@ -1,10 +1,12 @@
 import type {
   DiasMap, DiaData, SaloneroDay, CajeroDay,
   AggSalonero, AggGeneral, AggCajero, ContabilidadDay,
-  ProductMap, HistMap, Meta,
+  ProductMap, HistMap, Meta, CrudoCts,
 } from '../../shared/types/ventas'
 import { fi, isCajeroName, todayCR } from '../../shared/utils'
 import { claveCajeroDeTurno } from './baldesNoMesero'
+// Venta por persona: UNA fórmula (D4) para toda la app, en `indicadores.ts`.
+import { netaSalonDeSalonero, ventaPorPersonaDeTotales } from './indicadores'
 
 // ── Cajeros detection ────────────────────────────────────────
 export function esCajero(name: string): boolean { return isCajeroName(name) }
@@ -227,20 +229,82 @@ export function mixPorFamilia(dias: DiasMap, dates: string[]): MixFamilia {
   return { com, beb, iCom, iBeb }
 }
 
+// ── Redondeo de los totales (decisión del dueño 18-nov, opción A) ──────────
+/**
+ * Un balde del día (salonero o caja) que se suma al total del día en `getDayStats`. Los campos son los ₡
+ * YA redondeados que se muestran por persona; `cts`, si viene, son los mismos montos crudos en céntimos
+ * (solo PoS). Los totales del PERÍODO no pasan por acá: son la suma de los días ya redondeados.
+ */
+export interface ParteTotal {
+  neta: number; iva: number; serv: number; delivery: number; salon: number; bruta: number
+  cts?: CrudoCts
+}
+
+/**
+ * El total del día, redondeado UNA vez: neta, IVA, servicio y delivery = round(Σ crudo).
+ * Antes cada balde (salonero, caja) se redondeaba y después se sumaba, así que mover una factura
+ * de una persona a otra podía mover el total del día ±₡1. Ahora el total no depende del reparto.
+ *
+ * Salón y bruta NO se redondean otra vez: salen de los anteriores (salón = neta − delivery,
+ * bruta = neta + IVA + servicio), así las identidades de la tabla siguen cerrando al colón. Una parte
+ * SIN crudo (día del .xls o de `ventas_hist`) entra con sus ₡ tal cual, y si su salón o su bruta no
+ * cumplían esas identidades, la diferencia se conserva exacta (`ajuste…`). Si NINGUNA parte trae crudo
+ * (todo .xls / `ventas_hist`), es la suma de siempre, sin redondear nada: esos días no se mueven.
+ */
+export function sumarPartesRedondeando(partes: Iterable<ParteTotal>): {
+  ventaNeta: number; iva: number; serv: number; delivery: number; salon: number; ventaBruta: number
+  crudoCts: CrudoCts
+} {
+  const c: CrudoCts = { neta: 0, iva: 0, serv: 0, delivery: 0 }
+  let ajusteSalon = 0, ajusteBruta = 0
+  // Sin NINGÚN crudo (todo del .xls o de `ventas_hist`): la suma de siempre, sin tocar un céntimo.
+  const lista = [...partes]
+  if (!lista.some(p => p.cts)) {
+    const t = { ventaNeta: 0, iva: 0, serv: 0, delivery: 0, salon: 0, ventaBruta: 0 }
+    for (const p of lista) {
+      t.ventaNeta += p.neta; t.iva += p.iva; t.serv += p.serv
+      t.delivery += p.delivery; t.salon += p.salon; t.ventaBruta += p.bruta
+    }
+    return { ...t, crudoCts: c }
+  }
+  for (const p of lista) {
+    c.neta     += p.cts ? p.cts.neta     : Math.round(p.neta * 100)
+    c.iva      += p.cts ? p.cts.iva      : Math.round(p.iva * 100)
+    c.serv     += p.cts ? p.cts.serv     : Math.round(p.serv * 100)
+    c.delivery += p.cts ? p.cts.delivery : Math.round(p.delivery * 100)
+    if (!p.cts) {
+      ajusteSalon += p.salon - (p.neta - p.delivery)
+      ajusteBruta += p.bruta - (p.neta + p.iva + p.serv)
+    }
+  }
+  // Céntimos enteros → ₡ con UN redondeo. k/100 con k entero termina en ,5 exacto en binario, así que
+  // el empate se resuelve siempre igual (hacia arriba, como `Math.round` en el resto de la app).
+  const ventaNeta = Math.round(c.neta / 100)
+  const iva       = Math.round(c.iva / 100)
+  const serv      = Math.round(c.serv / 100)
+  const delivery  = Math.round(c.delivery / 100)
+  return {
+    ventaNeta, iva, serv, delivery,
+    salon:      ventaNeta - delivery + ajusteSalon,
+    ventaBruta: ventaNeta + iva + serv + ajusteBruta,
+    crudoCts:   c,
+  }
+}
+
 // ── Per-day combined stats ───────────────────────────────────
 export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: string[] } {
-  let ventaNeta = 0, iva = 0, serv = 0, salon = 0, delivery = 0, pax = 0
+  let pax = 0
   const saloneroNames: string[] = []
+  const partes: ParteTotal[] = []
   for (const [name, s] of Object.entries(dia.saloneros)) {
     if ((s as CajeroDay).esCajero) {
       const c = s as CajeroDay
-      ventaNeta += c.total
-      iva       += c.iva ?? 0
-      serv      += c.serv ?? 0
-      delivery  += c.delivery
-      salon     += c.salon
-      // El PAX de caja TAMBIÉN cuenta. En el PoS hay tickets de salón cobrados bajo un login
-      // de caja (111/222/388): su plata ya venía sumando acá (`c.total`, `c.salon`), pero su
+      partes.push({
+        neta: c.total, iva: c.iva ?? 0, serv: c.serv ?? 0, delivery: c.delivery, salon: c.salon,
+        bruta: c.total + (c.iva ?? 0) + (c.serv ?? 0), cts: c.crudoCts,
+      })
+      // El PAX de caja TAMBIÉN cuenta. En el PoS hay tickets de salón cobrados bajo un login de
+      // caja (111/222/388): su plata ya venía sumando acá (`c.total`, `c.salon`), pero su
       // pax se descartaba, así que el día informaba menos comensales de los que hubo — ~9%
       // menos que el xls en la Paridad, con el crudo (`pax_articulo`) dando idéntico.
       // `?? 0`: el `xlsParser` nunca llenó este campo, así que los días del xls no se mueven.
@@ -251,33 +315,33 @@ export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: st
       // `ventasPorCanal` (canal del ticket), así que Σ salón / Σ delivery del día dan lo mismo
       // que `ventasPorCanal`. Días del xls: sin el campo → todo a salón, como siempre.
       const dl  = sl.delivery ?? 0
-      ventaNeta += sl.total
-      iva       += sl.iva ?? 0
-      serv      += sl.serv ?? 0
-      salon     += sl.total - dl
-      delivery  += dl
+      partes.push({
+        neta: sl.total, iva: sl.iva ?? 0, serv: sl.serv ?? 0, delivery: dl, salon: sl.total - dl,
+        bruta: sl.total + (sl.iva ?? 0) + (sl.serv ?? 0), cts: sl.crudoCts,
+      })
       pax       += sl.pax ?? 0
       saloneroNames.push(name)
     }
   }
-  const ventaBruta = ventaNeta + iva + serv
+  // UN redondeo para el día, sobre la suma cruda de todos los baldes (no Σ de baldes redondeados).
+  const t = sumarPartesRedondeando(partes)
   return {
     fecha:      '',
-    ventaBruta,
-    ventaNeta,
-    iva,
-    serv,
-    salon,
-    delivery,
+    ventaBruta: t.ventaBruta,
+    ventaNeta:  t.ventaNeta,
+    iva:        t.iva,
+    serv:       t.serv,
+    salon:      t.salon,
+    delivery:   t.delivery,
     pax,
-    promPax:    pax > 0 ? salon / pax : 0,
+    promPax:    ventaPorPersonaDeTotales(t.salon, pax) ?? 0,
     saloneroNames,
   }
 }
 
 // ── aggSalonero ──────────────────────────────────────────────
 export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: ProductMap): AggSalonero {
-  let total = 0, com = 0, beb = 0, pax = 0, iCom = 0, iBeb = 0, iva = 0, serv = 0
+  let total = 0, salon = 0, com = 0, beb = 0, pax = 0, iCom = 0, iBeb = 0, iva = 0, serv = 0
   let days = 0
   const prods: Record<string, { q: number; m: number }> = {}
 
@@ -289,6 +353,7 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
     const s = raw as SaloneroDay
     days++
     total += s.total
+    salon += netaSalonDeSalonero(s)
     com   += s.com
     beb   += s.beb
     pax   += s.pax ?? 0
@@ -324,7 +389,8 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
     pax,
     iCom,
     iBeb:       iBebAdj,
-    promPax:    pax > 0 ? total / pax : 0,
+    // D4: su neta de SALÓN ÷ sus personas (antes `total / pax`: sumaba su delivery).
+    promPax:    ventaPorPersonaDeTotales(salon, pax) ?? 0,
     promPlato:  iCom > 0 ? com / iCom : 0,
     promBebida: iBebAdj > 0 ? beb / iBebAdj : 0,
     ratioCB:    beb > 0 ? com / beb : 0,
@@ -337,7 +403,7 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
 
 // ── aggGeneral ───────────────────────────────────────────────
 export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggGeneral {
-  let total = 0, cajTotal = 0, cajDelivery = 0, cajSalon = 0
+  let total = 0, salonMeseros = 0, cajTotal = 0, cajDelivery = 0, cajSalon = 0
   // DOS contadores de pax, a propósito (ver `AggGeneral.paxSaloneros`):
   //   · `pax`          = todos los comensales del día, caja incluida. Es "cuánta gente vino".
   //   · `paxSaloneros` = solo los de meseros. Es el denominador de `promPax`/`bebPax`, cuyos
@@ -361,6 +427,7 @@ export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggG
       } else {
         const sl = s as SaloneroDay
         total += sl.total
+        salonMeseros += netaSalonDeSalonero(sl)
         pax          += sl.pax ?? 0
         paxSaloneros += sl.pax ?? 0
         iCom  += sl.iCom ?? 0
@@ -387,12 +454,14 @@ export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggG
     cajDelivery,
     cajSalon,
     totalRest,
-    salon:      total + cajSalon,
+    // Salón = lo de salón de meseros (sin su delivery) + lo de salón de caja.
+    salon:      salonMeseros + cajSalon,
     pax,
     paxSaloneros,
-    // Sobre `paxSaloneros` y no sobre `pax`: los dos numeradores son de meseros. Es el mismo
-    // valor que devolvían antes de que `pax` pasara a contar también el de caja.
-    promPax:    paxSaloneros > 0 ? total / paxSaloneros : 0,
+    // D4 (firmada 17-nov, «un solo número en todos lados»): la venta por persona del DÍA es la de
+    // todo el salón —meseros y caja— ÷ todas sus personas, la misma de `getDayStats`. Antes era
+    // `total / paxSaloneros` (solo meseros, con su delivery). Cada mesero se compara contra esta.
+    promPax:    ventaPorPersonaDeTotales(salonMeseros + cajSalon, pax) ?? 0,
     iCom,
     iBeb,
     ratioCB:    beb > 0 ? com / beb : 0,
@@ -493,6 +562,11 @@ function sumarCajeroDay(a: CajeroDay, b: CajeroDay): CajeroDay {
     iva: a.iva + b.iva, serv: a.serv + b.serv, ordenes,
     ticketProm: ordenes ? total / ordenes : 0,
     prods: [...prods.values()].sort((x, y) => y[2] - x[2]),
+    // El crudo viaja si viene en los dos; si falta en uno, el balde sumado entra con sus ₡.
+    ...(a.crudoCts && b.crudoCts ? { crudoCts: {
+      neta: a.crudoCts.neta + b.crudoCts.neta, iva: a.crudoCts.iva + b.crudoCts.iva,
+      serv: a.crudoCts.serv + b.crudoCts.serv, delivery: a.crudoCts.delivery + b.crudoCts.delivery,
+    } } : {}),
   }
 }
 
@@ -555,6 +629,32 @@ export function getContabilidadDays(year: number, month: number | null, dias: Di
     }
   }
   return result
+}
+
+// ── Totales del «Detalle por día» (Contabilidad) ──────────────
+/**
+ * La fila TOTAL de «Ventas → Contabilidad → Detalle por día». La usan la pantalla y el correo quincenal
+ * al contador (Edge `ventas-dia-contador`, por el paquete de `ventasDiaContadorPuro.ts`): una sola
+ * definición. Prom/PAX del período = `ventaPorPersonaDeTotales(Σ salón, Σ pax) ?? 0` (como cada día en
+ * `getDayStats`), no el promedio de los Prom/PAX diarios.
+ */
+export interface TotalesContabilidad {
+  ventaBruta: number; iva: number; serv: number; ventaNeta: number
+  salon: number; delivery: number; pax: number; promPax: number
+}
+export function totalesContabilidad(days: readonly ContabilidadDay[]): TotalesContabilidad {
+  // Decisión del dueño (18-nov 08:14, opción A): cada DÍA ya es un solo redondeo de su crudo (`getDayStats`);
+  // el TOTAL del período es la SUMA de esos días tal como se muestran, así la fila TOTAL de la pantalla da lo
+  // mismo que la fórmula de suma del Excel del contador.
+  const t = { ventaBruta: 0, iva: 0, serv: 0, ventaNeta: 0, salon: 0, delivery: 0, pax: 0, promPax: 0 }
+  for (const d of days) {
+    t.ventaBruta += d.ventaBruta; t.iva += d.iva; t.serv += d.serv; t.ventaNeta += d.ventaNeta
+    t.salon += d.salon; t.delivery += d.delivery; t.pax += d.pax
+  }
+  // Una sola fuente de la cuenta (la misma que la pantalla en Hoy, Calendario y Mix): salón ÷ personas;
+  // sin personas → 0 en la fila (la función devuelve null).
+  t.promPax = ventaPorPersonaDeTotales(t.salon, t.pax) ?? 0
+  return t
 }
 
 // ── Top products ──────────────────────────────────────────────

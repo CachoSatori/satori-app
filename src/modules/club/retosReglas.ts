@@ -12,7 +12,8 @@ export function resumenFranja(r: Pick<Reto, 'dias' | 'hora_desde' | 'hora_hasta'
 /** Validación de pantalla (la base vuelve a validar todo). Devuelve el primer problema o null. */
 export function problemaReto(d: RetoDatos, hoy: string): string | null {
   if (d.nombre.trim().length < 2 || d.nombre_en.trim().length < 2) return 'Poné el nombre en español y en inglés.'
-  if (d.locales.length === 0) return 'Elegí al menos un local.'
+  // Mig 187: un reto pertenece a un solo local (para otro local se arma otro reto)
+  if (d.locales.length !== 1) return 'Un reto es de un solo local: elegí uno.'
   if (!d.desde || !d.hasta) return 'Poné las fechas del reto.'
   if (d.desde < hoy) return 'El reto no puede empezar en el pasado.'
   if (d.hasta < d.desde) return 'La fecha de fin es antes que la de inicio.'

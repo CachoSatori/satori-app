@@ -3,6 +3,7 @@
  * Accesible desde VentasContabilidad vía botón "🖨 Reporte"
  * Usa window.print() — el browser lo convierte en PDF via "Guardar como PDF"
  */
+import { ventaPorPersonaDeTotales } from './indicadores'
 import { useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { DiasMap, HistMap, ProductMap, Meta } from '../../shared/types/ventas'
@@ -138,7 +139,7 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
                 { label: 'Salón',           val: fi(totSal),  bold: false },
                 { label: 'Delivery',        val: fi(totDel),  bold: false },
                 { label: 'PAX Total',       val: totPax.toLocaleString('es-CR'), bold: false },
-                { label: 'Prom/PAX',        val: fi(totPax > 0 ? totSal / totPax : 0), bold: false },
+                { label: 'Prom/PAX',        val: fi(ventaPorPersonaDeTotales(totSal, totPax) ?? 0), bold: false },
               ].map(k => (
                 <div key={k.label} className={`rpt-kpi ${k.muted ? 'muted' : ''}`}>
                   <div className="rpt-kpi-label">{k.label}</div>

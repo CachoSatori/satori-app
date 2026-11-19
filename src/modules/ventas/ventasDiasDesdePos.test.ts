@@ -173,10 +173,10 @@ describe('paridad de FORMA con armarDia / «En vivo»', () => {
     for (const e of entradas) {
       if ('esCajero' in e && e.esCajero) {
         expect(Object.keys(e).sort()).toEqual(
-          ['delivery', 'esCajero', 'iva', 'ordenes', 'prods', 'salon', 'serv', 'ticketProm', 'total'])
+          ['crudoCts', 'delivery', 'esCajero', 'iva', 'ordenes', 'prods', 'salon', 'serv', 'ticketProm', 'total'])
       } else {
         expect(Object.keys(e).sort()).toEqual(
-          ['bebPax', 'beb', 'com', 'iBeb', 'iCom', 'iva', 'pax', 'promBebida', 'promPax',
+          ['bebPax', 'beb', 'com', 'crudoCts', 'iBeb', 'iCom', 'iva', 'pax', 'promBebida', 'promPax',
            'promPlato', 'prods', 'ratioCB', 'ratioU', 'serv', 'total'].sort())
       }
       expect(Array.isArray(e.prods)).toBe(true)

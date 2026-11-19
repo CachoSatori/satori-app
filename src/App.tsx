@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './shared/hooks/useAuth'
+import { CambioClaveProvider } from './shared/hooks/CambioClaveProvider'
+import { useCambioClave } from './shared/hooks/useCambioClave'
 import { ManagerOverrideProvider } from './shared/ManagerOverride'
 import { DeletionNoteProvider } from './modules/cash/deletionNote'
 import ErrorBoundary from './shared/ErrorBoundary'
@@ -31,6 +33,7 @@ const FinanzasModule    = lazy(() => import('./modules/finanzas/FinanzasModule')
 const InboxModule       = lazy(() => import('./modules/inbox/InboxModule'))
 const PruebaModule      = lazy(() => import('./modules/prueba/PruebaModule'))
 const RegistroCliente   = lazy(() => import('./pages/RegistroCliente'))
+const MiCuenta          = lazy(() => import('./pages/cuenta/MiCuenta'))
 
 // ── Loading fallback — same spinner used for auth ──────────────
 function ModuleLoading({ kanji = '祭' }: { kanji?: string }) {
@@ -64,10 +67,22 @@ function PendingApproval() {
 }
 
 // ── Route guards ───────────────────────────────────────────────
+// Cambio de contraseña obligatorio (mig 185): si el owner lo pidió y hay conexión, solo se puede estar en /mi-cuenta.
+// Devuelve el elemento a mostrar en lugar de la ruta, o null si puede seguir.
+const RUTA_CAMBIO_CLAVE = '/mi-cuenta'
+function useCorteCambioClave(): React.ReactNode | null {
+  const { debe, consultando } = useCambioClave()
+  const { pathname } = useLocation()
+  if (consultando) return <ModuleLoading />
+  if (debe && pathname !== RUTA_CAMBIO_CLAVE) return <Navigate to={RUTA_CAMBIO_CLAVE} replace />
+  return null
+}
+
 // `roles` opcional: si se pasa, el rol del perfil debe estar incluido,
 // si no → redirige al inicio (defensa por URL, además de ocultar tiles).
 function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: UserRole[] }) {
   const { user, profile, loading } = useAuth()
+  const corte = useCorteCambioClave()
   if (loading) return <ModuleLoading />
   if (!user) return <Navigate to="/login" replace />
   // Sesión presente pero perfil NO cargado (p. ej. loadProfile venció tras suspensión): NO renderizar
@@ -77,6 +92,8 @@ function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: 
   if (profile && !profile.is_active) return <PendingApproval />
   // Primer ingreso con contraseña temporal → elegir una nueva antes de usar la app
   if (debeCambiarPassword(user)) return <CambiarPasswordInicial />
+  // Cambio de contraseña pedido por el owner (mig 185) → solo /mi-cuenta
+  if (corte) return corte
   if (roles && profile && !roles.includes(profile.role)) return <Navigate to="/" replace />
   return <>{children}</>
 }
@@ -92,9 +109,11 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 function OwnerRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useAuth()
+  const corte = useCorteCambioClave()
   if (loading) return <ModuleLoading />
   if (!profile) return <Navigate to="/login" replace />
   if (debeCambiarPassword(user)) return <CambiarPasswordInicial />
+  if (corte) return corte
   return profile.role === 'owner' ? <>{children}</> : <Navigate to="/" replace />
 }
 
@@ -165,6 +184,8 @@ function AppRoutes() {
         <Route path="/caja"     element={<PrivateRoute roles={['owner','manager','cajero','contador']}><CashModule /></PrivateRoute>} />
         <Route path="/ventas"   element={<PrivateRoute roles={['owner','manager','contador']}><VentasModule /></PrivateRoute>} />
         <Route path="/sops"          element={<PrivateRoute><SOPsModule /></PrivateRoute>} />
+        {/* «Cambiar mi contraseña»: cualquier usuario logueado, todos los roles. */}
+        <Route path="/mi-cuenta"     element={<PrivateRoute><MiCuenta /></PrivateRoute>} />
         {/* Mis Propinas se integró como pestaña de Mi Rendimiento (la "casa del empleado").
             La ruta vieja redirige a esa pestaña para no romper enlaces/cards del Home. */}
         <Route path="/mis-propinas"  element={<Navigate to="/mi-rendimiento?tab=propinas" replace />} />
@@ -205,6 +226,7 @@ function StagingBanner() {
 export default function App() {
   return (
     <AuthProvider>
+      <CambioClaveProvider>
       <ManagerOverrideProvider>
         <DeletionNoteProvider>
           <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
@@ -219,6 +241,7 @@ export default function App() {
           </BrowserRouter>
         </DeletionNoteProvider>
       </ManagerOverrideProvider>
+      </CambioClaveProvider>
     </AuthProvider>
   )
 }

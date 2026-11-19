@@ -359,6 +359,13 @@ export default function HomePage() {
         <div className="header-user">
           <span className="user-name">{profile.full_name}</span>
           <span className="user-role">{ROLE_LABELS[profile.role] ?? profile.role}</span>
+          <button type="button" className="btn-signout btn-cuenta" onClick={() => navigate('/mi-cuenta')}
+            title="Cambiar mi contraseña" aria-label="Cambiar mi contraseña">
+            <svg className="btn-cuenta-llave" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
+              <circle cx="5" cy="8" r="3" /><path d="M8 8h7M12.5 8v2.5M14.5 8v2" />
+            </svg>
+            Contraseña
+          </button>
           <button className="btn-signout" onClick={signOut} title="Cerrar sesión">✕</button>
         </div>
       </header>

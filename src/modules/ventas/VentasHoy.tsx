@@ -9,8 +9,10 @@ import {
 } from './ventasUtils'
 import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
-import { esPostCorte } from '../cash/cierrePozo'
+import { bloqueoACaja, bloqueoPorTurno, AVISO_A_CAJA } from './aCaja'
+import { todayCR } from '../../shared/utils'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { ventaPorPersonaDeTotales } from './indicadores'
 
 interface Props {
   dias:   DiasMap
@@ -83,7 +85,8 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     if (!sameD.length) return null
     const vals  = sameD.map(d => aggGeneral([d], dias, pm)).filter(g => g.pax > 0)
     if (!vals.length) return null
-    const avgPP = vals.reduce((s,g) => s + g.promPax, 0) / vals.length
+    // D4: Σ salón ÷ Σ personas de los 4 días (no el promedio de los 4 promedios).
+    const avgPP = ventaPorPersonaDeTotales(vals.reduce((s,g) => s + g.salon, 0), vals.reduce((s,g) => s + g.pax, 0)) ?? 0
     const avgVt = vals.reduce((s,g) => s + g.total, 0)   / vals.length
     return { promPax: avgPP, total: avgVt, n: vals.length, dow }
   }, [activeDate, allDates, dias, pm])
@@ -169,8 +172,12 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     )
   }
 
+  // LA cuenta del día (opción A, 18-nov): un solo redondeo del crudo. «Venta Total Restaurante», «Salón»,
+  // «Delivery», el mensaje 📤 y «→ Caja» salen todos de acá, no de la suma por persona (`gen`).
   const stats      = getDayStats(dia)
   const hasCajeros = hayCaja
+  // «→ Caja» solo para la jornada en curso y antes del corte del pozo (ver `aCaja.ts`).
+  const bloqueoCaja = bloqueoACaja(activeDate, todayCR())
 
   // ▲/▼ delta vs día anterior
   function delta(cur: number, prev: number | undefined, isInt = false): React.ReactNode {
@@ -239,7 +246,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             </button>
           )}
           {/* Share / Compartir */}
-          {gen && gen.totalRest > 0 && (() => {
+          {gen && stats.ventaNeta > 0 && (() => {
             const dayLabel = new Date(activeDate + 'T12:00:00').toLocaleDateString('es-CR', { weekday:'short', day:'numeric', month:'short' })
             const sorted = [...salAggs].sort((a,b) => b.promPax - a.promPax)
             const topLines = sorted.slice(0,3).map((s,i) =>
@@ -248,9 +255,9 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             const text = [
               `🍣 *SATORI — ${dayLabel}*`,
               '━━━━━━━━━━━━━━━━━━━━',
-              `💰 Ventas: *${fi(gen.totalRest)}*`,
+              `💰 Ventas: *${fi(stats.ventaNeta)}*`,
               gen.pax > 0 ? `👥 PAX: ${gen.pax}  •  Prom/PAX: *${fi(gen.promPax)}*` : '',
-              gen.cajDelivery > 0 ? `🛵 Delivery: ${fi(gen.cajDelivery)}` : '',
+              stats.delivery > 0 ? `🛵 Delivery: ${fi(stats.delivery)}` : '',
               `🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${ratioCB.toFixed(1)}`,
               topLines ? '━━━━━━━━━━━━━━━━━━━━\n' + topLines : '',
               '━━━━━━━━━━━━━━━━━━━━',
@@ -265,33 +272,33 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             )
           })()}
           {/* Auto-register ventas in Caja */}
-          {(profile?.role === 'owner' || profile?.role === 'manager') && gen && gen.totalRest > 0 && (
+          {(profile?.role === 'owner' || profile?.role === 'manager') && gen && stats.ventaNeta > 0 && (
             <button
               className="vt-range-btn"
-              disabled={registrando}
-              title="Crea un movimiento de ingreso en la Caja con el total de ventas del día"
-              style={{ fontSize: '0.68rem', borderColor: 'var(--vt-green)', color: 'var(--vt-green)' }}
+              disabled={registrando || bloqueoCaja !== null}
+              aria-describedby={bloqueoCaja ? 'vt-acaja-aviso' : undefined}
+              title={bloqueoCaja ? AVISO_A_CAJA[bloqueoCaja] : 'Crea un movimiento de ingreso en la Caja con el total de ventas del día'}
+              style={{ fontSize: '0.68rem', borderColor: 'var(--vt-green)', color: 'var(--vt-green)',
+                ...(bloqueoCaja ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}
               onClick={async () => {
                 if (!profile) return
+                // ⚠️ Dos llaves antes de escribir plata (ver `aCaja.ts`):
+                // 1) el día elegido es HOY (jornada en curso, hora CR) y es anterior al corte del pozo
+                //    (desde el corte la venta entra por el Cierre del Día: este atajo la duplicaría);
+                // 2) el turno abierto es de ESE día. Si no, la venta de una fecha caería en la caja de otra.
+                const b1 = bloqueoACaja(activeDate, todayCR())
+                if (b1) { setRegMsg(`⚠ ${AVISO_A_CAJA[b1]}`); return }
                 setRegistrando(true); setRegMsg(null)
                 try {
-                  // ⚠️ CANAL DUPLICADO — bloqueado desde el corte del pozo.
-                  // Este botón crea un ingreso de la venta del día en `Registradora`, y el
-                  // Cierre crea otro por la MISMA venta en `Caja Fuerte`. Con el modelo viejo
-                  // no chocaban (saldoCajaFuerte ignora Registradora); con el pozo las dos
-                  // cajas suman, así que la venta entraría DOS VECES. Post-corte la venta
-                  // entra por un solo canal: las ventas brutas del Cierre del Día.
-                  if (esPostCorte(activeDate)) {
-                    setRegMsg('⚠ Desde el pozo, las ventas entran por el Cierre del Día (ventas brutas). Este atajo duplicaría el ingreso.')
-                    return
-                  }
                   const cashSession = await getOpenCashSession()
                   if (!cashSession) { setRegMsg('⚠ No hay turno de caja abierto'); return }
+                  const b2 = bloqueoPorTurno(activeDate, cashSession.session_date)
+                  if (b2) { setRegMsg(`⚠ ${AVISO_A_CAJA[b2]}`); return }
                   await createCashMovement({
                     session_id:    cashSession.id,
                     created_by:    profile.id,
                     movement_type: 'ingreso',
-                    amount_crc:    Math.round(gen.totalRest),
+                    amount_crc:    Math.round(stats.ventaNeta),   // = «Venta Total Restaurante» (en días del PoS ya es entero)
                     amount_usd:    0,
                     currency:      'CRC',
                     exchange_rate: null,
@@ -301,7 +308,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
                     caja_origen:   'Registradora',
                     shift:         cashSession.shift_type ?? '',
                   })
-                  setRegMsg(`✓ ₡${Math.round(gen.totalRest).toLocaleString('es-CR')} registrado en Caja`)
+                  setRegMsg(`✓ ₡${Math.round(stats.ventaNeta).toLocaleString('es-CR')} registrado en Caja`)
                   setTimeout(() => setRegMsg(null), 4000)
                 } catch (e) {
                   setRegMsg(`✗ ${e instanceof Error ? e.message : 'Error'}`)
@@ -315,6 +322,12 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           )}
         </div>
       </div>
+      {(profile?.role === 'owner' || profile?.role === 'manager') && gen && stats.ventaNeta > 0 && bloqueoCaja && !regMsg && (
+        <div id="vt-acaja-aviso" data-testid="acaja-aviso"
+          style={{ fontSize: '0.72rem', padding: '0.3rem 0', color: 'var(--c-gris)' }}>
+          {AVISO_A_CAJA[bloqueoCaja]}
+        </div>
+      )}
       {regMsg && (
         <div style={{ fontSize: '0.78rem', padding: '0.4rem 0', color: regMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)' }}>
           {regMsg}
@@ -335,13 +348,13 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
             </div>
             <div className="vt-kpi">
               <div className="vt-kpi-label">Salón</div>
-              <div className="vt-kpi-val">{fi(gen.total + gen.cajSalon)}</div>
-              <div className="vt-kpi-sub">{gen.totalRest > 0 ? ((gen.total + gen.cajSalon) / gen.totalRest * 100).toFixed(1) : 0}%</div>
+              <div className="vt-kpi-val">{fi(stats.salon)}</div>
+              <div className="vt-kpi-sub">{stats.ventaNeta > 0 ? (stats.salon / stats.ventaNeta * 100).toFixed(1) : 0}%</div>
             </div>
             <div className="vt-kpi blue">
               <div className="vt-kpi-label">Delivery</div>
-              <div className="vt-kpi-val">{fi(gen.cajDelivery)}</div>
-              <div className="vt-kpi-sub">{gen.totalRest > 0 ? (gen.cajDelivery / gen.totalRest * 100).toFixed(1) : 0}%</div>
+              <div className="vt-kpi-val">{fi(stats.delivery)}</div>
+              <div className="vt-kpi-sub">{stats.ventaNeta > 0 ? (stats.delivery / stats.ventaNeta * 100).toFixed(1) : 0}%</div>
             </div>
             {cajAggs.filter(c => c.total !== 0).map(c => (
               <div key={c.nombre} className="vt-kpi">

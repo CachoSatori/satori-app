@@ -11,8 +11,6 @@ const PERMITIDOS: Record<string, number> = {
   // carpeta del archivo en Storage (no la ve nadie ni se compara con fechas CR)
   'shared/api/documents.ts': 1,
   'shared/api/facturas.ts': 1,
-  // respaldo si fechaCR() no puede leer la fecha (nunca pasa con un Date válido)
-  'modules/ventas/VentasPromPaxExplicado.tsx': 1,
 }
 
 function archivos(dir: string): string[] {

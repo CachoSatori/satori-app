@@ -1,4 +1,4 @@
-# Pase a PROD de la mig 194 `mi_rendimiento_equipo` (origen club 138) — **número definitivo**
+# Pase a PROD de la mig 194 `mi_rendimiento_equipo` (origen club 138) — **número definitivo, HECHO 18-nov 15:40 -06:00**
 
 > **⛔ Esquema y permisos: firma del dueño sobre el SHA exacto.** Pedido del dueño del 18-nov 12:55 («quiero que ellos
 > evalúen su propio rendimiento personal […] y poder evaluarlos personalmente además de en equipo»), opción A. Si algo no
@@ -92,6 +92,22 @@ evolución» igual.
 ## 7. Firma y bitácora
 | Fecha y hora (-06:00) | Qué | Quién |
 |---|---|---|
-| | Firma del dueño sobre el SHA | |
-| | Merge / Branching | |
-| | Control §5 | |
+| 2026-11-18 15:03 | Decisiones del dueño tras el verificador (ICP y líder siempre; riesgo de la resta entre rangos aceptado) | dueño |
+| 2026-11-18 15:40 | Merge de #296 a `main`, SHA `edac218`; Branching aplica la 194 (ledger de prod = 194) | merge |
+| 2026-11-18 | Control §5: ver §8 | control |
+
+## 8. Después del merge: batería y verificación en prod
+- **Batería en staging (corrida por la sesión de CC del dueño, con la 193 debajo):** 55/55 casos OK con 13 mutaciones que
+  muerden. Staging queda en ledger 188 (189–194 sin aplicar).
+- **Verificación en prod (solo lectura, `begin read only` … `rollback`):**
+  - Ledger: 1 fila `194` / `mi_rendimiento_equipo`; check «Supabase Preview» en success.
+  - Las 6 funciones `security definer` con `search_path = public, pg_temp`; sin EXECUTE para `anon` en las 6 y para
+    `authenticated` en las 4 internas.
+  - 6 funciones `security definer`, sin EXECUTE para `anon`. (El 42501 de salonero es solo de la 193; en la 194 el
+    personal sí llama a sus funciones y ve lo suyo.)
+- **Validación física del dueño (18-nov, tarde/noche, hora no registrada):** con un salonero, Mi evolución, El local y
+  competencias, OK.
+
+## 9. Estado final
+Hecho. Vuelta atrás solo hacia adelante (§6). Riesgo aceptado por el dueño: restar dos rangos por la API puede despejar a
+un compañero en una noche de 2 personas (§1).

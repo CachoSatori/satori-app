@@ -5,12 +5,12 @@
 > ventas, qué hay en prod y en staging, pendientes de estabilización, seguridad abierta y notas. Más viejo: [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-18 (tarde).** `main` = `9c82ee6` (tras #294, mig 193). **Ledger de prod = 193** (190 por #291, 191 por #292, 192 por #295, 193 por #294; la 194 es #296, sin firma). Cron jobid 10 `satori-ventas-dia-contador`, `0 13 1,16 * *` = 07:00 CR los días 1 y 16; primer envío el 1-dic. Sagrados iguales (tabla de abajo). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md) (los del 15–18-nov están en el proyecto privado).
-- **Edge de prod:** `cierre-email` **v16** (desde `f8b6c2a6`, rama de #283: resumen de ventas en el correo de cierre, remitente propio; ezbr `c222f5df…`; vuelta atrás = `b02d2841` + remitente) · `ventas-dia-contador` **v4** (desde `060b539`, rama de #281; ezbr `439b3914…`; `verify_jwt` on). El resto, como está en la tabla de Edge.
-- **Agente del PoS de prod:** `C:\satori\agente-sal` @ `89c5aa42` (pase #262 hecho el 18-nov: tarea cambiada 06:23:43, re-backfill 2024-01…2026-11 completo, N = 11.505; salón 90 d sin salonero 370 → 172). Vuelta atrás: `C:\satori\agente-d9` @ `578f38c`, con la config en `C:\satori\sal-vuelta`. Bitácora en la rama de #262 (no va a `main`).
-- **Staging:** ledger **188** (185–188 aplicadas el 18-nov 06:04 por la sesión de CC del dueño).
-- Movido tal cual al [histórico](docs/historico/ESTADO-HISTORICO.md) el 18-nov (poda 15 KB): «Entró a `main` el 17–18-nov», «Hallazgos nuevos» y «Cola (Menor)» (`cierre_read`) (detalle en [HALLAZGOS.md](HALLAZGOS.md)).
-- **Abiertos sin firma:** #262 (rama del agente, no va a `main`), #259 (fast-check, 3 hallazgos `it.fails`), #257, #264, #252, #246 (SPEC Ventas v2). **Falta validación física del dueño:** #229 (en servicio), Club 186–188 y Ventas #274 en prod.
+**Al día: 2026-11-18 (noche, 19:03 -06:00).** `main` = `909a3de`. **Ledger de prod = 194. Staging = 188** (189–194 sin aplicar: la 189 agenda un cron con la URL de prod y no se aplica en staging tal cual; las corre la sesión de CC del dueño). Cron jobid 10 `satori-ventas-dia-contador`, `0 13 1,16 * *` (07:00 CR, días 1 y 16; primer envío 1-dic). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).
+- **Entró hoy (18-nov):** #289 (→Caja solo en la jornada en curso) · #290/#293 (Resumen v2) · #291 · #288 · mig 191 (ventas: cada uno ve lo suyo) · mig 192 (propinas: cada uno lo suyo) · #294 Tiempos + mig 193 (mesas internas 51–53 fuera solo del tiempo sentado y de la alerta de pax) · #296 Mi Rendimiento (evolución + equipo agregado) + mig 194: K = 4 para posición, promedio y mediana, y para «personas»; ICP y líder (nombre y puntos) siempre; **riesgo aceptado por el dueño:** restando dos rangos por la API se puede despejar a un compañero en una noche de 2 personas · #297 Tiempos/Resumen con % en vez de índice y barra única.
+- **Edge de prod:** `ventas-dia-contador` **v5** · `cierre-email` **v17** · `pago-notificar` **v15** · `monthly-report` **v24**.
+- **Agente del PoS de prod:** `agente-fe` @ `07782e49`, controlado con facturas reales el 18-nov 16:50 -06:00: clave FE OK; total = medios − vuelto OK. Vuelta atrás: `agente-sal` @ `89c5aa42` (el anterior).
+- **Validaciones físicas del dueño hechas (18-nov):** Propinas · Mi Rendimiento con un salonero · Tiempos y Resumen. Sin validar: #229 y Club 186–188.
+- **Abiertos sin firma:** #262 (rama del agente, no va a `main`), #259, #257, #264, #252, #246.
 - **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov.
 - **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 
@@ -18,7 +18,7 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `9c82ee6` (#294) |
+| `main` (PROD, Pages `/satori-app/`, sin regla de protección) | `909a3de` |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 184 (ponerla al día: en cola) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
@@ -51,26 +51,28 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 10. **Nunca revertir ni borrar el `.sql` de una migración que está en el ledger de prod** (si no, Branching falla en cada push; pasó con la 074). Si se revierte el código, el archivo se queda.
 11. **La fecha del movimiento de caja es el día en que se registró (el turno), nunca la de la factura** (14/11). La de factura va a la descripción («· fact AAAA-MM-DD») y se analiza con `src/shared/utils/fechaFactura.ts` (clave FE manda; sin clave, la única lectura día/mes posible; si hay dos, la pantalla pregunta; más de 7 días avisa, no bloquea).
 12. **Bitácora de permisos (165) caída = no se cambian roles ni activaciones** (fail closed, 14/11). Si hay que cortar un acceso igual: (1) ban o cambio de clave en Supabase Auth; (2) si además hay que desactivar, soporte, como dueño de la tabla y en UNA transacción: `alter table public.profiles disable trigger trg_profiles_bitacora_permisos;` → `update public.profiles set is_active = false where id = '<UUID>';` → `alter table public.profiles enable trigger trg_profiles_bitacora_permisos;`; (3) anotarlo a mano con `origen = 'manual'` y la hora real cuando vuelva.  Guía 6.6.
+13. **Turno de prod (18/11):** una sola sesión toca prod o `main` a la vez. Un prompt de CC que toca prod empieza con «TURNO DE PROD: esta sesión de CC».
+14. **Staging, conector (18/11):** si el conector cancela una confirmación (`drop`, `delete`), NO se reescribe el SQL para esquivarla. La batería la corre la sesión de CC del dueño (Management API, ref de staging fijo, ROLLBACK).
 
 ---
 
 ## ☁️ Edge, Cloudflare, cron y agentes (leído 12–17/11; solo lectura)
-Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tienen el FROM nuevo (pendiente en cola). `on`/`off` = `verify_jwt`. Confirmar secretos por su lista (nombre + huella); el código, por `ezbr_sha256`
+`on`/`off` = `verify_jwt`. Confirmar secretos por su lista (nombre + huella); el código, por `ezbr_sha256`
 
 | Función | PROD | STAGING |
 |---|---|---|
 | `monthly-report` | v24 · on (desde `50831a8e`, #245+#241, + remitente propio 18-nov) | v9 · on |
 | `extract-document` | v20 · on (código desde `8a8dfb6`, rama `claude/busy-brown-ssjq4e`, modelo `claude-sonnet-5-5`) | v29 desde `190b5f5` |
-| `cierre-email` | v16 · on (desde `f8b6c2a6`, rama de #283, + remitente propio) | v15 · on |
+| `cierre-email` | v17 · on (v16 desde `f8b6c2a6`, rama de #283, + remitente propio) | v15 · on |
 | `pago-notificar` | v15 · on (desde `588c5593`, #243, + remitente propio) | — |
-| `ventas-dia-contador` | v4 · on (desde `060b539`, rama de #281; ezbr `439b3914…`) | — |
+| `ventas-dia-contador` | v5 · on (v4 desde `060b539`, rama de #281) | — |
 | `ingest-ndf` | v13 · off (código v3 del 09/11 desde `5da233a`; vive en `claude/puente-item11-prod-v2`) | v21 · off |
 | `ingest-punches` | — | v13 · off |
 | `alta-empleado` | v12 · on (rama `claude/alta-empleado-fn`) | v8 · on |
 | `club-pase` | v7 · off (rama `claude/club-pase-edge` @ `6c5848e`) | v1 · off (`WALLET_ENTORNO` = `stg`) |
 
 - **Cloudflare:** Pages `satori-club` y Worker `satori-club-api` (Workers Builds desde `main`; secretos a mano; `/api/salud`). **Cron del Club:** jobid 8.
-- **Agentes del PoS:** «Satori PoS Bridge» (staging, @ `14bd278`) y «… PROD» (`C:\satori\agente-sal` @ `89c5aa42` desde el 18/11, cuenta SYSTEM). `biotime-bridge` publica solo a staging (`ingest-punches`).
+- **Agentes del PoS:** «Satori PoS Bridge» (staging, @ `14bd278`) y «… PROD» (`agente-fe` @ `07782e49` desde el 18/11, cuenta SYSTEM). `biotime-bridge` publica solo a staging (`ingest-punches`).
 - **Ventas = solo PoS** (firmado 16/11): ninguna pantalla lee `ventas_dias`; `ventas_hist` solo antes del 2024-01-05. Guarda: `src/ventasSoloPos.test.ts`.
 
 ---
@@ -80,12 +82,12 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 ### Numeración de migraciones (regla del dueño, 08/11)
 > **Fuente de verdad:** `supabase/migraciones-reservadas.json`, que lee `supabase/migraciones.test.ts`. La bitácora larga de cada número está en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 
-1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **139**; 134, 135, 136, 137 y 138 se reservaron para pasar directo a 190, 191, 193, 192 y 194) · PASE A PROD **150–199** (solo renumeraciones del pase; **190** (`pos_ventas_resumen`), **191** (#292), **192** (#295) y **193** (#294, `pos_ventas_tiempos`) en prod desde el 18-nov (ledger 193); la **194** (definitiva) es de `claude/mi-rendimiento-evolucion` (#296, origen 138, sin firma); próximo libre **195**). La **086** queda libre.
+1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**: la 099 fue la última, 17/11; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **139**; 134, 135, 136, 137 y 138 se reservaron para pasar directo a 190, 191, 193, 192 y 194) · PASE A PROD **150–199** (solo renumeraciones del pase; **190–194** en prod desde el 18-nov; **194** (#296, `mi_rendimiento_equipo`) también; próximo libre **195**). La **086** queda libre.
 2. Cada PR que agrega una migración actualiza esta tabla y el registro. El gate falla si no está registrada, queda fuera del bloque de su rama o repite número.
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199 (nunca a uno de creación), en el mismo PR (archivo, rollback, pruebas, scripts, fila del ledger de staging), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
 
-**Ledger de prod: 189** (150–189 por merge → Branching, 11/11–18/11; PASE de cada una en `docs/pases/`). Staging: 188; le faltan las filas viejas 065 y 066.
+**Ledger de prod: 194** (150–194 por merge → Branching, 11/11–18/11; PASE de cada una en `docs/pases/`). Staging: 188 (189–194 sin aplicar); le faltan las filas viejas 065 y 066.
 
 | Número | Detalle (nombre en el registro JSON; `←` origen, `→` renumerada) |
 |---|---|
@@ -187,12 +189,11 @@ Versiones re-leídas 18-nov. Las fuentes de las ramas de correo todavía no tien
 | 188 | ← 132 (#273, en prod 17-nov) |
 | 189 | ← 133 (cron `satori-ventas-dia-contador`, 1 y 16 a las 07:00 CR; en prod 18-nov, jobid 10; PASE-189) |
 | 190 | ← 134 (`pos_ventas_resumen`, Ventas v2 «Resumen»; en prod 18-nov por #291; PASE-190) |
-| 191 | ← 135 (cierra la fuga de la 067: personal solo lo suyo, manager sus locales; + `pos_nombres_por_login`; #292 en borrador, sin firma; PASE-191) |
-| 192 | ← 137 (`propinas_cada_uno_lo_suyo`: lectura de `tip_entries`, cada uno lo suyo; #295 en borrador, firma de permisos pendiente; PASE-192) |
-| 193 | ← 136 (`pos_ventas_tiempos`: horas de todos los canales, tiempo sentado, `pos_mesas_internas` + `pos_ventas_internas`; #294, **en prod 18-nov** (ledger 193); PASE-193) |
-| 194 | ← 138 (`mi_rendimiento_equipo`: el equipo en agregados; definitiva, #296 sin firma; PASE-194) |
+| 191 | ← 135 (cierra la fuga de la 067: personal solo lo suyo, manager sus locales; + `pos_nombres_por_login`; #292, en prod 18-nov; PASE-191) |
+| 192 | ← 137 (`propinas_cada_uno_lo_suyo`: lectura de `tip_entries`, cada uno lo suyo; #295, en prod 18-nov; PASE-192) |
+| 193 | ← 136 (`pos_ventas_tiempos`: horas de todos los canales, tiempo sentado, `pos_mesas_internas` + `pos_ventas_internas`; #294, en prod 18-nov; PASE-193) |
+| 194 | ← 138 (`mi_rendimiento_equipo`: el equipo en agregados; #296, en prod 18-nov; PASE-194) |
 
-083, 084, 087 y 088 (caja) van a 152+ con su paquete.
 
 ## 🔒 Abierto que sigue vigente
 - **Seguridad en prod:** 4 `SECURITY DEFINER` ejecutables por `anon` (`get_my_role`, `handle_new_user`, `log_movement_edit`, `unif_on_cash_movement`); sin `supabase/config.toml`.

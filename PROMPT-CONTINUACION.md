@@ -1,4 +1,4 @@
-# Continuación — backlog abierto y priorizado (al día: 2026-11-17 noche)
+# Continuación — backlog abierto y priorizado (al día: 2026-11-18 noche, 19:03 -06:00)
 
 > **Punto de arranque:** [ESTADO.md](ESTADO.md) (⚡ARRANQUE y reglas) y [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).
 > Solo lo **abierto**. Lo hecho y el detalle heredado (backlog de `staging` del 29/10, pases y olas de jun–jul, lo hecho del 05 y 10–11/11,
@@ -8,13 +8,15 @@
 
 **Marcas:** 🖊️ firma del dueño · 👁️ validación en piso · 🔐 seguridad · 🧹 limpieza · ⛔ no mergear sin OK.
 
-## 🟥 P0 — Ahora (17/11)
+## 🟥 P0 — Ahora (18/11 noche)
 1. **👁️ Confirmar el cron del Club:** corrida de las 03:15 CR del 17/11 en `cron.job_run_details` (jobid 8) y repetir el 23/11 (§5.6 del `docs/pases/PASE-cron-club-mantenimiento.md`). Para leerlo: solo `select` sobre `cron.job_run_details`; nunca `for update` sobre `cron.job` ([regla](docs/REGLAS-POR-INCIDENTE.md)).
-2. **👁️ Validaciones físicas del dueño (18/11):** Club 186–188 en prod (deshacer «enviado» de cumpleaños, retos de un local con tope de 3, casilla de mayor de 18 en Miembros y Escanear) · Ventas #274 en prod · #229 en servicio.
-3. **🖊️ Pase del salonero por líneas (#262)** en la PC del PoS, 18/11 antes de las 14:00 (el agente D9 ya está en prod con el backfill hecho).
+2. **👁️ Validaciones físicas del dueño que faltan:** Club 186–188 en prod (deshacer «enviado» de cumpleaños, retos de un local con tope de 3, casilla de mayor de 18 en Miembros y Escanear) · #229 en servicio. (Hechas el 18/11: Propinas, Mi Rendimiento con un salonero, Tiempos y Resumen.)
+3. **🖊️ Staging 189–194 por la sesión de CC del dueño** (Management API, ref de staging fijo, ROLLBACK). La 189 agenda un cron con la URL de prod: no se aplica tal cual. Regla 14 de ESTADO.
+3b. **👁️ Revisar en 20–30 días** (≈ 8–18/12) si se sigue pisando la clave FE de los tiquetes 04 (el agente toma `clave_fe` por consecutivo sin filtrar el tipo).
+3c. **Alerta si el agente del PoS deja de latir > 30 min en servicio** (`pos_ventas_latido`).
+3d. **Recorrer con `satori-verificar` en staging Tiempos y Resumen** cuando haya sesión (capturas por rol).
 4. **Correos desplegados (17/11, ya en prod):** `cierre-email` v14 y `pago-notificar` v14 sin prueba funcional hasta el próximo cierre o pago real; `monthly-report` v23 probada con dry_run. Sus PRs (#242, #243, #245, #241) siguen abiertos: el código de Edge entra a `main` con el ítem 11 (A05). Decidir también qué pasa con #231, #232 y #235, que no entraron.
 4b. **🧹 A04 · sacar del repo el nombre de la PC del PoS** (`pos-bridge/README.md`, `pos-bridge/.env.example` y el ESTADO de la rama del agente): se hace en la rama del agente, no desde `main` ([R12](docs/REGLAS-POR-INCIDENTE.md)).
-4c. **🖊️ Remitente propio de los correos (P0, 18/11):** el dominio `satoricostarica.com` quedó **verificado en Resend** el 17/11 (DNS en SiteGround: DKIM `resend._domainkey`, MX y SPF de `send`). Revisar desde qué dirección salen `pago-notificar`, `cierre-email` y `monthly-report`: si siguen en la dirección de prueba de Resend, los avisos de pago **no llegan a proveedores** (Resend sin dominio solo entrega a la cuenta dueña). Cambio corto de remitente a `@satoricostarica.com`, con firma. Supabase Auth de prod ya usa SMTP propio (Resend) para el recupero de contraseña.
 4d. **Portal del socio (club-web):** pestañas con mayúscula uniforme «Tu red · Club Satori · Local» (decisión del dueño 17/11, B). Va en el próximo PR del portal.
 4e. **🔐 Revisión de SiteGround (semana del 18/11, solo configuración, no se borra ningún sitio):** DMARC con dirección de reportes y después «quarantine» · copia de backups fuera de SiteGround · verificación en dos pasos de la cuenta · registros viejos de `staging3`.
 5. **🧹 Staging:** reintentar el `drop` del índice de la v1 de la 183 (`pos_ndf_tickets_local_fecha_efectiva_idx`). La herramienta cancela los `drop`: va por sesión de CC.
@@ -41,7 +43,9 @@
 6. **Propinas · reparto semanal de cocina:** pasar la exclusión de un nombre fijo en el código a una marca en la base (🖊️ spec y firma: toca propinas).
 7. **Mi Rendimiento:** Semana → Por día (alcance con el dueño) · empleados inactivos sin nombre para el salonero (el RLS de `employees` muestra el código del PoS) · día sin pax muestra −100 % en vez de «sin dato».
 8. **🖊️ Umbrales del ICP** (hoy ≥13 % excelente, <10 % a mejorar): recalibrar; el histórico real da 5–9 % y el del equipo en octubre 10,6 % con el PoS.
-9. **Ventas · «Contexto jueves» de «Hoy»** mostró un promedio mal mientras cargaba el histórico: revisar si mezcla días del Excel y del PoS en la comparativa de las 4 últimas ocurrencias.
+9. **Ventas 3.4 · reporte quincenal de excepciones con anotación** (spec en SPEC Ventas v2, #246).
+10. **Policy de `pos_mesas_internas` por local** (backlog del #294): hoy un manager lee la lista de todos los locales; limitar con `puede_ver_local`. 🖊️ toca permisos.
+11. **Ventas · «Contexto jueves» de «Hoy»** mostró un promedio mal mientras cargaba el histórico: revisar si mezcla días del Excel y del PoS en la comparativa de las 4 últimas ocurrencias.
 
 ## 🟧 P1 — Seguridad, Edge y deploy
 1. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las funciones con su `verify_jwt` (`monthly-report` true v10+, `extract-document` true, `cierre-email` true, `pago-notificar` true, `ingest-ndf` false, `alta-empleado` true, `club-pase` false). Traer **antes** el código de prod (v10 de `monthly-report`, `8a8dfb6` de `extract-document`, `alta-empleado`) y copiar `[auth]`/`[api]` de prod (`disable_signup = true`, `site_url`, redirects, mínimo 8) o un merge los pisa. Hasta cerrarlo, ningún PR a `main` con `supabase/functions/` (regla 2).

@@ -1,4 +1,4 @@
-# Pase a PROD de la mig 193 `pos_ventas_tiempos` (origen club/puente 136) — número PROVISORIO
+# Pase a PROD de la mig 193 `pos_ventas_tiempos` (origen club/puente 136) — número definitivo, HECHO 18-nov 15:09 -06:00
 
 > **⛔ Esquema: firma del dueño sobre el SHA exacto.** Decisiones del dueño del 18-nov-2026 13:08 -06:00 («294 B»:
 > horas de todos los canales; tiempo sentado por tamaño de mesa; mesas 51–53 internas) y su corrección de las 13:45:
@@ -91,4 +91,19 @@ mapa de salón, y la alerta de pax vuelve a contar las mesas internas.
 | 2026-11-18 | agente | Batería en Postgres local 10/10 y 12/12 mutaciones; staging 10/10 (con los recortes de §3) |
 | | verificador | Revisión independiente (pedida en el PR) |
 | | dueño | Firma de esquema sobre el SHA exacto (OK de merge) |
-| | control | §4 y §5 |
+| 2026-11-18 15:09 | merge | #294 a `main`, SHA `9c82ee6`; Branching aplica la 193 (ledger de prod = 193) |
+| 2026-11-18 | control | §5 hecho: ver §9 |
+
+## 9. Después del merge: batería y verificación en prod
+- **Batería en staging (por la sesión de CC del dueño):** 10/10 casos OK con 12 mutaciones que muerden (las de §3).
+  Staging queda en ledger 188: la 189 agenda un cron con la URL de prod y no se aplica allá tal cual.
+- **Verificación en prod (solo lectura, `begin read only` … `rollback`):**
+  - Ledger: 1 fila `193` / `pos_ventas_tiempos`; check «Supabase Preview» en success.
+  - Funciones `security definer` con `search_path = public, pg_temp`; `anon` sin EXECUTE; los helpers sin EXECUTE
+    para `authenticated`.
+  - Como salonero (JWT simulado): 42501.
+- **Validación física del dueño (18-nov):** Tiempos y Resumen, OK.
+
+## 10. Estado final
+Hecho. Vuelta atrás solo hacia adelante (§7). Ajustes posteriores de pantalla (% en vez de índice, barra única) fueron
+#297, sin cambios de esquema.

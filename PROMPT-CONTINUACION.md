@@ -11,7 +11,7 @@
 ## 🟥 P0 — Ahora (19/11)
 1. **👁️ Confirmar el cron del Club:** corrida del 17/11 en `cron.job_run_details` (jobid 8) y repetir el 23/11 (solo `select`; nunca `for update` sobre `cron.job`).
 2. **👁️ Validaciones del dueño que faltan:** #229 en servicio · #300 con el próximo crédito real · correo de pago (`pago-notificar` muestra lo facturado y no lo pagado si hubo crédito). Hechas: correo de cierre 18-nov y Club 186–188. **Club en PAUSA** hasta que Apple apruebe la Wallet.
-3. **🖊️ Staging 192–194 por la CC del dueño** (la 189 se omite: cron con URL de prod). Regla 14. Además, desde su CC: `strict` y `enforce_admins` de la protección de `main`.
+3. **🖊️ Staging 192–194 por la CC del dueño** (la 189 se omite: cron con URL de prod). Regla 14. (La protección de `main` ya quedó con `strict` y `enforce_admins`, 19-nov 08:34.)
 3a. **Cola nueva (19/11):** menores de #300 (2 pruebas de botones, botón Aplicar del modal) y de #301 (prueba propia de R16 con renombrado, `gate.sh` visible si se saltan guardas sin `origin/main`, `edited` solo si cambia la base, checks-protegidos con `edited`; después modo bloquear) · **🖊️** orden FIFO del reparto de crédito sin desempate con igual `created_at` (toca plata) · `.claude/settings.json` con deny + hooks · métricas por PR · achicar el correo de cierre (pedido del dueño) · **WhatsApp automático a proveedores** (Cloud API) después de #300, con la foto del comprobante en la base (**🖊️** migración).
 3b. **👁️ Revisar en 20–30 días** (≈ 8–18/12) si se sigue pisando la clave FE de los tiquetes 04 (el agente toma `clave_fe` por consecutivo sin filtrar el tipo).
 3c. ~~Alerta de latido del agente~~: el dueño dijo que no por ahora (19/11).

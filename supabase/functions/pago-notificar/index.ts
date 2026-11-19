@@ -78,14 +78,15 @@ Deno.serve(async (req) => {
     //    ser del MISMO proveedor y estar pagados ('aprobado'). Si no, no se manda nada.
     const { data: movs, error: mErr } = await userClient
       .from('cash_movements')
-      .select('id, supplier_id, amount_crc, amount_usd, method, description, created_at, status, session_id')
+      .select('id, supplier_id, amount_crc, amount_usd, method, description, subcategory, created_at, status, session_id')
       .in('id', ids)
     if (mErr) return json({ ok: false, error: 'Sin acceso al movimiento' }, 403)
     const lote = (movs ?? []) as unknown as MovimientoPago[]
     const valido = validarLote(ids, lote)
     if (!valido.ok) {
       if (valido.error === 'Movimiento sin proveedor') return json({ ok: false, skipped: 'movimiento sin proveedor' }, 200)
-      return json({ ok: false, error: valido.error }, valido.status)
+      // 409: `pendientes` = ids que todavía no están pagados (cola offline) → la app puede reintentar después.
+      return json({ ok: false, error: valido.error, ...(valido.pendientes ? { pendientes: valido.pendientes } : {}) }, valido.status)
     }
 
     // 5) Releer el proveedor. Decisión server-side: SOLO si notificar_pago='email' + email cargado.
@@ -108,8 +109,9 @@ Deno.serve(async (req) => {
       .eq('reversed', false)
     if (aErr) return json({ ok: false, error: 'Sin acceso a los créditos aplicados' }, 403)
 
-    // 7) Fecha real del pago: la auditoría de ediciones (052) guarda el cambio a 'aprobado'. Su RLS la deja ver a
-    //    owner/manager/contador; para otro rol vuelve vacía (o error) y se usa el momento del envío (ver pago.ts).
+    // 7) Fecha del pago: la auditoría de ediciones (052) guarda el cambio a 'aprobado'. Su RLS la deja ver a
+    //    owner/manager/contador; para otro rol (o un pago que nació pagado) vuelve vacía y se usa created_at del
+    //    movimiento, como la v15. Nunca el envío rotulado como pago (ver pago.ts).
     const { data: edits } = await userClient
       .from('movement_edits')
       .select('movement_id, edited_at, changed')

@@ -5,12 +5,15 @@
 //  src/modules/cash/supplierCredits.ts → saldoResidual y que el comprobante PNG de la app).
 //  Sin red ni Deno: lo usan index.ts y las pruebas (vitest). Solo PRESENTACIÓN: no escribe ni recalcula nada guardado.
 //
-//  Fecha del pago (no hay columna: approved_at nunca se llena; el pago es un cambio de status):
+//  Fecha del pago (no hay columna: approved_at nunca se llena; el pago es un cambio de status). Fuente, en este orden:
 //    1. movement_edits (auditoría tamper-evident de la 052): la ÚLTIMA fila del movimiento cuyo `changed.status.new`
-//       es 'aprobado' → el momento exacto en que se marcó pagado.
-//    2. Si no hay fila legible (RLS de movement_edits = owner/manager/contador: un cajero no la ve) → el momento del
-//       envío. En el flujo normal la app llama a la función segundos después de marcar pagado, así que es el mismo día.
-//  NUNCA la fecha de la factura (created_at): ese era el error del correo anterior.
+//       es 'aprobado' → el momento exacto en que se marcó pagado ('auditoria').
+//    2. Si no hay fila legible → el día CR de created_at del movimiento ('registro'), lo que mostraba la v15. Cubre los
+//       pagos que nacieron pagados o son anteriores a la auditoría y al cajero, que no
+//       puede leer movement_edits (RLS owner/manager/contador).
+//    3. Solo si tampoco hay created_at válido → el momento del envío ('envio'), y el correo lo rotula «enviado el»,
+//       NUNCA «fecha del pago» (ronda 2: el envío rotulado como pago era una regresión frente a la v15).
+//  Un reenvío días después no mueve la fecha del pago: ninguna de las fuentes 1 y 2 depende del momento del envío.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
 export const MAX_IDS = 50
@@ -54,6 +57,7 @@ export interface MovimientoPago {
   amount_usd: number | null
   method: string | null
   description: string | null
+  subcategory?: string | null
   created_at: string
   status: string
   session_id?: string | null
@@ -64,31 +68,42 @@ export interface MovimientoPago {
  * son todos del MISMO proveedor y están TODOS pagados ('aprobado'). Si no, no se manda nada.
  */
 export function validarLote(ids: string[], movs: MovimientoPago[]):
-  { ok: true; supplierId: string } | { ok: false; status: number; error: string } {
+  { ok: true; supplierId: string } | { ok: false; status: number; error: string; pendientes?: string[] } {
   const porId = new Map(movs.map((m) => [m.id, m]))
   if (ids.some((id) => !porId.has(id))) return { ok: false, status: 404, error: 'Movimiento no encontrado' }
   const lote = ids.map((id) => porId.get(id)!)
   if (lote.some((m) => !m.supplier_id)) return { ok: false, status: 400, error: 'Movimiento sin proveedor' }
   const proveedores = new Set(lote.map((m) => m.supplier_id))
   if (proveedores.size !== 1) return { ok: false, status: 400, error: 'Los movimientos son de proveedores distintos' }
-  if (lote.some((m) => m.status !== 'aprobado')) return { ok: false, status: 409, error: 'Hay movimientos que no están pagados' }
+  // 409 con los ids que faltan (p. ej. todavía en la cola offline): la app puede reintentar después solo con esos.
+  const pendientes = lote.filter((m) => m.status !== 'aprobado').map((m) => m.id)
+  if (pendientes.length) return { ok: false, status: 409, error: 'Hay movimientos que no están pagados', pendientes }
   return { ok: true, supplierId: lote[0].supplier_id as string }
 }
 
 export interface EdicionMovimiento { movement_id: string; edited_at: string; changed: unknown }
 export interface AplicacionCredito { applied_to_movement_id: string | null; amount_applied: number; reversed?: boolean | null }
 
-/** Momento del pago de UN movimiento: la última edición que lo pasó a 'aprobado'; si no hay, `ahora` (el envío). */
-export function momentoDelPago(movId: string, edits: EdicionMovimiento[], ahora: string): { iso: string; fuente: 'auditoria' | 'envio' } {
+export type FuenteFecha = 'auditoria' | 'registro' | 'envio'
+
+/**
+ * Momento del pago de UN movimiento: la última edición que lo pasó a 'aprobado' ('auditoria'); si no hay, su
+ * created_at ('registro'); solo si created_at no es una fecha válida, `ahora` ('envio', se rotula «enviado el»).
+ */
+export function momentoDelPago(
+  m: Pick<MovimientoPago, 'id' | 'created_at'>, edits: EdicionMovimiento[], ahora: string,
+): { iso: string; fuente: FuenteFecha } {
   let mejor: string | null = null
   for (const e of edits) {
-    if (e.movement_id !== movId) continue
+    if (e.movement_id !== m.id) continue
     const st = (e.changed as { status?: { new?: unknown } } | null)?.status
     if (!st || st.new !== 'aprobado') continue
     if (!isFinite(Date.parse(e.edited_at))) continue
     if (mejor === null || Date.parse(e.edited_at) > Date.parse(mejor)) mejor = e.edited_at
   }
-  return mejor ? { iso: mejor, fuente: 'auditoria' } : { iso: ahora, fuente: 'envio' }
+  if (mejor) return { iso: mejor, fuente: 'auditoria' }
+  if (m.created_at && isFinite(Date.parse(m.created_at))) return { iso: m.created_at, fuente: 'registro' }
+  return { iso: ahora, fuente: 'envio' }
 }
 
 export interface FilaFactura {
@@ -107,9 +122,10 @@ export interface Pago {
   totalCreditoCRC: number
   totalPagadoCRC: number
   totalUSD: number
-  /** Día CR del pago; si las facturas se marcaron en días distintos (reenvío de varias), desde/hasta. */
+  /** Día CR del pago; si las facturas se marcaron en días distintos (reenvío de varias), desde/hasta. Con
+   *  `fuenteFecha = 'envio'` es el día del ENVÍO (ninguna fuente confiable) y el correo lo rotula «enviado el». */
   fechaPago: { desde: string; hasta: string }
-  fuenteFecha: 'auditoria' | 'envio' | 'mixta'
+  fuenteFecha: FuenteFecha | 'mixta'
   metodo: string
 }
 
@@ -131,7 +147,7 @@ export function armarPago(input: {
     return {
       id: m.id,
       fecha: input.fechaFactura?.[m.id] || diaCR(m.created_at),
-      referencia: (m.description ?? '').trim(),
+      referencia: (m.description || m.subcategory || '').trim(),   // como la app (comprobanteProveedor.ts)
       facturadoCRC: facturado,
       creditoCRC: credito,
       pagadoCRC: r2(facturado - credito),
@@ -139,17 +155,22 @@ export function armarPago(input: {
     }
   }).sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 
-  const momentos = input.movs.map((m) => momentoDelPago(m.id, input.edits, input.ahora))
-  const dias = momentos.map((x) => diaCR(x.iso)).sort()
-  const fuentes = new Set(momentos.map((x) => x.fuente))
+  const momentos = input.movs.map((m) => momentoDelPago(m, input.edits, input.ahora))
+  // El rango sale solo de las fechas confiables (auditoría o registro). El envío entra únicamente si no hay ninguna.
+  const confiables = momentos.filter((x) => x.fuente !== 'envio')
+  const usados = confiables.length ? confiables : momentos
+  const dias = usados.map((x) => diaCR(x.iso)).sort()
+  const fuentes = new Set(usados.map((x) => x.fuente))
   const metodos = [...new Set(input.movs.map((m) => (m.method ?? '').trim() || 'Transferencia'))].sort()
 
+  const totalPagadoCRC = r2(filas.reduce((s, f) => s + f.pagadoCRC, 0))
+  const totalUSD = r2(filas.reduce((s, f) => s + f.usd, 0))
   return {
     filas,
     totalFacturadoCRC: r2(filas.reduce((s, f) => s + f.facturadoCRC, 0)),
     totalCreditoCRC: r2(filas.reduce((s, f) => s + f.creditoCRC, 0)),
-    totalPagadoCRC: r2(filas.reduce((s, f) => s + f.pagadoCRC, 0)),
-    totalUSD: r2(filas.reduce((s, f) => s + f.usd, 0)),
+    totalPagadoCRC,
+    totalUSD,
     fechaPago: { desde: dias[0], hasta: dias[dias.length - 1] },
     fuenteFecha: fuentes.size === 1 ? [...fuentes][0] : 'mixta',
     metodo: metodos.length === 1 ? metodos[0] : metodos.slice(0, -1).join(', ') + ' y ' + metodos[metodos.length - 1],

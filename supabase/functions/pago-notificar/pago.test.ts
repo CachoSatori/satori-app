@@ -33,8 +33,9 @@ describe('validarLote', () => {
   it('proveedores distintos → 400', () => {
     expect(validarLote([ids.a, ids.b], [facturaA, { ...facturaB, supplier_id: 'otro' }])).toMatchObject({ ok: false, status: 400 })
   })
-  it('alguno sin pagar → 409 (no se manda nada)', () => {
-    expect(validarLote([ids.a, ids.b], [facturaA, { ...facturaB, status: 'pendiente' }])).toMatchObject({ ok: false, status: 409 })
+  it('alguno sin pagar → 409 con los ids que faltan (la app reintenta después; no se manda nada)', () => {
+    expect(validarLote([ids.a, ids.b], [facturaA, { ...facturaB, status: 'pendiente' }]))
+      .toEqual({ ok: false, status: 409, error: 'Hay movimientos que no están pagados', pendientes: [ids.b] })
   })
   it('sin proveedor → no se manda', () => {
     expect(validarLote([ids.a], [{ ...facturaA, supplier_id: null }])).toMatchObject({ ok: false, error: 'Movimiento sin proveedor' })
@@ -43,14 +44,46 @@ describe('validarLote', () => {
 
 describe('fecha del pago', () => {
   it('sale de la auditoría (cambio a «aprobado»), no de la factura ni de otra edición', () => {
-    expect(momentoDelPago(ids.a, editsEjemplo, ENVIO_ISO)).toEqual({ iso: PAGO_ISO, fuente: 'auditoria' })
+    expect(momentoDelPago(facturaA, editsEjemplo, ENVIO_ISO)).toEqual({ iso: PAGO_ISO, fuente: 'auditoria' })
   })
   it('una edición posterior al pago que no cambia el estado no mueve la fecha', () => {
     const e = [...editsEjemplo, { movement_id: ids.a, edited_at: '2026-11-21T15:00:00Z', changed: { method: { old: 'Transferencia', new: 'SINPE' } } }]
-    expect(momentoDelPago(ids.a, e, ENVIO_ISO).iso).toBe(PAGO_ISO)
+    expect(momentoDelPago(facturaA, e, ENVIO_ISO).iso).toBe(PAGO_ISO)
   })
-  it('sin auditoría legible (cajero) → el momento del envío', () => {
-    expect(momentoDelPago(ids.a, [], ENVIO_ISO)).toEqual({ iso: ENVIO_ISO, fuente: 'envio' })
+  it('sin auditoría legible (cajero) → created_at del movimiento, NUNCA el envío', () => {
+    expect(momentoDelPago(facturaA, [], ENVIO_ISO)).toEqual({ iso: facturaA.created_at, fuente: 'registro' })
+  })
+  it('pago nacido pagado (sin fila de auditoría) → fecha = día CR de created_at', () => {
+    // 22:30 CR del 3-nov = 04:30 UTC del 4-nov: el día es el de Costa Rica, no el UTC.
+    const nacido = { ...facturaA, created_at: '2026-11-04T04:30:00Z' }
+    const p = armarPago({ movs: [nacido], aplicaciones: [], edits: [], ahora: ENVIO_ISO })
+    expect(p.fechaPago).toEqual({ desde: '2026-11-03', hasta: '2026-11-03' })
+    expect(p.fuenteFecha).toBe('registro')
+  })
+  it('reenvío días después: la fecha del pago no cambia (con y sin auditoría)', () => {
+    const despues = '2026-11-27T18:00:00Z'
+    for (const edits of [editsEjemplo, []]) {
+      const antes = armarPago({ movs: [facturaA, facturaB], aplicaciones: [], edits, ahora: ENVIO_ISO })
+      const reenvio = armarPago({ movs: [facturaA, facturaB], aplicaciones: [], edits, ahora: despues })
+      expect(reenvio.fechaPago).toEqual(antes.fechaPago)
+      expect(reenvio.fuenteFecha).toBe(antes.fuenteFecha)
+      expect(reenvio.fechaPago.hasta).not.toBe(diaCR(despues))
+    }
+  })
+  it('una factura con auditoría y otra sin ella → rango con las dos fechas confiables, sin el envío', () => {
+    const p = armarPago({ movs: [facturaA, facturaB], aplicaciones: [], edits: editsEjemplo.filter((e) => e.movement_id === ids.a), ahora: '2026-11-27T18:00:00Z' })
+    expect(p.fechaPago).toEqual({ desde: '2026-11-10', hasta: '2026-11-19' })
+    expect(p.fuenteFecha).toBe('mixta')
+  })
+  it('solo sin ninguna fecha confiable (created_at inválido) se usa el envío, marcado como tal', () => {
+    const roto = { ...facturaA, created_at: '' }
+    expect(momentoDelPago(roto, [], ENVIO_ISO)).toEqual({ iso: ENVIO_ISO, fuente: 'envio' })
+    const p = armarPago({ movs: [roto], aplicaciones: [], edits: [], ahora: ENVIO_ISO })
+    expect(p.fuenteFecha).toBe('envio')
+    // Con otra factura que sí tiene fecha confiable, el envío no entra al rango ni al rótulo.
+    const q = armarPago({ movs: [facturaB, { ...roto, id: ids.c }], aplicaciones: [], edits: [], ahora: '2026-11-27T18:00:00Z' })
+    expect(q.fechaPago).toEqual({ desde: '2026-11-10', hasta: '2026-11-10' })
+    expect(q.fuenteFecha).toBe('registro')
   })
   it('si se pagó, se volvió a pendiente y se pagó otra vez, vale el último pago', () => {
     const e = [
@@ -58,7 +91,7 @@ describe('fecha del pago', () => {
       { movement_id: ids.a, edited_at: '2026-11-16T15:00:00Z', changed: { status: { old: 'aprobado', new: 'pendiente' } } },
       { movement_id: ids.a, edited_at: PAGO_ISO, changed: { status: { old: 'pendiente', new: 'aprobado' } } },
     ]
-    expect(momentoDelPago(ids.a, e, ENVIO_ISO).iso).toBe(PAGO_ISO)
+    expect(momentoDelPago(facturaA, e, ENVIO_ISO).iso).toBe(PAGO_ISO)
   })
   it('día de Costa Rica: 21:40 CR del 19 = 03:40 UTC del 20 → 19-nov', () => {
     expect(diaCR(PAGO_ISO)).toBe('2026-11-19')
@@ -83,6 +116,12 @@ describe('montos', () => {
     expect(p.totalFacturadoCRC).toBe(186_450)
     expect(p.totalCreditoCRC).toBe(20_000)
     expect(p.totalPagadoCRC).toBe(166_450)
+  })
+  it('referencia = description || subcategory, como la app', () => {
+    const q = armarPago({ movs: [{ ...facturaA, description: '', subcategory: 'Pescado' }, { ...facturaB, description: null, subcategory: null }], aplicaciones: [], edits: [], ahora: ENVIO_ISO })
+    expect(q.filas.map((f) => f.referencia)).toEqual(['Pescado', ''])
+    const r = armarPago({ movs: [{ ...facturaA, subcategory: 'Pescado' }], aplicaciones: [], edits: [], ahora: ENVIO_ISO })
+    expect(r.filas[0].referencia).toBe(facturaA.description)
   })
   it('fecha de la factura: la de la sesión si se pudo leer; si no, el día CR de created_at', () => {
     expect(p.filas.map((f) => f.fecha)).toEqual(['2026-11-03', '2026-11-10'])

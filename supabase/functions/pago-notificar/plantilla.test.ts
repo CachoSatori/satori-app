@@ -71,6 +71,30 @@ describe('comprobante de pago agrupado', () => {
     expect(t).toContain('₡66.450 y $120,50')
     expect(t).toContain('Efectivo y Transferencia')
   })
+  it('solo en dólares: el total va en dólares, nunca «₡0 total pagado»', () => {
+    const p = armarPago({ movs: [facturaUsd], aplicaciones: [], edits: [], ahora: ENVIO_ISO })
+    const t = verificarCorreo(buildHtml(p, proveedorEjemplo), { pie: PIE.replace('19 nov 26', '12 nov 26') })
+    expect(t).not.toContain('₡0')
+    expect(t).toContain('$120,50 total pagado')
+    expect(t).not.toContain('total pagado en dólares')
+    expect(t).toContain('Le confirmamos el pago de una factura por $120,50 el 12 de noviembre de 2026.')
+  })
+  it('sin auditoría (cajero / nacido pagado): fecha del pago = registro del movimiento, no el envío', () => {
+    const p = armarPago({ movs: [facturaB], aplicaciones: [], edits: [], ahora: '2026-11-27T18:00:00Z' })
+    const t = verificarCorreo(buildHtml(p, proveedorEjemplo), { pie: PIE.replace('19 nov 26', '10 nov 26') })
+    expect(t).toContain('10 nov 26 fecha del pago')
+    expect(asunto(p)).toBe('Comprobante de pago — Satori (10 de noviembre de 2026)')
+    expect(t).not.toContain('27 de noviembre')
+  })
+  it('sin ninguna fecha confiable: «enviado el», nunca «fecha del pago»', () => {
+    const p = armarPago({ movs: [{ ...facturaB, created_at: '' }], aplicaciones: [], edits: [], ahora: ENVIO_ISO, fechaFactura: { [ids.b]: '2026-11-10' } })
+    const t = verificarCorreo(buildHtml(p, proveedorEjemplo), { pie: PIE })
+    expect(t).not.toMatch(/fecha del pago/i)
+    expect(t).toContain('19 nov 26 enviado el')
+    expect(t).toContain('Enviado el')
+    expect(asunto(p)).toBe('Comprobante de pago — Satori (enviado el 19 de noviembre de 2026)')
+    expect(t).toContain('Le confirmamos el pago de una factura por ₡66.450.')
+  })
   it('saldada entera con crédito: lo dice, sin «pago por ₡0»', () => {
     const p = armarPago({
       movs: [facturaB], edits: editsEjemplo, ahora: ENVIO_ISO,
@@ -84,7 +108,7 @@ describe('comprobante de pago agrupado', () => {
     const muchas: MovimientoPago[] = Array.from({ length: 13 }, (_, i) => ({
       ...facturaB, id: `00000000-0000-4000-8000-${String(100 + i).padStart(12, '0')}`, description: `Ref ${String(i + 1).padStart(2, '0')}`,
     }))
-    const t = verificarCorreo(buildHtml(armarPago({ movs: muchas, aplicaciones: [], edits: [], ahora: ENVIO_ISO }), proveedorEjemplo), { pie: PIE })
+    const t = verificarCorreo(buildHtml(armarPago({ movs: muchas, aplicaciones: [], edits: [], ahora: ENVIO_ISO }), proveedorEjemplo), { pie: PIE.replace('19 nov 26', '10 nov 26') })
     for (let i = 1; i <= 13; i++) expect(t).toContain(`Ref ${String(i).padStart(2, '0')}`)
     expect(t).not.toContain('Se muestran')
   })

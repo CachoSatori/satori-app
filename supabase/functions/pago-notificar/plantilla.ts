@@ -2,7 +2,8 @@
 //  Plantilla del comprobante de pago al proveedor, con el estándar de reportes Satori adaptado a correo
 //  (correo-estandar.ts). Lo lee alguien de afuera (el proveedor): va en «usted».
 //  (19-nov) UN correo por pago con la lista de facturas: fecha de la factura, referencia, lo facturado, el crédito a
-//  favor aplicado (si hubo) y lo pagado; el total pagado; la fecha REAL del pago (CR) y el método.
+//  favor aplicado (si hubo) y lo pagado; el total pagado (₡, $ o ambas); la fecha del pago (CR) y el método. Sin
+//  fecha confiable del pago, «enviado el» (ronda 2).
 //  El correo del proveedor NO va en el cuerpo (solo es el destinatario).
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -34,19 +35,23 @@ export function fechaPagoCorta(p: Pago): string {
   return desde === hasta ? fechaCorta(desde) : `${fechaCorta(desde)} al ${fechaCorta(hasta)}`
 }
 
+/** Sin fecha confiable del pago (fuente = envío): se rotula «enviado el», NUNCA «fecha del pago» (ronda 2). */
+const soloEnvio = (p: Pago): boolean => p.fuenteFecha === 'envio'
+
 export function asunto(p: Pago): string {
-  return `Comprobante de pago — Satori (${fechaPagoLarga(p)})`
+  return `Comprobante de pago — Satori (${soloEnvio(p) ? 'enviado el ' : ''}${fechaPagoLarga(p)})`
 }
 
 function bajada(p: Pago): string {
   const n = p.filas.length
-  const cuando = p.fechaPago.desde === p.fechaPago.hasta ? `el ${fechaPagoLarga(p)}` : fechaPagoLarga(p)
+  // Sin fecha confiable del pago, la bajada no dice cuándo se pagó (la fecha del envío va rotulada aparte).
+  const cuando = soloEnvio(p) ? '' : ' ' + (p.fechaPago.desde === p.fechaPago.hasta ? `el ${fechaPagoLarga(p)}` : fechaPagoLarga(p))
   const facturas = n === 1 ? 'una factura' : `${n} facturas`
   if (p.totalPagadoCRC <= EPS && p.totalUSD <= EPS && p.totalCreditoCRC > EPS) {
-    return `Le confirmamos que ${n === 1 ? 'su factura quedó saldada' : `sus ${n} facturas quedaron saldadas`} con su crédito a favor ${cuando}.`
+    return `Le confirmamos que ${n === 1 ? 'su factura quedó saldada' : `sus ${n} facturas quedaron saldadas`} con su crédito a favor${cuando}.`
   }
   const credito = p.totalCreditoCRC > EPS ? `, después de aplicar ${crc(p.totalCreditoCRC)} de su crédito a favor` : ''
-  return `Le confirmamos el pago de ${facturas} por ${monto(p.totalPagadoCRC, p.totalUSD).replace(' · ', ' y ')} ${cuando}${credito}.`
+  return `Le confirmamos el pago de ${facturas} por ${monto(p.totalPagadoCRC, p.totalUSD).replace(' · ', ' y ')}${cuando}${credito}.`
 }
 
 function filasFacturas(filas: FilaFactura[], conCredito: boolean): string[][] {
@@ -70,10 +75,14 @@ export function buildHtml(p: Pago, s: ProveedorCorreo): string {
   const conCredito = p.totalCreditoCRC > EPS
   const conUsd = p.totalUSD > EPS
 
-  const lista: Cifra[] = [{ valor: crc(p.totalPagadoCRC), etiqueta: 'total pagado' }]
-  if (conUsd) lista.push({ valor: usd(p.totalUSD), etiqueta: 'total pagado en dólares' })
+  // Total en la moneda que corresponda (mismo criterio que comprobanteProveedor.ts): ₡ si hay ₡ o no hay $; $ si hay $.
+  // Una factura solo en dólares no dice «₡0 total pagado».
+  const conCrc = Math.abs(p.totalPagadoCRC) > EPS || !conUsd
+  const lista: Cifra[] = []
+  if (conCrc) lista.push({ valor: crc(p.totalPagadoCRC), etiqueta: 'total pagado' })
+  if (conUsd) lista.push({ valor: usd(p.totalUSD), etiqueta: conCrc ? 'total pagado en dólares' : 'total pagado' })
   if (conCredito) lista.push({ valor: crc(p.totalCreditoCRC), etiqueta: 'crédito a favor aplicado' })
-  lista.push({ valor: esc(corta), etiqueta: 'fecha del pago' })
+  lista.push({ valor: esc(corta), etiqueta: soloEnvio(p) ? 'enviado el' : 'fecha del pago' })
 
   let html = cabecera(reporte, corta) + titulo(s.name, esc(bajada(p))) + cifras(lista)
 
@@ -97,7 +106,7 @@ export function buildHtml(p: Pago, s: ProveedorCorreo): string {
     [{ titulo: 'concepto', ancho: 32 }, { titulo: 'dato', ancho: 68 }],
     [
       [celdaNombre('Proveedor'), esc(s.name)],
-      [celdaNombre('Fecha del pago'), esc(fechaPagoLarga(p))],
+      [celdaNombre(soloEnvio(p) ? 'Enviado el' : 'Fecha del pago'), esc(fechaPagoLarga(p))],
       [celdaNombre('Método'), esc(p.metodo)],
       [celdaNombre('Facturas'), esc(String(p.filas.length))],
       ...(conCredito ? [[celdaNombre('Total facturado'), esc(monto(p.totalFacturadoCRC, p.totalUSD))]] : []),

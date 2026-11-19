@@ -103,8 +103,10 @@ evolución» igual.
   - Ledger: 1 fila `194` / `mi_rendimiento_equipo`; check «Supabase Preview» en success.
   - Las 6 funciones `security definer` con `search_path = public, pg_temp`; sin EXECUTE para `anon` en las 6 y para
     `authenticated` en las 4 internas.
-  - Como salonero (JWT simulado), pidiendo otro local: 42501.
-- **Validación física del dueño (18-nov):** Mi Rendimiento con un salonero, OK.
+  - 6 funciones `security definer`, sin EXECUTE para `anon`. (El 42501 de salonero es solo de la 193; en la 194 el
+    personal sí llama a sus funciones y ve lo suyo.)
+- **Validación física del dueño (18-nov, tarde/noche, hora no registrada):** con un salonero, Mi evolución, El local y
+  competencias, OK.
 
 ## 9. Estado final
 Hecho. Vuelta atrás solo hacia adelante (§6). Riesgo aceptado por el dueño: restar dos rangos por la API puede despejar a

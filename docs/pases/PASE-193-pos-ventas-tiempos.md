@@ -102,7 +102,7 @@ mapa de salón, y la alerta de pax vuelve a contar las mesas internas.
   - Funciones `security definer` con `search_path = public, pg_temp`; `anon` sin EXECUTE; los helpers sin EXECUTE
     para `authenticated`.
   - Como salonero (JWT simulado): 42501.
-- **Validación física del dueño (18-nov):** Tiempos y Resumen, OK.
+- **Validación física del dueño (18-nov, tarde/noche, hora no registrada):** Tiempos y Resumen, OK.
 
 ## 10. Estado final
 Hecho. Vuelta atrás solo hacia adelante (§7). Ajustes posteriores de pantalla (% en vez de índice, barra única) fueron

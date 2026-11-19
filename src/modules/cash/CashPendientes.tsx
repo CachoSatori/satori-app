@@ -9,6 +9,7 @@ import { saldoResidual, saldoCredito, facturaAplicado } from './supplierCredits'
 import { RegistrarCreditoModal, AplicarCreditoModal } from './CreditoModals'
 import { waNumber, descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
 import { comprobantePago } from './comprobanteProveedor'
+import { agruparEnvios, type ReceptorPago } from './envioPagoProveedor'
 
 interface Props {
   movements: CashMovement[]
@@ -154,12 +155,15 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
       .map(id => {
         const sid = movById.get(id)?.supplier_id
         const s = sid ? supById.get(sid) : undefined
-        return s && s.notificar_pago === 'email' && s.email ? { id, name: s.name, email: s.email } : null
+        return s && s.notificar_pago === 'email' && s.email ? { id, supplierId: s.id, name: s.name, email: s.email } : null
       })
-      .filter((x): x is { id: string; name: string; email: string } => x !== null)
+      .filter((x): x is ReceptorPago => x !== null)
+    // (19-nov) UN comprobante por proveedor con todas sus facturas de este pago (antes: uno por factura).
+    const porProveedor = agruparEnvios(receptores)
     // Confirmación EXPLÍCITA por envío. Si nadie recibe (Notificar=No) → flujo idéntico al actual (sin confirm).
-    if (receptores.length > 0) {
-      const lineas = receptores.map(r => `📧 Se enviará comprobante a: ${r.name} (${r.email})`).join('\n')
+    if (porProveedor.length > 0) {
+      const lineas = porProveedor.map(r =>
+        `📧 Se enviará un comprobante a: ${r.name} (${r.email})${r.ids.length > 1 ? ` · ${r.ids.length} facturas` : ''}`).join('\n')
       if (!window.confirm(`Confirmar pago de ${ids.length} pendiente${ids.length !== 1 ? 's' : ''}.\n\n${lineas}`)) return
     }
     setSaving(true)
@@ -168,7 +172,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
         ? updateCashMovement(id, aprobacionPropinaFields())
         : updateMovementStatus(id, 'aprobado')))
       // LA PLATA MANDA: el email va DESPUÉS del pago, fire-and-forget — nunca lo bloquea ni lo revierte.
-      receptores.forEach(r => { void sendPagoProveedorEmail(r.id) })
+      porProveedor.forEach(r => { void sendPagoProveedorEmail(r.ids) })
       setSelected(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
       // Comprobante post-pago (snapshot ya armado en el call site, estable ante el refresh). Propinas → null.
       if (snapshot && snapshot.data.lineas.length) setPagoResultado(snapshot)

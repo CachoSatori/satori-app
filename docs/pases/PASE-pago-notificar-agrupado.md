@@ -23,7 +23,7 @@
 ## Orden del pase (la app va DESPUÉS)
 1. **Esta Edge** (compatible con los dos formatos). Con la app de hoy sigue saliendo un correo por factura, pero ya con
    la fecha real y lo pagado.
-2. **La app** (PR en borrador de `claude/pago-agrupado-app`): una llamada por proveedor. Si por error la app llegara
+2. **La app** (#303, borrador, rama `claude/pago-agrupado-app`): una llamada por proveedor. Si por error la app llegara
    antes, la Edge vieja contesta 400 «Falta movimiento_id» y la app cae sola a una llamada por id (lo de hoy).
 
 ## Responsables

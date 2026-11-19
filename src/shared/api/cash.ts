@@ -969,9 +969,33 @@ export async function sendCierreEmail(cierreId: string): Promise<void> {
 // functions.invoke reenvía el JWT; la Edge Function 'pago-notificar' EXIGE auth, relee movimiento+proveedor
 // server-side (anti-IDOR) y envía por Resend. NUNCA lanza: LA PLATA MANDA — el pago ya quedó pagado; si el
 // email falla, `proveedor_notificado_at` queda NULL y la UI ofrece reintento. NO pasar contenido libre.
-export async function sendPagoProveedorEmail(movementId: string): Promise<void> {
+// (19-nov, dueño) UN correo por pago: se llama UNA vez por proveedor con TODOS los ids pagados en esa acción
+// (`{ movimiento_ids }`); la función arma la lista de facturas, la fecha real del pago y lo pagado con crédito.
+// Pase: primero la Edge nueva (acepta los dos formatos), después esta app. Red de seguridad por si la app llega
+// antes: la Edge vieja contesta 400 «Falta movimiento_id» al formato nuevo → se cae a una llamada por id (lo de antes).
+export const MENSAJE_EDGE_VIEJA = 'Falta movimiento_id'
+
+async function esEdgeVieja(error: unknown): Promise<boolean> {
+  const ctx = (error as { context?: unknown } | null)?.context
+  if (!ctx || typeof (ctx as Response).clone !== 'function') return false
+  const r = ctx as Response
+  if (r.status !== 400) return false
   try {
-    await supabase.functions.invoke('pago-notificar', { body: { movimiento_id: movementId } })
+    const body = await r.clone().json() as { error?: unknown }
+    return body?.error === MENSAJE_EDGE_VIEJA
+  } catch { return false }
+}
+
+export async function sendPagoProveedorEmail(movementIds: string[]): Promise<void> {
+  const ids = [...new Set(movementIds.filter(Boolean))]
+  if (!ids.length) return
+  try {
+    const { error } = await supabase.functions.invoke('pago-notificar', { body: { movimiento_ids: ids } })
+    if (error && await esEdgeVieja(error)) {
+      for (const id of ids) {
+        try { await supabase.functions.invoke('pago-notificar', { body: { movimiento_id: id } }) } catch { /* idem */ }
+      }
+    }
   } catch {
     /* función no desplegada / sin RESEND_API_KEY / envío falló → se ignora; queda para reintento */
   }

@@ -71,12 +71,12 @@ const GENERICOS = new Set([
 // Cómo arreglarlo: usá un ficticio de la lista blanca 80000000–80000099 (p. ej. 80000001, o «+506 8000 0001»). Si es un número
 // que no es teléfono (id, monto, semilla), escribilo de forma que no parezca uno (con separador de miles, o con prefijo de
 // texto) o agregá la ruta a TELEFONO_FUERA_RUTAS con el motivo.
-const TEL = /(?<![0-9A-Za-z_.,-])(?:\+?506[ -]?)?([24-8][0-9]{3})[ -]?([0-9]{4})(?![0-9])(?![.,][0-9])/g
+const TEL = /(?<![0-9A-Za-z_-])(?<![0-9][.,])(?:\+?506[ -]?)?([24-8][0-9]{3})[ .-]?([0-9]{4})(?![0-9])(?![.,][0-9])/g
 const TEL_FICTICIO = /^800000[0-9]{2}$/
 const TEL_PLACEHOLDER = '88888888'   // «8888-8888»: ejemplo de formato en el campo de teléfono de los formularios
 /** Rutas fuera de la regla de teléfonos, con el motivo (además de supabase/migrations y los lockfiles, ya fuera del escaneo). */
 export const TELEFONO_FUERA_RUTAS: { patron: RegExp; motivo: string }[] = [
-  { patron: /^scripts\/sql\/.*\.(sql|sh)$/, motivo: 'pruebas SQL que corren contra la base con números inventados de patrón obvio (6000xxxx, 6111xxxx, 8888xxxx); cambiarlos exige re-correrlas contra una base' },
+  { patron: /^scripts\/sql\/.*\.(sql|sh)$/, motivo: 'pruebas SQL que corren contra la base con números inventados de patrón obvio (6000xxxx, 6001xxxx, 6111xxxx, 8888xxxx); cambiarlos exige re-correrlas contra una base' },
   { patron: /^scripts\/t0-reconciliacion-cajas\/REPORTE-T0B-PROD\.md$/, motivo: 'reporte con ids de movimientos de ocho dígitos, no teléfonos' },
   { patron: /^docs\/analisis\/[^/]+\/datos\/.*\.csv$/, motivo: 'datos numéricos exportados (montos, conteos): sin teléfonos, y los números largos chocan con la regla' },
 ]
@@ -195,6 +195,12 @@ test('la guarda de teléfonos: cae con uno plausible (con o sin +506, guiones o 
   expect(cae(`'+506 8000 0001' y '${'8000'}${'0099'}' y '8000-0000'`)).toEqual([])   // lista blanca 80000000–80000099
   expect(cae(`'${'8000'}${'0100'}'`)).toHaveLength(1)                   // fuera del bloque
   expect(cae(`placeholder="8888-8888" · 2024-2025 · seed 20261118 · ${86_400_000} · 52608717.00 · ${plausible}9`)).toEqual([])   // placeholder, años, fecha compacta, ms, monto, número más largo
+  // ronda 2: CSV, prefijo pegado y puntos caen; los decimales no
+  expect(cae(`nombre,${plausible}`)).toHaveLength(1)
+  expect(cae(`Tel.${plausible}`)).toHaveLength(1)
+  expect(cae(`${plausible.slice(0, 4)}.${plausible.slice(4)}`)).toHaveLength(1)
+  expect(cae('12.345678')).toEqual([])
+  expect(cae('1234.5678 y 0.71234567')).toEqual([])
   expect(cae(`id 2a${plausible}`)).toEqual([])                // pegado a letras: hash o id
   expect(telefonosMalos('supabase/migrations/x.sql', plausible)).toHaveLength(1)   // (el escaneo real la saltea entera)
   expect(telefonosMalos('scripts/sql/999_pruebas.sql', plausible)).toEqual([])    // exclusión justificada

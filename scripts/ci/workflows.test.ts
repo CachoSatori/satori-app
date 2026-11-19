@@ -1,21 +1,32 @@
-// (19-nov, menores del #301) El evento `edited` de un PR también se dispara al cambiar el título o el cuerpo: ahí no hay nada
-// nuevo que juzgar. ci.yml (Gate) y checks-protegidos.yml reaccionan a `edited` SOLO si cambió la base (`changes.base`).
-// Mutación: sacar la condición `changes.base` del `if` del job → cae; sacar `edited` de `types` → cae (se perdería el re-apuntado de base).
+// (19-nov, ronda 2 del #304) El evento `edited` de un PR corre el Gate COMPLETO. Un `if` a nivel de job que lo salte deja el
+// check en «Skipped», y un job saltado cuenta como «Success» para un check requerido; además la concurrency cancelaría el Gate en curso.
+// Por eso ci.yml (job «gate») y checks-protegidos.yml (job «guarda») NO llevan `if` a nivel de job.
+// Mutación nombrada: volver a poner `if:` bajo `gate:` o `guarda:` → cae; sacar `edited` de `types` → cae (se perdería el re-apuntado de base).
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const wf = (f: string) => readFileSync(resolve(__dirname, '../../.github/workflows', f), 'utf8')
 
-describe.each([['ci.yml', 'gate'], ['checks-protegidos.yml', 'guarda']])('%s: `edited` solo con cambio de base', (archivo, job) => {
+/** Líneas `if:` a nivel de job (4 espacios) dentro del job `id`. */
+export function ifsDeJob(yml: string, id: string): string[] {
+  const l = yml.split('\n')
+  const ini = l.findIndex(x => x === `  ${id}:`)
+  if (ini < 0) throw new Error(`no hay job ${id}`)
+  const fin = l.findIndex((x, i) => i > ini && /^ {0,2}\S/.test(x))
+  return l.slice(ini + 1, fin < 0 ? undefined : fin).filter(x => /^ {4}if:/.test(x))
+}
+
+describe.each([['ci.yml', 'gate'], ['checks-protegidos.yml', 'guarda']])('%s: `edited` corre completo', (archivo, job) => {
   const t = wf(archivo)
   it('escucha `edited`', () => {
     expect(t).toMatch(/types:\s*\[[^\]]*\bedited\b[^\]]*\]/)
   })
-  it(`el job «${job}» tiene un \`if\` que deja pasar \`edited\` solo si viene \`changes.base\``, () => {
-    const bloque = t.slice(t.indexOf(`\n  ${job}:`))
-    const si = /^\s{4}if:\s*(.+)$/m.exec(bloque)?.[1] ?? ''
-    expect(si).toContain("github.event.action != 'edited'")
-    expect(si).toContain('github.event.changes.base != null')
+  it(`el job «${job}» no tiene \`if\` a nivel de job`, () => {
+    expect(ifsDeJob(t, job)).toEqual([])
   })
+})
+
+it('control: la guarda sí detecta un `if` de job', () => {
+  expect(ifsDeJob('jobs:\n  gate:\n    name: G\n    if: ${{ x }}\n    runs-on: u\n  otro:\n    if: y\n', 'gate')).toHaveLength(1)
 })

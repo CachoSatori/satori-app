@@ -24,9 +24,8 @@ concurrency:
 jobs:
   gate:
     name: Gate
-    # (19-nov) `edited` también se dispara al cambiar el título o el cuerpo: ahí no hay nada nuevo que juzgar. Solo corre si
-    # cambió la base (`changes.base` viene en el evento únicamente en ese caso). Cualquier otro evento corre como siempre.
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+    # (19-nov) SIN `if` a nivel de job: un job saltado cuenta como «Success» para un check requerido (y con `edited` cancelaría
+    # el Gate en curso por la concurrency). Con `edited` el Gate corre completo. Lo cuida scripts/ci/workflows.test.ts.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

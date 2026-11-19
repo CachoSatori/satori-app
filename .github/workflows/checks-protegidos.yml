@@ -14,7 +14,7 @@ name: Checks protegidos
 on:
   pull_request_target:
     branches: [main]
-    # edited: solo si cambió la BASE (ver el `if` del job): un PR que se re-apunta a otra rama cambia qué archivos toca.
+    # edited: corre completo (un PR que se re-apunta a otra rama cambia qué archivos toca).
     types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review, edited]
 
 permissions:
@@ -28,8 +28,7 @@ concurrency:
 jobs:
   guarda:
     name: Checks protegidos
-    # (19-nov) Editar el título o el cuerpo no cambia los archivos del PR: solo corre con `edited` si cambió la base.
-    if: ${{ github.event.action != 'edited' || github.event.changes.base != null }}
+    # (19-nov) SIN `if` a nivel de job: un job saltado cuenta como «Success» para un check requerido. Lo cuida scripts/ci/workflows.test.ts.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

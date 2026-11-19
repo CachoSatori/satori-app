@@ -76,4 +76,15 @@ describe('AplicarCreditoModal — reparte un crédito entre varias facturas (FIF
     fireEvent.click(aplicarBtn)
     expect(applySpy).not.toHaveBeenCalled()
   })
+  // Mutación nombrada: quitar `if (ocupado) return` de aplicar() → esta prueba cae.
+  it('la guarda `ocupado` DENTRO de aplicar(): con datos releyéndose, un clic que llegue igual no imputa', () => {
+    const pendientes = [fac({ id: 'f1', amount_crc: 30000 })]
+    render(<AplicarCreditoModal supplier={supplier} credits={[credit()]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} ocupado />)
+    const boton = screen.getByRole('button', { name: /Aplicar \(/ }) as HTMLButtonElement
+    expect(boton.disabled).toBe(true)
+    // El botón gris no deja hacer clic: se invoca el onClick de React tal cual, como si se hubiera habilitado por un desfase.
+    const clave = Object.keys(boton).find(k => k.startsWith('__reactProps'))!
+    ;(boton as unknown as Record<string, { onClick: () => void }>)[clave].onClick()
+    expect(applySpy).not.toHaveBeenCalled()
+  })
 })

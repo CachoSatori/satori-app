@@ -9,7 +9,7 @@ describe('comprobante — texto para WhatsApp', () => {
     const d: ComprobanteData = {
       tituloTexto: 'Comprobante de pago',
       tituloPNG: 'Comprobante de pago a proveedor',
-      proveedor: 'Pescados del Pacífico',
+      proveedor: 'Proveedor de prueba 1',
       lineas: [
         { fecha: '2026-07-05', nota: 'Factura 12', monto: '₡30 000' },
         { fecha: '2026-07-06', nota: 'Factura 13', monto: '₡7 000', subnotaTexto: 'facturado ₡10 000 − crédito ₡3 000 = pagado ₡7 000' },
@@ -19,7 +19,7 @@ describe('comprobante — texto para WhatsApp', () => {
     }
     expect(comprobanteTexto(d)).toBe(
       '*Satori Sushi Bar* — Comprobante de pago\n' +
-      'Pescados del Pacífico\n\n' +
+      'Proveedor de prueba 1\n\n' +
       '• 2026-07-05  ₡30 000  Factura 12\n' +
       '• 2026-07-06  ₡7 000  Factura 13\n' +
       '    (facturado ₡10 000 − crédito ₡3 000 = pagado ₡7 000)\n\n' +
@@ -31,7 +31,7 @@ describe('comprobante — texto para WhatsApp', () => {
     const d: ComprobanteData = {
       tituloTexto: 'Comprobante de aplicación de saldo a favor',
       tituloPNG: 'Comprobante de aplicación de saldo a favor',
-      proveedor: 'Verduras La Huerta',
+      proveedor: 'Proveedor de prueba 4',
       lineas: [
         { fecha: '2026-07-05', nota: 'saldada ✓', monto: '₡30 000' },
         { fecha: '2026-07-06', nota: 'residual ₡10 000', monto: '₡20 000' },
@@ -42,7 +42,7 @@ describe('comprobante — texto para WhatsApp', () => {
       pie: ['Crédito usado: TRF-889900', 'Saldo a favor restante: ₡0'],
     }
     const out = comprobanteTexto(d)
-    expect(out).toContain('*Satori Sushi Bar* — Comprobante de aplicación de saldo a favor\nVerduras La Huerta')
+    expect(out).toContain('*Satori Sushi Bar* — Comprobante de aplicación de saldo a favor\nProveedor de prueba 4')
     expect(out).toContain('• 2026-07-05  ₡30 000  saldada ✓')
     expect(out).toContain('• 2026-07-06  ₡20 000  residual ₡10 000')
     expect(out).toContain('\nTotal: ₡50 000\n\n')
@@ -56,7 +56,7 @@ describe('comprobante — texto para WhatsApp', () => {
       totalTexto: '₡100', totalPNG: '₡100',
     }
     expect(comprobanteTexto(d)).toBe('*Satori Sushi Bar* — X\nP\n\n• 2026-07-05  ₡100\n\nTotal: ₡100')
-    expect(waNumber('89900324')).toBe('50689900324')
+    expect(waNumber('80000090')).toBe('50680000090')
   })
 })
 
@@ -66,7 +66,7 @@ describe('comprobante — texto para WhatsApp', () => {
 describe('compartirComprobanteWhatsApp — degradación sin Web Share de archivos', () => {
   const d: ComprobanteData = {
     tituloTexto: 'Comprobante de pago', tituloPNG: 'Comprobante de pago a proveedor',
-    proveedor: 'Pescados del Pacífico',
+    proveedor: 'Proveedor de prueba 1',
     lineas: [{ fecha: '2026-07-05', nota: 'Factura 12', monto: '₡30 000' }],
     totalTexto: '₡30 000', totalPNG: '₡30 000',
   }
@@ -75,10 +75,10 @@ describe('compartirComprobanteWhatsApp — degradación sin Web Share de archivo
     const open = vi.fn()
     vi.stubGlobal('navigator', {})            // sin canShare/share
     vi.stubGlobal('window', { open })
-    await compartirComprobanteWhatsApp(d, '8990 0324')
+    await compartirComprobanteWhatsApp(d, '8000 0090')
     expect(open).toHaveBeenCalledTimes(1)
     const [url, target] = open.mock.calls[0]
-    expect(url).toBe(`https://wa.me/50689900324?text=${encodeURIComponent(comprobanteTexto(d))}`)
+    expect(url).toBe(`https://wa.me/50680000090?text=${encodeURIComponent(comprobanteTexto(d))}`)
     expect(target).toBe('_blank')
     vi.unstubAllGlobals()
   })

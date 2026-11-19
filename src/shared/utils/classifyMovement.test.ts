@@ -27,7 +27,7 @@ const mkSupplier = (name: string, aliases: string[] | null = null): Supplier => 
 })
 
 const suppliers: Supplier[] = [
-  mkSupplier('Pescadería del Pacífico', ['Pesca Pacífico']),
+  mkSupplier('Proveedor de prueba 2', ['Pesca Pacífico']),
   mkSupplier('Verdulería La Huerta'),
   mkSupplier('Carnes El Novillo'),
 ]
@@ -52,7 +52,7 @@ describe('classifyMovement — contrato base', () => {
 
 describe('señal 1 — proveedor reconocido → mercadería (confianza alta)', () => {
   it('supplierName que coincide con un proveedor conocido → mercadería ~0.95', () => {
-    const r = classifyMovement({ supplierName: 'Pescadería del Pacífico' }, suppliers)
+    const r = classifyMovement({ supplierName: 'Proveedor de prueba 2' }, suppliers)
     expect(r.suggestion).toBe('mercaderia')
     expect(r.confidence).toBeGreaterThanOrEqual(0.9)
   })
@@ -145,7 +145,7 @@ describe('casos borde', () => {
   })
 
   it('proveedor conocido pero lista de suppliers vacía → no puede reconocerlo → operativa', () => {
-    const r = classifyMovement({ supplierName: 'Pescadería del Pacífico' }, [])
+    const r = classifyMovement({ supplierName: 'Proveedor de prueba 2' }, [])
     expect(r.suggestion).toBe('operativa')
   })
 

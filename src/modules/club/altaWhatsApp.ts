@@ -26,7 +26,7 @@ export function textoAltaWhatsApp(nombre: string, urlPortal: string): string {
 
 /**
  * Hallazgo 230 (D 16-nov, el dueño): el número como se lo lee el cajero al cliente antes de mandarle el link del portal.
- * CR (8 dígitos o 506 + 8): «+506 8888 0000». Otro país: «+<dígitos>» tal cual (no adivinamos su formato). Sin dígitos: ''.
+ * CR (8 dígitos o 506 + 8): «+506 8000 0000». Otro país: «+<dígitos>» tal cual (no adivinamos su formato). Sin dígitos: ''.
  */
 export function formatoWhatsApp(tel: string): string {
   const n = waNumber(tel)

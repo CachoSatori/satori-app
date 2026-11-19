@@ -42,9 +42,9 @@ const movs = [
   mov({ id: 'p1', subcategory: 'Propinas por turno', description: 'Propinas turno 2026-07-13 Mediodía', amount_crc: 10000 }),
   mov({ id: 'p2', subcategory: 'Propinas por turno', description: 'Propinas turno 2026-07-13 Noche',    amount_crc: 20000 }),
   mov({ id: 'p3', subcategory: 'Propinas por turno', description: 'Propinas turno 2026-07-14 Noche',    amount_crc: 30000 }),
-  mov({ id: 's1', supplier_name: 'Pescados del Pacífico', description: 'Factura 12', amount_crc: 50000 }),
-  mov({ id: 's2', supplier_name: 'Pescados del Pacífico', description: 'Factura 13', amount_crc: 5000 }),
-  mov({ id: 's3', supplier_name: 'Verduras La Huerta',    description: 'Factura 99', amount_crc: 7000 }),
+  mov({ id: 's1', supplier_name: 'Proveedor de prueba 1', description: 'Factura 12', amount_crc: 50000 }),
+  mov({ id: 's2', supplier_name: 'Proveedor de prueba 1', description: 'Factura 13', amount_crc: 5000 }),
+  mov({ id: 's3', supplier_name: 'Proveedor de prueba 4',    description: 'Factura 99', amount_crc: 7000 }),
 ]
 
 const renderPend = () => render(<CashPendientes movements={movs} sessions={[]} suppliers={[]} credits={[]} applications={[]} onRefresh={vi.fn()} />)
@@ -69,8 +69,8 @@ describe('CashPendientes — las propinas caen en UN solo grupo', () => {
   it('los proveedores siguen agrupando aparte, por nombre', () => {
     renderPend()
 
-    expect(screen.getByText('Pescados del Pacífico')).toBeTruthy()
-    expect(screen.getByText('Verduras La Huerta')).toBeTruthy()
+    expect(screen.getByText('Proveedor de prueba 1')).toBeTruthy()
+    expect(screen.getByText('Proveedor de prueba 4')).toBeTruthy()
     expect(screen.getByText(/Proveedor · 2 pagos pendientes/)).toBeTruthy()   // Pescados: 2 facturas
   })
 

@@ -39,7 +39,7 @@ const H = vi.hoisted(() => {
     makeBuilder,
     rpcSpy: vi.fn(async () => ({ error: null })),
     uploadSpy: vi.fn(async () => ({ path: 'docs/factura.jpg', sha: 'sha123' })),
-    extractSpy: vi.fn(async () => [{ tipo: 'factura', proveedor: 'Pescadería del Mar', moneda: 'CRC', total: 50000, items: [{ descripcion: 'pescado', cantidad: 2 }] }]),
+    extractSpy: vi.fn(async () => [{ tipo: 'factura', proveedor: 'Proveedor de prueba 3', moneda: 'CRC', total: 50000, items: [{ descripcion: 'pescado', cantidad: 2 }] }]),
     createDocSpy: vi.fn(async () => ({ id: 'doc1', raw_json: { items: [{ descripcion: 'pescado' }], total: 50000 }, linked_movement_id: 'm1' })),
     normalizeSpy: vi.fn(async () => ({ blob: new Blob(['x']), filename: 'factura.jpg' })),
     updateMovementMetadataSpy: vi.fn(async () => {}),
@@ -102,7 +102,7 @@ describe('InvRevision — adjuntar factura (F4.3b)', () => {
     expect(createDocSpy).not.toHaveBeenCalled()        // el doc NO se crea hasta confirmar
 
     // Lo leído por la IA vs lo que dice el pago, lado a lado.
-    expect(screen.getByText('Pescadería del Mar')).toBeTruthy()          // proveedor leído
+    expect(screen.getByText('Proveedor de prueba 3')).toBeTruthy()          // proveedor leído
     expect(screen.getByText(/Proveedor del pago/)).toBeTruthy()
     // total leído (= monto → sin ⚠). Matcher por función (el separador de miles de es-CR es un
     // espacio no separable) + tag: el <strong> es el de la confirmación (la tarjeta de la lista
@@ -125,7 +125,7 @@ describe('InvRevision — adjuntar factura (F4.3b)', () => {
     const args = createDocSpy.mock.calls[0] as unknown[]
     expect(args[0]).toBe('docs/factura.jpg')           // path
     expect(args[1]).toBe('sha123')                     // sha (de uploadImage)
-    expect((args[2] as { proveedor?: string })?.proveedor).toBe('Pescadería del Mar')   // lo extraído viaja al doc
+    expect((args[2] as { proveedor?: string })?.proveedor).toBe('Proveedor de prueba 3')   // lo extraído viaja al doc
     expect(args[3]).toBe('u-contador')                 // lo registra el contador que adjunta
     expect(args[4]).toBe('m1')                         // linked_movement_id = cash_movement_id de la tarea
     expect(args[5]).toBe('procesado')                  // no entra a la cola de la Bandeja

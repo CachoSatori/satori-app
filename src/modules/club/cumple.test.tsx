@@ -104,7 +104,7 @@ describe('Escanear → alta en caja con cumpleaños (v3)', () => {
     fireEvent.click(screen.getByText(/Nuevo socio del Local Club/))
     const campo = (l: RegExp) => screen.getByText(l).parentElement!.querySelector('input') as HTMLInputElement
     fireEvent.change(campo(/Nombre y apellido/), { target: { value: 'Ana Prueba' } })
-    fireEvent.change(campo(/^WhatsApp$/), { target: { value: '88880000' } })
+    fireEvent.change(campo(/^WhatsApp$/), { target: { value: '80000000' } })
     fireEvent.click(campo(/Verifiqué que es local/))
     fireEvent.click(campo(/Es mayor de 18 años/))
     return campo

@@ -30,7 +30,7 @@ const socio = (x: Partial<ClubMiembro> = {}): ClubMiembro => ({
 })
 const rolSocio: ClubRol = { miembro_id: 'm1', rol: 'socio', estado: 'activo', desde: '2026-10-01T12:00:00Z', alta_por: 'caja' }
 
-function preparar(m: ClubMiembro, tel: string | null = '8888 0000') {
+function preparar(m: ClubMiembro, tel: string | null = '8000 0000') {
   api.getMiembros.mockResolvedValue([m]); api.getSaldos.mockResolvedValue([]); api.getNegocios.mockResolvedValue([])
   api.getRoles.mockResolvedValue([rolSocio]); api.getMovimientos.mockResolvedValue([])
   api.getContacto.mockResolvedValue({ miembro_id: m.id, telefono: tel, email: null, optin_whatsapp: true, optin_email: false })
@@ -56,10 +56,10 @@ describe('reglas puras', () => {
     for (const r of ['cajero', 'contador', 'salonero', null, undefined]) expect(puedeLinkPortalDe(r, 'local-a', ['local-a'])).toBe(false)
   })
   it('link de WhatsApp: solo con el número confirmado; texto en «usted»', () => {
-    expect(linkPortalWhatsApp('88880000', 'Ana', URL, null)).toBeNull()
-    expect(linkPortalWhatsApp('88880000', 'Ana', URL, '88881111')).toBeNull()
-    const href = linkPortalWhatsApp('8888 0000', 'Ana María', URL, '88880000')!
-    expect(href.startsWith('https://wa.me/50688880000?text=')).toBe(true)
+    expect(linkPortalWhatsApp('80000000', 'Ana', URL, null)).toBeNull()
+    expect(linkPortalWhatsApp('80000000', 'Ana', URL, '80000011')).toBeNull()
+    const href = linkPortalWhatsApp('8000 0000', 'Ana María', URL, '80000000')!
+    expect(href.startsWith('https://wa.me/50680000000?text=')).toBe(true)
     expect(decodeURIComponent(href.split('?text=')[1])).toContain(URL)
     expect(textoLinkPortalWhatsApp('Ana', URL)).not.toMatch(TUTEO_VOSEO)
   })
@@ -86,12 +86,12 @@ describe('Miembros → ficha del socio → «Portal del socio»', () => {
     await screen.findByText('Portal del socio')
     await waitFor(() => expect(api.getContacto).toHaveBeenCalled())
     fireEvent.click(screen.getByText('Mandar por WhatsApp'))
-    await screen.findByText(/¿Este es su WhatsApp\? \+506 8888 0000/)
+    await screen.findByText(/¿Este es su WhatsApp\? \+506 8000 0000/)
     expect(abrir).not.toHaveBeenCalled()
     fireEvent.click(screen.getByText('Sí, es este'))
     expect(abrir).toHaveBeenCalledTimes(1)
     const href = String(abrir.mock.calls[0][0])
-    expect(href.startsWith('https://wa.me/50688880000?text=')).toBe(true)
+    expect(href.startsWith('https://wa.me/50680000000?text=')).toBe(true)
     expect(decodeURIComponent(href.split('?text=')[1])).toContain(URL)
     abrir.mockRestore()
   })

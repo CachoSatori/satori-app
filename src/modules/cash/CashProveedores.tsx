@@ -373,7 +373,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
             <div className="cash-form-grid">
               <div className="tips-field">
                 <div className="tips-field-label">Nombre *</div>
-                <input className="tips-input-dark" value={form.name} onChange={e => up('name', e.target.value)} placeholder="ej: Pescados del Pacífico" />
+                <input className="tips-input-dark" value={form.name} onChange={e => up('name', e.target.value)} placeholder="ej: Pescadería Ejemplo" />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Categoría</div>

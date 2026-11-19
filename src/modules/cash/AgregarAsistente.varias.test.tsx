@@ -25,7 +25,7 @@ import { tablaDocs, vaciarDocs } from '../../shared/api/documentosEnMemoria.test
 
 const clave = (n: number) => `506131126003101000000001000010100000${String(n).padStart(4, '0')}1100000001`
 const fac = (n: number, total: number, over: Record<string, unknown> = {}) => ({
-  tipo: 'factura', proveedor: 'Pescadería del Pacífico', proveedor_cedula: '3101000000', numero_documento: `0010000101000000${n}`,
+  tipo: 'factura', proveedor: 'Proveedor de prueba 2', proveedor_cedula: '3101000000', numero_documento: `0010000101000000${n}`,
   moneda: 'CRC', fecha: '2026-11-13', total, confianza: 0.9, items: [], clave_fe: clave(n), ...over,
 })
 const m = vi.hoisted(() => {
@@ -65,7 +65,7 @@ vi.mock('../../shared/FacturaVerify', () => ({ default: () => <span>📷 factura
 import AgregarAsistente from './AgregarAsistente'
 import { PagoFoto } from './CashProveedores'
 
-const sup: Supplier = { id: 'p1', name: 'Pescadería del Pacífico', category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
+const sup: Supplier = { id: 'p1', name: 'Proveedor de prueba 2', category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
   metodo_pago: 'Efectivo', cuenta_iban: '', aliases: null, is_active: true, email: null, whatsapp: null, notificar_pago: 'no',
   created_at: '2026-06-29T00:00:00Z', updated_at: '2026-06-29T00:00:00Z' }
 const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession

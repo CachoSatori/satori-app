@@ -26,16 +26,16 @@ beforeEach(() => {
 
 describe('socioAltaCaja → club_socio_alta_caja_v3 (173; la v2 de la 159 + cumpleaños) con token_portal (156)', () => {
   it('llama a la v2 con p_mayor_edad y devuelve el token del alta', async () => {
-    const r = await socioAltaCaja('Ana Prueba', '88880000', null, true, true)
+    const r = await socioAltaCaja('Ana Prueba', '80000000', null, true, true)
     expect(H.rpc).toHaveBeenCalledTimes(1)
     const [fn, args] = H.rpc.mock.calls[0]
     expect(fn).toBe('club_socio_alta_caja_v3')
-    expect(args).toMatchObject({ p_nombre: 'Ana Prueba', p_whatsapp: '88880000', p_email: null, p_verifico_residencia: true, p_mayor_edad: true,
+    expect(args).toMatchObject({ p_nombre: 'Ana Prueba', p_whatsapp: '80000000', p_email: null, p_verifico_residencia: true, p_mayor_edad: true,
                                  p_cumple_dia: null, p_cumple_mes: null, p_cumple_permiso: null })
     expect(r.token_portal).toBe(TOK)
   })
   it('173: con cumpleaños manda día, mes y el permiso en true', async () => {
-    await socioAltaCaja('Ana Prueba', '88880000', null, true, true, { dia: 29, mes: 2 })
+    await socioAltaCaja('Ana Prueba', '80000000', null, true, true, { dia: 29, mes: 2 })
     expect(H.rpc.mock.calls[0][1]).toMatchObject({ p_cumple_dia: 29, p_cumple_mes: 2, p_cumple_permiso: true })
   })
 })
@@ -46,7 +46,7 @@ describe('Escanear → alta en caja con edad: el cajero ve el botón del link', 
     fireEvent.click(screen.getByText(/Nuevo socio del Local Club/))
     const campo = (l: RegExp) => screen.getByText(l).parentElement!.querySelector('input') as HTMLInputElement
     fireEvent.change(campo(/Nombre y apellido/), { target: { value: 'Ana Prueba' } })
-    fireEvent.change(campo(/^WhatsApp$/), { target: { value: '88880000' } })
+    fireEvent.change(campo(/^WhatsApp$/), { target: { value: '80000000' } })
     fireEvent.click(campo(/Verifiqué que es local/))
     fireEvent.click(campo(/Es mayor de 18 años/))
     fireEvent.click(screen.getByText('Dar de alta'))

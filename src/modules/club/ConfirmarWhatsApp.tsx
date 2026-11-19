@@ -1,5 +1,5 @@
 /**
- * Hallazgo 230 (D 16-nov, el dueño): «¿Este es su WhatsApp? +506 8888 0000» antes de mandar el link del portal.
+ * Hallazgo 230 (D 16-nov, el dueño): «¿Este es su WhatsApp? +506 8000 0000» antes de mandar el link del portal.
  * Pantalla del personal (voseo). Sin dígitos no hay «Sí, es este». La usan el alta en caja (Escanear) y la ficha del
  * socio en Miembros («Mandar por WhatsApp»).
  */

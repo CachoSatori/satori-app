@@ -7,7 +7,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    # labeled/unlabeled: la etiqueta `ok-dueno-edge` (excepción de la guarda R04) vuelve a correr el gate. edited: cambio de base.
+    # labeled/unlabeled: la etiqueta `ok-dueno-edge` (excepción de la guarda R04) vuelve a correr el gate. edited: solo corre
+    # el Gate si cambió la BASE (ver el `if` del job); editar el título o el cuerpo del PR no gasta una corrida.
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled, edited]
   # Para que main también tenga su línea «GATE: PASS …» (sin base: las guardas del diff se saltan, lo dice el log).
   push:
@@ -23,6 +24,9 @@ concurrency:
 jobs:
   gate:
     name: Gate
+    # (19-nov) `edited` también se dispara al cambiar el título o el cuerpo: ahí no hay nada nuevo que juzgar. Solo corre si
+    # cambió la base (`changes.base` viene en el evento únicamente en ese caso). Cualquier otro evento corre como siempre.
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

@@ -20,12 +20,12 @@ vi.mock('../../shared/api/finance', () => ({ getFinanceAccounts: vi.fn(async () 
 vi.mock('../../shared/api/documents', () => ({
   uploadImage: vi.fn(async () => ({ path: 'docs/f.jpg', sha: 'sha1' })),
   extractImage: vi.fn(async () => [{
-    tipo: 'factura', proveedor: 'Pescadería del Pacífico', moneda: 'CRC', total: 50000,
+    tipo: 'factura', proveedor: 'Proveedor de prueba 2', moneda: 'CRC', total: 50000,
     fecha: '2026-07-01', confianza: 0.9, items: [],
   }]),
   // (13-nov) lectura con detalle y chequeos de duplicados: sin duplicados en estas pruebas
   extractImageDetalle: vi.fn(async () => ({ documentos: [{
-    tipo: 'factura', proveedor: 'Pescadería del Pacífico', moneda: 'CRC', total: 50000,
+    tipo: 'factura', proveedor: 'Proveedor de prueba 2', moneda: 'CRC', total: 50000,
     fecha: '2026-07-01', confianza: 0.9, items: [],
   }], fallo: false })),
   sha256File: vi.fn(async () => 'sha-foto'),
@@ -74,7 +74,7 @@ describe('AgregarAsistente — flujo guiado (dos opciones → reveal)', () => {
   it('foto sacada → se revela el form con la precarga de la IA (confirmación actual)', async () => {
     renderAsistente()
     takePhoto()
-    await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Pescadería del Pacífico'))
+    await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Proveedor de prueba 2'))
     expect((screen.getByLabelText('Monto colones') as HTMLInputElement).value).toBe('50000')
     expect(screen.getByRole('button', { name: /Confirmar y registrar/ })).toBeTruthy()
     expect(screen.getByText(/Factura leída/)).toBeTruthy()

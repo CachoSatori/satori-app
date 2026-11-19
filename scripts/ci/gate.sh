@@ -48,6 +48,9 @@ paso() { # $1 = nombre, resto = comando
 
 # Guardas del diff del PR contra su base (R04 supabase/functions, R14 migraciones existentes). Baratas: van primero.
 paso guardas-pr node scripts/ci/guardas-pr.mjs
+# (19-nov) La línea de resultado de las guardas va a PANTALLA, no solo al log: si se saltaron por no tener base (sin origin/main)
+# se ve acá. En el CI de un PR eso ya es FAIL dentro de guardas-pr.mjs.
+grep -E '^guardas-pr:' "$LOGS/guardas-pr.log" | sed 's/^/   /' || true
 
 if [ "${GATE_SKIP_INSTALL:-0}" != "1" ]; then
   paso npm-ci npm ci

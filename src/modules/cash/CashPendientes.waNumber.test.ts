@@ -13,13 +13,13 @@ import { waNumber } from './CashPendientes'
 
 describe('waNumber — normaliza WhatsApp CR a internacional para wa.me', () => {
   it('local CR de 8 dígitos → 506 + número', () => {
-    expect(waNumber('89900324')).toBe('50689900324')
+    expect(waNumber('80000090')).toBe('50680000090')
   })
   it('ya con código CR (11 dígitos) → sin cambios', () => {
-    expect(waNumber('50689900324')).toBe('50689900324')
+    expect(waNumber('50680000090')).toBe('50680000090')
   })
-  it("'+506 8990 0324' con formato → 50689900324 (no duplica el 506)", () => {
-    expect(waNumber('+506 8990 0324')).toBe('50689900324')
+  it("'+506 8000 0090' con formato → 50680000090 (no duplica el 506)", () => {
+    expect(waNumber('+506 8000 0090')).toBe('50680000090')
   })
   it('vacío / sin dígitos → cadena vacía', () => {
     expect(waNumber('')).toBe('')

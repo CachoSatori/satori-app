@@ -29,7 +29,7 @@ beforeAll(async () => {
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 function llenar({ mayor = true, dia = '', mes = '', permiso = false } = {}) {
   $<HTMLInputElement>('a-nombre').value = 'Ana Prueba'
-  $<HTMLInputElement>('a-wa').value = '60000000'
+  $<HTMLInputElement>('a-wa').value = '80000020'
   $<HTMLInputElement>('a-ok').checked = true
   $<HTMLInputElement>('a-mayor').checked = mayor
   $<HTMLSelectElement>('a-cdia').value = dia

@@ -2,7 +2,7 @@
 // rápida y sin tocar la app. Mutación: un paso que falla a propósito → «GATE: FAIL paso=…» y exit ≠ 0.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -57,6 +57,64 @@ describe('gate.sh', () => {
     const r = correr()
     expect(r.status).toBe(1)
     expect(r.ultima).toMatch(/^GATE: FAIL paso=anti-diagnostico /)
+  })
+
+  it('mutación: tsc falla → GATE: FAIL paso=tsc y exit 1', () => {
+    falso('npx', 'case "$1" in tsc) echo "src/x.ts(3,1): error TS2322: tipo mal"; exit 2;; vite) mkdir -p dist;; vitest) echo " Tests  7 passed (7)";; esac')
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.ultima).toMatch(/^GATE: FAIL paso=tsc sha=[0-9a-f]{7,8}$/)
+    expect(r.salida).toContain('TS2322')
+  })
+
+  it('mutación: lint sube → GATE: FAIL paso=lint y muestra archivo y línea del error aunque pasen de 60 líneas', () => {
+    const relleno = Array.from({ length: 80 }, (_, i) => `  ${i + 1}:1  warning  relleno  regla-x`).join('\n')
+    falso('node', `case "$1" in *guardas-pr*) exit 0;; esac
+echo "eslint: 99 problemas (1 errores, 98 advertencias) · línea base: 9"
+echo "/repo/src/relleno.ts"; cat <<'X'
+${relleno}
+X
+echo "/repo/src/roto.ts"; echo "  42:7  error  variable sin usar  no-unused-vars"
+echo "::error title=Lint::subió"; exit 1`)
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.ultima).toMatch(/^GATE: FAIL paso=lint /)
+    expect(r.salida).toContain('/repo/src/roto.ts')
+    expect(r.salida).toContain('42:7  error')
+    expect(r.salida).toContain('::error title=Lint')
+  })
+
+  it('mutación: sin conteo de tests (tests=?) → GATE: FAIL, no PASS', () => {
+    falso('npx', 'case "$1" in vite) mkdir -p dist;; vitest) echo "todo bien pero sin resumen";; esac')
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.ultima).toMatch(/^GATE: FAIL paso=vitest-conteo /)
+  })
+
+  it('mutación: sin conteo de lint (lint=?/?) → GATE: FAIL, no PASS', () => {
+    falso('node', 'case "$1" in *guardas-pr*) exit 0;; esac; echo "eslint sin el formato esperado"')
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.ultima).toMatch(/^GATE: FAIL paso=lint-conteo /)
+  })
+
+  it('en CI, sha= es GATE_SHA (cabeza del PR), no el commit de fusión', () => {
+    const r = correr({ GATE_SHA: 'abcdef0123456789abcdef0123456789abcdef01' })
+    expect(r.status).toBe(0)
+    expect(r.ultima).toMatch(/^GATE: PASS sha=abcdef01 /)
+  })
+
+  it('en el CI de un PR, GATE_BASE = HEAD^1 de la fusión (cabeza actual de main), no el base.sha del evento', () => {
+    spawnSync('git', ['switch', '-q', '-c', 'pr'], { cwd: raiz })
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@ejemplo.test', 'commit', '-q', '--allow-empty', '-m', 'pr'], { cwd: raiz })
+    spawnSync('git', ['switch', '-q', '-'], { cwd: raiz })
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@ejemplo.test', 'commit', '-q', '--allow-empty', '-m', 'main avanza'], { cwd: raiz })
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@ejemplo.test', 'merge', '-q', '--no-ff', '-m', 'fusion', 'pr'], { cwd: raiz })
+    const padre = spawnSync('git', ['rev-parse', 'HEAD^1'], { cwd: raiz, encoding: 'utf8' }).stdout.trim()
+    falso('node', 'case "$1" in *guardas-pr*) echo "base=$GATE_BASE" > "$GATE_LOGS/../base.txt"; exit 0;; esac; echo "eslint: 5 problemas (0 errores, 5 advertencias) · línea base: 9"')
+    const r = correr({ GITHUB_EVENT_NAME: 'pull_request', GATE_BASE: '' })
+    expect(r.status).toBe(0)
+    expect(readFileSync(join(raiz, 'base.txt'), 'utf8').trim()).toBe(`base=${padre}`)
   })
 
   it('un paso extra que falla a propósito → GATE: FAIL con su nombre', () => {

@@ -7,8 +7,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    # labeled/unlabeled: la etiqueta `ok-dueno-edge` (excepción de la guarda R04) vuelve a correr el gate.
-    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    # labeled/unlabeled: la etiqueta `ok-dueno-edge` (excepción de la guarda R04) vuelve a correr el gate. edited: cambio de base.
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled, edited]
   # Para que main también tenga su línea «GATE: PASS …» (sin base: las guardas del diff se saltan, lo dice el log).
   push:
     branches: [main]
@@ -49,6 +49,5 @@ jobs:
         env:
           # Cabeza del PR (no el commit de fusión) para la línea «GATE: PASS sha=…»; vacío en un push a main.
           GATE_SHA: ${{ github.event.pull_request.head.sha }}
-          GATE_BASE: ${{ github.event.pull_request.base.sha }}
           GATE_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: bash scripts/ci/gate.sh

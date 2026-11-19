@@ -54,6 +54,34 @@ describe('guardas-pr: R04 (supabase/functions)', () => {
   })
 })
 
+describe('guardas-pr: R04 (supabase/config.toml)', () => {
+  it('mutación: tocar supabase/config.toml → cae', () => {
+    escribir('supabase/config.toml', 'a = 1'); commit('config')
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.salida).toMatch(/R04.*config\.toml/)
+  })
+})
+
+describe('guardas-pr: PR atrasado (la base es la cabeza ACTUAL de main, HEAD^1 de la fusión)', () => {
+  // main avanza con una Edge y una migración DESPUÉS de que el PR salió; el PR solo toca src/. El CI corre sobre la fusión.
+  function armar() {
+    git('switch', '-q', '-c', 'pr')
+    escribir('src/solo.ts', 'x'); commit('pr: solo src')
+    git('switch', '-q', 'main')
+    escribir('supabase/functions/x/index.ts', 'export const nuevo = 1')
+    escribir('supabase/migrations/190_entro_a_main.sql', 'select 5;'); commit('main avanza')
+    git('merge', '-q', '--no-ff', '-m', 'fusion', 'pr')
+  }
+  it('con base = HEAD^1 de la fusión → pasa; con el base.sha viejo habría dado falso R04', () => {
+    armar()
+    const viejo = git('rev-parse', 'base').stdout.trim()
+    expect(correr({ GATE_BASE: viejo }).status).toBe(1) // el falso positivo que se corrige
+    const base = git('rev-parse', 'HEAD^1').stdout.trim()
+    expect(correr({ GATE_BASE: base }).status).toBe(0)
+  })
+})
+
 describe('guardas-pr: R14 (migraciones que ya existían)', () => {
   it('agregar una migración nueva → pasa', () => {
     escribir('supabase/migrations/195_nueva.sql', 'select 3;'); commit('nueva')

@@ -10,8 +10,8 @@
 //   · el registro se contradice (bloques que se pisan, un número en dos lugares, una asignada fuera
 //     de su bloque);
 //   · ESTADO.md no lista los bloques o algún número registrado;
-//   · (R16) un .sql NUEVO respecto de la base del PR (GATE_BASE, o el merge-base con origin/main) no tiene un número mayor
-//     que «ultimo_ledger_prod»: Branching rechaza una versión menor que la última aplicada en prod.
+//   · (R16) un .sql NUEVO (su ruta no existe en la base del PR: GATE_BASE, o el merge-base con origin/main; incluye los
+//     renombrados) no tiene un número mayor que «ultimo_ledger_prod»: Branching rechaza una versión menor que la última aplicada en prod.
 // La regla del pase a prod («ningún número ≤ al último del ledger de prod») depende de la base y se
 // verifica en el PR del pase, no acá; este test solo exige que la renumeración caiga en el bloque de
 // pase y quede registrada con su origen (nunca dentro de un bloque de creación).
@@ -154,8 +154,8 @@ describe('numeración de migraciones', () => {
   // CI de un PR siempre trae GATE_BASE (gate.sh), así que ahí corre.
   const base = baseDelPr()
   it.skipIf(!base)('R16: toda migración NUEVA respecto de la base tiene un número mayor que «ultimo_ledger_prod»', () => {
-    const nuevas = execFileSync('git', ['diff', '--name-only', '--diff-filter=A', `${base}...HEAD`, '--', 'supabase/migrations'], { cwd: RAIZ, encoding: 'utf8' })
-      .split('\n').filter(Boolean).map(f => f.split('/').pop() as string)
+    const enBase = new Set(execFileSync('git', ['ls-tree', '--name-only', base, 'supabase/migrations/'], { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter(Boolean))
+    const nuevas = migs.map(m => m.archivo).filter(f => !enBase.has(`supabase/migrations/${f}`))
     const malas = nuevas.filter(f => Number(f.split('_')[0]) <= REG.ultimo_ledger_prod)
       .map(f => `${f}: número ≤ ${REG.ultimo_ledger_prod} (último del ledger de prod). Renumerala al siguiente libre mayor que ${REG.ultimo_ledger_prod} (bloque de pase 150–199 si cabe), en el mismo PR y registrada en migraciones-reservadas.json y ESTADO (R16)`)
     expect(malas).toEqual([])

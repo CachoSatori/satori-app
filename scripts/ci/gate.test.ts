@@ -2,7 +2,7 @@
 // rápida y sin tocar la app. Mutación: un paso que falla a propósito → «GATE: FAIL paso=…» y exit ≠ 0.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -102,6 +102,19 @@ echo "::error title=Lint::subió"; exit 1`)
     const r = correr({ GATE_SHA: 'abcdef0123456789abcdef0123456789abcdef01' })
     expect(r.status).toBe(0)
     expect(r.ultima).toMatch(/^GATE: PASS sha=abcdef01 /)
+  })
+
+  it('en el CI de un PR, GATE_BASE = HEAD^1 de la fusión (cabeza actual de main), no el base.sha del evento', () => {
+    spawnSync('git', ['switch', '-q', '-c', 'pr'], { cwd: raiz })
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@ejemplo.test', 'commit', '-q', '--allow-empty', '-m', 'pr'], { cwd: raiz })
+    spawnSync('git', ['switch', '-q', '-'], { cwd: raiz })
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@ejemplo.test', 'commit', '-q', '--allow-empty', '-m', 'main avanza'], { cwd: raiz })
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@ejemplo.test', 'merge', '-q', '--no-ff', '-m', 'fusion', 'pr'], { cwd: raiz })
+    const padre = spawnSync('git', ['rev-parse', 'HEAD^1'], { cwd: raiz, encoding: 'utf8' }).stdout.trim()
+    falso('node', 'case "$1" in *guardas-pr*) echo "base=$GATE_BASE" > "$GATE_LOGS/../base.txt"; exit 0;; esac; echo "eslint: 5 problemas (0 errores, 5 advertencias) · línea base: 9"')
+    const r = correr({ GITHUB_EVENT_NAME: 'pull_request', GATE_BASE: '' })
+    expect(r.status).toBe(0)
+    expect(readFileSync(join(raiz, 'base.txt'), 'utf8').trim()).toBe(`base=${padre}`)
   })
 
   it('un paso extra que falla a propósito → GATE: FAIL con su nombre', () => {

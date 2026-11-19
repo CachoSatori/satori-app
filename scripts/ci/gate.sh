@@ -7,12 +7,15 @@
 #   GATE: FAIL paso=<nombre> sha=<8>      (y exit 1; también si no se pudo leer el conteo de tests o de lint: paso=vitest-conteo / lint-conteo)
 # Variables: GATE_SKIP_INSTALL=1 salta `npm ci` (dependencias ya instaladas); GATE_PASOS_EXTRA="nombre:comando" agrega
 # un paso al final; GATE_LOGS=<dir> fija dónde van los logs; GATE_ROOT=<dir> corre el gate en otra carpeta (pruebas).
-# En el CI de un PR: GATE_SHA = cabeza del PR (el commit que se revisa, no el de fusión), GATE_BASE = SHA base del PR (lo usan las
-# guardas R04/R14/R16) y GATE_LABELS = etiquetas del PR (excepción `ok-dueno-edge`). Sin GATE_BASE, la base es el merge-base con origin/main.
+# En el CI de un PR: GATE_SHA = cabeza del PR (el commit que se revisa, no el de fusión), GATE_BASE = base de las
+# guardas R04/R14/R16 (en un PR del CI se calcula sola: HEAD^1 de la fusión) y GATE_LABELS = etiquetas del PR (excepción `ok-dueno-edge`). Sin GATE_BASE, la base es el merge-base con origin/main.
 set -euo pipefail
 
 cd "${GATE_ROOT:-$(dirname "${BASH_SOURCE[0]}")/../..}"
 if [ -n "${GATE_SHA:-}" ]; then SHA="${GATE_SHA:0:8}"; else SHA="$(git rev-parse --short=8 HEAD 2>/dev/null || echo desconocido)"; fi
+# CI de un PR: HEAD es la fusión del PR con la cabeza actual de main, y su primer padre es esa cabeza. Esa es la base (no el
+# base.sha del evento, que queda viejo si main avanzó y haría pasar por del PR lo que entró a main después).
+if [ -z "${GATE_BASE:-}" ] && [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then GATE_BASE="$(git rev-parse HEAD^1 2>/dev/null || true)"; fi
 export GATE_BASE="${GATE_BASE:-}" GATE_LABELS="${GATE_LABELS:-}"
 LOGS="${GATE_LOGS:-$(mktemp -d "${TMPDIR:-/tmp}/gate.XXXXXX")}"
 mkdir -p "$LOGS"

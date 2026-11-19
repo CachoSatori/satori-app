@@ -1,6 +1,6 @@
-# Continuación — backlog abierto y priorizado (al día: 2026-11-18 noche, 19:03 -06:00)
+# Continuación — backlog abierto y priorizado (al día: 2026-11-19, ~08:30 -06:00)
 
-> **Punto de arranque:** [ESTADO.md](ESTADO.md) (⚡ARRANQUE y reglas) y [docs/handoffs/HANDOFF-2026-11-13.md](docs/handoffs/HANDOFF-2026-11-13.md).
+> **Punto de arranque:** [ESTADO.md](ESTADO.md) (⚡ARRANQUE y reglas) y [docs/handoffs/HANDOFF-2026-11-19.md](docs/handoffs/HANDOFF-2026-11-19.md).
 > Solo lo **abierto**. Lo hecho y el detalle heredado (backlog de `staging` del 29/10, pases y olas de jun–jul, lo hecho del 05 y 10–11/11,
 > P0–P3 del go-live) están en [docs/historico/PROMPT-CONTINUACION-HISTORICO.md](docs/historico/PROMPT-CONTINUACION-HISTORICO.md). Poda: pasado
 > **15 KB**, la sesión de cierre mueve lo cerrado al histórico. Prioridad del proyecto: estabilizar lo que se usa a diario (caja, Bandeja,
@@ -8,12 +8,13 @@
 
 **Marcas:** 🖊️ firma del dueño · 👁️ validación en piso · 🔐 seguridad · 🧹 limpieza · ⛔ no mergear sin OK.
 
-## 🟥 P0 — Ahora (18/11 noche)
-1. **👁️ Confirmar el cron del Club:** corrida de las 03:15 CR del 17/11 en `cron.job_run_details` (jobid 8) y repetir el 23/11 (§5.6 del `docs/pases/PASE-cron-club-mantenimiento.md`). Para leerlo: solo `select` sobre `cron.job_run_details`; nunca `for update` sobre `cron.job` ([regla](docs/REGLAS-POR-INCIDENTE.md)).
-2. **👁️ Validaciones físicas del dueño que faltan:** Club 186–188 en prod (deshacer «enviado» de cumpleaños, retos de un local con tope de 3, casilla de mayor de 18 en Miembros y Escanear) · #229 en servicio. (Hechas el 18/11: Propinas, Mi Rendimiento con un salonero, Tiempos y Resumen.)
-3. **🖊️ Staging 189–194 por la sesión de CC del dueño** (Management API, ref de staging fijo, ROLLBACK). La 189 agenda un cron con la URL de prod: no se aplica tal cual. Regla 14 de ESTADO.
+## 🟥 P0 — Ahora (19/11)
+1. **👁️ Confirmar el cron del Club:** corrida del 17/11 en `cron.job_run_details` (jobid 8) y repetir el 23/11 (solo `select`; nunca `for update` sobre `cron.job`).
+2. **👁️ Validaciones del dueño que faltan:** #229 al lanzar el Club (0 visitas de socios desde el 17-nov) · correo de pago agrupado en curso (PR #303 + `claude/pago-notificar-agrupado`, deploy de Edge con firma) · WhatsApp automático a proveedores: spec en curso, prioridad alta. Hechas: #300 (19-nov, 2 facturas), correo de cierre 18-nov y Club 186–188. **Club en PAUSA** hasta que Apple apruebe la Wallet.
+3. **🖊️ Staging 192–194 por la CC del dueño** (la 189 se omite: cron con URL de prod). Regla 14. (La protección de `main` ya quedó con `strict` y `enforce_admins`, 19-nov 08:34.)
+3a. **Cola nueva (19/11):** menores de #300 (2 pruebas de botones, botón Aplicar del modal) y de #301 (prueba propia de R16 con renombrado, `gate.sh` visible si se saltan guardas sin `origin/main`, `edited` solo si cambia la base, checks-protegidos con `edited`; después modo bloquear) · **🖊️** orden FIFO del reparto de crédito sin desempate con igual `created_at` (toca plata) · `.claude/settings.json` con deny + hooks · métricas por PR · achicar el correo de cierre (pedido del dueño) · **WhatsApp automático a proveedores** (Cloud API) después de #300, con la foto del comprobante en la base (**🖊️** migración).
 3b. **👁️ Revisar en 20–30 días** (≈ 8–18/12) si se sigue pisando la clave FE de los tiquetes 04 (el agente toma `clave_fe` por consecutivo sin filtrar el tipo).
-3c. **Alerta si el agente del PoS deja de latir > 30 min en servicio** (`pos_ventas_latido`).
+3c. ~~Alerta de latido del agente~~: el dueño dijo que no por ahora (19/11).
 3d. **Recorrer con `satori-verificar` en staging Tiempos y Resumen** cuando haya sesión (capturas por rol).
 4. **Correos desplegados (17/11, ya en prod):** `cierre-email` v14 y `pago-notificar` v14 sin prueba funcional hasta el próximo cierre o pago real; `monthly-report` v23 probada con dry_run. Sus PRs (#242, #243, #245, #241) siguen abiertos: el código de Edge entra a `main` con el ítem 11 (A05). Decidir también qué pasa con #231, #232 y #235, que no entraron.
 4b. **🧹 A04 · sacar del repo el nombre de la PC del PoS** (`pos-bridge/README.md`, `pos-bridge/.env.example` y el ESTADO de la rama del agente): se hace en la rama del agente, no desde `main` ([R12](docs/REGLAS-POR-INCIDENTE.md)).

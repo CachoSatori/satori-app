@@ -37,19 +37,18 @@ Primero lo **barato**, mientras trabajás: `npx tsc -b`, `npx eslint <lo tocado>
 va **una vez antes de abrir el PR** (no en cada commit) y otra vez si cambia la cabeza después de una revisión.
 En un clon o `git worktree` limpio de la cabeza del PR (los untracked del árbol de trabajo engañan):
 ```bash
-npm ci
-npx tsc -b                 # 0 errores
-npx vite build             # OK
-npx vitest run             # todo verde (incluye supabase/migraciones.test.ts, club-web y los escaneos del repo)
-npx eslint . | tail -1     # cantidad <= la de main medida en el mismo momento, sin errores nuevos tuyos
+bash scripts/ci/gate.sh    # única definición del gate (la misma que corre el CI); sin pipes que tapen la salida
 ```
-- [ ] La línea base de lint se mide en `origin/main` el mismo día (no copiar el número de ESTADO: cambia).
+Hace `npm ci`, `tsc -b`, build de producción, grep anti-diagnóstico, `vitest run` (incluye club-web), lint contra la línea
+base de `scripts/ci/lint-linea-base.json` y build de club-web. Cada paso guarda su log completo en un temporal y a pantalla
+solo va lo que falla. La **última línea** es el veredicto: `GATE: PASS sha=<8> tests=<n> lint=<n>/<tope> build=ok` o
+`GATE: FAIL paso=<nombre> sha=<8>` (exit 1). No se corre `eslint . | tail` ni nada con pipe que tape un código de salida.
+- [ ] El tope de lint es el de `scripts/ci/lint-linea-base.json` (sale en la línea `GATE:` como `lint=<n>/<tope>`); si el lint baja, bajá el tope en el mismo PR.
 - [ ] Si tocás `club-web/` (páginas, `functions/`, `worker/`) o la API del Club:
       `cd club-web && npm ci && VITE_CLUB_URL=https://club.ejemplo.test npm run build` (sin `VITE_CLUB_URL` el build de
       producción falla a propósito). Sus pruebas corren dentro del `vitest` de la raíz.
-- [ ] El CI del repo (`.github/workflows/ci.yml`, job «Gate») y `npm test` en `deploy.yml` corren pruebas, pero **no
-      reemplazan este gate**: el PR trae sus propios números (tests, lint antes/después, hashes de sagrados), medidos en
-      copia limpia.
+- [ ] El job «Gate» de `.github/workflows/ci.yml` llama a este mismo script. El PR trae igual sus propios números (la
+      línea `GATE:` y los hashes de sagrados), medidos en copia limpia.
 - [ ] Un test que falla a veces **no se reintenta ni se tapa con `sleep`**: se busca la causa o se reporta (R11).
 
 ## 4. Pruebas que muerden
@@ -95,7 +94,7 @@ el correo público del negocio, solo en el aviso del Club y su prueba (ver `CLAU
       ahí la revisión es a mano.
 
 ## 10. PR en borrador
-- [ ] Commit con el trailer de la sesión **y** el trailer `Verificado:` con uno de: `gate` · `gate+staging` ·
+- [ ] Commit con el trailer de la sesión **y** el trailer `Verificado:` con uno de: `gate` (= la línea `GATE:` de `scripts/ci/gate.sh` copiada tal cual) · `gate+staging` ·
       `gate+verificador` · `ninguno (motivo)`. Dice la verdad: `gate+verificador` solo si un agente que no vio el
       trabajo lo revisó sobre ese SHA. Push: `git -c push.negotiate=true push -u origin claude/<tema>`.
 - [ ] PR en **borrador** contra `main` (REST: `gh api repos/CachoSatori/satori-app/pulls … -F draft=true`). Si toca

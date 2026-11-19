@@ -16,8 +16,8 @@ Solo lectura: no pusheás a la rama ajena ni mergeás. Si esta skill y `ESTADO.m
 - [ ] Si es una ronda 2 o más: partí de los hallazgos y el gate que ya existen **para ese SHA** (§1 y §4).
 
 ## 1. Gate propio (no el del autor)
-- [ ] `npm ci && npx tsc -b && npx vite build && npx vitest run`, y `npx eslint .` contra la cuenta de `origin/main`
-      medida hoy. Si toca `club-web/`: su build con `VITE_CLUB_URL` de prueba.
+- [ ] `bash scripts/ci/gate.sh` (npm ci, tsc, build, vitest con club-web, lint contra la línea base, build de club-web y las
+      guardas del diff R04/R14/R16). Pegá su última línea: `GATE: PASS sha=<8> …` o `GATE: FAIL paso=…`.
 - [ ] Los números coinciden con los del PR. Si no, es hallazgo.
 - [ ] Un test que falla a veces **no se reintenta ni se arregla con `sleep`**: se busca la causa o se reporta (R11).
 

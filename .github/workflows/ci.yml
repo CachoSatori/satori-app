@@ -7,12 +7,17 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    # labeled/unlabeled: la etiqueta `ok-dueno-edge` (excepción de la guarda R04) vuelve a correr el gate. edited: cambio de base.
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled, edited]
+  # Para que main también tenga su línea «GATE: PASS …» (sin base: las guardas del diff se saltan, lo dice el log).
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,6 +30,8 @@ jobs:
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+          # Historia completa: las guardas del diff (R04, R14, R16) comparan contra el SHA base del PR.
+          fetch-depth: 0
 
       # Node 22, igual que deploy.yml. Con Node 20 las pruebas no corren: @supabase/realtime-js exige WebSocket
       # nativo (Node 22+) al crear el cliente (corrida 43374987628 de este PR).
@@ -35,45 +42,12 @@ jobs:
           # Misma clave que deploy.yml (package-lock.json de la raíz): los PR reusan el cache que guarda main.
           cache: npm
 
-      - name: App · npm ci
-        run: npm ci
-
-      - name: App · tsc -b
-        run: npx tsc -b
-
-      - name: App · vite build (production)
+      # Una sola definición del gate: scripts/ci/gate.sh (npm ci, tsc -b, build de producción con variables ficticias,
+      # grep anti-diagnóstico, vitest —incluye club-web—, lint contra línea base y build de club-web). La última línea
+      # del log es «GATE: PASS …» o «GATE: FAIL paso=…». Local: `bash scripts/ci/gate.sh`.
+      - name: Gate (scripts/ci/gate.sh)
         env:
-          VITE_APP_ENV: production
-          VITE_SUPABASE_URL: https://proyecto-ficticio.supabase.co
-          VITE_SUPABASE_ANON_KEY: clave-ficticia-solo-ci
-        run: npx vite build
-
-      # Mismo chequeo que deploy.yml: el bundle de producción no lleva diagnóstico de staging.
-      - name: App · gate anti-diagnóstico
-        run: |
-          if grep -rlE "armBootHang|__satoriDiag|boot-hang|realtimeReproSwitch" dist/; then
-            echo "::error::El build de producción trae código de diagnóstico de staging"; exit 1
-          fi
-
-      # Corre todas las pruebas del repo, incluidas las de club-web (vitest vive en la raíz).
-      - name: App · vitest run
-        run: npx vitest run
-
-      # Falla solo si la cantidad de problemas SUBE respecto de scripts/ci/lint-linea-base.json.
-      # Va antes del build de club-web para que eslint no recorra club-web/dist.
-      - name: App · lint (línea base)
-        run: node scripts/ci/lint-linea-base.mjs
-
-      - name: club-web · npm ci
-        working-directory: club-web
-        run: npm ci
-
-      # Las pruebas de club-web usan el vitest de la raíz; este paso las muestra aparte.
-      - name: club-web · pruebas
-        run: npx vitest run club-web
-
-      - name: club-web · build (production)
-        working-directory: club-web
-        env:
-          VITE_CLUB_URL: https://club.ejemplo.com
-        run: npm run build
+          # Cabeza del PR (no el commit de fusión) para la línea «GATE: PASS sha=…»; vacío en un push a main.
+          GATE_SHA: ${{ github.event.pull_request.head.sha }}
+          GATE_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: bash scripts/ci/gate.sh

@@ -26,6 +26,10 @@ Cloudflare construye `satori-club` y el Worker `satori-club-api` desde `main`.
 - [ ] Sagrados por hash igual a la tabla de ESTADO. Ningún archivo bajo `supabase/functions/` (regla 2).
 - [ ] Migraciones: está claro por qué vía entran (ver `satori-migraciones-y-prod` §4). Si es «a mano antes del merge»,
       ya están aplicadas y verificadas en prod.
+- [ ] Etiquetas `ok-dueno-*` (`ok-dueno-edge` levanta la guarda R04; `ok-dueno-checks`, la de checks protegidos): las pone solo
+      quien tenga el OK del dueño **en el chat**, para ese PR. **No quedan atadas al SHA**: si el PR cambia después de
+      ponerla, la etiqueta sigue ahí. Antes de mergear, confirmar que el OK del chat cubre la cabeza actual; ante la duda,
+      sacar la etiqueta (el CI se re-evalúa al sacarla) y pedir el OK de nuevo.
 - [ ] Si el merge necesita algo en un panel (variable, binding, secreto, Worker existente), está hecho **antes**.
 - [ ] La vuelta atrás está escrita (revert del merge + rollback SQL si aplica).
 

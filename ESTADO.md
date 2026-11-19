@@ -10,8 +10,8 @@
 - **Protección de `main` (19-nov 08:34):** «Gate» requerido · rama al día (`strict=true`) · sin excepción para admins (`enforce_admins=true`). Las sesiones en la nube no pueden cambiarla (403 del proxy): se cambia en GitHub → Settings → Branches. A prueba hasta el 3-dic.
 - **Edge de prod (sin cambios):** `ventas-dia-contador` v5 · `cierre-email` v17 · `pago-notificar` v15 · `monthly-report` v24 · `club-pase` v7 · `ingest-ndf` v13 · `extract-document` v20 · `alta-empleado` v12. Agente PoS `agente-fe` @ `07782e49`.
 - **Cerrados hoy:** #276, #231, #246, #232, #60. **Abiertos:** lista en el handoff (esperan ítem 11, rama del agente, por revisar, #252 con firma).
-- **Validado por el dueño:** correo de cierre del 18-nov (bien; pidió resumirlo) y Club 186–188. **Pendiente:** #229 en servicio · #300 con el próximo crédito real · correo de pago (muestra lo facturado, no lo pagado, si hubo crédito).
-- **Decisiones del dueño (19-nov):** Club en PAUSA hasta la Wallet · WhatsApp automático a proveedores después de #300 (foto en la base, migración con firma) · sin alerta de latido por ahora · arnés a prueba hasta el 3-dic (detalle en el handoff).
+- **Validado por el dueño:** correo de cierre del 18-nov (bien; pidió resumirlo) y Club 186–188. **#300 VALIDADO (19-nov, comprobante post-pago con 2 facturas).** **Pendiente:** #229 al lanzar el Club (0 visitas de socios desde el 17-nov) · correo de pago agrupado en curso (PR #303 + `claude/pago-notificar-agrupado`; Edge con firma).
+- **Decisiones del dueño (19-nov):** Club en PAUSA hasta la Wallet · WhatsApp automático a proveedores: spec en curso, prioridad alta (foto en la base, migración con firma) · sin alerta de latido por ahora · arnés a prueba hasta el 3-dic (detalle en el handoff).
 - **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov.
 - **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 

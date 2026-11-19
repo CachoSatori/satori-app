@@ -211,14 +211,15 @@ const tendencia = (c: number | null, mas: string, menos: string, igual: string):
 export function bajada(
   p: CifrasRango,
   a: { id: BaseId; cifras: CifrasRango | null; nombre?: NombreEnFrase },
-  b: { id: BaseId; cifras: CifrasRango | null; nombre?: NombreEnFrase },
+  b?: { id: BaseId; cifras: CifrasRango | null; nombre?: NombreEnFrase },
 ): string {
   if (p.totales.ventaNeta <= 0) return 'No hay ventas del PoS en este período.'
   const ca = a.cifras ? cambioPct(p.totales.ventaNeta, a.cifras.totales.ventaNeta) : null
-  const cb = b.cifras ? cambioPct(p.totales.ventaNeta, b.cifras.totales.ventaNeta) : null
-  const tramos = [tramoBajada(ca, a.nombre ?? genericoDe(a.id)), tramoBajada(cb, b.nombre ?? genericoDe(b.id))].filter((t): t is string => !!t)
-  if (tramos.length === 0) return 'Sin comparación para este período: no hay ventas del PoS en las bases.'
-  const ref = a.cifras && ca !== null ? a.cifras : b.cifras
+  const cb = b?.cifras ? cambioPct(p.totales.ventaNeta, b.cifras.totales.ventaNeta) : null
+  const tramos = [tramoBajada(ca, a.nombre ?? genericoDe(a.id)), b ? tramoBajada(cb, b.nombre ?? genericoDe(b.id)) : null]
+    .filter((t): t is string => !!t)
+  if (tramos.length === 0) return `Sin comparación para este período: no hay ventas del PoS en ${b ? 'las bases' : 'la base'}.`
+  const ref = a.cifras && ca !== null ? a.cifras : (b?.cifras ?? null)
   const gente = ref ? tendencia(cambioPct(p.totales.pax, ref.totales.pax), 'Entra más gente', 'Entra menos gente', 'Entra la misma gente') : null
   const gasto = ref ? tendencia(cambioPct(p.vpp.valor, ref.vpp.valor), 'gasta más por persona', 'gasta menos por persona', 'gasta casi lo mismo') : null
   const cola = [gente, gasto].filter(Boolean).join('; ')

@@ -10,12 +10,12 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import type { FilaPromPaxRpc } from '../../shared/api/posNdf'
 import { fi } from './ventasUtils'
 import BarraVentasV2 from './BarraVentasV2'
-import { escribirBarra, leerBarra, periodoDeBarra, rotuloBase } from './barraVentasV2'
+import { basesALeer, basesDe, conArticulo, nombreBase, escribirBarra, leerBarra, periodoDeBarra, rotuloBase } from './barraVentasV2'
 import { estimadorPorNeta, ventaPorPersona } from './indicadores'
 import type { BaseId, PeriodoV2 } from './periodos'
 import { cifrasDelRango, MUESTRA_CHICA_PERSONAS, type Lectura } from './resumenV2'
 import {
-  calendario, DIAS_SEMANA_LARGO, filasQuincenas, mapaHoras, mapaHorasTodos, nombreQuincena, porDiaSemana, porTurno,
+  calendario, claseDeCambio, compararDiaSemana, DIAS_SEMANA_LARGO, fmtPctSigno, filasQuincenas, mapaHoras, mapaHorasTodos, nombreQuincena, porDiaSemana, porTurno,
   porTurnoHoras, rangosDeTiempos, ultimasQuincenas, vppPorDiaSemana,
 } from './tiemposV2'
 import { cargarLecturaDeRangos, cargarTiempos, cargarTurnos, getLocalesVentas } from './tiemposV2Datos'
@@ -23,13 +23,12 @@ import { TAMANOS, type TiemposRpc } from './tiemposV2Rpc'
 import type { LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
 
-/** «Tiempos» abre en «Mes a la fecha»: con un solo día no hay día de semana ni calendario que mirar. */
+/** «Tiempos» abre en el mes en curso, a la fecha («Mes» en la barra): con un solo día no hay día de semana ni calendario. */
 export const PERIODO_TIEMPOS = 'mesALaFecha' as const
 
 const fmtPct = (x: number | null) => x === null ? 'sin comparación'
   : Math.abs(x) < 0.05 ? '0,0 %' : `${x > 0 ? '▲ +' : '▼ −'}${Math.abs(x).toFixed(1).replace('.', ',')} %`
 const claseCambio = (x: number | null) => x === null || Math.abs(x) < 0.05 ? 'gris' : x > 0 ? 'sube' : 'baja'
-const fmtIdx = (x: number | null) => x === null ? '—' : String(Math.round(x))
 const fmtVpp = (v: number | null) => v === null ? '—' : fi(Math.round(v))
 
 export default function VentasTiempos() {
@@ -37,7 +36,8 @@ export default function VentasTiempos() {
   const role = profile?.role ?? ''
   const [sp, setSp] = useSearchParams()
   const estado = useMemo(() => leerBarra(sp, PERIODO_TIEMPOS), [sp])
-  const { tipo, dia, desde, hasta, baseA, baseB } = estado
+  const { tipo, dia, desde, hasta, comparar } = estado
+  const [baseA, baseB] = basesALeer(comparar)
   const { periodo, aviso } = useMemo(() => periodoDeBarra({ tipo, dia, desde, hasta }), [tipo, dia, desde, hasta])
   const quincenas = useMemo(() => ultimasQuincenas(periodo), [periodo])
 
@@ -98,7 +98,7 @@ export default function VentasTiempos() {
           Leyendo las ventas del PoS (el período, sus bases y las últimas 12 quincenas)…
         </div>
       )}
-      {listo && <Contenido periodo={periodo} quincenas={quincenas} l={listo.l} turnos={listo.turnos} tiempos={listo.tiempos} baseA={baseA} baseB={baseB} />}
+      {listo && <Contenido periodo={periodo} quincenas={quincenas} l={listo.l} turnos={listo.turnos} tiempos={listo.tiempos} bases={basesDe(comparar)} leidas={[baseA, baseB]} />}
     </div>
   )
 }
@@ -109,11 +109,13 @@ interface ContenidoProps {
   l:         Lectura
   turnos:    FilaPromPaxRpc[] | null
   tiempos:   TiemposRpc | null
-  baseA:     BaseId
-  baseB:     BaseId
+  /** Las bases que se muestran (una o las dos), en orden. */
+  bases:     BaseId[]
+  /** Las dos bases que se leyeron (`basesALeer`): las que se muestran salen de acá. */
+  leidas:    [BaseId, BaseId]
 }
 
-function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: ContenidoProps) {
+function Contenido({ periodo, quincenas, l, turnos, tiempos, bases, leidas: [baseA, baseB] }: ContenidoProps) {
   const d = useMemo(() => {
     const estimador = estimadorPorNeta(l.facturas)
     const p = cifrasDelRango(l, periodo)
@@ -124,10 +126,14 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
       noche: ventaPorPersona(l.facturas, periodo, { estimador, turno: 'noche' }),
     }
     const abiertos = semana.map(s => s.diasAbiertos)
+    const vsBase = (r: typeof ra) => {
+      if (!r) return compararDiaSemana(semana, p.ventaPorDiaAbierto, null, null)
+      const c = cifrasDelRango(l, r)
+      return compararDiaSemana(semana, p.ventaPorDiaAbierto, porDiaSemana(c.dias), c.ventaPorDiaAbierto)
+    }
     return {
       p, semana,
-      semanaA: ra ? porDiaSemana(cifrasDelRango(l, ra).dias) : null,
-      semanaB: rb ? porDiaSemana(cifrasDelRango(l, rb).dias) : null,
+      vs: { [baseA]: vsBase(ra), [baseB]: vsBase(rb) } as Record<BaseId, ReturnType<typeof compararDiaSemana>>,
       vppSemana: vppPorDiaSemana(l, periodo, estimador),
       mapa: tiempos ? mapaHorasTodos(tiempos.horas, periodo, abiertos) : mapaHoras(l.facturas, periodo, abiertos),
       turnos: tiempos ? porTurnoHoras(p.dias, tiempos.horas, vppTurno)
@@ -137,40 +143,49 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
     }
   }, [l, periodo, quincenas, turnos, tiempos, baseA, baseB])
 
-  const rA = rotuloBase(periodo, baseA), rB = rotuloBase(periodo, baseB)
   const qCerrada = { tipo: 'quincena' as const, enCurso: false, dias: 15 }
-  const qA = rotuloBase(qCerrada, baseA), qB = rotuloBase(qCerrada, baseB)
   const sumaSemana = d.semana.reduce((s, f) => s + f.neta, 0)
+  const contraQue = bases.map(id => { const n = nombreBase(periodo, id); return `${conArticulo(n, 'de')} ${n.texto}` }).join(' y ')
 
   return (
     <>
       {/* 1. Día de semana */}
       <section className="vt2t-bloque" data-bloque="dia-semana">
         <div className="vt-sl">Día de semana (lunes a domingo)</div>
-        <p className="vt2-nota">Índice: 100 = el día promedio del período (venta neta ÷ días abiertos). Arriba de 100, ese día vende más que el promedio.</p>
+        <p className="vt2-nota" data-nota="que-compara">El % compara el promedio por día de cada día de semana con el del mismo día de semana {contraQue}.</p>
         <div style={{ overflowX: 'auto' }}>
           <table className="vt-tbl" aria-label="Día de semana">
             <thead><tr>
-              <th>Día</th><th>Días abiertos</th><th>Venta neta</th><th>Promedio por día</th><th>Índice</th>
-              <th>Índice · {rA.toLowerCase()}</th><th>Índice · {rB.toLowerCase()}</th><th>Venta por persona</th>
+              <th>Día</th><th>Promedio por día</th>
+              {bases.map(id => <th key={id}>vs {rotuloBase(periodo, id).toLowerCase()}</th>)}
+              <th>Venta por persona</th>
             </tr></thead>
             <tbody>
-              {d.semana.map((f, i) => (
-                <tr key={f.dow} data-dow={f.dow}>
-                  <td>{f.nombre}</td><td>{f.diasAbiertos}</td><td>{fi(f.neta)}</td>
-                  <td>{f.promedio === null ? '—' : fi(Math.round(f.promedio))}</td>
-                  <td><b>{fmtIdx(f.indice)}</b></td>
-                  <td>{d.semanaA ? fmtIdx(d.semanaA[i].indice) : 'sin comparación'}</td>
-                  <td>{d.semanaB ? fmtIdx(d.semanaB[i].indice) : 'sin comparación'}</td>
-                  <td className={d.vppSemana[i].personasCargadas + d.vppSemana[i].personasEstimadas < MUESTRA_CHICA_PERSONAS ? 'vt2-delta gris' : ''}>
-                    {fmtVpp(d.vppSemana[i].valor)}
-                  </td>
-                </tr>
-              ))}
-              <tr className="vt2-total" data-fila="total">
-                <td>TOTAL</td><td>{d.p.diasAbiertos}</td><td>{fi(sumaSemana)}</td>
+              {d.semana.map((f, i) => {
+                const detalle = `${f.diasAbiertos} ${f.diasAbiertos === 1 ? 'día abierto' : 'días abiertos'} · venta neta ${fi(f.neta)}`
+                return (
+                  <tr key={f.dow} data-dow={f.dow} title={detalle}>
+                    <td>{f.nombre}<div className="vt2-delta-base vt2-sub" data-detalle="dia">{detalle}</div></td>
+                    <td>{f.promedio === null ? '—' : fi(Math.round(f.promedio))}</td>
+                    {bases.map(id => {
+                      const x = d.vs[id].porDia[i]
+                      return <td key={id} data-vs={id} className={`vt2-delta ${claseDeCambio(x)}`}
+                        title={periodo.bases[id]?.rotulo ?? periodo.motivos[id] ?? ''}>{fmtPctSigno(x)}</td>
+                    })}
+                    <td className={d.vppSemana[i].personasCargadas + d.vppSemana[i].personasEstimadas < MUESTRA_CHICA_PERSONAS ? 'vt2-delta gris' : ''}>
+                      {fmtVpp(d.vppSemana[i].valor)}
+                    </td>
+                  </tr>
+                )
+              })}
+              <tr className="vt2-total" data-fila="total" title={`${d.p.diasAbiertos} días abiertos · venta neta ${fi(sumaSemana)}`}>
+                <td>TOTAL<div className="vt2-delta-base vt2-sub" data-detalle="total">{d.p.diasAbiertos} días abiertos · venta neta <span data-neta="total">{fi(sumaSemana)}</span></div></td>
                 <td>{d.p.ventaPorDiaAbierto === null ? '—' : fi(Math.round(d.p.ventaPorDiaAbierto))}</td>
-                <td>100</td><td /><td /><td>{fmtVpp(d.p.vpp.valor)}</td>
+                {bases.map(id => {
+                  const x = d.vs[id].total
+                  return <td key={id} data-vs={id} className={`vt2-delta ${claseDeCambio(x)}`}><b>{fmtPctSigno(x)}</b></td>
+                })}
+                <td>{fmtVpp(d.p.vpp.valor)}</td>
               </tr>
             </tbody>
           </table>
@@ -273,7 +288,8 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
           <table className="vt-tbl" aria-label="Quincenas">
             <thead><tr>
               <th>Quincena</th><th>Venta neta</th><th>Días abiertos</th><th>Venta por día abierto</th><th>Personas</th>
-              <th>Venta por persona</th><th>vs {qA.toLowerCase()}</th><th>vs {qB.toLowerCase()}</th>
+              <th>Venta por persona</th>
+              {bases.map(id => <th key={id}>vs {rotuloBase(qCerrada, id).toLowerCase()}</th>)}
             </tr></thead>
             <tbody>
               {d.quincenas.map(f => (
@@ -282,12 +298,14 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, baseA, baseB }: Con
                   <td>{fi(f.cifras.totales.ventaNeta)}</td><td>{f.cifras.diasAbiertos}</td>
                   <td>{f.cifras.ventaPorDiaAbierto === null ? '—' : fi(Math.round(f.cifras.ventaPorDiaAbierto))}</td>
                   <td>{f.cifras.totales.pax}</td><td>{fmtVpp(f.cifras.vpp.valor)}</td>
-                  <td className={`vt2-delta ${claseCambio(f.cambioA)}`} title={f.q.bases[baseA]?.rotulo ?? f.q.motivos[baseA] ?? ''}>
-                    {fmtPct(f.cambioA)}{f.cambioDiaA !== null && <span className="vt2-delta-base"> · por día {fmtPct(f.cambioDiaA).replace(/[▲▼] /, '')}</span>}
-                  </td>
-                  <td className={`vt2-delta ${claseCambio(f.cambioB)}`} title={f.q.bases[baseB]?.rotulo ?? f.q.motivos[baseB] ?? ''}>
-                    {fmtPct(f.cambioB)}{f.cambioDiaB !== null && <span className="vt2-delta-base"> · por día {fmtPct(f.cambioDiaB).replace(/[▲▼] /, '')}</span>}
-                  </td>
+                  {bases.map(id => {
+                    const [cambio, cambioDia] = id === baseA ? [f.cambioA, f.cambioDiaA] : [f.cambioB, f.cambioDiaB]
+                    return (
+                      <td key={id} data-vs={id} className={`vt2-delta ${claseCambio(cambio)}`} title={f.q.bases[id]?.rotulo ?? f.q.motivos[id] ?? ''}>
+                        {fmtPct(cambio)}{cambioDia !== null && <span className="vt2-delta-base"> · por día {fmtPct(cambioDia).replace(/[▲▼] /, '')}</span>}
+                      </td>
+                    )
+                  })}
                 </tr>
               ))}
             </tbody>

@@ -11,7 +11,7 @@ import { calcularPeriodo, diaSemana, type Rango } from './periodos'
 import { armarLectura, cifrasDelRango } from './resumenV2'
 import { datos, l as linea, t as ticket } from './resumenV2.fixture'
 import {
-  calendario, filasQuincenas, mapaHoras, nombreQuincena, ordenHora, porDiaSemana, porTurno,
+  calendario, claseDeCambio, compararDiaSemana, filasQuincenas, fmtPctSigno, mapaHoras, nombreQuincena, ordenHora, porDiaSemana, porTurno,
   rangosDeTiempos, ultimasQuincenas, vppPorDiaSemana,
 } from './tiemposV2'
 import { armarDiasMap } from './ventasDiasDesdePos'
@@ -62,18 +62,54 @@ describe('Día de semana = Contabilidad', () => {
     expect(filas.map(f => f.diasAbiertos)).toEqual([4, 4, 4, 5, 5, 5, 4])
   })
 
-  it('el índice: 100 = día promedio; el promedio de los índices ponderado por días abiertos da 100', () => {
-    const c = cifrasDelRango(lectura, octubre)
-    const filas = porDiaSemana(c.dias)
-    const pond = filas.reduce((s, f) => s + (f.indice ?? 0) * f.diasAbiertos, 0) / c.diasAbiertos
-    expect(pond).toBeCloseTo(100, 9)
-    const jueves = filas[3]
-    expect(jueves.indice).toBeCloseTo((jueves.neta / 5) / (c.totales.ventaNeta / c.diasAbiertos) * 100, 9)
+  it('sin días abiertos: promedio en null (nunca 0)', () => {
+    const filas = porDiaSemana([])
+    expect(filas.every(f => f.promedio === null && f.neta === 0 && f.diasAbiertos === 0)).toBe(true)
+    expect(filas[0]).not.toHaveProperty('indice')
   })
 
-  it('sin días abiertos: índice y promedio en null (nunca 0)', () => {
-    const filas = porDiaSemana([])
-    expect(filas.every(f => f.indice === null && f.promedio === null && f.neta === 0)).toBe(true)
+  it('el % del día de semana: promedio por día ÷ promedio del MISMO día de semana en la base − 1 (oct contra sep)', () => {
+    const oct = cifrasDelRango(lectura, octubre)
+    const sep = cifrasDelRango(lectura, { desde: '2026-09-01', hasta: '2026-09-30' })
+    const fo = porDiaSemana(oct.dias), fs = porDiaSemana(sep.dias)
+    const c = compararDiaSemana(fo, oct.ventaPorDiaAbierto, fs, sep.ventaPorDiaAbierto)
+    expect(c.porDia).toHaveLength(7)
+    for (let i = 0; i < 7; i++) {
+      // A mano, con la neta y los días abiertos de cada lado (no con el promedio ya hecho).
+      const esperado = ((fo[i].neta / fo[i].diasAbiertos) / (fs[i].neta / fs[i].diasAbiertos) - 1) * 100
+      expect(c.porDia[i]).toBeCloseTo(esperado, 9)
+    }
+    // El jueves: 5 en octubre, 4 en septiembre. El % es por día, no por la suma: con la suma daría otro número.
+    const porSuma = (fo[3].neta / fs[3].neta - 1) * 100
+    expect(Math.abs(c.porDia[3]! - porSuma)).toBeGreaterThan(1)
+    expect(c.total).toBeCloseTo(((oct.totales.ventaNeta / oct.diasAbiertos) / (sep.totales.ventaNeta / sep.diasAbiertos) - 1) * 100, 9)
+  })
+
+  it('el % sin datos para comparar: sin base, sin días ese día de semana o base en 0 → null («—»)', () => {
+    const oct = cifrasDelRango(lectura, octubre)
+    const fo = porDiaSemana(oct.dias)
+    expect(compararDiaSemana(fo, oct.ventaPorDiaAbierto, null, null)).toEqual({ porDia: new Array(7).fill(null), total: null })
+    const vacia = porDiaSemana([])
+    expect(compararDiaSemana(fo, oct.ventaPorDiaAbierto, vacia, null).porDia.every(x => x === null)).toBe(true)
+    // Solo el lunes abrió en la base: el resto «—», el lunes con número.
+    const unLunes = porDiaSemana([{ ...oct.dias[0], fecha: '2026-09-07', ventaNeta: 1000 }])
+    const c = compararDiaSemana(fo, oct.ventaPorDiaAbierto, unLunes, 1000)
+    expect(c.porDia[0]).not.toBeNull()
+    expect(c.porDia.slice(1).every(x => x === null)).toBe(true)
+    // Un día de semana sin días abiertos en el PERÍODO: también «—».
+    const soloLunesPer = porDiaSemana([{ ...oct.dias[0], fecha: '2026-10-05', ventaNeta: 500 }])
+    expect(compararDiaSemana(soloLunesPer, 500, unLunes, 1000).porDia).toEqual([-50, null, null, null, null, null, null])
+  })
+
+  it('formato del %: un decimal con coma y signo; «—» sin dato; color sube / baja / gris', () => {
+    expect(fmtPctSigno(4.2)).toBe('+4,2 %')
+    expect(fmtPctSigno(-8)).toBe('−8,0 %')
+    expect(fmtPctSigno(-50)).toBe('−50,0 %')
+    expect(fmtPctSigno(0.04)).toBe('0,0 %')
+    expect(fmtPctSigno(-0.04)).toBe('0,0 %')
+    expect(fmtPctSigno(null)).toBe('—')
+    expect(fmtPctSigno(Number.NaN)).toBe('—')
+    expect([claseDeCambio(4.2), claseDeCambio(-8), claseDeCambio(0.01), claseDeCambio(null)]).toEqual(['sube', 'baja', 'gris', 'gris'])
   })
 
   it('venta por persona D4 por día de semana: una mesa de las 00:30 de la caja de la noche es del día anterior', () => {

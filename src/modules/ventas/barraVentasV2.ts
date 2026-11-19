@@ -4,20 +4,53 @@
 // que se conserve al pasar de una pestaña a otra y sobreviva a un «recargar». Las fechas las arma
 // SIEMPRE `periodos.ts` (`calcularPeriodo`): acá solo se lee y se escribe la URL.
 
-import { BASES, BASES_POR_DEFECTO, calcularPeriodo, fechasCortas, periodoAnterior, periodoSiguiente,
+import { BASES_POR_DEFECTO, calcularPeriodo, fechasCortas, periodoAnterior, periodoSiguiente,
   type BaseId, type PeriodoV2, type TipoPeriodoV2 } from './periodos'
 
-export const OPCIONES_PERIODO: readonly { id: TipoPeriodoV2; label: string }[] = [
-  { id: 'hoy',          label: 'Hoy' },
-  { id: 'ayer',         label: 'Ayer' },
-  { id: 'semana',       label: 'Semana' },
-  { id: 'quincena',     label: 'Quincena' },
-  { id: 'mesALaFecha',  label: 'Mes a la fecha' },
-  { id: 'mes',          label: 'Mes' },
-  { id: 'anioALaFecha', label: 'Año a la fecha' },
-  { id: 'temporada',    label: 'Temporada' },
-  { id: 'rango',        label: 'Rango' },
-]
+/** Todos los tipos que entiende la URL (los links viejos no rompen: lo que no se ofrece cae al defecto). */
+export const ROTULO_PERIODO: Record<TipoPeriodoV2, string> = {
+  hoy: 'Hoy', ayer: 'Ayer', semana: 'Semana', quincena: 'Quincena', mesALaFecha: 'Mes', mes: 'Mes',
+  anioALaFecha: 'Año a la fecha', temporada: 'Temporada', rango: 'Rango',
+}
+
+/**
+ * Las opciones de «Período», las mismas en todas las pestañas (decisión del dueño, 18-nov 17:11: se simplifica la
+ * ESTRUCTURA, no las opciones). «Mes» con el mes en curso es el mes a la fecha (hasta ayer): mismo período que el
+ * «Mes a la fecha» de antes, que ya no aparece aparte.
+ */
+export const PERIODOS: readonly TipoPeriodoV2[] = ['hoy', 'ayer', 'semana', 'quincena', 'mes', 'anioALaFecha', 'temporada', 'rango']
+
+/**
+ * Contra qué se compara: una sola base o «Los dos» (período anterior equivalente + año pasado, mismo día de
+ * semana: el par por defecto de D3). «Año pasado, mismas fechas» (la del contador) se elige sola.
+ */
+export type Comparar = 'anterior' | 'anio' | 'anioFechas' | 'ambos'
+export const BASE_ANTERIOR: BaseId = BASES_POR_DEFECTO[0]
+export const BASE_ANIO: BaseId = BASES_POR_DEFECTO[1]
+export const BASE_ANIO_FECHAS: BaseId = 'anioMismasFechas'
+export const COMPARAR_POR_DEFECTO: Comparar = 'ambos'
+export const OPCIONES_COMPARAR: readonly Comparar[] = ['anterior', 'anio', 'anioFechas', 'ambos']
+
+/** Las bases que se muestran, en orden (la anterior primero). */
+export function basesDe(c: Comparar): BaseId[] {
+  if (c === 'anterior') return [BASE_ANTERIOR]
+  if (c === 'anio') return [BASE_ANIO]
+  if (c === 'anioFechas') return [BASE_ANIO_FECHAS]
+  return [BASE_ANTERIOR, BASE_ANIO]
+}
+
+/**
+ * Las dos bases que se leen. Con «anterior», «año pasado, mismo día de semana» o «Los dos» se lee siempre el mismo
+ * par (cambiar entre esas tres no vuelve a leer); «Año pasado, mismas fechas» se lee sola.
+ */
+export function basesALeer(c: Comparar): [BaseId, BaseId] {
+  return c === 'anioFechas' ? [BASE_ANIO_FECHAS, BASE_ANIO_FECHAS] : [BASE_ANTERIOR, BASE_ANIO]
+}
+
+/** Texto de cada opción de «Comparar con»: el nombre concreto de la base (pedido del dueño del 18-nov). */
+export function rotuloComparar(p: Pick<PeriodoV2, 'tipo' | 'enCurso' | 'dias'>, c: Comparar): string {
+  return c === 'ambos' ? 'Los dos' : rotuloBase(p, basesDe(c)[0])
+}
 
 /** Rótulo genérico de cada base (cuando no hay período a mano). En pantalla va `rotuloBase`. */
 export const ROTULO_BASE: Record<BaseId, string> = {
@@ -98,28 +131,28 @@ export interface EstadoBarra {
   dia?:   string
   desde?: string
   hasta?: string
-  baseA:  BaseId
-  baseB:  BaseId
+  comparar: Comparar
 }
 
 const RE_DIA = /^\d{4}-\d{2}-\d{2}$/
-const esTipo = (s: string | null): s is TipoPeriodoV2 => !!s && OPCIONES_PERIODO.some(o => o.id === s)
-const esBase = (s: string | null): s is BaseId => !!s && (BASES as readonly string[]).includes(s)
+const esTipo = (s: string | null): s is TipoPeriodoV2 => !!s && Object.prototype.hasOwnProperty.call(ROTULO_PERIODO, s)
+const esComparar = (s: string | null): s is Comparar => !!s && (OPCIONES_COMPARAR as readonly string[]).includes(s)
 const dia = (s: string | null) => (s && RE_DIA.test(s) ? s : undefined)
 
-/** Lee la barra de la URL. Lo que no se entiende cae al valor por defecto (nunca rompe). */
+/**
+ * Lee la barra de la URL. Lo que no se entiende cae al valor por defecto (nunca rompe). «Mes a la fecha» (links
+ * viejos) se sigue leyendo: es el «Mes» en curso. Los `a`/`b` viejos se ignoran.
+ */
 export function leerBarra(sp: URLSearchParams, porDefecto: TipoPeriodoV2 = PERIODO_POR_DEFECTO): EstadoBarra {
   const p = sp.get('p')
-  let baseA: BaseId = esBase(sp.get('a')) ? (sp.get('a') as BaseId) : BASES_POR_DEFECTO[0]
-  let baseB: BaseId = esBase(sp.get('b')) ? (sp.get('b') as BaseId) : BASES_POR_DEFECTO[1]
-  if (baseA === baseB) { baseA = BASES_POR_DEFECTO[0]; baseB = BASES_POR_DEFECTO[1] }
+  const c = sp.get('c')
   return {
     local: sp.get('local') || null,
     tipo:  esTipo(p) ? p : porDefecto,
     dia:   dia(sp.get('d')),
     desde: dia(sp.get('desde')),
     hasta: dia(sp.get('hasta')),
-    baseA, baseB,
+    comparar: esComparar(c) ? c : COMPARAR_POR_DEFECTO,
   }
 }
 
@@ -132,8 +165,9 @@ export function escribirBarra(sp: URLSearchParams, e: EstadoBarra): URLSearchPar
   poner('d', e.tipo === 'rango' ? undefined : e.dia)
   poner('desde', e.tipo === 'rango' ? e.desde : undefined)
   poner('hasta', e.tipo === 'rango' ? e.hasta : undefined)
-  poner('a', e.baseA)
-  poner('b', e.baseB)
+  poner('c', e.comparar === COMPARAR_POR_DEFECTO ? undefined : e.comparar)
+  out.delete('a')
+  out.delete('b')
   return out
 }
 
@@ -162,21 +196,25 @@ export function moverPeriodo(e: EstadoBarra, p: PeriodoV2, hacia: -1 | 1): Estad
   return { ...e, tipo: nuevo.tipo, dia: nuevo.tipo === 'hoy' ? undefined : nuevo.desde, desde: undefined, hasta: undefined }
 }
 
-/** Cambiar la base A (o B) a una que ya ocupa la otra: se intercambian, nunca quedan iguales. */
-export function elegirBase(e: EstadoBarra, cual: 'A' | 'B', id: BaseId): EstadoBarra {
-  if (cual === 'A') return id === e.baseB ? { ...e, baseA: id, baseB: e.baseA } : { ...e, baseA: id }
-  return id === e.baseA ? { ...e, baseB: id, baseA: e.baseB } : { ...e, baseB: id }
+/**
+ * Elegir otro tipo en «Período»: el nuevo período contiene el último día del que se estaba mirando (de «Semana
+ * del 5-oct» a «Mes» = octubre; desde «Ayer» = el mes en curso, a la fecha). «Rango» arranca con las fechas de hoy.
+ */
+export function cambiarTipo(e: EstadoBarra, p: PeriodoV2, tipo: TipoPeriodoV2): EstadoBarra {
+  if (tipo === 'rango') return { ...e, tipo, dia: undefined, desde: e.desde ?? p.desde, hasta: e.hasta ?? p.hasta }
+  if (tipo === 'hoy') return { ...e, tipo, dia: undefined, desde: undefined, hasta: undefined }
+  return { ...e, tipo, dia: p.hasta, desde: undefined, hasta: undefined }
 }
 
 /**
  * «1 al 15 de noviembre (15 días) contra el mes anterior a la misma fecha (1–15 oct) y contra el año
  * pasado, mismo día de semana (2–16 nov 2025). Hoy, en curso, no entra.»
  */
-export function periodoEnPalabras(p: PeriodoV2, a: BaseId, b: BaseId): string {
+export function periodoEnPalabras(p: PeriodoV2, bases: readonly BaseId[]): string {
   if (p.tipo === 'hoy') return 'Hoy está en curso: se mira en «En vivo», contra la misma hora.'
-  const contra = [a, b].map(id => {
+  const contra = bases.map(id => {
     const n = nombreBase(p, id)
     return p.bases[id] ? `contra ${n.articulo} ${baseConFechas(p, id)}` : `sin comparación ${conArticulo(n, 'con')} ${n.texto}`
   })
-  return `${p.rotulo} ${contra[0]} y ${contra[1]}.${p.enCurso || p.hasta === p.N ? ' Hoy, en curso, no entra.' : ''}`
+  return `${p.rotulo} ${contra.join(' y ')}.${p.enCurso || p.hasta === p.N ? ' Hoy, en curso, no entra.' : ''}`
 }

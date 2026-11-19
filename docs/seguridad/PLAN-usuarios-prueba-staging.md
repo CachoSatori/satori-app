@@ -75,6 +75,12 @@ Comparación con prod por md5 del `id`, del correo en minúsculas y del hash: pr
 | C · Secret de GitHub Actions | `STG_PRUEBA_PASSWORD` del repo. | Útil si algún día hay e2e en CI. | Los agentes de CC no pueden leerlo; solo un workflow. |
 | D · Gestor del dueño | El dueño la guarda y la pasa. | — | Trabajo manual del dueño y pasa por el chat: descartada. |
 
+**Por qué `encrypted_password` no queda vacío (verificado 17-nov):** aunque el alta no lleve `password`, GoTrue guarda
+igual un hash bcrypt de 60 caracteres de una clave al azar que nadie conoce ni ve. Por eso el control `sin_password` de
+`crear.sh` **no** mira que la columna esté vacía; significa «nadie conoce la contraseña»: (1) el payload del alta no
+trae `password` (el script lo verifica con `jq` antes de crear y frena si aparece) y (2) el usuario no tiene
+identidades fuera de `email`. El script además informa `hash_bcrypt_al_azar` (largo 60) como dato, no como falla.
+
 Nunca en el repo ni en el chat. Recomendación: **A**; si después hace falta probar el login por pantalla, sumar B
 para **un** usuario.
 
@@ -117,3 +123,13 @@ para **un** usuario.
 2. OK del dueño → `neutralizar-copias.sql` → `inventario.sql` → comparación de hashes con prod = 0 coincidencias.
 3. PR aparte para `clone_prod_to_staging.py` (c2).
 4. Skill «verificar» / `satori-estandar-pr` §4: usar `sesion.sh` para pruebas de permisos y pantallas.
+
+## 6. Bitácora
+
+- **17-nov ~13:20 (CR):** creados los 10 usuarios de prueba en staging con `crear.sh`. Roles OK; sesión de owner y de
+  salonero por `sesion.sh` OK. El control `sin_password` dio false en los 10 porque esperaba `encrypted_password`
+  vacío (ver §4(b)); corregido en este PR.
+- **17-nov ~13:30 (CR):** neutralizadas las 11 cuentas que no son de prueba (contraseña al azar, ban a 100 años,
+  0 sesiones).
+- **17-nov:** redirecciones de Auth de staging ampliadas a `https://*.satori-staging.pages.dev/**` para poder validar
+  vistas previas de PR.

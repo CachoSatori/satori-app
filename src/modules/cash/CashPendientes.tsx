@@ -17,6 +17,7 @@ interface Props {
   credits: SupplierCredit[]           // mig 053/054 — saldo a favor del proveedor
   applications: CreditApplication[]
   onRefresh: () => void
+  refrescando?: boolean   // (19-nov) el padre está releyendo en silencio: los datos en pantalla pueden estar viejos
 }
 
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
@@ -48,7 +49,7 @@ interface Group {
 // Clave sentinela (no puede colisionar con el nombre lowercase de un proveedor real).
 const PROPINAS_KEY = '__propinas__'
 
-export default function CashPendientes({ movements, sessions, suppliers, credits, applications, onRefresh }: Props) {
+export default function CashPendientes({ movements, sessions, suppliers, credits, applications, onRefresh, refrescando = false }: Props) {
   const requireManager = useManagerOverride()
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
   // Lookups para la notificación al proveedor (mig 047). Null-safe: supplier_id puede ser null.
@@ -69,6 +70,9 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
+  // Pagar, rechazar y aplicar crédito esperan a que termine el refresco silencioso: hasta entonces la lista puede
+  // mostrar como pendiente algo que ya se pagó (y se pagaría dos veces).
+  const ocupado = saving || refrescando
   // Comprobante POST-pago: snapshot de lo pagado. Al pagar la última factura (o "Marcar todos"), el
   // grupo desaparece de Pendientes → sin este snapshot no se podría emitir el comprobante después.
   const [pagoResultado, setPagoResultado] = useState<{ data: ComprobanteData; whatsapp: string | null } | null>(null)
@@ -143,7 +147,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
   // "Pagar ahora" (CashTurno/CashCierre, propinaEgresoFields) sigue siendo Efectivo/Registradora.
   // Los proveedores no cambian: solo status.
   const pagar = async (ids: string[], snapshot?: { data: ComprobanteData; whatsapp: string | null } | null) => {
-    if (!ids.length) return
+    if (!ids.length || ocupado) return
     // Destinatarios del comprobante por email: SOLO proveedores con notificar_pago='email' + email.
     // Selección mixta (propinas + varios proveedores) → acá quedan SOLO los configurados.
     const receptores = ids
@@ -356,9 +360,9 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                           <td style={{ fontSize: '0.78rem', color: 'var(--c-tinta)' }}>{r.ref || '—'}</td>
                           <td style={{ textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                              <button className="tips-btn-teal" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.7rem' }}
+                              <button className="tips-btn-teal" disabled={ocupado} style={{ fontSize: '0.72rem', padding: '0.3rem 0.7rem' }}
                                 onClick={() => pagar([r.id], snap([r]))}>✓ Pagado</button>
-                              <button className="tips-btn-ghost" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem', color: 'var(--c-laca)', borderColor: 'var(--c-laca-borde)' }}
+                              <button className="tips-btn-ghost" disabled={ocupado} style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem', color: 'var(--c-laca)', borderColor: 'var(--c-laca-borde)' }}
                                 onClick={() => rechazar([r.id])} title="Rechazar (requiere autorización de gerencia)">✕ Rechazar</button>
                             </div>
                           </td>
@@ -377,19 +381,19 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                 {/* Acciones del grupo */}
                 <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', padding: '0.9rem 1.1rem', borderTop: '1px solid var(--c-linea)' }}>
                   {selInGroup.length > 0 && (
-                    <button className="cd-btn-primary" disabled={saving}
+                    <button className="cd-btn-primary" disabled={ocupado}
                       onClick={() => pagar(selInGroup.map(r => r.id), snap(selInGroup))}>
                       ✓ Pagar seleccionados ({selInGroup.length})
                     </button>
                   )}
                   {selInGroup.length > 0 && (
-                    <button className="tips-btn-ghost" disabled={saving}
+                    <button className="tips-btn-ghost" disabled={ocupado}
                       style={{ color: 'var(--c-laca)', borderColor: 'var(--c-laca-borde)' }}
                       onClick={() => rechazar(selInGroup.map(r => r.id))}>
                       ✕ Rechazar seleccionados ({selInGroup.length})
                     </button>
                   )}
-                  <button className="cd-btn-primary" disabled={saving}
+                  <button className="cd-btn-primary" disabled={ocupado}
                     style={{ background: 'var(--c-tinta)' }}
                     onClick={() => pagar(g.rows.map(r => r.id), snap(g.rows))}>
                     ✓ Marcar todos pagados
@@ -412,7 +416,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                     </button>
                   )}
                   {!g.esPropinas && supG && saldoDisp > 0 && (
-                    <button className="cd-btn-primary" disabled={saving} onClick={() => abrirAplicar(supG)}>
+                    <button className="cd-btn-primary" disabled={ocupado} onClick={() => abrirAplicar(supG)}>
                       💳 Aplicar crédito ({fi(saldoDisp)})
                     </button>
                   )}

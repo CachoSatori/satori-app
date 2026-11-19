@@ -7,10 +7,13 @@
 //                              («saldada», «parcial · queda X», «sin cubrir · queda X») + lo que queda por pagar.
 //                              Se arma con el SNAPSHOT previo a aplicar (no con el estado después del refresco).
 //   · liquidacionDeCredito   → reenvío por crédito, rearmado desde credit_applications (append-only, sin `reversed`).
+//                              (Dueño, 19-nov) SOLO las facturas que tocó ese crédito, con su estado al aplicar: no hay
+//                              historial de estados para saber qué otras estaban pendientes ese día, así que NO lleva
+//                              «sin cubrir» ni «Queda por pagar» (ver comprobanteReenvioCredito).
 import type { CashMovement, CreditApplication, SupplierCredit } from '../../shared/types/database'
 import { fi, fd } from './cashUtils'
 import { dateCR } from '../../shared/utils'
-import { facturaAplicado, saldoResidual, saldoCredito } from './supplierCredits'
+import { facturaAplicado, saldoResidual } from './supplierCredits'
 import type { ComprobanteData } from './comprobante'
 
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
@@ -61,12 +64,28 @@ export function filaPagoDeMovimiento(m: CashMovement, fecha: string, application
   }
 }
 
+export const SALDADA_CON_CREDITO = 'Saldada con crédito a favor'
+
 /** Reenvío por factura (Historial de pagos): el mismo comprobante del pago, para una sola factura.
- *  Única diferencia: si el crédito la cubrió entera (se pagó ₡0), el monto y el total dicen ₡0 en vez de vacío. */
+ *  Si el crédito la cubrió entera (no se transfirió nada), NO es un «Comprobante de pago … ₡0» ni un «TOTAL A PAGAR»:
+ *  es «Saldada con crédito a favor», con lo facturado y el crédito que la saldó. Una factura de ₡0 sin crédito dice ₡0. */
 export function comprobanteFacturaPagada(
   m: CashMovement, fecha: string, nombre: string, applications: CreditApplication[],
 ): ComprobanteData {
   const fila = filaPagoDeMovimiento(m, fecha, applications)
+  if (fila.aplicado > EPS && fila.residual <= EPS && fila.usd <= EPS) {
+    const desglose = `facturado ${fi(fila.crc)} − crédito ${fi(fila.aplicado)}`
+    return {
+      tituloTexto: SALDADA_CON_CREDITO,
+      tituloPNG: SALDADA_CON_CREDITO,
+      proveedor: nombre,
+      lineas: [{ fecha: fila.fecha, nota: fila.ref, monto: fi(fila.aplicado), subnotaTexto: desglose, subnotaPNG: desglose }],
+      totalTexto: fi(fila.aplicado),
+      totalPNG: fi(fila.aplicado),
+      totalLabel: SALDADA_CON_CREDITO.toUpperCase(),
+      totalLabelTexto: SALDADA_CON_CREDITO,
+    }
+  }
   const d = comprobantePago(nombre, false, [fila])
   if (!d.totalTexto) {
     return {
@@ -80,7 +99,8 @@ export function comprobanteFacturaPagada(
 }
 
 // ── Liquidación de saldo a favor ─────────────────────────────────────────────────────────────────
-export type EstadoFactura = 'saldada' | 'parcial' | 'sin_cubrir'
+// 'sin_datos' = la factura no está entre los movimientos cargados (solo en el reenvío): no se sabe cómo quedó.
+export type EstadoFactura = 'saldada' | 'parcial' | 'sin_cubrir' | 'sin_datos'
 
 export interface FacturaLiquidada {
   id: string
@@ -99,7 +119,6 @@ export interface Liquidacion {
   porPagarUSD: number
   creditoRef: string
   saldoRestante: number // saldo a favor que le queda al crédito
-  fechaAplicacion?: string  // solo en el reenvío: día (o rango) CR de las imputaciones
 }
 
 export interface FacturaPrevia {
@@ -114,7 +133,7 @@ const estadoDe = (aplicado: number, queda: number): EstadoFactura =>
   aplicado <= EPS ? 'sin_cubrir' : (queda <= EPS ? 'saldada' : 'parcial')
 
 function totales(facturas: FacturaLiquidada[]) {
-  const pend = facturas.filter(f => f.estado !== 'saldada')
+  const pend = facturas.filter(f => f.estado === 'parcial' || f.estado === 'sin_cubrir')
   return {
     totalAplicado: r2(facturas.reduce((s, f) => s + f.aplicado, 0)),
     porPagarCRC: r2(pend.reduce((s, f) => s + f.queda, 0)),
@@ -145,15 +164,23 @@ export function armarLiquidacion(input: {
 
 const ts = (s: string): number => { const t = Date.parse(s); return Number.isFinite(t) ? t : 0 }
 
+/** Reenvío por crédito (dueño, 19-nov): solo lo que se sabe con certeza de ESE momento. */
+export interface ReenvioCredito {
+  facturas: FacturaLiquidada[]   // solo las que tocó el crédito: 'saldada' | 'parcial' | 'sin_datos'
+  totalAplicado: number
+  creditoRef: string
+  fechaAplicacion?: string       // día CR (o «X al Y») de las imputaciones de este crédito
+}
+
 /**
- * Reenvío por crédito: rearma la liquidación desde `credit_applications` (append-only), sin las reversadas. Una línea
- * por factura que el crédito tocó (si se aplicó en varias veces, se suman). «queda» = el residual de la factura tal como
- * quedó en ese momento: monto − todo lo aplicado (no reversado, de cualquier crédito) hasta la última imputación de
- * ESTE crédito. Lo aplicado después por otro crédito no cambia este comprobante. `movements` se usa para fecha y nota.
+ * Reenvío por crédito: rearma desde `credit_applications` (append-only), sin las reversadas. Una línea por factura que
+ * ESTE crédito tocó (si se aplicó en varias veces, se suman). «queda» = monto − todo lo aplicado (no reversado, de
+ * cualquier crédito) hasta la última imputación de este crédito: lo aplicado después no cambia este comprobante.
+ * Una factura que no está en `movements` queda «sin datos» (no se adivina). Orden: fecha y, a igual fecha, id (R06).
  */
 export function liquidacionDeCredito(
   credito: SupplierCredit, applications: CreditApplication[], movements: CashMovement[],
-): Liquidacion | null {
+): ReenvioCredito | null {
   const vivas = applications.filter(a => !a.reversed)
   const mias = vivas.filter(a => a.credit_id === credito.id && a.applied_to_movement_id)
   if (!mias.length) return null
@@ -166,26 +193,58 @@ export function liquidacionDeCredito(
   const facturas: FacturaLiquidada[] = [...porFactura.entries()].map(([id, apps]) => {
     const m = movById.get(id)
     const aplicado = r2(apps.reduce((s, a) => s + N(a.amount_applied), 0))
+    if (!m) return { id, fecha: '', desc: 'factura fuera del período cargado', aplicado, queda: 0, quedaUSD: 0, estado: 'sin_datos' as const }
     const hasta = Math.max(...apps.map(a => ts(a.applied_at)))
     const aplicadoHasta = r2(vivas
       .filter(a => a.applied_to_movement_id === id && ts(a.applied_at) <= hasta)
       .reduce((s, a) => s + N(a.amount_applied), 0))
-    const queda = m ? Math.max(0, r2(N(m.amount_crc) - aplicadoHasta)) : 0
-    const estado: EstadoFactura = !m ? 'saldada' : estadoDe(aplicado, queda)
+    const queda = Math.max(0, r2(N(m.amount_crc) - aplicadoHasta))
+    const estado = estadoDe(aplicado, queda)
     return {
-      id,
-      fecha: m ? dateCR(m.created_at) : '',
-      desc: m ? (m.description || m.subcategory || '').slice(0, 26) : 'factura fuera del período cargado',
-      aplicado, queda, quedaUSD: m && estado !== 'saldada' ? N(m.amount_usd) : 0, estado,
+      id, fecha: dateCR(m.created_at), desc: (m.description || m.subcategory || '').slice(0, 26),
+      aplicado, queda, quedaUSD: estado !== 'saldada' ? N(m.amount_usd) : 0, estado,
     }
-  }).sort((a, b) => a.fecha.localeCompare(b.fecha))
+  }).sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const dias = mias.map(a => dateCR(a.applied_at)).filter(Boolean).sort()
-  const fechaAplicacion = dias.length ? (dias[0] === dias[dias.length - 1] ? dias[0] : `${dias[0]} a ${dias[dias.length - 1]}`) : undefined
+  const fechaAplicacion = dias.length ? (dias[0] === dias[dias.length - 1] ? dias[0] : `${dias[0]} al ${dias[dias.length - 1]}`) : undefined
   return {
-    facturas, ...totales(facturas),
+    facturas,
+    totalAplicado: r2(facturas.reduce((s, f) => s + f.aplicado, 0)),
     creditoRef: credito.referencia ?? '',
-    saldoRestante: Math.max(0, saldoCredito(credito, applications)),
     fechaAplicacion,
+  }
+}
+
+export const PIE_SALDO_HOY = 'Para el saldo pendiente de hoy, consulte con nosotros.'
+
+/** Título del reenvío: «Crédito aplicado el <fecha CR>» (o «del X al Y» si se aplicó en varios días). */
+export function tituloReenvioCredito(fechaAplicacion?: string): string {
+  if (!fechaAplicacion) return 'Crédito aplicado'
+  return fechaAplicacion.includes(' al ') ? `Crédito aplicado del ${fechaAplicacion}` : `Crédito aplicado el ${fechaAplicacion}`
+}
+
+/** Comprobante del REENVÍO por crédito (PNG + texto WhatsApp): las facturas que tocó, su estado al aplicar y el total
+ *  aplicado. Sin «Queda por pagar» ni «sin cubrir» (no se pueden reconstruir exactos) y con la línea fija del pie. */
+export function comprobanteReenvioCredito(r: ReenvioCredito, proveedor: string): ComprobanteData {
+  const titulo = tituloReenvioCredito(r.fechaAplicacion)
+  return {
+    tituloTexto: titulo,
+    tituloPNG: titulo,
+    proveedor,
+    lineas: r.facturas.map(f => ({
+      fecha: f.fecha,
+      nota: f.desc,
+      monto: fi(f.aplicado),
+      subnotaTexto: etiquetaEstado(f),
+      subnotaPNG: etiquetaEstado(f),
+    })),
+    totalTexto: fi(r.totalAplicado),
+    totalPNG: fi(r.totalAplicado),
+    totalLabel: 'TOTAL APLICADO',
+    pie: [
+      ...(r.creditoRef ? [`Crédito usado: ${r.creditoRef}`] : []),
+      PIE_SALDO_HOY,
+    ],
   }
 }
 
@@ -200,6 +259,7 @@ export function montoMixto(crc: number, usd: number): string {
 /** Etiqueta del estado de una factura en el comprobante y en pantalla. */
 export function etiquetaEstado(f: FacturaLiquidada): string {
   if (f.estado === 'saldada') return 'saldada ✓'
+  if (f.estado === 'sin_datos') return 'sin datos de la factura'
   const q = montoMixto(f.queda, f.quedaUSD)
   return f.estado === 'parcial' ? `parcial · queda ${q}` : `sin cubrir · queda ${q}`
 }
@@ -222,7 +282,6 @@ export function comprobanteLiquidacion(liq: Liquidacion, proveedor: string): Com
     totalLabel: 'TOTAL APLICADO',
     pie: [
       `Crédito usado${liq.creditoRef ? `: ${liq.creditoRef}` : ''}`,
-      ...(liq.fechaAplicacion ? [`Aplicado el ${liq.fechaAplicacion}`] : []),
       `Saldo a favor restante: ${fi(liq.saldoRestante)}`,
       `Queda por pagar: ${montoMixto(liq.porPagarCRC, liq.porPagarUSD)}`,
     ],

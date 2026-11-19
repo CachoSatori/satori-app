@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // (19-nov) Proveedores: reenviar por WhatsApp o PNG el comprobante de un crédito (Saldo a favor, armado desde
-// credit_applications sin reversadas) y el de un pago (Historial de pagos, por factura). Solo comparte: no escribe nada.
+// credit_applications sin reversadas; solo lo que tocó el crédito, decisión del dueño) y el de un pago (Historial de pagos, por factura). Solo comparte: no escribe nada.
 // Fechas en hora CR. Datos ficticios.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
@@ -46,18 +46,18 @@ beforeEach(() => {
 })
 
 describe('Proveedores — reenviar comprobantes', () => {
-  it('Saldo a favor: reenvía la liquidación del crédito (sin la reversada) con cada factura y lo que queda por pagar', () => {
+  it('Saldo a favor: reenvía solo las facturas que tocó el crédito (sin la reversada), sin «Queda por pagar»', () => {
     fireEvent.click(screen.getByRole('button', { name: /Saldo a favor \(1\)/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Reenviar el comprobante del crédito por WhatsApp' }))
     expect(spy.compartir).toHaveBeenCalledTimes(1)
     expect(spy.compartir.mock.calls[0][1]).toBe('80000000')
     const t = comprobanteTexto(ultimo())
-    expect(t).toContain('Comprobante de aplicación de saldo a favor')
+    expect(t).toContain('— Crédito aplicado el 2026-07-10\n')
     expect(t).toContain(`• 2026-07-05  ${fi(30000)}  Factura A\n    (saldada ✓)`)                    // fecha CR, no la UTC (06)
     expect(t).toContain(`• 2026-07-07  ${fi(15000)}  Factura B\n    (parcial · queda ${fi(25000)})`)
     expect(t).toContain(`Total: ${fi(45000)}`)
-    expect(t).toContain(`Saldo a favor restante: ${fi(5000)}`)
-    expect(t).toContain(`Queda por pagar: ${fi(25000)}`)
+    expect(t).toContain('Para el saldo pendiente de hoy, consulte con nosotros.')
+    expect(t).not.toMatch(/queda por pagar|sin cubrir/i)
     // Lo que ya se veía no cambia de cifras: saldo / monto del crédito.
     expect(screen.getByTitle('saldo / monto original').textContent).toBe(`${fi(5000)} / ${fi(50000)}`)
     fireEvent.click(screen.getByRole('button', { name: 'Descargar el comprobante del crédito (PNG)' }))
@@ -72,10 +72,13 @@ describe('Proveedores — reenviar comprobantes', () => {
     expect(screen.getByText('2026-07-05')).toBeTruthy()              // fecha CR del pago (05:30 UTC del 06 = 23:30 CR del 05)
     fireEvent.click(botones[0])
     const d = ultimo()
-    expect(d.tituloTexto).toBe('Comprobante de pago')
+    // El crédito la cubrió entera: no es «Comprobante de pago … ₡0» ni «TOTAL A PAGAR».
+    expect(d.tituloTexto).toBe('Saldada con crédito a favor')
+    expect(d.totalLabel).toBe('SALDADA CON CRÉDITO A FAVOR')
     expect(d.lineas).toHaveLength(1)
-    expect(d.lineas[0].monto).toBe(fi(0))                             // el crédito la cubrió entera
-    expect(d.lineas[0].subnotaTexto).toBe(`facturado ${fi(30000)} − crédito ${fi(30000)} = pagado ${fi(0)}`)
+    expect(d.lineas[0].monto).toBe(fi(30000))
+    expect(d.lineas[0].subnotaTexto).toBe(`facturado ${fi(30000)} − crédito ${fi(30000)}`)
+    expect(comprobanteTexto(d)).toContain(`Saldada con crédito a favor: ${fi(30000)}`)
     expect(spy.escribir).not.toHaveBeenCalled()
   })
 })

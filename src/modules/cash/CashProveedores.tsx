@@ -17,7 +17,7 @@ import { computeSupplierStatus } from './proveedoresStatus'
 import { saldoCredito } from './supplierCredits'
 import { dateCR } from '../../shared/utils'
 import { descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
-import { comprobanteFacturaPagada, comprobanteLiquidacion, liquidacionDeCredito } from './comprobanteProveedor'
+import { comprobanteFacturaPagada, comprobanteReenvioCredito, liquidacionDeCredito } from './comprobanteProveedor'
 
 interface Props {
   suppliers:    Supplier[]
@@ -132,7 +132,8 @@ export default function CashProveedores({ suppliers, movements, credits, applica
   const compPago = (s: Supplier, m: CashMovement): ComprobanteData => comprobanteFacturaPagada(m, fechaFactura(m), s.name, applications)
   const compCredito = (s: Supplier, c: SupplierCredit): ComprobanteData | null => {
     const liq = liquidacionDeCredito(c, applications, movements)
-    return liq ? comprobanteLiquidacion(liq, s.name) : null
+    // (Dueño, 19-nov) Solo las facturas que tocó el crédito, sin «Queda por pagar» ni «sin cubrir».
+    return liq ? comprobanteReenvioCredito(liq, s.name) : null
   }
 
   return (

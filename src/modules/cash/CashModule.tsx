@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
@@ -80,8 +80,13 @@ export default function CashModule() {
   // Fecha con la que se abre «Cierre del día» al tocar un día de la alerta (remonta CashCierre).
   const [fechaCierre, setFechaCierre] = useState<string | null>(null)
 
+  // (19-nov) Refrescos silenciosos en curso (contador: pueden solaparse con el de tiempo real). Pendientes deshabilita
+  // pagar mientras haya uno, para no pagar dos veces lo que la lista vieja todavía muestra.
+  const silenciosos = useRef(0)
+  const [refrescando, setRefrescando] = useState(false)
   const loadAll = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
+    else { silenciosos.current++; setRefrescando(true) }
     setError(null)
     try {
       const [open, all, supps, allMovs, creds, apps] = await Promise.all([
@@ -104,6 +109,7 @@ export default function CashModule() {
       setError(e instanceof Error ? e.message : 'Error cargando datos')
     } finally {
       setLoading(false)
+      if (opts?.silent && --silenciosos.current === 0) setRefrescando(false)
     }
   }, [veAlerta])
 
@@ -244,6 +250,7 @@ export default function CashModule() {
             credits={credits}
             applications={creditApps}
             onRefresh={refrescarSilencioso}
+            refrescando={refrescando}
           />
         )}
         {tab === 'resumen' && (

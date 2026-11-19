@@ -1,13 +1,13 @@
 // (19-nov) Armado de los comprobantes al proveedor: liquidación con TODAS las facturas (saldada / parcial / sin cubrir)
-// y lo que queda por pagar; reenvío por crédito desde credit_applications (sin reversadas) y por factura; el pago normal
-// sigue dando EXACTAMENTE lo mismo que antes. Datos ficticios.
+// y lo que queda por pagar; reenvío por crédito desde credit_applications (sin reversadas, solo lo que tocó el crédito,
+// sin «Queda por pagar»: decisión del dueño) y por factura; el pago normal sigue dando EXACTAMENTE lo mismo. Datos ficticios.
 import { describe, it, expect } from 'vitest'
 import type { CashMovement, CreditApplication, SupplierCredit } from '../../shared/types/database'
 import { fi, fd } from './cashUtils'
 import { comprobanteTexto, fechaEmisionCR } from './comprobante'
 import {
   armarLiquidacion, comprobanteLiquidacion, liquidacionDeCredito, comprobantePago, comprobanteFacturaPagada,
-  filaPagoDeMovimiento, type FilaPago,
+  comprobanteReenvioCredito, filaPagoDeMovimiento, PIE_SALDO_HOY, SALDADA_CON_CREDITO, type FilaPago,
 } from './comprobanteProveedor'
 
 const mov = (o: Partial<CashMovement>): CashMovement => ({
@@ -99,10 +99,10 @@ describe('liquidacionDeCredito — reenvío por crédito desde credit_applicatio
       ['f2', 20000, 'parcial', 10000],
     ])
   })
-  it('totales: aplicado 50 000, saldo restante 20 000 (lo de hoy), queda por pagar 10 000; fecha CR de las imputaciones', () => {
-    expect([liq.totalAplicado, liq.saldoRestante, liq.porPagarCRC]).toEqual([50000, 20000, 10000])
-    expect(liq.fechaAplicacion).toBe('2026-07-10 a 2026-07-11')
-    expect(comprobanteTexto(comprobanteLiquidacion(liq, 'P'))).toContain('Aplicado el 2026-07-10 a 2026-07-11')
+  it('total aplicado 50 000; aplicado en dos días → título «Crédito aplicado del X al Y» (fecha CR)', () => {
+    expect(liq.totalAplicado).toBe(50000)
+    expect(liq.fechaAplicacion).toBe('2026-07-10 al 2026-07-11')
+    expect(comprobanteTexto(comprobanteReenvioCredito(liq, 'P'))).toContain('— Crédito aplicado del 2026-07-10 al 2026-07-11\n')
   })
   it('sin imputaciones vivas → null (no hay comprobante que reenviar)', () => {
     expect(liquidacionDeCredito(credito(), [apps[3]], movs)).toBeNull()
@@ -110,6 +110,72 @@ describe('liquidacionDeCredito — reenvío por crédito desde credit_applicatio
   it('la fecha de imputación es la de Costa Rica (23:30 CR = 05:30 UTC del día siguiente)', () => {
     const l = liquidacionDeCredito(credito(), [app({ applied_to_movement_id: 'f1', amount_applied: 1000, applied_at: '2026-07-11T05:30:00Z' })], movs)!
     expect(l.fechaAplicacion).toBe('2026-07-10')
+    expect(comprobanteReenvioCredito(l, 'P').tituloTexto).toBe('Crédito aplicado el 2026-07-10')
+  })
+
+  // Punto 2 (verificador): una factura que no está entre los movimientos cargados NO es «saldada».
+  it('factura fuera de los movimientos cargados → «sin datos», no «saldada»', () => {
+    const l = liquidacionDeCredito(credito(), [app({ applied_to_movement_id: 'NO-CARGADA', amount_applied: 7000 })], movs)!
+    expect(l.facturas.map(f => [f.estado, f.aplicado, f.queda])).toEqual([['sin_datos', 7000, 0]])
+    const t = comprobanteTexto(comprobanteReenvioCredito(l, 'P'))
+    expect(t).toContain('(sin datos de la factura)')
+    expect(t).not.toContain('saldada')
+  })
+
+  // Punto 3 (R06): a igual fecha, el orden lo fija el id, no el orden en que llegaron las imputaciones.
+  it('dos facturas del mismo día: orden fijo por id, llegue como llegue', () => {
+    const mismos = [mov({ id: 'fb', created_at: '2026-07-05T18:00:00Z' }), mov({ id: 'fa', created_at: '2026-07-05T19:00:00Z' })]
+    const ida = [app({ id: 'x', applied_to_movement_id: 'fb', amount_applied: 100 }), app({ id: 'y', applied_to_movement_id: 'fa', amount_applied: 200 })]
+    expect(liquidacionDeCredito(credito(), ida, mismos)!.facturas.map(f => f.id)).toEqual(['fa', 'fb'])
+    expect(liquidacionDeCredito(credito(), [...ida].reverse(), [...mismos].reverse())!.facturas.map(f => f.id)).toEqual(['fa', 'fb'])
+  })
+})
+
+// Decisión del dueño (19-nov): el reenvío por crédito muestra SOLO las facturas que tocó ese crédito, con su estado al
+// aplicar y el total aplicado; sin «Queda por pagar» ni «sin cubrir», y con la línea fija para el saldo de hoy.
+describe('reenvío por crédito — mismo escenario que el comprobante original', () => {
+  // 4 pendientes; el crédito de 70 000 deja f1 y f2 saldadas, f3 parcial y f4 sin cubrir (el original lista las 4).
+  const enElMomento = [
+    mov({ id: 'f1', status: 'aprobado', amount_crc: 30000, created_at: '2026-07-05T18:00:00Z', description: 'Factura A' }),
+    mov({ id: 'f2', status: 'aprobado', amount_crc: 20000, created_at: '2026-07-06T18:00:00Z', description: 'Factura B' }),
+    mov({ id: 'f3', status: 'pendiente', amount_crc: 30000, created_at: '2026-07-07T18:00:00Z', description: 'Factura C' }),
+    mov({ id: 'f4', status: 'pendiente', amount_crc: 25000, created_at: '2026-07-08T18:00:00Z', description: 'Factura D' }),
+  ]
+  const apps = [
+    app({ id: '1', applied_to_movement_id: 'f1', amount_applied: 30000, applied_at: '2026-07-10T15:00:00Z' }),
+    app({ id: '2', applied_to_movement_id: 'f2', amount_applied: 20000, applied_at: '2026-07-10T15:00:01Z' }),
+    app({ id: '3', applied_to_movement_id: 'f3', amount_applied: 20000, applied_at: '2026-07-10T15:00:02Z' }),
+  ]
+  const original = comprobanteLiquidacion(armarLiquidacion({
+    facturas: enElMomento.map(m => ({ id: m.id, fecha: m.created_at.slice(0, 10), desc: m.description, residualPrevio: m.amount_crc, usd: 0 })),
+    aplicado: { f1: 30000, f2: 20000, f3: 20000 }, creditoRef: 'TRF-PRUEBA', saldoCreditoPrevio: 70000,
+  }), 'P')
+  // Después se pagan f4 (por transferencia) y el resto de f3 con OTRO crédito: el reenvío no cambia.
+  const despues = enElMomento.map(m => ({ ...m, status: 'aprobado' } as CashMovement))
+  const apps2 = [...apps, app({ id: '9', credit_id: 'OTRO', applied_to_movement_id: 'f3', amount_applied: 10000, applied_at: '2026-07-15T15:00:00Z' })]
+  const reenvio = comprobanteReenvioCredito(liquidacionDeCredito(credito(), apps2, despues)!, 'P')
+  const t = comprobanteTexto(reenvio)
+
+  it('lista las 2 saldadas y la parcial con lo aplicado, iguales a esas líneas del original', () => {
+    expect(reenvio.lineas.map(l => [l.fecha, l.monto, l.subnotaTexto])).toEqual([
+      ['2026-07-05', fi(30000), 'saldada ✓'],
+      ['2026-07-06', fi(20000), 'saldada ✓'],
+      ['2026-07-07', fi(20000), `parcial · queda ${fi(10000)}`],
+    ])
+    expect(reenvio.lineas).toEqual(original.lineas.slice(0, 3))
+    expect(t).toContain(`Total: ${fi(70000)}`)
+  })
+  it('título con la fecha CR de la aplicación y la línea fija del pie', () => {
+    expect(reenvio.tituloTexto).toBe('Crédito aplicado el 2026-07-10')
+    expect(reenvio.pie).toEqual(['Crédito usado: TRF-PRUEBA', PIE_SALDO_HOY])
+    expect(PIE_SALDO_HOY).toBe('Para el saldo pendiente de hoy, consulte con nosotros.')
+  })
+  it('NO muestra «Queda por pagar» ni facturas «sin cubrir» (el original sí)', () => {
+    expect(comprobanteTexto(original)).toContain('Queda por pagar')
+    expect(comprobanteTexto(original)).toContain('sin cubrir')
+    expect(t).not.toMatch(/queda por pagar/i)
+    expect(t).not.toMatch(/sin cubrir/i)
+    expect(t).not.toContain('Factura D')
   })
 })
 
@@ -152,10 +218,22 @@ describe('pago normal — mismas cifras que antes', () => {
     expect(d.totalTexto).toBe(fi(20000))
     expect(d.lineas[0].subnotaTexto).toBe(`facturado ${fi(30000)} − crédito ${fi(10000)} = pagado ${fi(20000)}`)
   })
-  it('reenvío de una factura que el crédito cubrió entera: dice ₡0 (no queda vacío)', () => {
+  // Punto 5 (verificador): saldada SOLO con crédito no es «Comprobante de pago … ₡0» ni «TOTAL A PAGAR».
+  it('reenvío de una factura que el crédito cubrió entera: «Saldada con crédito a favor», sin ₡0 ni TOTAL A PAGAR', () => {
     const m = mov({ id: 'f1', amount_crc: 30000 })
     const d = comprobanteFacturaPagada(m, '2026-07-05', 'P', [app({ applied_to_movement_id: 'f1', amount_applied: 30000 })])
-    expect([d.lineas[0].monto, d.totalTexto, d.totalPNG]).toEqual([fi(0), fi(0), fi(0)])
+    expect(SALDADA_CON_CREDITO).toBe('Saldada con crédito a favor')
+    expect([d.tituloTexto, d.tituloPNG, d.totalLabel]).toEqual([SALDADA_CON_CREDITO, SALDADA_CON_CREDITO, 'SALDADA CON CRÉDITO A FAVOR'])
+    expect([d.lineas[0].monto, d.totalPNG, d.lineas[0].subnotaPNG]).toEqual([fi(30000), fi(30000), `facturado ${fi(30000)} − crédito ${fi(30000)}`])
+    const t = comprobanteTexto(d)
+    expect(t).toContain(`Saldada con crédito a favor: ${fi(30000)}`)
+    expect(t).not.toContain('Comprobante de pago')
+    expect(t).not.toContain(fi(0))
+    expect(t).not.toMatch(/total a pagar/i)
+  })
+  it('una factura de ₡0 sin crédito sigue siendo comprobante de pago y dice ₡0 (no queda vacío)', () => {
+    const d = comprobanteFacturaPagada(mov({ id: 'z', amount_crc: 0 }), '2026-07-05', 'P', [])
+    expect([d.tituloTexto, d.lineas[0].monto, d.totalTexto, d.totalLabel]).toEqual(['Comprobante de pago', fi(0), fi(0), undefined])
   })
 })
 
@@ -165,7 +243,10 @@ describe('textos y fechas', () => {
   })
   it('los textos que lee el proveedor no tutean ni vosean', () => {
     const liq = armarLiquidacion({ facturas: [{ id: 'a', fecha: '2026-07-05', desc: 'x', residualPrevio: 100, usd: 0 }], aplicado: {}, creditoRef: 'R', saldoCreditoPrevio: 10 })
+    const reenvio = liquidacionDeCredito(credito(), [app({ applied_to_movement_id: 'm', amount_applied: 10 })], [mov({})])!
     const t = comprobanteTexto(comprobanteLiquidacion(liq, 'P')) + comprobanteTexto(comprobantePago('P', false, [{ fecha: '', ref: '', crc: 1, usd: 0, aplicado: 0, residual: 1 }]))
+      + comprobanteTexto(comprobanteReenvioCredito(reenvio, 'P'))
+      + comprobanteTexto(comprobanteFacturaPagada(mov({}), '', 'P', [app({ applied_to_movement_id: 'm', amount_applied: 30000 })]))
     expect(t).not.toMatch(/\b(vos|tu|tus|tenés|tienes|podés|puedes|revisá|revisa)\b/i)
   })
 })

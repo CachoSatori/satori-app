@@ -15,6 +15,7 @@ const db = vi.hoisted(() => ({
   credits: [] as SupplierCredit[],
   sups: [] as Supplier[],
   lecturas: 0,
+  freno: null as Promise<void> | null,   // si está, la lectura de movimientos espera a que se suelte (refresco en curso)
 }))
 const copia = <T,>(xs: T[]): T[] => xs.map(x => ({ ...x }))
 // Las lecturas tardan como la red de verdad: con promesas instantáneas React junta «cargando» y «listo» en un solo
@@ -28,7 +29,7 @@ vi.mock('../../shared/api/jornadasConVentas', () => ({ getJornadasConVentas: asy
 vi.mock('../../shared/api/cash', () => ({
   getOpenCashSession: async () => null,
   getCashSessions: async () => [],
-  getAllCashMovements: async () => { await red(); db.lecturas++; return copia(db.movs) },
+  getAllCashMovements: async () => { await red(); if (db.freno) await db.freno; db.lecturas++; return copia(db.movs) },
   getSuppliers: async () => copia(db.sups),
   getSupplierCredits: async () => copia(db.credits),
   getCreditApplications: async () => copia(db.apps),
@@ -82,7 +83,7 @@ async function aplicarCredito() {
 
 beforeEach(() => {
   cleanup()
-  db.movs = []; db.apps = []; db.credits = []; db.sups = [sup]; db.lecturas = 0
+  db.movs = []; db.apps = []; db.credits = []; db.sups = [sup]; db.lecturas = 0; db.freno = null
 })
 
 describe('CashModule real — el comprobante no se pierde con el refresco', () => {
@@ -132,5 +133,26 @@ describe('CashModule real — el comprobante no se pierde con el refresco', () =
     expect(within(modal).getByText(/Total pagado/).textContent).toContain(fi(30000))
     fireEvent.click(modal.parentElement as HTMLElement)          // afuera: no cierra
     expect(screen.getByText(/Comprobante de pago ·/)).toBeTruthy()
+  })
+
+  // Punto 4 (verificador): mientras corre el refresco silencioso la lista es VIEJA (la factura recién pagada sigue ahí):
+  // pagar, rechazar y aplicar crédito quedan deshabilitados hasta que llegan los datos nuevos.
+  it('durante el refresco silencioso tras pagar, los botones de pagar están deshabilitados; al terminar, vuelven', async () => {
+    db.movs = [fac('f1', 30000, 5), fac('f2', 20000, 6)]
+    montar()
+    const primero = (await screen.findAllByRole('button', { name: /✓ Pagado/ }))[0]
+    let soltar = () => {}
+    db.freno = new Promise<void>(r => { soltar = r })
+    fireEvent.click(primero)
+    await screen.findByText(/Comprobante de pago ·/)
+    // Lista todavía vieja: f1 (ya pagada) sigue en pantalla.
+    expect(screen.getByText(/2 facturas · 1 proveedor/)).toBeTruthy()
+    const pagar = [...screen.getAllByRole('button', { name: /✓ Pagado/ }), screen.getByRole('button', { name: /Marcar todos pagados/ })]
+    pagar.forEach(b => expect((b as HTMLButtonElement).disabled).toBe(true))
+    screen.getAllByRole('button', { name: /Rechazar/ }).forEach(b => expect((b as HTMLButtonElement).disabled).toBe(true))
+    db.freno = null; soltar()
+    await screen.findByText(/1 factura · 1 proveedor/)
+    expect((screen.getByRole('button', { name: /✓ Pagado/ }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: /Marcar todos pagados/ }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

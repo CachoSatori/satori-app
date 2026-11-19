@@ -30,6 +30,7 @@ export interface ComprobanteData {
   totalTexto: string      // WhatsApp: "Total: {totalTexto}"
   totalPNG: string        // Canvas: el texto grande del total (puede diferir del de texto en el espaciado del $)
   totalLabel?: string     // Canvas: etiqueta del total (default "TOTAL A PAGAR")
+  totalLabelTexto?: string // WhatsApp: etiqueta del total (default "Total")
   pie?: string[]          // líneas extra al pie (ambos medios): p.ej. crédito usado / saldo restante
 }
 
@@ -40,7 +41,7 @@ export function comprobanteTexto(d: ComprobanteData): string {
     return l.subnotaTexto ? `${base}\n    (${l.subnotaTexto})` : base
   }).join('\n')
   const pie = d.pie?.length ? `\n\n${d.pie.join('\n')}` : ''
-  return `*Satori Sushi Bar* — ${d.tituloTexto}\n${d.proveedor}\n\n${lineas}\n\nTotal: ${d.totalTexto}${pie}`
+  return `*Satori Sushi Bar* — ${d.tituloTexto}\n${d.proveedor}\n\n${lineas}\n\n${d.totalLabelTexto ?? 'Total'}: ${d.totalTexto}${pie}`
 }
 
 /** Comprobante como imagen PNG (Canvas). Requiere DOM (browser). Resuelve null si no hay líneas

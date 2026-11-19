@@ -30,6 +30,7 @@ export interface ComprobanteData {
   totalTexto: string      // WhatsApp: "Total: {totalTexto}"
   totalPNG: string        // Canvas: el texto grande del total (puede diferir del de texto en el espaciado del $)
   totalLabel?: string     // Canvas: etiqueta del total (default "TOTAL A PAGAR")
+  totalLabelTexto?: string // WhatsApp: etiqueta del total (default "Total")
   pie?: string[]          // líneas extra al pie (ambos medios): p.ej. crédito usado / saldo restante
 }
 
@@ -40,7 +41,7 @@ export function comprobanteTexto(d: ComprobanteData): string {
     return l.subnotaTexto ? `${base}\n    (${l.subnotaTexto})` : base
   }).join('\n')
   const pie = d.pie?.length ? `\n\n${d.pie.join('\n')}` : ''
-  return `*Satori Sushi Bar* — ${d.tituloTexto}\n${d.proveedor}\n\n${lineas}\n\nTotal: ${d.totalTexto}${pie}`
+  return `*Satori Sushi Bar* — ${d.tituloTexto}\n${d.proveedor}\n\n${lineas}\n\n${d.totalLabelTexto ?? 'Total'}: ${d.totalTexto}${pie}`
 }
 
 /** Comprobante como imagen PNG (Canvas). Requiere DOM (browser). Resuelve null si no hay líneas
@@ -71,7 +72,7 @@ export function comprobantePNGBlob(d: ComprobanteData): Promise<Blob | null> {
   ctx.font = 'bold 24px Arial'; ctx.fillStyle = '#0d0d0d'
   ctx.fillText(d.proveedor, padX, 124)
   ctx.font = '13px Arial'; ctx.fillStyle = '#8a8070'
-  ctx.fillText(`Emitido: ${new Date().toLocaleDateString('es-CR')}   ·   ${sumCount} factura(s)`, padX, 148)
+  ctx.fillText(`Emitido: ${fechaEmisionCR()}   ·   ${sumCount} factura(s)`, padX, 148)
 
   // header tabla
   let y = headerH - 16
@@ -119,6 +120,11 @@ export function comprobantePNGBlob(d: ComprobanteData): Promise<Blob | null> {
   ctx.fillText('Documento generado automáticamente · Satori · Santa Teresa, CR', padX, H - 24)
 
   return new Promise(resolve => c.toBlob(blob => resolve(blob), 'image/png'))
+}
+
+/** Fecha de emisión del PNG en hora de Costa Rica (mismo formato «d/m/aaaa» de antes, sin depender de la zona del aparato). */
+export function fechaEmisionCR(ahora: Date = new Date()): string {
+  return new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica' }).format(ahora)
 }
 
 /** Nombre de archivo del PNG (compartido por descarga y share). */

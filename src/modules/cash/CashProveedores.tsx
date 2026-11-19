@@ -329,7 +329,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                                     ? <span style={{ color: 'var(--c-teal)' }}>📧 Comprobante enviado · {pmt.proveedor_notificado_at.slice(0, 10)}</span>
                                     : <span style={{ color: 'var(--c-oro-texto)' }}>📧 No enviado</span>}
                                   <button
-                                    onClick={async () => { await sendPagoProveedorEmail(pmt.id); onRefresh() }}
+                                    onClick={async () => { await sendPagoProveedorEmail([pmt.id]); onRefresh() }}
                                     style={{ background: 'none', border: 'none', color: 'var(--c-teal)', cursor: 'pointer', fontSize: '0.62rem', padding: 0, textDecoration: 'underline' }}>
                                     {pmt.proveedor_notificado_at ? 'Reenviar' : 'Enviar comprobante'}
                                   </button>

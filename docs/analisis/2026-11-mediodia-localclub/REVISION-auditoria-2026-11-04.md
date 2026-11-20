@@ -1,5 +1,7 @@
 # Revisión independiente del análisis — 04-nov-2026
 
+> Nota: datos movidos fuera del repo (privacidad, 20-nov); se regeneran con las queries de scripts/ o se piden al dueño.
+
 Revisión hecha por un agente aparte que no participó del análisis.
 
 **Qué hizo:**

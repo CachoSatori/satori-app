@@ -5,10 +5,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { buildHtml, tipoCambio, tituloFecha, UMBRAL_CUADRA } from './plantilla.ts'
+import { buildHtml, textoConSaltos, tipoCambio, tituloFecha, UMBRAL_CUADRA } from './plantilla.ts'
 import { verificarCorreo } from './correo-estandar.verificar.ts'
 import { COLOR, crc } from './correo-estandar.ts'
-import { cierreCuadraEjemplo, cierreFaltanteEjemplo } from './plantilla.ejemplo.ts'
+import { cierreCuadraEjemplo, cierreFaltanteEjemplo, cierreSinNovedadesEjemplo } from './plantilla.ejemplo.ts'
 import * as edge from './ventasPos.gen.js'
 import type { LogicaResumen, ResumenCorreo } from './resumen.ts'
 import { diaFicticio } from './pruebas.fixtures.ts'
@@ -25,10 +25,16 @@ function foto(nombre: string, html: string) {
 describe('correo del cierre: cuadra', () => {
   const html = buildHtml(cierreCuadraEjemplo)
   const texto = verificarCorreo(html, { pie: 'Satori, cierre de caja, 15 nov 26' })
-  it('cabecera, título y bajada con la conclusión', () => {
+  it('cabecera; sin el título ni la bajada que repetían la diferencia (v18)', () => {
     expect(texto).toContain('Satori Cierre de caja 15 nov 26')
-    expect(texto).toContain('15 de noviembre')
-    expect(texto).toContain('La caja cuadra, sin diferencia. Cerró Ana Prueba, con tipo de cambio ₡505,20.')
+    expect(html).not.toContain('<h1')
+    expect(texto).not.toContain('15 de noviembre')
+    expect(texto).not.toContain('La caja cuadra')
+  })
+  it('Diferencia: «Cuadra» y, en gris abajo, quién cerró y el tipo de cambio', () => {
+    expect(texto).toContain('Diferencia Cuadra sin diferencia Cerró Ana Prueba, tipo de cambio ₡505,20')
+    expect(html).toContain(`<br><span style="color:${COLOR.gris}">Cerró Ana Prueba, tipo de cambio ₡505,20</span>`)
+    expect(buildHtml({ ...cierreCuadraEjemplo, manager: '  ' })).toContain('>Tipo de cambio ₡505,20<')
   })
   it('mismas cifras que el correo anterior', () => {
     for (const s of ['₡812.400', '$145,00', '₡2.315.900', '$380,50', '−₡337.500', '₡650.000', '$200,00', '₡100.000',
@@ -36,11 +42,25 @@ describe('correo del cierre: cuadra', () => {
     expect(html).toContain(`color:${COLOR.musgo}">Cuadra`)
     expect(html).not.toContain(COLOR.laca)
   })
-  it('notas, escapadas', () => {
-    expect(texto).toContain('Se cambió el rollo de la impresora de la barra.')
+  it('Resumen del día: tal cual, con sus saltos de línea, y escapado', () => {
+    expect(texto).toContain('Resumen del día Queja: una mesa de la terraza esperó mucho el segundo plato. 86: gyozas desde las 21:00. Mantenimiento: se cambió el rollo de la impresora de la barra.')
+    expect(html).toContain('segundo plato.<br>86: gyozas desde las 21:00.<br>Mantenimiento:')
     const h = buildHtml({ ...cierreCuadraEjemplo, notas: '<script>x</script>', manager: '<b>x</b>' })
     expect(h).not.toContain('<script>')
     expect(h).not.toContain('<b>x')
+    expect(textoConSaltos('a\r\nb\rc\nd & e')).toBe('a<br>b<br>c<br>d &amp; e')
+  })
+  it('sin la sección «Notas» del final (ahora es el Resumen del día)', () => {
+    expect(html).not.toMatch(/>Notas</)
+  })
+  it('«Sin novedades» también se muestra', () => {
+    expect(verificarCorreo(buildHtml(cierreSinNovedadesEjemplo), { pie: 'Satori, cierre de caja, 15 nov 26' }))
+      .toContain('Resumen del día Sin novedades Diferencia')
+  })
+  it('notas vacías o en blanco (cierres viejos) → no hay sección', () => {
+    for (const notas of [null, '', '  \n ']) {
+      expect(buildHtml({ ...cierreCuadraEjemplo, notas })).not.toContain('Resumen del día')
+    }
   })
   it('vista previa al día', () => foto('cierre-email.html', html))
 })
@@ -48,16 +68,18 @@ describe('correo del cierre: cuadra', () => {
 describe('correo del cierre: con diferencia', () => {
   const html = buildHtml(cierreFaltanteEjemplo)
   const texto = verificarCorreo(html, { pie: 'Satori, cierre de caja, 15 nov 26' })
-  it('faltante en laca, con monto y motivo', () => {
-    expect(texto).toContain('Faltante de ₡12.500: Vuelto de una mesa mal contado.')
+  it('faltante en laca, con monto y motivo, y quién cerró en gris abajo', () => {
+    expect(texto).toContain('Diferencia Faltante −₡12.500 Vuelto de una mesa mal contado Cerró Ana Prueba, tipo de cambio ₡505,20')
     expect(html).toContain(`color:${COLOR.laca}">Faltante`)
-    expect(texto).toContain('−₡12.500')
     expect(texto).not.toContain('Notas')
+    expect(texto).not.toContain('Resumen del día')   // cierre viejo sin notas
   })
   it('umbral de «cuadra» igual que antes: |diferencia| < ₡500', () => {
     expect(UMBRAL_CUADRA).toBe(500)
-    expect(buildHtml({ ...cierreCuadraEjemplo, diferencia_crc: -499 })).toContain('La caja cuadra')
-    expect(buildHtml({ ...cierreCuadraEjemplo, diferencia_crc: 500 })).toContain('Sobrante de ₡500.')
+    expect(buildHtml({ ...cierreCuadraEjemplo, diferencia_crc: -499 })).toContain(`color:${COLOR.musgo}">Cuadra`)
+    const h = buildHtml({ ...cierreCuadraEjemplo, diferencia_crc: 500 })
+    expect(h).toContain(`color:${COLOR.laca}">Sobrante`)
+    expect(h).toContain('+₡500')
   })
   it('vista previa al día', () => foto('cierre-email-faltante.html', html))
 })
@@ -108,6 +130,17 @@ describe('correo del cierre: ventas del día', () => {
     expect(texto).toContain('Fuera del promedio: 1 mesa de dueños.')
     expect(texto).toContain('al menos 3 mesas y 6 personas')
     expect(texto).toContain('Beb/PAX')
+  })
+  it('orden v18: Resumen → Diferencia → Ventas → Salonero → Caja del día → Conteo → pie', () => {
+    const orden = ['Resumen del día', 'Diferencia', 'Ventas del día', 'Salonero destacado', 'Caja del día',
+      'Distribución del conteo físico', 'Satori, cierre de caja, 15 nov 26']
+    // El pie se busca desde el final (el mismo texto está en el <title> del documento).
+    const pos = orden.map((s, i) => (i === orden.length - 1 ? texto.lastIndexOf(s) : texto.indexOf(s)))
+    for (const p of pos) expect(p).toBeGreaterThan(-1)
+    expect([...pos].sort((a, b) => a - b)).toEqual(pos)
+    // Las cifras grandes van después del salonero destacado, no arriba.
+    expect(texto.indexOf('ventas mediodía')).toBeGreaterThan(texto.indexOf('Salonero destacado'))
+    expect(texto.indexOf('total contado')).toBeLessThan(texto.indexOf('Distribución del conteo físico'))
   })
   it('vista previa al día (muestra para el dueño)', () => foto('cierre-email-ventas.html', html))
   it('sin resumen (undefined) → el correo de antes, sin sección', () => {

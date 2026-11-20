@@ -5,22 +5,22 @@
 > ventas, qué hay en prod y en staging, pendientes de estabilización, seguridad abierta y notas. Más viejo: [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-11-19 (~08:30 -06:00).** `main` = `1abcc825`. **Ledger de prod = 194. Staging = 191** (190 y 191 aplicadas el 19-nov, md5 de funciones = prod; la 189 se OMITE a propósito: agenda un cron con la URL de prod; 192–194 pendientes, las corre la CC de la Mac del dueño). Cron jobid 10 `satori-ventas-dia-contador` (1 y 16; primer envío 1-dic). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-19.md](docs/handoffs/HANDOFF-2026-11-19.md).
-- **Entró hoy (19-nov):** #264 · #257 (R23, R24) · #299 (`scripts/ci/gate.sh` único; trailer `Verificado:` = línea GATE) · #301 (guardas de CI: R04, R14, sagrados por hash leídos de este archivo, R16 con `ultimo_ledger_prod` = 194) · #300 (comprobantes de proveedores).
-- **Protección de `main` (19-nov 08:34):** «Gate» requerido · rama al día (`strict=true`) · sin excepción para admins (`enforce_admins=true`). Las sesiones en la nube no pueden cambiarla (403 del proxy): se cambia en GitHub → Settings → Branches. A prueba hasta el 3-dic.
-- **Edge de prod (sin cambios):** `ventas-dia-contador` v5 · `cierre-email` v17 · `pago-notificar` v15 · `monthly-report` v24 · `club-pase` v7 · `ingest-ndf` v13 · `extract-document` v20 · `alta-empleado` v12. Agente PoS `agente-fe` @ `07782e49`.
-- **Cerrados hoy:** #276, #231, #246, #232, #60. **Abiertos:** lista en el handoff (esperan ítem 11, rama del agente, por revisar, #252 con firma).
-- **Validado por el dueño:** correo de cierre del 18-nov (bien; pidió resumirlo) y Club 186–188. **#300 VALIDADO (19-nov, comprobante post-pago con 2 facturas).** **Pendiente:** #229 al lanzar el Club (0 visitas de socios desde el 17-nov) · correo de pago agrupado en curso (PR #303 + `claude/pago-notificar-agrupado`; Edge con firma).
-- **Decisiones del dueño (19-nov):** Club en PAUSA hasta la Wallet · WhatsApp automático a proveedores: spec en curso, prioridad alta (foto en la base, migración con firma) · sin alerta de latido por ahora · arnés a prueba hasta el 3-dic (detalle en el handoff).
-- **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov.
-- **Deploy:** `version.json` y `/api/salud` no se ven desde la sesión (proxy 403): verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
+**Al día: 2026-11-19 (cierre del día).** `main` = `311bca6d` (merge #304). **Ledger de prod = 194. Staging = 194** (190–194 aplicadas el 19-nov, md5 de funciones = prod; la 189 se OMITE a propósito: agenda un cron con la URL de prod). Cron jobid 10 `satori-ventas-dia-contador` (1 y 16; primer envío 1-dic). **Punto de entrada:** [docs/handoffs/HANDOFF-2026-11-19.md](docs/handoffs/HANDOFF-2026-11-19.md).
+- **Entró (19-nov):** #264 · #257 · #299 (`gate.sh` único) · #301 (guardas de CI) · #300 (comprobantes de proveedores) · #303 (correo de pago agrupado, app) · #304 (teléfonos ficticios en pruebas + guarda en `privacidadRepo`; Caja: botones grises durante el refresco; CI: Gate completo también en `edited`, R16 con renombrados, aviso al saltar guardas; R26).
+- **Protección de `main` (19-nov 08:34):** «Gate» requerido · `strict=true` · `enforce_admins=true`. Se cambia en GitHub → Settings → Branches (las sesiones en la nube reciben 403). A prueba hasta el 3-dic.
+- **Edge de prod:** `pago-notificar` **v16** (desde `claude/pago-notificar-agrupado` @ `9088687b`, firma del dueño 19-nov: correo agrupado por pago, fecha real, lo pagado si hubo crédito, total en su moneda; vuelta atrás = v15 desde `99a53281`). Sin cambios: `ventas-dia-contador` v5 · `cierre-email` v17 · `monthly-report` v24 · `club-pase` v7 · `ingest-ndf` v13 · `extract-document` v20 · `alta-empleado` v12. Agente PoS `agente-fe` @ `07782e49`.
+- **Validado por el dueño:** #300. **Pendiente:** #229 al lanzar el Club · correo de pago agrupado: prueba con su proveedor de prueba.
+- **Decisiones del dueño (19-nov):** Club en PAUSA hasta Apple (3 inscripciones de Apple Developer retiradas por «sitio con poco contenido»; revisión manual pedida por el caso de soporte; no reinscribirse hasta respuesta de una persona) · WhatsApp automático de comprobantes: línea nueva dedicada, hasta 3 números por proveedor + botón manual para grupos, verificación de negocio en Meta en curso (spec en los docs del proyecto, no en el repo) · bot de WhatsApp de delivery y reservas: idea registrada, después de F1 · sin alerta de latido · arnés a prueba hasta el 3-dic.
+- **Decisiones del dueño (20-nov, a prueba hasta el 3-dic):** los PRs SOLO de docs (.md, sin código ni checks protegidos) se mergean sin pedir OK con el Gate en verde, respetando D1 · primero en la cola: `settings.json` con deny + hooks que bloquean con exit 2 + `autoMode.environment` · poda de CLAUDE.md/ESTADO/skills a lo que no se deduce del código · spec (Fable) de conexión solo-staging para agentes, como secreto del entorno de la nube.
+- **Métricas del arnés (19-nov), rondas:** #299 1 · #300 2 · #301 2 · #303 1 (+ Edge 2) · #304 2; todas por «revision», una por «contrato» (#300).
+- **Cron:** job 4 aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov.
 
 > **Definition of Done:** ninguna entrega se cierra sin ⚡ARRANQUE al día (mismo PR o PR de docs inmediato). **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se corrige el archivo.
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `1abcc825` |
-| `staging` | sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 184 (ponerla al día: en cola) |
+| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `311bca6d` |
+| `staging` | rama sin cambios desde el 13/11 (`4726b7f`); su base está en ledger 194 |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
 | Gate | `bash scripts/ci/gate.sh` (único; mismo en CI y local) |
@@ -41,7 +41,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 
 ## 🛑 Reglas operativas (leer antes de tocar `main` o una base)
 1. **Branching corre `migrate` contra PROD en cada push a `main`** Desde la 085 las migraciones entran **por merge → Branching**. «A mano antes del merge» es histórico: solo con firma del dueño y verificando antes el ref.
-2. **Ningún PR a `main` con archivos bajo `supabase/functions/` hasta cerrar el ítem 11** (versionar `ingest-ndf` con `config.toml`): sin `config.toml`, Branching despliega con `verify_jwt=true` y el agente del PoS (solo `x-ingest-secret`) recibe 401. El código de `main` está atrasado y pisaría prod: `monthly-report` (anterior a SEC-02), `extract-document` (prod = `8a8dfb6`, rama `claude/busy-brown-ssjq4e`; el de `main` deja la Bandeja vacía con `claude-sonnet-5-5`), `ingest-ndf` y `alta-empleado` (ramas aparte). `club-pase` entra con **`verify_jwt = false`** (el portón es `x-club-web`); hasta el ítem 11 se despliega a mano desde `claude/club-pase-edge`.
+2. **Ningún PR a `main` con archivos bajo `supabase/functions/` hasta cerrar el ítem 11** (versionar `ingest-ndf` con `config.toml`): sin él, Branching despliega con `verify_jwt=true` y el agente del PoS recibe 401; además el código de `main` está atrasado y pisaría prod (`monthly-report`, `extract-document`, `ingest-ndf`, `alta-empleado`). `club-pase` entra con `verify_jwt = false`; hasta el ítem 11 se despliega a mano desde `claude/club-pase-edge`.
 3. **Merges D1 (13/11):** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK explícito del dueño en el momento. Una sola sesión de CC mergea a la vez, solo sus PRs.
 4. **«Ver como» usa los permisos del owner:** probar permisos con un usuario real del rol o su JWT en `begin read only` … `rollback`.
 5. **ICP = propina electrónica declarada (voluntaria: tarjeta/SINPE) / neta de sus mesas.** El 10 % de servicio no entra al numerador ni al denominador; `payout_crc` no es ICP; barra: «no aplica».
@@ -51,7 +51,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 9. **Un deploy se verifica por contenido, no por HTTP 200** (el fallback del SPA devuelve `index.html` a cualquier ruta).
 10. **Nunca revertir ni borrar el `.sql` de una migración que está en el ledger de prod** (si no, Branching falla en cada push; pasó con la 074). Si se revierte el código, el archivo se queda.
 11. **La fecha del movimiento de caja es el día en que se registró (el turno), nunca la de la factura** (14/11). La de factura va a la descripción («· fact AAAA-MM-DD») y se analiza con `src/shared/utils/fechaFactura.ts` (clave FE manda; sin clave, la única lectura día/mes posible; si hay dos, la pantalla pregunta; más de 7 días avisa, no bloquea).
-12. **Bitácora de permisos (165) caída = no se cambian roles ni activaciones** (fail closed, 14/11). Si hay que cortar un acceso igual: (1) ban o cambio de clave en Supabase Auth; (2) si además hay que desactivar, soporte, como dueño de la tabla y en UNA transacción: `alter table public.profiles disable trigger trg_profiles_bitacora_permisos;` → `update public.profiles set is_active = false where id = '<UUID>';` → `alter table public.profiles enable trigger trg_profiles_bitacora_permisos;`; (3) anotarlo a mano con `origen = 'manual'` y la hora real cuando vuelva.  Guía 6.6.
+12. **Bitácora de permisos (165) caída = no se cambian roles ni activaciones** (fail closed, 14/11). Si hay que cortar un acceso igual: ban o cambio de clave en Supabase Auth; si además hay que desactivar, ver la guía 6.6 (soporte, una transacción con el trigger `trg_profiles_bitacora_permisos` deshabilitado y vuelto a habilitar) y anotarlo a mano con `origen = 'manual'`.
 13. **Turno de prod (18/11):** una sola sesión toca prod o `main` a la vez. Un prompt de CC que toca prod empieza con «TURNO DE PROD: esta sesión de CC».
 14. **Staging, conector (18/11):** si el conector cancela una confirmación (`drop`, `delete`), NO se reescribe el SQL para esquivarla. La batería la corre la sesión de CC del dueño (Management API, ref de staging fijo, ROLLBACK).
 
@@ -65,14 +65,14 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 | `monthly-report` | v24 · on (desde `50831a8e`, #245+#241, + remitente propio 18-nov) | v9 · on |
 | `extract-document` | v20 · on (código desde `8a8dfb6`, rama `claude/busy-brown-ssjq4e`, modelo `claude-sonnet-5-5`) | v29 desde `190b5f5` |
 | `cierre-email` | v17 · on (v16 desde `f8b6c2a6`, rama de #283, + remitente propio) | v15 · on |
-| `pago-notificar` | v15 · on (desde `588c5593`, #243, + remitente propio) | — |
+| `pago-notificar` | v16 · on (desde `9088687b`, rama `claude/pago-notificar-agrupado`; v15 = `99a53281`) | — |
 | `ventas-dia-contador` | v5 · on (v4 desde `060b539`, rama de #281) | — |
 | `ingest-ndf` | v13 · off (código v3 del 09/11 desde `5da233a`; vive en `claude/puente-item11-prod-v2`) | v21 · off |
 | `ingest-punches` | — | v13 · off |
 | `alta-empleado` | v12 · on (rama `claude/alta-empleado-fn`) | v8 · on |
 | `club-pase` | v7 · off (rama `claude/club-pase-edge` @ `6c5848e`) | v1 · off (`WALLET_ENTORNO` = `stg`) |
 
-- **Cloudflare:** Pages `satori-club` y Worker `satori-club-api` (Workers Builds desde `main`; secretos a mano; `/api/salud`). **Cron del Club:** jobid 8.
+- **Cloudflare:** Pages `satori-club` y Worker `satori-club-api` (Workers Builds desde `main`). **Cron del Club:** jobid 8.
 - **Agentes del PoS:** «Satori PoS Bridge» (staging, @ `14bd278`) y «… PROD» (`agente-fe` @ `07782e49` desde el 18/11, cuenta SYSTEM). `biotime-bridge` publica solo a staging (`ingest-punches`).
 - **Ventas = solo PoS** (firmado 16/11): ninguna pantalla lee `ventas_dias`; `ventas_hist` solo antes del 2024-01-05. Guarda: `src/ventasSoloPos.test.ts`.
 
@@ -88,7 +88,7 @@ Docs: [ROADMAP.md](ROADMAP.md) · backlog [PROMPT-CONTINUACION.md](PROMPT-CONTIN
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199 (nunca a uno de creación), en el mismo PR (archivo, rollback, pruebas, scripts, fila del ledger de staging), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
 
-**Ledger de prod: 194** (150–194 por merge → Branching, 11/11–18/11; PASE de cada una en `docs/pases/`). Staging: 191 (189 se omite; 192–194 sin aplicar); le faltan las filas viejas 065 y 066.
+**Ledger de prod: 194** (150–194 por merge → Branching, 11/11–18/11; PASE de cada una en `docs/pases/`). Staging: 194 (189 se omite); le faltan las filas viejas 065 y 066.
 
 | Número | Detalle (nombre en el registro JSON; `←` origen, `→` renumerada) |
 |---|---|

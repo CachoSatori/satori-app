@@ -12,4 +12,6 @@ supabase/.temp/
 __pycache__/
 *.pyc
 .claude/settings.local.json
+# Marcas de habilitación (ya las cubre *.local; explícito por si alguien lo toca). Control: scripts/ci/marcas-versionadas.test.ts
+.claude/*.local
 docs/analisis/**/datos/

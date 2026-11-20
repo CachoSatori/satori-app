@@ -3,7 +3,7 @@
 // ╚══════════════════════════════════════════════════════════════════════════════════════╝
 // Patrón de seguridad = extract-document / cierre-email (post-IDOR): EXIGE el JWT del usuario,
 // NO usa service_role, RELEE movimiento+proveedor server-side con el token del usuario (el RLS es el
-// portón) y ARMA el email server-side — el cliente NO manda contenido libre, solo el id del movimiento.
+// portón) y ARMA el email server-side — el cliente NO manda contenido libre, solo los ids de los movimientos.
 // Decide server-side: envía SOLO si el proveedor tiene notificar_pago='email' + email cargado.
 // Fire-and-forget desde la app: si algo falla, el pago YA quedó pagado y `proveedor_notificado_at`
 // queda NULL (→ la UI ofrece reintento). LA PLATA MANDA.
@@ -13,11 +13,13 @@
 // Requiere el secret RESEND_API_KEY. Si falta → no-op 200 ("no enviado"), no rompe nada.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { asunto, buildHtml } from './plantilla.ts'
+import { armarPago, idsDelCuerpo, validarLote, type AplicacionCredito, type EdicionMovimiento, type MovimientoPago } from './pago.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY       = Deno.env.get('SUPABASE_ANON_KEY')!
-const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
+const FROM_EMAIL     = 'Satori <no-responder@satoricostarica.com>'
 
 const ALLOWED_ORIGINS = new Set([
   'https://cachosatori.github.io',    // prod — GitHub Pages (base /satori-app/)
@@ -35,17 +37,6 @@ function corsHeaders(req: Request): Record<string, string> {
   return headers
 }
 
-interface MovementRow {
-  id: string
-  supplier_id: string | null
-  supplier_name: string | null
-  amount_crc: number
-  amount_usd: number | null
-  method: string | null
-  description: string
-  created_at: string
-  status: string
-}
 interface SupplierRow {
   id: string
   name: string
@@ -53,34 +44,7 @@ interface SupplierRow {
   notificar_pago: string | null
 }
 
-const crc = (n: number) => '₡' + Math.round(n).toLocaleString('es-CR')
-const usd = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fechaCR = (iso: string) =>
-  new Date(iso).toLocaleDateString('es-CR', { timeZone: 'America/Costa_Rica', day: '2-digit', month: 'long', year: 'numeric' })
-const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
-
-function buildHtml(m: MovementRow, s: SupplierRow): string {
-  const usdRow = (m.amount_usd && m.amount_usd > 0)
-    ? `<tr><td style="padding:5px 0;color:#666">Monto (USD)</td><td style="padding:5px 0;text-align:right;font-weight:600">${usd(m.amount_usd)}</td></tr>`
-    : ''
-  return `<!doctype html><html><body style="margin:0;background:#faf9f5;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a">
-    <div style="max-width:520px;margin:0 auto;padding:24px">
-      <div style="font-size:20px;font-weight:700;letter-spacing:.5px">Satori Sushi Bar</div>
-      <div style="color:#888;font-size:13px;margin-bottom:16px">Comprobante de pago a proveedor</div>
-      <div style="background:#fff;border:1px solid #eee;border-radius:12px;padding:18px">
-        <div style="font-size:15px;font-weight:600;margin-bottom:10px">${esc(s.name)}</div>
-        <table style="width:100%;font-size:14px;border-collapse:collapse">
-          <tr><td style="padding:5px 0;color:#666">Fecha</td><td style="padding:5px 0;text-align:right">${fechaCR(m.created_at)}</td></tr>
-          <tr><td style="padding:5px 0;color:#666">Monto (CRC)</td><td style="padding:5px 0;text-align:right;font-weight:600">${crc(m.amount_crc)}</td></tr>
-          ${usdRow}
-          <tr><td style="padding:5px 0;color:#666">Método</td><td style="padding:5px 0;text-align:right">${esc(m.method ?? 'Transferencia')}</td></tr>
-          <tr><td style="padding:5px 0;color:#666">Detalle</td><td style="padding:5px 0;text-align:right">${esc(m.description ?? '')}</td></tr>
-        </table>
-      </div>
-      <div style="color:#aaa;font-size:11px;margin-top:16px">Aviso automático de Satori. No respondas a este correo.</div>
-    </div></body></html>`
-}
+// Plantilla del correo (estándar de reportes Satori adaptado a correo): ./plantilla.ts · armado puro: ./pago.ts
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -93,8 +57,11 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) return json({ ok: false, error: 'No autorizado' }, 401)
 
-    const { movimiento_id } = await req.json().catch(() => ({}))
-    if (!movimiento_id) return json({ ok: false, error: 'Falta movimiento_id' }, 400)
+    // (19-nov) `{ movimiento_ids: uuid[] }` = UN correo con todas las facturas del pago. Sigue aceptando
+    // `{ movimiento_id }` (la app anterior, durante el pase) como lista de 1.
+    const leidos = idsDelCuerpo(await req.json().catch(() => ({})))
+    if ('error' in leidos) return json({ ok: false, error: leidos.error }, 400)
+    const ids = leidos.ids
 
     // 2) Cliente con el token del usuario → aplica RLS (NO service_role).
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
@@ -107,22 +74,26 @@ Deno.serve(async (req) => {
 
     if (!RESEND_API_KEY) return json({ ok: false, error: 'RESEND_API_KEY no configurada' }, 200)
 
-    // 4) Releer el movimiento CON el cliente del usuario (RLS = portón, cierra el IDOR).
-    const { data: mov, error: mErr } = await userClient
+    // 4) Releer los movimientos CON el cliente del usuario (RLS = portón, cierra el IDOR): tienen que estar todos,
+    //    ser del MISMO proveedor y estar pagados ('aprobado'). Si no, no se manda nada.
+    const { data: movs, error: mErr } = await userClient
       .from('cash_movements')
-      .select('id, supplier_id, supplier_name, amount_crc, amount_usd, method, description, created_at, status')
-      .eq('id', movimiento_id)
-      .maybeSingle()
+      .select('id, supplier_id, amount_crc, amount_usd, method, description, subcategory, created_at, status, session_id')
+      .in('id', ids)
     if (mErr) return json({ ok: false, error: 'Sin acceso al movimiento' }, 403)
-    if (!mov) return json({ ok: false, error: 'Movimiento no encontrado' }, 404)
-    const m = mov as unknown as MovementRow
-    if (!m.supplier_id) return json({ ok: false, skipped: 'movimiento sin proveedor' }, 200)
+    const lote = (movs ?? []) as unknown as MovimientoPago[]
+    const valido = validarLote(ids, lote)
+    if (!valido.ok) {
+      if (valido.error === 'Movimiento sin proveedor') return json({ ok: false, skipped: 'movimiento sin proveedor' }, 200)
+      // 409: `pendientes` = ids que todavía no están pagados (cola offline) → la app puede reintentar después.
+      return json({ ok: false, error: valido.error, ...(valido.pendientes ? { pendientes: valido.pendientes } : {}) }, valido.status)
+    }
 
     // 5) Releer el proveedor. Decisión server-side: SOLO si notificar_pago='email' + email cargado.
     const { data: sup, error: sErr } = await userClient
       .from('suppliers')
       .select('id, name, email, notificar_pago')
-      .eq('id', m.supplier_id)
+      .eq('id', valido.supplierId)
       .maybeSingle()
     if (sErr) return json({ ok: false, error: 'Sin acceso al proveedor' }, 403)
     const s = sup as unknown as SupplierRow | null
@@ -130,23 +101,59 @@ Deno.serve(async (req) => {
       return json({ ok: false, skipped: 'proveedor sin email / notificación desactivada' }, 200)
     }
 
-    // 6) Enviar por Resend (contenido 100% armado server-side).
-    const subject = `Comprobante de pago — Satori (${fechaCR(m.created_at)})`
+    // 6) Crédito a favor aplicado (no reversado). Sin poder leerlo NO se manda: mostraría lo facturado como pagado.
+    const { data: apps, error: aErr } = await userClient
+      .from('credit_applications')
+      .select('applied_to_movement_id, amount_applied, reversed')
+      .in('applied_to_movement_id', ids)
+      .eq('reversed', false)
+    if (aErr) return json({ ok: false, error: 'Sin acceso a los créditos aplicados' }, 403)
+
+    // 7) Fecha del pago: la auditoría de ediciones (052) guarda el cambio a 'aprobado'. Su RLS la deja ver a
+    //    owner/manager/contador; para otro rol (o un pago que nació pagado) vuelve vacía y se usa created_at del
+    //    movimiento, como la v15. Nunca el envío rotulado como pago (ver pago.ts).
+    const { data: edits } = await userClient
+      .from('movement_edits')
+      .select('movement_id, edited_at, changed')
+      .in('movement_id', ids)
+
+    // 8) Día de la factura = día de la sesión de caja (lo que ve el personal en Pendientes); si no se lee, created_at.
+    const sesiones = [...new Set(lote.map((m) => m.session_id).filter((x): x is string => !!x))]
+    const fechaFactura: Record<string, string> = {}
+    if (sesiones.length) {
+      const { data: ses } = await userClient.from('cash_sessions').select('id, session_date').in('id', sesiones)
+      const dia = new Map(((ses ?? []) as { id: string; session_date: string | null }[]).map((x) => [x.id, x.session_date]))
+      for (const m of lote) { const d = m.session_id ? dia.get(m.session_id) : null; if (d) fechaFactura[m.id] = d }
+    }
+
+    const ahora = new Date().toISOString()
+    const pago = armarPago({
+      movs: lote,
+      aplicaciones: (apps ?? []) as unknown as AplicacionCredito[],
+      edits: (edits ?? []) as unknown as EdicionMovimiento[],
+      ahora,
+      fechaFactura,
+    })
+
+    // 9) Enviar por Resend (contenido 100% armado server-side). UN correo para todo el lote.
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM_EMAIL, to: [s.email], subject, html: buildHtml(m, s) }),
+      body: JSON.stringify({ from: FROM_EMAIL, to: [s.email], subject: asunto(pago), html: buildHtml(pago, s) }),
     })
     const d = await res.json().catch(() => ({}))
     if (!res.ok) return json({ ok: false, error: `Resend: ${JSON.stringify(d)}` }, 200)
 
-    // 7) Sellar proveedor_notificado_at (SOLO esa columna). Si esto falla, el email ya se envió;
-    //    no se revierte el pago. La columna no es sensible → no dispara la auditoría de ediciones (052).
+    // 10) Sellar proveedor_notificado_at (SOLO esa columna) en TODOS los movimientos del lote. Si esto falla, el
+    //     email ya se envió; no se revierte el pago. La columna no es sensible → no dispara la auditoría (052).
     await userClient.from('cash_movements')
-      .update({ proveedor_notificado_at: new Date().toISOString() })
-      .eq('id', m.id)
+      .update({ proveedor_notificado_at: ahora })
+      .in('id', ids)
 
-    return json({ ok: true, id: (d as { id?: string })?.id ?? null, to: s.email }, 200)
+    return json({
+      ok: true, agrupado: true, id: (d as { id?: string })?.id ?? null, to: s.email,
+      facturas: ids.length, fecha_fuente: pago.fuenteFecha,
+    }, 200)
   } catch (e) {
     return json({ ok: false, error: String(e) }, 200)
   }

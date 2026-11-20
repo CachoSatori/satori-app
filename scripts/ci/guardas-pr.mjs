@@ -1,5 +1,7 @@
 // Guardas baratas del diff de un PR contra su base (las corre scripts/ci/gate.sh, paso «guardas-pr»):
-//   R04  nada bajo supabase/functions/ ni supabase/config.toml hacia main hasta cerrar el ítem 11 (ESTADO, regla 2). Excepción: etiqueta `ok-dueno-edge`.
+//   R04  supabase/functions/ o supabase/config.toml hacia main: SOLO con supabase/config.toml presente y en regla (ítem 11:
+//        cada función con su verify_jwt, ingest-ndf y club-pase en false, sin [remotes]; ver edgeConfig.mjs). Sin config.toml,
+//        nada (ESTADO, regla 2). Excepción: etiqueta `ok-dueno-edge`.
 //   R14  nunca modificar, borrar ni renombrar un supabase/migrations/*.sql que ya existía en la base (ESTADO, regla 10),
 //        salvo una renumeración registrada con `origen` en supabase/migraciones-reservadas.json.
 // Base: GATE_BASE (gate.sh la fija en el CI de un PR a HEAD^1 de la fusión = cabeza ACTUAL de main, no el base.sha viejo del
@@ -10,6 +12,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { revisarRepo } from './edgeConfig.mjs'
 
 export const ETIQUETA_EDGE = 'ok-dueno-edge'
 
@@ -22,14 +25,19 @@ export function parsearNameStatus(salida) {
 }
 
 /** @returns {string[]} problemas (vacío = ok) */
-export function evaluar({ cambios, etiquetas, registro }) {
+export function evaluar({ cambios, etiquetas, registro, config = { existe: false, problemas: [] } }) {
   const problemas = []
   const esEdge = r => !!r && (r.startsWith('supabase/functions/') || r === 'supabase/config.toml')
   const edge = cambios.filter(c => esEdge(c.ruta) || esEdge(c.anterior))
-  if (edge.length && !etiquetas.includes(ETIQUETA_EDGE)) {
+  if (edge.length && !etiquetas.includes(ETIQUETA_EDGE) && config.existe) {
+    // Ítem 11 cerrado: con config.toml en regla, Branching despliega cada función con su verify_jwt (ESTADO, regla 2).
+    for (const p of config.problemas) {
+      problemas.push(`R04: ${p}. Cómo arreglarlo: corregí supabase/config.toml en el mismo PR (ítem 11; ESTADO, regla 2).`)
+    }
+  } else if (edge.length && !etiquetas.includes(ETIQUETA_EDGE)) {
     problemas.push(
       `R04: el PR toca supabase/functions/ o supabase/config.toml (${edge.slice(0, 5).map(c => c.ruta).join(', ')}${edge.length > 5 ? ` y ${edge.length - 5} más` : ''}). ` +
-      `Hasta cerrar el ítem 11 no entra nada ahí hacia main (ESTADO, regla 2): un despliegue de Branching desde main pisa prod con código viejo. ` +
+      `Sin supabase/config.toml (ítem 11) no entra nada ahí hacia main (ESTADO, regla 2): Branching desplegaría sin el verify_jwt de cada función. ` +
       `Cómo arreglarlo: sacá esos archivos del PR (van por la rama de Edge con el dueño); si el dueño ya lo autorizó, que ponga la etiqueta «${ETIQUETA_EDGE}» al PR.`)
   }
   const origenes = new Map() // «NNN_nombre.sql» de origen → número al que se renumeró
@@ -78,7 +86,7 @@ export function correr(env = process.env) {
   const cambios = parsearNameStatus(git(['diff', '--name-status', '-M', '--diff-filter=ADMR', `${base}...HEAD`, '--', 'supabase/functions', 'supabase/config.toml', 'supabase/migrations'], cwd))
   const etiquetas = (env.GATE_LABELS ?? '').split(/[,\n]/).map(s => s.trim()).filter(Boolean)
   const registro = JSON.parse(readFileSync(join(cwd, 'supabase/migraciones-reservadas.json'), 'utf8'))
-  const problemas = evaluar({ cambios, etiquetas, registro })
+  const problemas = evaluar({ cambios, etiquetas, registro, config: revisarRepo(cwd) })
   for (const p of problemas) console.log(`::error title=Guarda del PR::${p}`)
   if (!problemas.length) console.log(`guardas-pr: R04 y R14 ok contra ${base.slice(0, 8)} (${cambios.length} cambios en supabase/).`)
   return problemas.length ? 1 : 0

@@ -177,6 +177,7 @@ describe('Cierre del día — TC con decimales', () => {
     cambiar(montos()[1], '10')       // $10 × 503.45 = ₡5.034,50
     cambiar(montos()[7], '94966')    // remanente CF ₡
     cambiar(montos()[8], '10')       // remanente CF $
+    fireEvent.click(screen.getByRole('button', { name: 'Sin novedades' }))   // resumen del día (obligatorio, 20-nov)
     fireEvent.click(screen.getByText(/Revisar resumen y cerrar el día/))
     expect(await screen.findByText(/TC ₡503,45/)).toBeTruthy()
     fireEvent.click(await screen.findByText(/CONFIRMAR CIERRE DEL DÍA/))

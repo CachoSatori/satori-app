@@ -12,7 +12,7 @@ si no, lo dice en la descripción con el motivo. Ver [PLANTILLA](docs/sop-app/PL
 ## Skills del repo (`.claude/skills/`)
 
 `satori-estandar-pr` (todo cambio que termina en PR; fuente única de rama, gate, pruebas, privacidad, reporte) · `satori-revision-pr` ·
-`satori-migraciones-y-prod` · `satori-verificar` · `satori-merge-y-deploy` (ventana D1 en ESTADO regla 3).
+`satori-migraciones-y-prod` · `satori-verificar` · `satori-merge-y-deploy` (ventana D1 del 20-nov en ESTADO regla 3: libre 23:30–15:00 · 15:00–19:00 con OK del dueño · 19:00–23:30 solo urgente con OK).
 Si una skill y `ESTADO.md` no coinciden, gana `ESTADO.md` y se corrige la skill.
 
 ## Repo público

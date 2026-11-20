@@ -12,8 +12,8 @@
 - **Protección de `main`:** «Gate» requerido · rama al día (`strict`) · sin excepción para admins. Las sesiones en la nube no pueden cambiarla (403):
   GitHub → Settings → Branches. Arnés a prueba hasta el 3-dic.
 - **Decisiones del dueño (19–20-nov):** Club en PAUSA hasta que Apple apruebe la Wallet · sin alerta de latido por ahora · WhatsApp automático a
-  proveedores: spec en curso, prioridad alta (foto en la base, migración con firma) · **PRs solo de `.md` se mergean sin OK del dueño con Gate verde y
-  respetando D1** (a prueba hasta el 3-dic) · NO se adopta auto-merge de código · `settings.json` con deny + hooks, spec de staging para agentes y esta poda: en curso.
+  proveedores: spec en curso, prioridad alta (foto en la base, migración con firma) · **PRs solo de `.md` se mergean sin OK del dueño con Gate verde,
+  solo de 23:30 a 15:00** (a prueba hasta el 3-dic) · **D1 nueva (20-nov):** libre 23:30–15:00, 15:00–19:00 con OK, 19:00–23:30 urgente con OK · NO se adopta auto-merge de código · `settings.json` con deny + hooks, spec de staging para agentes y esta poda: en curso.
 - **Pendiente del dueño:** correo de pago agrupado (PR #303, ya en `main`) · #229 al lanzar el Club (0 visitas de socios desde el 17-nov).
 - **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov. Job 10 (`ventas-dia-contador`): primer envío 1-dic.
 - **Deploy:** `version.json` y `/api/salud` dan 403 por el proxy de la sesión: verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
@@ -44,7 +44,7 @@
 ## 🛑 Reglas operativas (leer antes de tocar `main` o una base)
 1. **Branching corre `migrate` contra PROD en cada push a `main`.** Las migraciones entran por merge → Branching; «a mano antes del merge» solo con firma del dueño y verificando el ref.
 2. **Ningún PR a `main` con archivos bajo `supabase/functions/` hasta cerrar el ítem 11** (versionar `ingest-ndf` con `config.toml`): sin él, Branching despliega con `verify_jwt=true` (el agente del PoS recibe 401) y el código de `main` está atrasado y pisaría prod. Despliegue manual desde la rama viva, con firma.
-3. **Merges (D1, 13/11):** libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK explícito del dueño en el momento. Una sola sesión de CC mergea a la vez, solo sus PRs. **Excepción (20/11, a prueba hasta el 3-dic):** un PR solo de `.md` con Gate verde se mergea sin OK del dueño, igual dentro de D1 (en 19:00–23:30 no).
+3. **Merges (D1, cambio del dueño 20/11):** libre 23:30–15:00 · 15:00–19:00 solo con OK del dueño en el momento para ese PR · 19:00–23:30 solo si es urgente y con OK del dueño (la cita dice URGENTE). Una sola sesión de CC mergea a la vez, solo sus PRs. **Excepción (20/11, a prueba hasta el 3-dic):** un PR solo de `.md` con Gate verde se mergea sin OK del dueño **solo de 23:30 a 15:00**; fuera de esa franja sigue la regla general. Lo hace cumplir la guardia de `scripts/hooks/` (marca de OK con el número de PR y `--match-head-commit`), cuando entre el #308.
 4. **«Ver como» usa los permisos del owner:** probar permisos con un usuario real del rol o su JWT en `begin read only` … `rollback`.
 5. **ICP = propina electrónica declarada (voluntaria: tarjeta/SINPE) / neta de sus mesas.** El 10 % de servicio no entra al numerador ni al denominador; `payout_crc` no es ICP; barra: «no aplica».
 6. **El PoS se lee por las funciones de la 067** (`pos_ventas_tickets_rango`, `pos_ventas_lineas`, `pos_ventas_latido`), sin medios de pago ni `clase_ingreso`. **`pos_ndf_*` cerradas a gerencia** (`owner/manager/contador`; «En vivo» también). **Ventas = solo PoS** (16/11): ninguna pantalla lee `ventas_dias`; `ventas_hist` solo antes del 2024-01-05 (guarda `src/ventasSoloPos.test.ts`).

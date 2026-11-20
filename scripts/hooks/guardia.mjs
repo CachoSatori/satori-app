@@ -20,7 +20,7 @@ import { comandos, programa } from './shell.mjs'
 import { subcomandoGit, evaluarPush, detectarMerge, valorOpcion, REPO } from './git.mjs'
 import { evaluarSQL, esSoloLectura, refsEn, refLiteral, REF_PROD, REF_STAGING } from './sql.mjs'
 import { relojCR, ventanaD1, ahora as relojHooks } from './hora.mjs'
-import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoincide, migracionesFirmadas, RE_ARCHIVO_MARCA, MARCAS } from './marcas.mjs'
+import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoincide, migracionesFirmadas, escribeProtegido, MARCAS } from './marcas.mjs'
 
 /**
  * @typedef {{ numero: number, cabeza: string, archivos: string[] } | { error: string }} InfoPR
@@ -33,7 +33,7 @@ import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoin
  */
 
 // Una RUTA a un .env* (no un patrón de búsqueda ni código): `.env`, `club-web/.env.local`, `.env*`. `.env.example` sí se lee.
-const RE_ENV = /^(?:[\w@.~-]*\/)*\.env(?:\.[\w.-]+)?\*?$/
+const RE_ENV = /^(?:[\w@.~${}-]*\/)*\.env(?:\.[\w.-]+)?\*?$/
 const RE_ENV_PERMITIDO = /\.env\.example$/
 const SOLO_MIRA = new Set(['ls', 'test', '[', '[[', 'stat'])
 // Programas cuyo primer argumento posicional es un patrón o un programa, no un archivo (salvo -e / -f / --regexp).
@@ -57,26 +57,28 @@ export function rutasDeArchivo(prog, args) {
 }
 const esRutaEnv = a => RE_ENV.test(a) && !RE_ENV_PERMITIDO.test(a)
 
-/** Ventana D1 (sin red). @returns {{ bloqueo: string | null, necesitaOk: boolean, reloj: ReturnType<typeof relojCR> }} */
+/** Ventana D1 (sin red). @returns {{ ventana: 'libre' | 'con-ok' | 'urgente', reloj: ReturnType<typeof relojCR> }} */
 export function ventanaMerge(ctx) {
   const reloj = relojCR(ctx.ahora)
-  const v = ventanaD1(reloj.minutos)
-  if (v === 'bloqueado') return { bloqueo: `Regla D1: merges bloqueados de 15:50 a 19:00 (hora CR ${reloj.hhmm}). Esperá a las 19:00 con OK del dueño, o a las 23:30.`, necesitaOk: false, reloj }
-  return { bloqueo: null, necesitaOk: v === 'con-ok', reloj }
+  return { ventana: ventanaD1(reloj.minutos), reloj }
 }
 
 /**
- * Merge de un PR: D1 (de 19:00 a 23:30, OK del dueño para ESE PR), `--match-head-commit` / `sha` obligatorio e igual a
- * la cabeza, y la cabeza tiene que ser un SHA firmado (salvo PR solo de .md). @returns {string | null}
+ * Merge de un PR. D1 (20-nov): libre 23:30–15:00 · 15:00–19:00 con OK del dueño para ESE PR · 19:00–23:30 solo urgente
+ * (OK con URGENTE en la cita). Además `--match-head-commit` / `sha` obligatorio e igual a la cabeza, y la cabeza tiene que
+ * ser un SHA firmado. Un PR solo de .md no necesita SHA firmado, y de 23:30 a 15:00 tampoco OK. @returns {string | null}
  */
 export function evaluarMerge(merge, ctx) {
   const v = ventanaMerge(ctx)
-  if (v.bloqueo) return v.bloqueo
   const info = ctx.consultarPR(merge.selector, merge.repo, ctx.cwd)
   if ('error' in info) return `No pude leer el PR para verificar la cabeza (${info.error}). Sin verificar no se mergea.`
-  if (v.necesitaOk) {
-    const ok = okNocheValido(leerMarca('noche', ctx), v.reloj.fecha, info.numero)
-    if (!ok.ok) return `Regla D1: de 19:00 a 23:30 (hora CR ${v.reloj.hhmm}) el merge necesita el OK del dueño en el momento para el #${info.numero}: ${ok.motivo}. Formato en scripts/hooks/README.md (${MARCAS.noche.archivo} o ${MARCAS.noche.variable}).`
+  if (v.ventana !== 'libre') {
+    const urgente = v.ventana === 'urgente'
+    const ok = okNocheValido(leerMarca('noche', ctx), v.reloj.fecha, info.numero, { urgente })
+    if (!ok.ok) {
+      const tramo = urgente ? 'de 19:00 a 23:30 solo se mergea si es URGENTE y con OK del dueño (URGENTE dentro de la cita)' : 'de 15:00 a 19:00 el merge necesita el OK del dueño en el momento'
+      return `Regla D1 (hora CR ${v.reloj.hhmm}): ${tramo} para el #${info.numero}: ${ok.motivo}. Formato en scripts/hooks/README.md (${MARCAS.noche.archivo} o ${MARCAS.noche.variable}).`
+    }
   }
   const cabeza = String(info.cabeza).toLowerCase()
   const pedida = String(merge.cabezaPedida ?? '').toLowerCase()
@@ -135,9 +137,18 @@ export function migracionFirmada(sql, ctx) {
  * ¿psql va a una base remota? Sí si nombra Supabase, usa una URL de conexión, una variable (no se sabe a dónde va) o un
  * host que no es local. Solo `psql` a localhost / socket local (baterías) queda afuera.
  */
-export function psqlRemoto(args) {
+export function psqlRemoto(args, asignaciones = []) {
   const texto = args.join(' ')
   if (/supabase\.(co|com|in)|postgres(?:ql)?:\/\/|\$/.test(texto)) return true
+  // Variables de conexión delante del comando: PGHOST=…, PGSERVICE=…, DATABASE_URL=… (y cualquier PG* con URL o variable).
+  for (const a of asignaciones) {
+    const [nombre, ...resto] = a.split('=')
+    const valor = resto.join('=')
+    if (!/^(PG[A-Z]*|DATABASE_URL)$/.test(nombre)) continue
+    if (/supabase\.(co|com|in)|postgres(?:ql)?:\/\/|\$/.test(valor)) return true
+    if ((nombre === 'PGHOST' || nombre === 'PGHOSTADDR') && !/^(localhost|127\.0\.0\.1|::1|\/.*)$/.test(valor)) return true
+    if (nombre === 'PGSERVICE' || nombre === 'DATABASE_URL') return true
+  }
   const host = valorOpcion(args, ['-h', '--host']) ?? /\bhost=(\S+)/.exec(texto)?.[1]
   return host !== undefined && !/^(localhost|127\.0\.0\.1|::1|\/.*)$/.test(host)
 }
@@ -208,13 +219,9 @@ export function evaluarBash(cmd, ctx) {
   for (const s of comandos(cmd)) {
     const { prog, args } = programa(s.palabras)
 
-    // Marcas: no se escriben por Bash.
-    for (const r of s.redirecciones) {
-      if (/>/.test(r.op) && RE_ARCHIVO_MARCA.test(r.destino)) return `No se escribe una marca de habilitación por Bash (${r.destino}). La pone el dueño o su sesión, con su OK (ver scripts/hooks/README.md).`
-    }
-    if (!['cat', 'ls', 'test', '[', 'stat', 'rm', 'head', 'grep'].includes(prog) && args.some(a => RE_ARCHIVO_MARCA.test(a))) {
-      return `No se toca una marca de habilitación por Bash (${prog}). La pone el dueño o su sesión, con su OK (ver scripts/hooks/README.md).`
-    }
+    // Marcas y configuración de Claude Code: se leen, no se escriben por Bash.
+    const protegido = escribeProtegido(prog, args, s.redirecciones)
+    if (protegido) return `No se escribe por Bash una marca de habilitación ni la configuración de Claude Code (${protegido}). La pone el dueño o su sesión, con su OK (ver scripts/hooks/README.md).`
 
     // .env*: no se lee.
     if (!SOLO_MIRA.has(prog)) {
@@ -271,9 +278,10 @@ export function evaluarBash(cmd, ctx) {
     }
 
     if (prog === 'psql') {
-      const texto = args.join(' ')
+      const asignaciones = s.palabras.slice(0, s.palabras.findIndex(p => p.split('/').pop() === 'psql')).filter(p => /^[A-Za-z_][A-Za-z0-9_]*=/.test(p))
+      const texto = [...asignaciones, ...args].join(' ')
       const refs = refsEn(texto)
-      if (psqlRemoto(args)) {
+      if (psqlRemoto(args, asignaciones)) {
         if (refs.length === 0) refs.push(/\$/.test(texto) ? '(variable)' : '(host sin ref)')
         const partes = []
         const c = valorOpcion(args, ['-c', '--command'])

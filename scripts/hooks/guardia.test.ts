@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 // @ts-expect-error módulo .mjs sin tipos
-import { evaluarBash, evaluarMerge, ventanaMerge, evaluarMcpSupabase, rutasDeArchivo } from './guardia.mjs'
+import { evaluarBash, evaluarMerge, evaluarMcpSupabase, rutasDeArchivo, psqlRemoto } from './guardia.mjs'
 // @ts-expect-error módulo .mjs sin tipos
 import { relojCR, ventanaD1 } from './hora.mjs'
 // @ts-expect-error módulo .mjs sin tipos
@@ -34,13 +34,13 @@ function marca(nombre: string, texto: string) { writeFileSync(join(raiz, '.claud
 beforeEach(() => { raiz = mkdtempSync(join(tmpdir(), 'guardia-')); mkdirSync(join(raiz, '.claude')) })
 afterEach(() => rmSync(raiz, { recursive: true, force: true }))
 
-describe('hora CR y ventana D1 (bordes)', () => {
+describe('hora CR y ventana D1 (bordes; regla del 20-nov)', () => {
   const casos: [string, string, string][] = [
-    ['2026-11-20T21:49:00Z', '15:49', 'libre'],
-    ['2026-11-20T21:50:00Z', '15:50', 'bloqueado'],
-    ['2026-11-21T00:59:00Z', '18:59', 'bloqueado'],
-    ['2026-11-21T01:00:00Z', '19:00', 'con-ok'],
-    ['2026-11-21T05:29:00Z', '23:29', 'con-ok'],
+    ['2026-11-20T20:59:00Z', '14:59', 'libre'],
+    ['2026-11-20T21:00:00Z', '15:00', 'con-ok'],
+    ['2026-11-21T00:59:00Z', '18:59', 'con-ok'],
+    ['2026-11-21T01:00:00Z', '19:00', 'urgente'],
+    ['2026-11-21T05:29:00Z', '23:29', 'urgente'],
     ['2026-11-21T05:30:00Z', '23:30', 'libre'],
   ]
   for (const [iso, hhmm, ventana] of casos) {
@@ -55,35 +55,52 @@ describe('hora CR y ventana D1 (bordes)', () => {
 
 describe('merge: regla D1', () => {
   const merge = { selector: '305', repo: 'CachoSatori/satori-app', cabezaPedida: CABEZA }
+  const OK = '2026-11-20 #305 «dale, mergeá el 305»'
+  const URGENTE = '2026-11-20 #305 «URGENTE: se cae el cierre, mergeá el 305»'
   beforeEach(() => marca('sha-firmado.local', `#305 ${CABEZA}`))
-  it('15:50–19:00 bloquea aunque haya OK y SHA firmado', () => {
-    marca('ok-dueno-noche.local', '2026-11-20 #305 «dale, mergeá el 305»')
-    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-20T21:50:00Z' }))).toMatch(/15:50 a 19:00/)
-    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-20T21:49:00Z' }))).toBeNull()
+  it('14:59 libre sin OK; 15:00 pide OK', () => {
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-20T20:59:00Z' }))).toBeNull()
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-20T21:00:00Z' }))).toMatch(/15:00 a 19:00.*OK/)
+    marca('ok-dueno-noche.local', OK)
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-20T21:00:00Z' }))).toBeNull()
   })
-  it('19:00–23:30 sin OK bloquea; con OK de hoy (fecha CR), del PR y con cita pasa', () => {
-    const noche = '2026-11-21T01:00:00Z'
-    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toMatch(/OK del dueño/)
-    marca('ok-dueno-noche.local', '2026-11-21 #305 «dale, mergeá el 305»') // fecha UTC: mal
-    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toMatch(/2026-11-20/)
-    marca('ok-dueno-noche.local', '2026-11-20 #305 sin cita')
-    expect(evaluarMerge(merge, ctx({ ahora: noche }))).not.toBeNull()
-    marca('ok-dueno-noche.local', '2026-11-20 #306 «dale, mergeá el 306»') // OK de otro PR
-    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toMatch(/#305/)
-    marca('ok-dueno-noche.local', '2026-11-20 #3050 «dale, mergeá el 3050»') // prefijo de otro número
-    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toMatch(/#305/)
-    marca('ok-dueno-noche.local', '2026-11-20 #305 «dale, mergeá el 305»')
-    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toBeNull()
+  it('18:59 con OK pasa; 19:00 con el mismo OK no: pide URGENTE', () => {
+    marca('ok-dueno-noche.local', OK)
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T00:59:00Z' }))).toBeNull()
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T01:00:00Z' }))).toMatch(/URGENTE/)
+    marca('ok-dueno-noche.local', '2026-11-20 #305 URGENTE «dale, mergeá el 305»') // URGENTE fuera de la cita: no
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T01:00:00Z' }))).toMatch(/URGENTE/)
+    marca('ok-dueno-noche.local', URGENTE)
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T01:00:00Z' }))).toBeNull()
     expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T05:29:00Z' }))).toBeNull()
   })
-  it('el OK también puede venir por variable de entorno', () => {
-    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T05:29:00Z', env: { SATORI_OK_DUENO_NOCHE: '2026-11-20 #305 "ok del dueño a las 23"' } }))).toBeNull()
-  })
-  it('23:30 en adelante libre sin OK', () => {
+  it('23:29 sin URGENTE bloquea; 23:30 libre sin OK', () => {
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T05:29:00Z' }))).toMatch(/D1/)
     expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T05:30:00Z' }))).toBeNull()
   })
-  it('ventana sin red: 15:50–19:00 no consulta GitHub', () => {
-    expect(ventanaMerge(ctx({ ahora: '2026-11-20T22:00:00Z' })).bloqueo).toMatch(/D1/)
+  it('el OK vale solo con la fecha CR de hoy, el número del PR y la cita', () => {
+    const tarde = '2026-11-20T22:00:00Z'
+    marca('ok-dueno-noche.local', '2026-11-21 #305 «dale, mergeá el 305»') // fecha UTC: mal
+    expect(evaluarMerge(merge, ctx({ ahora: tarde }))).toMatch(/2026-11-20/)
+    marca('ok-dueno-noche.local', '2026-11-20 #305 sin cita')
+    expect(evaluarMerge(merge, ctx({ ahora: tarde }))).not.toBeNull()
+    marca('ok-dueno-noche.local', '2026-11-20 #306 «dale, mergeá el 306»') // OK de otro PR
+    expect(evaluarMerge(merge, ctx({ ahora: tarde }))).toMatch(/#305/)
+    marca('ok-dueno-noche.local', '2026-11-20 #3050 «dale, mergeá el 3050»') // prefijo de otro número
+    expect(evaluarMerge(merge, ctx({ ahora: tarde }))).toMatch(/#305/)
+  })
+  it('el OK también puede venir por variable de entorno', () => {
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T05:29:00Z', env: { SATORI_OK_DUENO_NOCHE: '2026-11-20 #305 "URGENTE ok del dueño"' } }))).toBeNull()
+  })
+  it('PR solo de .md: sin OK solo de 23:30 a 15:00; fuera, regla general', () => {
+    const pr = { numero: 305, cabeza: CABEZA, archivos: ['docs/a.md'] }
+    marca('sha-firmado.local', '')
+    expect(evaluarMerge(merge, ctx({ pr, ahora: '2026-11-20T20:59:00Z' }))).toBeNull()
+    expect(evaluarMerge(merge, ctx({ pr, ahora: '2026-11-21T05:30:00Z' }))).toBeNull()
+    expect(evaluarMerge(merge, ctx({ pr, ahora: '2026-11-20T21:00:00Z' }))).toMatch(/OK/)
+    expect(evaluarMerge(merge, ctx({ pr, ahora: '2026-11-21T01:00:00Z' }))).toMatch(/URGENTE/)
+    marca('ok-dueno-noche.local', OK)
+    expect(evaluarMerge(merge, ctx({ pr, ahora: '2026-11-20T21:00:00Z' }))).toBeNull()
   })
 })
 
@@ -159,7 +176,7 @@ describe('supabase CLI', () => {
 })
 
 describe('.env y marcas', () => {
-  for (const c of ['cat .env', 'cat .env.local', 'grep KEY .env.production', 'grep -e KEY .env', 'rg x club-web/.env', 'source ./.env', 'head -1 club-web/.env', 'node --env-file=.env x.js', 'less < .env', 'cat .env*'])
+  for (const c of ['cat .env', 'cat .env.local', 'grep KEY .env.production', 'grep -e KEY .env', 'rg x club-web/.env', 'cat "$HOME/x/.env"', 'cat $CLAUDE_PROJECT_DIR/.env.local', 'cat ${HOME}/.env', 'source ./.env', 'head -1 club-web/.env', 'node --env-file=.env x.js', 'less < .env', 'cat .env*'])
     it(`bloquea leer: ${c}`, () => expect(evaluarBash(c, ctx())).toMatch(/\.env/))
   for (const c of ['ls -la .env', 'test -f .env.local', 'node -e "console.log(process.env.X)"', 'grep -r import.meta.env src', 'cat src/environment.ts',
     'grep -rn ".env" src', "rg '.env' src", 'cat .env.example', "sed -n '/.env/p' docs/x.md", 'grep -e foo src'])
@@ -171,6 +188,10 @@ describe('.env y marcas', () => {
     expect(rutasDeArchivo('grep', ['-rn', '.env', 'src'])).toEqual(['src'])
     expect(rutasDeArchivo('grep', ['-e', 'x', '.env'])).toEqual(['x', '.env'])
   })
+  for (const c of ['git diff .claude/settings.json', 'jq . .claude/settings.json', 'cat .claude/settings.local.json', 'cp .claude/settings.json /tmp/copia.json', 'grep deny .claude/settings.json'])
+    it(`leer la configuración sí: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
+  for (const c of ['tee .claude/settings.json < x', 'mv x.json .claude/settings.local.json', 'rm .claude/settings.json', 'git checkout -- .claude/settings.json', 'cp nuevo.json .claude/settings.json'])
+    it(`escribir la configuración no: ${c}`, () => expect(evaluarBash(c, ctx())).toMatch(/configuración/))
   it('leer o borrar la marca sí', () => {
     expect(evaluarBash('cat .claude/turno-prod.local', ctx())).toBeNull()
     expect(evaluarBash('rm .claude/turno-prod.local', ctx())).toBeNull()
@@ -243,6 +264,12 @@ describe('SQL por Bash (Management API, psql, PostgREST)', () => {
     expect(evaluarBash('psql "$DB_URL" -c "select 1"', ctx())).toBeNull()
     expect(evaluarBash('psql postgresql://u@db.ejemplo.test/x -c "truncate t"', ctx())).toMatch(/truncate|literal/)
     expect(evaluarBash('psql -h 10.0.0.5 -c "delete from t"', ctx())).not.toBeNull()
+    expect(evaluarBash('PGHOST=db.ejemplo.test psql -c "delete from t"', ctx())).not.toBeNull()
+    expect(evaluarBash('DATABASE_URL=x psql -c "update t set a = 1"', ctx())).toMatch(/literal/)
+    expect(evaluarBash(`env PGHOST=db.${REF_STAGING}.supabase.co psql -c "drop table t"`, ctx())).toMatch(/drop/)
+    expect(evaluarBash('PGHOST=localhost psql -c "drop table t"', ctx())).toBeNull()
+    expect(psqlRemoto([], ['PGPASSWORD=x'])).toBe(false)
+    expect(psqlRemoto([], ['PGHOST=10.0.0.5'])).toBe(true)
     expect(evaluarBash(`curl -X DELETE "https://${REF_STAGING}.supabase.co/rest/v1/t?id=eq.1"`, ctx())).toMatch(/PostgREST/)
   })
 })
@@ -307,9 +334,11 @@ describe('CLI (exit codes reales)', () => {
     const r = correr({ tool_name: 'mcp__Supabase__get_project', tool_input: { project_id: REF_PROD }, cwd: raiz }, { SATORI_ENTORNO: 'staging-agentes' })
     expect(r.status).toBe(2)
   })
-  it('merge en 15:50–19:00 por CLI: exit 2 sin consultar GitHub', () => {
-    const r = correr({ tool_name: 'Bash', tool_input: { command: 'gh pr merge 305' }, cwd: raiz }, { SATORI_HOOKS_AHORA: '2026-11-20T22:30:00Z' })
+  it('merge por CLI con gh que falla: exit 2 (sin verificar no se mergea)', () => {
+    mkdirSync(join(raiz, 'bin'))
+    writeFileSync(join(raiz, 'bin', 'gh'), '#!/usr/bin/env bash\necho "sin red" >&2\nexit 1\n', { mode: 0o755 })
+    const r = correr({ tool_name: 'Bash', tool_input: { command: `gh pr merge 305 --match-head-commit ${CABEZA}` }, cwd: raiz }, { PATH: `${join(raiz, 'bin')}:${process.env.PATH ?? ''}` })
     expect(r.status).toBe(2)
-    expect(r.stderr).toMatch(/D1/)
+    expect(r.stderr).toMatch(/No pude leer el PR/)
   })
 })

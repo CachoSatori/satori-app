@@ -1,6 +1,7 @@
 // Hora de Costa Rica para los hooks (UTC-6 fijo, sin horario de verano). Mismo criterio que todayCR() de
 // src/shared/utils, reescrito acá porque los hooks corren con node sin compilar TypeScript.
-// Regla D1 (ESTADO.md, regla 3): libre 23:30–15:50 · bloqueado 15:50–19:00 · 19:00–23:30 solo con OK del dueño.
+// Regla D1 (ESTADO.md, regla 3; cambio del dueño del 20-nov): libre 23:30–15:00 · 15:00–19:00 solo con OK del dueño en el
+// momento · 19:00–23:30 solo si es urgente y con OK del dueño.
 
 const OFFSET_MS = 6 * 60 * 60 * 1000
 
@@ -16,14 +17,14 @@ export function relojCR(ahora = new Date()) {
   }
 }
 
-export const BLOQUEO_DESDE = 15 * 60 + 50 // 15:50
-export const NOCHE_DESDE = 19 * 60 // 19:00
+export const OK_DESDE = 15 * 60 // 15:00
+export const URGENTE_DESDE = 19 * 60 // 19:00
 export const LIBRE_DESDE = 23 * 60 + 30 // 23:30
 
-/** @param {number} minutos minutos desde la medianoche CR @returns {'libre' | 'bloqueado' | 'con-ok'} */
+/** @param {number} minutos minutos desde la medianoche CR @returns {'libre' | 'con-ok' | 'urgente'} */
 export function ventanaD1(minutos) {
-  if (minutos >= BLOQUEO_DESDE && minutos < NOCHE_DESDE) return 'bloqueado'
-  if (minutos >= NOCHE_DESDE && minutos < LIBRE_DESDE) return 'con-ok'
+  if (minutos >= OK_DESDE && minutos < URGENTE_DESDE) return 'con-ok'
+  if (minutos >= URGENTE_DESDE && minutos < LIBRE_DESDE) return 'urgente'
   return 'libre'
 }
 

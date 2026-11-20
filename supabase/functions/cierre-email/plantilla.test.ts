@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { buildHtml, textoConSaltos, tipoCambio, tituloFecha, UMBRAL_CUADRA } from './plantilla.ts'
+import { buildHtml, CORTE_LARGO, textoConSaltos, tipoCambio, UMBRAL_CUADRA } from './plantilla.ts'
 import { verificarCorreo } from './correo-estandar.verificar.ts'
 import { COLOR, crc } from './correo-estandar.ts'
 import { cierreCuadraEjemplo, cierreFaltanteEjemplo, cierreSinNovedadesEjemplo } from './plantilla.ejemplo.ts'
@@ -50,6 +50,13 @@ describe('correo del cierre: cuadra', () => {
     expect(h).not.toContain('<b>x')
     expect(textoConSaltos('a\r\nb\rc\nd & e')).toBe('a<br>b<br>c<br>d &amp; e')
   })
+  it('Resumen del día: una palabra larga sin espacios se corta (word-break y overflow-wrap)', () => {
+    expect(CORTE_LARGO).toBe('word-break:break-word;overflow-wrap:anywhere')
+    const largo = 'x'.repeat(120)
+    const h = buildHtml({ ...cierreCuadraEjemplo, notas: `Mantenimiento: ${largo}` })
+    expect(h).toContain(`<span style="word-break:break-word;overflow-wrap:anywhere">Mantenimiento: ${largo}</span>`)
+    expect(html).toContain('<span style="word-break:break-word;overflow-wrap:anywhere">Queja: una mesa')
+  })
   it('sin la sección «Notas» del final (ahora es el Resumen del día)', () => {
     expect(html).not.toMatch(/>Notas</)
   })
@@ -85,10 +92,9 @@ describe('correo del cierre: con diferencia', () => {
 })
 
 describe('formatos', () => {
-  it('tipo de cambio y título', () => {
+  it('tipo de cambio', () => {
     expect(tipoCambio(510)).toBe('₡510')
     expect(tipoCambio(505.2)).toBe('₡505,20')
-    expect(tituloFecha('2026-06-01')).toBe('1 de junio')
   })
   it('sin propinas ni dólares no muestra filas vacías raras', () => {
     const h = buildHtml({ ...cierreCuadraEjemplo, propinas_m_crc: null, propinas_n_crc: 0, vm_usd: null, vn_usd: 0, sep_diaria_usd: 0, remanente_usd: 0 })

@@ -31,16 +31,6 @@ const N = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0)
 /** Umbral de «cuadra» del correo anterior (sin cambios): diferencia menor a ₡500 en valor absoluto. */
 export const UMBRAL_CUADRA = 500
 
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-
-/** «2026-11-15» → «15 de noviembre» (título de página). */
-export function tituloFecha(iso: string): string {
-  const r = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '')
-  if (!r) return String(iso ?? '')
-  return `${Number(r[3])} de ${MESES[Number(r[2]) - 1] ?? ''}`
-}
-
 /** Tipo de cambio con coma decimal y hasta 2 decimales: 505.2 → «₡505,20»; 510 → «₡510». */
 export function tipoCambio(v: number): string {
   const x = N(v)
@@ -83,7 +73,8 @@ export function buildHtml(c: CierreCorreo, resumen?: ResumenCorreo | null): stri
   // 1. Resumen del día: el texto del encargado, tal cual (escapado, con sus saltos de línea).
   if (notas) {
     html += seccion('Resumen del día')
-    html += parrafo(textoConSaltos(notas))
+    // Texto libre: una palabra o un enlace largo sin espacios no puede ensanchar el correo (móvil).
+    html += parrafo(`<span style="${CORTE_LARGO}">${textoConSaltos(notas)}</span>`)
   }
 
   // 2. Diferencia: verbo de acción en musgo («Cuadra») o laca (faltante / sobrante), con el monto y el motivo;
@@ -123,6 +114,9 @@ export function buildHtml(c: CierreCorreo, resumen?: ResumenCorreo | null): stri
   html += pie('cierre de caja', fecha, resumen ? NOTA_VENTAS(resumen) : undefined)
   return documento(`Satori, cierre de caja, ${fecha}`, html)
 }
+
+/** Corte de palabras largas para el texto libre del encargado. */
+export const CORTE_LARGO = 'word-break:break-word;overflow-wrap:anywhere'
 
 /** Texto libre escapado, con los saltos de línea como <br> (CRLF incluido). */
 export function textoConSaltos(t: string): string {

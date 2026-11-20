@@ -1,0 +1,130 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Bash(cat .env*)",
+      "Bash(cat */.env*)",
+      "Bash(cat * .env*)",
+      "Bash(head .env*)",
+      "Bash(head */.env*)",
+      "Bash(head * .env*)",
+      "Bash(tail .env*)",
+      "Bash(tail */.env*)",
+      "Bash(tail * .env*)",
+      "Bash(less .env*)",
+      "Bash(less */.env*)",
+      "Bash(less * .env*)",
+      "Bash(grep .env*)",
+      "Bash(grep */.env*)",
+      "Bash(grep * .env*)",
+      "Bash(source .env*)",
+      "Bash(source */.env*)",
+      "Bash(source * .env*)",
+      "Bash(git push * main)",
+      "Bash(git push * main *)",
+      "Bash(git push *:main)",
+      "Bash(git push *:main *)",
+      "Bash(git push *refs/heads/main*)",
+      "Bash(git push --force *)",
+      "Bash(git push * --force)",
+      "Bash(git push * --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push * -f *)",
+      "Bash(git * push * main)",
+      "Bash(git * push * main *)",
+      "Bash(git * push *:main)",
+      "Bash(git * push *:main *)",
+      "Bash(git * push *refs/heads/main*)",
+      "Bash(git * push --force *)",
+      "Bash(git * push * --force)",
+      "Bash(git * push * --force *)",
+      "Bash(git * push -f *)",
+      "Bash(git * push * -f *)",
+      "Bash(supabase db push)",
+      "Bash(supabase db push *)",
+      "Bash(supabase * db push*)",
+      "Bash(supabase functions deploy)",
+      "Bash(supabase functions deploy *)",
+      "Bash(supabase * functions deploy*)",
+      "Bash(npx supabase* db push*)",
+      "Bash(npx supabase* functions deploy*)",
+      "Bash(supabase db reset *--linked*)",
+      "Bash(supabase * db reset *--linked*)",
+      "Bash(npx supabase* db reset *--linked*)",
+      "Bash(supabase db reset *--db-url*)",
+      "Bash(npx supabase* db reset *--db-url*)"
+    ],
+    "ask": [
+      "Edit(.claude/*.local)",
+      "Edit(.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
+      "Edit(scripts/hooks/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/guardia.mjs\" || exit 2",
+            "timeout": 90,
+            "statusMessage": "Guardia de Satori",
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*[Ss]upabase.*__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/guardia.mjs\" || exit 2",
+            "timeout": 30,
+            "statusMessage": "Guardia de Satori (Supabase)",
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/lint-archivo.mjs\"",
+            "timeout": 120,
+            "statusMessage": "eslint del archivo"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/tests-tarea.mjs\"",
+            "timeout": 600,
+            "statusMessage": "Pruebas relacionadas"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/gate-stop.mjs\"",
+            "timeout": 1500,
+            "statusMessage": "Gate antes de terminar"
+          }
+        ]
+      }
+    ]
+  }
+}

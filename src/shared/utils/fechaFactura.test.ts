@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   normalizarFechaFactura, fechaDeClaveFE, invertirDiaMes, avisoFechaFactura, esFechaValida, fechaLarga,
-  preguntaFechaAmbigua, msgFacturaVieja, msgClaveDistinta, MSG_FECHA_INVERTIDA, MSG_FECHA_FUTURA, DIAS_FACTURA_VIEJA,
+  preguntaFechaAmbigua, msgFacturaVieja, fechaFacturaDeDescripcion, msgClaveDistinta, MSG_FECHA_INVERTIDA, MSG_FECHA_FUTURA, DIAS_FACTURA_VIEJA,
 } from './fechaFactura'
 import { conFechaCR, type DocExtract } from '../api/documents'
 
@@ -202,5 +202,21 @@ describe('conFechaCR (lo que precarga la app)', () => {
     expect(r.fecha_origen).toBe('ambigua')
     expect(r.fecha_opciones).toEqual(['2026-11-10', '2026-10-11'])
     expect(r.fecha_leida).toBe('2026-10-11')
+  })
+})
+
+describe('fechaFacturaDeDescripcion — la fecha de factura que la app deja en la descripción (20-nov, FIFO)', () => {
+  it('lee «· fact AAAA-MM-DD»; si hay varias, la última', () => {
+    expect(fechaFacturaDeDescripcion('Pescado · fact 2026-11-09')).toBe('2026-11-09')
+    expect(fechaFacturaDeDescripcion('Propinas · Prov · fact 2026-11-02')).toBe('2026-11-02')
+    expect(fechaFacturaDeDescripcion('x · fact 2026-10-01 · fact 2026-10-03')).toBe('2026-10-03')
+  })
+  it('sin fecha, con fecha que no existe o sin el «·» de la app → null', () => {
+    expect(fechaFacturaDeDescripcion('Pescado')).toBeNull()
+    expect(fechaFacturaDeDescripcion('')).toBeNull()
+    expect(fechaFacturaDeDescripcion(null)).toBeNull()
+    expect(fechaFacturaDeDescripcion('Pescado · fact 2026-02-30')).toBeNull()
+    expect(fechaFacturaDeDescripcion('Pescado · fact 2026-11-091')).toBeNull()
+    expect(fechaFacturaDeDescripcion('fact 2026-11-09 sin punto')).toBeNull()
   })
 })

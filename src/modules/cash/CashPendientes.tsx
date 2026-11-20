@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import type { CashMovement, CashSession, Supplier, SupplierCredit, CreditApplication } from '../../shared/types/database'
 import { updateMovementStatus, updateCashMovement, sendPagoProveedorEmail } from '../../shared/api/cash'
 import { aprobacionPropinaFields } from './propinaPago'
 import { fi, fd } from './cashUtils'
 import { dateCR } from '../../shared/utils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
-import { saldoResidual, saldoCredito, facturaAplicado } from './supplierCredits'
+import { saldoResidual, saldoCredito, facturaAplicado, diaDelMovimiento } from './supplierCredits'
 import { RegistrarCreditoModal, AplicarCreditoModal } from './CreditoModals'
 import { waNumber, descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
 import { comprobantePago } from './comprobanteProveedor'
@@ -53,6 +53,9 @@ const PROPINAS_KEY = '__propinas__'
 export default function CashPendientes({ movements, sessions, suppliers, credits, applications, onRefresh, refrescando = false }: Props) {
   const requireManager = useManagerOverride()
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
+  // Día del movimiento (regla 11): el del turno; a nivel día, la fecha CR del registro. La usa el FIFO del crédito.
+  const fechaMov = useCallback(
+    (m: CashMovement) => diaDelMovimiento(m, sesionMap), [sesionMap])
   // Lookups para la notificación al proveedor (mig 047). Null-safe: supplier_id puede ser null.
   const movById = useMemo(() => new Map(movements.map(m => [m.id, m])), [movements])
   const supById = useMemo(() => new Map(suppliers.map(s => [s.id, s])), [suppliers])
@@ -226,6 +229,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
       {aplModal && (
         <AplicarCreditoModal supplier={aplModal} credits={credits} applications={applications}
           pendientes={movements.filter(m => m.supplier_id === aplModal.id && m.status === 'pendiente')}
+          fechaMovimiento={fechaMov}
           onDone={onRefresh} onClose={() => setAplModal(null)} ocupado={ocupado} />
       )}
 

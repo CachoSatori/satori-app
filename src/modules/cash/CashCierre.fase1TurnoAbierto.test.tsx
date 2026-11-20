@@ -108,6 +108,7 @@ describe('CashCierre · Fase 2 sigue bloqueada con la Caja Diaria abierta', () =
     // fila (Caja Diaria 3/4 · Registradora 5/6 · Remanente CF 7/8).
     setMonto(m[0], 100000)   // ventas noche
     setMonto(m[7], 100000)   // Remanente CF ₡ → total contado = deberia → sin diferencia
+    fireEvent.click(screen.getByRole('button', { name: 'Sin novedades' }))   // resumen del día (obligatorio, 20-nov)
   }
 
   it('con turno abierto el botón de cerrar el día queda deshabilitado', async () => {

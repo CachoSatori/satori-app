@@ -59,6 +59,7 @@ const preparar = async () => {
   render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
   await screen.findByText(/Revisar resumen y cerrar el día/)
   setMonto(montos()[0], 100000)
+  fireEvent.click(screen.getByRole('button', { name: 'Sin novedades' }))   // resumen del día (obligatorio, 20-nov)
 }
 
 beforeEach(() => {

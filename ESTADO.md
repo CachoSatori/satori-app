@@ -43,8 +43,8 @@
 
 ## 🛑 Reglas operativas (leer antes de tocar `main` o una base)
 1. **Branching corre `migrate` contra PROD en cada push a `main`.** Las migraciones entran por merge → Branching; «a mano antes del merge» solo con firma del dueño y verificando el ref.
-2. **Ningún PR a `main` con archivos bajo `supabase/functions/` hasta cerrar el ítem 11** (versionar `ingest-ndf` con `config.toml`): sin él, Branching despliega con `verify_jwt=true` (el agente del PoS recibe 401) y el código de `main` está atrasado y pisaría prod. Despliegue manual desde la rama viva, con firma.
-3. **Merges (D1, cambio del dueño 20/11):** libre 23:30–15:00 · 15:00–19:00 solo con OK del dueño en el momento para ese PR · 19:00–23:30 solo si es urgente y con OK del dueño (la cita dice URGENTE). Una sola sesión de CC mergea a la vez, solo sus PRs. **Excepción (20/11, a prueba hasta el 3-dic):** un PR solo de `.md` con Gate verde se mergea sin OK del dueño **solo de 23:30 a 15:00**; fuera de esa franja sigue la regla general. Lo hace cumplir la guardia de `scripts/hooks/` (marca de OK con el número de PR y `--match-head-commit`), cuando entre el #308.
+2. **Edge Functions (ítem 11, PR #313, a la espera de firma):** hasta ese merge, ningún PR a `main` con `supabase/functions/` (despliegue manual desde la rama viva, con firma). Desde el merge, con `supabase/config.toml` válido (lista blanca: solo `project_id` y `verify_jwt` por función; R04 en `scripts/ci/edgeConfig.mjs`), **las Edge entran por merge y Branching las despliega en cada push a `main`**: código de Edge en `main` = cambio en prod (firma). El Preview por PR está desactivado. Humo después del merge: versión, `verify_jwt` y `ezbr_sha256` de las 8 funciones y latido del PoS (`satori-merge-y-deploy` §4). Paquete: [PASE-item11-config-edge](docs/pases/PASE-item11-config-edge.md).
+3. **Merges (D1, cambio del dueño 20/11):** libre 23:30–15:00 · 15:00–19:00 solo con OK del dueño en el momento para ese PR · 19:00–23:30 solo si es urgente y con OK del dueño (la cita dice URGENTE). Una sola sesión de CC mergea a la vez, solo sus PRs. **Excepción (20/11, a prueba hasta el 3-dic):** un PR solo de `.md` con Gate verde se mergea sin OK del dueño **solo de 23:30 a 15:00**; fuera de esa franja sigue la regla general. Lo hace cumplir la guardia de `scripts/hooks/` (marca de OK con el número de PR y `--match-head-commit`).
 4. **«Ver como» usa los permisos del owner:** probar permisos con un usuario real del rol o su JWT en `begin read only` … `rollback`.
 5. **ICP = propina electrónica declarada (voluntaria: tarjeta/SINPE) / neta de sus mesas.** El 10 % de servicio no entra al numerador ni al denominador; `payout_crc` no es ICP; barra: «no aplica».
 6. **El PoS se lee por las funciones de la 067** (`pos_ventas_tickets_rango`, `pos_ventas_lineas`, `pos_ventas_latido`), sin medios de pago ni `clase_ingreso`. **`pos_ndf_*` cerradas a gerencia** (`owner/manager/contador`; «En vivo» también). **Ventas = solo PoS** (16/11): ninguna pantalla lee `ventas_dias`; `ventas_hist` solo antes del 2024-01-05 (guarda `src/ventasSoloPos.test.ts`).
@@ -60,15 +60,18 @@
 ---
 
 ## ☁️ Edge, Cloudflare y agentes
-`verify_jwt`: **off** solo en `ingest-ndf` (el agente manda `x-ingest-secret`), `ingest-punches` y `club-pase` (portón `x-club-web`); el resto **on**. Secretos: por su lista (nombre + huella); código: por `ezbr_sha256`, no por versión.
+`verify_jwt`: **off** solo en `ingest-ndf` (el agente manda `x-ingest-secret`) y `club-pase` (portón `x-club-web`); el resto **on** (`ingest-punches` no existe en prod). Secretos: por su lista (nombre + huella); código: por `ezbr_sha256`, no por versión.
 
-| Función en prod | Fuente del código desplegado (no está en `main`) |
+| Función en prod (20-nov, leído de prod) | Fuente del código desplegado |
 |---|---|
-| `extract-document` | `8a8dfb6`, rama `claude/busy-brown-ssjq4e` (modelo `claude-sonnet-5-5`; el de `main` deja la Bandeja vacía) |
-| `ingest-ndf` | `5da233a`, rama `claude/puente-item11-prod-v2` |
-| `alta-empleado` | rama `claude/alta-empleado-fn` |
-| `club-pase` | rama `claude/club-pase-edge` @ `6c5848e` |
-| `monthly-report`, `cierre-email`, `pago-notificar`, `ventas-dia-contador` | ramas de sus PRs (esperan ítem 11: #241–#245, #281, #283) |
+| `monthly-report` v24 | `50831a8e` (#245) + remitente propio (sin commit; va en el PR del ítem 11) |
+| `extract-document` v20 | `190b5f59`, rama `claude/extract-document-sin-datos` |
+| `cierre-email` v17 | `87364a84`, rama `claude/cierre-email-redondeo` (comentarios aparte) |
+| `pago-notificar` v16 | `9088687b`, rama `claude/pago-notificar-agrupado` |
+| `ventas-dia-contador` v5 | `78e95953`, rama `claude/ventas-dia-contador-redondeo` (comentarios aparte) |
+| `ingest-ndf` v13 | `5da233a5`, rama `claude/puente-item11-prod-v2` |
+| `alta-empleado` v12 | `942d12f5`, rama `claude/alta-empleado-fn` |
+| `club-pase` v7 | `5cc50737` (= `6c5848e`), rama `claude/club-pase-edge` |
 
 - **Cloudflare:** Pages `satori-club` y Worker `satori-club-api` (Workers Builds desde `main`; secretos a mano). **Agentes del PoS:** staging @ `14bd278`; prod `agente-fe` @ `07782e49`. `biotime-bridge` publica solo a staging.
 

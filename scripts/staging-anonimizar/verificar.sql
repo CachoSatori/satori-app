@@ -83,8 +83,8 @@ begin
                        r.tabla, r.columna) into n;
         c_ruta := c_ruta + n;
       when r.clase = 'json' then
-        execute format('select count(*) from public.%1$I where %2$I is not null and pg_temp.anon_json_fuera(%2$I) > 0',
-                       r.tabla, r.columna) into n;
+        execute format('select count(*) from public.%1$I where %2$I is not null and pg_temp.anon_json_fuera(%2$I, %3$L) > 0',
+                       r.tabla, r.columna, pg_temp.anon_perfil(r.tabla, r.columna)) into n;
         c_json := c_json + n;
       when r.clase = 'vaciar_tabla' then
         null;   -- se cuenta por tabla abajo
@@ -184,9 +184,13 @@ begin
     return query select 'cron · jobs que nombran el host de prod'::text,
       (select count(*) from cron.job where command ilike '%yiczgdtirrkdvohdquzf%'), true;
   end if;
-  if to_regclass('net._http_response') is not null then
-    return query select 'net · respuestas HTTP guardadas'::text, (select count(*) from net._http_response), v_fase = 'transaccion';
-  end if;
+  -- pg_net, pg_cron y Realtime: en 0 dentro de la transacción; después pueden volver a llenarse solos (informativo)
+  for r in select x.t, x.d from (values ('net._http_response', 'net · respuestas HTTP guardadas'), ('net.http_request_queue', 'net · cola de pedidos HTTP'),
+                                        ('cron.job_run_details', 'cron · historial de corridas'), ('realtime.messages', 'realtime · mensajes')) x(t, d)
+            where to_regclass(x.t) is not null loop
+    execute format('select count(*) from %s', r.t) into n;
+    return query select r.d::text, n, v_fase = 'transaccion';
+  end loop;
   if to_regclass('storage.objects') is not null then
     return query select 'storage · objetos fuera de documents/sops/ y de la imagen ficticia'::text,
       (select count(*) from storage.objects o
@@ -210,17 +214,17 @@ begin
 end $$;
 
 -- Claves de un JSON fuera de la lista blanca (recorre como anon_json: lo «mantener_todo» y lo transformado no se mira).
-create or replace function pg_temp.anon_json_fuera(j jsonb) returns int language plpgsql as $$
+create or replace function pg_temp.anon_json_fuera(j jsonb, p_perfil text default '*') returns int language plpgsql as $$
 begin
   case jsonb_typeof(j)
     when 'object' then
       return (select coalesce(sum(case when p.trato is null then 1
                                        when p.trato = 'mantener' and jsonb_typeof(e.v) in ('object', 'array')
-                                         then pg_temp.anon_json_fuera(e.v)
+                                         then pg_temp.anon_json_fuera(e.v, p_perfil)
                                        else 0 end), 0)::int
-                from jsonb_each(j) e(k, v) left join _anon_json_claves p on p.clave = e.k);
+                from jsonb_each(j) e(k, v) left join _anon_json_claves p on p.perfil = p_perfil and p.clave = e.k);
     when 'array' then
-      return (select coalesce(sum(pg_temp.anon_json_fuera(x)), 0)::int from jsonb_array_elements(j) x
+      return (select coalesce(sum(pg_temp.anon_json_fuera(x, p_perfil)), 0)::int from jsonb_array_elements(j) x
                where jsonb_typeof(x) in ('object', 'array'));
     else return 0;
   end case;

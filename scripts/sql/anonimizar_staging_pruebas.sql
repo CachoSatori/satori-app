@@ -104,7 +104,7 @@ end $$;
 
 -- 07–09 · la guarda aborta: otro ref, base sin marca de staging, sin usuarios de prueba
 do $$
-declare v_ok boolean; v_msg text;
+declare v_ok boolean; v_msg text; v_ref text := current_setting('anon.ref', true);
 begin
   v_msg := null;
   begin
@@ -112,7 +112,7 @@ begin
     perform pg_temp.anon_guarda();
   exception when others then v_msg := sqlerrm;
   end;
-  perform set_config('anon.ref', 'hwiatgicyyqyezqwldia', true);
+  perform set_config('anon.ref', v_ref, true);   -- la marca que traía la corrida (correr.py la pone; --armar la deja vacía)
   insert into _rA (caso, ok, detalle) values ('07 guarda: con un ref que no es el de staging aborta', v_msg like 'ANON-ABORTA%', v_msg);
 
   v_msg := null;
@@ -274,17 +274,56 @@ begin
     v_f = 1 and v1c = v0c + 1 and v1t = v0t + 1, format('correo %s→%s · teléfono %s→%s', v0c, v1c, v0t, v1t));
 end $$;
 
+-- 18–19 · antes de tocar nada: texto libre en una mesa o dentro de un producto de una mesa abierta → anonimizar aborta
+do $$
+declare v_msg text; v_f bigint := 0;
+begin
+  begin
+    update public.pos_ndf_tickets set mesa = 'Mesa de ' || 'Alguien Inventado' where ctid = (select ctid from public.pos_ndf_tickets limit 1);
+    get diagnostics v_f = row_count;
+    perform pg_temp.anon_formas_ok();
+    raise exception using errcode = 'XAN01';
+  exception when sqlstate 'XAN01' then v_msg := '(no abortó)';
+            when others then v_msg := sqlerrm;
+  end;
+  insert into _rA (caso, ok, detalle) values ('18 formas: texto libre en una mesa aborta antes de tocar nada',
+    v_f = 1 and v_msg like 'ANON-ABORTA: texto libre%pos_ndf_tickets.mesa%', v_msg);
+  v_msg := null;
+  begin
+    insert into public.pos_ndf_open (local, clave, updated_at, detalle_productos)
+    values ('santa-teresa', 'anon-prueba-19', now(), jsonb_build_array(jsonb_build_object('nombre', 'sin cebolla, es para ' || 'Alguien Inventado', 'cantidad', 1)));
+    perform pg_temp.anon_formas_ok();
+    raise exception using errcode = 'XAN01';
+  exception when sqlstate 'XAN01' then v_msg := '(no abortó)';
+            when others then v_msg := sqlerrm;
+  end;
+  insert into _rA (caso, ok, detalle) values ('19 formas: texto libre dentro de detalle_productos aborta antes de tocar nada',
+    v_msg like 'ANON-ABORTA: texto libre%pos_ndf_open.detalle_productos%', v_msg);
+end $$;
+
+-- 20 · ventas_hist.data (D4): su perfil deja SOLO los totales del día de HistDay (ni la lista general entra)
+do $$
+declare r jsonb;
+begin
+  r := pg_temp.anon_json('{"ventaBruta": 1, "ventaNeta": 2, "iva": 3, "serv": 4, "salon": 5, "delivery": 6, "pax": 7, "promPax": 8,
+                           "source": "hist", "saloneros": {"x": 1}, "total": 9, "local": "y", "nombre": "z"}'::jsonb, 'ventas_hist.data');
+  insert into _rA (caso, ok, detalle) values ('20 ventas_hist: solo ventaBruta … promPax y source',
+    r = '{"ventaBruta": 1, "ventaNeta": 2, "iva": 3, "serv": 4, "salon": 5, "delivery": 6, "pax": 7, "promPax": 8, "source": "hist"}'::jsonb
+    and pg_temp.anon_perfil('ventas_hist', 'data') = 'ventas_hist.data' and pg_temp.anon_perfil('documents', 'raw_json') = '*',
+    r::text);
+end $$;
+
 -- @@LOCAL@@
 
 select json_agg(json_build_object('caso', caso, 'ok', coalesce(ok, false), 'detalle', detalle) order by n) from _rA;
 
 -- ASSERT: cada caso que falla sale como WARNING, después el resumen y, si hay fallas o faltan casos, ABORTA con
--- «ANON-FALLAN». Esperados: 16 de base (01, 02, 04–17) + 1 con --idempotencia (03) + los locales con --local
+-- «ANON-FALLAN». Esperados: 19 de base (01, 02, 04–20) + 1 con --idempotencia (03) + los locales con --local
 -- (anon.casos_locales). Este bloque NO lleva «exception when others».
 do $$
 declare
   r record;
-  v_esp int := 16 + case when current_setting('anon.idempotencia', true) = 'si' then 1 else 0 end
+  v_esp int := 19 + case when current_setting('anon.idempotencia', true) = 'si' then 1 else 0 end
                   + coalesce(nullif(current_setting('anon.casos_locales', true), ''), '0')::int;
   v_tot int; v_ok int; v_mal int; v_lista text;
 begin

@@ -1,6 +1,6 @@
 -- anonimizar_staging_casos_local.sql · Casos que SOLO corren con --local (sobre anonimizar_staging_semilla_local.sql,
 -- datos inventados): miran que cada dato sembrado salió como dice la spec. Los inserta la batería en «-- @@LOCAL@@».
-select set_config('anon.casos_locales', '14', true);
+select set_config('anon.casos_locales', '16', true);
 
 -- L01 · el mismo nombre (con otra mayúscula, tildes iguales o espacios) queda con el mismo alias en todas las columnas
 insert into _rA (caso, ok, detalle)
@@ -142,3 +142,20 @@ insert into _rA (caso, ok, detalle)
 select 'L14 PoS: transfers sin from/to, notes = nota de prueba',
        transfers = '[{"pax": 2}]'::jsonb and notes = 'Nota de prueba', transfers::text
   from public.pos_orders limit 1;
+
+-- L15 · ventas_hist: quedan exactamente las claves de HistDay (sin saloneros ni nada más)
+insert into _rA (caso, ok, detalle)
+select 'L15 ventas_hist: solo los totales del día de HistDay',
+       (select array_agg(k order by k) from jsonb_object_keys(data) k)
+         = array['delivery', 'iva', 'pax', 'promPax', 'salon', 'serv', 'source', 'ventaBruta', 'ventaNeta']
+   and (data->>'ventaBruta')::int = 500000, data::text
+  from public.ventas_hist where session_date = '2023-05-01';
+
+-- L16 · fuera de public vacío; mesas y productos de catálogo intactos
+insert into _rA (caso, ok, detalle)
+select 'L16 cron, net y realtime vacíos; mesas y detalle_productos intactos',
+       (select count(*) from cron.job_run_details) = 0 and (select count(*) from net.http_request_queue) = 0
+   and (select count(*) from realtime.messages) = 0 and (select count(*) from net._http_response) = 0
+   and (select mesa from public.pos_ndf_tickets where numero_factura = '9001') = 'M7'
+   and (select detalle_productos from public.pos_ndf_open where clave = 'abierta-anon-1') = '[{"nombre": "Producto ficticio uno", "cantidad": 2}]'::jsonb,
+       null;

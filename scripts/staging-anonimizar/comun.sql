@@ -163,12 +163,101 @@ begin
   return v;
 end $$;
 -- La política en una tabla con llave (las funciones JSON la leen por join: un jsonb grande se descomprimiría en cada clave).
+-- perfil '*' = la política general; perfil '<tabla>.<columna>' = la lista propia de esa columna (_anon_json_perfil).
 create or replace function pg_temp.anon_preparar_politica() returns void language plpgsql as $$
 begin
   drop table if exists _anon_json_claves;
-  create temp table _anon_json_claves (clave text primary key, trato text not null) on commit drop;
-  insert into _anon_json_claves select k, v from jsonb_each_text(pg_temp.anon_politica_json()) x(k, v);
+  create temp table _anon_json_claves (perfil text, clave text, trato text not null, primary key (perfil, clave)) on commit drop;
+  insert into _anon_json_claves select '*', k, v from jsonb_each_text(pg_temp.anon_politica_json()) x(k, v);
+  insert into _anon_json_claves select tabla || '.' || columna, clave, trato from _anon_json_perfil;
   analyze _anon_json_claves;
+end $$;
+create or replace function pg_temp.anon_perfil(p_tabla text, p_columna text) returns text language plpgsql stable as $$
+begin
+  return coalesce((select p_tabla || '.' || p_columna from _anon_json_perfil
+                    where tabla = p_tabla and columna = p_columna limit 1), '*');
+end $$;
+
+-- ── Formas de mesas y de los JSON de productos (se cuentan ANTES de tocar nada) ──────────────────────────────────
+-- Estas columnas quedan «mantener» / «json_mantener»: se supone que son catálogo (nombres de mesa y de producto del PoS).
+-- Si aparece texto libre (p. ej. «mesa de <cliente>» o una nota dentro de un producto), anonimizar.sql ABORTA antes de
+-- cambiar nada y `correr.py formas` muestra los conteos (nunca los valores) para clasificarlo.
+create or replace function pg_temp.anon_preparar_catalogo() returns void language plpgsql as $$
+declare r record;
+begin
+  drop table if exists _anon_catalogo;
+  create temp table _anon_catalogo (v text primary key) on commit drop;
+  for r in select x.t, x.c from (values ('pos_ndf_ticket_lines', 'nombre'), ('pos_ndf_ticket_lines', 'codigo_producto'),
+                                        ('product_map', 'nombre'), ('pos_prices', 'product_name'), ('pos_order_items', 'product_name'),
+                                        ('recipes', 'product_name'), ('modifiers', 'name'), ('club_cortesias', 'nombre'),
+                                        ('club_cortesias', 'codigo_producto'), ('salon_tables', 'name'), ('pos_mesas_internas', 'mesa')) x(t, c)
+            where exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = x.t and column_name = x.c) loop
+    execute format('insert into _anon_catalogo select distinct lower(btrim(%1$I)) from public.%2$I where %1$I is not null and btrim(%1$I) <> %3$L
+                    on conflict do nothing', r.c, r.t, '');
+  end loop;
+  analyze _anon_catalogo;
+end $$;
+
+-- Forma de un texto. p_estricta: sin «código interno» (palabra suelta en minúscula), para mesas y claves de nombre.
+create or replace function pg_temp.anon_forma_texto(v text, p_estricta boolean default true) returns text language plpgsql stable as $$
+declare t text := btrim(coalesce(v, ''));
+begin
+  if t = '' then return 'vacía'; end if;
+  if exists (select 1 from _anon_catalogo c where c.v = lower(t)) then return 'catálogo'; end if;
+  if t ~ '^-?[0-9]+([.,][0-9]+)?$' then return 'número'; end if;
+  if pg_temp.anon_es_uuid(t) then return 'uuid'; end if;
+  if t ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}([ T][0-9:.+-]+)?$' then return 'fecha'; end if;
+  if t ~ '^[[:alpha:]]{0,8}[ -]?[0-9]{1,4}[[:alpha:]]?$' then return 'código'; end if;
+  if upper(t) in ('BARRA', 'DELIVERY', 'LLEVAR', 'PARA LLEVAR', 'EXPRESS', 'TERRAZA', 'SALON', 'SALÓN', 'PLAYA', 'JARDIN', 'JARDÍN')
+    then return 'lugar conocido'; end if;
+  if not p_estricta and t ~ '^[a-z_]{1,24}$' then return 'código interno'; end if;
+  return 'texto libre';
+end $$;
+
+-- Hojas de un JSON con su clave (los elementos de un arreglo heredan la clave del padre).
+create or replace function pg_temp.anon_hojas(j jsonb) returns table (k text, v jsonb) language sql immutable as $$
+  with recursive h(k, v) as (
+    select null::text, j
+    union all
+    select coalesce(e.key, h.k), e.value
+      from h, lateral (select x.key, x.value from jsonb_each(case when jsonb_typeof(h.v) = 'object' then h.v else '{}'::jsonb end) x
+                       union all
+                       select null, y.value from jsonb_array_elements(case when jsonb_typeof(h.v) = 'array' then h.v else '[]'::jsonb end) y) e
+  )
+  select k, v from h where jsonb_typeof(v) not in ('object', 'array')
+$$;
+
+-- Conteos: «forma <x>» por columna de mesa; «clave <k>» y «forma <x>» por columna JSON de productos. Sin valores.
+create or replace function pg_temp.anon_formas() returns table (columna text, forma text, n bigint) language plpgsql as $$
+declare r record;
+begin
+  perform pg_temp.anon_preparar_catalogo();
+  for r in select x.t, x.c from (values ('pos_ndf_tickets', 'mesa'), ('pos_ndf_tickets', 'mesa_factura'), ('pos_ndf_open', 'mesa'),
+                                        ('pos_orders', 'table_name')) x(t, c)
+            where exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = x.t and column_name = x.c) loop
+    return query execute format('select %1$L::text, %2$L || pg_temp.anon_forma_texto(%3$I), count(*) from public.%4$I group by 2',
+                                r.t || '.' || r.c, 'forma ', r.c, r.t);
+  end loop;
+  for r in select x.t, x.c from (values ('pos_ndf_open', 'detalle_productos'), ('pos_checks', 'items_snapshot')) x(t, c)
+            where exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = x.t and column_name = x.c) loop
+    return query execute format('select %1$L::text, %2$L || coalesce(h.k, %3$L), count(*) from public.%4$I t, pg_temp.anon_hojas(t.%5$I) h group by 2',
+                                r.t || '.' || r.c, 'clave ', '(sin clave)', r.t, r.c);
+    return query execute format($q$select %1$L::text, %2$L || case when jsonb_typeof(h.v) <> 'string' then jsonb_typeof(h.v)
+                                       else pg_temp.anon_forma_texto(h.v #>> '{}', coalesce(lower(h.k), '') in
+                                            ('nombre', 'name', 'label', 'nota', 'note', 'notes', 'product_name', 'cliente', 'customer',
+                                             'comentario', 'observacion', 'descripcion', 'description', 'mesa', 'table_name')) end,
+                                       count(*) from public.%3$I t, pg_temp.anon_hojas(t.%4$I) h group by 2$q$,
+                                r.t || '.' || r.c, 'forma ', r.t, r.c);
+  end loop;
+end $$;
+
+create or replace function pg_temp.anon_formas_ok() returns void language plpgsql as $$
+declare v text;
+begin
+  select string_agg(f.columna || ' = ' || f.n, '; ' order by f.columna) into v from pg_temp.anon_formas() f where f.forma = 'forma texto libre';
+  if v is not null then
+    raise exception 'ANON-ABORTA: texto libre que no es de catálogo en mesas o productos (ver «correr.py formas»; clasificar antes de seguir): %', v;
+  end if;
 end $$;
 
 -- ── Controles del §2 (antes = después, si no la transacción se descarta) ─────────────────────────────────────────

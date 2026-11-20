@@ -19,6 +19,7 @@
 --   token           nuevo al azar con el MISMO formato (hex, alfabeto del Club, largo): respeta check y unique.
 --   clave_fe        clave FE de 50 dígitos: posiciones 10–21 (cédula del emisor) → 999999999999 (D7).
 --   json            lista blanca de claves (D4): las claves que no están en la política se borran; ver anonimizar.sql.
+--                   Si la columna tiene un perfil en _anon_json_perfil (abajo), la lista es SOLO la de su perfil.
 --   json_mantener   JSON sin datos de personas (productos, beneficios, refs del PoS, configuración).
 --   adjuntos        arreglo JSON de rutas de Storage → la imagen ficticia (D3).
 --   ruta_storage    ruta de Storage → la imagen ficticia (D3).
@@ -245,7 +246,7 @@ select v.tabla, btrim(c), v.clase
   ('ventas_comps', 'data', 'json'),
   ('ventas_dias', 'file_name,data', 'vaciar_tabla'),                                -- D4
   ('ventas_hist', 'source', 'mantener'),
-  ('ventas_hist', 'data', 'json_mantener'),                                          -- «reporte general, sin salonero» (ventasFuente.ts)
+  ('ventas_hist', 'data', 'json'),                                                   -- D4: solo los totales del día (perfil abajo)
   ('ventas_metas', 'key', 'mantener'),
   ('ventas_metas', 'value', 'json_mantener'),
   -- finanzas, locales y SOP
@@ -278,3 +279,12 @@ select btrim(c), v.trato
   ('local,local_nombre,multilocal,umbral,pos_logins,logins_fijos,registradores,mapeo,login,en,modo,pedido,visto,abierto_en,hora,hora_factura,visita', 'mantener')
   ) v(claves, trato),
   unnest(string_to_array(v.claves, ',')) c;
+
+-- Perfiles JSON por columna: la lista blanca de esa columna es EXACTAMENTE esta (no se suma la general).
+-- ventas_hist.data = HistDay de src/shared/types/ventas.ts (totales del día; lo lee getVentasHist en shared/api/ventas.ts).
+drop table if exists _anon_json_perfil;
+create temp table _anon_json_perfil (tabla text, columna text, clave text, trato text not null,
+                                     primary key (tabla, columna, clave)) on commit drop;
+insert into _anon_json_perfil (tabla, columna, clave, trato)
+select 'ventas_hist', 'data', btrim(c), 'mantener'
+  from unnest(string_to_array('ventaBruta,ventaNeta,iva,serv,salon,delivery,pax,promPax,source', ',')) c;

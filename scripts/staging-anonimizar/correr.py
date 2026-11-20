@@ -7,8 +7,10 @@ SQL (comun.sql) lo exige además de club_entorno = 'staging' y los usuarios de p
   python3 scripts/staging-anonimizar/correr.py ensayo [--idempotencia]   # batería entera en BEGIN … ROLLBACK (no deja nada)
   python3 scripts/staging-anonimizar/correr.py real --si                 # BEGIN … anonimizar + verificar … COMMIT
   python3 scripts/staging-anonimizar/correr.py verificar                 # solo conteos (después de storage.sh)
+  python3 scripts/staging-anonimizar/correr.py formas                    # solo conteos de formas de mesas y productos
   Agregar --local para el Postgres 16 local (psql; PGHOST/PGPORT/PGUSER/PGDATABASE del entorno: local_armar_base.sh) y
-  --armar para solo imprimir el SQL armado (no conecta; sirve para el SQL Editor o el MCP).
+  --armar para solo imprimir el SQL armado (no conecta). Sale SIN la marca de ref: así no pasa la guarda si se pega en
+  otro lado; para usarlo a mano, escribir la marca a propósito después de leer el ref en pantalla.
 
 Orden en staging (STAGING.md, «Anonimizar»): ensayo → ensayo --idempotencia → real --si → storage.sh --si → verificar.
 «real» escribe para siempre: lo corre el coordinador con el OK del dueño por chat (D5 de SPEC-staging-agentes).
@@ -32,17 +34,19 @@ def frag(nombre: str) -> str:
     return (DIR / nombre).read_text(encoding='utf-8')
 
 
-def marcas(modo: str, fase: str, idem: bool = False) -> str:
-    return (f"select set_config('anon.ref', '{REF}', true);\n"
+def marcas(modo: str, fase: str, idem: bool = False, ref: str = REF) -> str:
+    # --armar pasa ref='': el SQL impreso NO trae la marca, así pegarlo en otro lado (SQL Editor, otro proyecto) no pasa
+    # la guarda. Para correrlo a mano hay que escribir la marca a propósito, leyendo el ref en pantalla (regla 7).
+    return (f"select set_config('anon.ref', '{ref}', true);\n"
             f"select set_config('anon.modo', '{modo}', true);\n"
             f"select set_config('anon.fase', '{fase}', true);\n"
             f"select set_config('anon.idempotencia', '{'si' if idem else 'no'}', true);\n")
 
 
-def armar_ensayo(local: bool, idem: bool) -> str:
+def armar_ensayo(local: bool, idem: bool, ref: str = REF) -> str:
     sql = BATERIA.read_text(encoding='utf-8')
     rellenos = {
-        '@@PREPARAR@@': marcas('ensayo', 'transaccion', idem) + (SEMILLA.read_text(encoding='utf-8') if local else ''),
+        '@@PREPARAR@@': marcas('ensayo', 'transaccion', idem, ref) + (SEMILLA.read_text(encoding='utf-8') if local else ''),
         '@@CLASIFICACION@@': frag('clasificacion.sql'),
         '@@COMUN@@': frag('comun.sql'),
         '@@ANONIMIZAR@@': frag('anonimizar.sql'),
@@ -57,15 +61,22 @@ def armar_ensayo(local: bool, idem: bool) -> str:
     return sql
 
 
-def armar_real() -> str:
-    return ('begin;\n' + marcas('real', 'transaccion') + frag('clasificacion.sql') + frag('comun.sql')
+def armar_real(ref: str = REF) -> str:
+    return ('begin;\n' + marcas('real', 'transaccion', ref=ref) + frag('clasificacion.sql') + frag('comun.sql')
             + frag('anonimizar.sql') + frag('verificar.sql') + 'commit;\n')
 
 
-def armar_verificar() -> str:
+def armar_verificar(ref: str = REF) -> str:
     # Solo tablas y funciones temporales; termina en ROLLBACK igual (nada que guardar).
-    return ('begin;\n' + marcas('verificar', 'final') + frag('clasificacion.sql') + frag('comun.sql')
+    return ('begin;\n' + marcas('verificar', 'final', ref=ref) + frag('clasificacion.sql') + frag('comun.sql')
             + frag('verificar.sql') + 'rollback;\n')
+
+
+def armar_formas(ref: str = REF) -> str:
+    # Solo lectura: conteos de formas de mesas y de claves/formas de los JSON de productos (comun.sql, anon_formas).
+    return ('begin;\n' + marcas('formas', 'final', ref=ref) + frag('clasificacion.sql') + frag('comun.sql')
+            + 'select pg_temp.anon_guarda();\n'
+            + 'select columna, forma, n from pg_temp.anon_formas() order by columna, forma;\nrollback;\n')
 
 
 def staging_crudo(sql: str) -> object:
@@ -109,14 +120,17 @@ def main() -> None:
     args = sys.argv[1:]
     modo = args[0] if args and not args[0].startswith('-') else ''
     es_local, solo_armar, idem = '--local' in args, '--armar' in args, '--idempotencia' in args
+    ref = '' if solo_armar else REF
     if modo == 'ensayo':
-        sql = armar_ensayo(es_local, idem)
+        sql = armar_ensayo(es_local, idem, ref)
     elif modo == 'real':
         if '--si' not in args and not solo_armar:
             sys.exit('«real» escribe en staging para siempre: agregar --si (y tener el OK del dueño por chat).')
-        sql = armar_real()
+        sql = armar_real(ref)
     elif modo == 'verificar':
-        sql = armar_verificar()
+        sql = armar_verificar(ref)
+    elif modo == 'formas':
+        sql = armar_formas(ref)
     else:
         sys.exit(__doc__)
     if os.environ.get('ANON_DIR_MUTADO') and not es_local:
@@ -130,7 +144,7 @@ def main() -> None:
             if l.startswith('[{') and modo == 'ensayo':
                 for c in json.loads(l):
                     print(('ok    ' if c['ok'] else 'FALLA ') + c['caso'] + (f" · {c['detalle']}" if c.get('detalle') and not c['ok'] else ''))
-            elif modo != 'ensayo' and '|' in l:
+            elif modo != 'ensayo' and '|' in l:   # verificar, real, formas: solo conteos
                 print('   ', l)
         print(f'anonimizar {modo} (local): verde')
         return

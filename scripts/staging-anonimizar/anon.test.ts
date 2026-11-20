@@ -3,6 +3,7 @@
 // scripts/sql/anonimizar_staging_pruebas.sql + anonimizar_staging_mutaciones.py; esto corre en el gate sin base.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import {
   CEDULA_FICTICIA, IMAGEN_FICTICIA, NOTA, aliasNumerado, asignarAlias, claveAlias, descripcionAnonima, esAlias,
   esCorreoFicticio, esTelefonoFicticio, reemplazarCedulaClave, telefonoFicticio,
@@ -147,6 +148,37 @@ describe('sincronía con el SQL', () => {
   })
 })
 
+describe('correr.py y cadena.sh', () => {
+  const armar = (modo: string) => execFileSync('python3', ['-I', new URL('./correr.py', import.meta.url).pathname, modo, '--armar'],
+    { env: { PATH: process.env.PATH ?? '' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+
+  it('--armar deja VACÍA la marca de ref: pegado en otro lado no pasa la guarda', () => {
+    for (const modo of ['real', 'verificar', 'formas', 'ensayo']) {
+      const sql = armar(modo)
+      expect(sql).toContain("select set_config('anon.ref', '', true);")
+      expect(sql).not.toContain("set_config('anon.ref', 'hwiatgicyyqyezqwldia'")
+      expect(sql.indexOf("set_config('anon.ref', '', true)")).toBe(sql.indexOf("set_config('anon.ref'"))   // la primera marca, vacía
+    }
+  })
+
+  it('después de un re-clonado, cadena.sh vuelve a marcar club_entorno ANTES de crear usuarios y anonimizar', () => {
+    const cadena = leer('cadena.sh')
+    const i = cadena.indexOf('club_marcar_staging.sql")')
+    expect(i).toBeGreaterThan(0)
+    expect(i).toBeLessThan(cadena.indexOf('bash "$UP/crear.sh"'))
+    expect(i).toBeLessThan(cadena.indexOf('correr.py" ensayo'))
+  })
+
+  it('se vacían pg_net (respuestas y cola), el historial de pg_cron y Realtime', () => {
+    for (const t of ['net._http_response', 'net.http_request_queue', 'cron.job_run_details', 'realtime.messages']) expect(ANON).toContain(`'${t}'`)
+  })
+
+  it('las formas de mesas y productos se chequean antes de la primera escritura', () => {
+    expect(ANON.indexOf('select pg_temp.anon_formas_ok();')).toBeGreaterThan(0)
+    expect(ANON.indexOf('select pg_temp.anon_formas_ok();')).toBeLessThan(ANON.indexOf('set local session_replication_role'))
+  })
+})
+
 describe('clasificación (clasificacion.sql)', () => {
   const CLASES = new Set(['mantener', 'alias_empleado', 'alias_proveedor', 'alias_socio', 'alias_cliente', 'correo', 'correo_auth',
     'telefono', 'nota', 'descripcion_fact', 'nulo', 'seudonimo', 'token', 'clave_fe', 'json', 'json_mantener', 'adjuntos',
@@ -181,11 +213,24 @@ describe('clasificación (clasificacion.sql)', () => {
     expect(clase('pos_ndf_tickets', 'clave_fe')).toBe('clave_fe')                    // D7
     expect(clase('employees', 'pos_login')).toBe('mantener')                         // logins del PoS: no se tocan
     expect(clase('sops', 'content')).toBe('mantener')                                // D6
+    expect(clase('ventas_hist', 'data')).toBe('json')                                // D4: lista blanca
     expect(clase('bitacora_permisos', 'antes')).toBe('mantener')
     for (const c of ['token_portal', 'token_pase', 'codigo', 'codigo_socio']) expect(clase('club_miembros', c)).toBe('token')
     expect(clase('club_cupones_contactos', 'baja_token')).toBe('token')
     expect(clase('club_web_clave', 'sha256')).toBe('token')
     expect(clase('club_codigos_canje', 'codigo_hash')).toBe('token')
     expect(filas.filter(f => f.tabla.endsWith('_pre_migracion_2026_07')).every(f => f.clase === 'vaciar_tabla')).toBe(true)
+  })
+})
+
+describe('perfil de ventas_hist.data (D4)', () => {
+  it('es EXACTAMENTE la lista de claves de HistDay (src/shared/types/ventas.ts), leída del código', () => {
+    const tipos = readFileSync(new URL('../../src/shared/types/ventas.ts', import.meta.url), 'utf8')
+    const cuerpo = /export interface HistDay \{([\s\S]*?)\}/.exec(tipos)?.[1] ?? ''
+    const deHistDay = [...cuerpo.matchAll(/^\s*(\w+)\s*:/gm)].map(m => m[1]).sort()
+    const perfil = /from unnest\(string_to_array\('([^']+)', ','\)\) c;\s*$/.exec(CLASIF.trimEnd())?.[1].split(',').sort()
+    expect(deHistDay.length).toBeGreaterThanOrEqual(9)
+    expect(perfil).toEqual(deHistDay)
+    expect(CLASIF).toContain("select 'ventas_hist', 'data', btrim(c), 'mantener'")
   })
 })

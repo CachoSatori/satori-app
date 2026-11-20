@@ -23,6 +23,10 @@ create table if not exists auth.audit_log_entries (id uuid primary key default g
 create table if not exists auth.flow_state (id uuid primary key default gen_random_uuid(), user_id uuid, auth_code text);
 create table if not exists net._http_response (id bigserial primary key, content text);
 create table if not exists cron.job (jobid bigserial primary key, command text, active boolean default true);
+create table if not exists cron.job_run_details (runid bigserial primary key, return_message text);
+create table if not exists net.http_request_queue (id bigserial primary key, url text, body bytea);
+create schema if not exists realtime;
+create table if not exists realtime.messages (id bigserial primary key, payload jsonb);
 
 -- deriva de prod que la base local no tiene (las columnas de texto están todas en clasificacion.sql)
 alter table public.suppliers add column if not exists cuenta_iban text;
@@ -82,6 +86,9 @@ insert into auth.audit_log_entries (payload) values (json_build_object('actor_us
 insert into auth.flow_state (user_id, auth_code) values ('00000000-0000-4000-8a00-0000000000a1', 'codigo');
 insert into net._http_response (content) values ('{"ok":true}');
 insert into cron.job (command) values ('select 1');
+insert into cron.job_run_details (return_message) values ('1 row');
+insert into net.http_request_queue (url) values ('https://ejemplo.test/funcion');
+insert into realtime.messages (payload) values ('{"evento": "prueba"}');
 
 -- Personal
 insert into public.employees (id, full_name, role, profile_id, is_active, pos_name, pos_login) values
@@ -149,6 +156,15 @@ insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estad
    '00100001040000000123', '506' || '011126' || '003101999992' || '00100001040000000123' || '1' || '12345678'),
   ('santa-teresa', '9002', '2026-11-01 21:00:00+00', 'C', 'salon', 'cajero', true, 'ok', 9200,
    '00100001040000000124', '506' || '011126' || '003101999992' || '00100001040000000124' || '1' || '22345678');
+insert into public.pos_ndf_open (local, clave, mesa, updated_at, detalle_productos) values
+  ('santa-teresa', 'abierta-anon-1', 'M7', now(), '[{"nombre": "Producto ficticio uno", "cantidad": 2}]');
+insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, precio, monto)
+select id, 'P1', 'Producto ficticio uno', 2, 1000, 2000 from public.pos_ndf_tickets where numero_factura = '9001';
+update public.pos_ndf_tickets set mesa = case numero_factura when '9001' then 'M7' else 'BARRA' end, mesa_factura = 'T 12'
+ where numero_factura in ('9001', '9002');
+insert into public.ventas_hist (session_date, data, source) values
+  ('2023-05-01', '{"ventaBruta": 500000, "ventaNeta": 400000, "iva": 52000, "serv": 48000, "salon": 380000, "delivery": 20000,
+    "pax": 40, "promPax": 9500, "source": "hist", "saloneros": {"Lucía Inventada": 1}, "total": 7, "local": "x"}', 'reporte');
 insert into public.pos_orders (salonero_name, notes, transfers) values
   ('LUCÍA INVENTADA MORA', 'Mesa de Carolina, alérgica', jsonb_build_array(jsonb_build_object('from', 'Lucía', 'to', 'Andrés', 'pax', 2)));
 insert into public.ventas_dias (session_date, file_name, data) values ('2026-11-01', 'ventas.xls', '{"saloneros": {"Lucía": {"total": 1}}}');

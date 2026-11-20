@@ -8,9 +8,10 @@
 -- Si algún control del §2 cambia (sumas de caja, propinas y ventas, huellas, permisos, claves FE, filas) la
 -- transacción ABORTA con «ANON-ABORTA» y no queda nada.
 
--- ── 0. Guarda (ref + club_entorno + usuarios de prueba) y clasificación completa ──────────────────────────────────
+-- ── 0. Guarda (ref + club_entorno + usuarios de prueba), clasificación completa y formas de mesas/productos ─────
 select pg_temp.anon_guarda();
 select pg_temp.anon_clasificacion_ok();
+select pg_temp.anon_formas_ok();   -- mesas y JSON de productos: solo catálogo, antes de tocar nada
 do $$
 begin
   if to_regclass('cron.job') is not null
@@ -233,19 +234,19 @@ end $$;
 
 -- Lista blanca recursiva (D4): una consulta por objeto (plan cacheado de plpgsql), la política por join contra su tabla
 -- y recursión solo en lo anidado, para que las ~24 mil marcas de BioTime entren holgadas en el tiempo de la API.
-create or replace function pg_temp.anon_json(j jsonb) returns jsonb language plpgsql as $$
+create or replace function pg_temp.anon_json(j jsonb, p_perfil text default '*') returns jsonb language plpgsql as $$
 begin
   case jsonb_typeof(j)
     when 'object' then
       return (select coalesce(jsonb_object_agg(e.k, case
                 when p.trato = 'mantener_todo' then e.v
                 when p.trato = 'mantener' then
-                  case when jsonb_typeof(e.v) in ('object', 'array') then pg_temp.anon_json(e.v) else e.v end
+                  case when jsonb_typeof(e.v) in ('object', 'array') then pg_temp.anon_json(e.v, p_perfil) else e.v end
                 else pg_temp.anon_json_valor(e.v, p.trato) end), '{}'::jsonb)
                 from jsonb_each(j) e(k, v)
-                join _anon_json_claves p on p.clave = e.k);           -- lo que no está en la lista blanca, se borra
+                join _anon_json_claves p on p.perfil = p_perfil and p.clave = e.k);   -- lo que no está, se borra
     when 'array' then
-      return (select coalesce(jsonb_agg(case when jsonb_typeof(a.x) in ('object', 'array') then pg_temp.anon_json(a.x)
+      return (select coalesce(jsonb_agg(case when jsonb_typeof(a.x) in ('object', 'array') then pg_temp.anon_json(a.x, p_perfil)
                                              else a.x end order by a.o), '[]'::jsonb)
                 from jsonb_array_elements(j) with ordinality a(x, o));
     else return j;
@@ -328,8 +329,8 @@ begin
         execute format('update public.%1$I set %2$I = pg_temp.anon_clave_fe(%2$I)
                          where %2$I ~ %3$L and substr(%2$I, 10, 12) <> %4$L', r.tabla, r.columna, '^[0-9]{50}$', '999999999999');
       when 'json' then
-        execute format('update public.%1$I set %2$I = pg_temp.anon_json(%2$I) where %2$I is not null',
-                       r.tabla, r.columna);
+        execute format('update public.%1$I set %2$I = pg_temp.anon_json(%2$I, %3$L) where %2$I is not null',
+                       r.tabla, r.columna, pg_temp.anon_perfil(r.tabla, r.columna));
       when 'adjuntos' then
         execute format($q$update public.%1$I set %2$I = case when jsonb_typeof(%2$I) = 'array'
                               then (select coalesce(jsonb_agg(to_jsonb('anon/ficticia.png'::text)), '[]'::jsonb) from jsonb_array_elements(%2$I))
@@ -491,16 +492,19 @@ update public.profiles p set email = u.email from auth.users u where u.id = p.id
 update public.profiles p set email = pg_temp.anon_correo(p.email)
  where p.email is not null and not pg_temp.anon_correo_ok(p.email) and not exists (select 1 from auth.users u where u.id = p.id);
 
--- ── 9. Fuera de public: respuestas HTTP guardadas por pg_net (cuerpos de las Edge) ─────────────────────────────────
--- pg_stat_statements se reinicia DESPUÉS del commit (correr.py, modo real): no es transaccional.
+-- ── 9. Fuera de public: lo que guardan pg_net, pg_cron y Realtime (cuerpos de las Edge, salidas de los jobs, mensajes)
+-- pg_stat_statements se reinicia DESPUÉS del commit (correr.py, modo real): no es transaccional. Los logs de la
+-- plataforma (API, Postgres, Auth, Edge) no se pueden limpiar desde acá: STAGING.md, «no limpia».
 do $$
-declare n bigint;
+declare t text; n bigint;
 begin
-  if to_regclass('net._http_response') is not null then
-    delete from net._http_response where true;
-    get diagnostics n = row_count;
-    insert into _anon_conteo (paso, filas) values ('net · _http_response', n);
-  end if;
+  foreach t in array array['net._http_response', 'net.http_request_queue', 'cron.job_run_details', 'realtime.messages'] loop
+    if to_regclass(t) is not null then
+      execute format('delete from %s where true', t);   -- where true: por si pg_safeupdate está activo
+      get diagnostics n = row_count;
+      insert into _anon_conteo (paso, filas) values ('fuera de public · ' || t, n);
+    end if;
+  end loop;
 end $$;
 
 -- ── 10. Controles DESPUÉS: idénticos a los de antes o se aborta todo ─────────────────────────────────────────────

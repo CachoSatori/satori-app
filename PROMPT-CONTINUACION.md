@@ -1,6 +1,6 @@
-# Continuación — backlog abierto y priorizado (al día: 2026-11-19, ~08:30 -06:00)
+# Continuación — backlog abierto y priorizado (al día: 2026-11-20, tarde)
 
-> **Punto de arranque:** [ESTADO.md](ESTADO.md) (⚡ARRANQUE y reglas) y [docs/handoffs/HANDOFF-2026-11-19.md](docs/handoffs/HANDOFF-2026-11-19.md).
+> **Punto de arranque:** [ESTADO.md](ESTADO.md) (⚡ARRANQUE y reglas) y [docs/handoffs/HANDOFF-2026-11-20.md](docs/handoffs/HANDOFF-2026-11-20.md).
 > Solo lo **abierto**. Lo hecho y el detalle heredado (backlog de `staging` del 29/10, pases y olas de jun–jul, lo hecho del 05 y 10–11/11,
 > P0–P3 del go-live) están en [docs/historico/PROMPT-CONTINUACION-HISTORICO.md](docs/historico/PROMPT-CONTINUACION-HISTORICO.md). Poda: pasado
 > **15 KB**, la sesión de cierre mueve lo cerrado al histórico. Prioridad del proyecto: estabilizar lo que se usa a diario (caja, Bandeja,
@@ -8,15 +8,15 @@
 
 **Marcas:** 🖊️ firma del dueño · 👁️ validación en piso · 🔐 seguridad · 🧹 limpieza · ⛔ no mergear sin OK.
 
-## 🟥 P0 — Ahora (19/11)
-1. **👁️ Confirmar el cron del Club:** corrida del 17/11 en `cron.job_run_details` (jobid 8) y repetir el 23/11 (solo `select`; nunca `for update` sobre `cron.job`).
-2. **👁️ Validaciones del dueño que faltan:** #229 al lanzar el Club (0 visitas de socios desde el 17-nov) · correo de pago agrupado (PR #303 en `main`, `pago-notificar` v16 en prod, vuelta atrás v15; falta que lo vea en un pago real) · WhatsApp automático a proveedores: spec en curso, prioridad alta. Hechas: #300 (19-nov, 2 facturas), correo de cierre 18-nov y Club 186–188. **Club en PAUSA** hasta que Apple apruebe la Wallet.
-3. ~~Staging 192–194~~: hecho el 19-nov (ledger de staging = 194, md5 = prod; la 189 se omite a propósito, regla 14). Protección de `main` con `strict` y `enforce_admins` desde el 19-nov 08:34.
-3a. **Cola nueva (19/11):** menores de #300 (2 pruebas de botones, botón Aplicar del modal) y de #301 (prueba propia de R16 con renombrado, `gate.sh` visible si se saltan guardas sin `origin/main`, `edited` solo si cambia la base, checks-protegidos con `edited`; después modo bloquear) · **🖊️** orden FIFO del reparto de crédito sin desempate con igual `created_at` (toca plata) · `.claude/settings.json` con deny + hooks · métricas por PR · achicar el correo de cierre (pedido del dueño) · **WhatsApp automático a proveedores** (Cloud API) después de #300, con la foto del comprobante en la base (**🖊️** migración).
+## 🟥 P0 — Ahora (20/11)
+1. **👁️ Cron del Club:** repetir el 23/11 la verificación del jobid 8 (solo `select`; nunca `for update` sobre `cron.job`).
+2. **👁️ Validaciones del dueño:** cierre del 20-nov (Resumen del día, correo `cierre-email` v19, aviso de propinas sin repartir) · correo de pago agrupado, paso 2 (pagar 2 de 3 facturas del proveedor de prueba) · próximo crédito real (#310, FIFO) · #229 al lanzar el Club. **Club en PAUSA** hasta Apple.
+3. **Firma del dueño (#317):** no se probó en vivo; probarla el 21-nov con el primer merge de código.
+3a. **Cola (en orden):** menores del #317 (comillas en `cd`; CI que verifique `git ls-files '.claude/*.local'` vacío; permitir `reset --keep`/`switch -C`) · script de anonimización de staging (spec firmada, D1/D3/D4/D5) · rehacer lo útil del #73 (Opus) · rehacer el #75 (Sonnet) · rama `staging` congelada (decidir) · métricas por PR · WhatsApp a proveedores F0 → F1a (**🖊️** migración) · costos de producto junto con Inventario · H3 de propinas (decidir).
 3b. **👁️ Revisar en 20–30 días** (≈ 8–18/12) si se sigue pisando la clave FE de los tiquetes 04 (el agente toma `clave_fe` por consecutivo sin filtrar el tipo).
 3c. ~~Alerta de latido del agente~~: el dueño dijo que no por ahora (19/11).
 3d. **Recorrer con `satori-verificar` en staging Tiempos y Resumen** cuando haya sesión (capturas por rol).
-4. **Correos desplegados (17/11, ya en prod):** `cierre-email` v14 y `pago-notificar` v14 sin prueba funcional hasta el próximo cierre o pago real; `monthly-report` v23 probada con dry_run. Sus PRs (#242, #243, #245, #241) siguen abiertos: el código de Edge entra a `main` con el ítem 11 (A05). Decidir también qué pasa con #231, #232 y #235, que no entraron.
+4. ~~Correos desplegados~~: en `main` y prod desde el ítem 11 (#313, #314); cerrados sin merge #241, #242, #243, #245, #235.
 4b. **🧹 A04 · sacar del repo el nombre de la PC del PoS** (`pos-bridge/README.md`, `pos-bridge/.env.example` y el ESTADO de la rama del agente): se hace en la rama del agente, no desde `main` ([R12](docs/REGLAS-POR-INCIDENTE.md)).
 4d. **Portal del socio (club-web):** pestañas con mayúscula uniforme «Tu red · Club Satori · Local» (decisión del dueño 17/11, B). Va en el próximo PR del portal.
 4e. **🔐 Revisión de SiteGround (semana del 18/11, solo configuración, no se borra ningún sitio):** DMARC con dirección de reportes y después «quarantine» · copia de backups fuera de SiteGround · verificación en dos pasos de la cuenta · registros viejos de `staging3`.
@@ -50,7 +50,7 @@
 12. **Propinas · aviso sin repartir (#320), menores del verificador:** la propiedad «avisa ⇔ guardas» no cubre montos con céntimos (barra < ₡0,5 bloquea sin aviso) · falta una mutación del aviso con cobertura (rol efectivo vs natural en `TipsModule`) · «Quincenal» recalcula con los puntos y roles **actuales** de `role_tip_points`, no con los del turno (`payout_crc` guardado).
 
 ## 🟧 P1 — Seguridad, Edge y deploy
-1. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las funciones con su `verify_jwt` (`monthly-report` true v10+, `extract-document` true, `cierre-email` true, `pago-notificar` true, `ingest-ndf` false, `alta-empleado` true, `club-pase` false). Traer **antes** el código de prod (v10 de `monthly-report`, `8a8dfb6` de `extract-document`, `alta-empleado`) y copiar `[auth]`/`[api]` de prod (`disable_signup = true`, `site_url`, redirects, mínimo 8) o un merge los pisa. Hasta cerrarlo, ningún PR a `main` con `supabase/functions/` (regla 2).
+1. ~~Ítem 11 · `config.toml`~~: hecho (#313, 20-nov). Cada merge que toca `supabase/functions/` despliega por Branching (regla 2 de ESTADO).
 2. **🔐 Rotar los secretos de ingesta** (`POS_INGEST_SECRET` prod y staging, `INGEST_SECRET` de BioTime, y su copia en los `.env` de las PCs): pospuesto por el dueño (06/11); con las tareas paradas y verificando `pos_ndf_cursor.last_error` null después. **Revocar `claude-code-prod`** solo después de identificar en Supabase si es la credencial de las sesiones de CC (se reemplaza, nunca se revoca solo).
 3. **🔐 4 `SECURITY DEFINER` ejecutables por `anon`:** `get_my_role` (analizar policies antes del revoke), `handle_new_user`, `log_movement_edit`, `unif_on_cash_movement`.
 4. **Gate en el deploy:** `deploy.yml` publica sin correr `vitest` (HALLAZGOS #14).

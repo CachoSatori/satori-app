@@ -4,25 +4,24 @@
 > (incluye el ESTADO íntegro previo a la poda del 20-nov).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega)
-**Al día: 2026-11-20 (05:30 -06:00).** `main` = `311bca6d` (merge #304, 05:20). **Ledger prod = 194 · staging = 194** (190–194 aplicadas el
-19-nov, md5 = prod; la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
-[docs/handoffs/HANDOFF-2026-11-19.md](docs/handoffs/HANDOFF-2026-11-19.md).
-- **Entró el 19–20-nov:** #264, #257, #299, #301, #302, #300, #303, #304.
-- **Edge prod:** `pago-notificar` v16 (vuelta atrás v15); el resto igual. **Agente PoS prod** (`agente-fe`): latido OK (último poll ~3 min).
-- **Protección de `main`:** «Gate» requerido · rama al día (`strict`) · sin excepción para admins. Las sesiones en la nube no pueden cambiarla (403):
-  GitHub → Settings → Branches. Arnés a prueba hasta el 3-dic.
-- **Decisiones del dueño (19–20-nov):** Club en PAUSA hasta que Apple apruebe la Wallet · sin alerta de latido por ahora · WhatsApp automático a
-  proveedores: spec en curso, prioridad alta (foto en la base, migración con firma) · **PRs solo de `.md` se mergean sin OK del dueño con Gate verde,
-  solo de 23:30 a 15:00** (a prueba hasta el 3-dic) · **D1 nueva (20-nov):** libre 23:30–15:00, 15:00–19:00 con OK, 19:00–23:30 urgente con OK · NO se adopta auto-merge de código · `settings.json` con deny + hooks, spec de staging para agentes y esta poda: en curso.
-- **Pendiente del dueño:** correo de pago agrupado (PR #303, ya en `main`) · #229 al lanzar el Club (0 visitas de socios desde el 17-nov).
-- **Cron:** job 4 (quincena) aplicado el 16-nov, **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov. Job 10 (`ventas-dia-contador`): primer envío 1-dic.
+**Al día: 2026-11-20 (tarde).** `main` = `7ce4ebe9` (merge #320). **Ledger prod = 194 · staging = 194** (la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
+[docs/handoffs/HANDOFF-2026-11-20.md](docs/handoffs/HANDOFF-2026-11-20.md).
+- **Entró el 20-nov:** #307 (poda) · #306 (spec staging para agentes, firmada) · #309 (menores de #304) · #310 (FIFO de crédito, sin migración) · #313 (ítem 11: `config.toml` + Edge = prod) · #311 (Resumen del día obligatorio en el cierre) · #314 (`cierre-email` v18, en prod como v19) · #308 (hooks: deny + D1 nueva) · #316 (datos de análisis fuera del repo público) · #315 (spec de anonimizar staging, firmada D1/D3/D4/D5) · #318 y #319 (pruebas de caracterización y de propiedades) · #317 (firma del dueño como pedido «Aprobar») · #320 (aviso de propinas sin repartir).
+- **Cerrados sin merge:** #305, #312, #61, #235, #241, #242, #243, #245, #281, #283, #63, #73.
+- **Edge prod (después del ítem 11):** `monthly-report` v25 · `extract-document` v21 · `cierre-email` v19 · `pago-notificar` v17 · `ventas-dia-contador` v6 · `ingest-ndf` v14 (verify_jwt false) · `alta-empleado` v13 · `club-pase` v8 (verify_jwt false). **Desde el #313, cada merge que toca `supabase/functions/` despliega por Branching.** Agente PoS prod (`agente-fe`): latido OK.
+- **Protección de `main`:** «Gate» requerido · rama al día (`strict`) · sin excepción para admins. Las sesiones en la nube no pueden cambiarla (403). Arnés a prueba hasta el 3-dic.
+- **Decisiones del dueño:** Club en PAUSA hasta que Apple apruebe la Wallet · sin alerta de latido · **D1 (20-nov): 23:30–15:00 libre · 15:00–19:00 con OK del dueño · 19:00–23:30 solo urgente con OK** · PRs solo de `.md` se mergean sin OK únicamente de 23:30 a 15:00 · NO auto-merge de código.
+- **Firma (opción A, #317):** la sesión principal pide la firma con Write de la marca y el dueño toca «Aprobar» en la app. **No se probó en vivo** (la sesión del 20-nov tenía los hooks viejos): probarla el 21-nov con el primer merge de código.
+- **Pendiente del dueño:** cierre del 20-nov (Resumen del día + correo v19 + aviso de propinas) · correo de pago agrupado, paso 2 (pagar 2 de 3 facturas del proveedor de prueba) · próximo crédito real (#310) · #229 al lanzar el Club.
+- **Cola (en orden):** menores del #317 (comillas en `cd`; CI que verifique `git ls-files '.claude/*.local'` vacío; permitir `reset --keep`/`switch -C`) · script de anonimización de staging (spec firmada) · rehacer lo útil del #73 (Opus) · rehacer el #75 (Sonnet) · rama `staging` congelada (decidir) · métricas por PR · WhatsApp a proveedores F0 → F1a · cron del Club el 23-nov · costos de producto con Inventario · H3 de propinas (decidir).
+- **Cron:** job 4 (quincena) **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov. Job 10 (`ventas-dia-contador`): primer envío 1-dic.
 - **Deploy:** `version.json` y `/api/salud` dan 403 por el proxy de la sesión: verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 
 > **Definition of Done:** ninguna entrega se cierra sin ⚡ARRANQUE al día (mismo PR o PR de docs inmediato). **El repo manda:** si este archivo y la realidad no coinciden, gana la realidad y se corrige el archivo.
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `311bca6d` |
+| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `7ce4ebe9` |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`); su base ya está al día (ledger 194) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
@@ -43,7 +42,7 @@
 
 ## 🛑 Reglas operativas (leer antes de tocar `main` o una base)
 1. **Branching corre `migrate` contra PROD en cada push a `main`.** Las migraciones entran por merge → Branching; «a mano antes del merge» solo con firma del dueño y verificando el ref.
-2. **Edge Functions (ítem 11, PR #313, a la espera de firma):** hasta ese merge, ningún PR a `main` con `supabase/functions/` (despliegue manual desde la rama viva, con firma). Desde el merge, con `supabase/config.toml` válido (lista blanca: solo `project_id` y `verify_jwt` por función; R04 en `scripts/ci/edgeConfig.mjs`), **las Edge entran por merge y Branching las despliega en cada push a `main`**: código de Edge en `main` = cambio en prod (firma). El Preview por PR está desactivado. Humo después del merge: versión, `verify_jwt` y `ezbr_sha256` de las 8 funciones y latido del PoS (`satori-merge-y-deploy` §4). Paquete: [PASE-item11-config-edge](docs/pases/PASE-item11-config-edge.md).
+2. **Edge Functions (ítem 11, PR #313, en `main` desde el 20-nov):** con `supabase/config.toml` válido (lista blanca: solo `project_id` y `verify_jwt` por función; R04 en `scripts/ci/edgeConfig.mjs`), **las Edge entran por merge y Branching las despliega en cada push a `main`**: código de Edge en `main` = cambio en prod (firma). El Preview por PR está desactivado. Humo después del merge: versión, `verify_jwt` y `ezbr_sha256` de las 8 funciones y latido del PoS (`satori-merge-y-deploy` §4). Paquete: [PASE-item11-config-edge](docs/pases/PASE-item11-config-edge.md).
 3. **Merges (D1, cambio del dueño 20/11):** libre 23:30–15:00 · 15:00–19:00 solo con OK del dueño en el momento para ese PR · 19:00–23:30 solo si es urgente y con OK del dueño (la cita dice URGENTE). Una sola sesión de CC mergea a la vez, solo sus PRs. **Excepción (20/11, a prueba hasta el 3-dic):** un PR solo de `.md` con Gate verde se mergea sin OK del dueño **solo de 23:30 a 15:00**; fuera de esa franja sigue la regla general. Lo hace cumplir la guardia de `scripts/hooks/` (marca de OK con el número de PR y `--match-head-commit`).
 4. **«Ver como» usa los permisos del owner:** probar permisos con un usuario real del rol o su JWT en `begin read only` … `rollback`.
 5. **ICP = propina electrónica declarada (voluntaria: tarjeta/SINPE) / neta de sus mesas.** El 10 % de servicio no entra al numerador ni al denominador; `payout_crc` no es ICP; barra: «no aplica».
@@ -62,16 +61,18 @@
 ## ☁️ Edge, Cloudflare y agentes
 `verify_jwt`: **off** solo en `ingest-ndf` (el agente manda `x-ingest-secret`) y `club-pase` (portón `x-club-web`); el resto **on** (`ingest-punches` no existe en prod). Secretos: por su lista (nombre + huella); código: por `ezbr_sha256`, no por versión.
 
-| Función en prod (20-nov, leído de prod) | Fuente del código desplegado |
+| Función en prod (20-nov, tras el ítem 11) | Versión |
 |---|---|
-| `monthly-report` v24 | `50831a8e` (#245) + remitente propio (sin commit; va en el PR del ítem 11) |
-| `extract-document` v20 | `190b5f59`, rama `claude/extract-document-sin-datos` |
-| `cierre-email` v17 | `87364a84`, rama `claude/cierre-email-redondeo` (comentarios aparte) |
-| `pago-notificar` v16 | `9088687b`, rama `claude/pago-notificar-agrupado` |
-| `ventas-dia-contador` v5 | `78e95953`, rama `claude/ventas-dia-contador-redondeo` (comentarios aparte) |
-| `ingest-ndf` v13 | `5da233a5`, rama `claude/puente-item11-prod-v2` |
-| `alta-empleado` v12 | `942d12f5`, rama `claude/alta-empleado-fn` |
-| `club-pase` v7 | `5cc50737` (= `6c5848e`), rama `claude/club-pase-edge` |
+| `monthly-report` | v25 |
+| `extract-document` | v21 |
+| `cierre-email` | v19 |
+| `pago-notificar` | v17 |
+| `ventas-dia-contador` | v6 |
+| `ingest-ndf` | v14 (verify_jwt false) |
+| `alta-empleado` | v13 |
+| `club-pase` | v8 (verify_jwt false) |
+
+El código de `main` es el desplegado (Branching); las fuentes por rama de antes del ítem 11 están en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 
 - **Cloudflare:** Pages `satori-club` y Worker `satori-club-api` (Workers Builds desde `main`; secretos a mano). **Agentes del PoS:** staging @ `14bd278`; prod `agente-fe` @ `07782e49`. `biotime-bridge` publica solo a staging.
 

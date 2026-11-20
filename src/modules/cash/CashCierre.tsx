@@ -30,6 +30,7 @@ import {
 } from './cierrePozo'
 import { shiftLabel } from '../../shared/utils'
 import { avisoTipoCambio, errorTipoCambio, parseTipoCambio } from './tipoCambio'
+import { TEMAS_RESUMEN, SIN_NOVEDADES, AVISO_RESUMEN_VACIO, resumenVacio, agregarTema, type TemaResumen } from './resumenDia'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -252,7 +253,19 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // Al cambiar de fecha se resetea (estado derivado de la fecha, sin efecto).
   const [recuentoFecha, setRecuentoFecha] = useState(fecha)
   if (recuentoFecha !== fecha) { setRecuentoFecha(fecha); setPrimerConteo(null); setSinRecontar(false); setOfertaRecuento(false) }
+  // «Resumen del día» (20-nov): lo escribe el encargado al cerrar; va en la columna de notas de
+  // siempre (sin esquema nuevo). Obligatorio: vacío no cierra (o «Sin novedades»).
   const [notas,        setNotas]        = useState('')
+  const resumenRef = useRef<HTMLTextAreaElement>(null)
+  const [focoResumen, setFocoResumen] = useState(0)
+  useEffect(() => {
+    if (!focoResumen || !resumenRef.current) return
+    const el = resumenRef.current
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [focoResumen])
+  const tocarTema = (tema: TemaResumen) => { setNotas(t => agregarTema(t, tema)); setFocoResumen(n => n + 1) }
+  const faltaResumen = resumenVacio(notas)
 
   // CAMBIO A — cerrar con ventas en ₡0: confirmación explícita por fase (checkbox).
   const [confirmVentasCeroM, setConfirmVentasCeroM] = useState(false)
@@ -274,6 +287,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // Fuera de tolerancia el motivo se pide recién cuando ya se ofreció el reconteo (recontó o eligió no).
   const recuentoResuelto = primerConteo !== null || sinRecontar
   const pedirCierre = () => {
+    if (faltaResumen) { setError(AVISO_RESUMEN_VACIO); return }
     if (requiresAjuste && !recuentoResuelto) { setOfertaRecuento(true); return }
     setShowResumen(true)
   }
@@ -369,6 +383,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     if (requiresAjuste && !ajusteMotivo.trim()) {
       setError('⚠ Hay diferencia — el motivo es obligatorio antes de cerrar'); return
     }
+    if (faltaResumen) { setError(AVISO_RESUMEN_VACIO); return }
     // Orden de fases: la noche NO se puede cerrar sin el Mediodía confirmado (Fase 1).
     // Sin `parcial`, las ventas de mediodía se perderían y el cierre quedaría a medias.
     if (!parcial) { setError('Cerrá primero el Mediodía (Fase 1) antes de cerrar la noche.'); return }
@@ -401,7 +416,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           diferencia_crc:       diferencia ?? 0,
           ajuste_tipo:          requiresAjuste ? ajusteTipoDerivado : '',
           ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
-          notas,
+          notas:                notas.trim(),
           tipo_cambio:          tc,
           // Mig 074: el primer conteo si hubo reconteo; null si no hubo.
           primer_conteo_crc:    primerConteo ? primerConteo.crc : null,
@@ -657,7 +672,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
             </div>
           </div>
           {completo.notas && (
-            <div style={{ fontSize:'0.78rem', color:'var(--c-gris)', padding:'0.5rem 0.75rem', background:'var(--c-panel)', borderRadius:2 }}>
+            <div style={{ fontSize:'0.78rem', color:'var(--c-gris)', padding:'0.5rem 0.75rem', background:'var(--c-panel)', borderRadius:2, whiteSpace:'pre-wrap' }}>
               📝 {completo.notas}
             </div>
           )}
@@ -1001,12 +1016,29 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 )}
               </Section>
 
-              {/* Notas + Confirmar */}
+              {/* Resumen del día (obligatorio) + Confirmar */}
               <div style={{ marginBottom:'0.75rem' }}>
-                <Field label="Notas del cierre">
-                  <input value={notas} onChange={e => setNotas(e.target.value)}
-                    placeholder="Observaciones, incidentes…"
-                    className="cierre-input" style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem' }} />
+                <Field label="Resumen del día">
+                  <div role="group" aria-label="Temas del resumen" style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
+                    {TEMAS_RESUMEN.map(tema => (
+                      <button key={tema} type="button" onClick={() => tocarTema(tema)} className="tips-btn-ghost"
+                        style={{ padding:'0 12px', fontSize:'0.78rem' }}>
+                        {tema}
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => setNotas(SIN_NOVEDADES)} className="tips-btn-ghost"
+                      style={{ padding:'0 12px', fontSize:'0.78rem' }}>
+                      {SIN_NOVEDADES}
+                    </button>
+                  </div>
+                  <textarea ref={resumenRef} aria-label="Resumen del día" value={notas} onChange={e => setNotas(e.target.value)}
+                    rows={4} placeholder="Qué pasó hoy: quejas, personal, emergencias, 86, mantenimiento…"
+                    className="cierre-input"
+                    style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem', resize:'vertical', fontFamily:'inherit',
+                             ...(faltaResumen ? { border:'1px solid var(--c-laca)' } : {}) }} />
+                  {faltaResumen && (
+                    <div role="status" style={{ fontSize:'0.72rem', color:'var(--c-laca)', marginTop:4 }}>{AVISO_RESUMEN_VACIO}</div>
+                  )}
                 </Field>
               </div>
 
@@ -1014,7 +1046,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 onClick={pedirCierre}
                 disabled={saving || turnoAbierto || ventasNVacias || (ventasNCeroReal && !confirmVentasCeroN)
                   || (postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && !confirmVentaBrutaN)
-                  || totalContadoCRC === 0 || (requiresAjuste && recuentoResuelto && !ajusteMotivo.trim())}
+                  || totalContadoCRC === 0 || (requiresAjuste && recuentoResuelto && !ajusteMotivo.trim()) || faltaResumen}
                 className="cierre-btn green">
                 👁 Revisar resumen y cerrar el día →
               </button>
@@ -1129,11 +1161,11 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               </div>
             )}
 
-            {notas.trim() && <div className="cd-modal-note">📝 {notas.trim()}</div>}
+            {notas.trim() && <div className="cd-modal-note" style={{ whiteSpace:'pre-wrap' }}>📝 Resumen del día: {notas.trim()}</div>}
 
             <div className="cd-modal-actions">
               <button className="tips-btn-ghost" onClick={() => setShowResumen(false)}>Volver a editar</button>
-              <button className="cd-btn-green" disabled={saving}
+              <button className="cd-btn-green" disabled={saving || faltaResumen}
                 onClick={() => { setShowResumen(false); handleConfirmCompleto() }}>
                 {saving ? 'Cerrando…' : '✓ CONFIRMAR CIERRE DEL DÍA'}
               </button>

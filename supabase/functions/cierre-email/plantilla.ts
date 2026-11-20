@@ -7,7 +7,7 @@
 
 import {
   COLOR, cabecera, celdaNombre, cifras, crc, documento, esc, fechaCorta, gris, miles, nombrePropio, parrafo, pct, pie,
-  seccion, tabla, titulo, usd, variacion, verbo, type Cifra,
+  seccion, tabla, usd, variacion, verbo, type Cifra,
 } from './correo-estandar.ts'
 import type { Destacado, ResumenCorreo, ResumenDia } from './resumen.ts'
 
@@ -31,16 +31,6 @@ const N = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0)
 /** Umbral de «cuadra» del correo anterior (sin cambios): diferencia menor a ₡500 en valor absoluto. */
 export const UMBRAL_CUADRA = 500
 
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-
-/** «2026-11-15» → «15 de noviembre» (título de página). */
-export function tituloFecha(iso: string): string {
-  const r = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '')
-  if (!r) return String(iso ?? '')
-  return `${Number(r[3])} de ${MESES[Number(r[2]) - 1] ?? ''}`
-}
-
 /** Tipo de cambio con coma decimal y hasta 2 decimales: 505.2 → «₡505,20»; 510 → «₡510». */
 export function tipoCambio(v: number): string {
   const x = N(v)
@@ -56,6 +46,12 @@ const usdGris = (v: number) => (N(v) > 0 ? `<span style="color:${COLOR.gris}">${
  *   · `undefined` → sin sección de ventas (el correo de antes, tal cual);
  *   · `null`      → la sección dice «Resumen de ventas no disponible» (falló la lectura, cierre viejo…);
  *   · objeto      → la sección «Ventas del día».
+ *
+ * Orden (v18, decisión del dueño 20-nov: más corto y lo importante arriba):
+ *   cabecera → Resumen del día (lo que escribió el encargado; si viene vacío, no va) → Diferencia (con «Cerró X,
+ *   tipo de cambio Y» en gris) → Ventas del día → Salonero destacado → cifras de caja → Distribución del conteo
+ *   físico → pie. Sin título ni bajada (repetían la diferencia) y sin la sección «Notas» del final (ahora es el
+ *   Resumen del día).
  */
 export function buildHtml(c: CierreCorreo, resumen?: ResumenCorreo | null): string {
   const reporte = 'Cierre de caja'
@@ -72,31 +68,36 @@ export function buildHtml(c: CierreCorreo, resumen?: ResumenCorreo | null): stri
   const motivo = (c.ajuste_motivo ?? '').trim()
   const notas = (c.notas ?? '').trim()
 
-  // Bajada: la conclusión primero.
-  const conclusion = cuadra
-    ? 'La caja cuadra, sin diferencia.'
-    : `${ajusteTipo} de ${crc(Math.abs(dif))}${motivo ? `: ${motivo}` : ''}.`
-  const quien = `${manager ? `Cerró ${manager}` : 'Cierre'}, con tipo de cambio ${tipoCambio(tc)}.`
-  const bajada = esc(`${conclusion} ${quien}`)
+  let html = cabecera(reporte, fecha)
 
+  // 1. Resumen del día: el texto del encargado, tal cual (escapado, con sus saltos de línea).
+  if (notas) {
+    html += seccion('Resumen del día')
+    // Texto libre: una palabra o un enlace largo sin espacios no puede ensanchar el correo (móvil).
+    html += parrafo(`<span style="${CORTE_LARGO}">${textoConSaltos(notas)}</span>`)
+  }
+
+  // 2. Diferencia: verbo de acción en musgo («Cuadra») o laca (faltante / sobrante), con el monto y el motivo;
+  //    abajo, en gris, quién cerró y con qué tipo de cambio.
+  const quien = gris(`${manager ? `Cerró ${manager}, tipo` : 'Tipo'} de cambio ${tipoCambio(tc)}`)
+  html += seccion('Diferencia')
+  html += cuadra
+    ? parrafo(`${verbo('Cuadra', COLOR.musgo)}&nbsp;&nbsp;${gris('sin diferencia')}<br>${quien}`)
+    : parrafo(`${verbo(ajusteTipo, COLOR.laca)}&nbsp;&nbsp;<span style="font-weight:600;color:${COLOR.laca}">${dif >= 0 ? '+' : ''}${crc(dif)}</span>${motivo ? `<br>${gris(motivo)}` : ''}<br>${quien}`)
+
+  // 3. Ventas del día y salonero destacado (resumen del PoS).
+  if (resumen !== undefined) html += seccionVentas(resumen)
+
+  // 4. Cifras de la caja (las mismas de siempre).
   const lista: Cifra[] = [
     { valor: crc(N(c.vm_crc)), etiqueta: 'ventas mediodía', variacionHtml: usdGris(N(c.vm_usd)) },
     { valor: crc(N(c.vn_crc)), etiqueta: 'ventas noche', variacionHtml: usdGris(N(c.vn_usd)) },
   ]
   if (propPagadas > 0) lista.push({ valor: crc(-propPagadas), etiqueta: 'propinas pagadas en el cierre' })
   lista.push({ valor: crc(totalCRC), etiqueta: 'total contado', variacionHtml: usdGris(totalUSD) })
+  html += seccion('Caja del día') + cifras(lista)
 
-  let html = cabecera(reporte, fecha) + titulo(tituloFecha(c.session_date), bajada) + cifras(lista)
-
-  // Diferencia: verbo de acción en musgo («Cuadra») o laca (faltante / sobrante), con el monto y el motivo.
-  html += seccion('Diferencia')
-  html += cuadra
-    ? parrafo(`${verbo('Cuadra', COLOR.musgo)}&nbsp;&nbsp;${gris('sin diferencia')}`)
-    : parrafo(`${verbo(ajusteTipo, COLOR.laca)}&nbsp;&nbsp;<span style="font-weight:600;color:${COLOR.laca}">${dif >= 0 ? '+' : ''}${crc(dif)}</span>${motivo ? `<br>${gris(motivo)}` : ''}`)
-
-  if (resumen !== undefined) html += seccionVentas(resumen)
-
-  // Conteo físico
+  // 5. Conteo físico
   html += seccion('Distribución del conteo físico', 'A dónde fue el efectivo contado.')
   const fila = (nombre: string, colones: number, dolares: number) =>
     [celdaNombre(nombre), crc(colones), dolares > 0 ? usd(dolares) : gris('—')]
@@ -110,13 +111,16 @@ export function buildHtml(c: CierreCorreo, resumen?: ResumenCorreo | null): stri
     ],
   )
 
-  if (notas) {
-    html += seccion('Notas')
-    html += parrafo(esc(notas), COLOR.gris)
-  }
-
   html += pie('cierre de caja', fecha, resumen ? NOTA_VENTAS(resumen) : undefined)
   return documento(`Satori, cierre de caja, ${fecha}`, html)
+}
+
+/** Corte de palabras largas para el texto libre del encargado. */
+export const CORTE_LARGO = 'word-break:break-word;overflow-wrap:anywhere'
+
+/** Texto libre escapado, con los saltos de línea como <br> (CRLF incluido). */
+export function textoConSaltos(t: string): string {
+  return esc(t).replace(/\r\n|\r|\n/g, '<br>')
 }
 
 // ── Ventas del día (resumen del PoS) ─────────────────────────────────────────────────────────

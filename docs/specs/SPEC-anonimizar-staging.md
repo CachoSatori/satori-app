@@ -56,7 +56,7 @@ ventas por día.
 - **`anonimizar.sql`:** idempotente, una transacción; aborta si el ref o `club_entorno` no son de staging o faltan
   los usuarios de prueba. Devuelve solo conteos.
 - **`verificar.sql` (solo lectura, solo conteos) exige 0 en:** correos fuera de `@staging-satori.test` y
-  `@example.com` · teléfonos fuera de 80000000–80009999 (sembrados: 00–99; cien no alcanzan para socios) ·
+  `@example.com` · teléfonos fuera del bloque ficticio de la lista blanca de la guarda de privacidad (los de ocho dígitos que empiezan con 800000: cien números, sembrados todos; si cien no alcanzan para los socios, ampliar la lista blanca es un cambio aparte, en un check protegido (`src/privacidadRepo.test.ts`), con firma del dueño, y no parte de esta spec) ·
   nombres que no sean alias ni de prueba · datos de banco · tokens iguales a los de antes · objetos de Storage
   fuera de `sops/` y de la imagen ficticia · columnas sin clasificar. Más los controles del §2.
 - **Mutación:** en una transacción descartada se siembran un correo, un teléfono y un nombre inventados con forma
@@ -79,13 +79,15 @@ por la API de Storage con la llave de servicio de staging (`lib.sh`), no por SQL
   STAGING.md al día. Sin migración ni sagrados; nada en prod. **Verifica** un agente que no vio el trabajo.
 - **Corre** el coordinador en staging, **con OK del dueño por chat** (escritura persistente). ~10 minutos.
 
-## 7. Decisiones del dueño
-| # | Decisión | Opciones | Recomendación | ¿Firma? |
-|---|---|---|---|---|
-| D1 | Montos | Dejarlos · escalarlos por factor secreto | Dejarlos | Sí |
-| D2 | Alias | Numerado, se rearma en cada clonado · estable entre clonados (guarda una sal) | Numerado | No |
-| D3 | Storage | A borrar + imagen ficticia · B solo borrar · C dejar | A | Sí |
-| D4 | JSON con datos | Lista blanca de campos (montos, fechas) · vaciar todo | Lista blanca; `ventas_dias` (nadie la lee) vacía | Sí |
-| D5 | Sueldos | Dejar el monto con alias · poner un valor ficticio por tipo | Valor ficticio | Sí |
-| D6 | PDF de SOP y libros de franquicia | Dejarlos · borrar los de `franquicia/` | Dejarlos | No |
-| D7 | Cédula del emisor en la clave FE | Reemplazar (§2) · dejar | Reemplazar | No |
+## 7. Decisiones (firmadas 20-nov)
+| # | Decisión | Resuelto | ¿Firma? |
+|---|---|---|---|
+| D1 | Montos | Dejarlos | Firmada |
+| D2 | Alias | Numerado, se rearma en cada clonado | No lleva |
+| D3 | Storage | Borrar todo lo que no sea `sops/` y poner una imagen ficticia; los PDF de SOP se quedan | Firmada |
+| D4 | JSON con datos | Lista blanca de campos; vaciar `ventas_dias` | Firmada |
+| D5 | Sueldos | Valor ficticio por tipo | Firmada |
+| D6 | PDF de SOP y libros de franquicia | Dejarlos | No lleva |
+| D7 | Cédula del emisor en la clave FE | Reemplazarla (§2) | No lleva |
+
+Con las firmas de D1, D3, D4 y D5 queda resuelta la spec; construirla sigue siendo un PR aparte.

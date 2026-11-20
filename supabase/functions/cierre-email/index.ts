@@ -10,19 +10,33 @@
  * esta función EXIGE Authorization (JWT del usuario, verificado con getUser) y RELEE
  * la fila del cierre con un cliente que lleva ESE token → el RLS de cash_cierres_dia
  * es el portón (mismo patrón que extract-document post-IDOR). NO usa service_role para
- * leer datos. Resend (RESEND_API_KEY) manda el correo, igual que monthly-report.
+ * leer el cierre. Resend (RESEND_API_KEY) manda el correo, igual que monthly-report.
+ *
+ * RESUMEN DE VENTAS DEL DÍA (pedido del dueño 18-nov; opción B firmada 18-nov 05:49 CR — CAMBIO DE PATRÓN):
+ * el cierre lo confirma el CAJERO, que no lee el PoS (regla 6). Sin abrir permisos, el resumen se lee
+ * con service_role, pero SOLO (a) después de releer el cierre con el JWT del usuario (si no lo ve, no se
+ * lee nada), (b) si el cierre es de las últimas 36 h (resumen.ts), (c) para su jornada y la de −7, y
+ * (d) como agregados que van SOLO dentro del correo a REPORT_TO_EMAIL: la respuesta HTTP no trae montos
+ * ni nombres. Si el resumen falla, el correo sale igual con «Resumen de ventas no disponible».
  *
  * Deploy STAGING: supabase functions deploy cierre-email --project-ref hwiatgicyyqyezqwldia
  * (prod va en el pase, con firma — NO tocar prod acá.)
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { destinatarioDe } from './destinatario.ts'
+import { procesarCierre, type CierreFila } from './proceso.ts'
+import { resumenParaCierre, type LogicaResumen } from './resumen.ts'
+import { leerNombres, leerVentanaJornada, logica } from './lecturaPos.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY       = Deno.env.get('SUPABASE_ANON_KEY')!
+// Solo para el resumen de ventas (opción B, ver cabecera). Nunca para leer el cierre.
+const SERVICE_KEY    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 // Mismo destinatario/config que monthly-report (en prod ya existe por ese reporte).
-const TO_EMAIL       = Deno.env.get('REPORT_TO_EMAIL') ?? 'cachorrogp@gmail.com'
-const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
+// Sin correo por defecto en el código (firma del dueño, 16-nov): sin REPORT_TO_EMAIL no se manda nada.
+const TO_EMAIL       = destinatarioDe(Deno.env.get('REPORT_TO_EMAIL'))
+const FROM_EMAIL     = 'Satori <no-responder@satoricostarica.com>'
 
 const ALLOWED_ORIGINS = new Set([
   'https://cachosatori.github.io',    // prod — GitHub Pages (base /satori-app/)
@@ -40,90 +54,7 @@ function corsHeaders(req: Request): Record<string, string> {
   return headers
 }
 
-const INK = '#0d0d0d', PAPER = '#f5f0e8', GOLD = '#c8a96e'
-const GREEN = '#2a7a4a', RED = '#c23b22', PURPLE = '#8a5aa8', GOLDDK = '#8a6d1f'
-const N = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0)
-const fi = (v: number) => '₡ ' + Math.round(N(v)).toLocaleString('es-CR')
-const fu = (v: number) => '$ ' + N(v).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-interface CierreRow {
-  session_date: string
-  manager: string | null
-  tipo: string
-  vm_crc: number | null; vm_usd: number | null
-  vn_crc: number | null; vn_usd: number | null
-  propinas_m_crc: number | null; propinas_n_crc: number | null
-  sep_diaria_crc: number | null; sep_diaria_usd: number | null
-  sep_registradora_crc: number | null; sep_registradora_usd: number | null
-  remanente_crc: number | null; remanente_usd: number | null
-  diferencia_crc: number | null
-  ajuste_tipo: string | null; ajuste_motivo: string | null
-  notas: string | null; tipo_cambio: number | null
-}
-
-function row(label: string, crc: number, usd = 0, color = ''): string {
-  const usdTxt = usd > 0 ? ` <span style="color:#999;font-size:11px">· ${fu(usd)}</span>` : ''
-  return `<tr>
-    <td style="padding:7px 0;color:#666;font-size:12px">${label}</td>
-    <td style="padding:7px 0;font-size:13px;text-align:right;font-weight:600${color ? `;color:${color}` : ''}">${fi(crc)}${usdTxt}</td>
-  </tr>`
-}
-
-function buildHtml(c: CierreRow): string {
-  // propinas pagadas en el cierre = suma sellada de ambas piernas (mismo dato del popup).
-  const propPagadas = N(c.propinas_m_crc) + N(c.propinas_n_crc)
-  const totalCRC = N(c.sep_diaria_crc) + N(c.sep_registradora_crc) + N(c.remanente_crc)
-  const totalUSD = N(c.sep_diaria_usd) + N(c.sep_registradora_usd) + N(c.remanente_usd)
-  const dif = N(c.diferencia_crc)
-  const cuadra = Math.abs(dif) < 500
-  const tc = N(c.tipo_cambio)
-
-  const difBlock = cuadra
-    ? `<div style="margin:14px 0;padding:10px 14px;background:#eaf5ee;border-left:3px solid ${GREEN};font-size:13px;color:${GREEN};font-weight:600">✅ Cuadra — sin diferencia</div>`
-    : `<div style="margin:14px 0;padding:10px 14px;background:#fbecea;border-left:3px solid ${RED};font-size:13px;color:${RED}">
-        <div style="font-weight:700">⚠ Ajuste: ${(c.ajuste_tipo ?? '').trim() || (dif < 0 ? 'Faltante' : 'Sobrante')}${(c.ajuste_motivo ?? '').trim() ? ` — ${(c.ajuste_motivo ?? '').trim()}` : ''}</div>
-        <div style="font-family:monospace;margin-top:4px">${dif >= 0 ? '+' : ''}${fi(dif)}</div>
-      </div>`
-
-  const notaBlock = (c.notas ?? '').trim()
-    ? `<div style="margin-top:10px;font-size:11px;color:#888">📝 ${(c.notas ?? '').trim()}</div>` : ''
-
-  return `<div style="max-width:520px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#fff">
-    <div style="background:${INK};padding:22px 28px 18px">
-      <div style="font-family:Georgia,serif;font-size:22px;color:${GOLD};letter-spacing:.08em;font-weight:700">里 SATORI</div>
-      <div style="font-size:10px;color:#555;letter-spacing:.25em;text-transform:uppercase;margin-top:3px">Cierre del día · ${c.session_date}</div>
-    </div>
-    <div style="padding:20px 28px">
-      <div style="font-size:11px;color:#999;margin-bottom:14px">
-        Cerrado por ${c.manager ?? '—'} · TC ₡${tc.toLocaleString('es-CR')}
-      </div>
-
-      <div style="font-size:10px;color:#999;letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px">Ventas y propinas</div>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-        ${row('Ventas Mediodía', N(c.vm_crc), N(c.vm_usd))}
-        ${row('Ventas Noche', N(c.vn_crc), N(c.vn_usd))}
-        ${propPagadas > 0 ? `<tr><td style="padding:7px 0;color:#666;font-size:12px">Propinas pagadas en el cierre</td><td style="padding:7px 0;font-size:13px;text-align:right;font-weight:600;color:${PURPLE}">− ${fi(propPagadas)}</td></tr>` : ''}
-      </table>
-
-      <div style="font-size:10px;color:#999;letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px">Distribución del conteo físico</div>
-      <table style="width:100%;border-collapse:collapse">
-        ${row('Caja Diaria mañana', N(c.sep_diaria_crc), N(c.sep_diaria_usd), GREEN)}
-        ${row('Caja Registradora', N(c.sep_registradora_crc), N(c.sep_registradora_usd))}
-        ${row('Remanente CF', N(c.remanente_crc), N(c.remanente_usd), GOLDDK)}
-        <tr style="border-top:2px solid ${INK}">
-          <td style="padding:9px 0;font-size:13px;font-weight:700">Total contado</td>
-          <td style="padding:9px 0;font-size:14px;text-align:right;font-weight:700">${fi(totalCRC)}${totalUSD > 0 ? ` <span style="color:#999;font-size:11px">· ${fu(totalUSD)}</span>` : ''}</td>
-        </tr>
-      </table>
-
-      ${difBlock}
-      ${notaBlock}
-    </div>
-    <div style="padding:12px 28px;background:#f0ece4;border-top:1px solid #e0dbd2">
-      <p style="font-size:10px;color:#aaa;margin:0">Resumen automático del cierre · Satori Sushi Bar · Santa Teresa, CR</p>
-    </div>
-  </div>`
-}
+// Plantilla del correo (estándar de reportes Satori adaptado a correo): ./plantilla.ts · flujo: ./proceso.ts
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -134,44 +65,52 @@ Deno.serve(async (req) => {
   try {
     // 1) Exigir el JWT del usuario (el cliente lo reenvía vía supabase.functions.invoke).
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) return json({ ok: false, error: 'No autorizado' }, 401)
+    const cuerpo = await req.json().catch(() => ({}))
 
-    const { cierre_id } = await req.json().catch(() => ({}))
-    if (!cierre_id) return json({ ok: false, error: 'Falta cierre_id' }, 400)
+    // 2) Cliente con el token del usuario → aplica RLS (NO service_role) para el cierre.
+    const userClient = authHeader
+      ? createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+      : null
 
-    // 2) Cliente con el token del usuario → aplica RLS (NO service_role).
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
+    const r = await procesarCierre(cuerpo, {
+      hayToken: !!authHeader,
+      // 3) Verificar que el token corresponde a un usuario real.
+      usuarioValido: async () => !!(await userClient!.auth.getUser()).data?.user,
+      hayResend: !!RESEND_API_KEY,
+      hayDestinatario: !!TO_EMAIL,
+      // 4) Releer la fila del cierre CON el cliente del usuario → el RLS es el portón.
+      //    Solo cierres COMPLETOS: un parcial no tiene resumen final que enviar.
+      leerCierre: async (id) => {
+        const { data, error } = await userClient!.from('cash_cierres_dia').select('*')
+          .eq('id', id).eq('tipo', 'completo').maybeSingle()
+        return { data: data as unknown as CierreFila | null, error }
+      },
+      // 5) Resumen de ventas (opción B): SOLO para el cierre que el usuario pudo leer, SOLO si es de las
+      //    últimas 36 h y SOLO su jornada y la de −7, con service_role. Agregados; nada vuelve al cliente.
+      resumen: (c) => {
+        const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
+        return resumenParaCierre(c, {
+          logica: logica as unknown as LogicaResumen,
+          leerVentana: (dia, local) => leerVentanaJornada(admin, dia, local),
+          leerNombres: (logins) => leerNombres(admin, logins),
+          ahora: new Date(),
+        })
+      },
+      enviar: async (subject, html) => {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: FROM_EMAIL, to: [TO_EMAIL], subject, html }),
+        })
+        const d = await res.json().catch(() => ({}))
+        if (!res.ok) console.error(JSON.stringify({ etapa: 'resend', status: res.status }))
+        return { ok: res.ok, id: (d as { id?: string })?.id ?? null }
+      },
+      log: (o) => console.log(JSON.stringify(o)),
     })
-
-    // 3) Verificar que el token corresponde a un usuario real.
-    const { data: { user } } = await userClient.auth.getUser()
-    if (!user) return json({ ok: false, error: 'No autorizado' }, 401)
-
-    if (!RESEND_API_KEY) return json({ ok: false, error: 'RESEND_API_KEY no configurada' }, 200)
-
-    // 4) Releer la fila del cierre CON el cliente del usuario → el RLS es el portón.
-    //    Solo cierres COMPLETOS: un parcial no tiene resumen final que enviar.
-    const { data, error } = await userClient
-      .from('cash_cierres_dia')
-      .select('*')
-      .eq('id', cierre_id)
-      .eq('tipo', 'completo')
-      .maybeSingle()
-    if (error) return json({ ok: false, error: 'Sin acceso al cierre' }, 403)
-    if (!data) return json({ ok: false, error: 'Cierre no encontrado' }, 404)
-
-    const c = data as unknown as CierreRow
-    const subject = `🔒 Satori — Cierre del día ${c.session_date}`
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM_EMAIL, to: [TO_EMAIL], subject, html: buildHtml(c) }),
-    })
-    const d = await res.json().catch(() => ({}))
-    if (!res.ok) return json({ ok: false, error: `Resend: ${JSON.stringify(d)}` }, 200)
-    return json({ ok: true, id: (d as { id?: string })?.id ?? null }, 200)
+    return json(r.body, r.status)
   } catch (e) {
-    return json({ ok: false, error: String(e) }, 200)
+    console.error(JSON.stringify({ etapa: 'no_controlado', detalle: String(e).replace(/\d{4,}/g, '#') }))
+    return json({ ok: false, error: 'No se pudo enviar el correo' }, 200)
   }
 })

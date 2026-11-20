@@ -1,0 +1,261 @@
+{
+ "ventana": {
+  "desde": "2026-10-04T00:00:00-06:00",
+  "hasta": "2026-10-08T00:00:00-06:00"
+ },
+ "dias": {
+  "2026-10-05": {
+   "fileName": "ndf 2026-10-05",
+   "uploadedAt": "2026-10-06",
+   "saloneros": {
+    "MESERO UNO": {
+     "pax": 2,
+     "total": 20000,
+     "com": 20000,
+     "beb": 0,
+     "iCom": 4,
+     "iBeb": 0,
+     "iva": 2600,
+     "serv": 2000,
+     "promPax": 10000,
+     "promPlato": 5000,
+     "promBebida": 0,
+     "ratioCB": 0,
+     "ratioU": 0,
+     "bebPax": 0,
+     "prods": [
+      [
+       "ROLL FICTICIO",
+       2,
+       16000
+      ],
+      [
+       "BEBIDA FICTICIA",
+       2,
+       4000
+      ]
+     ]
+    },
+    "Cajero turno mañana": {
+     "esCajero": true,
+     "pax": 1,
+     "total": 10000,
+     "salon": 10000,
+     "delivery": 0,
+     "iva": 1300,
+     "serv": 0,
+     "ordenes": 1,
+     "ticketProm": 10000,
+     "prods": [
+      [
+       "ROLL FICTICIO",
+       1,
+       8000
+      ],
+      [
+       "POSTRE FICTICIO",
+       1,
+       2000
+      ]
+     ]
+    },
+    "MESERO DOS": {
+     "pax": 3,
+     "total": 45000,
+     "com": 45000,
+     "beb": 0,
+     "iCom": 8,
+     "iBeb": 0,
+     "delivery": 15000,
+     "iva": 5850,
+     "serv": 3000,
+     "promPax": 15000,
+     "promPlato": 5625,
+     "promBebida": 0,
+     "ratioCB": 0,
+     "ratioU": 0,
+     "bebPax": 0,
+     "prods": [
+      [
+       "ROLL FICTICIO",
+       5,
+       39000
+      ],
+      [
+       "BEBIDA FICTICIA",
+       3,
+       6000
+      ]
+     ]
+    }
+   }
+  },
+  "2026-10-06": {
+   "fileName": "ndf 2026-10-06",
+   "uploadedAt": "2026-10-06",
+   "saloneros": {
+    "MESERO UNO": {
+     "pax": 1,
+     "total": 10000,
+     "com": 10000,
+     "beb": 0,
+     "iCom": 5,
+     "iBeb": 0,
+     "iva": 1300,
+     "serv": 1000,
+     "promPax": 10000,
+     "promPlato": 2000,
+     "promBebida": 0,
+     "ratioCB": 0,
+     "ratioU": 0,
+     "bebPax": 0,
+     "prods": [
+      [
+       "BEBIDA FICTICIA",
+       5,
+       10000
+      ]
+     ]
+    }
+   }
+  }
+ },
+ "pm": {
+  "ROLL FICTICIO": {
+   "tipo": "comida",
+   "clasificacion": "Entradas",
+   "subclasificacion": "",
+   "multiplicador": 1,
+   "costo_unitario": 0,
+   "tipoDeFamilia": true
+  },
+  "BEBIDA FICTICIA": {
+   "tipo": "comida",
+   "clasificacion": "Otros",
+   "subclasificacion": "",
+   "multiplicador": 1,
+   "costo_unitario": 0,
+   "tipoDeFamilia": true
+  },
+  "POSTRE FICTICIO": {
+   "tipo": "comida",
+   "clasificacion": "Entradas",
+   "subclasificacion": "",
+   "multiplicador": 1,
+   "costo_unitario": 0,
+   "tipoDeFamilia": true
+  }
+ },
+ "hist": {
+  "2026-10-05": {
+   "ventaBruta": 89750,
+   "ventaNeta": 75000,
+   "iva": 9750,
+   "serv": 5000,
+   "salon": 60000,
+   "delivery": 15000,
+   "pax": 6,
+   "promPax": 10000,
+   "source": "hist"
+  },
+  "2026-10-06": {
+   "ventaBruta": 12300,
+   "ventaNeta": 10000,
+   "iva": 1300,
+   "serv": 1000,
+   "salon": 10000,
+   "delivery": 0,
+   "pax": 1,
+   "promPax": 10000,
+   "source": "hist"
+  }
+ },
+ "stats": {
+  "2026-10-05": {
+   "fecha": "",
+   "ventaBruta": 89750,
+   "ventaNeta": 75000,
+   "iva": 9750,
+   "serv": 5000,
+   "salon": 60000,
+   "delivery": 15000,
+   "pax": 6,
+   "promPax": 10000,
+   "saloneroNames": [
+    "MESERO UNO",
+    "MESERO DOS"
+   ]
+  },
+  "2026-10-06": {
+   "fecha": "",
+   "ventaBruta": 12300,
+   "ventaNeta": 10000,
+   "iva": 1300,
+   "serv": 1000,
+   "salon": 10000,
+   "delivery": 0,
+   "pax": 1,
+   "promPax": 10000,
+   "saloneroNames": [
+    "MESERO UNO"
+   ]
+  }
+ },
+ "avisos": [],
+ "pmFusionado": {
+  "ROLL FICTICIO": {
+   "tipo": "comida",
+   "clasificacion": "",
+   "tipoDeFamilia": false,
+   "subclasificacion": "",
+   "multiplicador": 1,
+   "costo_unitario": 0
+  },
+  "BEBIDA FICTICIA": {
+   "tipo": "comida",
+   "clasificacion": "Otros",
+   "subclasificacion": "",
+   "multiplicador": 1,
+   "costo_unitario": 0,
+   "tipoDeFamilia": true
+  },
+  "POSTRE FICTICIO": {
+   "tipo": "comida",
+   "clasificacion": "Entradas",
+   "subclasificacion": "",
+   "multiplicador": 1,
+   "costo_unitario": 0,
+   "tipoDeFamilia": true
+  }
+ },
+ "cols": {
+  "tickets": [
+   "id",
+   "numero_factura",
+   "estado",
+   "fecha_registra",
+   "fecha_cierra",
+   "cajero_login",
+   "canal",
+   "mesa",
+   "salonero_login",
+   "registrado_por",
+   "servicio_crc",
+   "total_crc",
+   "valor_servido_crc",
+   "iva_crc",
+   "regalia_crc",
+   "pax",
+   "pax_articulo"
+  ],
+  "lineas": [
+   "ticket_id",
+   "codigo_producto",
+   "nombre",
+   "cantidad",
+   "monto",
+   "familia",
+   "usuario_registra"
+  ]
+ }
+}

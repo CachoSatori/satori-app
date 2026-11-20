@@ -117,6 +117,17 @@ export interface TicketIngest extends TicketMapeado {
   tipo?:           string | null
   mesa?:           string | null
   numero_pedido?:  string | null
+  // ── Ítem 11 (mig 081). Opcionales: un agente viejo no los manda y quedan en null. ─────────
+  /** `FAC_Facturas.Area`: el área de la mesa de la factura (la mesa es (área, mesa)). */
+  area_factura?:      string | null
+  /** `FAC_Facturas.NumeroMesa`: la mesa de la factura (las cuentas divididas no tienen pedido). */
+  mesa_factura?:      string | null
+  /** Consecutivo de la factura electrónica, 20 dígitos. */
+  consecutivo_fe?:    string | null
+  /** Clave de la factura electrónica, 50 dígitos. */
+  clave_fe?:          string | null
+  /** `FAC_Pedidos.FechaRegistra` del pedido de la factura, con zona explícita. */
+  pedido_abierto_en?: string | null
 }
 
 /** Una línea = el `ItemMapeado` de la Fase 1a más el precio unitario. */
@@ -145,6 +156,10 @@ export interface OpenIngest {
   pax?:            number | null
   pax_alerta?:     PaxAlerta | null
   updated_at?:     string | null
+  /** Ítem 11 (mig 081): `FAC_Pedidos.FechaRegistra`, con zona explícita. */
+  pedido_abierto_en?: string | null
+  /** Mig 081: `FAC_Pedidos.Area` (la mesa es (área, mesa)). */
+  area?:              string | null
   // ── Frente C v1: PROVISIONALES. Nunca entran en neta / cuadre / pos_ndf_tickets. ──────
   /** Estimado por catálogo, bruto. `null` = no se pudo calcular; `0` = cero real (cortesía). */
   monto_estimado_crc?: number | null
@@ -214,6 +229,12 @@ export interface TicketRow {
   pax_alerta:       PaxAlerta
   total_crc:        number
   total_fuente:     string
+  /** Ítem 11 (mig 081). */
+  area_factura:      string | null
+  mesa_factura:      string | null
+  consecutivo_fe:    string | null
+  clave_fe:          string | null
+  pedido_abierto_en: string | null
 }
 
 export interface LineaRow {
@@ -245,6 +266,9 @@ export interface OpenRow {
   pax_pedido:         number | null
   items_valor:        number | null
   detalle_productos:  ProductoComandado[] | null
+  /** Ítem 11 (mig 081). */
+  pedido_abierto_en:  string | null
+  area:               string | null
 }
 
 export interface CursorRow {
@@ -281,10 +305,23 @@ export type Resultado<T> = { ok: true; valor: T } | { ok: false; error: string }
 
 // ── Normalización ──────────────────────────────────────────────────────────────
 
+/**
+ * CLUB-AUD-48: tope de largo para todo texto que llega del agente (nombres, logins, mesas…): se recorta a
+ * `MAX_TEXTO`. Las claves (`numero_factura`, `clave` de la mesa) no se recortan: si pasan `MAX_CLAVE`, el registro
+ * se descarta (recortar una clave podría pisar otra factura).
+ */
+export const MAX_TEXTO = 200
+export const MAX_CLAVE = 60
 const texto = (v: unknown): string | null => {
   if (v === null || v === undefined) return null
   const s = String(v).trim()
-  return s === '' ? null : s
+  return s === '' ? null : s.slice(0, MAX_TEXTO)
+}
+const clave = (v: unknown): string | null | 'larga' => {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  if (s === '') return null
+  return s.length > MAX_CLAVE ? 'larga' : s
 }
 
 const entero = (v: unknown): number => {
@@ -326,8 +363,10 @@ export function normalizarTicket(local: string, t: unknown): Resultado<TicketNor
   if (!t || typeof t !== 'object') return { ok: false, error: 'ticket no es un objeto' }
   const x = t as Partial<TicketIngest> & { medios?: Record<string, unknown> }
 
-  const numero_factura = texto(x.numero_factura)
-  if (numero_factura === null) return { ok: false, error: 'falta numero_factura' }
+  const nf = clave(x.numero_factura)
+  if (nf === null) return { ok: false, error: 'falta numero_factura' }
+  if (nf === 'larga') return { ok: false, error: `numero_factura de más de ${MAX_CLAVE} caracteres` }
+  const numero_factura = nf
 
   const fecha_registra = instanteConZona(x.fecha_registra)
   if (fecha_registra === null) {
@@ -434,6 +473,12 @@ export function normalizarTicket(local: string, t: unknown): Resultado<TicketNor
         pax_alerta,
         total_crc:        recalculado,
         total_fuente:     texto(x.total_fuente) ?? 'provisorio',
+        // Ítem 11 (mig 081). Nunca tumban el ticket: lo que no tiene la forma esperada va null.
+        area_factura:      textoCorto(x.area_factura, 20),
+        mesa_factura:      textoCorto(x.mesa_factura, 20),
+        consecutivo_fe:    digitos(x.consecutivo_fe, 20),
+        clave_fe:          digitos(x.clave_fe, 50),
+        pedido_abierto_en: instanteOpcionalONull(x.pedido_abierto_en),
       },
       lineas,
       totalRecalculado,
@@ -445,17 +490,19 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
   if (!o || typeof o !== 'object') return { ok: false, error: 'mesa abierta no es un objeto' }
   const x = o as Partial<OpenIngest>
 
-  const clave = texto(x.clave)
-  if (clave === null) return { ok: false, error: 'mesa abierta sin clave' }
+  const cl = clave(x.clave)
+  if (cl === null) return { ok: false, error: 'mesa abierta sin clave' }
+  if (cl === 'larga') return { ok: false, error: `mesa abierta con clave de más de ${MAX_CLAVE} caracteres` }
+  const claveMesa = cl
 
   const upd = instanteOpcional(x.updated_at)
-  if (!upd.ok) return { ok: false, error: `mesa ${clave}: updated_at sin zona horaria explícita` }
+  if (!upd.ok) return { ok: false, error: `mesa ${claveMesa}: updated_at sin zona horaria explícita` }
 
   return {
     ok: true,
     valor: {
       local,
-      clave,
+      clave: claveMesa,
       numero_factura: texto(x.numero_factura),
       id_pedido:      texto(x.id_pedido),
       mesa:           texto(x.mesa),
@@ -473,8 +520,29 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
       // Informativo (mig 065). Fail-closed: cualquier entrada malformada tira el array ENTERO
       // a null, no se guarda una lista a medias que se leería como «la mesa solo tiene esto».
       detalle_productos:  productosComandados(x.detalle_productos),
+      // Ítem 11 (mig 081). Sin zona o ilegible → null (no tumba la mesa).
+      pedido_abierto_en:  instanteOpcionalONull(x.pedido_abierto_en),
+      area:               textoCorto(x.area, 20),
     },
   }
+}
+
+/** Texto recortado, o null si falta o es más largo que `max`. */
+const textoCorto = (v: unknown, max: number): string | null => {
+  const s = texto(v)
+  return s !== null && s.length <= max ? s : null
+}
+
+/** Exactamente `largo` dígitos, o null. */
+const digitos = (v: unknown, largo: number): string | null => {
+  const s = texto(v)
+  return s !== null && s.length === largo && /^[0-9]+$/.test(s) ? s : null
+}
+
+/** Un instante con zona explícita, o null (ausente, sin zona o ilegible: nunca rechaza). */
+const instanteOpcionalONull = (v: unknown): string | null => {
+  const r = instanteOpcional(v)
+  return r.ok ? r.valor : null
 }
 
 /**
@@ -519,7 +587,10 @@ export function normalizarCursor(local: string, c: unknown, ahora: string): Curs
   const poll = instanteOpcional(x.last_poll_at)
 
   // El cursor se fecha con el lote aunque el agente no mande nada: es el latido.
-  const out: CursorParcial = { local, last_poll_at: (poll.ok ? poll.valor : null) ?? ahora }
+  // CLUB-AUD-46: el latido es la hora del SERVIDOR; el `last_poll_at` que manda el agente se ignora (un reloj
+  // corrido en la PC no puede hacer parecer vivo a un agente caído).
+  void poll
+  const out: CursorParcial = { local, last_poll_at: ahora }
 
   if (tiene(x, 'last_factura')) out.last_factura = texto(x.last_factura)
   if (tiene(x, 'last_fecha_registra')) {
@@ -531,26 +602,55 @@ export function normalizarCursor(local: string, c: unknown, ahora: string): Curs
 }
 
 /**
+ * LEGADO (Grok 117): el Edge `ingest-ndf` ya NO usa esta función. El cursor lo calcula la base (`pos_ndf_ingestar`,
+ * mig 082 v3, «corte seguro»), donde el corte SÍ puede quedar por debajo del máximo mientras haya una `R` abierta.
+ * Se deja (con sus pruebas) solo como historia de CLUB-AUD-46; no usar en código nuevo.
+ *
  * El cursor guardado + lo que trajo el lote. Lo ausente se conserva; lo explícito pisa.
+ * @deprecated Legado: el cursor lo calcula `pos_ndf_ingestar` (mig 082 v3).
  *
  * Sin esto, un `upsert` con el objeto entero pondría en null lo que el agente no mandó
  * — y el saludo de arranque (lote vacío) le borraría `last_factura`, o sea que el
  * agente volvería a leer el día desde el principio en cada reinicio.
  */
 export function fusionarCursor(actual: CursorRow | null, entrante: CursorParcial): CursorRow {
+  // CLUB-AUD-46 (LEGADO, reemplazado por la 082 v3): `last_factura` y `last_fecha_registra` solo avanzaban.
   return {
     local:               entrante.local,
     last_poll_at:        entrante.last_poll_at,
     last_factura:        tiene(entrante, 'last_factura')
-      ? entrante.last_factura ?? null
+      ? masNuevaFactura(actual?.last_factura ?? null, entrante.last_factura ?? null)
       : actual?.last_factura ?? null,
     last_fecha_registra: tiene(entrante, 'last_fecha_registra')
-      ? entrante.last_fecha_registra ?? null
+      ? masNuevoInstante(actual?.last_fecha_registra ?? null, entrante.last_fecha_registra ?? null)
       : actual?.last_fecha_registra ?? null,
     last_error:          tiene(entrante, 'last_error')
       ? entrante.last_error ?? null
       : actual?.last_error ?? null,
   }
+}
+
+/**
+ * La factura más nueva de las dos. Números del PoS (solo dígitos): se comparan como números, sin los ceros de
+ * adelante. Si alguna no es numérica no hay orden confiable: se queda la nueva (como antes). `null` nunca pisa.
+ */
+export function masNuevaFactura(actual: string | null, nueva: string | null): string | null {
+  if (nueva === null) return actual
+  if (actual === null) return nueva
+  if (/^\d+$/.test(actual) && /^\d+$/.test(nueva)) {
+    const a = BigInt(actual), n = BigInt(nueva)
+    return n >= a ? nueva : actual
+  }
+  return nueva
+}
+
+/** El instante más nuevo (ISO). `null` nunca pisa; si alguno no se puede leer, se queda la nueva. */
+export function masNuevoInstante(actual: string | null, nueva: string | null): string | null {
+  if (nueva === null) return actual
+  if (actual === null) return nueva
+  const a = Date.parse(actual), n = Date.parse(nueva)
+  if (Number.isNaN(a) || Number.isNaN(n)) return nueva
+  return n >= a ? nueva : actual
 }
 
 // ── Validación del sobre ───────────────────────────────────────────────────────
@@ -672,4 +772,36 @@ export function normalizarLote(p: PayloadValidado, ahora: string): LoteNormaliza
     recalculados,
     problemas,
   }
+}
+
+/**
+ * CLUB-AUD-32: un secreto por local. `POS_INGEST_SECRETS` es un JSON `{"santa-teresa": "…", "nosara": "…"}`; el
+ * secreto que llega en el header decide el local, y el sobre tiene que ser de ESE local. Si no está el mapa,
+ * vale el secreto único de antes (`POS_INGEST_SECRET`), pero solo para `localLegado` (hoy, santa-teresa).
+ * Devuelve el local autorizado o `null` (401). Sin nada configurado: `null` siempre (fail-closed).
+ */
+export function localDelSecreto(
+  header: string,
+  cfg: { mapa?: string | null; legado?: string | null; localLegado?: string },
+  igual: (a: string, b: string) => boolean,
+): string | null {
+  if (!header) return null
+  const mapaTxt = (cfg.mapa ?? '').trim()
+  if (mapaTxt) {
+    let mapa: Record<string, unknown>
+    try { mapa = JSON.parse(mapaTxt) } catch { return null }
+    // CLUB-AUD-47: un mismo secreto en dos locales es un error de configuración → nadie entra (fail-closed).
+    const valores = Object.values(mapa).filter((v): v is string => typeof v === 'string')
+    if (new Set(valores).size !== valores.length) return null
+    let elegido: string | null = null
+    for (const [local, sec] of Object.entries(mapa)) {
+      // se comparan todos (tiempo parejo); secretos cortos no valen
+      if (typeof sec === 'string' && sec.length >= 32 && LOCALES.has(local) && igual(header, sec)) elegido = local
+    }
+    return elegido
+  }
+  const legado = (cfg.legado ?? '').trim()
+  // CLUB-AUD-47: el secreto único también tiene que tener al menos 32 caracteres.
+  if (legado.length >= 32 && igual(header, legado)) return cfg.localLegado ?? 'santa-teresa'
+  return null
 }

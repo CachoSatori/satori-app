@@ -1,0 +1,51 @@
+# Configuración de Supabase versionada (ítem 11). Branching la lee en cada push a main.
+#
+# QUÉ HACE EN PROD (docs de Supabase, «Deploying changes to production»): al hacer merge a main, Branching
+# aplica las migraciones nuevas y DESPLIEGA las Edge Functions declaradas acá abajo, con su verify_jwt.
+# Una carpeta de supabase/functions/ sin su bloque no se despliega (y la guarda R04 del gate no la deja entrar).
+# Todo lo demás (API, Auth, seed) se IGNORA en prod: solo se aplicaría a prod con un bloque [remotes.*] que
+# apunte al proyecto, y acá NO hay ninguno a propósito (lo prueba supabase/config.test.ts).
+#
+# Por eso NO hay [auth] ni [api]: la configuración de prod (registro cerrado, site_url, redirects, contraseña
+# mínima) se maneja en el panel y este archivo no la toca (decisión del dueño, 07/11). Si algún día se agregan,
+# en una rama de preview solo cambiarían esa rama; para prod haría falta [remotes.<x>] con firma del dueño.
+#
+# verify_jwt = true  → la puerta de Supabase exige un JWT válido del proyecto antes de correr el código;
+#                      después el código hace su propia guarda.
+# verify_jwt = false → solo la guarda del código. Solo para quien llama sin JWT de usuario:
+#   · ingest-ndf: el agente del PoS manda x-ingest-secret (con true recibe 401 en cada ciclo y no entra ninguna venta).
+#   · club-pase: club-web llama sin sesión; el portón es x-club-web.
+#
+# Los valores son los de PROD leídos con list_edge_functions (solo lectura) el 20-nov-2026. El código de cada
+# carpeta es el que corre hoy en prod (ver docs/pases/PASE-item11-config-edge.md).
+#
+# ⚠️ monthly-report / ventas-dia-contador y la rotación de claves: el cron manda la service_role del Vault, que hoy
+# es un JWT. Si se pasa a las claves nuevas (sb_secret_…, no son JWT) la puerta rechazaría al cron con 401: en ese
+# mismo cambio hay que revisar el verify_jwt de las dos.
+
+# Nombre local del proyecto para la CLI (no es el ref de ningún proyecto).
+project_id = "satori-app"
+
+[functions.monthly-report]
+verify_jwt = true
+
+[functions.extract-document]
+verify_jwt = true
+
+[functions.cierre-email]
+verify_jwt = true
+
+[functions.pago-notificar]
+verify_jwt = true
+
+[functions.ventas-dia-contador]
+verify_jwt = true
+
+[functions.alta-empleado]
+verify_jwt = true
+
+[functions.ingest-ndf]
+verify_jwt = false
+
+[functions.club-pase]
+verify_jwt = false

@@ -12,7 +12,8 @@ export const cierreCuadraEjemplo: CierreCorreo = {
   remanente_crc: 1_284_350, remanente_usd: 325.5,
   diferencia_crc: 150,
   ajuste_tipo: null, ajuste_motivo: null,
-  notas: 'Se cambió el rollo de la impresora de la barra.',
+  // «Resumen del día» (v18): lo escribe el encargado con los botones de tema; va arriba del correo.
+  notas: 'Queja: una mesa de la terraza esperó mucho el segundo plato.\n86: gyozas desde las 21:00.\nMantenimiento: se cambió el rollo de la impresora de la barra.',
   tipo_cambio: 505.2,
 }
 
@@ -21,5 +22,11 @@ export const cierreFaltanteEjemplo: CierreCorreo = {
   diferencia_crc: -12_500,
   ajuste_tipo: 'Faltante',
   ajuste_motivo: 'Vuelto de una mesa mal contado',
-  notas: null,
+  notas: null,   // cierre viejo, sin resumen: el correo no muestra la sección
+}
+
+/** El caso más común: día sin nada que contar. */
+export const cierreSinNovedadesEjemplo: CierreCorreo = {
+  ...cierreCuadraEjemplo,
+  notas: 'Sin novedades',
 }

@@ -143,6 +143,16 @@ function unirONull(...avisos: (string | null)[]): string | null {
   return unir(...avisos) || null
 }
 
+// (20-nov) La fecha de factura de un movimiento, leída de su descripción («… · fact AAAA-MM-DD», como la escriben
+// AgregarAsistente e InboxModule). Si hay más de una, manda la última (la que agregó la app al final). null si no hay o
+// no es una fecha real: los movimientos anteriores al 14-nov no la tienen. No decide el día del movimiento (regla 11).
+const FACT_EN_DESC = /·\s*fact\s+(\d{4}-\d{2}-\d{2})(?!\d)/g
+export function fechaFacturaDeDescripcion(desc: string | null | undefined): string | null {
+  const todas = [...String(desc ?? '').matchAll(FACT_EN_DESC)]
+  const ult = todas.length ? todas[todas.length - 1][1] : null
+  return esFechaValida(ult) ? ult : null
+}
+
 // Aviso para una fecha de factura cualquiera (también la que escribe el usuario): si queda en el futuro, o si tiene más
 // de DIAS_FACTURA_VIEJA días. Nunca bloquea.
 export function avisoFechaFactura(fecha: string | null | undefined, hoy: string): string | null {

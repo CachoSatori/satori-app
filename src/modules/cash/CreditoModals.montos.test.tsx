@@ -75,7 +75,7 @@ describe('RegistrarCreditoModal — monto ₡', () => {
 describe('AplicarCreditoModal — montos por factura', () => {
   beforeEach(() => { applySpy.mockReset(); applySpy.mockResolvedValue('app-id') })
   const abrir = () => {
-    render(<AplicarCreditoModal supplier={supplier} credits={[credit()]} applications={[]}
+    render(<AplicarCreditoModal fechaMovimiento={m => m.created_at.slice(0, 10)} supplier={supplier} credits={[credit()]} applications={[]}
       pendientes={[fac({ id: 'f1', amount_crc: 30000 })]} onDone={vi.fn()} onClose={vi.fn()} />)
     return screen.getByRole('textbox') as HTMLInputElement
   }
@@ -99,7 +99,7 @@ describe('AplicarCreditoModal — montos por factura', () => {
     expect((screen.getByRole('button', { name: /Aplicar \(/ }) as HTMLButtonElement).disabled).toBe(true)
   })
   it('el reparto FIFO precargado con céntimos se lee bien (2 decimales)', () => {
-    render(<AplicarCreditoModal supplier={supplier} credits={[credit({ amount_crc: 100.3 })]} applications={[]}
+    render(<AplicarCreditoModal fechaMovimiento={m => m.created_at.slice(0, 10)} supplier={supplier} credits={[credit({ amount_crc: 100.3 })]} applications={[]}
       pendientes={[fac({ id: 'a', amount_crc: 0.1 }), fac({ id: 'b', amount_crc: 500, created_at: '2026-07-06T12:00:00Z' })]}
       onDone={vi.fn()} onClose={vi.fn()} />)
     const [a, b] = screen.getAllByRole('textbox') as HTMLInputElement[]

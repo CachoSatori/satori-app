@@ -26,6 +26,9 @@ const fac = (o: Partial<CashMovement>): CashMovement => ({
   created_at: '2026-07-05T12:00:00Z', description: '', subcategory: '', ...o,
 } as unknown as CashMovement)
 
+// Día del movimiento como lo pasa CashPendientes (session_date del turno); acá, por id o el día de created_at.
+const diaDe = (dias: Record<string, string> = {}) => (m: CashMovement) => dias[m.id] ?? m.created_at.slice(0, 10)
+
 describe('AplicarCreditoModal — reparte un crédito entre varias facturas (FIFO)', () => {
   beforeEach(() => { applySpy.mockReset(); applySpy.mockResolvedValue('app-id') })
 
@@ -37,7 +40,7 @@ describe('AplicarCreditoModal — reparte un crédito entre varias facturas (FIF
       fac({ id: 'f2', created_at: '2026-07-06T12:00:00Z', amount_crc: 30000 }),
       fac({ id: 'f3', created_at: '2026-07-07T12:00:00Z', amount_crc: 30000 }),
     ]
-    render(<AplicarCreditoModal supplier={supplier} credits={[credit()]} applications={[]} pendientes={pendientes} onDone={onDone} onClose={onClose} />)
+    render(<AplicarCreditoModal fechaMovimiento={diaDe()} supplier={supplier} credits={[credit()]} applications={[]} pendientes={pendientes} onDone={onDone} onClose={onClose} />)
 
     // El botón confirma el total repartido = 30k + 20k = 50 000 (separador ICU agnóstico).
     const aplicarBtn = screen.getByRole('button', { name: /Aplicar \(/ })
@@ -66,7 +69,7 @@ describe('AplicarCreditoModal — reparte un crédito entre varias facturas (FIF
     const onDone = vi.fn(), onClose = vi.fn()
     // saldo 10k, una factura de 30k → FIFO pre-llena 10k (≤ saldo) → Aplicar habilitado.
     const pendientes = [fac({ id: 'f1', amount_crc: 30000 })]
-    render(<AplicarCreditoModal supplier={supplier} credits={[credit({ amount_crc: 10000 })]} applications={[]} pendientes={pendientes} onDone={onDone} onClose={onClose} />)
+    render(<AplicarCreditoModal fechaMovimiento={diaDe()} supplier={supplier} credits={[credit({ amount_crc: 10000 })]} applications={[]} pendientes={pendientes} onDone={onDone} onClose={onClose} />)
 
     const input = screen.getByRole('textbox') as HTMLInputElement
     fireEvent.change(input, { target: { value: '25000' } })  // 25k > saldo 10k → inválido
@@ -79,12 +82,65 @@ describe('AplicarCreditoModal — reparte un crédito entre varias facturas (FIF
   // Mutación nombrada: quitar `if (ocupado) return` de aplicar() → esta prueba cae.
   it('la guarda `ocupado` DENTRO de aplicar(): con datos releyéndose, un clic que llegue igual no imputa', () => {
     const pendientes = [fac({ id: 'f1', amount_crc: 30000 })]
-    render(<AplicarCreditoModal supplier={supplier} credits={[credit()]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} ocupado />)
+    render(<AplicarCreditoModal fechaMovimiento={diaDe()} supplier={supplier} credits={[credit()]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} ocupado />)
     const boton = screen.getByRole('button', { name: /Aplicar \(/ }) as HTMLButtonElement
     expect(boton.disabled).toBe(true)
     // El botón gris no deja hacer clic: se invoca el onClick de React tal cual, como si se hubiera habilitado por un desfase.
     const clave = Object.keys(boton).find(k => k.startsWith('__reactProps'))!
     ;(boton as unknown as Record<string, { onClick: () => void }>)[clave].onClick()
     expect(applySpy).not.toHaveBeenCalled()
+  })
+  // (20-nov) Mutación: volver a `a.created_at.localeCompare(b.created_at)` en `ordered` → caen las dos.
+  it('misma created_at: el crédito va primero a la de fecha de factura más vieja (no al orden de llegada)', async () => {
+    const T = '2026-11-18T15:00:00Z'
+    const pendientes = [
+      fac({ id: 'f-nueva', created_at: T, amount_crc: 30000, description: 'Pescado · fact 2026-11-16' }),
+      fac({ id: 'f-vieja', created_at: T, amount_crc: 30000, description: 'Pescado · fact 2026-11-12' }),
+    ]
+    render(<AplicarCreditoModal fechaMovimiento={diaDe()} supplier={supplier} credits={[credit({ amount_crc: 40000 })]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar \(/ }))
+    await screen.findByRole('button', { name: /Descargar comprobante/ })
+    const calls = applySpy.mock.calls.map(c => c[0] as { movement_id: string; amount: number })
+    expect(calls).toEqual([
+      expect.objectContaining({ movement_id: 'f-vieja', amount: 30000 }),
+      expect.objectContaining({ movement_id: 'f-nueva', amount: 10000 }),
+    ])
+  })
+  it('empate total (misma fecha de factura y created_at): desempata por id', async () => {
+    const T = '2026-11-18T15:00:00Z'
+    const pendientes = [
+      fac({ id: 'f-b', created_at: T, amount_crc: 30000, description: 'Pescado · fact 2026-11-12' }),
+      fac({ id: 'f-a', created_at: T, amount_crc: 30000, description: 'Pescado · fact 2026-11-12' }),
+    ]
+    render(<AplicarCreditoModal fechaMovimiento={diaDe()} supplier={supplier} credits={[credit({ amount_crc: 40000 })]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar \(/ }))
+    await screen.findByRole('button', { name: /Descargar comprobante/ })
+    const calls = applySpy.mock.calls.map(c => c[0] as { movement_id: string; amount: number })
+    expect(calls.map(c => [c.movement_id, c.amount])).toEqual([['f-a', 30000], ['f-b', 10000]])
+  })
+  // (20-nov) Sin «· fact» manda el día del movimiento. Mutación: «sin fact al final» → caen las dos.
+  it('una pendiente vieja SIN fact va antes que una nueva CON fact', async () => {
+    const pendientes = [
+      fac({ id: 'f-nueva', created_at: '2026-11-13T15:00:00Z', amount_crc: 30000, description: 'Pescado · fact 2026-11-12' }),
+      fac({ id: 'f-vieja', created_at: '2026-11-05T15:00:00Z', amount_crc: 30000, description: 'Pescado' }),
+    ]
+    render(<AplicarCreditoModal fechaMovimiento={diaDe({ 'f-vieja': '2026-11-05', 'f-nueva': '2026-11-13' })} supplier={supplier} credits={[credit({ amount_crc: 40000 })]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar \(/ }))
+    await screen.findByRole('button', { name: /Descargar comprobante/ })
+    const calls = applySpy.mock.calls.map(c => c[0] as { movement_id: string; amount: number })
+    expect(calls.map(c => [c.movement_id, c.amount])).toEqual([['f-vieja', 30000], ['f-nueva', 10000]])
+  })
+  it('descripción editada sin «· fact»: cae al día del movimiento (el del turno, no el de created_at en UTC)', async () => {
+    // f-editada: creada 2026-11-12T03:00Z (= 11-nov 21:00 en CR), turno del 11; su «fact» se perdió al editar.
+    // f-fact: factura del 12, creada antes en UTC. Con el día UTC de created_at empatarían en el 12 y ganaría f-fact.
+    const pendientes = [
+      fac({ id: 'f-fact', created_at: '2026-11-12T01:00:00Z', amount_crc: 30000, description: 'Pescado · fact 2026-11-12' }),
+      fac({ id: 'f-editada', created_at: '2026-11-12T03:00:00Z', amount_crc: 30000, description: 'Pescado · fac 2026-11-01 (editada)' }),
+    ]
+    render(<AplicarCreditoModal fechaMovimiento={diaDe({ 'f-editada': '2026-11-11', 'f-fact': '2026-11-11' })} supplier={supplier} credits={[credit({ amount_crc: 40000 })]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar \(/ }))
+    await screen.findByRole('button', { name: /Descargar comprobante/ })
+    const calls = applySpy.mock.calls.map(c => c[0] as { movement_id: string; amount: number })
+    expect(calls.map(c => [c.movement_id, c.amount])).toEqual([['f-editada', 30000], ['f-fact', 10000]])
   })
 })

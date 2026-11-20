@@ -5,6 +5,9 @@
 //   saldoResidual = factura.amount_crc − Σ(aplicaciones NO reversadas A esa factura)
 //   máximo aplicable de un crédito a una factura = min(saldoCredito, saldoResidual)
 
+import { fechaFacturaDeDescripcion } from '../../shared/utils/fechaFactura'
+import { dateCR } from '../../shared/utils'
+
 export interface CreditApplicationLike {
   amount_applied: number
   reversed: boolean
@@ -52,6 +55,41 @@ export function maxAplicable(
   credito: SupplierCreditLike, factura: FacturaLike, applications: CreditApplicationLike[],
 ): number {
   return round2(Math.max(0, Math.min(saldoCredito(credito, applications), saldoResidual(factura, applications))))
+}
+
+export interface FacturaOrdenable {
+  id: string
+  created_at: string
+  description?: string | null
+  /** Día del movimiento (el del turno, o el día CR del registro si es a nivel día), AAAA-MM-DD. Regla 11. */
+  fecha_mov: string
+}
+
+/**
+ * Día del movimiento (regla 11): el `session_date` de su turno; a nivel día (sin turno, o turno no cargado), el día CR
+ * del registro. Nunca el día UTC de `created_at`.
+ */
+export function diaDelMovimiento(
+  m: { session_id: string | null; created_at: string }, sesiones: Map<string, { session_date: string }>,
+): string {
+  return sesiones.get(m.session_id ?? '')?.session_date ?? dateCR(m.created_at)
+}
+
+/** Fecha efectiva para el FIFO: la de factura («· fact AAAA-MM-DD») y, si no hay, la del movimiento (dueño, 20-nov). */
+export function fechaEfectivaFIFO(f: FacturaOrdenable): string {
+  return fechaFacturaDeDescripcion(f.description) ?? f.fecha_mov
+}
+
+/**
+ * (20-nov, decisión del dueño) Orden FIFO del reparto, total y fijo (R06): fecha efectiva ascendente (la de factura;
+ * sin «· fact», la del movimiento), después `created_at`, después `id`. Dos facturas con el mismo `created_at` nunca
+ * quedan en orden indefinido.
+ */
+export function compararFIFO(a: FacturaOrdenable, b: FacturaOrdenable): number {
+  const fa = fechaEfectivaFIFO(a), fb = fechaEfectivaFIFO(b)
+  if (fa !== fb) return fa < fb ? -1 : 1
+  if (a.created_at !== b.created_at) return a.created_at < b.created_at ? -1 : 1
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
 /**

@@ -34,6 +34,7 @@ export const REGLAS = [
   { patron: '.github/workflows/**', porque: 'workflows: el gate de CI, el deploy y esta guarda' },
   { patron: '.github/CODEOWNERS', porque: 'quién revisa qué' },
   { patron: 'scripts/ci/**', porque: 'scripts del gate (lint con línea base, esta guarda y su lista)' },
+  { patron: 'scripts/hooks/**', porque: 'hooks de las sesiones de agentes (.claude/settings.json): guardia de merges, push, SQL y gate al cerrar' },
   { patron: 'vite.config.ts', porque: 'configuración de vitest (qué pruebas corren) y del build' },
   { patron: 'vitest.setup.ts', porque: 'preparación de todas las pruebas' },
   { patron: 'eslint.config.js', porque: 'reglas del lint del gate' },

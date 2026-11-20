@@ -1,27 +1,18 @@
 # Convenciones del repo — Satori App
 
-Estado vivo, reglas operativas y punteros: [ESTADO.md](ESTADO.md). Backlog abierto: [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
-Errores que pasaron a regla: [docs/REGLAS-POR-INCIDENTE.md](docs/REGLAS-POR-INCIDENTE.md). Lo cerrado y el detalle viejo (tal cual, no se pierde):
-[docs/historico/ESTADO-HISTORICO.md](docs/historico/ESTADO-HISTORICO.md) y [docs/historico/PROMPT-CONTINUACION-HISTORICO.md](docs/historico/PROMPT-CONTINUACION-HISTORICO.md).
-ESTADO y PROMPT-CONTINUACION se podan al pasar los 15 KB (ver `satori-estandar-pr` §13).
+Estado, reglas y punteros: [ESTADO.md](ESTADO.md). Backlog: [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md). Errores que pasaron a regla:
+[docs/REGLAS-POR-INCIDENTE.md](docs/REGLAS-POR-INCIDENTE.md). Lo podado, tal cual: [ESTADO-HISTORICO](docs/historico/ESTADO-HISTORICO.md) y
+[PROMPT-CONTINUACION-HISTORICO](docs/historico/PROMPT-CONTINUACION-HISTORICO.md). Poda al pasar 15 KB (`satori-estandar-pr` §10).
 
 ## Guías de uso de la app (`docs/sop-app/`)
 
-- **Regla permanente:** todo PR que cambie pantallas, botones, roles o reglas de un módulo actualiza su guía en
-  `docs/sop-app/` **en el mismo PR**, incluido el campo `verificado_en_commit` del front matter.
-- Si un PR no la actualiza (porque no hace falta o porque queda para después), lo dice en la descripción del PR,
-  con el motivo.
-- Las guías siguen [docs/sop-app/PLANTILLA.md](docs/sop-app/PLANTILLA.md) y el mapa de módulos está en
-  [docs/sop-app/INVENTARIO.md](docs/sop-app/INVENTARIO.md).
+Todo PR que cambie pantallas, botones, roles o reglas de un módulo actualiza su guía **en el mismo PR** (incluido `verificado_en_commit`);
+si no, lo dice en la descripción con el motivo. Ver [PLANTILLA](docs/sop-app/PLANTILLA.md) e [INVENTARIO](docs/sop-app/INVENTARIO.md).
 
 ## Skills del repo (`.claude/skills/`)
 
-- `satori-estandar-pr`: al arrancar cualquier cambio que termina en un PR (rama, sagrados, gate, pruebas, guía, privacidad, reporte).
-- `satori-revision-pr`: para revisar un PR que hizo otra sesión: checklist por disparador (solo las filas que el diff toca), hallazgos Importante / Menor / Preexistente y veredicto (listo / cambios / bloquea).
-- `satori-migraciones-y-prod`: antes de crear una migración, tocar una base, una Edge Function o un secreto.
-- `satori-verificar`: para verificar en staging, por rol y con capturas, un cambio que ve el personal o un cliente, antes de pedir la validación física al dueño (tabla «pantalla · rol · qué se ve · OK/no»).
-- `satori-merge-y-deploy`: con el OK del dueño para mergear a `main`: ventana horaria (regla D1: libre de 23:30 a 15:50, bloqueado de 15:50 a 19:00, de 19:00 a 23:30 solo con OK explícito del dueño), merge y verificación del deploy.
-
+`satori-estandar-pr` (todo cambio que termina en PR; fuente única de rama, gate, pruebas, privacidad, reporte) · `satori-revision-pr` ·
+`satori-migraciones-y-prod` · `satori-verificar` · `satori-merge-y-deploy` (ventana D1 en ESTADO regla 3).
 Si una skill y `ESTADO.md` no coinciden, gana `ESTADO.md` y se corrige la skill.
 
 ## Repo público

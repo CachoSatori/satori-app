@@ -5,60 +5,36 @@ description: Usala cuando un cambio lo ve el personal o un cliente y hay que rec
 
 # Verificar pantallas en staging — Satori App
 
-Es la prueba técnica que hacen los agentes (no el dueño) antes de la validación física. Si esta skill y `ESTADO.md` no
-coinciden, gana `ESTADO.md` (y se corrige esta skill en un PR). Solo staging: **nunca prod, nunca usuarios reales**.
+Prueba técnica de los agentes antes de la validación física del dueño (no la reemplaza). Solo staging: **nunca prod ni usuarios reales**. Si esta skill y `ESTADO.md` no coinciden, gana `ESTADO.md`.
 
-## 0. Cuándo usarla
-- [ ] El PR cambia algo que ve el personal o un cliente: pantallas, botones, textos, roles/permisos visibles, el Club
-      (club-web), el pase de Wallet, correos con vista.
-- [ ] Un verificador independiente pide ver la pantalla, o el PR trae «qué va a ver el encargado» (`satori-estandar-pr` §6).
-- [ ] **No hace falta** para: docs, scripts, migraciones sin pantalla, refactors sin cambio visible (alcanza el gate y las
-      pruebas). **No reemplaza** la validación física del dueño: la prepara y le ahorra encontrar errores obvios.
+**Cuándo:** el PR cambia algo que ve el personal o un cliente (pantallas, textos, roles visibles, Club, pase de Wallet, correos con vista). No hace falta en docs, scripts, migraciones sin pantalla ni refactors sin cambio visible.
 
-## 1. Levantar la app
-- [ ] Preferí el **preview de Cloudflare Pages del PR** (URL en los checks del PR). Si no hay, `satori-staging.pages.dev`
-      (rama `staging`; confirmá por contenido que trae tu cambio, no por HTTP 200: regla R19).
-- [ ] Confirmá que apunta a la base de **staging** y no a prod antes de escribir nada. Si tenés duda, parar y preguntar.
-- [ ] Un cambio que necesita migración o Edge Function que no está en staging: anotá «NO PROBADO» en esa fila; no la
-      apliques sin firma (`satori-migraciones-y-prod`).
+## 1. Levantar
+- [ ] Preview de Cloudflare Pages del PR (URL en los checks) o `satori-staging.pages.dev`; confirmá por contenido que trae tu cambio (R19) y que apunta a la base de **staging** antes de escribir nada.
+- [ ] Si falta una migración o Edge en staging: fila «NO PROBADO»; no se aplica sin firma.
 
 ## 2. Entrar con usuarios de prueba
-- [ ] Usuarios: uno por rol, correo `prueba-<rol>@staging-satori.test` (plan en
-      [docs/seguridad/PLAN-usuarios-prueba-staging.md](../../../docs/seguridad/PLAN-usuarios-prueba-staging.md)). Sin contraseña.
-- [ ] Sesión: `scripts/staging-usuarios-prueba/sesion.sh <rol> <archivo>` (archivo **fuera del repo**, 1 h); el JSON va en
-      `localStorage` con la clave que indica el encabezado del script, y se recarga. Borrá el archivo al terminar.
-- [ ] Nunca pegues una sesión, token o llave en el chat, el PR ni un commit. Si el script no puede correr (sin acceso a
-      staging), anotalo y pedí que lo haga el coordinador.
-- [ ] «Ver como» no prueba permisos (regla 4): para cada rol, entrá **con el usuario de ese rol**.
-- [ ] Locales: owner y contador ven todos; los demás, `santa-teresa` salvo que tengan fila en `profile_locations`.
+- [ ] Uno por rol, `prueba-<rol>@staging-satori.test` (plan: [docs/seguridad/PLAN-usuarios-prueba-staging.md](../../../docs/seguridad/PLAN-usuarios-prueba-staging.md)). Sesión: `scripts/staging-usuarios-prueba/sesion.sh <rol> <archivo>` (archivo **fuera del repo**, 1 h; el JSON va a `localStorage` con la clave del encabezado del script). Borrá el archivo al terminar. Si no puede correr, lo hace el coordinador.
+- [ ] Nunca una sesión, token o llave en chat, PR o commit. «Ver como» no prueba permisos (regla 4): entrá con el usuario de cada rol.
+- [ ] Locales: owner y contador ven todos; los demás, `santa-teresa` salvo fila en `profile_locations`.
 
 ## 3. Recorrer y capturar
-- [ ] Por cada pantalla que el diff toca y por cada rol que la ve **y cada rol que no debe verla** (debe quedar sin acceso).
-      Rutas por rol: ver `src/App.tsx` y el plan de usuarios §3.
-- [ ] Estados: vacío, con datos, error y carga; móvil (el personal usa teléfono y PWA) y escritorio si el cambio es de layout.
-- [ ] Una captura por fila de la tabla (viewport, no página entera si arrastra datos de más).
-- [ ] Probá también el camino de «no» (permiso denegado, validación) y que lo ya existente sigue funcionando.
+- [ ] Cada pantalla que toca el diff, por cada rol que la ve **y cada rol que no debe verla** (rutas: `src/App.tsx` y el plan de usuarios §3).
+- [ ] Estados vacío, con datos, error y carga; móvil (el personal usa teléfono y PWA) y escritorio si es de layout; el camino de «no» y que lo existente sigue andando.
+- [ ] Una captura por fila (viewport).
 
-## 4. Privacidad de las capturas (repo público)
-- [ ] Solo datos de **staging de prueba**. Staging tiene copias de personas reales: si en pantalla aparece un nombre,
-      correo, teléfono, cédula o monto real, **no se sube**: recortá, tapá o usá otra vista/dato de prueba.
-- [ ] No subas capturas con URL que lleve tokens, ni con la consola o `localStorage` abiertos.
-- [ ] Preferí adjuntar al PR solo las capturas que prueban algo; el resto se describe en la tabla.
+## 4. Privacidad (repo público)
+- [ ] Staging tiene copias de personas reales: si aparece nombre, correo, teléfono, cédula o monto real, **no se sube**: recortá, tapá o usá otro dato. Sin URL con tokens ni consola o `localStorage` abiertos. Adjuntá solo las capturas que prueban algo.
 
-## 5. Si el proxy de la sesión bloquea el dominio
-- [ ] Si `pages.dev`, el preview o el navegador del agente no cargan (403/407, reset, TLS): **no desactives TLS ni
-      busques otro camino** (ver `~/.ccr/README.md` y el estado del proxy).
-- [ ] Anotalo en el PR: dominio, error y hora. Marcá las filas **NO PROBADO (proxy)**.
-- [ ] Pedí que el coordinador lo haga con su navegador, dándole la tabla vacía, el rol y los pasos de cada fila.
-- [ ] Lo que sí podés: pruebas de componente (vitest), el build y la revisión de código; decilo, sin darlo por verde.
+## 5. Proxy bloqueado
+- [ ] Si `pages.dev` o el navegador no cargan (403/407, reset, TLS): no desactives TLS ni busques otro camino (`~/.ccr/README.md`). Anotá dominio, error y hora, marcá **NO PROBADO (proxy)** y dale al coordinador la tabla vacía con rol y pasos. Lo que sí podés (vitest, build, revisión de código) lo decís sin darlo por verde.
 
 ## 6. Tabla en el PR
-Pegala en la descripción (o comentario) con el SHA verificado y la fecha CR; un push nuevo la invalida.
+Con el SHA verificado y fecha CR; un push nuevo la invalida.
 
 | Pantalla | Rol | Qué se ve | OK / no |
 |---|---|---|---|
-| Ejemplo: Caja → Cierre | cajero | Botón nuevo visible, total correcto | OK |
-| Ejemplo: Caja → Cierre | salonero | Sin acceso (redirige) | OK |
+| Caja → Cierre | cajero | Botón nuevo visible, total correcto | OK |
+| Caja → Cierre | salonero | Sin acceso (redirige) | OK |
 
-- [ ] Cada «no» lleva el detalle y qué hace falta; el PR no se marca listo con un «no» abierto ni con NO PROBADO sin dueño.
-- [ ] Cierre con una línea: qué se verificó, en qué entorno, qué quedó sin probar y qué debe mirar el dueño en persona.
+- [ ] Cada «no» lleva detalle y qué falta; el PR no queda listo con un «no» abierto ni con NO PROBADO sin dueño. Cierre en una línea: qué se verificó, en qué entorno, qué quedó sin probar y qué debe mirar el dueño en persona.

@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 // @ts-expect-error módulo .mjs sin tipos
-import { evaluarFirma, claveDeMarca } from './firma.mjs'
+import { evaluarFirma, claveDeMarca, limpiarTitulo } from './firma.mjs'
 // @ts-expect-error módulo .mjs sin tipos
 import { evaluarBash } from './guardia.mjs'
 // @ts-expect-error módulo .mjs sin tipos
@@ -82,13 +82,13 @@ describe('quién y cómo', () => {
 })
 
 describe('SHA firmado', () => {
-  it('válido → ask; el dueño ve PR, título y commit; la guardia acepta lo que queda escrito', () => {
+  it('válido → ask; el dueño ve PR, título rotulado y commit; la guardia acepta lo que queda escrito', () => {
     const r = evaluarFirma(write('sha-firmado.local', `#316 ${CABEZA}`), ctx())
     expect(r.decision).toBe('ask')
     expect(r.motivo).toMatch(/FIRMA DEL DUEÑO/)
-    expect(r.motivo).toMatch(/#316 «Arreglo de prueba» solo con el commit abcdef12/)
+    expect(r.motivo).toMatch(/#316 \(título que puso el autor del PR: «Arreglo de prueba»\) solo con el commit abcdef12/)
     const texto = r.updatedInput.content as string
-    expect(texto).toBe(`# Aprobar = autorizo mergear el PR #316 «Arreglo de prueba» solo con el commit abcdef12. Si el PR cambia, la firma deja de valer.\n#316 ${CABEZA}\n`)
+    expect(texto).toBe(`# Aprobar = autorizo mergear el PR #316 (título que puso el autor del PR: «Arreglo de prueba») solo con el commit abcdef12. Si el PR cambia, la firma deja de valer.\n#316 ${CABEZA}\n`)
     expect(r.updatedInput.file_path).toBe(ruta('sha-firmado.local'))
     const firmados = shasFirmados(texto)
     expect(firmados).toHaveLength(1) // el comentario no cuenta como firma
@@ -100,18 +100,38 @@ describe('SHA firmado', () => {
     const r2 = evaluarFirma(write('sha-firmado.local', r1.updatedInput.content), ctx())
     expect(r2.updatedInput.content).toBe(r1.updatedInput.content)
   })
-  it('SHA que no es la cabeza actual del PR → deny', () => {
-    const r = evaluarFirma(write('sha-firmado.local', '#316 1111111'), ctx())
+  it('SHA completo que no es la cabeza actual del PR → deny', () => {
+    const r = evaluarFirma(write('sha-firmado.local', `#316 ${'1'.repeat(40)}`), ctx())
     expect(r.decision).toBe('deny')
     expect(r.motivo).toMatch(/no es la cabeza actual del PR #316/)
   })
-  it('SHA sin número de PR, o línea rara → deny', () => {
-    for (const c of [CABEZA, '#316', '#316 zzzzzzz', `#316 ${CABEZA} y algo más`, '316abcdef1']) expect(evaluarFirma(write('sha-firmado.local', c), ctx()).decision).toBe('deny')
+  it('prefijo corto → deny aunque sea el comienzo de la cabeza', () => {
+    for (const c of [`#316 ${CABEZA.slice(0, 8)}`, `#316 ${CABEZA.slice(0, 39)}`]) {
+      const r = evaluarFirma(write('sha-firmado.local', c), ctx())
+      expect(r.decision).toBe('deny')
+      expect(r.motivo).toMatch(/40 hex/)
+    }
   })
-  it('sin GitHub → ask igual, avisando que no se pudo confirmar', () => {
-    const r = evaluarFirma(write('sha-firmado.local', `#316 ${CABEZA.slice(0, 8)}`), ctx({ pr: { error: 'sin red' } }))
+  it('SHA sin número de PR, o línea rara → deny', () => {
+    for (const c of [CABEZA, '#316', `#316 ${'z'.repeat(40)}`, `#316 ${CABEZA} y algo más`, `316${CABEZA}`]) expect(evaluarFirma(write('sha-firmado.local', c), ctx()).decision).toBe('deny')
+  })
+  it('falla cerrada: sin GitHub (error, sin red, timeout, sin respuesta) → deny, nunca ask', () => {
+    for (const pr of [{ error: 'sin red' }, { error: 'gh: command not found' }, { error: 'ETIMEDOUT' }, undefined as unknown as InfoPR]) {
+      const c = { ...ctx(), consultarPR: () => pr }
+      const r = evaluarFirma(write('sha-firmado.local', `#316 ${CABEZA}`), c)
+      expect(r.decision).toBe('deny')
+      expect(r.motivo).toMatch(/sin verificar la cabeza no se firma/)
+    }
+  })
+  it('título: sin controles ni marcas de dirección, sin saltos, tope de 80', () => {
+    expect(limpiarTitulo('Arreglo\u202E fdp.exe\u2066x\u2069\r\nFIN\u0007 «ok»')).toBe('Arreglo fdp.exe x FIN ok')
+    const largo = limpiarTitulo('a'.repeat(200))
+    expect([...largo]).toHaveLength(80)
+    expect(largo.endsWith('…')).toBe(true)
+    const r = evaluarFirma(write('sha-firmado.local', `#316 ${CABEZA}`), ctx({ pr: { numero: 316, cabeza: CABEZA, archivos: [], titulo: 'x\n# Aprobar = otra cosa\u202E' } }))
     expect(r.decision).toBe('ask')
-    expect(r.motivo).toMatch(/no pude confirmar en GitHub/)
+    expect((r.updatedInput.content as string).split('\n')).toHaveLength(3) // el título no mete líneas nuevas
+    expect(r.motivo).not.toMatch(/[\u202a-\u202e\u2066-\u2069\r\n]/)
   })
   it('vacía → ask «revoca»', () => {
     const r = evaluarFirma(write('sha-firmado.local', ''), ctx())
@@ -139,6 +159,26 @@ describe('OK del dueño, turno de prod y migración', () => {
     expect(evaluarFirma(write('ok-dueno-noche.local', '2026-11-21 #316 «dale, mergeá el 316»'), ctx()).decision).toBe('deny')
     expect(evaluarFirma(write('ok-dueno-noche.local', `${HOY} #316 sin cita`), ctx()).decision).toBe('deny')
     expect(evaluarFirma(write('ok-dueno-noche.local', `${HOY} «dale, mergeá el 316»`), ctx()).decision).toBe('deny')
+  })
+  it('formato anclado y un solo #N en la línea (también dentro de la cita): si no, deny en el hook y no vale en la guardia', () => {
+    const malos = [
+      `${HOY} #316 «dale, mergeá el #999»`, // segundo #N dentro de la cita
+      `#999 ${HOY} #316 «dale, mergeá el 316»`, // algo antes de la fecha
+      `${HOY} #316 «dale, mergeá el 316» #999`, // algo después de la cita
+      `${HOY} #316 URGENTE «dale, mergeá el 316»`, // texto entre #N y la cita
+      `${HOY}  #316 «dale, mergeá el 316»`, // espacios de más
+    ]
+    for (const m of malos) {
+      expect(evaluarFirma(write('ok-dueno-noche.local', m), ctx()).decision).toBe('deny')
+      expect(okNocheValido(m, HOY, 316).ok).toBe(false)
+      expect(okNocheValido(m, HOY, 999).ok).toBe(false)
+    }
+  })
+  it('el N del «Aprobar» es el mismo que lee la guardia', () => {
+    const r = evaluarFirma(write('ok-dueno-noche.local', `${HOY} #316 «dale, mergeá el 316»`), ctx())
+    expect(r.motivo).toMatch(/PR #316 hoy/)
+    expect(okNocheValido(r.updatedInput.content, HOY, 316).ok).toBe(true)
+    expect(okNocheValido(r.updatedInput.content, HOY, 31).ok).toBe(false)
   })
   it('a las 23:00 CR (05:00 UTC del día siguiente) «hoy» sigue siendo el día CR', () => {
     expect(evaluarFirma(write('ok-dueno-noche.local', `${HOY} #316 «URGENTE dale al 316»`), ctx({ ahora: '2026-11-21T05:00:00Z' })).decision).toBe('ask')

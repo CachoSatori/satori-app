@@ -13,7 +13,7 @@ tiene 15 s (hasta 3 por merge = 45 s) y el hook 90 s.
 
 | Evento | Script | Bloquea (exit 2) |
 |---|---|---|
-| `PreToolUse` · `Bash` | `guardia.mjs` | leer una ruta `.env*` (también con `$HOME/…`; `.env.example` sí) · escribir una marca o `.claude/settings(.local).json` (leerlos sí: `cat`, `jq`, `git diff`) · `git push` a `main` (`main`, `HEAD:main`, `refs/heads/main`, `--mirror`/`--all`, push sin refspec estando en `main`) · `--force`/`-f`/`+refspec` (solo `--force-with-lease`) · `supabase db push` / `functions deploy` / `db reset --linked` · merge de PR fuera de D1, con `--auto`, sin `--match-head-commit` o sin SHA firmado · SQL destructivo fuera de `begin … rollback` (salvo migración firmada) · escritura en prod sin turno · `DELETE` por PostgREST |
+| `PreToolUse` · `Bash` | `guardia.mjs` | leer una ruta `.env*` (también con `$HOME/…`; `.env.example` sí) · todo comando que nombre una marca, `settings.local.json` o una carpeta `.claude` y no sea una lectura evidente (`cat`, `jq`, `git diff`/`log`/`add`/`commit`, `cp` a `/tmp/`) o el borrado de una marca (`rm`, revoca) · código a un intérprete por un tubo (`… \| bash`, `base64 -d \| sh`), `bash <(…)`, `eval "$…"` · `git push` a `main` (`main`, `HEAD:main`, `refs/heads/main`, `--mirror`/`--all`, push sin refspec estando en `main`) · `--force`/`-f`/`+refspec` (solo `--force-with-lease`) · `supabase db push` / `functions deploy` / `db reset --linked` · merge de PR fuera de D1, con `--auto`, sin `--match-head-commit` de 40 hex igual a la cabeza o sin SHA firmado exacto · SQL destructivo fuera de `begin … rollback` (salvo migración firmada) · escritura en prod sin turno · `DELETE` por PostgREST |
 | `PreToolUse` · `Edit\|Write\|MultiEdit\|NotebookEdit` | `firma.mjs` | escribir una marca desde un **subagente** (`agent_id`), fuera de `<raíz>/.claude/`, con algo que no sea `Write`, o con contenido que no se entiende (SHA que no es la cabeza del PR, fecha que no es hoy CR). Si está bien, no bloquea: devuelve `ask` con el texto «Aprobar = …» (ver «Firma del dueño desde la app»). Otro archivo: pasa sin tocar |
 | `PreToolUse` · `mcp__*supabase*__*` | `guardia.mjs` | igual para `execute_sql` y `apply_migration`; contra prod, toda herramienta que escribe (migración, deploy de Edge, secretos, ramas) pide el turno |
 | `PostToolUse` · `Edit\|Write\|MultiEdit` | `lint-archivo.mjs` | eslint del archivo `.ts`/`.tsx` tocado con **más errores que en la base** de la rama (merge-base con `origin/main`). La deuda vieja no bloquea; sumar un error sí. Archivo nuevo: cero errores |
@@ -44,14 +44,17 @@ el merge por GraphQL y el merge por `curl` a la API.
 ## Marcas que habilitan (no versionadas)
 
 Archivos `.claude/*.local` (los ignora `.gitignore` por `*.local`) **o** variables de entorno fijadas al abrir la
-sesión. Las escribe la sesión principal con `Write` y las firma el dueño tocando **Aprobar** en la app (ver abajo); un
-agente no puede escribirlas por Bash (lo frena la guardia) y un subagente tampoco por Write (lo frena `firma.mjs`).
+sesión. Las escribe la sesión principal con `Write` y las firma el dueño tocando **Aprobar** en la app (ver abajo). Un
+subagente no puede por Write (lo frena `firma.mjs`). Por Bash la guardia frena lo que puede leer (ver tabla), pero es una
+**barrera blanda**: no expande variables ni decodifica nada, así que un comando armado para esconder el nombre de la marca
+y la carpeta puede pasarla. Lo que sostiene la firma es el pedido de permiso de `Write` y el clasificador del modo automático
+para lo demás; la guardia frena los errores, no a un agente decidido a esquivarla.
 Las líneas que empiezan con `# ` son comentarios (el texto «Aprobar = …» que pone el hook) y no cuentan.
 
 | Marca | Archivo | Variable | Formato | Vence |
 |---|---|---|---|---|
-| SHA firmado | `.claude/sha-firmado.local` | `SATORI_SHA_FIRMADO` | una línea por PR: `#305 <sha>` (7 a 40 hex). Un `<sha>` sin número vale para cualquier PR (solo por variable: por `Write` el hook exige el número) | al cambiar la cabeza del PR |
-| OK del dueño | `.claude/ok-dueno-noche.local` | `SATORI_OK_DUENO_NOCHE` | `AAAA-MM-DD #305 «cita textual del OK del dueño»` (fecha CR de hoy, número del PR, cita de 8+ caracteres entre «…» o "…"); de 19:00 a 23:30 la cita lleva `URGENTE`; vale solo para ese PR | al cambiar el día CR |
+| SHA firmado | `.claude/sha-firmado.local` | `SATORI_SHA_FIRMADO` | una línea por PR: `#305 <sha>` con el SHA **completo** (40 hex, la cabeza que da REST); la guardia compara igualdad exacta y una línea con prefijo corto no cuenta. Un `<sha>` sin número vale para cualquier PR (solo por variable: por `Write` el hook exige el número) | al cambiar la cabeza del PR |
+| OK del dueño | `.claude/ok-dueno-noche.local` | `SATORI_OK_DUENO_NOCHE` | línea anclada `AAAA-MM-DD #305 «cita textual del OK del dueño»`, nada antes ni después (fecha CR de hoy, cita de 8+ caracteres entre «…» o "…", **un solo** `#N` en toda la línea, tampoco dentro de la cita); de 19:00 a 23:30 la cita lleva `URGENTE`; vale solo para ese PR | al cambiar el día CR |
 | Migración firmada | `.claude/migracion-firmada.local` | `SATORI_MIGRACION_FIRMADA` | una línea por archivo: `<sha256 del .sql> [nombre]` (lo que da `sha256sum supabase/migrations/NNN_x.sql`) | al cambiar el archivo (otro sha) |
 | Turno de prod | `.claude/turno-prod.local` | `SATORI_TURNO_PROD` | una línea con `TURNO DE PROD` y la fecha CR de hoy, p. ej. `TURNO DE PROD: esta sesión de CC · AAAA-MM-DD` (regla 13) | al cambiar el día CR |
 
@@ -71,9 +74,11 @@ de permiso es la firma:
 1. La sesión principal (coordinador) escribe la marca **entera** con `Write` en `<raíz del proyecto>/.claude/<marca>.local`,
    p. ej. `#316 <sha de la cabeza>`. Para sumar una firma, reescribe el archivo con las líneas viejas y la nueva.
 2. `firma.mjs` revisa: sesión principal (sin `agent_id`), ruta exacta, `Write`, formato, y para el SHA que sea la cabeza
-   actual del PR (REST de GitHub; si no responde, avisa en el texto). Si algo falla: deny con el motivo.
+   actual del PR, igual y completa (REST de GitHub). Si REST falla (sin red, sin `gh`, error o timeout), **deny**: nunca se
+   pide firmar un SHA sin verificar. Si algo falla: deny con el motivo.
 3. Si está bien, devuelve `ask` y reescribe el contenido (`updatedInput`) con una línea `# Aprobar = …` antes de cada firma,
-   p. ej. `# Aprobar = autorizo mergear el PR #316 «título» solo con el commit 6ac9d561. Si el PR cambia, la firma deja de valer.`
+   p. ej. `# Aprobar = autorizo mergear el PR #316 (título que puso el autor del PR: «…») solo con el commit 6ac9d561. Si el PR
+   cambia, la firma deja de valer.` El título se limpia (controles, saltos, marcas de dirección) y se corta a 80 caracteres.
 4. La regla `Edit(/.claude/*.local)` de `permissions.ask` fuerza el pedido aunque la sesión esté en modo automático. El dueño
    ve el archivo y su contenido (con las líneas «Aprobar = …») y toca **Aprobar** o **Rechazar**. Rechazar = no hay firma.
 5. Revocar: `rm .claude/<marca>.local` por Bash (la guardia lo deja) o `Write` vacío (pide Aprobar «revoca»).
@@ -88,6 +93,14 @@ Por qué así (Claude Code 2.1.329; fuentes en el PR):
   ([hooks](https://code.claude.com/docs/en/hooks)). Por eso el hook niega toda marca fuera de la ruta que cubre la regla.
 - Un subagente no puede mostrar el pedido; el hook lo distingue por `agent_id` (presente solo cuando el hook corre dentro
   de un subagente o compañero).
+
+Dónde queda anclada la regla `Edit(/.claude/*.local)`: en la «carpeta de trabajo principal» (la de arranque). El hook usa
+`CLAUDE_PROJECT_DIR`, «the project root where the session started» ([hooks](https://code.claude.com/docs/en/hooks)). En una
+sesión de la nube las dos son la carpeta del clon donde arranca la sesión (en el binario 2.1.329 el hook recibe la raíz del
+proyecto de la sesión). Si Claude entra a un worktree a mitad de sesión, `CLAUDE_PROJECT_DIR` «stays put» en la copia
+principal; si la regla se moviera con él (NO VERIFICADO), el hook niega toda marca que no esté en `CLAUDE_PROJECT_DIR`: el
+desajuste falla cerrado (no hay firma), nunca deja una marca sin pedido. Por eso: **firmar siempre desde la sesión
+principal, sin entrar a un worktree.**
 
 Límites:
 - Si nadie está mirando la sesión, Claude Code puede **negar** en vez de preguntar (no firma: hay que reintentar con el dueño

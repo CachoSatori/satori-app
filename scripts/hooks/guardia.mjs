@@ -65,8 +65,8 @@ export function ventanaMerge(ctx) {
 
 /**
  * Merge de un PR. D1 (20-nov): libre 23:30–15:00 · 15:00–19:00 con OK del dueño para ESE PR · 19:00–23:30 solo urgente
- * (OK con URGENTE en la cita). Además `--match-head-commit` / `sha` obligatorio e igual a la cabeza, y la cabeza tiene que
- * ser un SHA firmado. Un PR solo de .md no necesita SHA firmado, y de 23:30 a 15:00 tampoco OK. @returns {string | null}
+ * (OK con URGENTE en la cita). Además `--match-head-commit` / `sha` obligatorio, completo (40 hex) e igual a la cabeza, y la
+ * cabeza tiene que ser, exacta, un SHA firmado. Un PR solo de .md no necesita SHA firmado, y de 23:30 a 15:00 tampoco OK. @returns {string | null}
  */
 export function evaluarMerge(merge, ctx) {
   const v = ventanaMerge(ctx)
@@ -82,12 +82,12 @@ export function evaluarMerge(merge, ctx) {
   }
   const cabeza = String(info.cabeza).toLowerCase()
   const pedida = String(merge.cabezaPedida ?? '').toLowerCase()
-  if (!/^[0-9a-f]{7,40}$/.test(pedida)) return `Falta fijar la cabeza: gh pr merge ${info.numero} --match-head-commit <sha firmado> (o el campo sha en la API). Así GitHub no mergea otro commit.`
-  if (!cabeza.startsWith(pedida)) return `--match-head-commit ${pedida} no es la cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}).`
+  if (!/^[0-9a-f]{40}$/.test(pedida)) return `Falta fijar la cabeza completa: gh pr merge ${info.numero} --match-head-commit <sha firmado, 40 hex> (o el campo sha en la API). Así GitHub no mergea otro commit.`
+  if (cabeza !== pedida) return `--match-head-commit ${pedida.slice(0, 8)} no es la cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}).`
   if (info.archivos.length > 0 && info.archivos.every(a => a.toLowerCase().endsWith('.md'))) return null
   const firmados = shasFirmados(leerMarca('sha', ctx))
   if (!shaFirmadoCoincide(firmados, info.numero, cabeza)) {
-    return `La cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}) no es un SHA firmado por el dueño. Anotá «#${info.numero} <sha>» en ${MARCAS.sha.archivo} o en ${MARCAS.sha.variable} (ver scripts/hooks/README.md).`
+    return `La cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}) no es un SHA firmado por el dueño. Anotá «#${info.numero} <sha completo de 40 hex>» en ${MARCAS.sha.archivo} o en ${MARCAS.sha.variable} (ver scripts/hooks/README.md).`
   }
   return null
 }
@@ -214,8 +214,49 @@ function sqlDeCuerpo(cuerpo) {
 
 const SOSPECHOSO = /\b(drop|delete|truncate)\b/i
 
+// ---- Marcas y .claude/ por Bash: barrera blanda (el lector no expande variables ni decodifica nada). -----------------
+// Si el comando nombra una marca, `settings.local.json` o una carpeta `.claude`, solo pasan lecturas evidentes; además,
+// nunca pasa código que llega a un intérprete por un tubo (`… | bash`, `base64 -d | sh`) ni `bash <(…)` / `eval "$…"`.
+const RE_NOMBRE_PROTEGIDO = /sha-firmado|ok-dueno-noche|turno-prod|migracion-firmada|settings\.local\.json/i
+const RE_DIR_CLAUDE = /(?:^|[\s/'"=:;(&|<>`$])\.claude(?=[/\\'"\s;|&)<>`*]|$)/
+const RE_MARCA_ARCHIVO = /(?:^|\/)(?:sha-firmado|ok-dueno-noche|turno-prod|migracion-firmada)\.local$/
+const LECTURAS = new Set(['cat', 'jq', 'head', 'tail', 'less', 'more', 'ls', 'stat', 'wc', 'grep', 'egrep', 'fgrep', 'rg', 'diff', 'cmp',
+  'sha256sum', 'sha1sum', 'md5sum', 'file', 'test', '[', '[[', 'echo', 'printf', 'true', 'pwd', 'realpath', 'readlink', 'basename', 'dirname', 'cd'])
+const GIT_LECTURAS = new Set(['diff', 'log', 'show', 'status', 'ls-files', 'add', 'commit', 'hash-object', 'check-ignore', 'blame', 'grep', 'rev-parse', 'cat-file'])
+const RE_INTERPRETE_POR_TUBO = /\|\s*(?:sudo\s+|env\s+(?:\w+=\S*\s+)*)?(?:\S*\/)?(?:bash|sh|zsh|dash|ksh|python[\d.]*|node|perl|ruby|php)(?:\s+-[A-Za-z]+)*\s*(?=$|[|;&)\n])/
+const RE_CODIGO_ILEGIBLE = /(?:^|[\s;&|(])(?:bash|sh|zsh|dash|ksh|source|\.)\s+<\(|\beval\b[^\n;|&]*\$/
+
+/** ¿Este comando simple es una lectura evidente (o borra una marca: revoca)? */
+function lecturaEvidente(s) {
+  const { prog, args } = programa(s.palabras)
+  if (s.redirecciones.some(r => />/.test(r.op) && r.destino !== '/dev/null')) return false
+  const pos = args.filter(a => !a.startsWith('-'))
+  if (LECTURAS.has(prog)) return true
+  if (prog === 'git') {
+    const { sub, resto } = subcomandoGit(args)
+    return GIT_LECTURAS.has(sub) && !resto.some(a => a === '-o' || a.startsWith('--output'))
+  }
+  if (prog === 'gh') return !args.some(a => ['checkout', 'clone', 'download'].includes(a))
+  if (prog === 'cp') { const d = pos[pos.length - 1] ?? ''; return pos.length >= 2 && d.startsWith('/tmp/') && !RE_NOMBRE_PROTEGIDO.test(d) && !RE_DIR_CLAUDE.test(d) }
+  if (prog === 'rm' || prog === 'unlink') return pos.length > 0 && pos.every(a => RE_MARCA_ARCHIVO.test(a))
+  return false
+}
+
+/** @returns {string | null} */
+export function evaluarZonaProtegida(cmd) {
+  if (RE_INTERPRETE_POR_TUBO.test(cmd) || RE_CODIGO_ILEGIBLE.test(cmd)) {
+    return 'No se pasa código a un intérprete por un tubo, por <(…) ni por eval de una variable (… | bash, base64 -d | sh): la guardia no lo puede leer. Escribí el comando tal cual.'
+  }
+  if (!RE_NOMBRE_PROTEGIDO.test(cmd) && !RE_DIR_CLAUDE.test(cmd)) return null
+  const malo = comandos(cmd).find(s => s.palabras.length > 0 && !lecturaEvidente(s))
+  if (!malo) return null
+  return `No se escribe por Bash una marca de habilitación ni la configuración de Claude Code: un comando que nombra .claude/, una marca o settings.local.json solo puede leer (cat, jq, git diff…) o borrar una marca (rm, revoca); «${malo.palabras.slice(0, 3).join(' ')}» no es lectura. La marca la escribe la sesión principal con Write y la firma el dueño (ver scripts/hooks/README.md).`
+}
+
 /** @param {string} cmd @param {Contexto} ctx @returns {string | null} motivo del bloqueo */
 export function evaluarBash(cmd, ctx) {
+  const zona = evaluarZonaProtegida(cmd)
+  if (zona) return zona
   for (const s of comandos(cmd)) {
     const { prog, args } = programa(s.palabras)
 

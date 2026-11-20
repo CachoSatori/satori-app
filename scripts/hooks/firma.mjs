@@ -17,7 +17,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { basename, join, resolve, isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { MARCAS, okNocheValido, turnoProdValido } from './marcas.mjs'
+import { MARCAS, parsearOkNoche, turnoProdValido } from './marcas.mjs'
 import { relojCR, ahora as relojHooks } from './hora.mjs'
 import { consultarPRgh, REPO } from './guardia.mjs'
 
@@ -36,6 +36,16 @@ export function claveDeMarca(ruta) {
 const corto = sha => sha.slice(0, 8)
 
 /**
+ * Título del PR para el texto del pedido: lo escribe el autor del PR, así que se limpia (controles, saltos, marcas de
+ * dirección U+200E/F, U+202A–202E, U+2066–2069, comillas «») y se corta a 80 caracteres.
+ */
+export function limpiarTitulo(t) {
+  const s = String(t ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069«»]/g, ' ').replace(/\s+/g, ' ').trim()
+  const letras = [...s]
+  return letras.length > 80 ? letras.slice(0, 79).join('') + '…' : s
+}
+
+/**
  * Lee las líneas de una marca y arma el texto «Aprobar = …» de cada una.
  * @returns {{ ok: true, lineas: { dato: string, aprobar: string }[] } | { ok: false, motivo: string }}
  */
@@ -45,30 +55,25 @@ export function leerFirmas(clave, contenido, ctx) {
   const lineas = []
   for (const dato of datos) {
     if (clave === 'sha') {
-      const m = /^#(\d+)\s+([0-9a-f]{7,40})$/i.exec(dato)
-      if (!m) return { ok: false, motivo: `«${dato}» no es «#<PR> <sha>» (7 a 40 hex, con el número del PR: un SHA sin PR valdría para cualquiera)` }
+      const m = /^#(\d+)\s+([0-9a-f]{40})$/i.exec(dato)
+      if (!m) return { ok: false, motivo: `«${dato}» no es «#<PR> <sha completo>» (40 hex, la cabeza que da GitHub, con el número del PR: un SHA sin PR valdría para cualquiera)` }
       const pr = Number(m[1])
       const sha = m[2].toLowerCase()
       const info = ctx.consultarPR(String(pr), REPO, ctx.raiz)
-      let detalle
-      if ('error' in info) {
-        detalle = ` (no pude confirmar en GitHub que ${corto(sha)} sea su cabeza: ${info.error}; el merge igual la verifica)`
-      } else {
-        if (!String(info.cabeza).toLowerCase().startsWith(sha)) {
-          return { ok: false, motivo: `${corto(sha)} no es la cabeza actual del PR #${pr} (${corto(String(info.cabeza))}): el dueño firmaría un commit que ya no se mergea` }
-        }
-        detalle = info.titulo ? ` «${info.titulo.replace(/[«»\n]/g, '')}»` : ''
-      }
+      // Falla cerrada: sin la cabeza leída por REST no se le pide al dueño que firme nada.
+      if (!info || 'error' in info) return { ok: false, motivo: `no pude leer el PR #${pr} en GitHub (${info?.error ?? 'sin respuesta'}): sin verificar la cabeza no se firma` }
+      const cabeza = String(info.cabeza).toLowerCase()
+      if (cabeza !== sha) return { ok: false, motivo: `${corto(sha)} no es la cabeza actual del PR #${pr} (${corto(cabeza)}): el dueño firmaría un commit que no se mergea` }
+      const titulo = limpiarTitulo(info.titulo)
+      const detalle = titulo ? ` (título que puso el autor del PR: «${titulo}»)` : ''
       lineas.push({ dato: `#${pr} ${sha}`, aprobar: `autorizo mergear el PR #${pr}${detalle} solo con el commit ${corto(sha)}. Si el PR cambia, la firma deja de valer.` })
     } else if (clave === 'noche') {
-      const n = /#(\d+)(?!\d)/.exec(dato)
-      if (!n) return { ok: false, motivo: `«${dato}» no tiene el número del PR (#N)` }
-      const pr = Number(n[1])
-      const r = okNocheValido(dato, fecha, pr)
-      if (!r.ok) return { ok: false, motivo: `«${dato}»: ${r.motivo}` }
-      const urgente = okNocheValido(dato, fecha, pr, { urgente: true }).ok
+      const p = parsearOkNoche(dato)
+      if (!p) return { ok: false, motivo: `«${dato}» no es «AAAA-MM-DD #N «cita del dueño»» (un solo #N en la línea, cita de 8+ caracteres)` }
+      if (p.fecha !== fecha) return { ok: false, motivo: `«${dato}» no tiene la fecha CR de hoy (${fecha})` }
+      const urgente = /\bURGENTE\b/.test(p.cita)
       const tramo = urgente ? 'de 15:00 a 23:30 (es URGENTE: vale también de 19:00 a 23:30)' : 'de 15:00 a 19:00'
-      lineas.push({ dato, aprobar: `autorizo mergear el PR #${pr} hoy ${fecha}, ${tramo}, hora CR. Vence a medianoche.` })
+      lineas.push({ dato, aprobar: `autorizo mergear el PR #${p.pr} hoy ${fecha}, ${tramo}, hora CR. Vence a medianoche.` })
     } else if (clave === 'prod') {
       if (!turnoProdValido(dato, fecha).ok) return { ok: false, motivo: `«${dato}» no tiene «TURNO DE PROD» con la fecha de hoy (${fecha})` }
       lineas.push({ dato, aprobar: `esta sesión de CC puede escribir en la base de PRODUCCIÓN hoy ${fecha} (regla 13). Vence a medianoche.` })

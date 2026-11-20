@@ -85,7 +85,6 @@ const TEL_PLACEHOLDER = '88888888'   // «8888-8888»: ejemplo de formato en el 
 export const TELEFONO_FUERA_RUTAS: { patron: RegExp; motivo: string }[] = [
   { patron: /^scripts\/sql\/.*\.(sql|sh)$/, motivo: 'pruebas SQL que corren contra la base con números inventados de patrón obvio (6000xxxx, 6001xxxx, 6111xxxx, 8888xxxx); cambiarlos exige re-correrlas contra una base' },
   { patron: /^scripts\/t0-reconciliacion-cajas\/REPORTE-T0B-PROD\.md$/, motivo: 'reporte con ids de movimientos de ocho dígitos, no teléfonos' },
-  { patron: /^docs\/analisis\/[^/]+\/datos\/.*\.csv$/, motivo: 'datos numéricos exportados (montos, conteos): sin teléfonos, y los números largos chocan con la regla' },
 ]
 const esFechaCompacta = (d: string) => /^20[0-9]{2}(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])$/.test(d)   // 20261118: semilla o fecha
 const esRangoAnios = (a: string, b: string) => /^(19|20)[0-9]{2}$/.test(a) && /^(19|20)[0-9]{2}$/.test(b)   // 2024-2025

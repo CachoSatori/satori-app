@@ -1,5 +1,7 @@
 # Análisis mediodía, menú y Local Club (nov 2026)
 
+> Nota: datos movidos fuera del repo (privacidad, 20-nov); se regeneran con las queries de scripts/ o se piden al dueño.
+
 Análisis hecho entre el 29-oct y el 03-nov-2026 con datos del PoS Nube de Fuego (ago-2024 a oct-2026).
 Objetivo: decidir qué hacer con el menú de mediodía (familia 29 GREENSEASON) y con el descuento Local Club.
 

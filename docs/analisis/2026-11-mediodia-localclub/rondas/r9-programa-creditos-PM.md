@@ -1,5 +1,7 @@
 # Ronda 9 — Programa de créditos (tarjetas) y comisiones PM: conciliación con el PoS · 04-nov-2026
 
+> Nota: datos movidos fuera del repo (privacidad, 20-nov); se regeneran con las queries de scripts/ o se piden al dueño.
+
 Reporte: https://claude.ai/artifact/9Ad3sbMcV4q2gMLfJbNXcq
 
 ## Fuentes entregadas por el dueño (no se guardan en el repo)

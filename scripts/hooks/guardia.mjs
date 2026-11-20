@@ -12,6 +12,7 @@
 //   · con SATORI_ENTORNO=staging-agentes: toda herramienta MCP de Supabase o SQL por Bash fuera del ref de staging, y
 //     todo merge de PR (el push a main ya está frenado siempre).
 import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { isAbsolute, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -19,7 +20,7 @@ import { comandos, programa } from './shell.mjs'
 import { subcomandoGit, evaluarPush, detectarMerge, valorOpcion, REPO } from './git.mjs'
 import { evaluarSQL, esSoloLectura, refsEn, refLiteral, REF_PROD, REF_STAGING } from './sql.mjs'
 import { relojCR, ventanaD1, ahora as relojHooks } from './hora.mjs'
-import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoincide, RE_ARCHIVO_MARCA, MARCAS } from './marcas.mjs'
+import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoincide, migracionesFirmadas, RE_ARCHIVO_MARCA, MARCAS } from './marcas.mjs'
 
 /**
  * @typedef {{ numero: number, cabeza: string, archivos: string[] } | { error: string }} InfoPR
@@ -31,31 +32,60 @@ import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoin
  * }} Contexto
  */
 
-const RE_ENV = /(?:^|[/=:@\\])\.env(?:[.*?\w-]*)$/
+// Una RUTA a un .env* (no un patrón de búsqueda ni código): `.env`, `club-web/.env.local`, `.env*`. `.env.example` sí se lee.
+const RE_ENV = /^(?:[\w@.~-]*\/)*\.env(?:\.[\w.-]+)?\*?$/
+const RE_ENV_PERMITIDO = /\.env\.example$/
 const SOLO_MIRA = new Set(['ls', 'test', '[', '[[', 'stat'])
+// Programas cuyo primer argumento posicional es un patrón o un programa, no un archivo (salvo -e / -f / --regexp).
+const PRIMERO_ES_PATRON = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'sed', 'awk', 'gawk'])
 
-/** Regla D1 + OK de la noche. @returns {string | null} */
-export function evaluarD1(ctx) {
+/** Argumentos que son rutas de archivo (para la regla de .env). */
+export function rutasDeArchivo(prog, args) {
+  const salida = []
+  let saltarPatron = PRIMERO_ES_PATRON.has(prog) && !args.some(a => /^(-e|-f|--regexp|--file|--expression)(=|$)/.test(a))
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
+    if (a.startsWith('-')) {
+      const igual = a.indexOf('=')
+      if (igual !== -1) salida.push(a.slice(igual + 1)) // --env-file=.env
+      continue
+    }
+    if (saltarPatron) { saltarPatron = false; continue }
+    salida.push(a)
+  }
+  return salida
+}
+const esRutaEnv = a => RE_ENV.test(a) && !RE_ENV_PERMITIDO.test(a)
+
+/** Ventana D1 (sin red). @returns {{ bloqueo: string | null, necesitaOk: boolean, reloj: ReturnType<typeof relojCR> }} */
+export function ventanaMerge(ctx) {
   const reloj = relojCR(ctx.ahora)
   const v = ventanaD1(reloj.minutos)
-  if (v === 'bloqueado') return `Regla D1: merges bloqueados de 15:50 a 19:00 (hora CR ${reloj.hhmm}). Esperá a las 19:00 con OK del dueño, o a las 23:30.`
-  if (v === 'con-ok') {
-    const ok = okNocheValido(leerMarca('noche', ctx), reloj.fecha)
-    if (!ok.ok) return `Regla D1: de 19:00 a 23:30 (hora CR ${reloj.hhmm}) el merge necesita el OK del dueño en el momento: ${ok.motivo}. Formato en scripts/hooks/README.md (${MARCAS.noche.archivo} o ${MARCAS.noche.variable}).`
-  }
-  return null
+  if (v === 'bloqueado') return { bloqueo: `Regla D1: merges bloqueados de 15:50 a 19:00 (hora CR ${reloj.hhmm}). Esperá a las 19:00 con OK del dueño, o a las 23:30.`, necesitaOk: false, reloj }
+  return { bloqueo: null, necesitaOk: v === 'con-ok', reloj }
 }
 
-/** Merge de un PR: D1, y la cabeza tiene que ser el SHA firmado (salvo PR solo de .md). @returns {string | null} */
+/**
+ * Merge de un PR: D1 (de 19:00 a 23:30, OK del dueño para ESE PR), `--match-head-commit` / `sha` obligatorio e igual a
+ * la cabeza, y la cabeza tiene que ser un SHA firmado (salvo PR solo de .md). @returns {string | null}
+ */
 export function evaluarMerge(merge, ctx) {
-  const d1 = evaluarD1(ctx)
-  if (d1) return d1
+  const v = ventanaMerge(ctx)
+  if (v.bloqueo) return v.bloqueo
   const info = ctx.consultarPR(merge.selector, merge.repo, ctx.cwd)
   if ('error' in info) return `No pude leer el PR para verificar la cabeza (${info.error}). Sin verificar no se mergea.`
+  if (v.necesitaOk) {
+    const ok = okNocheValido(leerMarca('noche', ctx), v.reloj.fecha, info.numero)
+    if (!ok.ok) return `Regla D1: de 19:00 a 23:30 (hora CR ${v.reloj.hhmm}) el merge necesita el OK del dueño en el momento para el #${info.numero}: ${ok.motivo}. Formato en scripts/hooks/README.md (${MARCAS.noche.archivo} o ${MARCAS.noche.variable}).`
+  }
+  const cabeza = String(info.cabeza).toLowerCase()
+  const pedida = String(merge.cabezaPedida ?? '').toLowerCase()
+  if (!/^[0-9a-f]{7,40}$/.test(pedida)) return `Falta fijar la cabeza: gh pr merge ${info.numero} --match-head-commit <sha firmado> (o el campo sha en la API). Así GitHub no mergea otro commit.`
+  if (!cabeza.startsWith(pedida)) return `--match-head-commit ${pedida} no es la cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}).`
   if (info.archivos.length > 0 && info.archivos.every(a => a.toLowerCase().endsWith('.md'))) return null
   const firmados = shasFirmados(leerMarca('sha', ctx))
-  if (!shaFirmadoCoincide(firmados, info.numero, info.cabeza)) {
-    return `La cabeza del PR #${info.numero} (${info.cabeza.slice(0, 8)}) no es un SHA firmado por el dueño. Anotá «#${info.numero} <sha>» en ${MARCAS.sha.archivo} o en ${MARCAS.sha.variable} (ver scripts/hooks/README.md).`
+  if (!shaFirmadoCoincide(firmados, info.numero, cabeza)) {
+    return `La cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}) no es un SHA firmado por el dueño. Anotá «#${info.numero} <sha>» en ${MARCAS.sha.archivo} o en ${MARCAS.sha.variable} (ver scripts/hooks/README.md).`
   }
   return null
 }
@@ -75,18 +105,41 @@ function exigirTurnoProd(ctx, origen, que) {
  * @returns {string | null}
  */
 export function evaluarSQLaRef(sql, refs, ctx, origen) {
-  if (refs.length === 0) return `${origen}: no encuentro el ref de Supabase; confirmalo y escribilo literal (regla 7).`
+  const lectura = sql !== null && esSoloLectura(sql)
+  if (refs.length === 0) refs = ['(sin ref)']
   for (const ref of refs) {
-    if (!refLiteral(ref)) return `${origen}: el ref «${ref}» no es literal; escribilo (regla 7: confirmar el ref antes de cualquier comando de base).`
     if (esStagingAgentes(ctx) && ref !== REF_STAGING) return `${origen}: SATORI_ENTORNO=staging-agentes solo permite el ref de staging (${REF_STAGING}), no «${ref}».`
+    // Sin ref literal no se sabe si es prod (regla 7): leer pasa (leer prod no pide turno); escribir, no.
+    if (!refLiteral(ref) && !lectura) return `${origen}: el ref «${ref}» no es literal y el SQL escribe (o no se puede leer); escribí el ref (regla 7: confirmar el ref antes de cualquier comando de base).`
   }
-  if (refs.includes(REF_PROD) && (sql === null || !esSoloLectura(sql))) {
+  if (refs.includes(REF_PROD) && !lectura) {
     const m = exigirTurnoProd(ctx, origen, sql === null ? 'SQL que no pude leer' : 'escritura o DDL')
     if (m) return m
   }
   if (sql === null) return null
   const m = evaluarSQL(sql)
-  return m ? `${origen}: ${m}. Lo destructivo va dentro de begin … rollback (prueba) o por migración con firma.` : null
+  if (!m) return null
+  if (migracionFirmada(sql, ctx)) return null
+  return `${origen}: ${m}. Lo destructivo va dentro de begin … rollback (prueba), o es una migración firmada (sha256 del .sql en ${MARCAS.migracion.archivo}; ver scripts/hooks/README.md).`
+}
+
+/** ¿Este SQL es, tal cual, una migración firmada (sha256 del .sql)? Tolera solo el salto de línea final. */
+export function migracionFirmada(sql, ctx) {
+  const firmadas = migracionesFirmadas(leerMarca('migracion', ctx))
+  if (firmadas.size === 0) return false
+  const sha = t => createHash('sha256').update(t, 'utf8').digest('hex')
+  return [sql, sql.replace(/\s+$/, '') + '\n', sql.replace(/\s+$/, '')].some(t => firmadas.has(sha(t)))
+}
+
+/**
+ * ¿psql va a una base remota? Sí si nombra Supabase, usa una URL de conexión, una variable (no se sabe a dónde va) o un
+ * host que no es local. Solo `psql` a localhost / socket local (baterías) queda afuera.
+ */
+export function psqlRemoto(args) {
+  const texto = args.join(' ')
+  if (/supabase\.(co|com|in)|postgres(?:ql)?:\/\/|\$/.test(texto)) return true
+  const host = valorOpcion(args, ['-h', '--host']) ?? /\bhost=(\S+)/.exec(texto)?.[1]
+  return host !== undefined && !/^(localhost|127\.0\.0\.1|::1|\/.*)$/.test(host)
 }
 
 /** Herramientas MCP de Supabase que solo leen (por prefijo del nombre). */
@@ -165,8 +218,8 @@ export function evaluarBash(cmd, ctx) {
 
     // .env*: no se lee.
     if (!SOLO_MIRA.has(prog)) {
-      const env = [...args, ...s.redirecciones.filter(r => r.op.startsWith('<') && r.op !== '<<<').map(r => r.destino)]
-        .find(a => RE_ENV.test(a) || a.split('=').some(p => RE_ENV.test(p)))
+      const env = [...rutasDeArchivo(prog, args), ...s.redirecciones.filter(r => r.op.startsWith('<') && r.op !== '<<<').map(r => r.destino)]
+        .find(esRutaEnv)
       if (env) return `No se leen archivos .env* (${env}): tienen secretos. Si hace falta un valor, pedíselo al dueño por su sesión.`
     }
 
@@ -176,6 +229,7 @@ export function evaluarBash(cmd, ctx) {
     if (sb) {
       const t = ' ' + sb.filter(a => !a.startsWith('-')).join(' ') + ' '
       if (/ db push /.test(t)) return 'Bloqueado: supabase db push (las migraciones entran por merge → Branching, regla 1).'
+      if (/ db reset /.test(t) && sb.some(a => a === '--linked' || a.startsWith('--db-url'))) return 'Bloqueado: supabase db reset contra una base remota (--linked / --db-url).'
       if (/ functions deploy /.test(t)) return 'Bloqueado: supabase functions deploy (Edge solo con firma del dueño, regla 2; lo corre el dueño).'
     }
 
@@ -219,7 +273,8 @@ export function evaluarBash(cmd, ctx) {
     if (prog === 'psql') {
       const texto = args.join(' ')
       const refs = refsEn(texto)
-      if (refs.length || /supabase\.(co|com|in)/.test(texto)) {
+      if (psqlRemoto(args)) {
+        if (refs.length === 0) refs.push(/\$/.test(texto) ? '(variable)' : '(host sin ref)')
         const partes = []
         const c = valorOpcion(args, ['-c', '--command'])
         if (c !== undefined) partes.push(c)
@@ -246,7 +301,7 @@ function ramaActualGit(dir) {
 }
 
 function ghJson(args) {
-  const r = spawnSync('gh', ['api', ...args], { encoding: 'utf8', timeout: 30_000 })
+  const r = spawnSync('gh', ['api', ...args], { encoding: 'utf8', timeout: 15_000 })
   if (r.status !== 0) throw new Error((r.stderr || r.stdout || 'gh api falló').trim().split('\n')[0])
   return JSON.parse(r.stdout)
 }

@@ -28,7 +28,7 @@ const corridas = () => (existsSync(join(raiz, 'corridas')) ? readFileSync(join(r
 beforeEach(() => {
   raiz = mkdtempSync(join(tmpdir(), 'cierre-hook-'))
   spawnSync('git', ['init', '-q', '-b', 'claude/tema'], { cwd: raiz })
-  writeFileSync(join(raiz, '.gitignore'), 'node_modules\ncorridas\nresultado\n')
+  writeFileSync(join(raiz, '.gitignore'), 'node_modules\ncorridas\ncorridas-docs\nresultado\n')
   writeFileSync(join(raiz, 'a.ts'), 'export const a = 1\n')
   git('add', '-A')
   git('commit', '-q', '-m', 'base')
@@ -100,6 +100,24 @@ describe('Stop: gate si hay trabajo sin entregar', () => {
     expect(corridas()).toBe(3)
     // un turno nuevo (sin stop_hook_active) vuelve a contar desde cero
     expect(correr(STOP, { stop_hook_active: false }).status).toBe(2)
+  })
+  it('solo .md: camino rápido (guardas de docs), no el gate completo; si caen, exit 2', () => {
+    ejecutable('node_modules/.bin/vitest', 'echo "$@" >> corridas-docs; if [ -f resultado ]; then echo " FAIL  src/privacidadRepo.test.ts > correo"; exit 1; fi; echo " Tests  3 passed (3)"')
+    writeFileSync(join(raiz, 'notas.md'), '# notas\n')
+    expect(correr(STOP, {}).status).toBe(0)
+    expect(corridas()).toBe(0)
+    expect(readFileSync(join(raiz, 'corridas-docs'), 'utf8')).toMatch(/^run/)
+    writeFileSync(join(raiz, 'notas.md'), '# notas 2\n')
+    writeFileSync(join(raiz, 'resultado'), 'x')
+    const r = correr(STOP, {})
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/guardas de docs/)
+    expect(r.stderr).toContain('privacidadRepo')
+    expect(corridas()).toBe(0)
+    // .md + código: gate completo
+    writeFileSync(join(raiz, 'a.ts'), 'export const a = 5\n')
+    expect(correr(STOP, {}).status).toBe(2)
+    expect(corridas()).toBe(1)
   })
   it('gate verde se recuerda para el mismo árbol; si cambia, se vuelve a correr', () => {
     writeFileSync(join(raiz, 'a.ts'), 'export const a = 9\n')

@@ -3,10 +3,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 // @ts-expect-error módulo .mjs sin tipos
-import { evaluarBash, evaluarMerge, evaluarD1, evaluarMcpSupabase } from './guardia.mjs'
+import { evaluarBash, evaluarMerge, ventanaMerge, evaluarMcpSupabase, rutasDeArchivo } from './guardia.mjs'
 // @ts-expect-error módulo .mjs sin tipos
 import { relojCR, ventanaD1 } from './hora.mjs'
 // @ts-expect-error módulo .mjs sin tipos
@@ -53,33 +54,41 @@ describe('hora CR y ventana D1 (bordes)', () => {
 })
 
 describe('merge: regla D1', () => {
+  const merge = { selector: '305', repo: 'CachoSatori/satori-app', cabezaPedida: CABEZA }
+  beforeEach(() => marca('sha-firmado.local', `#305 ${CABEZA}`))
   it('15:50–19:00 bloquea aunque haya OK y SHA firmado', () => {
-    marca('ok-dueno-noche.local', '2026-11-20 «dale, mergeá el 305»')
-    marca('sha-firmado.local', `#305 ${CABEZA}`)
-    expect(evaluarD1(ctx({ ahora: '2026-11-20T21:50:00Z' }))).toMatch(/15:50 a 19:00/)
-    expect(evaluarD1(ctx({ ahora: '2026-11-20T21:49:00Z' }))).toBeNull()
+    marca('ok-dueno-noche.local', '2026-11-20 #305 «dale, mergeá el 305»')
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-20T21:50:00Z' }))).toMatch(/15:50 a 19:00/)
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-20T21:49:00Z' }))).toBeNull()
   })
-  it('19:00–23:30 sin OK bloquea; con OK de hoy (fecha CR) y cita pasa', () => {
+  it('19:00–23:30 sin OK bloquea; con OK de hoy (fecha CR), del PR y con cita pasa', () => {
     const noche = '2026-11-21T01:00:00Z'
-    expect(evaluarD1(ctx({ ahora: noche }))).toMatch(/OK del dueño/)
-    marca('ok-dueno-noche.local', '2026-11-21 «dale, mergeá el 305»') // fecha UTC: mal
-    expect(evaluarD1(ctx({ ahora: noche }))).toMatch(/fecha de hoy \(2026-11-20\)/)
-    marca('ok-dueno-noche.local', '2026-11-20 sin cita')
-    expect(evaluarD1(ctx({ ahora: noche }))).not.toBeNull()
-    marca('ok-dueno-noche.local', '2026-11-20 «dale, mergeá el 305»')
-    expect(evaluarD1(ctx({ ahora: noche }))).toBeNull()
-    expect(evaluarD1(ctx({ ahora: '2026-11-21T05:29:00Z' }))).toBeNull()
+    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toMatch(/OK del dueño/)
+    marca('ok-dueno-noche.local', '2026-11-21 #305 «dale, mergeá el 305»') // fecha UTC: mal
+    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toMatch(/2026-11-20/)
+    marca('ok-dueno-noche.local', '2026-11-20 #305 sin cita')
+    expect(evaluarMerge(merge, ctx({ ahora: noche }))).not.toBeNull()
+    marca('ok-dueno-noche.local', '2026-11-20 #306 «dale, mergeá el 306»') // OK de otro PR
+    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toMatch(/#305/)
+    marca('ok-dueno-noche.local', '2026-11-20 #3050 «dale, mergeá el 3050»') // prefijo de otro número
+    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toMatch(/#305/)
+    marca('ok-dueno-noche.local', '2026-11-20 #305 «dale, mergeá el 305»')
+    expect(evaluarMerge(merge, ctx({ ahora: noche }))).toBeNull()
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T05:29:00Z' }))).toBeNull()
   })
   it('el OK también puede venir por variable de entorno', () => {
-    expect(evaluarD1(ctx({ ahora: '2026-11-21T05:29:00Z', env: { SATORI_OK_DUENO_NOCHE: '2026-11-20 "ok del dueño a las 23"' } }))).toBeNull()
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T05:29:00Z', env: { SATORI_OK_DUENO_NOCHE: '2026-11-20 #305 "ok del dueño a las 23"' } }))).toBeNull()
   })
   it('23:30 en adelante libre sin OK', () => {
-    expect(evaluarD1(ctx({ ahora: '2026-11-21T05:30:00Z' }))).toBeNull()
+    expect(evaluarMerge(merge, ctx({ ahora: '2026-11-21T05:30:00Z' }))).toBeNull()
+  })
+  it('ventana sin red: 15:50–19:00 no consulta GitHub', () => {
+    expect(ventanaMerge(ctx({ ahora: '2026-11-20T22:00:00Z' })).bloqueo).toMatch(/D1/)
   })
 })
 
-describe('merge: SHA firmado', () => {
-  const merge = { selector: '305', repo: 'CachoSatori/satori-app' }
+describe('merge: SHA firmado y cabeza fijada', () => {
+  const merge = { selector: '305', repo: 'CachoSatori/satori-app', cabezaPedida: CABEZA.slice(0, 8) }
   it('sin SHA firmado bloquea; con el SHA de la cabeza pasa', () => {
     expect(evaluarMerge(merge, ctx())).toMatch(/no es un SHA firmado/)
     marca('sha-firmado.local', `#305 ${CABEZA.slice(0, 8)}`)
@@ -92,24 +101,38 @@ describe('merge: SHA firmado', () => {
   it('por variable SATORI_SHA_FIRMADO', () => {
     expect(evaluarMerge(merge, ctx({ env: { SATORI_SHA_FIRMADO: CABEZA } }))).toBeNull()
   })
-  it('PR solo de .md: exento del SHA, no de D1', () => {
+  it('sin --match-head-commit, o con otro SHA, bloquea', () => {
+    marca('sha-firmado.local', `#305 ${CABEZA}`)
+    expect(evaluarMerge({ ...merge, cabezaPedida: null }, ctx())).toMatch(/match-head-commit/)
+    expect(evaluarMerge({ ...merge, cabezaPedida: '1234567' }, ctx())).toMatch(/no es la cabeza/)
+  })
+  it('PR solo de .md: exento del SHA firmado, no de D1 ni de fijar la cabeza', () => {
     const pr = { numero: 305, cabeza: CABEZA, archivos: ['docs/a.md', 'ESTADO.md'] }
     expect(evaluarMerge(merge, ctx({ pr }))).toBeNull()
     expect(evaluarMerge(merge, ctx({ pr, ahora: '2026-11-20T22:00:00Z' }))).toMatch(/D1/)
+    expect(evaluarMerge({ ...merge, cabezaPedida: null }, ctx({ pr }))).toMatch(/match-head-commit/)
     expect(evaluarMerge(merge, ctx({ pr: { ...pr, archivos: ['docs/a.md', 'src/a.ts'] } }))).toMatch(/SHA firmado/)
   })
   it('si no se puede leer el PR, no se mergea', () => {
     expect(evaluarMerge(merge, ctx({ pr: { error: 'sin red' } }))).toMatch(/No pude leer el PR/)
   })
-  it('detecta las formas de merge por Bash', () => {
-    const conFirma = ctx({ ahora: '2026-11-20T22:00:00Z' })
-    for (const c of ['gh pr merge 305 --squash', 'gh pr merge --merge https://github.com/CachoSatori/satori-app/pull/305',
-      'gh api -X PUT repos/CachoSatori/satori-app/pulls/305/merge', 'gh api repos/CachoSatori/satori-app/pulls/305/merge -f merge_method=squash',
-      'cd x && gh pr merge', 'curl -X PUT https://api.github.com/repos/CachoSatori/satori-app/pulls/305/merge']) {
-      expect(evaluarBash(c, conFirma), c).toMatch(/D1/)
-    }
-    expect(evaluarBash('gh api repos/CachoSatori/satori-app/pulls/305/merge', conFirma)).toBeNull() // GET: solo consulta
-    expect(evaluarBash('gh pr view 305', conFirma)).toBeNull()
+  it('detecta las formas de merge por Bash y lee la cabeza pedida', () => {
+    marca('sha-firmado.local', `#305 ${CABEZA}`)
+    const c = ctx()
+    expect(evaluarBash('gh pr merge 305 --squash', c)).toMatch(/match-head-commit/)
+    expect(evaluarBash(`gh pr merge 305 --squash --match-head-commit ${CABEZA}`, c)).toBeNull()
+    expect(evaluarBash(`gh pr merge --merge https://github.com/CachoSatori/satori-app/pull/305 --match-head-commit=${CABEZA}`, c)).toBeNull()
+    expect(evaluarBash('gh api -X PUT repos/CachoSatori/satori-app/pulls/305/merge', c)).toMatch(/match-head-commit/)
+    expect(evaluarBash(`gh api repos/CachoSatori/satori-app/pulls/305/merge -f merge_method=squash -f sha=${CABEZA}`, c)).toBeNull()
+    expect(evaluarBash('gh api repos/CachoSatori/satori-app/pulls/305/merge', c)).toBeNull() // GET: solo consulta
+    expect(evaluarBash('gh pr view 305', c)).toBeNull()
+    const tarde = ctx({ ahora: '2026-11-20T22:00:00Z' })
+    expect(evaluarBash(`cd x && gh pr merge --match-head-commit ${CABEZA}`, tarde)).toMatch(/D1/)
+  })
+  it('bloquea --auto, curl a la API y GraphQL', () => {
+    marca('sha-firmado.local', `#305 ${CABEZA}`)
+    expect(evaluarBash(`gh pr merge 305 --auto --match-head-commit ${CABEZA}`, ctx())).toMatch(/--auto/)
+    expect(evaluarBash('curl -X PUT https://api.github.com/repos/CachoSatori/satori-app/pulls/305/merge', ctx())).toMatch(/curl/)
     expect(evaluarBash("gh api graphql -f query='mutation { mergePullRequest(input:{}) { clientMutationId } }'", ctx())).toMatch(/GraphQL/)
   })
 })
@@ -129,19 +152,25 @@ describe('git push', () => {
 })
 
 describe('supabase CLI', () => {
-  for (const c of ['supabase db push', 'supabase db push --linked', 'npx supabase db push', 'npx supabase@latest functions deploy club-pase', 'supabase --workdir x functions deploy f', "bash -c 'supabase db push'"])
+  for (const c of ['supabase db reset --linked', 'npx supabase db reset --db-url=postgresql://x', 'supabase db push', 'supabase db push --linked', 'npx supabase db push', 'npx supabase@latest functions deploy club-pase', 'supabase --workdir x functions deploy f', "bash -c 'supabase db push'"])
     it(`bloquea: ${c}`, () => expect(evaluarBash(c, ctx())).toMatch(/Bloqueado: supabase/))
-  for (const c of ['supabase db diff', 'npx supabase functions list', 'supabase migration list', 'npx vitest run'])
+  for (const c of ['supabase db reset', 'supabase db diff', 'npx supabase functions list', 'supabase migration list', 'npx vitest run'])
     it(`deja pasar: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
 })
 
 describe('.env y marcas', () => {
-  for (const c of ['cat .env', 'cat .env.local', 'grep KEY .env.production', 'source ./.env', 'head -1 club-web/.env', 'node --env-file=.env x.js', 'less < .env', 'cat .env*'])
+  for (const c of ['cat .env', 'cat .env.local', 'grep KEY .env.production', 'grep -e KEY .env', 'rg x club-web/.env', 'source ./.env', 'head -1 club-web/.env', 'node --env-file=.env x.js', 'less < .env', 'cat .env*'])
     it(`bloquea leer: ${c}`, () => expect(evaluarBash(c, ctx())).toMatch(/\.env/))
-  for (const c of ['ls -la .env', 'test -f .env.local', 'node -e "console.log(process.env.X)"', 'grep -r import.meta.env src', 'cat src/environment.ts'])
+  for (const c of ['ls -la .env', 'test -f .env.local', 'node -e "console.log(process.env.X)"', 'grep -r import.meta.env src', 'cat src/environment.ts',
+    'grep -rn ".env" src', "rg '.env' src", 'cat .env.example', "sed -n '/.env/p' docs/x.md", 'grep -e foo src'])
     it(`deja pasar: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
-  for (const c of ['echo "#305 abcdef1" > .claude/sha-firmado.local', 'printf x >> .claude/turno-prod.local', 'tee .claude/ok-dueno-noche.local < x', 'cp a .claude/turno-prod.local'])
+  for (const c of ['echo "{}" > .claude/settings.local.json', 'cp x.json .claude/settings.json', "sed -i 's/a/b/' .claude/settings.local.json",
+    'echo "abc" >> .claude/migracion-firmada.local', 'echo "#305 abcdef1" > .claude/sha-firmado.local', 'printf x >> .claude/turno-prod.local', 'tee .claude/ok-dueno-noche.local < x', 'cp a .claude/turno-prod.local'])
     it(`bloquea escribir la marca: ${c}`, () => expect(evaluarBash(c, ctx())).toMatch(/marca/))
+  it('rutasDeArchivo salta el patrón de grep salvo con -e', () => {
+    expect(rutasDeArchivo('grep', ['-rn', '.env', 'src'])).toEqual(['src'])
+    expect(rutasDeArchivo('grep', ['-e', 'x', '.env'])).toEqual(['x', '.env'])
+  })
   it('leer o borrar la marca sí', () => {
     expect(evaluarBash('cat .claude/turno-prod.local', ctx())).toBeNull()
     expect(evaluarBash('rm .claude/turno-prod.local', ctx())).toBeNull()
@@ -151,12 +180,13 @@ describe('.env y marcas', () => {
 describe('SQL: drop / delete / truncate solo dentro de begin … rollback', () => {
   const bloquea = ['delete from t', 'drop table t', 'truncate t', 'begin; delete from t; commit;', 'begin; delete from t;',
     'with x as (delete from t returning *) select * from x', "do $$ begin delete from t; end $$", 'alter table t drop column c',
-    'begin; select 1; rollback; delete from t;']
+    'begin; select 1; rollback; delete from t;', "do $$ begin execute 'drop table t'; end $$", "do $f$ begin execute format('delete from %I', 't'); end $f$"]
   for (const s of bloquea) it(`bloquea: ${s}`, () => expect(evaluarSQL(s)).not.toBeNull())
   const pasa = ['select 1', 'begin; delete from t; rollback;', 'BEGIN READ ONLY; drop table t; ROLLBACK;', "select 'delete from t'",
     '-- drop table t\nselect 1', 'create table t (id int references u on delete cascade)', 'create policy p on t for delete using (true)',
     'grant select, delete on t to authenticated', 'create function f() returns void as $$ delete from t $$ language sql',
-    'begin; savepoint a; delete from t; rollback to savepoint a; rollback;', 'select deleted_at from t']
+    'begin; savepoint a; delete from t; rollback to savepoint a; rollback;', 'select deleted_at from t',
+    "do $$ begin execute 'select 1'; end $$", "begin; do $$ begin execute 'drop table t'; end $$; rollback;"]
   for (const s of pasa) it(`deja pasar: ${s}`, () => expect(evaluarSQL(s)).toBeNull())
   it('lectura vs escritura', () => {
     expect(esSoloLectura('select * from t; with a as (select 1) select * from a')).toBe(true)
@@ -181,8 +211,22 @@ describe('SQL por Bash (Management API, psql, PostgREST)', () => {
     expect(evaluarBash(api(REF_PROD, 'update t set a = 1'), ctx())).toBeNull()
     expect(evaluarBash(api(REF_PROD, 'delete from t'), ctx())).toMatch(/fuera de begin/) // el turno no habilita borrar
   })
-  it('ref no literal bloquea (regla 7)', () => {
-    expect(evaluarBash(api('$REF', 'select 1'), ctx())).toMatch(/no es literal/)
+  it('ref no literal: escribir bloquea (regla 7), leer pasa', () => {
+    expect(evaluarBash(api('$REF', 'update t set a = 1'), ctx())).toMatch(/no es literal/)
+    expect(evaluarBash(api('$REF', 'select 1'), ctx())).toBeNull()
+  })
+  it('migración firmada: el sha256 exacto del .sql habilita su drop policy if exists; otro sha no', () => {
+    const sql = 'drop policy if exists p on t;\ncreate policy p on t for select using (true);\n'
+    const sha = createHash('sha256').update(sql).digest('hex')
+    const mcp = { project_id: REF_STAGING, name: 'm', query: sql }
+    expect(evaluarMcpSupabase('mcp__Supabase__apply_migration', mcp, ctx())).toMatch(/migración firmada/)
+    marca('migracion-firmada.local', `${'0'.repeat(64)} otra.sql`)
+    expect(evaluarMcpSupabase('mcp__Supabase__apply_migration', mcp, ctx())).toMatch(/migración firmada/)
+    marca('migracion-firmada.local', `${sha} 195_x.sql`)
+    expect(evaluarMcpSupabase('mcp__Supabase__apply_migration', mcp, ctx())).toBeNull()
+    expect(evaluarMcpSupabase('mcp__Supabase__apply_migration', { ...mcp, query: sql.trimEnd() }, ctx())).toBeNull() // sin el salto final
+    expect(evaluarMcpSupabase('mcp__Supabase__apply_migration', { ...mcp, query: sql + 'drop table t;' }, ctx())).toMatch(/migración firmada/)
+    expect(evaluarMcpSupabase('mcp__Supabase__apply_migration', { ...mcp, project_id: REF_PROD }, ctx())).toMatch(/turno de prod/) // la firma no da turno
   })
   it('cuerpo ilegible con drop/delete bloquea; heredoc se lee', () => {
     expect(evaluarBash(`curl -X POST https://api.supabase.com/v1/projects/${REF_STAGING}/database/query -d "$BODY"`, ctx())).toBeNull()
@@ -193,6 +237,12 @@ describe('SQL por Bash (Management API, psql, PostgREST)', () => {
   it('psql a Supabase y DELETE por PostgREST', () => {
     expect(evaluarBash(`psql "postgresql://postgres@db.${REF_STAGING}.supabase.co:5432/postgres" -c "drop table t"`, ctx())).toMatch(/drop/)
     expect(evaluarBash('psql -h localhost -c "drop table t"', ctx())).toBeNull() // base local de las baterías
+    expect(evaluarBash('psql -c "drop table t"', ctx())).toBeNull() // socket local
+    expect(evaluarBash('psql "$DB_URL" -c "drop table t"', ctx())).toMatch(/drop|literal/)
+    expect(evaluarBash('psql "$DB_URL" -c "update t set a = 1"', ctx())).toMatch(/no es literal/)
+    expect(evaluarBash('psql "$DB_URL" -c "select 1"', ctx())).toBeNull()
+    expect(evaluarBash('psql postgresql://u@db.ejemplo.test/x -c "truncate t"', ctx())).toMatch(/truncate|literal/)
+    expect(evaluarBash('psql -h 10.0.0.5 -c "delete from t"', ctx())).not.toBeNull()
     expect(evaluarBash(`curl -X DELETE "https://${REF_STAGING}.supabase.co/rest/v1/t?id=eq.1"`, ctx())).toMatch(/PostgREST/)
   })
 })
@@ -222,8 +272,8 @@ describe('herramientas MCP de Supabase', () => {
     expect(evaluarMcpSupabase('mcp__Supabase__execute_sql', sql(REF_STAGING, 'select 1'), ctx({ env }))).toBeNull()
     expect(evaluarMcpSupabase('mcp__Supabase__list_tables', { project_id: REF_PROD }, ctx())).toBeNull() // sin la variable, leer prod pasa
     marca('sha-firmado.local', `#305 ${CABEZA}`)
-    expect(evaluarBash('gh pr merge 305', ctx({ env }))).toMatch(/staging-agentes/)
-    expect(evaluarBash('gh pr merge 305', ctx())).toBeNull()
+    expect(evaluarBash(`gh pr merge 305 --match-head-commit ${CABEZA}`, ctx({ env }))).toMatch(/staging-agentes/)
+    expect(evaluarBash(`gh pr merge 305 --match-head-commit ${CABEZA}`, ctx())).toBeNull()
     expect(evaluarBash(`curl -X POST https://api.supabase.com/v1/projects/${REF_PROD}/database/query -d '{"query":"select 1"}'`, ctx({ env }))).toMatch(/staging-agentes/)
     expect(evaluarBash('git push origin main', ctx({ env }))).toMatch(/Bloqueado/)
   })

@@ -4,23 +4,29 @@
 estos hooks. Frenan lo irreversible aunque el agente se equivoque. Son **checks protegidos**
 (`scripts/ci/checks-protegidos.mjs`): cambiarlos pide OK del dueño.
 
-Solo **exit 2** bloquea; cualquier otro código deja seguir. Por eso la guardia va con `|| exit 2` en el comando: si
-`node` falla o el script se rompe, el comando queda bloqueado (falla cerrada).
+Solo **exit 2** bloquea; cualquier otro código, o un timeout, deja seguir. Por eso la guardia lleva
+`"onFailure": "block"` (Claude Code 2.1.329: un fallo, timeout o salida rara cuenta como exit 2; se ignora en Stop y
+TaskCompleted) y, por si la versión no lo conoce, `|| exit 2` en el comando: falla cerrada. Cada consulta a GitHub
+tiene 15 s (hasta 3 por merge = 45 s) y el hook 90 s.
 
 ## Qué hay
 
 | Evento | Script | Bloquea (exit 2) |
 |---|---|---|
-| `PreToolUse` · `Bash` | `guardia.mjs` | leer `.env*` · escribir una marca (abajo) · `git push` a `main` (`main`, `HEAD:main`, `refs/heads/main`, `--mirror`/`--all`, push sin refspec estando en `main`) · `--force`/`-f`/`+refspec` (solo `--force-with-lease`) · `supabase db push` / `functions deploy` · merge de PR fuera de D1 o sin SHA firmado · SQL destructivo fuera de `begin … rollback` · escritura en prod sin turno · `DELETE` por PostgREST |
+| `PreToolUse` · `Bash` | `guardia.mjs` | leer una ruta `.env*` (`.env.example` sí) · escribir una marca o `.claude/settings(.local).json` · `git push` a `main` (`main`, `HEAD:main`, `refs/heads/main`, `--mirror`/`--all`, push sin refspec estando en `main`) · `--force`/`-f`/`+refspec` (solo `--force-with-lease`) · `supabase db push` / `functions deploy` / `db reset --linked` · merge de PR fuera de D1, con `--auto`, sin `--match-head-commit` o sin SHA firmado · SQL destructivo fuera de `begin … rollback` (salvo migración firmada) · escritura en prod sin turno · `DELETE` por PostgREST |
 | `PreToolUse` · `mcp__*supabase*__*` | `guardia.mjs` | igual para `execute_sql` y `apply_migration`; contra prod, toda herramienta que escribe (migración, deploy de Edge, secretos, ramas) pide el turno |
 | `PostToolUse` · `Edit\|Write\|MultiEdit` | `lint-archivo.mjs` | eslint del archivo `.ts`/`.tsx` tocado con **más errores que en la base** de la rama (merge-base con `origin/main`). La deuda vieja no bloquea; sumar un error sí. Archivo nuevo: cero errores |
 | `TaskCompleted` | `tests-tarea.mjs` | `vitest related` sobre lo cambiado en la rama; si cae una prueba, la tarea no se marca completa (solo las líneas de falla) |
-| `Stop` | `gate-stop.mjs` | si hay cambios sin commitear, archivos nuevos o commits por delante de origin: `bash scripts/ci/gate.sh`; si falla, la sesión sigue. Tope de **3 rondas** seguidas con `stop_hook_active` (después deja terminar y avisa: no hay bucle). Un gate verde se recuerda para ese mismo árbol |
+| `Stop` | `gate-stop.mjs` | si hay cambios sin commitear, archivos nuevos o commits por delante de origin: `bash scripts/ci/gate.sh` (si **solo** cambiaron `.md`, camino rápido: las guardas que leen documentos, `GUARDAS_DOCS`); si falla, la sesión sigue. Tope de **3 rondas** seguidas con `stop_hook_active` (después deja terminar y avisa: no hay bucle). Un gate verde se recuerda para ese mismo árbol |
 
 Además, `permissions.deny` niega por regla: `Read` de `.env*`, `cat/head/tail/less/grep/source` sobre `.env*`, push a
 `main` y con `--force`/`-f` (también `git -c … push`), `supabase db push` y `supabase functions deploy` (también con
-`npx`). Las reglas de `Bash` son de mejor esfuerzo (un `bash -c` las esquiva); la guardia es la que vale.
-`permissions.ask` pide permiso para editar las marcas, `.claude/settings.json` y `scripts/hooks/**`.
+`npx`), `supabase db reset --linked` / `--db-url`. Las reglas de `Bash` son de mejor esfuerzo (un `bash -c` las esquiva); la guardia es la que vale.
+`permissions.ask` pide permiso para editar las marcas, `.claude/settings.json`, `.claude/settings.local.json` (ignorado
+por `.gitignore`) y `scripts/hooks/**`.
+
+**`.env`:** solo cuentan los argumentos que son rutas de archivo; el patrón de `grep`/`rg`/`sed`/`awk` no
+(`grep -rn ".env" src` pasa).
 
 ## Regla D1 (hora de Costa Rica, UTC-6 sin horario de verano)
 
@@ -28,7 +34,9 @@ Además, `permissions.deny` niega por regla: `Read` de `.env*`, `cat/head/tail/l
 - **15:50–19:00:** bloqueado siempre (cierre de caja de la mañana y preparación del servicio).
 - **19:00–23:30:** solo con el OK del dueño en el momento (marca «OK de la noche»).
 
-Aplica a `gh pr merge`, `gh api … /pulls/N/merge` (no GET) y `curl` a esa URL. El merge por GraphQL se bloquea siempre.
+Aplica a `gh pr merge` y `gh api … /pulls/N/merge` (no GET). El merge tiene que fijar la cabeza:
+`gh pr merge N --match-head-commit <sha firmado>` (o `-f sha=<sha>` en la API). Se bloquean siempre `gh pr merge --auto`,
+el merge por GraphQL y el merge por `curl` a la API.
 
 ## Marcas que habilitan (no versionadas)
 
@@ -39,11 +47,14 @@ Edit/Write pide permiso.
 | Marca | Archivo | Variable | Formato | Vence |
 |---|---|---|---|---|
 | SHA firmado | `.claude/sha-firmado.local` | `SATORI_SHA_FIRMADO` | una línea por PR: `#305 <sha>` (7 a 40 hex). Un `<sha>` sin número vale para cualquier PR | al cambiar la cabeza del PR |
-| OK de la noche | `.claude/ok-dueno-noche.local` | `SATORI_OK_DUENO_NOCHE` | `AAAA-MM-DD «cita textual del OK del dueño»` (fecha CR de hoy; cita de 8+ caracteres entre «…» o "…") | al cambiar el día CR |
+| OK de la noche | `.claude/ok-dueno-noche.local` | `SATORI_OK_DUENO_NOCHE` | `AAAA-MM-DD #305 «cita textual del OK del dueño»` (fecha CR de hoy, número del PR, cita de 8+ caracteres entre «…» o "…"); vale solo para ese PR | al cambiar el día CR |
+| Migración firmada | `.claude/migracion-firmada.local` | `SATORI_MIGRACION_FIRMADA` | una línea por archivo: `<sha256 del .sql> [nombre]` (lo que da `sha256sum supabase/migrations/NNN_x.sql`) | al cambiar el archivo (otro sha) |
 | Turno de prod | `.claude/turno-prod.local` | `SATORI_TURNO_PROD` | una línea con `TURNO DE PROD` y la fecha CR de hoy, p. ej. `TURNO DE PROD: esta sesión de CC · AAAA-MM-DD` (regla 13) | al cambiar el día CR |
 
 - **SHA firmado:** la cabeza del PR (leída por REST: `gh api repos/…/pulls/N`) tiene que empezar con el SHA firmado.
   Un PR **solo de `.md`** queda exento del SHA, **no** de D1. Si no se puede leer el PR, no se mergea.
+- **Migración firmada:** habilita `drop`/`delete` (p. ej. `drop policy if exists`) de ESE texto exacto (se tolera
+  solo el salto de línea final) al aplicarlo a mano con firma (regla 1). No da turno de prod: contra prod hace falta además.
 - **Turno de prod:** leer prod (SELECT, `list_*`, `get_*`) no lo pide; escribir sí (SQL de escritura o DDL,
   `apply_migration`, deploy de Edge, secretos, ramas). SQL que no se puede leer cuenta como escritura. El turno **no**
   habilita `drop`/`delete`/`truncate` fuera de `begin … rollback`.
@@ -55,8 +66,10 @@ Edit/Write pide permiso.
   `on delete cascade`, `for delete` de una policy, `grant … delete`.
 - Se mira en `mcp__*supabase*__execute_sql` / `apply_migration`, en `curl` a
   `api.supabase.com/v1/projects/<ref>/database/query` (`-d`, `--data*`, `@archivo`, heredoc) y en `psql` a un host de
-  Supabase (`-c`, `-f`, heredoc). `psql` local (baterías) no se mira.
-- El ref tiene que ser literal (regla 7): `$REF` bloquea.
+  Supabase, a una URL `postgres://`, a una variable (`psql "$DB_URL"`) o a un host no local (`-c`, `-f`, heredoc).
+  `psql` a localhost o socket local (baterías) no se mira.
+- `execute '…'` dentro de un `do $$ … $$` con `drop`/`delete`/`truncate` cuenta como destructivo.
+- Sin ref literal (regla 7) solo se puede leer: `$REF` o `psql "$DB_URL"` con SQL que escribe bloquea.
 
 ## `SATORI_ENTORNO=staging-agentes`
 

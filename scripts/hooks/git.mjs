@@ -54,7 +54,8 @@ export const REPO = 'CachoSatori/satori-app'
 
 /**
  * Detecta un merge de PR. @param {string} prog @param {string[]} args
- * @returns {null | { selector: string | null, repo: string } | { bloquear: string }}
+ * `cabezaPedida` = el SHA que el comando exige a GitHub (`--match-head-commit` en gh pr merge, campo `sha` en la API).
+ * @returns {null | { selector: string | null, repo: string, cabezaPedida: string | null } | { bloquear: string }}
  */
 export function detectarMerge(prog, args) {
   if (prog === 'gh') {
@@ -64,16 +65,20 @@ export function detectarMerge(prog, args) {
     const [sub, accion] = [args[i], args[i + 1]]
     if (sub === 'pr' && accion === 'merge') {
       let selector = null
+      let cabezaPedida = null
       const resto = args.slice(i + 2)
       for (let k = 0; k < resto.length; k++) {
         const a = resto[k]
+        if (a === '--auto') return { bloquear: 'gh pr merge --auto (mergearía después, sin control de la hora ni de la cabeza)' }
+        if (a === '--match-head-commit') { cabezaPedida = resto[k + 1] ?? null; k++; continue }
+        if (a.startsWith('--match-head-commit=')) { cabezaPedida = a.slice(20); continue }
         if (a === '-R' || a === '--repo') { repo = resto[k + 1]; k++; continue }
         if (a.startsWith('--repo=')) { repo = a.slice(7); continue }
         if (GH_OPC_CON_VALOR.has(a)) { k++; continue }
         if (a.startsWith('-')) continue
         selector ??= a
       }
-      return { selector, repo }
+      return { selector, repo, cabezaPedida }
     }
     if (sub === 'api') {
       const resto = args.slice(i + 1)
@@ -88,7 +93,12 @@ export function detectarMerge(prog, args) {
       const efectivo = (metodo ?? (conCampos ? 'POST' : 'GET')).toUpperCase()
       if (efectivo === 'GET') return null
       const m = /repos\/([^/]+\/[^/]+)\/pulls\/(\d+)\/merge/.exec(ruta)
-      return { selector: m[2], repo: m[1] }
+      let cabezaPedida = null
+      for (let k = 0; k < resto.length; k++) {
+        const campo = ['-f', '-F', '--field', '--raw-field'].includes(resto[k]) ? resto[k + 1] : /^--(?:raw-)?field=(.*)$/.exec(resto[k])?.[1]
+        if (campo?.startsWith('sha=')) cabezaPedida = campo.slice(4)
+      }
+      return { selector: m[2], repo: m[1], cabezaPedida }
     }
     return null
   }
@@ -97,8 +107,7 @@ export function detectarMerge(prog, args) {
     if (!url) return null
     const metodo = (valorOpcion(args, ['-X', '--request']) ?? 'GET').toUpperCase()
     if (metodo === 'GET') return null
-    const m = /repos\/([^/]+\/[^/]+)\/pulls\/(\d+)\/merge/.exec(url)
-    return { selector: m[2], repo: m[1] }
+    return { bloquear: 'merge por curl a la API de GitHub; usá gh pr merge con --match-head-commit' }
   }
   return null
 }

@@ -48,11 +48,17 @@
       "Bash(supabase functions deploy *)",
       "Bash(supabase * functions deploy*)",
       "Bash(npx supabase* db push*)",
-      "Bash(npx supabase* functions deploy*)"
+      "Bash(npx supabase* functions deploy*)",
+      "Bash(supabase db reset *--linked*)",
+      "Bash(supabase * db reset *--linked*)",
+      "Bash(npx supabase* db reset *--linked*)",
+      "Bash(supabase db reset *--db-url*)",
+      "Bash(npx supabase* db reset *--db-url*)"
     ],
     "ask": [
       "Edit(.claude/*.local)",
       "Edit(.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
       "Edit(scripts/hooks/**)"
     ]
   },
@@ -65,7 +71,8 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/guardia.mjs\" || exit 2",
             "timeout": 90,
-            "statusMessage": "Guardia de Satori"
+            "statusMessage": "Guardia de Satori",
+            "onFailure": "block"
           }
         ]
       },
@@ -76,7 +83,8 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/guardia.mjs\" || exit 2",
             "timeout": 30,
-            "statusMessage": "Guardia de Satori (Supabase)"
+            "statusMessage": "Guardia de Satori (Supabase)",
+            "onFailure": "block"
           }
         ]
       }

@@ -91,6 +91,12 @@ export function destructiva(stmt) {
   if (propia) return propia
   if (/^\s*do\b/.test(texto)) {
     for (const cuerpo of cuerpos) {
+      // SQL dinámico: `execute 'drop …'` o `execute format('delete …')` corre ya y va dentro de un string.
+      const sinComentarios = cuerpo.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ').toLowerCase()
+      if (/\bexecute\b/.test(sinComentarios)) {
+        const m = /\b(drop|delete|truncate)\b/.exec(sinComentarios.replace(SIN_PELIGRO, ' '))
+        if (m) return `execute … ${m[1]}`
+      }
       for (const s of sentencias(cuerpo)) {
         const d = destructivaTexto(limpiar(s).texto)
         if (d) return d

@@ -8,10 +8,11 @@ export const MARCAS = {
   sha: { archivo: '.claude/sha-firmado.local', variable: 'SATORI_SHA_FIRMADO' },
   noche: { archivo: '.claude/ok-dueno-noche.local', variable: 'SATORI_OK_DUENO_NOCHE' },
   prod: { archivo: '.claude/turno-prod.local', variable: 'SATORI_TURNO_PROD' },
+  migracion: { archivo: '.claude/migracion-firmada.local', variable: 'SATORI_MIGRACION_FIRMADA' },
 }
 
-/** Nombres de archivo de las marcas, para que la guardia frene escribirlas por Bash. */
-export const RE_ARCHIVO_MARCA = /(?:^|[/\\])(sha-firmado|ok-dueno-noche|turno-prod)\.local\b/
+/** Archivos de las marcas y de la configuración de Claude Code, para que la guardia frene escribirlos por Bash. */
+export const RE_ARCHIVO_MARCA = /(?:^|[/\\])(?:(?:sha-firmado|ok-dueno-noche|turno-prod|migracion-firmada)\.local\b|\.claude[/\\]settings(?:\.local)?\.json$)/
 
 /** Texto de la marca: variable de entorno + archivo (se suman). @returns {string} */
 export function leerMarca(clave, { raiz, env = process.env }) {
@@ -22,18 +23,19 @@ export function leerMarca(clave, { raiz, env = process.env }) {
 }
 
 /**
- * OK del dueño para mergear de 19:00 a 23:30: la fecha CR de hoy (AAAA-MM-DD) y la cita textual del OK entre «…» o
- * "…" (8 caracteres o más), en la misma línea. Vence sola al cambiar el día.
+ * OK del dueño para mergear de 19:00 a 23:30: en una misma línea, la fecha CR de hoy (AAAA-MM-DD), el número del PR
+ * (`#305`) y la cita textual del OK entre «…» o "…" (8 caracteres o más). Vale solo para ese PR y vence al cambiar el día.
  * @returns {{ ok: true, cita: string } | { ok: false, motivo: string }}
  */
-export function okNocheValido(texto, fechaCR) {
+export function okNocheValido(texto, fechaCR, pr) {
   if (!texto) return { ok: false, motivo: 'no hay OK del dueño para la noche' }
   for (const linea of texto.split('\n')) {
     if (!linea.includes(fechaCR)) continue
+    if (!new RegExp(`#${pr}(?!\\d)`).test(linea)) continue
     const cita = /«([^»]{8,})»|"([^"]{8,})"/.exec(linea)
     if (cita) return { ok: true, cita: (cita[1] ?? cita[2]).trim() }
   }
-  return { ok: false, motivo: `el OK de la noche no tiene la fecha de hoy (${fechaCR}) con la cita del dueño entre «…»` }
+  return { ok: false, motivo: `el OK de la noche no tiene, en una línea, la fecha de hoy (${fechaCR}), «#${pr}» y la cita del dueño entre «…»` }
 }
 
 /**
@@ -63,4 +65,18 @@ export function shasFirmados(texto) {
 export function shaFirmadoCoincide(firmados, pr, cabeza) {
   const c = String(cabeza).toLowerCase()
   return firmados.some(f => (f.pr === null || f.pr === pr) && c.startsWith(f.sha))
+}
+
+/**
+ * Migraciones firmadas: una línea por archivo, `<sha256 del .sql> [nombre]` (64 hex, lo que da `sha256sum`). Habilitan
+ * ESE texto exacto aunque traiga drop / delete (p. ej. `drop policy if exists`), al aplicarlo a mano con firma (regla 1).
+ * @returns {Set<string>}
+ */
+export function migracionesFirmadas(texto) {
+  const salida = new Set()
+  for (const linea of texto.split('\n')) {
+    const m = /^\s*([0-9a-f]{64})\b/i.exec(linea)
+    if (m) salida.add(m[1].toLowerCase())
+  }
+  return salida
 }

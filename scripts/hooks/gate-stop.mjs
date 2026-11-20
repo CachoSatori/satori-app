@@ -5,6 +5,8 @@
 // Sin bucle infinito: con `stop_hook_active` (el modelo ya siguió por un Stop anterior) se cuentan las rondas; a la
 // tercera seguida que falla, deja terminar y avisa (tope de 3 rondas, skill satori-estandar-pr §12). Un gate verde se
 // recuerda para ese mismo estado del árbol (no se repite si no cambió nada).
+// Camino rápido: si todo lo que cambió son .md, en lugar del gate completo corren las guardas que leen documentos
+// (privacidad, dominio, Wallet, ref de prod, migraciones de ESTADO, sagrados, checks protegidos).
 import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -30,6 +32,25 @@ export function trabajoPendiente(raiz) {
   }
   return { sucio, adelante }
 }
+
+/** Pruebas guardianas que leen documentos: el camino rápido de un cambio solo de .md. */
+export const GUARDAS_DOCS = [
+  'src/privacidadRepo.test.ts', 'src/dominioRepo.test.ts', 'src/walletRepo.test.ts', 'src/refProdEnPruebas.test.ts',
+  'supabase/migraciones.test.ts', 'scripts/ci/sagrados.test.ts', 'scripts/ci/checks-protegidos.test.ts',
+]
+
+/** Archivos cambiados en la rama: contra la base (merge-base con origin/main), sin commitear y nuevos. */
+export function archivosCambiados(raiz) {
+  const base = (git(raiz, ['merge-base', 'HEAD', 'origin/main']) ?? '').trim() || 'HEAD'
+  const lista = [
+    ...(git(raiz, ['diff', '--name-only', base]) ?? '').split('\n'),
+    ...(git(raiz, ['ls-files', '--others', '--exclude-standard']) ?? '').split('\n'),
+  ]
+  return [...new Set(lista.map(s => s.trim()).filter(Boolean))]
+}
+
+/** ¿Solo cambiaron .md? (lista vacía = no) */
+export const soloDocs = archivos => archivos.length > 0 && archivos.every(a => a.toLowerCase().endsWith('.md'))
 
 /** Huella del estado del árbol: HEAD + diff contra HEAD + archivos nuevos (con su contenido). */
 export function huella(raiz) {
@@ -104,7 +125,11 @@ export function main() {
 
   const env = { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' }
   if (dependenciasAlDia(raiz)) env.GATE_SKIP_INSTALL = '1'
-  const r = spawnSync('bash', [join(raiz, 'scripts', 'ci', 'gate.sh')], { cwd: raiz, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  const vitest = join(raiz, 'node_modules', '.bin', 'vitest')
+  const rapido = soloDocs(archivosCambiados(raiz)) && existsSync(vitest)
+  const r = rapido
+    ? spawnSync(vitest, ['run', ...GUARDAS_DOCS.filter(f => existsSync(join(raiz, f)))], { cwd: raiz, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+    : spawnSync('bash', [join(raiz, 'scripts', 'ci', 'gate.sh')], { cwd: raiz, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   const salida = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split('\n')
   if (r.status === 0) {
     writeFileSync(archivoOk, estado)
@@ -114,7 +139,7 @@ export function main() {
   writeFileSync(archivoRondas, String(rondas + 1))
   const motivo = sucio ? 'hay cambios sin commitear' : `hay ${adelante} commit(s) sin subir`
   process.stderr.write([
-    `[satori gate] No termines todavía: ${motivo} y el gate falla (ronda ${rondas + 1}/${TOPE_RONDAS}).`,
+    `[satori gate] No termines todavía: ${motivo} y ${rapido ? 'las guardas de docs fallan' : 'el gate falla'} (ronda ${rondas + 1}/${TOPE_RONDAS}).`,
     ...salida.slice(-40),
   ].join('\n') + '\n')
   process.exit(2)

@@ -45,13 +45,31 @@ el merge por GraphQL y el merge por `curl` a la API.
 
 Archivos `.claude/*.local` (los ignora `.gitignore` por `*.local`) **o** variables de entorno fijadas al abrir la
 sesión. Las escribe la sesión principal con `Write` y las firma el dueño tocando **Aprobar** en la app (ver abajo). Un
-subagente no puede por Write (lo frena `firma.mjs`). Por Bash la guardia frena lo que puede leer (ver tabla), pero es una
-**barrera blanda**: no expande variables ni decodifica nada, así que un comando armado para esconder el nombre de la marca
-y la carpeta puede pasarla (p. ej. `python3 -c "open('.cl'+'aude/sha-fir'+'mado.local','w')…"` arma la ruta con `+` y no
-nombra ni la carpeta ni la marca). Además niega: `cp`/`mv` con `-t`/`--target-directory` o hacia `.claude/`, `cd` a
-`.claude/`, todo comando con la carpeta actual dentro de `.claude/` (salvo un `cd` que salga), `git reset --hard` y
-`git checkout <rama> -- .claude`. Revisarla queda en el backlog (PROMPT-CONTINUACION, P1 Seguridad). Lo que sostiene la firma es el pedido de permiso de `Write` y el clasificador del modo automático
-para lo demás; la guardia frena los errores, no a un agente decidido a esquivarla.
+subagente no puede por Write (lo frena `firma.mjs`).
+
+> **La barrera fuerte es otra, no esta guardia:** (1) la firma del dueño por **Aprobar** (pedido de permiso de `Write`);
+> (2) el SHA **exacto** de la cabeza del PR, verificado por REST antes de mergear; (3) la protección de `main` en GitHub.
+> La guardia de Bash frena **errores**, no a un agente adversario: es una **barrera blanda** y queda así (#322 fue el
+> último ajuste; no se persiguen más variantes).
+
+Por Bash la guardia frena lo que puede leer (ver tabla). No expande variables ni decodifica nada, así que un comando armado
+para esconder el nombre de la marca y la carpeta puede pasarla (p. ej. `python3 -c "open('.cl'+'aude/sha-fir'+'mado.local','w')…"`
+arma la ruta con `+`; tampoco ve llaves `{a,b}`, `git read-tree`/`checkout-index`/`worktree add` ni lo que trae un `pull` de
+una URL antes de bajarlo). Lo que sí niega:
+
+- `cp`/`mv` con `-t`/`--target-directory` o hacia `.claude/`, `cd` a `.claude/`, todo comando con la carpeta actual dentro de
+  `.claude/` (salvo un `cd` que salga) y `git checkout <rama> -- .claude`.
+- Las reglas de `.claude/` y de las marcas miran las palabras ya sin comillas ni escapes (`.cla""ude`, `.cla\ude`) y los
+  globs que las alcanzan (`.cla*e`, `.c?aude`, `sha-fir*.local`). El intérprete por tubo se detecta también con comillas
+  (`| "bash"`) y detrás de `env` / `/usr/bin/env`.
+- `git checkout`/`restore`/`reset`/`switch`/`merge`/`stash`/`pull`/`cherry-pick`/`rebase`: antes se lista el árbol de
+  destino (`git ls-tree -r --name-only`) y se niega si trae `.claude/*.local` o `.claude/settings.local.json`; si ls-tree
+  falla, se niega. Sin un árbol de destino que revisar, se niega solo si el comando nombra `.` como ruta (`git restore .`).
+  `git reset --hard origin/main` y `git switch <rama>` limpias pasan (sincronizar un worktree).
+- `git add -f`/`--force` que alcanza `.claude/` (la ruta, `.`, `-A`, `:/` o una carpeta que contiene la raíz).
+- El gate controla que ninguna rama traiga una marca versionada (`scripts/ci/marcas-versionadas.test.ts`:
+  `git ls-files '.claude/*.local' '.claude/settings.local.json'` vacío y `.gitignore` que las ignora).
+
 Las líneas que empiezan con `# ` son comentarios (el texto «Aprobar = …» que pone el hook) y no cuentan.
 
 | Marca | Archivo | Variable | Formato | Vence |

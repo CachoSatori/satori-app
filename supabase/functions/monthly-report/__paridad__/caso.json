@@ -1,0 +1,219 @@
+{
+ "rango": {
+  "desde": "2026-10-05",
+  "hasta": "2026-10-06"
+ },
+ "uploadedAt": "2026-10-06",
+ "nombres": {
+  "901": "MESERO UNO",
+  "902": "MESERO DOS"
+ },
+ "curado": {
+  "ROLL FICTICIO": {
+   "tipo": "comida",
+   "clasificacion": "",
+   "subclasificacion": "",
+   "multiplicador": 1,
+   "costo_unitario": 0
+  }
+ },
+ "tickets": [
+  {
+   "id": "a1",
+   "numero_factura": "a1",
+   "estado": "C",
+   "fecha_registra": "2026-10-05T12:10:00-06:00",
+   "fecha_cierra": "2026-10-05T16:05:00-06:00",
+   "cajero_login": "111",
+   "canal": "salon",
+   "mesa": "4",
+   "salonero_login": "901",
+   "registrado_por": "salonero",
+   "servicio_crc": 2000,
+   "total_crc": 22600,
+   "valor_servido_crc": 20000,
+   "iva_crc": 2600,
+   "regalia_crc": 0,
+   "pax": 2,
+   "pax_articulo": 2
+  },
+  {
+   "id": "a2",
+   "numero_factura": "a2",
+   "estado": "C",
+   "fecha_registra": "2026-10-05T13:00:00-06:00",
+   "fecha_cierra": "2026-10-05T16:05:00-06:00",
+   "cajero_login": "111",
+   "canal": "llevar",
+   "mesa": null,
+   "salonero_login": null,
+   "registrado_por": "cajero",
+   "servicio_crc": 0,
+   "total_crc": 11300,
+   "valor_servido_crc": 10000,
+   "iva_crc": 1300,
+   "regalia_crc": 0,
+   "pax": 1,
+   "pax_articulo": 1
+  },
+  {
+   "id": "a3",
+   "numero_factura": "a3",
+   "estado": "C",
+   "fecha_registra": "2026-10-05T19:30:00-06:00",
+   "fecha_cierra": "2026-10-06T00:40:00-06:00",
+   "cajero_login": "222",
+   "canal": "salon",
+   "mesa": "7",
+   "salonero_login": "902",
+   "registrado_por": "salonero",
+   "servicio_crc": 3000,
+   "total_crc": 33900,
+   "valor_servido_crc": 30000,
+   "iva_crc": 3900,
+   "regalia_crc": 0,
+   "pax": 3,
+   "pax_articulo": 3
+  },
+  {
+   "id": "a4",
+   "numero_factura": "a4",
+   "estado": "C",
+   "fecha_registra": "2026-10-05T20:15:00-06:00",
+   "fecha_cierra": "2026-10-06T00:40:00-06:00",
+   "cajero_login": "222",
+   "canal": "delivery",
+   "mesa": null,
+   "salonero_login": "902",
+   "registrado_por": "salonero",
+   "servicio_crc": 0,
+   "total_crc": 16950,
+   "valor_servido_crc": 15000,
+   "iva_crc": 1950,
+   "regalia_crc": 0,
+   "pax": 0,
+   "pax_articulo": 0
+  },
+  {
+   "id": "a5",
+   "numero_factura": "a5",
+   "estado": "C",
+   "fecha_registra": "2026-10-06T00:30:00-06:00",
+   "fecha_cierra": "2026-10-06T00:40:00-06:00",
+   "cajero_login": "222",
+   "canal": "salon",
+   "mesa": "2",
+   "salonero_login": "901",
+   "registrado_por": "salonero",
+   "servicio_crc": 1000,
+   "total_crc": 11300,
+   "valor_servido_crc": 10000,
+   "iva_crc": 1300,
+   "regalia_crc": 0,
+   "pax": 1,
+   "pax_articulo": 1
+  },
+  {
+   "id": "a6",
+   "numero_factura": "a6",
+   "estado": "C",
+   "fecha_registra": "2026-10-07T19:00:00-06:00",
+   "fecha_cierra": "2026-10-07T22:00:00-06:00",
+   "cajero_login": "222",
+   "canal": "salon",
+   "mesa": "3",
+   "salonero_login": "901",
+   "registrado_por": "salonero",
+   "servicio_crc": 1000,
+   "total_crc": 11300,
+   "valor_servido_crc": 10000,
+   "iva_crc": 1300,
+   "regalia_crc": 0,
+   "pax": 2,
+   "pax_articulo": 2
+  }
+ ],
+ "lineas": [
+  {
+   "ticket_id": "a1",
+   "codigo_producto": "100",
+   "nombre": "ROLL FICTICIO",
+   "cantidad": 2,
+   "monto": 16000,
+   "familia": 2,
+   "usuario_registra": "901"
+  },
+  {
+   "ticket_id": "a1",
+   "codigo_producto": "200",
+   "nombre": "BEBIDA FICTICIA",
+   "cantidad": 2,
+   "monto": 4000,
+   "familia": 4,
+   "usuario_registra": "901"
+  },
+  {
+   "ticket_id": "a2",
+   "codigo_producto": "100",
+   "nombre": "ROLL FICTICIO",
+   "cantidad": 1,
+   "monto": 8000,
+   "familia": 2,
+   "usuario_registra": null
+  },
+  {
+   "ticket_id": "a2",
+   "codigo_producto": "300",
+   "nombre": "POSTRE FICTICIO",
+   "cantidad": 1,
+   "monto": 2000,
+   "familia": 2,
+   "usuario_registra": null
+  },
+  {
+   "ticket_id": "a3",
+   "codigo_producto": "100",
+   "nombre": "ROLL FICTICIO",
+   "cantidad": 3,
+   "monto": 24000,
+   "familia": 2,
+   "usuario_registra": "902"
+  },
+  {
+   "ticket_id": "a3",
+   "codigo_producto": "200",
+   "nombre": "BEBIDA FICTICIA",
+   "cantidad": 3,
+   "monto": 6000,
+   "familia": 4,
+   "usuario_registra": "901"
+  },
+  {
+   "ticket_id": "a4",
+   "codigo_producto": "100",
+   "nombre": "ROLL FICTICIO",
+   "cantidad": 2,
+   "monto": 15000,
+   "familia": 2,
+   "usuario_registra": "902"
+  },
+  {
+   "ticket_id": "a5",
+   "codigo_producto": "200",
+   "nombre": "BEBIDA FICTICIA",
+   "cantidad": 5,
+   "monto": 10000,
+   "familia": 4,
+   "usuario_registra": "901"
+  },
+  {
+   "ticket_id": "a6",
+   "codigo_producto": "100",
+   "nombre": "ROLL FICTICIO",
+   "cantidad": 1,
+   "monto": 10000,
+   "familia": 2,
+   "usuario_registra": "901"
+  }
+ ]
+}

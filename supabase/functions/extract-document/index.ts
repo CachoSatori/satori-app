@@ -10,15 +10,32 @@
  * rol en owner/manager/contador/cajero) sea el portón. NO usa la service_role para
  * el download → cierra el IDOR. CORS por allowlist (prod + staging).
  *
+ * Secretos de identidad del cliente: NEGOCIO_NOMBRE, NEGOCIO_RAZON_SOCIAL, NEGOCIO_CEDULA (ver
+ * docs/pases/EDGE-extract-document-sin-datos.md).
+ *
  * Deploy: supabase functions deploy extract-document --project-ref yiczgdtirrkdvohdquzf
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { armarPrompt, leerNegocio } from './prompt.ts'
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY          = Deno.env.get('SUPABASE_ANON_KEY')!
 // Haiku 4.5 = más barato; cambiá a 'claude-sonnet-4-5' por env si querés más precisión.
 const MODEL             = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5'
+// Sonnet 4.5 se retira de la API el 30-nov-2026; el reemplazo es claude-sonnet-5-5.
+// El tokenizer de 5.5 cuenta ~30 % más tokens para el mismo JSON: 3500 podía cortarlo.
+const MAX_TOKENS        = 8000
+
+// En Sonnet 5.5 el thinking viene encendido por defecto y `disabled` da 400: `between_tools` es
+// "sin thinking" (como corría con 4.5). Esos campos dan 400 en Sonnet 4.5 / Haiku 4.5, por eso
+// solo van si el secreto apunta a 5.5: el mismo código sirve antes y después del cambio de secreto.
+function opcionesModelo(model: string): Record<string, unknown> {
+  if (model.startsWith('claude-sonnet-5-5')) {
+    return { thinking: { type: 'between_tools' }, output_config: { effort: 'high' } }
+  }
+  return {}
+}
 
 // Allowlist de orígenes web conocidos. El '*' anterior dejaba que cualquier sitio
 // llamara la función desde el browser; ahora solo eco del Origin si está permitido.
@@ -47,38 +64,13 @@ const DOC_DEFAULTS = {
   cuenta_qb_sugerida: null, confianza: 0, requiere_revision: true,
 }
 
-const PROMPT = `Sos un asistente que extrae datos de documentos financieros de un restaurante en Costa Rica (Satori, razón social LCT Desarrollos Limitada, cédula 3-102-725602). Recibís UNA imagen que puede contener uno o varios documentos (es común que una foto traiga 2–3 facturas o tiquetes juntos). Devolvé SOLO un JSON válido, sin texto antes ni después y sin \`\`\`. Estructura: { "documentos": [ … ] }, un objeto por cada documento visible.
-
-Quién es quién:
-- El cliente siempre es Satori / LCT Desarrollos / cédula 3-102-725602. NUNCA pongas a Satori como proveedor.
-- En una factura/proforma, el proveedor es el emisor (BELCA Food Service, Guayafrut, Distribuidora Isleña, Exportadora PMT, etc.).
-- En un comprobante de transferencia/SINPE, el proveedor es el beneficiario/destino, NO el banco. Ej.: transferencia LAFISE a "GRUPO ASESOR ALVARADO / contadora maritza" → proveedor = la contadora; el banco va en banco.
-
-tipo:
-- factura: factura electrónica o tiquete de venta de un proveedor.
-- proforma: Guayafrut emite "PROFORMA"; tratala como factura (es su comprobante de venta).
-- comprobante_pago: captura o PDF de una transferencia/SINPE ya realizada ("Su transferencia ha sido realizada", "Número de referencia").
-- propinas: recibo manual de propinas (dice "tips", "tips AM", "tips salón pm"). NO es una compra, no lleva ítems de inventario; dejá items vacío.
-- otro: cualquier cosa que no calce.
-
-Reglas de extracción (Costa Rica):
-- clave_fe: la "Clave del Comprobante" / "Clave numérica" de 50 dígitos de las facturas electrónicas. Viene partida con espacios o en varias líneas → uní todo en 50 dígitos seguidos. Si no hay, null.
-- IVA mezclado por línea: en CR los alimentos básicos llevan 1% y el resto 13%; una misma factura puede tener ambos. Capturá iva_pct por ítem y, si el documento los desglosa, impuesto_1pct e impuesto_13pct.
-- Ítems en dos líneas: muchas facturas (BELCA, Guayafrut) ponen la descripción en una línea y en la siguiente el código + cantidad × precio_unitario + IVA + monto. Asocialos en un solo ítem.
-- Cantidades decimales (3.2, 0.1, 5.54) y unidades: K/Kg (peso), UN (unidad), CJ (caja), PQ (paquete), GL/GAL (galón), LB (libra). Capturá unidad, precio_unitario y total por línea. Si hay descuento por línea, el total ya viene con el descuento aplicado.
-- condicion_pago: contado o credito. Si dice "Quince días" / "8 días" / "15 días" → credito con plazo_dias. Crédito = cuenta por pagar.
-- metodo_pago / banco / referencia: si el documento lo indica ("Cobrador: TRANSFERENCIA", "pagos por SINPE móvil", "CONTADO" = Efectivo; en comprobantes, el banco BAC/BN/BCR/Lafise y el número de referencia).
-- moneda: CRC por defecto; USD si el documento está en dólares (ej. transferencias LAFISE en USD).
-- concepto: en comprobantes de pago, el detalle ("Conta Febrero marzo mayo" = contabilidad).
-- Números: sin separador de miles, punto decimal. "164,035.53" → 164035.53.
-- Documentos manuscritos (facturas de mariscos a mano, recibos): hacé tu mejor esfuerzo, pero poné confianza baja (≤0.5) y requiere_revision: true. No inventes: si un número no se lee, dejalo null.
-- cuenta_qb_sugerida: sugerí la cuenta del plan contable según el contenido (cervezas/licor → bebidas; pescado/carne/abarrotes → food cost; limpieza → limpieza; honorarios contables → honorarios profesionales). Si no estás seguro, null.
-- confianza: 0–1 según legibilidad y completitud. requiere_revision: true siempre que sea manuscrito, esté borroso, o la suma de ítems no calce con el total.
-
-Cada documento debe tener EXACTAMENTE estas claves:
-{ "tipo", "proveedor", "proveedor_cedula", "numero_documento", "clave_fe", "fecha" (YYYY-MM-DD), "moneda", "condicion_pago", "plazo_dias", "metodo_pago", "banco", "referencia", "concepto", "subtotal", "descuento", "impuesto_1pct", "impuesto_13pct", "impuesto_total", "total", "items":[{"codigo","descripcion","cantidad","unidad","precio_unitario","descuento","iva_pct","total"}], "cuenta_qb_sugerida", "confianza", "requiere_revision" }
-
-Devolvé únicamente el JSON.`
+// La identidad del cliente sale de secretos de la Edge (D15 = A): el repo público no la tiene escrita.
+// Si falta alguno, el prompt usa un texto genérico y se avisa UNA vez en el log (solo los nombres, nunca valores).
+const { negocio: NEGOCIO, faltantes: NEGOCIO_FALTANTES } = leerNegocio((k) => Deno.env.get(k))
+if (NEGOCIO_FALTANTES.length) {
+  console.warn(`extract-document: faltan secretos ${NEGOCIO_FALTANTES.join(', ')}; el prompt usa un texto genérico del cliente`)
+}
+const PROMPT = armarPrompt(NEGOCIO)
 
 function mediaType(path: string): string {
   const p = path.toLowerCase()
@@ -129,7 +121,8 @@ Deno.serve(async (req) => {
       headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 3500,
+        max_tokens: MAX_TOKENS,
+        ...opcionesModelo(MODEL),
         messages: [{
           role: 'user',
           content: [
@@ -144,7 +137,12 @@ Deno.serve(async (req) => {
       return json({ documentos: [], error: `Anthropic ${resp.status}: ${t.slice(0, 200)}` }, 200)
     }
     const data = await resp.json()
-    const text: string = data?.content?.[0]?.text ?? ''
+    // Sonnet 5.5 puede abrir la respuesta con un bloque `thinking`: leer los bloques por tipo, no content[0].
+    const text: string = Array.isArray(data?.content)
+      ? data.content.filter((b: { type?: string }) => b?.type === 'text').map((b: { text?: string }) => b.text ?? '').join('')
+      : ''
+    if (data?.stop_reason === 'max_tokens') return json({ documentos: [], error: 'Respuesta cortada (max_tokens)' }, 200)
+    if (data?.stop_reason === 'refusal') return json({ documentos: [], error: 'El modelo no leyó el documento (refusal)' }, 200)
     return json({ documentos: parseDocs(text) }, 200)
   } catch (e) {
     return json({ documentos: [], error: String(e) }, 200)

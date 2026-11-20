@@ -2,64 +2,45 @@
  * Supabase Edge Function — Reportes Mensuales Satori
  * Ported from SATORI PROPINAS standalone satori_apps_script_v4.1.js
  *
+ * Ventas: del PoS (`ventasPos.ts` + el paquete `ventasPos.gen.js`, la misma lógica que la app). Desde el
+ * 16-nov ya no se lee `ventas_dias` (xls). En dry_run la respuesta trae `control` (razones contra el xls).
+ *
  * Sends TWO emails (same as standalone):
  *   1. 📈 Reporte de Ventas — IRS saloneros, top productos, tendencia semanal
  *   2. 💰 Reporte de Propinas — distribución sector, AM/PM split, top take-home
  *
  * Triggers:
- *   - Día 1 del mes 08:00 CR (pg_cron → mes anterior)
- *   - Día 15 del mes 08:00 CR (pg_cron → mes actual acumulado)
- *   - POST manual: body { "month": "2026-04", "tipo": "ventas"|"propinas"|"ambos" }
+ *   - pg_cron (día 1 y día 15) con Authorization: Bearer <service_role, desde Vault>
+ *   - Botón de Admin (owner activo) con su JWT
+ *   - body { "month"?: "YYYY-MM", "periodo"?: "mes"|"quincena", "tipo"?: "ventas"|"propinas"|"ambos", "dry_run"?: boolean }
+ *     · periodo "mes" (o sin periodo): mes completo vs mes anterior (cron del día 1, botón de Admin).
+ *     · periodo "quincena": días 1–14 del mes vs 1–14 del mes anterior (cron del día 15). Ver periodo.ts.
+ *
+ * SEC-02 (06/11): exige service_role u owner activo; CORS con allowlist; parámetros validados;
+ * la respuesta NO trae montos ni nombres; errores fijos. Deploy A MANO con verify_jwt = true
+ * (regla: ningún PR a main con supabase/functions/ hasta el ítem 11).
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { poolTotalSesion, type PoolEntry } from './pool.ts'
+import { mesActualCR, type RangoMes } from './fechas.ts'
+import { elegirPeriodo } from './periodo.ts'
+import { buildVentasEmail, buildPropinasEmail } from './plantilla.ts'
+import { destinatarioDe, FALTA_DESTINATARIO } from './destinatario.ts'
+import { diasDelPos, netaDelPeriodo, tipoDeProductos, totalesDelPeriodo, type DiaData } from './ventasPos.ts'
+import { controlContraXls } from './controlXls.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const TO_EMAIL       = Deno.env.get('REPORT_TO_EMAIL') ?? 'cachorrogp@gmail.com'
-const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
+// Sin correo por defecto en el código (firma del dueño, 16-nov): sin REPORT_TO_EMAIL no se manda nada.
+const TO_EMAIL       = destinatarioDe(Deno.env.get('REPORT_TO_EMAIL'))
+const FROM_EMAIL     = 'Satori <no-responder@satoricostarica.com>'
 
-// ── Shared helpers (ported from Apps Script) ─────────────────
-const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const INK = '#0d0d0d', PAPER = '#f5f0e8', GOLD = '#c8a96e'
-const GREEN = '#4a7c59', RED = '#c23b22', BLUE = '#2a4a6b', TEAL = '#2a7a6a'
-const MUTED = '#888'
-
-const fi  = (v: number) => '₡ ' + Math.round(v).toLocaleString('es-CR')
-const fiS = (v: number) => v > 0 ? fi(v) : '—'
-
-const TH = `padding:8px 10px;text-align:left;color:#999;font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid #ddd;background:${PAPER}`
-const TD = `padding:8px 10px;border-bottom:1px solid #f0ece8;font-size:12px`
-
-function kRow(label: string, val: string, gold = false): string {
-  return `<tr><td style="padding:7px 0;color:#666;font-size:12px;width:55%">${label}</td>` +
-    `<td style="padding:7px 0;font-size:13px;text-align:right;${gold?`font-weight:700;color:${GOLD}`:''}">${val}</td></tr>`
-}
-function barRow(label: string, val: number, max: number, color: string, note = ''): string {
-  const w = max > 0 ? Math.round(val / max * 100) : 0
-  return `<tr>
-    <td style="padding:5px 0;color:#777;font-size:11px;width:90px;text-align:right;padding-right:10px">${label}</td>
-    <td style="padding:5px 0"><div style="background:#ece8e0;height:10px">
-      <div style="width:${w}%;height:10px;background:${color}"></div></div></td>
-    <td style="padding:5px 0 5px 10px;font-size:11px;font-weight:500;white-space:nowrap">${fi(val)}${note?` <span style="color:#aaa;font-size:10px">${note}</span>`:''}</td>
-  </tr>`
-}
-function emailHeader(title: string, mes: string, anio: number): string {
-  return `<div style="background:${INK};padding:22px 28px 18px">
-    <div style="font-family:Georgia,serif;font-size:22px;color:${GOLD};letter-spacing:.08em;font-weight:700">里 SATORI</div>
-    <div style="font-size:10px;color:#555;letter-spacing:.25em;text-transform:uppercase;margin-top:3px">${title} · ${mes} ${anio}</div>
-  </div>`
-}
-function emailFooter(mes: string, anio: number): string {
-  return `<div style="padding:12px 28px;background:#f0ece4;border-top:1px solid #e0dbd2">
-    <p style="font-size:10px;color:#aaa;margin:0">Generado automáticamente · Satori Sushi Bar · Santa Teresa, CR · ${mes} ${anio}</p>
-  </div>`
-}
+// Plantillas de los correos (estándar de reportes Satori adaptado a correo): ./plantilla.ts
 
 async function send(subject: string, html: string): Promise<void> {
+  if (!TO_EMAIL) throw new Error(FALTA_DESTINATARIO)   // nunca manda sin destinatario
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -70,6 +51,13 @@ async function send(subject: string, html: string): Promise<void> {
 }
 
 // ── Data fetching ─────────────────────────────────────────────
+// supabase-js NO tira cuando PostgREST responde 400/500: devuelve { data: null, error }. Antes el error se
+// ignoraba y un rango inválido («2026-09-31») se leía como «mes sin datos» → no salía el correo, sin aviso.
+// Ahora cualquier error de lectura corta el reporte: 500 con ref y la etapa en el log (sin montos ni nombres).
+function exigirLectura(etapa: string, error: { message?: string } | null | undefined): void {
+  if (error) throw new Error(`lectura ${etapa}: ${error.message ?? 'error'}`)
+}
+
 interface SaloneroData {
   nombre: string; ventas: number; pax: number; iCom: number; iBeb: number
   servicios: number; ticketProm: number; paxProm: number; constancia: number; irs: number
@@ -94,25 +82,25 @@ interface PropinasCalc {
   diasSem: Array<{ dia: string; avg: number; count: number }>
 }
 
-async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string): Promise<VentasCalc> {
-  const [year, month] = ym.split('-').map(Number)
-  const prevYm = month === 1 ? `${year-1}-12` : `${year}-${String(month-1).padStart(2,'0')}`
+// `r` = período reportado; `rPrev` = mismo período del mes anterior (mes completo o días 1–14): ver periodo.ts.
+// 16-nov (decisión firmada del dueño): las ventas salen del PoS (`ventasPos.ts`), nunca de `ventas_dias`.
+async function calcVentas(supabase: ReturnType<typeof createClient>, r: RangoMes, rPrev: RangoMes): Promise<VentasCalc & { dias: Record<string, DiaData> }> {
 
-  // Fetch ventas_dias for current and previous month
-  const { data: dias } = await supabase.from('ventas_dias' as never)
-    .select('session_date, data')
-    .gte('session_date', `${ym}-01`)
-    .lte('session_date', `${ym}-31`) as { data: Array<{session_date: string; data: {saloneros: Record<string, {total?:number;iva?:number;serv?:number;pax?:number;iCom?:number;iBeb?:number;esCajero?:boolean;delivery?:number;prods?:[string,number,number][]}>}}> | null }
+  const { dias, pm } = await diasDelPos(supabase, r)
+  const prev = await diasDelPos(supabase, rPrev)
 
-  const { data: prevDias } = await supabase.from('ventas_dias' as never)
-    .select('data').gte('session_date', `${prevYm}-01`).lte('session_date', `${prevYm}-31`)
-
-  // Product classifications
-  const { data: prodMap_ } = await supabase.from('product_map' as never).select('nombre, tipo')
+  // Tipo de producto: el curado (`product_map`) manda; si no tiene, la familia del PoS.
+  const { data: prodMap_, error: eProd } = await supabase.from('product_map' as never).select('nombre, tipo')
+  exigirLectura('product_map', eProd)
+  const curado: Record<string, { tipo: string }> = {}
+  for (const p of (prodMap_ ?? []) as {nombre: string; tipo: string}[]) curado[p.nombre] = { tipo: p.tipo }
+  const tipos = tipoDeProductos(curado, pm)
   const tipoMap: Record<string, string> = {}
-  for (const p of (prodMap_ ?? []) as {nombre: string; tipo: string}[]) tipoMap[p.nombre.toUpperCase().trim()] = p.tipo
+  for (const [n, i] of Object.entries(tipos)) tipoMap[n.toUpperCase().trim()] = i.tipo
 
-  let total=0, salon=0, caj=0, delivery=0, iva=0, serv=0, pax=0, iCom=0, iBeb=0, diasVentas=0
+  const tot = totalesDelPeriodo(dias)
+  const { total, salon, caj, delivery, iva, serv, pax, diasVentas } = tot
+  let iCom=0, iBeb=0
   const salMap: Record<string, {total:number;pax:number;iCom:number;iBeb:number;dias:Set<string>}> = {}
   const prodAcc: Record<string, {qty:number;monto:number;tipo:string}> = {}
   const semMap: Record<string, {total:number;dias:number}> = {}
@@ -120,38 +108,28 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string)
 
   const DAYS_ES: Record<number, string> = {0:'Domingo',1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado'}
 
-  for (const row of (dias ?? [])) {
-    diasVentas++
-    const dNum = Number(row.session_date.slice(8,10))
+  for (const [fecha, dia] of Object.entries(dias).sort(([a], [b]) => a.localeCompare(b))) {
+    const dayTotal = netaDelPeriodo({ [fecha]: dia })   // venta neta del día (restaurante entero)
+    if (dayTotal <= 0) continue
+    const dNum = Number(fecha.slice(8,10))
     const sem = dNum<=7?'1':dNum<=14?'2':dNum<=21?'3':dNum<=28?'4':'5'
     if (!semMap[sem]) semMap[sem] = {total:0,dias:0}
     semMap[sem].dias++
-    let dayTotal = 0
-    const dow = DAYS_ES[new Date(row.session_date+'T12:00:00').getDay()] ?? ''
-    for (const [nombre, s] of Object.entries(row.data?.saloneros ?? {})) {
-      iva  += s.iva  ?? 0
-      serv += s.serv ?? 0
-      if (s.esCajero) {
-        delivery += s.delivery ?? 0
-        caj      += (s.total ?? 0) - (s.delivery ?? 0)
-        total    += s.total ?? 0
-      } else {
-        const t = s.total ?? 0
-        salon += t; total += t; pax += s.pax ?? 0
-        iCom  += s.iCom ?? 0; iBeb += s.iBeb ?? 0
-        dayTotal += t
-        const k = nombre.toUpperCase().trim()
-        if (!salMap[k]) salMap[k] = {total:0,pax:0,iCom:0,iBeb:0,dias:new Set()}
-        salMap[k].total += t; salMap[k].pax += s.pax ?? 0
-        salMap[k].iCom  += s.iCom ?? 0; salMap[k].iBeb += s.iBeb ?? 0
-        salMap[k].dias.add(row.session_date)
-        for (const [pname,,monto] of (s.prods ?? [])) {
-          const qty = s.prods?.find(p => p[0]===pname)?.[1] ?? 0
-          const pk = String(pname).toUpperCase().trim()
-          const tipo = tipoMap[pk] ?? 'comida'
-          if (!prodAcc[pk]) prodAcc[pk] = {qty:0,monto:0,tipo}
-          prodAcc[pk].qty += qty; prodAcc[pk].monto += monto
-        }
+    const dow = DAYS_ES[new Date(fecha+'T12:00:00').getDay()] ?? ''
+    for (const [nombre, s] of Object.entries(dia.saloneros ?? {})) {
+      if (s.esCajero) continue
+      const t = s.total ?? 0
+      iCom  += s.iCom ?? 0; iBeb += s.iBeb ?? 0
+      const k = nombre.toUpperCase().trim()
+      if (!salMap[k]) salMap[k] = {total:0,pax:0,iCom:0,iBeb:0,dias:new Set()}
+      salMap[k].total += t; salMap[k].pax += s.pax ?? 0
+      salMap[k].iCom  += s.iCom ?? 0; salMap[k].iBeb += s.iBeb ?? 0
+      salMap[k].dias.add(fecha)
+      for (const [pname, qty, monto] of ((s.prods ?? []) as [string, number, number][])) {
+        const pk = String(pname).toUpperCase().trim()
+        const tipo = tipoMap[pk] ?? 'comida'
+        if (!prodAcc[pk]) prodAcc[pk] = {qty:0,monto:0,tipo}
+        prodAcc[pk].qty += qty ?? 0; prodAcc[pk].monto += monto ?? 0
       }
     }
     semMap[sem].total += dayTotal
@@ -159,12 +137,8 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string)
     dowTotals[dow].push(dayTotal)
   }
 
-  // Previous month total
-  let prevNeta = 0
-  type DiaRow = { session_date: string; data: { saloneros: Record<string, { total?: number; iva?: number; serv?: number; pax?: number; iCom?: number; iBeb?: number; esCajero?: boolean; delivery?: number; prods?: [string, number, number][] }> } }
-  for (const row of ((prevDias ?? []) as DiaRow[])) {
-    for (const s of Object.values(row.data?.saloneros ?? {})) prevNeta += s.total ?? 0
-  }
+  // Período anterior: la neta, del PoS con la misma suma.
+  const prevNeta = netaDelPeriodo(prev.dias)
 
   // IRS = 45% ticket/PAX + 35% constancia + 20% PAX prom/servicio
   const salArr = Object.entries(salMap).map(([nombre, d]) => {
@@ -188,6 +162,7 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string)
     .map(([sem,{total,dias}]) => ({sem,total,dias,avg:dias>0?Math.round(total/dias):0}))
 
   return {
+    dias,
     total, salon, caj, delivery, iva, serv, pax, iCom, iBeb, diasVentas, prevNeta,
     topSal:     salArr.sort((a,b)=>b.irs-a.irs).slice(0,8),
     topComida:  allProds.filter(p=>p.tipo!=='bebida').slice(0,5),
@@ -196,25 +171,29 @@ async function calcVentas(supabase: ReturnType<typeof createClient>, ym: string)
   }
 }
 
-async function calcPropinas(supabase: ReturnType<typeof createClient>, ym: string): Promise<PropinasCalc> {
-  const { data: sessions } = await supabase.from('tip_sessions')
+async function calcPropinas(supabase: ReturnType<typeof createClient>, r: RangoMes): Promise<PropinasCalc> {
+  const { data: sessions, error: eSes } = await supabase.from('tip_sessions')
     .select('id, shift_type, session_date').eq('status','closed')
-    .gte('session_date',`${ym}-01`).lte('session_date',`${ym}-31`)
+    .gte('session_date', r.desde).lte('session_date', r.hasta)
+  exigirLectura('tip_sessions', eSes)
   const sids = (sessions ?? []).map((s: {id:string}) => s.id)
 
   if (!sids.length) return {pool:0,barra:0,turnos:0,amCount:0,pmCount:0,amPool:0,pmPool:0,topProp:[],sectores:[],semanas:[],diasSem:[]}
 
   // Pool totals from sessions
-  const { data: sessData } = await supabase.from('tip_sessions')
+  const { data: sessData, error: eSesData } = await supabase.from('tip_sessions')
     .select('id,pool_efectivo_crc,pool_efectivo_usd,pool_barra_crc,pool_barra_electronico_crc,exchange_rate,shift_type,session_date')
     .in('id', sids)
+  exigirLectura('tip_sessions_pool', eSesData)
 
   // Entries + empleados PRIMERO: el pool de cada sesión = calcTurno.totalPool (sagrado) necesita la
   // propinaSala — las propinas INDIVIDUALES de sala, que viven en tip_entries.tip_amount_crc/usd, NO en
   // las columnas de la sesión. El correo viejo sumaba solo las columnas → perdía propinaSala.
-  const { data: entries } = await supabase.from('tip_entries')
+  const { data: entries, error: eEnt } = await supabase.from('tip_entries')
     .select('employee_id, payout_crc, session_id, tip_amount_crc, tip_amount_usd, covered_role').in('session_id', sids)
-  const { data: emps } = await supabase.from('employees').select('id, full_name, role')
+  exigirLectura('tip_entries', eEnt)
+  const { data: emps, error: eEmp } = await supabase.from('employees').select('id, full_name, role')
+  exigirLectura('employees', eEmp)
   const empInfo: Record<string,{name:string;role:string}> = {}
   for (const e of (emps ?? []) as Array<{id:string;full_name:string;role:string}>) empInfo[e.id] = {name:e.full_name, role:e.role}
 
@@ -279,209 +258,133 @@ async function calcPropinas(supabase: ReturnType<typeof createClient>, ym: strin
   return {pool,barra,turnos:totalTurnos,amCount,pmCount,amPool,pmPool,topProp,sectores,semanas,diasSem}
 }
 
-// ── Email builders ────────────────────────────────────────────
-function buildVentasEmail(v: VentasCalc, mes: string, anio: number): string {
-  const delta  = v.prevNeta > 0 ? ((v.total-v.prevNeta)/v.prevNeta*100) : null
-  const dStr   = delta !== null ? (delta>=0?`+${delta.toFixed(1)}%`:`${delta.toFixed(1)}%`) : null
-  const dColor = delta !== null ? (delta>=0 ? GREEN : RED) : MUTED
-  const maxSem = v.semanas.length > 0 ? Math.max(...v.semanas.map(s=>s.total)) : 1
-  const maxDia = v.diasSem.length > 0 ? v.diasSem[0].avg : 1
-  const iTotal = v.iCom + v.iBeb
+// ── SEC-02 (06/11): autenticación, CORS y validación ─────────────────────────
+// Antes la función corría con service_role SIN pedir nada (verify_jwt off): cualquiera podía pedirle
+// el total de ventas y el top salonero del mes, y disparar los correos del reporte.
+// Ahora: Authorization = service_role (el cron, desde Vault) o el JWT de un OWNER ACTIVO (botón de
+// Admin). La respuesta ya no trae montos ni nombres; los errores son fijos (+ ref en el log).
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 
-  return `<div style="font-family:'DM Mono',monospace,Georgia,sans-serif;max-width:640px;margin:0 auto;background:${PAPER}">
-${emailHeader('Reporte de Ventas', mes, anio)}
-<div style="padding:24px 28px">
-
-<h2 style="font-size:14px;color:${BLUE};margin:0 0 14px;border-bottom:2px solid ${BLUE};padding-bottom:8px">📈 Ventas · ${mes} ${anio}</h2>
-<table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-  ${kRow('Ventas totales restaurante', fi(v.total), true)}
-  ${kRow('Salón', fiS(v.salon))}
-  ${v.delivery>0?kRow('Delivery',fiS(v.delivery)):''}
-  ${v.caj>0?kRow('Caja / Para llevar',fiS(v.caj)):''}
-  ${kRow('Días con registro', v.diasVentas+' días')}
-  ${v.pax>0?kRow('Comensales (PAX)', v.pax.toLocaleString('es-CR')+' personas'):''}
-  ${v.pax>0&&v.salon>0?kRow('Ticket promedio / PAX', fi(v.salon/v.pax)):''}
-  ${v.diasVentas>0?kRow('Promedio diario', fi(v.total/v.diasVentas)):''}
-  ${dStr?kRow('vs mes anterior',`<span style="color:${dColor};font-weight:700">${dStr}</span>`):''}
-</table>
-
-${v.salon+v.caj+v.delivery>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 8px;letter-spacing:.12em;text-transform:uppercase">Distribución por Canal</h3>
-<table style="width:100%;border-collapse:collapse;margin-bottom:18px">
-  ${v.salon>0?barRow('Salón',v.salon,v.total,BLUE,(v.salon/v.total*100).toFixed(0)+'%'):''}
-  ${v.delivery>0?barRow('Delivery',v.delivery,v.total,GREEN,(v.delivery/v.total*100).toFixed(0)+'%'):''}
-  ${v.caj>0?barRow('Caja',v.caj,v.total,GOLD,(v.caj/v.total*100).toFixed(0)+'%'):''}
-</table>`:''}
-
-${iTotal>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 6px;letter-spacing:.12em;text-transform:uppercase">Mix Comida / Bebidas (ítems vendidos)</h3>
-<table style="width:100%;border-collapse:collapse;margin-bottom:18px">
-  <tr><td style="padding:5px 0;color:#777;font-size:11px;width:90px;text-align:right;padding-right:10px">Comida</td>
-  <td style="padding:5px 0"><div style="background:#ece8e0;height:10px"><div style="width:${Math.round(v.iCom/iTotal*100)}%;height:10px;background:${GOLD}"></div></div></td>
-  <td style="padding:5px 0 5px 10px;font-size:11px;font-weight:500">${Math.round(v.iCom).toLocaleString('es-CR')} ítems <span style="color:#aaa;font-size:10px">${(v.iCom/iTotal*100).toFixed(0)}%</span></td></tr>
-  <tr><td style="padding:5px 0;color:#777;font-size:11px;width:90px;text-align:right;padding-right:10px">Bebidas</td>
-  <td style="padding:5px 0"><div style="background:#ece8e0;height:10px"><div style="width:${Math.round(v.iBeb/iTotal*100)}%;height:10px;background:${TEAL}"></div></div></td>
-  <td style="padding:5px 0 5px 10px;font-size:11px;font-weight:500">${Math.round(v.iBeb).toLocaleString('es-CR')} ítems <span style="color:#aaa;font-size:10px">${(v.iBeb/iTotal*100).toFixed(0)}%</span></td></tr>
-</table>`:''}
-
-${v.semanas.length>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 6px;letter-spacing:.12em;text-transform:uppercase">Tendencia Semanal</h3>
-<table style="width:100%;border-collapse:collapse;margin-bottom:18px">
-  ${v.semanas.map((s,i)=>barRow('Sem.'+(i+1)+' ('+s.dias+'d)',s.total,maxSem,BLUE,'~'+fi(s.avg)+'/día')).join('')}
-</table>`:''}
-
-${v.diasSem.length>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 6px;letter-spacing:.12em;text-transform:uppercase">Promedio por Día de Semana</h3>
-<table style="width:100%;border-collapse:collapse;margin-bottom:18px">
-  ${v.diasSem.map(d=>barRow(d.dia,d.avg,maxDia,GOLD,d.count+' día'+(d.count!==1?'s':''))).join('')}
-</table>`:''}
-
-${v.topSal.length>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 4px;letter-spacing:.12em;text-transform:uppercase">🏆 Ranking Saloneros · IRS</h3>
-<p style="font-size:9px;color:#999;margin:0 0 8px">IRS = 45% ticket/PAX + 35% constancia + 20% PAX prom/servicio</p>
-<table style="width:100%;border-collapse:collapse;margin-bottom:18px">
-  <tr><th style="${TH}">#</th><th style="${TH}">Empleado</th><th style="${TH};text-align:center">IRS</th>
-  <th style="${TH};text-align:right">Ticket/PAX</th><th style="${TH};text-align:center">Días</th>
-  <th style="${TH};text-align:center">Const.</th><th style="${TH};text-align:right">Ventas</th></tr>
-  ${v.topSal.map((s,i)=>{
-    const irsColor = s.irs>=80?GREEN:s.irs>=60?GOLD:MUTED
-    return `<tr>
-      <td style="${TD};color:#aaa">${i+1}</td>
-      <td style="${TD};font-weight:bold">${s.nombre}</td>
-      <td style="${TD};text-align:center;font-weight:700;font-size:15px;color:${irsColor}">${s.irs}</td>
-      <td style="${TD};text-align:right;font-weight:700;color:${BLUE}">${fiS(s.ticketProm)}</td>
-      <td style="${TD};text-align:center;color:#888">${s.servicios}</td>
-      <td style="${TD};text-align:center;color:${s.constancia>=80?GREEN:s.constancia>=50?GOLD:'#aaa'}">${s.constancia}%</td>
-      <td style="${TD};text-align:right;color:#555">${fi(s.ventas)}</td>
-    </tr>`}).join('')}
-</table>`:''}
-
-${(v.topComida.length>0||v.topBebidas.length>0)?`
-<h3 style="font-size:11px;color:#444;margin:0 0 8px;letter-spacing:.12em;text-transform:uppercase">🍣 Top 5 Productos</h3>
-<table style="width:100%;border-collapse:collapse;margin-bottom:6px">
-  <tr><th style="${TH}" colspan="2">🍱 Comida</th><th style="${TH}" colspan="2">🍺 Bebidas</th></tr>
-  ${Array.from({length:5}).map((_,i)=>{
-    const c=v.topComida[i], b=v.topBebidas[i]
-    return `<tr>
-      <td style="${TD};color:${GOLD};font-size:11px">${c?c.nombre:'—'}</td>
-      <td style="${TD};text-align:right;font-size:11px;color:#888">${c?Math.round(c.qty)+' u · '+fi(c.monto):''}</td>
-      <td style="${TD};color:${TEAL};font-size:11px">${b?b.nombre:'—'}</td>
-      <td style="${TD};text-align:right;font-size:11px;color:#888">${b?Math.round(b.qty)+' u · '+fi(b.monto):''}</td>
-    </tr>`}).join('')}
-</table>`:''}
-
-</div>${emailFooter(mes,anio)}</div>`
+function origenPermitido(origin: string): boolean {
+  return origin === 'https://cachosatori.github.io'
+    || /^https:\/\/([a-z0-9-]+\.)?satori-staging\.pages\.dev$/.test(origin)
 }
-
-function buildPropinasEmail(p: PropinasCalc, mes: string, anio: number): string {
-  const maxSem = p.semanas.length>0 ? Math.max(...p.semanas.map(s=>s.avg)) : 1
-  const maxDia = p.diasSem.length>0 ? p.diasSem[0].avg : 1
-  const maxSec = p.sectores.length>0 ? p.sectores[0].total : 1
-  const SECLAB: Record<string,string> = {salonero:'Saloneros',barman:'Barra',cocina:'Cocina',runner:'Runners',manager:'Management',cajero:'Cajeros',barback:'Barback'}
-  const SECCOL: Record<string,string> = {salonero:TEAL,barman:BLUE,cocina:GOLD,runner:GREEN,manager:'#8a8070',cajero:'#6a4a8a',barback:'#8a6a4a'}
-
-  return `<div style="font-family:'DM Mono',monospace,Georgia,sans-serif;max-width:640px;margin:0 auto;background:${PAPER}">
-${emailHeader('Reporte de Propinas', mes, anio)}
-<div style="padding:24px 28px">
-
-<h2 style="font-size:14px;color:${TEAL};margin:0 0 14px;border-bottom:2px solid ${TEAL};padding-bottom:8px">💰 Propinas · ${mes} ${anio}</h2>
-<table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-  ${kRow('Turnos registrados', `${p.turnos} (${p.amCount} Mediodía · ${p.pmCount} Noche)`)}
-  ${kRow('Pool total distribuido', fi(p.pool), true)}
-  ${p.barra>0?kRow(`Pool barra (${p.pool>0?(p.barra/p.pool*100).toFixed(0):0}% del total)`,fi(p.barra)):''}
-  ${p.turnos>0?kRow('Promedio por turno', fi(p.pool/p.turnos)):''}
-  ${p.amCount>0?kRow('Promedio turno Mediodía', fi(p.amPool/p.amCount)):''}
-  ${p.pmCount>0?kRow('Promedio turno Noche', fi(p.pmPool/p.pmCount)):''}
-  ${p.diasSem.length>0?kRow('Mejor día', `${p.diasSem[0].dia} · ${fi(p.diasSem[0].avg)}`):''}
-  ${p.diasSem.length>1?kRow('Día más bajo', `${p.diasSem[p.diasSem.length-1].dia} · ${fi(p.diasSem[p.diasSem.length-1].avg)}`):''}
-</table>
-
-${p.semanas.length>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 8px;letter-spacing:.12em;text-transform:uppercase">Tendencia Semanal · Pool Promedio</h3>
-<table style="width:100%;border-collapse:collapse;margin-bottom:18px">
-  ${p.semanas.map((s,i)=>barRow('Semana '+(i+1),s.avg,maxSem,TEAL,'×'+s.count)).join('')}
-</table>`:''}
-
-${p.diasSem.length>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 8px;letter-spacing:.12em;text-transform:uppercase">Pool Promedio por Día</h3>
-<table style="width:100%;border-collapse:collapse;margin-bottom:18px">
-  ${p.diasSem.map(d=>barRow(d.dia,d.avg,maxDia,GOLD,'×'+d.count)).join('')}
-</table>`:''}
-
-${p.topProp.length>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 8px;letter-spacing:.12em;text-transform:uppercase">Top Empleados por Take-Home</h3>
-<table style="width:100%;border-collapse:collapse;margin-bottom:18px">
-  <tr><th style="${TH}">#</th><th style="${TH}">Empleado</th><th style="${TH}">Rol</th>
-  <th style="${TH};text-align:center">Turnos</th><th style="${TH};text-align:right">Take-Home</th>
-  <th style="${TH};text-align:right">Prom/turno</th><th style="${TH};text-align:center">Constancia</th></tr>
-  ${p.topProp.map((e,i)=>`<tr>
-    <td style="${TD};color:#aaa">${i+1}</td>
-    <td style="${TD};font-weight:bold">${e.nombre}</td>
-    <td style="${TD};color:#888;font-size:11px">${e.rol}</td>
-    <td style="${TD};text-align:center;color:#888">${e.dias}</td>
-    <td style="${TD};text-align:right;font-weight:700;color:${GOLD}">${fi(e.take)}</td>
-    <td style="${TD};text-align:right;color:#666">${fi(e.prom)}</td>
-    <td style="${TD};text-align:center"><span style="color:${e.constancia>=80?GREEN:e.constancia>=50?GOLD:'#aaa'}">${e.constancia}%</span></td>
-  </tr>`).join('')}
-</table>`:''}
-
-${p.sectores.length>0?`
-<h3 style="font-size:11px;color:#444;margin:0 0 8px;letter-spacing:.12em;text-transform:uppercase">Distribución por Sector</h3>
-<table style="width:100%;border-collapse:collapse">
-  ${p.sectores.map(s=>barRow(SECLAB[s.rol]??s.rol,s.total,maxSec,SECCOL[s.rol]??MUTED,s.pct.toFixed(1)+'%')).join('')}
-</table>`:''}
-
-</div>${emailFooter(mes,anio)}</div>`
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? ''
+  const h: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+  if (origenPermitido(origin)) h['Access-Control-Allow-Origin'] = origin
+  return h
+}
+function igualConstante(a: string, b: string): boolean {
+  const ea = new TextEncoder().encode(a), eb = new TextEncoder().encode(b)
+  let diff = ea.length ^ eb.length
+  for (let i = 0; i < Math.max(ea.length, eb.length); i++) diff |= (ea[i] ?? 0) ^ (eb[i] ?? 0)
+  return diff === 0
+}
+// month: YYYY-MM entre 2024-01 y el mes en curso (CR). tipo: ventas | propinas | ambos.
+function mesValido(ym: string): boolean {
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(ym)
+  if (!m) return false
+  return ym >= '2024-01' && ym <= mesActualCR(new Date())
 }
 
 // ── Main handler ─────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, {
-    headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' }
-  })
+  const cors = corsHeaders(req)
+  const ref = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  const responder = (status: number, body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+  const falla = (status: number, code: string, error: string) => responder(status, { ok: false, code, error, ref })
+
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  if (req.method !== 'POST') return falla(405, 'metodo', 'Método no permitido')
 
   try {
+    // 1) Quién llama: service_role (cron) u owner activo (botón de Admin). Nada más.
+    const auth = req.headers.get('Authorization') ?? ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+    if (!token) return falla(401, 'sin_sesion', 'No autorizado')
+    let quien = 'service_role'
+    // service_role: igual a la del entorno, o verificada POR EL SERVIDOR (un endpoint de admin de GoTrue
+    // solo responde a una clave service_role real; sirve para el JWT viejo y para las claves nuevas).
+    const esServiceRole = igualConstante(token, SUPABASE_KEY) || await (async () => {
+      try {
+        const c = createClient(SUPABASE_URL, token, { auth: { persistSession: false, autoRefreshToken: false } })
+        const { error } = await c.auth.admin.listUsers({ page: 1, perPage: 1 })
+        return !error
+      } catch { return false }
+    })()
+    if (!esServiceRole) {
+      const comoUsuario = createClient(SUPABASE_URL, ANON_KEY, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+      const { data: ud } = await comoUsuario.auth.getUser()
+      if (!ud?.user) return falla(401, 'sin_sesion', 'No autorizado')
+      const admin = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+      const { data: owner, error: oe } = await admin.from('profiles').select('id')
+        .eq('id', ud.user.id).eq('role', 'owner').eq('is_active', true).maybeSingle()
+      if (oe) { console.error(JSON.stringify({ ref, etapa: 'owner', detalle: oe.message })); return falla(500, 'interno', 'No se pudo generar el reporte') }
+      if (!owner) return falla(403, 'no_autorizado', 'Solo un owner activo puede pedir el reporte')
+      quien = `owner:${ud.user.id}`
+    }
+
+    // 2) Parámetros.
+    const body = await req.json().catch(() => ({})) as { month?: unknown; periodo?: unknown; tipo?: unknown; dry_run?: unknown }
+    if (body === null || typeof body !== 'object') return falla(400, 'entrada', 'Datos inválidos')
+    let ym = ''
+    if (body.month !== undefined && body.month !== null && body.month !== '') {
+      if (typeof body.month !== 'string' || !mesValido(body.month)) return falla(400, 'mes', 'Mes inválido (YYYY-MM)')
+      ym = body.month
+    }
+    // Período: "mes" (por defecto; sin month = mes anterior en CR) o "quincena" (días 1–14; sin month = la
+    // última 1.ª quincena completa en CR, el día 15 = la del mes en curso). Ver periodo.ts.
+    const elegido = elegirPeriodo(body.periodo, ym, new Date())
+    if (!elegido.ok) return falla(400, elegido.code, elegido.error)
+    const plan = elegido.plan
+    const tipo = body.tipo === undefined || body.tipo === null || body.tipo === '' ? 'ambos' : body.tipo
+    if (tipo !== 'ventas' && tipo !== 'propinas' && tipo !== 'ambos') return falla(400, 'tipo', 'Tipo inválido (ventas, propinas o ambos)')
+    if (body.dry_run !== undefined && typeof body.dry_run !== 'boolean') return falla(400, 'dry_run', 'dry_run inválido')
+    const dry = body.dry_run === true   // modo seco: calcula todo, NO manda correos
+    // Sin destinatario no se manda nada (el modo seco no manda, así que puede seguir).
+    if (!dry && !TO_EMAIL) {
+      console.error(JSON.stringify({ ref, etapa: FALTA_DESTINATARIO, secreto: 'REPORT_TO_EMAIL' }))
+      return falla(500, 'falta_destinatario', 'Falta el destinatario del reporte (secreto REPORT_TO_EMAIL)')
+    }
+
+    // 3) Reporte. La respuesta dice qué se envió, sin montos ni nombres (van solo en el correo).
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    const body = await req.json().catch(() => ({})) as { month?: string; tipo?: string }
+    const enviados: string[] = [], sinDatos: string[] = []
 
-    // Determine month
-    let ym = body.month ?? ''
-    if (!ym) {
-      const now = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Costa_Rica'}))
-      now.setMonth(now.getMonth() - 1)
-      ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
-    }
-
-    const [y, m] = ym.split('-')
-    const mes    = MONTHS_ES[Number(m)-1] ?? m
-    const anio   = Number(y)
-    const tipo   = body.tipo ?? 'ambos'
-
-    const results: string[] = []
-
+    let control: Record<string, number | null> | undefined
     if (tipo === 'ventas' || tipo === 'ambos') {
-      const v = await calcVentas(supabase, ym)
+      const v = await calcVentas(supabase, plan.rango, plan.rangoComparado)
+      // Solo en dry_run: control contra lo que habría mandado el código viejo (`ventas_dias`, xls).
+      // RAZONES y conteos, nunca montos (van al log y a la respuesta).
+      if (dry) control = await controlContraXls(supabase, plan.rango, v.dias)
       if (v.diasVentas > 0) {
-        await send(`📈 Satori — Ventas ${mes} ${anio}`, buildVentasEmail(v, mes, anio))
-        results.push(`ventas: ${fi(v.total)} · ${v.diasVentas} días · IRS top: ${v.topSal[0]?.nombre??'—'} (${v.topSal[0]?.irs??0})`)
-      } else results.push('ventas: sin datos')
+        const html = buildVentasEmail(v, plan)
+        if (!dry) await send(plan.asuntoVentas, html)
+        enviados.push('ventas')
+      } else sinDatos.push('ventas')
     }
-
     if (tipo === 'propinas' || tipo === 'ambos') {
-      const p = await calcPropinas(supabase, ym)
+      const p = await calcPropinas(supabase, plan.rango)
       if (p.turnos > 0) {
-        await send(`💰 Satori — Propinas ${mes} ${anio}`, buildPropinasEmail(p, mes, anio))
-        results.push(`propinas: ${fi(p.pool)} pool · ${p.turnos} turnos`)
-      } else results.push('propinas: sin datos')
+        const html = buildPropinasEmail(p, plan)
+        if (!dry) await send(plan.asuntoPropinas, html)
+        enviados.push('propinas')
+      } else sinDatos.push('propinas')
     }
 
-    return new Response(JSON.stringify({ ok: true, month: `${mes} ${anio}`, results }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    })
-  } catch(err) {
-    console.error(err)
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), {
-      status: 500, headers: { 'Content-Type': 'application/json' }
-    })
+    console.log(JSON.stringify({ ref, quien, ym: plan.ym, periodo: plan.periodo, desde: plan.rango.desde, hasta: plan.rango.hasta, tipo, dry, enviados, sinDatos, fuente: 'pos', ...(control ? { control } : {}) }))
+    return responder(200, { ok: true, month: plan.etiqueta, periodo: plan.periodo, dry_run: dry, enviados, sin_datos: sinDatos, fuente: 'pos', ...(control ? { control } : {}) })
+  } catch (err) {
+    console.error(JSON.stringify({ ref, etapa: 'no_controlado', detalle: String(err) }))
+    return falla(500, 'interno', 'No se pudo generar el reporte')
   }
 })

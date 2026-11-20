@@ -63,6 +63,66 @@ describe('guardas-pr: R04 (supabase/config.toml)', () => {
   })
 })
 
+describe('guardas-pr: R04 con supabase/config.toml presente (ítem 11)', () => {
+  const OK = '[functions.x]\nverify_jwt = true\n'
+  it('config en regla (cada función con su verify_jwt) → pasa, también para un PR que solo toca código de Edge', () => {
+    escribir('supabase/config.toml', OK); commit('config')
+    expect(correr().status).toBe(0)
+    git('tag', '-f', 'base')
+    escribir('supabase/functions/x/index.ts', 'export const b = 2'); commit('toca edge')
+    expect(correr().status).toBe(0)
+  })
+  it('mutación: una función sin su [functions.<slug>] → cae y nombra la carpeta', () => {
+    escribir('supabase/config.toml', OK); escribir('supabase/functions/nueva/index.ts', 'export {}'); commit('nueva sin bloque')
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.salida).toMatch(/R04: supabase\/functions\/nueva\//)
+  })
+  it('mutación: verify_jwt ausente en el bloque → cae', () => {
+    escribir('supabase/config.toml', '[functions.x]\n'); commit('sin verify_jwt')
+    expect(correr().status).toBe(1)
+  })
+  it('mutación: ingest-ndf o club-pase con verify_jwt = true → cae (401 en cada llamada)', () => {
+    escribir('supabase/functions/ingest-ndf/index.ts', 'export {}')
+    escribir('supabase/config.toml', OK + '[functions.ingest-ndf]\nverify_jwt = true\n'); commit('ingest true')
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.salida).toMatch(/ingest-ndf.*verify_jwt = false/)
+    escribir('supabase/config.toml', OK + '[functions.ingest-ndf]\nverify_jwt = false\n'); commit('ingest false')
+    expect(correr().status).toBe(0)
+  })
+  it('mutación: bloque sin carpeta → cae', () => {
+    escribir('supabase/config.toml', OK + '[functions.fantasma]\nverify_jwt = true\n'); commit('huerfano')
+    expect(correr().status).toBe(1)
+  })
+  it('lista blanca: [remotes] escrito con puntos o en línea, entrypoint y enabled → cae; project_id arriba → pasa', () => {
+    const casos = [
+      'remotes.prod.project_id = "ref-ficticio"\n' + OK,
+      'remotes = { prod = { project_id = "ref-ficticio" } }\n' + OK,
+      OK + '[functions.x.remotes]\nproject_id = "ref-ficticio"\n',
+      '[functions.x]\nverify_jwt = true\nentrypoint = "./otro.ts"\n',
+      '[functions.x]\nverify_jwt = true\nenabled = false\n',
+      '[functions.x]\nverify_jwt = true\nfunctions.x.enabled = false\n',
+      '[[functions.x]]\nverify_jwt = true\n',
+      'functions = { x = { verify_jwt = true } }\n',
+    ]
+    casos.forEach((texto, i) => {
+      escribir('supabase/config.toml', texto); commit(`caso ${i}`)
+      const r = correr()
+      expect(r.status, `caso ${i}: ${texto}`).toBe(1)
+      expect(r.salida).toMatch(/R04: supabase\/config\.toml/)
+    })
+    escribir('supabase/config.toml', 'project_id = "satori-app"\n' + OK); commit('project_id')
+    expect(correr().status).toBe(0)
+  })
+  it('mutación: [remotes.*] → cae (aplicaría [auth]/[api] a otro proyecto)', () => {
+    escribir('supabase/config.toml', OK + '[remotes.prod]\nproject_id = "ref-ficticio"\n'); commit('remotes')
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.salida).toMatch(/remotes/)
+  })
+})
+
 describe('guardas-pr: PR atrasado (la base es la cabeza ACTUAL de main, HEAD^1 de la fusión)', () => {
   // main avanza con una Edge y una migración DESPUÉS de que el PR salió; el PR solo toca src/. El CI corre sobre la fusión.
   function armar() {

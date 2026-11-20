@@ -4,6 +4,7 @@ import { getTipEntriesBySession, upsertTipEntry, deleteTipEntry, updateSessionPo
 import { reconcilePropinaEgreso } from '../../shared/api/cash'
 import { calcHistory, calcTurno, formatCRC, formatNum, ROL_LABELS, ROL_ORDER, NO_PROPINA_ROLES, type HistoryCalc, type HistoryRow, type DraftLine } from '../../shared/utils/tipCalculations'
 import { avisosCierrePropinas } from './guardasCierre'
+import { sinRepartirTurno } from './sinRepartir'
 import { shiftLabel } from '../../shared/utils'
 
 interface Props {
@@ -372,6 +373,8 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         const preview = previewDraft ? calcTurno(previewDraft, ...previewArgs) : null
         // Guardas H1/H2: con pozo que nadie cobra, «Guardar cambios» queda deshabilitado con aviso.
         const avisosEdit = previewDraft ? avisosCierrePropinas(previewDraft, ...previewArgs) : []
+        // Aviso de plata sin repartir (decisión del dueño 20-nov): sobre la salida del reparto. Solo avisa.
+        const sinRepartir = preview ? sinRepartirTurno(preview) : null
         const payoutMap = new Map(preview?.updatedLines.map(l => [l.employeeId, Math.round(l.take_home)]) ?? [])
         const headPool  = editMode && preview ? preview.totals.totalPool : (modalCalc ? modalCalc.totalPool : poolTotalOf(modalSession))
 
@@ -540,8 +543,9 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
             <div style={{ display: 'flex', gap: '0.5rem', padding: '0.875rem 1.25rem', borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap', justifyContent: 'flex-end', background: 'var(--c-panel)' }}>
               {editMode ? (
                 <>
-                  {avisosEdit.length > 0 && (
+                  {(sinRepartir || avisosEdit.length > 0) && (
                     <div role="alert" data-testid="avisos-edicion" style={{ flexBasis: '100%', padding: '0.5rem 0.75rem', borderLeft: `3px solid ${RED}`, background: 'var(--c-fondo)', fontSize: '0.8rem', lineHeight: 1.4 }}>
+                      {sinRepartir && <div data-testid="aviso-sin-repartir" style={{ fontWeight: 700 }}>⚠ {sinRepartir.texto}</div>}
                       {avisosEdit.map(a => <div key={a.tipo}>⚠ {a.texto}</div>)}
                     </div>
                   )}

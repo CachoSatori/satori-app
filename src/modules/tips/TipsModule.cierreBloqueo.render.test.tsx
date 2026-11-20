@@ -59,6 +59,7 @@ describe('TipsModule — bloqueo del cierre por pozo que nadie cobra', () => {
     render(<TipsModule />)
     const b = await boton()
     expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByTestId('aviso-sin-repartir')).toBeNull()
     expect((b as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(b)
     await waitFor(() => expect(api.closeTipSession).toHaveBeenCalledWith('s1', 'p1'))
@@ -72,10 +73,27 @@ describe('TipsModule — bloqueo del cierre por pozo que nadie cobra', () => {
     const b = await boton()
     const alerta = screen.getByRole('alert')
     expect(alerta.textContent).toContain('Hay ₡7.500 de propina de barra y nadie de barra tiene horas cargadas.')
+    // Aviso del 20-nov arriba del botón: monto sin repartir (salida del reparto) y motivo.
+    expect(screen.getByTestId('aviso-sin-repartir').textContent).toBe(
+      '⚠ Quedan ₡7.500 sin repartir: hay propina de barra y nadie de barra tiene horas. Revisá las horas o los puntos antes de guardar.')
     expect((b as HTMLButtonElement).disabled).toBe(true)
     fireEvent.click(b)
     expect(window.confirm).not.toHaveBeenCalled()
     expect(api.closeTipSession).not.toHaveBeenCalled()
+  })
+
+  it('el aviso se va cuando se corrige: cargar horas a la barra lo oculta y habilita el botón', async () => {
+    state.session = sesion({ pool_efectivo_crc: 20000, pool_barra_crc: 6000 })
+    state.entries = [entrada('e1', 6), entrada('e2', 0)]
+    render(<TipsModule />)
+    const b = await boton()
+    expect(screen.getByTestId('aviso-sin-repartir').textContent).toContain('Quedan ₡6.000 sin repartir')
+    const filaBarra = screen.getByText('Barra Uno').closest('.tips-emp-row') as HTMLElement
+    const horasBarra = filaBarra.querySelector('input[type="number"]') as HTMLInputElement
+    fireEvent.change(horasBarra, { target: { value: '8' } })
+    await waitFor(() => expect(screen.queryByTestId('aviso-sin-repartir')).toBeNull())
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect((b as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('H1 con cobertura: el barman cubrió sala → la barra queda sin horas → bloquea', async () => {
@@ -94,6 +112,7 @@ describe('TipsModule — bloqueo del cierre por pozo que nadie cobra', () => {
     render(<TipsModule />)
     const b = await boton()
     expect(screen.getByRole('alert').textContent).toContain('Hay ₡5.000 para repartir y nadie del turno tiene puntos.')
+    expect(screen.getByTestId('aviso-sin-repartir').textContent).toContain('Quedan ₡5.000 sin repartir: hay pozo para repartir y nadie del turno tiene puntos u horas.')
     expect((b as HTMLButtonElement).disabled).toBe(true)
   })
 })

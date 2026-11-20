@@ -240,7 +240,9 @@ describe('camino de vuelta desde /tmp, cwd dentro de .claude y git reset --hard'
     'cp -t .claude /tmp/d/ok-dueno-noche.local', 'cp -t .claude /tmp/d/*', 'cp --target-directory=.claude /tmp/d/x', 'cp --target-directory .claude /tmp/d/x',
     'cp -vt .claude /tmp/d/x', 'cp .claude/ok-dueno-noche.local /tmp/../home/x/.claude/', 'mv /tmp/d/x .claude/', 'mv -t .claude /tmp/d/x',
     'cd .claude', 'cd .claude && cp /tmp/x .', 'cd ./.claude/', 'cd /home/x/wt/.claude/skills',
-    'git reset --hard', 'git reset --hard origin/otra', 'git -C /home/x reset --hard HEAD~1', 'git checkout otra -- .claude', 'git checkout otra -- .claude/settings.json',
+    'git checkout otra -- .claude', 'git checkout otra -- .claude/settings.json',
+    // Nombrar .claude/ sigue negando reset --hard, switch y checkout.
+    'git -C .claude reset --hard', 'git -C /home/x/wt/.claude reset --hard HEAD~1', 'git reset --hard && cp /tmp/x .claude/', 'git switch otra && cp /tmp/d/x .claude/',
   ]
   for (const c of bloquea) it(`bloquea: ${c}`, () => expect(evaluarBash(c, ctx())).not.toBeNull())
   it('la cadena del verificador: copiar a /tmp pasa, volver no', () => {
@@ -257,6 +259,28 @@ describe('camino de vuelta desde /tmp, cwd dentro de .claude y git reset --hard'
     expect(evaluarBash('cd ..', { ...ctx(), cwd: join(raiz, '.claude', 'skills') })).toMatch(/dentro de \.claude/) // sigue adentro
   })
   for (const c of ['git reset --soft HEAD~1', 'git reset HEAD a.ts', 'cd /home/claude/wt-x', 'cp .claude/settings.json /tmp/copia.json', 'git checkout -b claude/x origin/main'])
+    it(`deja pasar: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
+  // (#317, menores) Sincronizar un worktree: reset --hard, switch y checkout pasan si no nombran .claude/ ni corren desde adentro.
+  for (const c of ['git reset --hard', 'git reset --hard origin/main', 'git -C /home/claude/wt-x reset --hard origin/main', 'git fetch origin main && git reset --hard origin/main',
+    'git switch otra', 'git switch -c claude/x origin/main', 'git checkout otra'])
+    it(`sincronizar pasa: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
+  it('reset --hard / switch con la carpeta actual dentro de .claude: se niega', () => {
+    const adentro = { ...ctx(), cwd: join(raiz, '.claude') }
+    for (const c of ['git reset --hard', 'git reset --hard origin/main', 'git switch otra', 'git checkout otra'])
+      expect(evaluarBash(c, adentro)).toMatch(/dentro de \.claude/)
+  })
+})
+
+describe('comillas y escapes no esconden .claude/ ni la marca (#317, menores)', () => {
+  const bloquea = [
+    'cd .cla""ude && cp /tmp/d/* .', "cd .cla''ude && cp /tmp/d/* .", 'cd .cla\\ude && cp /tmp/d/* .', 'cd ".claude" && cp /tmp/d/* .',
+    'cp /tmp/d/x .cla""ude/', 'mv /tmp/d/x ".cl"aude/', 'git -C .cla""ude reset --hard', 'cp -t .cla\\ude /tmp/d/x',
+    'echo x > .claude/sha-fir""mado.local', 'cp /tmp/x .cla""ude/turno-prod.local', "touch .claude/ok-dueno-noc''he.local",
+    'echo IyBhCg== | base64 -d | ba""sh', "cat /tmp/a | sh''", 'cat /tmp/a | b\\ash',
+  ]
+  for (const c of bloquea) it(`bloquea: ${c}`, () => expect(evaluarBash(c, ctx())).not.toBeNull())
+  // Leer sigue pasando aunque venga con comillas.
+  for (const c of ['cat ".claude/settings.json"', "jq . '.claude'/settings.json", 'ls .cla""ude', 'echo "a" && echo \'b\''])
     it(`deja pasar: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
 })
 

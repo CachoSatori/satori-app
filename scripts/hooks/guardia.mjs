@@ -267,12 +267,24 @@ export function evaluarCwdProtegido(cmd, cwd) {
   return `La carpeta actual (${cwd}) está dentro de .claude/: ahí no corre ningún comando. Salí primero (cd a la raíz del proyecto).`
 }
 
+/**
+ * Las palabras del comando YA SIN comillas ni escapes (`.cla""ude`, `.cla''ude`, `.cla\ude` → `.claude`), con los destinos de
+ * las redirecciones, una línea por comando simple. Las reglas de `.claude/` y de las marcas se aplican a esto además del texto
+ * crudo: el shell junta las partes antes de correr, y la guardia tiene que ver lo mismo.
+ */
+export function textoSinComillas(cmd) {
+  return comandos(cmd).map(s => [...s.palabras, ...s.redirecciones.map(r => r.op + r.destino)].join(' ')).join('\n')
+}
+
 /** @returns {string | null} */
 export function evaluarZonaProtegida(cmd) {
-  if (RE_INTERPRETE_POR_TUBO.test(cmd) || RE_CODIGO_ILEGIBLE.test(cmd)) {
+  // Comillas vacías y escapes sueltos tampoco esconden el intérprete (`| ba""sh`, `| b\ash`).
+  const sinVacias = cmd.replace(/""|''|\\(?=[A-Za-z])/g, '')
+  if ([cmd, sinVacias].some(t => RE_INTERPRETE_POR_TUBO.test(t) || RE_CODIGO_ILEGIBLE.test(t))) {
     return 'No se pasa código a un intérprete por un tubo, por <(…) ni por eval de una variable (… | bash, base64 -d | sh): la guardia no lo puede leer. Escribí el comando tal cual.'
   }
-  if (!RE_NOMBRE_PROTEGIDO.test(cmd) && !RE_DIR_CLAUDE.test(cmd)) return null
+  const limpio = textoSinComillas(cmd)
+  if (![cmd, limpio].some(t => RE_NOMBRE_PROTEGIDO.test(t) || RE_DIR_CLAUDE.test(t))) return null
   const malo = comandos(cmd).find(s => s.palabras.length > 0 && !lecturaEvidente(s))
   if (!malo) return null
   return `No se escribe por Bash una marca de habilitación ni la configuración de Claude Code: un comando que nombra .claude/, una marca o settings.local.json solo puede leer (cat, jq, git diff…) o borrar una marca (rm, revoca); «${malo.palabras.slice(0, 3).join(' ')}» no es lectura. La marca la escribe la sesión principal con Write y la firma el dueño (ver scripts/hooks/README.md).`
@@ -310,7 +322,9 @@ export function evaluarBash(cmd, ctx) {
 
     if (prog === 'git') {
       const { sub, resto, dir } = subcomandoGit(args)
-      if (sub === 'reset' && resto.includes('--hard')) return 'Bloqueado: git reset --hard (puede pisar .claude/ y los cambios sin commitear). Usá git switch / git restore sobre archivos puntuales.'
+      // `git reset --hard` y `git switch` / `checkout` pasan (sincronizar un worktree): con la carpeta actual en .claude/ o si
+      // el comando nombra .claude/, ya los negaron evaluarCwdProtegido / evaluarZonaProtegida. Que ninguna rama traiga una
+      // marca versionada lo cuida el gate (scripts/ci/marcas-versionadas.test.ts).
       if (sub === 'push') {
         const base = dir ? resolve(ctx.cwd, dir) : ctx.cwd
         const m = evaluarPush(resto, () => ctx.ramaActual(base))

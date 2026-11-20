@@ -49,8 +49,12 @@ subagente no puede por Write (lo frena `firma.mjs`). Por Bash la guardia frena l
 **barrera blanda**: no expande variables ni decodifica nada, así que un comando armado para esconder el nombre de la marca
 y la carpeta puede pasarla (p. ej. `python3 -c "open('.cl'+'aude/sha-fir'+'mado.local','w')…"` arma la ruta con `+` y no
 nombra ni la carpeta ni la marca). Además niega: `cp`/`mv` con `-t`/`--target-directory` o hacia `.claude/`, `cd` a
-`.claude/`, todo comando con la carpeta actual dentro de `.claude/` (salvo un `cd` que salga), `git reset --hard` y
-`git checkout <rama> -- .claude`. Revisarla queda en el backlog (PROMPT-CONTINUACION, P1 Seguridad). Lo que sostiene la firma es el pedido de permiso de `Write` y el clasificador del modo automático
+`.claude/`, todo comando con la carpeta actual dentro de `.claude/` (salvo un `cd` que salga) y
+`git checkout <rama> -- .claude`. Las reglas de `.claude/` y de las marcas miran las palabras ya sin comillas ni escapes
+(`.cla""ude`, `.cla\ude` cuentan como `.claude`). `git reset --hard` y `git switch`/`checkout <rama>` pasan (sincronizar un
+worktree) si la carpeta actual no está en `.claude/` y el comando no la nombra; que ninguna rama traiga una marca versionada
+lo cuida el gate (`scripts/ci/marcas-versionadas.test.ts`: `git ls-files '.claude/*.local' '.claude/settings.local.json'`
+vacío y `.gitignore` que las ignora). Revisarla queda en el backlog (PROMPT-CONTINUACION, P1 Seguridad). Lo que sostiene la firma es el pedido de permiso de `Write` y el clasificador del modo automático
 para lo demás; la guardia frena los errores, no a un agente decidido a esquivarla.
 Las líneas que empiezan con `# ` son comentarios (el texto «Aprobar = …» que pone el hook) y no cuentan.
 

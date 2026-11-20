@@ -58,7 +58,7 @@
 6. **👁️ Proveedores A+B** sin validar en piso y **DNS de Resend + `RESEND_API_KEY`** (depende del dueño).
 7. **Edge `extract-document`:** prueba funcional en staging (v29) antes de cualquier pase.
 8. **Sin confirmar desde el 30/10:** el environment `github-pages` dejó un deploy en `waiting` (regla de protección): revisar Settings → Environments.
-9. **Guardia de Bash para las marcas = barrera blanda (#317):** no expande variables ni decodifica (un `python -c` que arma la ruta con `+` la pasa). Revisar si conviene un sandbox de escritura sobre `.claude/` o mover la verificación a algo que no dependa de leer el comando.
+9. **Guardia de Bash para las marcas = barrera blanda, cerrada (#317, #322):** #322 fue el último ajuste; no se persiguen más variantes. La barrera fuerte es la firma por «Aprobar» + el SHA exacto por REST + la protección de `main` (scripts/hooks/README.md).
 
 ## 🟦 P2 — Esperan decisión o firma del dueño
 - **Bloque 152+ de migraciones:** la 083 (`my_turno_stats_higiene`), la 084 (SAL-AUD-01), la 087 (`employee_edits_audit`) y la 088 (`employees_recibe_reparto_cocina`) con su paquete de pase; la MAINTAIN de `authenticated` en las tablas de caja.

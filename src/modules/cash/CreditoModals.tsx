@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react'
 import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '../../shared/types/database'
 import { createSupplierCredit, applySupplierCredit } from '../../shared/api/cash'
 import { fi } from './cashUtils'
-import { saldoCredito, saldoResidual, distribuirCreditoFIFO } from './supplierCredits'
+import { saldoCredito, saldoResidual, distribuirCreditoFIFO, compararFIFO } from './supplierCredits'
 import { parseMonto } from './montos'
 import { todayCR, dateCR } from '../../shared/utils'
 import { descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos } from './comprobante'
@@ -111,11 +111,13 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
 }
 
 // ── Aplicar crédito a UNA O VARIAS facturas pendientes (tiempo real, reparto FIFO). ──
-export function AplicarCreditoModal({ supplier, credits, applications, pendientes, onDone, onClose, ocupado = false }: {
+export function AplicarCreditoModal({ supplier, credits, applications, pendientes, fechaMovimiento, onDone, onClose, ocupado = false }: {
   supplier: Supplier
   credits: SupplierCredit[]
   applications: CreditApplication[]
   pendientes: CashMovement[]
+  /** (20-nov) Día del movimiento (turno, o día CR del registro): fecha del FIFO cuando la factura no trae «· fact». */
+  fechaMovimiento: (m: CashMovement) => string
   onDone: () => void
   onClose: () => void
   /** (19-nov) El padre está releyendo en silencio: los residuales en pantalla pueden estar viejos. «Aplicar» espera. */
@@ -124,10 +126,13 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
   const misCreditos = useMemo(
     () => credits.filter(c => c.supplier_id === supplier.id && saldoCredito(c, applications) > 0),
     [credits, applications, supplier.id])
-  // FIFO = más viejas primero: la lista y el reparto van por fecha de creación ascendente.
+  // FIFO = más viejas primero (20-nov): fecha de factura (sin «· fact», la del movimiento), después created_at, después id.
   const ordered = useMemo(
-    () => [...pendientes].sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [pendientes])
+    () => pendientes
+      .map(m => ({ m, k: { id: m.id, created_at: m.created_at, description: m.description, fecha_mov: fechaMovimiento(m) } }))
+      .sort((a, b) => compararFIFO(a.k, b.k))
+      .map(x => x.m),
+    [pendientes, fechaMovimiento])
 
   // Reparto FIFO puro para un crédito dado → { facturaId: montoStr } (solo montos > 0).
   const buildFIFO = (cId: string): Record<string, string> => {

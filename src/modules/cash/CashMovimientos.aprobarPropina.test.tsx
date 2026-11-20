@@ -61,7 +61,7 @@ const propinaPendiente = mov({
   session_id: 'ses-vieja', amount_crc: 30000,
 })
 const proveedorPendiente = mov({
-  id: 'prov-1', description: 'Factura 12', supplier_name: 'Pescados del Pacífico', amount_crc: 50000,
+  id: 'prov-1', description: 'Factura 12', supplier_name: 'Proveedor de prueba 1', amount_crc: 50000,
 })
 
 const renderMovs = (movements: CashMovement[]) => render(

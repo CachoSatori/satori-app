@@ -226,7 +226,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
       {aplModal && (
         <AplicarCreditoModal supplier={aplModal} credits={credits} applications={applications}
           pendientes={movements.filter(m => m.supplier_id === aplModal.id && m.status === 'pendiente')}
-          onDone={onRefresh} onClose={() => setAplModal(null)} />
+          onDone={onRefresh} onClose={() => setAplModal(null)} ocupado={ocupado} />
       )}
 
       {/* Comprobante POST-pago: el grupo ya salió de Pendientes, pero el snapshot deja emitirlo. Cierra solo con «Cerrar». */}

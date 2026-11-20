@@ -117,6 +117,21 @@ echo "::error title=Lint::subió"; exit 1`)
     expect(readFileSync(join(raiz, 'base.txt'), 'utf8').trim()).toBe(`base=${padre}`)
   })
 
+  it('si las guardas se saltaron por no tener base, el AVISO sale en pantalla (no solo en el log)', () => {
+    falso('node', 'case "$1" in *guardas-pr*) echo "guardas-pr: AVISO sin base contra la que comparar: se SALTAN R04 y R14."; exit 0;; esac; echo "eslint: 5 problemas (0 errores, 5 advertencias) · línea base: 9"')
+    const r = correr()
+    expect(r.status).toBe(0)
+    expect(r.salida).toMatch(/^\s+guardas-pr: AVISO sin base/m)
+    expect(r.ultima).toMatch(/^GATE: PASS /)
+  })
+
+  it('mutación: las guardas fallan (en CI, sin base) → GATE: FAIL paso=guardas-pr', () => {
+    falso('node', 'case "$1" in *guardas-pr*) echo "::error title=Guarda del PR::guardas-pr: FALLA sin base"; exit 1;; esac')
+    const r = correr()
+    expect(r.status).toBe(1)
+    expect(r.ultima).toMatch(/^GATE: FAIL paso=guardas-pr /)
+  })
+
   it('un paso extra que falla a propósito → GATE: FAIL con su nombre', () => {
     const r = correr({ GATE_PASOS_EXTRA: 'roto:exit 3' })
     expect(r.status).toBe(1)

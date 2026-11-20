@@ -5,8 +5,8 @@
 import { todayCR } from '../../shared/utils'
 
 // Normaliza un WhatsApp a formato internacional para wa.me (que EXIGE código de país).
-// Local CR = 8 dígitos (ej. 89900324) → 506 + número. Si ya trae 506 (11 díg) o es extranjero, se deja.
-// Idempotente: '+506 8990 0324' y '50689900324' → '50689900324' (no duplica el 506).
+// Local CR = 8 dígitos (ej. 80000090) → 506 + número. Si ya trae 506 (11 díg) o es extranjero, se deja.
+// Idempotente: '+506 8000 0090' y '50680000090' → '50680000090' (no duplica el 506).
 export const waNumber = (raw: string): string => {
   const d = (raw ?? '').replace(/\D/g, '')
   if (!d) return ''

@@ -40,7 +40,7 @@ def export_sintetico(carpeta: Path, *, negocio: str = SATORI, provisional: bool 
         'businesses.json': [{'_id': negocio, 'name': 'Negocio ficticio', 'peoplePointsRate': 6}],
         'referrers.json': [
             {'_id': 'refA', 'businessId': negocio, 'name': 'Referente Uno', 'workPlace': 'Hotel Ficticio',
-             'phoneNumber': '60000001', 'email': EMAIL_FICTICIO, 'createdAt': '2026-09-01T15:00:00.000Z',
+             'phoneNumber': '80000021', 'email': EMAIL_FICTICIO, 'createdAt': '2026-09-01T15:00:00.000Z',
              'updatedAt': '2026-09-01T15:00:00.000Z'},
             {'_id': 'refB', 'businessId': negocio, 'name': 'Referente Dos PM', 'workPlace': 'hotel  ficticio',
              'phoneNumber': None, 'email': None, 'createdAt': '2026-09-02T15:00:00.000Z'},
@@ -175,7 +175,7 @@ class Sql(unittest.TestCase):
 
     def test_20_errores_sin_datos_personales(self):
         cuerpo = ('{"message":"Failed to run sql query: ERROR:  22P02: invalid input syntax for type integer\\n'
-                  'LINE 1: ... {\\"email\\": \\"' + EMAIL_FICTICIO + '\\", \\"telefono\\": \\"+50660000001\\"} ...\\n"}')
+                  'LINE 1: ... {\\"email\\": \\"' + EMAIL_FICTICIO + '\\", \\"telefono\\": \\"+50680000021\\"} ...\\n"}')
         msg = mf.mensaje_error(cuerpo)
         self.assertIn('22P02', msg)
         self.assertNotIn('@', msg)

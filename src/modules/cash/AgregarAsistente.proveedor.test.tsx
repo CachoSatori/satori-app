@@ -15,7 +15,7 @@ const { createSpy, upsertSpy, uploadSpy, extractSpy, createDocSpy, normalizeSpy 
   })),
   uploadSpy: vi.fn(async () => ({ path: 'docs/f.jpg', sha: 'sha1' })),
   extractSpy: vi.fn(async (): Promise<Partial<DocExtract>[]> => [{
-    tipo: 'factura', proveedor: 'Pescadería del Pacífico', moneda: 'CRC', total: 50000, confianza: 0.9,
+    tipo: 'factura', proveedor: 'Proveedor de prueba 2', moneda: 'CRC', total: 50000, confianza: 0.9,
     items: [{ descripcion: 'pescado fresco', cantidad: 2, precio_unitario: 20000, total: 40000 }, { descripcion: 'camarón', cantidad: 1, precio_unitario: 10000, total: 10000 }],
   }]),
   createDocSpy: vi.fn(async () => ({ id: 'doc1' })),
@@ -45,7 +45,7 @@ const mkSupplier = (name: string): Supplier => ({
 })
 const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession
 
-function renderAsistente(suppliers: Supplier[] = [mkSupplier('Pescadería del Pacífico')]) {
+function renderAsistente(suppliers: Supplier[] = [mkSupplier('Proveedor de prueba 2')]) {
   render(<AgregarAsistente openSession={session} suppliers={suppliers} role="cajero" createdBy="u1" tc={600}
     onCreated={vi.fn()} onClose={vi.fn()} onError={vi.fn()} />)
   // Flujo guiado: estos tests ejercitan el FORM → entran por "Carga manual" (la foto que sacan
@@ -74,46 +74,46 @@ describe('AgregarAsistente — resolución de proveedor', () => {
   it('MATCH: proveedor reconocido → "✓ reconocido" y el movimiento lleva ese supplier_id', async () => {
     renderAsistente()
     takePhoto()
-    await waitFor(() => expect(screen.getByText(/Proveedor reconocido: Pescadería del Pacífico/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/Proveedor reconocido: Proveedor de prueba 2/)).toBeTruthy())
     confirmar()
     await waitFor(() => expect(createSpy).toHaveBeenCalled())
-    expect(createSpy.mock.calls[0][0]).toMatchObject({ supplier_id: 'Pescadería del Pacífico', classification: 'mercaderia' })
+    expect(createSpy.mock.calls[0][0]).toMatchObject({ supplier_id: 'Proveedor de prueba 2', classification: 'mercaderia' })
   })
 
   it('NO-MATCH: nombre desconocido → aviso; crear nuevo → el movimiento lleva el supplier_id del creado', async () => {
     renderAsistente()
-    setProveedor('Carnes El Nuevo')
+    setProveedor('Proveedor de prueba 5')
     setMonto('30000')
-    await waitFor(() => expect(screen.getByText(/«Carnes El Nuevo» no existe en el sistema/)).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: /Crear «Carnes El Nuevo»/ }))
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalledWith({ name: 'Carnes El Nuevo' }))
-    await waitFor(() => expect(screen.getByText(/Proveedor reconocido: Carnes El Nuevo/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/«Proveedor de prueba 5» no existe en el sistema/)).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /Crear «Proveedor de prueba 5»/ }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalledWith({ name: 'Proveedor de prueba 5' }))
+    await waitFor(() => expect(screen.getByText(/Proveedor reconocido: Proveedor de prueba 5/)).toBeTruthy())
     confirmar()
     await waitFor(() => expect(createSpy).toHaveBeenCalled())
-    expect(createSpy.mock.calls[0][0]).toMatchObject({ supplier_id: 'sup-new', supplier_name: 'Carnes El Nuevo' })
+    expect(createSpy.mock.calls[0][0]).toMatchObject({ supplier_id: 'sup-new', supplier_name: 'Proveedor de prueba 5' })
   })
 
   it('NO-MATCH: elegir un existente del selector → toma su supplier_id (sin crear)', async () => {
-    renderAsistente([mkSupplier('Pescadería del Pacífico')])
+    renderAsistente([mkSupplier('Proveedor de prueba 2')])
     setProveedor('Pescaderia Pacifico SA')   // parecido pero no exacto → desconocido
     setMonto('15000')
     await waitFor(() => expect(screen.getByLabelText('Elegir proveedor existente')).toBeTruthy())
-    fireEvent.change(screen.getByLabelText('Elegir proveedor existente'), { target: { value: 'Pescadería del Pacífico' } })
-    await waitFor(() => expect(screen.getByText(/Proveedor reconocido: Pescadería del Pacífico/)).toBeTruthy())
+    fireEvent.change(screen.getByLabelText('Elegir proveedor existente'), { target: { value: 'Proveedor de prueba 2' } })
+    await waitFor(() => expect(screen.getByText(/Proveedor reconocido: Proveedor de prueba 2/)).toBeTruthy())
     confirmar()
     await waitFor(() => expect(createSpy).toHaveBeenCalled())
-    expect(createSpy.mock.calls[0][0]).toMatchObject({ supplier_id: 'Pescadería del Pacífico' })
+    expect(createSpy.mock.calls[0][0]).toMatchObject({ supplier_id: 'Proveedor de prueba 2' })
     expect(upsertSpy).not.toHaveBeenCalled()
   })
 
   it('OPERATIVA con proveedor reconocido también lleva supplier_id (agrupa por proveedor)', async () => {
     renderAsistente()
-    setProveedor('Pescadería del Pacífico')
+    setProveedor('Proveedor de prueba 2')
     setMonto('20000')
     fireEvent.click(screen.getByRole('button', { name: /Operativa/ }))   // el humano la marca operativa
     confirmar()
     await waitFor(() => expect(createSpy).toHaveBeenCalled())
-    expect(createSpy.mock.calls[0][0]).toMatchObject({ movement_type: 'egreso_operativo', classification: 'operativa', supplier_id: 'Pescadería del Pacífico' })
+    expect(createSpy.mock.calls[0][0]).toMatchObject({ movement_type: 'egreso_operativo', classification: 'operativa', supplier_id: 'Proveedor de prueba 2' })
   })
 
   it('SIN proveedor (manual) → supplier_id null y no crea proveedores', async () => {

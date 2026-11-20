@@ -211,7 +211,7 @@ describe('club-pase (Edge)', () => {
 
   it('datos fuera de contrato (p. ej. con un teléfono) → 502 «contrato», sin firmar ni registrar', async () => {
     const { rpc, llamadas } = base({ club_pase_por_token: { data: MIEMBRO, error: null },
-                                     club_pase_datos: { data: datos({ nombre_pila: '+50688887777' }), error: null } })
+                                     club_pase_datos: { data: datos({ nombre_pila: '+50680000077' }), error: null } })
     const r = await manejarPase(pedido({ token: TOKEN }), 'google', env, rpc, google().fetch)
     expect(r.status).toBe(502)
     expect((await r.json()).error).toBe('contrato')

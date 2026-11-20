@@ -4,7 +4,7 @@
 //        salvo una renumeración registrada con `origen` en supabase/migraciones-reservadas.json.
 // Base: GATE_BASE (gate.sh la fija en el CI de un PR a HEAD^1 de la fusión = cabeza ACTUAL de main, no el base.sha viejo del
 // evento: con el viejo, todo lo que entró a main después contaría como del PR); sin ella, el merge-base con origin/main si existe; sin ninguna, se salta
-// y lo dice (en el CI de un push a main no hay base). Etiquetas: GATE_LABELS, separadas por coma o salto de línea.
+// y lo dice, también en pantalla vía gate.sh (en el CI de un push a main no hay base). En el CI de un PR sin base: FAIL. Etiquetas: GATE_LABELS, separadas por coma o salto de línea.
 // Uso: node scripts/ci/guardas-pr.mjs   (desde la raíz del repo; GATE_ROOT cambia la carpeta, para las pruebas)
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -64,7 +64,17 @@ export function resolverBase(cwd, env = process.env) {
 export function correr(env = process.env) {
   const cwd = env.GATE_ROOT || join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
   const base = resolverBase(cwd, env)
-  if (!base) { console.log('guardas-pr: sin base contra la que comparar (push a main o sin origin/main): se saltan R04 y R14.'); return 0 }
+  if (!base) {
+    // (19-nov) En el CI de un PR siempre hay base (gate.sh la calcula): que falte es un fallo del propio CI, y callarlo dejaría
+    // pasar un PR sin las guardas. En un push a main (o en un clon sin origin/main) no hay contra qué comparar: se salta, y
+    // gate.sh pone este aviso en pantalla (no solo en el log).
+    if (env.GITHUB_ACTIONS === 'true' && env.GITHUB_EVENT_NAME === 'pull_request') {
+      console.log('::error title=Guarda del PR::guardas-pr: FALLA, en el CI de un PR no se pudo calcular la base (HEAD^1 de la fusión). Sin ella R04 y R14 no corren: se rechaza antes que dejarlas en silencio.')
+      return 1
+    }
+    console.log('guardas-pr: AVISO sin base contra la que comparar (push a main o sin origin/main): se SALTAN R04 y R14. Con origin/main (git fetch origin) corren.')
+    return 0
+  }
   const cambios = parsearNameStatus(git(['diff', '--name-status', '-M', '--diff-filter=ADMR', `${base}...HEAD`, '--', 'supabase/functions', 'supabase/config.toml', 'supabase/migrations'], cwd))
   const etiquetas = (env.GATE_LABELS ?? '').split(/[,\n]/).map(s => s.trim()).filter(Boolean)
   const registro = JSON.parse(readFileSync(join(cwd, 'supabase/migraciones-reservadas.json'), 'utf8'))

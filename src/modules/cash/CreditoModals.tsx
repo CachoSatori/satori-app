@@ -111,13 +111,15 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
 }
 
 // ── Aplicar crédito a UNA O VARIAS facturas pendientes (tiempo real, reparto FIFO). ──
-export function AplicarCreditoModal({ supplier, credits, applications, pendientes, onDone, onClose }: {
+export function AplicarCreditoModal({ supplier, credits, applications, pendientes, onDone, onClose, ocupado = false }: {
   supplier: Supplier
   credits: SupplierCredit[]
   applications: CreditApplication[]
   pendientes: CashMovement[]
   onDone: () => void
   onClose: () => void
+  /** (19-nov) El padre está releyendo en silencio: los residuales en pantalla pueden estar viejos. «Aplicar» espera. */
+  ocupado?: boolean
 }) {
   const misCreditos = useMemo(
     () => credits.filter(c => c.supplier_id === supplier.id && saldoCredito(c, applications) > 0),
@@ -156,11 +158,12 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
   const anyOver     = ordered.some(m => montoOf(m.id) > residualOf(m) + 0.001)  // algún monto > su residual
   const overCredit  = sumMontos > saldoCred + 0.001                             // Σ > crédito disponible
   const errorMonto  = ordered.map(m => errorOf(m.id)).find(Boolean) ?? null   // primer monto mal escrito
-  const canApply    = sumMontos > 0 && !anyOver && !overCredit && !errorMonto && !saving
+  const canApply    = sumMontos > 0 && !anyOver && !overCredit && !errorMonto && !saving && !ocupado
 
   const cambiarCredito = (id: string) => { setCreditId(id); setMontos(buildFIFO(id)); setError(null) }
 
   const aplicar = async () => {
+    if (ocupado) return   // aunque el botón se habilite por un desfase, no imputa sobre datos que se están releyendo
     const items = ordered.map(m => ({ id: m.id, monto: montoOf(m.id) })).filter(x => x.monto > 0)
     if (errorMonto)    { setError(errorMonto); return }
     if (!items.length) { setError('Ingresá al menos un monto > 0'); return }

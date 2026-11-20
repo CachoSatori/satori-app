@@ -115,10 +115,22 @@ describe('guardas-pr: R14 (migraciones que ya existían)', () => {
 })
 
 describe('guardas-pr: sin base', () => {
-  it('sin GATE_BASE ni origin/main → se salta y lo dice', () => {
-    const r = spawnSync('node', [SCRIPT], { encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', GATE_ROOT: raiz } })
+  const sinBase = (env: Record<string, string> = {}) =>
+    spawnSync('node', [SCRIPT], { encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', GATE_ROOT: raiz, ...env } })
+  it('sin GATE_BASE ni origin/main (local o push a main) → se salta, con AVISO', () => {
+    const r = sinBase()
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/sin base/)
+    expect(r.stdout).toMatch(/^guardas-pr: AVISO sin base/m)
+  })
+  it('mutación: en el CI de un PR, sin base es FAIL (no se salta en silencio)', () => {
+    const r = sinBase({ GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'pull_request' })
+    expect(r.status).toBe(1)
+    expect(r.stdout).toMatch(/FALLA/)
+  })
+  it('en el CI de un push a main (sin base por diseño) → se salta con AVISO, no falla', () => {
+    const r = sinBase({ GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push' })
+    expect(r.status).toBe(0)
+    expect(r.stdout).toMatch(/AVISO sin base/)
   })
 })
 

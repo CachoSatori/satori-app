@@ -64,7 +64,7 @@ describe('validarDatos (contrato v1)', () => {
   it('rechaza otro contrato, contactos, el token del portal y URLs fuera del dominio', () => {
     expect(validarDatos({ ...base(), contrato: 2 })).toMatch(/contrato/)
     expect(validarDatos(base({ nombre_pila: 'ana@ejemplo.com' }))).toMatch(/contacto/)
-    expect(validarDatos(base({ nombre_pila: '+50688887777' }))).toMatch(/contacto/)
+    expect(validarDatos(base({ nombre_pila: '+50680000077' }))).toMatch(/contacto/)
     expect(validarDatos(base({ canjear_url: `https://club.ejemplo.test/p/${'b'.repeat(64)}` }))).toMatch(/token de pase/)
     expect(validarDatos(base({ codigo_barras: { tipo: 'socio', valor: 'https://otro.ejemplo/s/X' } }))).toMatch(/dominio/)
   })

@@ -23,7 +23,7 @@ import { relojCR, ventanaD1, ahora as relojHooks } from './hora.mjs'
 import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoincide, migracionesFirmadas, escribeProtegido, MARCAS } from './marcas.mjs'
 
 /**
- * @typedef {{ numero: number, cabeza: string, archivos: string[] } | { error: string }} InfoPR
+ * @typedef {{ numero: number, cabeza: string, archivos: string[], titulo?: string } | { error: string }} InfoPR
  * @typedef {{
  *   raiz: string, cwd: string, env: Record<string, string | undefined>, ahora: Date,
  *   ramaActual: (dir: string) => string,
@@ -65,8 +65,8 @@ export function ventanaMerge(ctx) {
 
 /**
  * Merge de un PR. D1 (20-nov): libre 23:30–15:00 · 15:00–19:00 con OK del dueño para ESE PR · 19:00–23:30 solo urgente
- * (OK con URGENTE en la cita). Además `--match-head-commit` / `sha` obligatorio e igual a la cabeza, y la cabeza tiene que
- * ser un SHA firmado. Un PR solo de .md no necesita SHA firmado, y de 23:30 a 15:00 tampoco OK. @returns {string | null}
+ * (OK con URGENTE en la cita). Además `--match-head-commit` / `sha` obligatorio, completo (40 hex) e igual a la cabeza, y la
+ * cabeza tiene que ser, exacta, un SHA firmado. Un PR solo de .md no necesita SHA firmado, y de 23:30 a 15:00 tampoco OK. @returns {string | null}
  */
 export function evaluarMerge(merge, ctx) {
   const v = ventanaMerge(ctx)
@@ -82,12 +82,12 @@ export function evaluarMerge(merge, ctx) {
   }
   const cabeza = String(info.cabeza).toLowerCase()
   const pedida = String(merge.cabezaPedida ?? '').toLowerCase()
-  if (!/^[0-9a-f]{7,40}$/.test(pedida)) return `Falta fijar la cabeza: gh pr merge ${info.numero} --match-head-commit <sha firmado> (o el campo sha en la API). Así GitHub no mergea otro commit.`
-  if (!cabeza.startsWith(pedida)) return `--match-head-commit ${pedida} no es la cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}).`
+  if (!/^[0-9a-f]{40}$/.test(pedida)) return `Falta fijar la cabeza completa: gh pr merge ${info.numero} --match-head-commit <sha firmado, 40 hex> (o el campo sha en la API). Así GitHub no mergea otro commit.`
+  if (cabeza !== pedida) return `--match-head-commit ${pedida.slice(0, 8)} no es la cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}).`
   if (info.archivos.length > 0 && info.archivos.every(a => a.toLowerCase().endsWith('.md'))) return null
   const firmados = shasFirmados(leerMarca('sha', ctx))
   if (!shaFirmadoCoincide(firmados, info.numero, cabeza)) {
-    return `La cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}) no es un SHA firmado por el dueño. Anotá «#${info.numero} <sha>» en ${MARCAS.sha.archivo} o en ${MARCAS.sha.variable} (ver scripts/hooks/README.md).`
+    return `La cabeza del PR #${info.numero} (${cabeza.slice(0, 8)}) no es un SHA firmado por el dueño. Anotá «#${info.numero} <sha completo de 40 hex>» en ${MARCAS.sha.archivo} o en ${MARCAS.sha.variable} (ver scripts/hooks/README.md).`
   }
   return null
 }
@@ -214,8 +214,76 @@ function sqlDeCuerpo(cuerpo) {
 
 const SOSPECHOSO = /\b(drop|delete|truncate)\b/i
 
+// ---- Marcas y .claude/ por Bash: barrera blanda (el lector no expande variables ni decodifica nada). -----------------
+// Si el comando nombra una marca, `settings.local.json` o una carpeta `.claude`, solo pasan lecturas evidentes; además,
+// nunca pasa código que llega a un intérprete por un tubo (`… | bash`, `base64 -d | sh`) ni `bash <(…)` / `eval "$…"`.
+const RE_NOMBRE_PROTEGIDO = /sha-firmado|ok-dueno-noche|turno-prod|migracion-firmada|settings\.local\.json/i
+const RE_DIR_CLAUDE = /(?:^|[\s/'"=:;(&|<>`$])\.claude(?=[/\\'"\s;|&)<>`*]|$)/
+const RE_MARCA_ARCHIVO = /(?:^|\/)(?:sha-firmado|ok-dueno-noche|turno-prod|migracion-firmada)\.local$/
+const LECTURAS = new Set(['cat', 'jq', 'head', 'tail', 'less', 'more', 'ls', 'stat', 'wc', 'grep', 'egrep', 'fgrep', 'rg', 'diff', 'cmp',
+  'sha256sum', 'sha1sum', 'md5sum', 'file', 'test', '[', '[[', 'echo', 'printf', 'true', 'pwd', 'realpath', 'readlink', 'basename', 'dirname'])
+const GIT_LECTURAS = new Set(['diff', 'log', 'show', 'status', 'ls-files', 'add', 'commit', 'hash-object', 'check-ignore', 'blame', 'grep', 'rev-parse', 'cat-file'])
+const RE_INTERPRETE_POR_TUBO = /\|\s*(?:sudo\s+|env\s+(?:\w+=\S*\s+)*)?(?:\S*\/)?(?:bash|sh|zsh|dash|ksh|python[\d.]*|node|perl|ruby|php)(?:\s+-[A-Za-z]+)*\s*(?=$|[|;&)\n])/
+const RE_CODIGO_ILEGIBLE = /(?:^|[\s;&|(])(?:bash|sh|zsh|dash|ksh|source|\.)\s+<\(|\beval\b[^\n;|&]*\$/
+
+/** ¿Este comando simple es una lectura evidente (o borra una marca: revoca)? */
+function lecturaEvidente(s) {
+  const { prog, args } = programa(s.palabras)
+  if (s.redirecciones.some(r => />/.test(r.op) && r.destino !== '/dev/null')) return false
+  const pos = args.filter(a => !a.startsWith('-'))
+  if (LECTURAS.has(prog)) return true
+  if (prog === 'git') {
+    const { sub, resto } = subcomandoGit(args)
+    return GIT_LECTURAS.has(sub) && !resto.some(a => a === '-o' || a.startsWith('--output'))
+  }
+  if (prog === 'gh') return !args.some(a => ['checkout', 'clone', 'download'].includes(a))
+  if (prog === 'cd') return !pos.some(a => RE_DIR_CLAUDE.test(a) || RE_DIR_CLAUDE.test('/' + a))
+  if (prog === 'cp') {
+    // Solo copiar HACIA /tmp: sin -t / --target-directory (cambian cuál argumento es el destino) y sin «..».
+    if (args.some(a => a === '-t' || a.startsWith('--target-directory') || /^-[a-zA-Z]*t/.test(a))) return false
+    const d = pos[pos.length - 1] ?? ''
+    return pos.length >= 2 && d.startsWith('/tmp/') && !d.includes('..') && !RE_NOMBRE_PROTEGIDO.test(d) && !RE_DIR_CLAUDE.test(d)
+  }
+  if (prog === 'rm' || prog === 'unlink') return pos.length > 0 && pos.every(a => RE_MARCA_ARCHIVO.test(a))
+  return false
+}
+
+/** ¿La ruta está en una carpeta `.claude` o debajo? */
+const dentroDeClaude = ruta => /(?:^|[/\\])\.claude(?:[/\\]|$)/.test(String(ruta ?? ''))
+
+/**
+ * Carpeta actual dentro de `.claude/` (el cwd persiste entre llamadas: `cd .claude` y después `cp /tmp/x .`): se niega
+ * todo, salvo un `cd` que salga. @returns {string | null}
+ */
+export function evaluarCwdProtegido(cmd, cwd) {
+  if (!dentroDeClaude(cwd)) return null
+  const simples = comandos(cmd).filter(s => s.palabras.length > 0)
+  const ultimo = simples[simples.length - 1]
+  const soloCd = simples.length > 0 && simples.every(s => programa(s.palabras).prog === 'cd' && s.redirecciones.length === 0)
+  if (soloCd) {
+    const destino = programa(ultimo.palabras).args.filter(a => !a.startsWith('-'))[0]
+    if (destino && !destino.includes('$') && !dentroDeClaude(resolve(cwd, destino))) return null
+  }
+  return `La carpeta actual (${cwd}) está dentro de .claude/: ahí no corre ningún comando. Salí primero (cd a la raíz del proyecto).`
+}
+
+/** @returns {string | null} */
+export function evaluarZonaProtegida(cmd) {
+  if (RE_INTERPRETE_POR_TUBO.test(cmd) || RE_CODIGO_ILEGIBLE.test(cmd)) {
+    return 'No se pasa código a un intérprete por un tubo, por <(…) ni por eval de una variable (… | bash, base64 -d | sh): la guardia no lo puede leer. Escribí el comando tal cual.'
+  }
+  if (!RE_NOMBRE_PROTEGIDO.test(cmd) && !RE_DIR_CLAUDE.test(cmd)) return null
+  const malo = comandos(cmd).find(s => s.palabras.length > 0 && !lecturaEvidente(s))
+  if (!malo) return null
+  return `No se escribe por Bash una marca de habilitación ni la configuración de Claude Code: un comando que nombra .claude/, una marca o settings.local.json solo puede leer (cat, jq, git diff…) o borrar una marca (rm, revoca); «${malo.palabras.slice(0, 3).join(' ')}» no es lectura. La marca la escribe la sesión principal con Write y la firma el dueño (ver scripts/hooks/README.md).`
+}
+
 /** @param {string} cmd @param {Contexto} ctx @returns {string | null} motivo del bloqueo */
 export function evaluarBash(cmd, ctx) {
+  const cwdMal = evaluarCwdProtegido(cmd, ctx.cwd)
+  if (cwdMal) return cwdMal
+  const zona = evaluarZonaProtegida(cmd)
+  if (zona) return zona
   for (const s of comandos(cmd)) {
     const { prog, args } = programa(s.palabras)
 
@@ -242,6 +310,7 @@ export function evaluarBash(cmd, ctx) {
 
     if (prog === 'git') {
       const { sub, resto, dir } = subcomandoGit(args)
+      if (sub === 'reset' && resto.includes('--hard')) return 'Bloqueado: git reset --hard (puede pisar .claude/ y los cambios sin commitear). Usá git switch / git restore sobre archivos puntuales.'
       if (sub === 'push') {
         const base = dir ? resolve(ctx.cwd, dir) : ctx.cwd
         const m = evaluarPush(resto, () => ctx.ramaActual(base))
@@ -332,7 +401,7 @@ export function consultarPRgh(selector, repo, cwd) {
     }
     const pr = ghJson([`repos/${repo}/pulls/${numero}`])
     const archivos = ghJson(['--paginate', `repos/${repo}/pulls/${numero}/files?per_page=100`, '--jq', '[.[].filename]'])
-    return { numero, cabeza: pr.head.sha, archivos: Array.isArray(archivos) ? archivos : [] }
+    return { numero, cabeza: pr.head.sha, archivos: Array.isArray(archivos) ? archivos : [], titulo: String(pr.title ?? '') }
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
   }

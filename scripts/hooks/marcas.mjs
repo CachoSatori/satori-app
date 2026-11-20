@@ -47,23 +47,32 @@ export function leerMarca(clave, { raiz, env = process.env }) {
 }
 
 /**
- * OK del dueño para mergear de 15:00 a 23:30 (de 19:00 a 23:30, además, URGENTE dentro de la cita): en una misma línea, la fecha CR de hoy (AAAA-MM-DD), el número del PR
- * (`#305`) y la cita textual del OK entre «…» o "…" (8 caracteres o más). Vale solo para ese PR y vence al cambiar el día.
+ * Una línea de OK del dueño, anclada: `AAAA-MM-DD #N «cita»` (o `"cita"`), cita de 8+ caracteres, y un solo `#<número>`
+ * en TODA la línea (tampoco dentro de la cita). La usan la guardia y el hook de la firma: el N sale del mismo lugar.
+ * @returns {{ fecha: string, pr: number, cita: string } | null}
+ */
+export function parsearOkNoche(linea) {
+  const m = /^\s*(\d{4}-\d{2}-\d{2}) #(\d+) (?:«([^«»]{8,})»|"([^"]{8,})")\s*$/.exec(String(linea))
+  if (!m) return null
+  if ((String(linea).match(/#\d/g) ?? []).length !== 1) return null
+  return { fecha: m[1], pr: Number(m[2]), cita: (m[3] ?? m[4]).trim() }
+}
+
+/**
+ * OK del dueño para mergear de 15:00 a 23:30 (de 19:00 a 23:30, además, URGENTE dentro de la cita): una línea con el
+ * formato de `parsearOkNoche`, con la fecha CR de hoy y ese PR. Vale solo para ese PR y vence al cambiar el día.
  * @returns {{ ok: true, cita: string } | { ok: false, motivo: string }}
  */
 export function okNocheValido(texto, fechaCR, pr, { urgente = false } = {}) {
   if (!texto) return { ok: false, motivo: 'no hay OK del dueño' }
   for (const linea of texto.split('\n')) {
-    if (!linea.includes(fechaCR)) continue
-    if (!new RegExp(`#${pr}(?!\\d)`).test(linea)) continue
-    const cita = /«([^»]{8,})»|"([^"]{8,})"/.exec(linea)
-    if (!cita) continue
-    const texto = (cita[1] ?? cita[2]).trim()
-    if (urgente && !/\bURGENTE\b/.test(texto)) continue
-    return { ok: true, cita: texto }
+    const p = parsearOkNoche(linea)
+    if (!p || p.fecha !== fechaCR || p.pr !== pr) continue
+    if (urgente && !/\bURGENTE\b/.test(p.cita)) continue
+    return { ok: true, cita: p.cita }
   }
   const extra = urgente ? ' con la palabra URGENTE dentro de la cita' : ''
-  return { ok: false, motivo: `el OK no tiene, en una línea, la fecha de hoy (${fechaCR}), «#${pr}» y la cita del dueño entre «…»${extra}` }
+  return { ok: false, motivo: `no hay una línea «${fechaCR} #${pr} «cita del dueño»» (fecha CR de hoy, un solo #N, cita de 8+ caracteres)${extra}` }
 }
 
 /**
@@ -77,22 +86,23 @@ export function turnoProdValido(texto, fechaCR) {
 }
 
 /**
- * SHA firmados: una línea por PR, `#<número> <sha>` (o `<número> <sha>`); un `<sha>` solo vale para cualquier PR.
- * El SHA tiene 7 a 40 hex. @returns {{ pr: number | null, sha: string }[]}
+ * SHA firmados: una línea por PR, `#<número> <sha>` (o `<número> <sha>`); un `<sha>` solo vale para cualquier PR (solo por
+ * variable: por Write el hook de la firma exige el número). El SHA va COMPLETO (40 hex, la cabeza que da REST): una línea con
+ * un prefijo corto o con texto de más no cuenta. @returns {{ pr: number | null, sha: string }[]}
  */
 export function shasFirmados(texto) {
   const salida = []
   for (const linea of texto.split('\n')) {
-    const m = /^\s*(?:#?(\d+)\s+)?([0-9a-f]{7,40})\b/i.exec(linea)
+    const m = /^\s*(?:#?(\d+)\s+)?([0-9a-f]{40})\s*$/i.exec(linea)
     if (m) salida.push({ pr: m[1] ? Number(m[1]) : null, sha: m[2].toLowerCase() })
   }
   return salida
 }
 
-/** ¿La cabeza del PR es un SHA firmado para ese PR? */
+/** ¿La cabeza del PR es, exacta, un SHA firmado para ese PR? */
 export function shaFirmadoCoincide(firmados, pr, cabeza) {
   const c = String(cabeza).toLowerCase()
-  return firmados.some(f => (f.pr === null || f.pr === pr) && c.startsWith(f.sha))
+  return firmados.some(f => (f.pr === null || f.pr === pr) && c === f.sha)
 }
 
 /**

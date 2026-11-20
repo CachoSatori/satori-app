@@ -10,7 +10,7 @@ Mergear a `main` **es** desplegar: Pages publica la app, Branching corre `migrat
 ## 1. Ventana y OK
 - [ ] Hora real: `TZ=America/Costa_Rica date`. Ventana D1 y excepción de PRs solo `.md`: **regla 3 de ESTADO**. Una sola sesión mergea, solo sus PRs.
 - [ ] D1 (20-nov): libre 23:30–15:00 · 15:00–19:00 con OK del dueño en el momento · 19:00–23:30 solo urgente con OK (la cita dice URGENTE). Un PR solo `.md` con Gate verde va sin OK **solo de 23:30 a 15:00** (regla 3).
-- [ ] Salvo ese caso, hace falta **OK explícito del dueño** para **este** PR y **este** SHA, citado en el cuerpo del merge (con roles). Sin OK no se mergea aunque la revisión diga «listo». Con los hooks del repo (`scripts/hooks/README.md`): marca de OK con `#N` (y URGENTE de 19:00 a 23:30) y SHA firmado; el merge fija la cabeza (`-f sha=<cabeza>` o `--match-head-commit`).
+- [ ] Salvo ese caso, hace falta **OK explícito del dueño** para **este** PR y **este** SHA, citado en el cuerpo del merge (con roles). Sin OK no se mergea aunque la revisión diga «listo». Con los hooks del repo (`scripts/hooks/README.md`): marca de OK con `#N` (y URGENTE de 19:00 a 23:30) y SHA firmado; el merge fija la cabeza (`-f sha=<cabeza>` o `--match-head-commit`). La marca la escribe la sesión principal con `Write` en `<raíz>/.claude/` y el dueño la firma tocando **Aprobar** en la app (nunca un subagente; flujo en `scripts/hooks/README.md`, «Firma del dueño desde la app»).
 - [ ] Antes de mergear un `.md`: `gh pr diff <n> --name-only` confirma que todo es `.md`.
 
 ## 2. Antes del merge

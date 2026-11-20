@@ -133,7 +133,10 @@ describe('sincronía con el SQL', () => {
     expect(COMUN).toMatch(/if v_n < 5 then/)
     const py = leer('correr.py')
     expect(py).toMatch(/^REF = 'hwiatgicyyqyezqwldia'/m)
-    expect(py).not.toMatch(/projects\/yiczgdtirrkdvohdquzf/)
+    // el ref de prod no se escribe en una prueba (src/refProdEnPruebas.test.ts): se lee de la herramienta que lo usa de candado
+    const prod = /PROD_REF = '([a-z]{20})'/.exec(readFileSync(new URL('../club/migrar_firestore.py', import.meta.url), 'utf8'))?.[1]
+    expect(prod).toMatch(/^[a-z]{20}$/)
+    expect(py).not.toContain(`projects/${prod}`)
     expect(ANON.indexOf('select pg_temp.anon_guarda();')).toBeLessThan(ANON.indexOf('update '))
   })
 

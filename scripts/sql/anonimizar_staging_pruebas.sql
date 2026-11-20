@@ -102,18 +102,18 @@ begin
     v_filas = 1 and v1 = v0 + 1, format('filas=%s antes=%s después=%s', v_filas, v0, v1));
 end $$;
 
--- 07–09 · la guarda aborta: ref de prod, base sin marca de staging, sin usuarios de prueba
+-- 07–09 · la guarda aborta: otro ref, base sin marca de staging, sin usuarios de prueba
 do $$
 declare v_ok boolean; v_msg text;
 begin
   v_msg := null;
   begin
-    perform set_config('anon.ref', 'yiczgdtirrkdvohdquzf', true);
+    perform set_config('anon.ref', 'otroref0000000000000', true);   -- cualquier ref que no sea el de staging (el de prod no se escribe en una prueba)
     perform pg_temp.anon_guarda();
   exception when others then v_msg := sqlerrm;
   end;
   perform set_config('anon.ref', 'hwiatgicyyqyezqwldia', true);
-  insert into _rA (caso, ok, detalle) values ('07 guarda: con el ref de prod aborta', v_msg like 'ANON-ABORTA%', v_msg);
+  insert into _rA (caso, ok, detalle) values ('07 guarda: con un ref que no es el de staging aborta', v_msg like 'ANON-ABORTA%', v_msg);
 
   v_msg := null;
   begin

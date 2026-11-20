@@ -6,6 +6,7 @@
 //   máximo aplicable de un crédito a una factura = min(saldoCredito, saldoResidual)
 
 import { fechaFacturaDeDescripcion } from '../../shared/utils/fechaFactura'
+import { dateCR } from '../../shared/utils'
 
 export interface CreditApplicationLike {
   amount_applied: number
@@ -60,20 +61,33 @@ export interface FacturaOrdenable {
   id: string
   created_at: string
   description?: string | null
+  /** Día del movimiento (el del turno, o el día CR del registro si es a nivel día), AAAA-MM-DD. Regla 11. */
+  fecha_mov: string
 }
 
 /**
- * (20-nov, decisión del dueño) Orden FIFO del reparto, total y fijo (R06): fecha de factura ascendente (de la
- * descripción «· fact AAAA-MM-DD»; sin fecha va al final), después `created_at`, después `id`. Así dos facturas
- * con el mismo `created_at` nunca quedan en orden indefinido.
+ * Día del movimiento (regla 11): el `session_date` de su turno; a nivel día (sin turno, o turno no cargado), el día CR
+ * del registro. Nunca el día UTC de `created_at`.
+ */
+export function diaDelMovimiento(
+  m: { session_id: string | null; created_at: string }, sesiones: Map<string, { session_date: string }>,
+): string {
+  return sesiones.get(m.session_id ?? '')?.session_date ?? dateCR(m.created_at)
+}
+
+/** Fecha efectiva para el FIFO: la de factura («· fact AAAA-MM-DD») y, si no hay, la del movimiento (dueño, 20-nov). */
+export function fechaEfectivaFIFO(f: FacturaOrdenable): string {
+  return fechaFacturaDeDescripcion(f.description) ?? f.fecha_mov
+}
+
+/**
+ * (20-nov, decisión del dueño) Orden FIFO del reparto, total y fijo (R06): fecha efectiva ascendente (la de factura;
+ * sin «· fact», la del movimiento), después `created_at`, después `id`. Dos facturas con el mismo `created_at` nunca
+ * quedan en orden indefinido.
  */
 export function compararFIFO(a: FacturaOrdenable, b: FacturaOrdenable): number {
-  const fa = fechaFacturaDeDescripcion(a.description), fb = fechaFacturaDeDescripcion(b.description)
-  if (fa !== fb) {
-    if (fa === null) return 1
-    if (fb === null) return -1
-    return fa < fb ? -1 : 1
-  }
+  const fa = fechaEfectivaFIFO(a), fb = fechaEfectivaFIFO(b)
+  if (fa !== fb) return fa < fb ? -1 : 1
   if (a.created_at !== b.created_at) return a.created_at < b.created_at ? -1 : 1
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }

@@ -1,6 +1,6 @@
 // Helpers puros del saldo a favor (mig 053). Encodean la MISMA matemática que la RPC apply_supplier_credit.
 import { describe, it, expect } from 'vitest'
-import { saldoCredito, saldoResidual, maxAplicable, distribuirCreditoFIFO, compararFIFO, type CreditApplicationLike } from './supplierCredits'
+import { saldoCredito, saldoResidual, maxAplicable, distribuirCreditoFIFO, compararFIFO, diaDelMovimiento, type CreditApplicationLike } from './supplierCredits'
 
 const app = (o: Partial<CreditApplicationLike>): CreditApplicationLike => ({
   amount_applied: 0, reversed: false, credit_id: 'C', applied_to_movement_id: 'F', ...o,
@@ -81,28 +81,54 @@ describe('distribuirCreditoFIFO — reparte un crédito entre varias facturas (m
   })
 })
 
-// (20-nov, decisión del dueño) Orden del reparto: fecha de factura ↑ (sin fecha al final), después created_at ↑, después id ↑.
-// Mutación: volver a ordenar solo por created_at → caen «misma created_at» y «empate total»; nulls first → cae «sin fecha».
+// (20-nov, decisión del dueño) Orden del reparto: fecha efectiva ↑ (la de factura; sin «· fact», el día del movimiento),
+// después created_at ↑, después id ↑. Mutaciones: ordenar solo por created_at → caen «misma created_at» y «empate total»;
+// sin fact al final → cae «vieja sin fact»; usar el día UTC de created_at en vez de fecha_mov → cae «editada».
 describe('compararFIFO — orden total y fijo del reparto (R06)', () => {
   const T = '2026-11-18T15:00:00.000000+00:00'
-  const f = (id: string, created_at: string, description = '') => ({ id, created_at, description })
+  const f = (id: string, created_at: string, description = '', fecha_mov = created_at.slice(0, 10)) =>
+    ({ id, created_at, description, fecha_mov })
   const orden = (xs: ReturnType<typeof f>[]) => [...xs].sort(compararFIFO).map(x => x.id)
 
   it('misma created_at, distinta fecha de factura → primero la factura más vieja', () => {
     expect(orden([f('a', T, 'P · fact 2026-11-15'), f('b', T, 'P · fact 2026-11-12')])).toEqual(['b', 'a'])
   })
-  it('la fecha de factura manda sobre created_at', () => {
+  it('la fecha de factura manda sobre created_at y sobre el día del movimiento', () => {
     expect(orden([f('a', '2026-11-10T12:00:00Z', 'P · fact 2026-11-09'), f('b', '2026-11-11T12:00:00Z', 'P · fact 2026-11-01')]))
       .toEqual(['b', 'a'])
   })
-  it('misma fecha de factura → created_at; empate total → id, sin importar el orden de entrada', () => {
+  it('misma fecha efectiva → created_at; empate total → id, sin importar el orden de entrada', () => {
     const x = f('9f', T, 'P · fact 2026-11-12'), y = f('0a', T, 'P · fact 2026-11-12'), z = f('5c', '2026-11-17T09:00:00Z', 'P · fact 2026-11-12')
     expect(orden([x, y, z])).toEqual(['5c', '0a', '9f'])
     expect(orden([y, z, x])).toEqual(['5c', '0a', '9f'])
     expect(orden([x, z, y])).toEqual(['5c', '0a', '9f'])
   })
-  it('sin fecha de factura → al final; entre ellas, created_at y después id', () => {
-    expect(orden([f('s2', T), f('c', T, 'P · fact 2026-11-16'), f('s1', T), f('s0', '2026-11-01T12:00:00Z')]))
-      .toEqual(['c', 's0', 's1', 's2'])
+  it('una pendiente vieja SIN fact va antes que una nueva CON fact (usa el día del movimiento)', () => {
+    expect(orden([f('nueva', '2026-11-13T15:00:00Z', 'P · fact 2026-11-12'), f('vieja', '2026-11-05T15:00:00Z', 'P', '2026-11-05')]))
+      .toEqual(['vieja', 'nueva'])
+  })
+  it('descripción editada sin «· fact» → cae al día del movimiento (turno), no al día UTC de created_at', () => {
+    // creada 2026-11-12T03:00Z = 11-nov 21:00 CR, turno del 11.
+    const editada = f('e', '2026-11-12T03:00:00Z', 'P · fac 2026-11-01 (editada)', '2026-11-11')
+    const conFact = f('c', '2026-11-12T01:00:00Z', 'P · fact 2026-11-12', '2026-11-11')
+    expect(orden([conFact, editada])).toEqual(['e', 'c'])
+  })
+  it('sin fact en ninguna: día del movimiento, después created_at, después id', () => {
+    expect(orden([f('s2', T, 'P', '2026-11-18'), f('s1', T, 'P', '2026-11-18'), f('s0', '2026-11-19T01:00:00Z', 'P', '2026-11-17')]))
+      .toEqual(['s0', 's1', 's2'])
+  })
+})
+
+// Mutación: devolver `m.created_at.slice(0, 10)` (día UTC) → caen las dos primeras.
+describe('diaDelMovimiento — el día que usa el FIFO cuando no hay «· fact» (regla 11)', () => {
+  const ses = new Map([['T1', { session_date: '2026-11-11' }]])
+  it('con turno: el session_date del turno', () => {
+    expect(diaDelMovimiento({ session_id: 'T1', created_at: '2026-11-12T03:00:00Z' }, ses)).toBe('2026-11-11')
+  })
+  it('a nivel día (sin turno): el día CR del registro, no el UTC (23:30 CR = 05:30 UTC del día siguiente)', () => {
+    expect(diaDelMovimiento({ session_id: null, created_at: '2026-11-12T05:30:00Z' }, ses)).toBe('2026-11-11')
+  })
+  it('turno que no está cargado: también el día CR del registro', () => {
+    expect(diaDelMovimiento({ session_id: 'T9', created_at: '2026-11-12T18:00:00Z' }, ses)).toBe('2026-11-12')
   })
 })

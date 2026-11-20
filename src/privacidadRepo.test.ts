@@ -7,7 +7,7 @@
 //      mentira y unos pocos genéricos (placeholders y remitentes de servicios). El correo público del negocio (también
 //      con alias `+algo`) solo vale en el aviso del Club y su prueba. El remitente propio del dominio verificado en
 //      Resend (decisión del dueño, 18-nov) solo vale en el código de las Edge de correo y sus pruebas.
-//   3. (19-nov) Un TELÉFONO: número CR de 8 dígitos que empiece con 2/4/5/6/7/8 (con o sin +506, guiones o espacios) que no
+//   3. (19-nov) Un TELÉFONO: número CR de 8 dígitos que empiece con 2/4/5/6/7/8 (con o sin +506, guiones, espacios o puntos) que no
 //      sea de la lista blanca de ficticios (80000000–80000099). Ver `telefonosMalos` más abajo.
 // Fuera del escaneo: `supabase/migrations/` (ya aplicadas: el ledger y Branching dependen de su texto) y los lockfiles
 // (metadatos de terceros).
@@ -71,7 +71,14 @@ const GENERICOS = new Set([
 // Cómo arreglarlo: usá un ficticio de la lista blanca 80000000–80000099 (p. ej. 80000001, o «+506 8000 0001»). Si es un número
 // que no es teléfono (id, monto, semilla), escribilo de forma que no parezca uno (con separador de miles, o con prefijo de
 // texto) o agregá la ruta a TELEFONO_FUERA_RUTAS con el motivo.
-const TEL = /(?<![0-9A-Za-z_-])(?<![0-9][.,])(?:\+?506[ -]?)?([24-8][0-9]{3})[ .-]?([0-9]{4})(?![0-9])(?![.,][0-9])/g
+// (20-nov, menores del #304) Solo el PUNTO pegado a un dígito es decimal: una coma es separador de columna (CSV, arreglo JSON),
+// así que `1,<teléfono>` o `<teléfono>,5` caen igual que `[<teléfono>`. Antes la coma valía como decimal y un teléfono pegado a una
+// columna numérica pasaba.
+const TEL = /(?<![0-9A-Za-z_-])(?<![0-9]\.)(?:\+?506[ -]?)?([24-8][0-9]{3})([ .-]?)([0-9]{4})(?![0-9])(?!\.[0-9])/g
+// (20-nov, menores del #304) «dddd.dddd» es ambiguo: teléfono con puntos o decimal de 4+4. En CÓDIGO (y JSON) un literal sin
+// comillas es un número, no un teléfono: pasa. Entre comillas, con +506 o en texto (md, csv, html…) sigue cayendo.
+const CODIGO = /\.(?:[cm]?[jt]sx?|json|sql|py)$/
+const COMILLAS = new Set(["'", '"', '`'])
 const TEL_FICTICIO = /^800000[0-9]{2}$/
 const TEL_PLACEHOLDER = '88888888'   // «8888-8888»: ejemplo de formato en el campo de teléfono de los formularios
 /** Rutas fuera de la regla de teléfonos, con el motivo (además de supabase/migrations y los lockfiles, ya fuera del escaneo). */
@@ -86,10 +93,13 @@ const esRangoAnios = (a: string, b: string) => /^(19|20)[0-9]{2}$/.test(a) && /^
 export function telefonosMalos(rel: string, texto: string): string[] {
   if (TELEFONO_FUERA_RUTAS.some(r => r.patron.test(rel))) return []
   const malos: string[] = []
+  const esCodigo = CODIGO.test(rel)
   for (const m of texto.matchAll(TEL)) {
-    const d = m[1] + m[2]
+    const d = m[1] + m[3]
+    const conPrefijo = /^\+?506/.test(m[0])
     if (TEL_FICTICIO.test(d) || d === TEL_PLACEHOLDER || esFechaCompacta(d) || d === '86400000' /* ms de un día */) continue
-    if (/[ -]/.test(m[0].replace(/^\+?506[ -]?/, '')) && esRangoAnios(m[1], m[2])) continue
+    if (/[ -]/.test(m[2]) && esRangoAnios(m[1], m[3])) continue
+    if (m[2] === '.' && !conPrefijo && esCodigo && !COMILLAS.has(texto[m.index - 1] ?? '')) continue   // decimal literal 4+4
     malos.push(`${rel}: teléfono que parece real (posición ${m.index}). Reemplácelo por un ficticio 80000000–80000099 (ver telefonosMalos en src/privacidadRepo.test.ts)`)
   }
   return malos
@@ -198,10 +208,25 @@ test('la guarda de teléfonos: cae con uno plausible (con o sin +506, guiones o 
   // ronda 2: CSV, prefijo pegado y puntos caen; los decimales no
   expect(cae(`nombre,${plausible}`)).toHaveLength(1)
   expect(cae(`Tel.${plausible}`)).toHaveLength(1)
-  expect(cae(`${plausible.slice(0, 4)}.${plausible.slice(4)}`)).toHaveLength(1)
+  expect(cae(`'${plausible.slice(0, 4)}.${plausible.slice(4)}'`)).toHaveLength(1)          // con puntos, entre comillas
+  expect(telefonosMalos('docs/x.md', `${plausible.slice(0, 4)}.${plausible.slice(4)}`)).toHaveLength(1)   // con puntos, en texto
   expect(cae('12.345678')).toEqual([])
   expect(cae('1234.5678 y 0.71234567')).toEqual([])
   expect(cae(`id 2a${plausible}`)).toEqual([])                // pegado a letras: hash o id
+  // (20-nov, menores del #304) teléfono pegado a una columna numérica (CSV o arreglo JSON): la coma no es decimal
+  expect(cae(`1,${plausible}`)).toHaveLength(1)
+  expect(cae(`${plausible},5`)).toHaveLength(1)
+  expect(telefonosMalos('docs/x.csv', `12,${plausible},3`)).toHaveLength(1)
+  expect(telefonosMalos('src/x.json', `[12,${plausible}]`)).toHaveLength(1)
+  // (20-nov, menores del #304) decimal 4+4 que empieza con 2–8: en código, sin comillas, es un número (pasa);
+  // entre comillas, con +506 o en texto sigue siendo teléfono (cae). Armados por partes para el escaneo.
+  const dec = ['2345', '6789'].join('.')
+  expect(cae(`const tasa = ${dec}`)).toEqual([])
+  expect(telefonosMalos('src/x.json', `{"monto": ${dec}}`)).toEqual([])
+  expect(cae(`'${dec}'`)).toHaveLength(1)
+  expect(cae(`"+506 ${dec}"`)).toHaveLength(1)
+  expect(cae(`+506 ${dec}`)).toHaveLength(1)
+  expect(telefonosMalos('docs/x.md', `Tel ${dec}`)).toHaveLength(1)
   expect(telefonosMalos('supabase/migrations/x.sql', plausible)).toHaveLength(1)   // (el escaneo real la saltea entera)
   expect(telefonosMalos('scripts/sql/999_pruebas.sql', plausible)).toEqual([])    // exclusión justificada
   expect(cae(plausible)[0]).toContain('80000000–80000099')    // el mensaje dice cómo arreglarlo

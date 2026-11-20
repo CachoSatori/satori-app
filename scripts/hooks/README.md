@@ -14,6 +14,7 @@ tiene 15 s (hasta 3 por merge = 45 s) y el hook 90 s.
 | Evento | Script | Bloquea (exit 2) |
 |---|---|---|
 | `PreToolUse` · `Bash` | `guardia.mjs` | leer una ruta `.env*` (también con `$HOME/…`; `.env.example` sí) · escribir una marca o `.claude/settings(.local).json` (leerlos sí: `cat`, `jq`, `git diff`) · `git push` a `main` (`main`, `HEAD:main`, `refs/heads/main`, `--mirror`/`--all`, push sin refspec estando en `main`) · `--force`/`-f`/`+refspec` (solo `--force-with-lease`) · `supabase db push` / `functions deploy` / `db reset --linked` · merge de PR fuera de D1, con `--auto`, sin `--match-head-commit` o sin SHA firmado · SQL destructivo fuera de `begin … rollback` (salvo migración firmada) · escritura en prod sin turno · `DELETE` por PostgREST |
+| `PreToolUse` · `Edit\|Write\|MultiEdit\|NotebookEdit` | `firma.mjs` | escribir una marca desde un **subagente** (`agent_id`), fuera de `<raíz>/.claude/`, con algo que no sea `Write`, o con contenido que no se entiende (SHA que no es la cabeza del PR, fecha que no es hoy CR). Si está bien, no bloquea: devuelve `ask` con el texto «Aprobar = …» (ver «Firma del dueño desde la app»). Otro archivo: pasa sin tocar |
 | `PreToolUse` · `mcp__*supabase*__*` | `guardia.mjs` | igual para `execute_sql` y `apply_migration`; contra prod, toda herramienta que escribe (migración, deploy de Edge, secretos, ramas) pide el turno |
 | `PostToolUse` · `Edit\|Write\|MultiEdit` | `lint-archivo.mjs` | eslint del archivo `.ts`/`.tsx` tocado con **más errores que en la base** de la rama (merge-base con `origin/main`). La deuda vieja no bloquea; sumar un error sí. Archivo nuevo: cero errores |
 | `TaskCompleted` | `tests-tarea.mjs` | `vitest related` sobre lo cambiado en la rama; si cae una prueba, la tarea no se marca completa (solo las líneas de falla) |
@@ -22,7 +23,8 @@ tiene 15 s (hasta 3 por merge = 45 s) y el hook 90 s.
 Además, `permissions.deny` niega por regla: `Read` de `.env*`, `cat/head/tail/less/grep/source` sobre `.env*`, push a
 `main` y con `--force`/`-f` (también `git -c … push`), `supabase db push` y `supabase functions deploy` (también con
 `npx`), `supabase db reset --linked` / `--db-url`. Las reglas de `Bash` son de mejor esfuerzo (un `bash -c` las esquiva); la guardia es la que vale.
-`permissions.ask` pide permiso para editar las marcas, `.claude/settings.json`, `.claude/settings.local.json` (ignorado
+`permissions.ask` pide permiso para editar las marcas (`Edit(/.claude/*.local)`, anclada a la raíz del proyecto, y
+`Edit(.claude/*.local)`, relativa a la carpeta actual), `.claude/settings.json`, `.claude/settings.local.json` (ignorado
 por `.gitignore`) y `scripts/hooks/**`.
 
 **`.env`:** solo cuentan los argumentos que son rutas de archivo; el patrón de `grep`/`rg`/`sed`/`awk` no
@@ -42,12 +44,13 @@ el merge por GraphQL y el merge por `curl` a la API.
 ## Marcas que habilitan (no versionadas)
 
 Archivos `.claude/*.local` (los ignora `.gitignore` por `*.local`) **o** variables de entorno fijadas al abrir la
-sesión. Las pone la sesión del dueño con su OK; un agente no puede escribirlas por Bash (lo frena la guardia) y por
-Edit/Write pide permiso.
+sesión. Las escribe la sesión principal con `Write` y las firma el dueño tocando **Aprobar** en la app (ver abajo); un
+agente no puede escribirlas por Bash (lo frena la guardia) y un subagente tampoco por Write (lo frena `firma.mjs`).
+Las líneas que empiezan con `# ` son comentarios (el texto «Aprobar = …» que pone el hook) y no cuentan.
 
 | Marca | Archivo | Variable | Formato | Vence |
 |---|---|---|---|---|
-| SHA firmado | `.claude/sha-firmado.local` | `SATORI_SHA_FIRMADO` | una línea por PR: `#305 <sha>` (7 a 40 hex). Un `<sha>` sin número vale para cualquier PR | al cambiar la cabeza del PR |
+| SHA firmado | `.claude/sha-firmado.local` | `SATORI_SHA_FIRMADO` | una línea por PR: `#305 <sha>` (7 a 40 hex). Un `<sha>` sin número vale para cualquier PR (solo por variable: por `Write` el hook exige el número) | al cambiar la cabeza del PR |
 | OK del dueño | `.claude/ok-dueno-noche.local` | `SATORI_OK_DUENO_NOCHE` | `AAAA-MM-DD #305 «cita textual del OK del dueño»` (fecha CR de hoy, número del PR, cita de 8+ caracteres entre «…» o "…"); de 19:00 a 23:30 la cita lleva `URGENTE`; vale solo para ese PR | al cambiar el día CR |
 | Migración firmada | `.claude/migracion-firmada.local` | `SATORI_MIGRACION_FIRMADA` | una línea por archivo: `<sha256 del .sql> [nombre]` (lo que da `sha256sum supabase/migrations/NNN_x.sql`) | al cambiar el archivo (otro sha) |
 | Turno de prod | `.claude/turno-prod.local` | `SATORI_TURNO_PROD` | una línea con `TURNO DE PROD` y la fecha CR de hoy, p. ej. `TURNO DE PROD: esta sesión de CC · AAAA-MM-DD` (regla 13) | al cambiar el día CR |
@@ -59,6 +62,38 @@ Edit/Write pide permiso.
 - **Turno de prod:** leer prod (SELECT, `list_*`, `get_*`) no lo pide; escribir sí (SQL de escritura o DDL,
   `apply_migration`, deploy de Edge, secretos, ramas). SQL que no se puede leer cuenta como escritura. El turno **no**
   habilita `drop`/`delete`/`truncate` fuera de `begin … rollback`.
+
+## Firma del dueño desde la app (opción A, decisión del dueño del 20-nov)
+
+El dueño firma por el chat de la app (sesiones en la nube, modo automático), no por terminal. Su **Aprobar** en el pedido
+de permiso es la firma:
+
+1. La sesión principal (coordinador) escribe la marca **entera** con `Write` en `<raíz del proyecto>/.claude/<marca>.local`,
+   p. ej. `#316 <sha de la cabeza>`. Para sumar una firma, reescribe el archivo con las líneas viejas y la nueva.
+2. `firma.mjs` revisa: sesión principal (sin `agent_id`), ruta exacta, `Write`, formato, y para el SHA que sea la cabeza
+   actual del PR (REST de GitHub; si no responde, avisa en el texto). Si algo falla: deny con el motivo.
+3. Si está bien, devuelve `ask` y reescribe el contenido (`updatedInput`) con una línea `# Aprobar = …` antes de cada firma,
+   p. ej. `# Aprobar = autorizo mergear el PR #316 «título» solo con el commit 6ac9d561. Si el PR cambia, la firma deja de valer.`
+4. La regla `Edit(/.claude/*.local)` de `permissions.ask` fuerza el pedido aunque la sesión esté en modo automático. El dueño
+   ve el archivo y su contenido (con las líneas «Aprobar = …») y toca **Aprobar** o **Rechazar**. Rechazar = no hay firma.
+5. Revocar: `rm .claude/<marca>.local` por Bash (la guardia lo deja) o `Write` vacío (pide Aprobar «revoca»).
+
+Por qué así (Claude Code 2.1.329; fuentes en el PR):
+- En modo automático, una regla `ask` explícita se resuelve **antes** del clasificador y pide permiso
+  ([permission-modes](https://code.claude.com/docs/en/permission-modes): «Explicit ask rules still force a prompt»; en el
+  binario, la regla ask del archivo se evalúa antes del control de rutas protegidas y el modo automático la deriva al pedido
+  con motivo `ask_rule`, sin clasificador).
+- `.claude/` es ruta protegida: **sin** una regla ask que calce, la escritura va al clasificador, que puede negarla sin
+  mostrar pedido (el problema del #308). Un `ask` del hook solo no alcanza: «the classifier can still deny the tool call»
+  ([hooks](https://code.claude.com/docs/en/hooks)). Por eso el hook niega toda marca fuera de la ruta que cubre la regla.
+- Un subagente no puede mostrar el pedido; el hook lo distingue por `agent_id` (presente solo cuando el hook corre dentro
+  de un subagente o compañero).
+
+Límites:
+- Si nadie está mirando la sesión, Claude Code puede **negar** en vez de preguntar (no firma: hay que reintentar con el dueño
+  presente). Cuándo la nube considera «ausente» al dueño: NO VERIFICADO.
+- El texto del pedido lo arma la app: según el camino, muestra el motivo del hook o el de la regla; el contenido del archivo
+  (con «Aprobar = …») se ve en los dos. Cómo se ve exactamente en la app del celular: NO VERIFICADO (lo valida el dueño).
 
 ## SQL
 

@@ -23,7 +23,7 @@ import { relojCR, ventanaD1, ahora as relojHooks } from './hora.mjs'
 import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoincide, migracionesFirmadas, escribeProtegido, MARCAS } from './marcas.mjs'
 
 /**
- * @typedef {{ numero: number, cabeza: string, archivos: string[] } | { error: string }} InfoPR
+ * @typedef {{ numero: number, cabeza: string, archivos: string[], titulo?: string } | { error: string }} InfoPR
  * @typedef {{
  *   raiz: string, cwd: string, env: Record<string, string | undefined>, ahora: Date,
  *   ramaActual: (dir: string) => string,
@@ -332,7 +332,7 @@ export function consultarPRgh(selector, repo, cwd) {
     }
     const pr = ghJson([`repos/${repo}/pulls/${numero}`])
     const archivos = ghJson(['--paginate', `repos/${repo}/pulls/${numero}/files?per_page=100`, '--jq', '[.[].filename]'])
-    return { numero, cabeza: pr.head.sha, archivos: Array.isArray(archivos) ? archivos : [] }
+    return { numero, cabeza: pr.head.sha, archivos: Array.isArray(archivos) ? archivos : [], titulo: String(pr.title ?? '') }
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
   }

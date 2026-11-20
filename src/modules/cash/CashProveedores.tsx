@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '../../shared/types/database'
+import type { Supplier, CashMovement, CashSession, SupplierCredit, CreditApplication } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier, sendPagoProveedorEmail } from '../../shared/api/cash'
 import {
   listLinkedDocs, uploadImage, createDocumentRow, extractImageDetalle, sha256File, findDuplicate, findDuplicateClave, findFacturaParecida,
@@ -15,12 +15,16 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import FacturaVerify from '../../shared/FacturaVerify'
 import { computeSupplierStatus } from './proveedoresStatus'
 import { saldoCredito } from './supplierCredits'
+import { dateCR } from '../../shared/utils'
+import { descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
+import { comprobanteFacturaPagada, comprobanteReenvioCredito, liquidacionDeCredito } from './comprobanteProveedor'
 
 interface Props {
   suppliers:    Supplier[]
   movements:    CashMovement[]
   credits:      SupplierCredit[]        // mig 053/054 — saldo a favor
   applications: CreditApplication[]     // mig 053 — aplicaciones de crédito a facturas
+  sessions?:    CashSession[]           // (19-nov) fecha del turno en el reenvío del comprobante (como en Pendientes)
   onRefresh:    () => void
 }
 
@@ -37,7 +41,7 @@ const empty: FormState = {
   email: '', whatsapp: '', notificar_pago: 'no',
 }
 
-export default function CashProveedores({ suppliers, movements, credits, applications, onRefresh }: Props) {
+export default function CashProveedores({ suppliers, movements, credits, applications, sessions = [], onRefresh }: Props) {
   const requireManager = useManagerOverride()
   const { profile } = useAuth()
 
@@ -118,6 +122,19 @@ export default function CashProveedores({ suppliers, movements, credits, applica
   }
 
   const up = (field: keyof FormState, val: string) => setForm(prev => ({ ...prev, [field]: val }))
+
+  // ── Reenvío del comprobante al proveedor (19-nov): WhatsApp (imagen por el menú de compartir → wa.me → descarga)
+  // o PNG. Solo arma y comparte: no escribe nada ni cambia montos.
+  const compartirArchivos = useMemo(() => puedeCompartirArchivos(), [])
+  const sesionDate = useMemo(() => new Map(sessions.map(x => [x.id, x.session_date])), [sessions])
+  // Fecha de la factura = la del turno (o el día CR del registro), igual que en Pendientes.
+  const fechaFactura = (m: CashMovement): string => sesionDate.get(m.session_id ?? '') ?? dateCR(m.created_at)
+  const compPago = (s: Supplier, m: CashMovement): ComprobanteData => comprobanteFacturaPagada(m, fechaFactura(m), s.name, applications)
+  const compCredito = (s: Supplier, c: SupplierCredit): ComprobanteData | null => {
+    const liq = liquidacionDeCredito(c, applications, movements)
+    // (Dueño, 19-nov) Solo las facturas que tocó el crédito, sin «Queda por pagar» ni «sin cubrir».
+    return liq ? comprobanteReenvioCredito(liq, s.name) : null
+  }
 
   return (
     <div>
@@ -245,7 +262,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                               <div key={c.id} style={{ padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)', fontSize: '0.72rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
                                   <span style={{ color: 'var(--c-gris)' }}>
-                                    {c.fecha_origen ?? c.created_at.slice(0, 10)} · {c.origin === 'nota_credito' ? 'Nota de crédito' : 'Sobrepago'}
+                                    {c.fecha_origen ?? dateCR(c.created_at)} · {c.origin === 'nota_credito' ? 'Nota de crédito' : 'Sobrepago'}
                                   </span>
                                   <span style={{ fontWeight: 600, color: saldo > 0 ? 'var(--c-teal)' : 'var(--c-gris)' }} title="saldo / monto original">
                                     {fi(saldo)} / {fi(c.amount_crc)}
@@ -258,9 +275,15 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                                 )}
                                 {apps.map(a => (
                                   <div key={a.id} style={{ fontSize: '0.62rem', color: 'var(--c-oro-texto)', marginLeft: '0.5rem' }}>
-                                    → aplicado {fi(a.amount_applied)} · {a.applied_at.slice(0, 10)}
+                                    → aplicado {fi(a.amount_applied)} · {dateCR(a.applied_at)}
                                   </div>
                                 ))}
+                                {apps.length > 0 && (
+                                  <div style={{ marginTop: 3, marginLeft: '0.5rem', fontSize: '0.62rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <span style={{ color: 'var(--c-gris)' }}>Comprobante:</span>
+                                    <BotonesReenvio whatsapp={s.whatsapp} puedeCompartir={compartirArchivos} etiqueta="el comprobante del crédito" data={() => compCredito(s, c)} />
+                                  </div>
+                                )}
                               </div>
                             )
                           })}
@@ -291,7 +314,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                             <div key={pmt.id} style={{ padding: '0.25rem 0', borderBottom: '1px solid var(--c-linea)' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
                                 <div>
-                                  <span style={{ color: 'var(--c-gris)' }}>{pmt.created_at?.slice(0, 10)}</span>
+                                  <span style={{ color: 'var(--c-gris)' }}>{dateCR(pmt.created_at)}</span>
                                   {pmt.method !== 'Efectivo' && <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>· {pmt.method}</span>}
                                   <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? 'var(--c-oro-texto)' : 'var(--c-gris)' }}>· {pmt.status === 'pendiente' ? 'Pendiente' : 'Pagado'}</span>
                                 </div>
@@ -306,10 +329,17 @@ export default function CashProveedores({ suppliers, movements, credits, applica
                                     ? <span style={{ color: 'var(--c-teal)' }}>📧 Comprobante enviado · {pmt.proveedor_notificado_at.slice(0, 10)}</span>
                                     : <span style={{ color: 'var(--c-oro-texto)' }}>📧 No enviado</span>}
                                   <button
-                                    onClick={async () => { await sendPagoProveedorEmail(pmt.id); onRefresh() }}
+                                    onClick={async () => { await sendPagoProveedorEmail([pmt.id]); onRefresh() }}
                                     style={{ background: 'none', border: 'none', color: 'var(--c-teal)', cursor: 'pointer', fontSize: '0.62rem', padding: 0, textDecoration: 'underline' }}>
                                     {pmt.proveedor_notificado_at ? 'Reenviar' : 'Enviar comprobante'}
                                   </button>
+                                </div>
+                              )}
+                              {/* (19-nov) Reenviar el comprobante de ESTA factura por WhatsApp o PNG (a todo proveedor, tenga o no correo). */}
+                              {pmt.status === 'aprobado' && (
+                                <div style={{ marginTop: 3, fontSize: '0.62rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                  <span style={{ color: 'var(--c-gris)' }}>Comprobante:</span>
+                                  <BotonesReenvio whatsapp={s.whatsapp} puedeCompartir={compartirArchivos} etiqueta="el comprobante del pago" data={() => compPago(s, pmt)} />
                                 </div>
                               )}
                               <div style={{ marginTop: 2 }}>
@@ -343,7 +373,7 @@ export default function CashProveedores({ suppliers, movements, credits, applica
             <div className="cash-form-grid">
               <div className="tips-field">
                 <div className="tips-field-label">Nombre *</div>
-                <input className="tips-input-dark" value={form.name} onChange={e => up('name', e.target.value)} placeholder="ej: Pescados del Pacífico" />
+                <input className="tips-input-dark" value={form.name} onChange={e => up('name', e.target.value)} placeholder="ej: Pescadería Ejemplo" />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Categoría</div>
@@ -416,6 +446,27 @@ export default function CashProveedores({ suppliers, movements, credits, applica
         </div>
       )}
     </div>
+  )
+}
+
+// (19-nov) Botones para reenviar un comprobante al proveedor: 💬 WhatsApp (si tiene número o el equipo comparte
+// archivos) y 📷 PNG. `data` se arma recién al tocar (no en cada render).
+function BotonesReenvio({ whatsapp, puedeCompartir, data, etiqueta }: {
+  whatsapp: string | null | undefined
+  puedeCompartir: boolean
+  data: () => ComprobanteData | null
+  etiqueta: string
+}) {
+  const link = { background: 'none', border: 'none', color: 'var(--c-teal)', cursor: 'pointer', fontSize: '0.62rem', padding: 0, textDecoration: 'underline' } as const
+  return (
+    <span style={{ display: 'inline-flex', gap: '0.6rem', alignItems: 'center' }}>
+      {(whatsapp || puedeCompartir) && (
+        <button style={link} title={`Reenviar ${etiqueta} por WhatsApp`} aria-label={`Reenviar ${etiqueta} por WhatsApp`}
+          onClick={() => { const d = data(); if (d) void compartirComprobanteWhatsApp(d, whatsapp ?? '') }}>💬 WhatsApp</button>
+      )}
+      <button style={link} title={`Descargar ${etiqueta} (PNG)`} aria-label={`Descargar ${etiqueta} (PNG)`}
+        onClick={() => { const d = data(); if (d) descargarComprobantePNG(d) }}>📷 PNG</button>
+    </span>
   )
 }
 

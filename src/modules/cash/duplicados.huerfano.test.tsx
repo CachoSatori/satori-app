@@ -12,7 +12,7 @@ import { tablaDocs, vaciarDocs, borrarMovimiento, fallas } from '../../shared/ap
 
 const CLAVE = '50612112600310100000000100001010000099001100000001'
 const FACTURA = {
-  tipo: 'factura', proveedor: 'Pescadería del Pacífico', proveedor_cedula: '3101000000', numero_documento: '00100001010000099001',
+  tipo: 'factura', proveedor: 'Proveedor de prueba 2', proveedor_cedula: '3101000000', numero_documento: '00100001010000099001',
   moneda: 'CRC', fecha: '2026-11-13', total: 48500, confianza: 0.9, items: [], clave_fe: CLAVE,
 }
 const m = vi.hoisted(() => {
@@ -53,7 +53,7 @@ import AgregarAsistente from './AgregarAsistente'
 import { PagoFoto } from './CashProveedores'
 import InboxModule from '../inbox/InboxModule'
 
-const sup: Supplier = { id: 'p1', name: 'Pescadería del Pacífico', category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
+const sup: Supplier = { id: 'p1', name: 'Proveedor de prueba 2', category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
   metodo_pago: 'Efectivo', cuenta_iban: '', aliases: null, is_active: true, email: null, whatsapp: null, notificar_pago: 'no',
   created_at: '2026-06-29T00:00:00Z', updated_at: '2026-06-29T00:00:00Z' }
 const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession
@@ -99,7 +99,7 @@ describe('huérfanos: borrar el movimiento → recargar la misma foto → se per
     // 4) Recarga de la misma foto (17:26): se permite, sin bloqueo por foto ni por clave FE ni aviso de «parecida».
     const onError = await cargarEnAsistente()
     const btn = await confirmar()
-    await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Pescadería del Pacífico'))
+    await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Proveedor de prueba 2'))
     expect(onError).not.toHaveBeenCalled()
     expect(screen.queryByTestId('aviso-asistente')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Es otra' })).toBeNull()

@@ -8,7 +8,8 @@ import { fi } from './cashUtils'
 import { saldoCredito, saldoResidual, distribuirCreditoFIFO } from './supplierCredits'
 import { parseMonto } from './montos'
 import { todayCR, dateCR } from '../../shared/utils'
-import { descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
+import { descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos } from './comprobante'
+import { armarLiquidacion, comprobanteLiquidacion, etiquetaEstado, montoMixto, type Liquidacion } from './comprobanteProveedor'
 
 const uuid = (): string =>
   (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
@@ -110,13 +111,15 @@ export function RegistrarCreditoModal({ supplier, movements, onDone, onClose }: 
 }
 
 // ── Aplicar crédito a UNA O VARIAS facturas pendientes (tiempo real, reparto FIFO). ──
-export function AplicarCreditoModal({ supplier, credits, applications, pendientes, onDone, onClose }: {
+export function AplicarCreditoModal({ supplier, credits, applications, pendientes, onDone, onClose, ocupado = false }: {
   supplier: Supplier
   credits: SupplierCredit[]
   applications: CreditApplication[]
   pendientes: CashMovement[]
   onDone: () => void
   onClose: () => void
+  /** (19-nov) El padre está releyendo en silencio: los residuales en pantalla pueden estar viejos. «Aplicar» espera. */
+  ocupado?: boolean
 }) {
   const misCreditos = useMemo(
     () => credits.filter(c => c.supplier_id === supplier.id && saldoCredito(c, applications) > 0),
@@ -140,9 +143,9 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
   const [montos, setMontos]     = useState<Record<string, string>>(() => buildFIFO(misCreditos[0]?.id ?? ''))
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
-  // Vista de comprobante tras aplicar: snapshot de lo imputado (estable ante el refresh del padre).
-  type Resultado = { items: { fecha: string; desc: string; monto: number; residual: number }[]; creditoRef: string; totalAplicado: number; saldoRestante: number }
-  const [resultado, setResultado] = useState<Resultado | null>(null)
+  // Vista de comprobante tras aplicar: snapshot de la liquidación (estable ante el refresco del padre). (19-nov) Lista
+  // TODAS las pendientes del proveedor (saldada / parcial / sin cubrir) y lo que queda por pagar.
+  const [resultado, setResultado] = useState<Liquidacion | null>(null)
 
   const credito   = misCreditos.find(c => c.id === creditId) ?? null
   const saldoCred = credito ? saldoCredito(credito, applications) : 0
@@ -155,11 +158,12 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
   const anyOver     = ordered.some(m => montoOf(m.id) > residualOf(m) + 0.001)  // algún monto > su residual
   const overCredit  = sumMontos > saldoCred + 0.001                             // Σ > crédito disponible
   const errorMonto  = ordered.map(m => errorOf(m.id)).find(Boolean) ?? null   // primer monto mal escrito
-  const canApply    = sumMontos > 0 && !anyOver && !overCredit && !errorMonto && !saving
+  const canApply    = sumMontos > 0 && !anyOver && !overCredit && !errorMonto && !saving && !ocupado
 
   const cambiarCredito = (id: string) => { setCreditId(id); setMontos(buildFIFO(id)); setError(null) }
 
   const aplicar = async () => {
+    if (ocupado) return   // aunque el botón se habilite por un desfase, no imputa sobre datos que se están releyendo
     const items = ordered.map(m => ({ id: m.id, monto: montoOf(m.id) })).filter(x => x.monto > 0)
     if (errorMonto)    { setError(errorMonto); return }
     if (!items.length) { setError('Ingresá al menos un monto > 0'); return }
@@ -181,63 +185,48 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
       setError(`Se aplicaron ${ok.length} de ${items.length} facturas. Fallaron ${fail.length} — revisá y reintentá.`)
     } else {
       // Éxito total → VISTA DE COMPROBANTE (no cierra directo). Snapshot con los residuales PREVIOS:
-      // `applications` sigue siendo el de este render (el refresh del padre por onDone es async).
-      const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
-      const resItems = items.map(it => {
-        const m = ordered.find(x => x.id === it.id)!
-        const residualPrev = residualOf(m)
-        return { fecha: dateCR(m.created_at), desc: (m.description || m.subcategory || '').slice(0, 26), monto: it.monto, residual: Math.max(0, r2(residualPrev - it.monto)) }
-      })
-      const totalAplicado = items.reduce((s, it) => s + it.monto, 0)
-      setResultado({ items: resItems, creditoRef: credito?.referencia ?? '', totalAplicado, saldoRestante: Math.max(0, r2(saldoCred - totalAplicado)) })
+      // `ordered` y `applications` son los de este render (el refresco del padre por onDone no los cambia acá).
+      // Entran TODAS las pendientes del proveedor; las que no recibieron monto quedan «sin cubrir».
+      const aplicadoPorFactura: Record<string, number> = {}
+      items.forEach(it => { aplicadoPorFactura[it.id] = it.monto })
+      setResultado(armarLiquidacion({
+        facturas: ordered.map(m => ({
+          id: m.id, fecha: dateCR(m.created_at), desc: (m.description || m.subcategory || '').slice(0, 26),
+          residualPrevio: residualOf(m), usd: Number(m.amount_usd) || 0,
+        })),
+        aplicado: aplicadoPorFactura,
+        creditoRef: credito?.referencia ?? '',
+        saldoCreditoPrevio: saldoCred,
+      }))
     }
   }
 
   // Comprobante de la liquidación (reusa el generador compartido ./comprobante).
-  const comprobanteData = (): ComprobanteData => {
-    const r = resultado!
-    return {
-      tituloTexto: 'Comprobante de aplicación de saldo a favor',
-      tituloPNG: 'Comprobante de aplicación de saldo a favor',
-      proveedor: supplier.name,
-      lineas: r.items.map(it => ({
-        fecha: it.fecha,
-        nota: it.residual <= 0.001 ? 'saldada ✓' : `residual ${fi(it.residual)}`,
-        monto: fi(it.monto),
-      })),
-      totalTexto: fi(r.totalAplicado),
-      totalPNG: fi(r.totalAplicado),
-      totalLabel: 'TOTAL APLICADO',
-      pie: [
-        `Crédito usado${r.creditoRef ? `: ${r.creditoRef}` : ''}`,
-        `Saldo a favor restante: ${fi(r.saldoRestante)}`,
-      ],
-    }
-  }
-  const descargarComp = () => descargarComprobantePNG(comprobanteData())
+  const descargarComp = () => { if (resultado) descargarComprobantePNG(comprobanteLiquidacion(resultado, supplier.name)) }
   // Manda la IMAGEN por el menú de compartir (Web Share); sin soporte cae a wa.me texto / descarga.
-  const waComp = () => { void compartirComprobanteWhatsApp(comprobanteData(), supplier.whatsapp ?? '') }
+  const waComp = () => { if (resultado) void compartirComprobanteWhatsApp(comprobanteLiquidacion(resultado, supplier.name), supplier.whatsapp ?? '') }
 
   // Tras aplicar con éxito: VISTA DE RESULTADO (comprobante) — descargar PNG / WhatsApp / cerrar.
   if (resultado) {
     const r = resultado
+    // Se cierra SOLO con «Cerrar» (un toque afuera no lo pierde).
     return (
-      <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal-overlay">
         <div className="cd-modal" onClick={e => e.stopPropagation()}>
           <div className="cd-modal-title">Comprobante · {supplier.name}</div>
           <div style={{ fontSize: '0.78rem', color: 'var(--c-gris)', marginBottom: '0.6rem' }}>
             Saldo a favor aplicado{r.creditoRef ? ` · ${r.creditoRef}` : ''}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: 260, overflowY: 'auto' }}>
-            {r.items.map((it, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
+            {r.facturas.map(f => (
+              <div key={f.id} data-estado={f.estado} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid var(--c-linea)' }}>
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {it.fecha} · <span style={{ color: 'var(--c-gris)' }}>{it.desc}</span>
+                  {f.fecha} · <span style={{ color: 'var(--c-gris)' }}>{f.desc}</span>
                 </span>
                 <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <strong>{fi(it.monto)}</strong>
-                  <div style={{ fontSize: '0.66rem', color: it.residual <= 0.001 ? 'var(--c-teal)' : 'var(--c-oro-texto)' }}>
-                    {it.residual <= 0.001 ? 'saldada ✓' : `residual ${fi(it.residual)}`}
+                  <strong>{fi(f.aplicado)}</strong>
+                  <div style={{ fontSize: '0.66rem', color: f.estado === 'saldada' ? 'var(--c-teal)' : (f.estado === 'parcial' ? 'var(--c-oro-texto)' : 'var(--c-gris)') }}>
+                    {etiquetaEstado(f)}
                   </div>
                 </span>
               </div>
@@ -246,6 +235,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
           <div style={{ display: 'flex', gap: '1.5rem', margin: '0.75rem 0', fontSize: '0.85rem', flexWrap: 'wrap' }}>
             <div>Total aplicado: <strong>{fi(r.totalAplicado)}</strong></div>
             <div>Saldo restante: <strong style={{ color: 'var(--c-teal)' }}>{fi(r.saldoRestante)}</strong></div>
+            <div>Queda por pagar: <strong style={{ color: 'var(--c-oro-texto)' }}>{montoMixto(r.porPagarCRC, r.porPagarUSD)}</strong></div>
           </div>
           <div className="cd-modal-actions">
             <button className="tips-btn-ghost" onClick={descargarComp}>Descargar comprobante</button>
@@ -270,7 +260,8 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
   }
 
   return (
-    <div className="cd-modal-overlay" onClick={onClose}>
+    // Mientras aplica, un toque afuera no cierra: se perdería el comprobante que llega al terminar.
+    <div className="cd-modal-overlay" onClick={() => { if (!saving) onClose() }}>
       <div className="cd-modal" onClick={e => e.stopPropagation()}>
         <div className="cd-modal-title">Aplicar crédito · {supplier.name}</div>
         {error && <div className="tips-error" style={{ marginBottom: '1rem' }}><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}

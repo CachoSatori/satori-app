@@ -13,7 +13,7 @@ const H = vi.hoisted(() => {
   }
   const doc = {
     id: 'doc1', image_path: 'docs/factura-1.jpg', linked_movement_id: 'm1', estado: 'procesado',
-    raw_json: { items: [{ descripcion: 'pescado', cantidad: 2 }], total: 50000, proveedor: 'Pescadería del Mar' },
+    raw_json: { items: [{ descripcion: 'pescado', cantidad: 2 }], total: 50000, proveedor: 'Proveedor de prueba 3' },
   }
   const movement = {
     id: 'm1', created_by: 'u-cajero', amount_crc: 50000, amount_usd: 0, currency: 'CRC',

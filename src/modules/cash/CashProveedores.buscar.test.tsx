@@ -33,8 +33,8 @@ const sup = (over: Partial<Supplier>): Supplier => ({
 })
 
 const suppliers = [
-  sup({ id: 's1', name: 'Pescados del Pacífico', category: 'Pescados y Mariscos', contact: '8888-1111' }),
-  sup({ id: 's2', name: 'Verduras La Huerta',    category: 'Vegetales',           contact: 'Doña Ana' }),
+  sup({ id: 's1', name: 'Proveedor de prueba 1', category: 'Pescados y Mariscos', contact: '8000-0011' }),
+  sup({ id: 's2', name: 'Proveedor de prueba 4',    category: 'Vegetales',           contact: 'Doña Ana' }),
   // Fila con category y contact NULL — el caso que no debe romper el filtro.
   sup({ id: 's3', name: 'Proveedor Sin Datos',   category: null as unknown as string, contact: null as unknown as string }),
 ]
@@ -49,24 +49,24 @@ const buscar = (t: string) =>
 describe('CashProveedores · buscador null-safe', () => {
   it('filtra por nombre sin romper con filas de category/contact null', () => {
     renderProv()
-    expect(() => buscar('pescados')).not.toThrow()
-    expect(screen.getByText('Pescados del Pacífico')).toBeTruthy()
-    expect(screen.queryByText('Verduras La Huerta')).toBeNull()
+    expect(() => buscar('prueba 1')).not.toThrow()
+    expect(screen.getByText('Proveedor de prueba 1')).toBeTruthy()
+    expect(screen.queryByText('Proveedor de prueba 4')).toBeNull()
     expect(screen.queryByText('Proveedor Sin Datos')).toBeNull()
   })
 
   it('filtra por categoría', () => {
     renderProv()
     buscar('vegetales')
-    expect(screen.getByText('Verduras La Huerta')).toBeTruthy()
-    expect(screen.queryByText('Pescados del Pacífico')).toBeNull()
+    expect(screen.getByText('Proveedor de prueba 4')).toBeTruthy()
+    expect(screen.queryByText('Proveedor de prueba 1')).toBeNull()
   })
 
   it('filtra por contacto', () => {
     renderProv()
     buscar('doña ana')
-    expect(screen.getByText('Verduras La Huerta')).toBeTruthy()
-    expect(screen.queryByText('Pescados del Pacífico')).toBeNull()
+    expect(screen.getByText('Proveedor de prueba 4')).toBeTruthy()
+    expect(screen.queryByText('Proveedor de prueba 1')).toBeNull()
   })
 
   it('la fila de campos null se puede buscar por su nombre, sin crash', () => {
@@ -79,6 +79,6 @@ describe('CashProveedores · buscador null-safe', () => {
     renderProv()
     buscar('zzz-no-existe')
     expect(screen.getByText('Sin coincidencias')).toBeTruthy()
-    expect(screen.queryByText('Pescados del Pacífico')).toBeNull()
+    expect(screen.queryByText('Proveedor de prueba 1')).toBeNull()
   })
 })

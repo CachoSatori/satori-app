@@ -9,16 +9,20 @@
 //     o el archivo de origen sigue en el repo (se renombra, no se copia);
 //   · el registro se contradice (bloques que se pisan, un número en dos lugares, una asignada fuera
 //     de su bloque);
-//   · ESTADO.md no lista los bloques o algún número registrado.
+//   · ESTADO.md no lista los bloques o algún número registrado;
+//   · (R16) un .sql NUEVO (su ruta no existe en la base del PR: GATE_BASE, o el merge-base con origin/main; incluye los
+//     renombrados) no tiene un número mayor que «ultimo_ledger_prod»: Branching rechaza una versión menor que la última aplicada en prod.
 // La regla del pase a prod («ningún número ≤ al último del ledger de prod») depende de la base y se
 // verifica en el PR del pase, no acá; este test solo exige que la renumeración caiga en el bloque de
 // pase y quede registrada con su origen (nunca dentro de un bloque de creación).
+import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 interface Bloque { tipo: 'creacion' | 'pase'; desde: number; hasta: number; que: string }
 interface Registro {
+  ultimo_ledger_prod: number
   bloques: Record<string, Bloque>
   usadas_antes_de_los_bloques: Record<string, { nombre: string; de: string }>
   libres_fuera_de_bloque: string[]
@@ -140,4 +144,25 @@ describe('numeración de migraciones', () => {
       expect(seccion, `número ${v}`).toMatch(new RegExp(`\\| ${v} \\|`))
     }
   })
+
+  it('el registro declara el último número del ledger de prod', () => {
+    expect(Number.isInteger(REG.ultimo_ledger_prod), 'falta «ultimo_ledger_prod» en migraciones-reservadas.json').toBe(true)
+    expect(migs.some(m => Number(m.version) === REG.ultimo_ledger_prod), 'ningún .sql tiene el número de «ultimo_ledger_prod»').toBe(true)
+  })
+
+  // R16: se compara contra la base del PR. Sin base (push a main, o clon sin origin/main) no hay contra qué: se salta y el
+  // CI de un PR siempre trae GATE_BASE (gate.sh), así que ahí corre.
+  const base = baseDelPr()
+  it.skipIf(!base)('R16: toda migración NUEVA respecto de la base tiene un número mayor que «ultimo_ledger_prod»', () => {
+    const enBase = new Set(execFileSync('git', ['ls-tree', '--name-only', base, 'supabase/migrations/'], { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter(Boolean))
+    const nuevas = migs.map(m => m.archivo).filter(f => !enBase.has(`supabase/migrations/${f}`))
+    const malas = nuevas.filter(f => Number(f.split('_')[0]) <= REG.ultimo_ledger_prod)
+      .map(f => `${f}: número ≤ ${REG.ultimo_ledger_prod} (último del ledger de prod). Renumerala al siguiente libre mayor que ${REG.ultimo_ledger_prod} (bloque de pase 150–199 si cabe), en el mismo PR y registrada en migraciones-reservadas.json y ESTADO (R16)`)
+    expect(malas).toEqual([])
+  })
 })
+
+function baseDelPr(): string {
+  if (process.env.GATE_BASE) return process.env.GATE_BASE
+  try { return execFileSync('git', ['merge-base', 'origin/main', 'HEAD'], { cwd: RAIZ, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() } catch { return '' }
+}

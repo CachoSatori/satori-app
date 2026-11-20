@@ -37,6 +37,9 @@ vi.mock('./VentasEvaluacion',     () => vista('evaluacion'))
 vi.mock('./VentasICP',            () => vista('icp'))
 vi.mock('./VentasCalendario',     () => vista('calendario'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
+vi.mock('./VentasResumen',        () => vista('resumen'))
+vi.mock('./VentasTiempos',        () => vista('tiempos'))
+vi.mock('./VentasMesasInternas',  () => vista('internas'))
 
 import VentasModule from './VentasModule'
 import { TABS } from './ventasTabs'
@@ -117,10 +120,10 @@ describe('VentasModule · navegación', () => {
     const hoy = screen.getByRole('tab', { name: 'Hoy' })
     hoy.focus()
     fireEvent.keyDown(hoy, { key: 'ArrowRight' })
-    expect((await screen.findByTestId('vista')).textContent).toBe('envivo')
-    const envivo = screen.getByRole('tab', { name: 'En vivo' })
-    expect(document.activeElement).toBe(envivo)
-    fireEvent.keyDown(envivo, { key: 'ArrowLeft' })
+    expect((await screen.findByTestId('vista')).textContent).toBe('resumen')
+    const resumen = screen.getByRole('tab', { name: 'Resumen' })
+    expect(document.activeElement).toBe(resumen)
+    fireEvent.keyDown(resumen, { key: 'ArrowLeft' })
     await vi.waitFor(() => expect(screen.getByTestId('vista').textContent).toBe('hoy'))
   })
 

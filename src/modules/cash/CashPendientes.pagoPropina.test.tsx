@@ -33,7 +33,7 @@ const propina = mov({
   description: 'Propinas turno 2026-07-14 Noche', amount_crc: 30000,
 })
 const proveedor = mov({
-  id: 'prov-1', supplier_name: 'Pescados del Pacífico', description: 'Factura 12', amount_crc: 50000,
+  id: 'prov-1', supplier_name: 'Proveedor de prueba 1', description: 'Factura 12', amount_crc: 50000,
 })
 
 // Botón "✓ Pagado" de la fila que contiene ese texto (no del grupo ni de otra fila).
@@ -82,7 +82,7 @@ describe('CashPendientes · una propina pendiente se paga por banco', () => {
     // proveedor, así que "Marcar todos pagados" (que es POR GRUPO) aparece dos veces: se
     // pulsan los dos y se comprueba que cada id salió por la vía de su fila.
     const propinaConNombreDeProveedor = mov({
-      id: 'prop-2', subcategory: 'Propinas por turno', supplier_name: 'Pescados del Pacífico',
+      id: 'prop-2', subcategory: 'Propinas por turno', supplier_name: 'Proveedor de prueba 1',
       description: 'Propinas turno 2026-07-12 Noche', amount_crc: 8000,
     })
     render(<CashPendientes movements={[proveedor, propinaConNombreDeProveedor]} sessions={[]} suppliers={[]} credits={[]} applications={[]} onRefresh={vi.fn()} />)
@@ -98,8 +98,8 @@ describe('CashPendientes · una propina pendiente se paga por banco', () => {
       status: 'aprobado', method: 'Transferencia', caja_origen: 'Banco',
     })
 
-    await waitFor(() => expect(botonMarcarTodos('Pescados del Pacífico').disabled).toBe(false))
-    fireEvent.click(botonMarcarTodos('Pescados del Pacífico'))
+    await waitFor(() => expect(botonMarcarTodos('Proveedor de prueba 1').disabled).toBe(false))
+    fireEvent.click(botonMarcarTodos('Proveedor de prueba 1'))
     await waitFor(() => expect(updateMovementStatus).toHaveBeenCalledTimes(1))
     expect(updateMovementStatus.mock.calls[0]).toEqual(['prov-1', 'aprobado'])   // proveedor → solo status
     expect(updateCashMovement).toHaveBeenCalledTimes(1)                          // y nada más por banco

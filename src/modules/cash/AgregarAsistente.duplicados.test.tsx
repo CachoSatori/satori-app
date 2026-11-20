@@ -7,7 +7,7 @@ import type { DocExtract } from '../../shared/api/documents'
 
 const CLAVE = '5'.repeat(50)
 const doc = (over: Partial<DocExtract> = {}): Partial<DocExtract> => ({
-  tipo: 'factura', proveedor: 'Pescadería del Pacífico', numero_documento: '1001', moneda: 'CRC', fecha: '2026-11-12',
+  tipo: 'factura', proveedor: 'Proveedor de prueba 2', numero_documento: '1001', moneda: 'CRC', fecha: '2026-11-12',
   total: 50000, confianza: 0.9, items: [], clave_fe: null, ...over,
 })
 const m = vi.hoisted(() => ({
@@ -31,7 +31,7 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import AgregarAsistente from './AgregarAsistente'
 
-const sup: Supplier = { id: 'p1', name: 'Pescadería del Pacífico', category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
+const sup: Supplier = { id: 'p1', name: 'Proveedor de prueba 2', category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
   metodo_pago: 'Efectivo', cuenta_iban: '', aliases: null, is_active: true, email: null, whatsapp: null, notificar_pago: 'no',
   created_at: '2026-06-29T00:00:00Z', updated_at: '2026-06-29T00:00:00Z' }
 const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession
@@ -63,7 +63,7 @@ beforeEach(() => {
 describe('asistente «Agregar» — fotos (13-nov)', () => {
   it('un documento → igual que hoy: precarga, sin avisos; al confirmar, un solo documento enlazado', async () => {
     abrirYSacarFoto()
-    await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Pescadería del Pacífico'))
+    await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Proveedor de prueba 2'))
     expect(screen.queryByText(/documentos: el primero/)).toBeNull()
     fireEvent.click(confirmarBtn())
     await waitFor(() => expect(m.createDocSpy).toHaveBeenCalledTimes(1))
@@ -151,7 +151,7 @@ describe('asistente «Agregar» — avisos después del pago (13-nov, verificaci
   it('falla solo el enlace (sin extras) → el aviso de «se pagaría dos veces», una vez', async () => {
     m.createDocSpy.mockRejectedValue(new Error('red'))
     abrirYSacarFoto()
-    await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Pescadería del Pacífico'))
+    await waitFor(() => expect((screen.getByLabelText('Proveedor') as HTMLInputElement).value).toBe('Proveedor de prueba 2'))
     fireEvent.click(confirmarBtn())
     await avisoEnModal('El pago se registró, pero la factura no se enlazó: adjuntala en Revisión de inventario. No la subas a la Bandeja: se pagaría dos veces.')
     expect(screen.queryByRole('button', { name: /Confirmar y registrar/ })).toBeNull()   // «listo»: no se puede pagar dos veces

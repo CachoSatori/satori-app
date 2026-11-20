@@ -1,5 +1,6 @@
 {
-  "_que_es": "Registro de numeración de migraciones (decisión del dueño, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
+  "_que_es": "«ultimo_ledger_prod» (R16): último número aplicado en prod; todo .sql NUEVO respecto de la base tiene que ser mayor (lo exige migraciones.test.ts; se sube en el PR del pase que lo aplica). Registro de numeración de migraciones (decisión del dueño, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
+  "ultimo_ledger_prod": 194,
   "bloques": {
     "caja": {
       "tipo": "creacion",
@@ -309,6 +310,42 @@
       "rama": "claude/club-4-arreglos",
       "renumerada_a": "186"
     },
+    "133": {
+      "nombre": "cron_ventas_dia_contador",
+      "bloque": "club",
+      "rama": "claude/correo-contador-ventas-dia",
+      "renumerada_a": "189"
+    },
+    "134": {
+      "nombre": "pos_ventas_resumen",
+      "bloque": "club",
+      "rama": "claude/ventas-v2-resumen-fn",
+      "renumerada_a": "190"
+    },
+    "135": {
+      "nombre": "pos_ventas_solo_lo_suyo",
+      "bloque": "club",
+      "rama": "claude/pos-ventas-solo-lo-suyo",
+      "renumerada_a": "191"
+    },
+    "136": {
+      "nombre": "pos_ventas_tiempos",
+      "bloque": "club",
+      "rama": "claude/ventas-v2-23-tiempos",
+      "renumerada_a": "193"
+    },
+    "137": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "club",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "renumerada_a": "192"
+    },
+    "138": {
+      "nombre": "mi_rendimiento_equipo",
+      "bloque": "club",
+      "rama": "claude/mi-rendimiento-evolucion",
+      "renumerada_a": "194"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -530,6 +567,42 @@
       "bloque": "pase",
       "rama": "claude/club-4-arreglos",
       "origen": "130"
+    },
+    "189": {
+      "nombre": "cron_ventas_dia_contador",
+      "bloque": "pase",
+      "rama": "claude/correo-contador-ventas-dia",
+      "origen": "133"
+    },
+    "190": {
+      "nombre": "pos_ventas_resumen",
+      "bloque": "pase",
+      "rama": "claude/ventas-v2-resumen-fn",
+      "origen": "134"
+    },
+    "191": {
+      "nombre": "pos_ventas_solo_lo_suyo",
+      "bloque": "pase",
+      "rama": "claude/pos-ventas-solo-lo-suyo",
+      "origen": "135"
+    },
+    "192": {
+      "nombre": "propinas_cada_uno_lo_suyo",
+      "bloque": "pase",
+      "rama": "claude/propinas-solo-lo-suyo",
+      "origen": "137"
+    },
+    "193": {
+      "nombre": "pos_ventas_tiempos",
+      "bloque": "pase",
+      "rama": "claude/ventas-v2-23-tiempos",
+      "origen": "136"
+    },
+    "194": {
+      "nombre": "mi_rendimiento_equipo",
+      "bloque": "pase",
+      "rama": "claude/mi-rendimiento-evolucion",
+      "origen": "138"
     }
   }
 }

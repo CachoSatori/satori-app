@@ -31,7 +31,7 @@ const mkSupplier = (name: string, aliases: string[] | null = null): Supplier => 
 })
 
 const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession
-const suppliers: Supplier[] = [mkSupplier('Pescadería del Pacífico', ['Pesca Pacífico'])]
+const suppliers: Supplier[] = [mkSupplier('Proveedor de prueba 2', ['Pesca Pacífico'])]
 
 function renderAsistente(role: UserRole = 'cajero') {
   const onCreated = vi.fn()
@@ -96,7 +96,7 @@ describe('AgregarAsistente — clase confirmada + snapshot advisory', () => {
 
   it('proveedor reconocido: crea egreso_mercaderia con classification=mercaderia + supplier_id', async () => {
     renderAsistente('cajero')
-    fireEvent.change(screen.getByLabelText('Proveedor'), { target: { value: 'Pescadería del Pacífico' } })
+    fireEvent.change(screen.getByLabelText('Proveedor'), { target: { value: 'Proveedor de prueba 2' } })
     setMonto('50000')
     await confirmar()
 
@@ -105,7 +105,7 @@ describe('AgregarAsistente — clase confirmada + snapshot advisory', () => {
       movement_type: 'egreso_mercaderia',
       classification: 'mercaderia',
       suggested_classification: 'mercaderia',
-      supplier_id: 'Pescadería del Pacífico',
+      supplier_id: 'Proveedor de prueba 2',
     })
     expect(arg.account_id).toBeNull()   // mercadería no postea asiento operativo
   })

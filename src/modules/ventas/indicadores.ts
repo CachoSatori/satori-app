@@ -77,6 +77,12 @@ export interface FacturaIndicador {
   clase_ingreso?: string | null
   /** Parte de `neta` de la familia 28 (dueños). Si falta, se decide por `clase_ingreso`. */
   neta_duenos?:   number
+  /**
+   * Factura de una MESA INTERNA del local (Ajustes → «Mesas internas», tabla `pos_mesas_internas`, mig 193; 51, 52
+   * y 53 en santa-teresa). Decisión del dueño (18-nov 13:45): es VENTA (se cerró con IVA) y sigue en todo, incluida
+   * esta venta por persona. Solo sale de la ALERTA de mesas sin pax: en esas mesas no se cargan personas.
+   */
+  interna?:       boolean
 }
 
 /** Dónde cae una factura: día y turno de su sesión de caja. */
@@ -479,6 +485,8 @@ export interface AlertaMesasSinPax {
   regaliasTotales: number
   /** Mesas de dueños del rango: fuera de la alerta, contadas aparte. */
   mesasDuenos:     number
+  /** Facturas de mesas internas (Ajustes) del rango: fuera de la alerta (ahí no se cargan personas), contadas aparte. */
+  mesasInternas:   number
 }
 
 const conteo = (facturasSalon: number, sinPax: number): ConteoSinPax =>
@@ -488,11 +496,12 @@ const conteo = (facturasSalon: number, sinPax: number): ConteoSinPax =>
 export function alertaMesasSinPax(facturas: readonly FacturaIndicador[], r: Rango): AlertaMesasSinPax {
   const ubic = ubicarFacturas(facturas)
   const por = new Map<string, { t: number; s: number }>()
-  let tSin = 0, sSin = 0, tTot = 0, sTot = 0, regalias = 0, duenos = 0
+  let tSin = 0, sSin = 0, tTot = 0, sTot = 0, regalias = 0, duenos = 0, internas = 0
   for (const f of facturas) {
     if (!esFacturaDeSalon(f)) continue
     const u = ubic.get(f)
     if (!u || !enRango(u.dia, r)) continue
+    if (f.interna) { internas += 1; continue }
     const fuera = quedaFueraDelIndicador(f)
     if (fuera === 'duenos') { duenos += 1; continue }
     if (fuera === 'regalia') { regalias += 1; continue }
@@ -513,7 +522,7 @@ export function alertaMesasSinPax(facturas: readonly FacturaIndicador[], r: Rang
   const porSalonero = [...por.entries()]
     .map(([salonero_login, e]) => ({ salonero_login, ...conteo(e.t, e.s) }))
     .sort((a, b) => b.sinPax - a.sinPax || b.pct - a.pct || a.salonero_login.localeCompare(b.salonero_login))
-  return { porSalonero, sinSalonero: conteo(tSin, sSin), total: conteo(tTot, sTot), regaliasTotales: regalias, mesasDuenos: duenos }
+  return { porSalonero, sinSalonero: conteo(tSin, sSin), total: conteo(tTot, sTot), regaliasTotales: regalias, mesasDuenos: duenos, mesasInternas: internas }
 }
 
 /** El rango de un solo día: ayer respecto de `hoy` (día CR, de `todayCR()`). */

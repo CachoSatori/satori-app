@@ -393,7 +393,7 @@ describe('alerta de mesas sin pax', () => {
 
   it('sin facturas: todo en 0, sin dividir por cero', () => {
     const a = alertaMesasSinPax([], { desde: '2026-11-18', hasta: '2026-11-18' })
-    expect(a).toEqual({ porSalonero: [], sinSalonero: { facturasSalon: 0, sinPax: 0, pct: 0 }, total: { facturasSalon: 0, sinPax: 0, pct: 0 }, regaliasTotales: 0, mesasDuenos: 0 })
+    expect(a).toEqual({ porSalonero: [], sinSalonero: { facturasSalon: 0, sinPax: 0, pct: 0 }, total: { facturasSalon: 0, sinPax: 0, pct: 0 }, regaliasTotales: 0, mesasDuenos: 0, mesasInternas: 0 })
   })
 })
 

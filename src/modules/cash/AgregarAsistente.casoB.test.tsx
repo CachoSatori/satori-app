@@ -36,9 +36,9 @@ vi.mock('../../shared/FacturaVerify', () => ({ default: () => <span>📷 factura
 import AgregarAsistente from './AgregarAsistente'
 import { PagoFoto } from './CashProveedores'
 
-const FACTURA = { tipo: 'factura', proveedor: 'Pescadería del Pacífico', numero_documento: '1001', moneda: 'CRC',
+const FACTURA = { tipo: 'factura', proveedor: 'Proveedor de prueba 2', numero_documento: '1001', moneda: 'CRC',
   fecha: '2026-11-12', total: 50000, confianza: 0.9, items: [], clave_fe: null }
-const sup: Supplier = { id: 'p1', name: 'Pescadería del Pacífico', category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
+const sup: Supplier = { id: 'p1', name: 'Proveedor de prueba 2', category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
   metodo_pago: 'Efectivo', cuenta_iban: '', aliases: null, is_active: true, email: null, whatsapp: null, notificar_pago: 'no',
   created_at: '2026-06-29T00:00:00Z', updated_at: '2026-06-29T00:00:00Z' }
 const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession

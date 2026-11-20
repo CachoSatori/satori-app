@@ -386,16 +386,28 @@ export async function getMesasAbiertas(local: string): Promise<MesaAbiertaRow[]>
  * «sin asignar». Un nombre NUNCA se inventa.
  */
 export async function getSaloneroNombres(): Promise<Record<string, string>> {
-  const { data, error } = await sb
-    .from('employees')
-    .select('pos_login, full_name')
-    .not('pos_login', 'is', null)
-  if (error) throw new Error(error.message)
+  // Dos fuentes, juntas:
+  //   · la tabla `employees` (lo que el RLS deja: owner/manager todo; el resto, solo los ACTIVOS), como siempre;
+  //   · `pos_nombres_por_login` (mig 191): SOLO el par login → nombre, incluidos los inactivos, para owner, manager
+  //     y contador (decisión del dueño 18-nov 11:50). Sin eso el contador veía el login de un salonero que ya no
+  //     está. A los demás roles les devuelve 0 filas; si la función todavía no existe (antes de la 191), se ignora.
+  const [tabla, rpc] = await Promise.all([
+    sb.from('employees').select('pos_login, full_name').not('pos_login', 'is', null),
+    sb.rpc('pos_nombres_por_login'),
+  ])
+  if (tabla.error) throw new Error(tabla.error.message)
   const out: Record<string, string> = {}
-  for (const e of (data ?? []) as unknown as { pos_login: string | null; full_name: string | null }[]) {
+  for (const e of (tabla.data ?? []) as unknown as { pos_login: string | null; full_name: string | null }[]) {
     const login = (e.pos_login ?? '').trim()
     const nombre = (e.full_name ?? '').trim()
     if (login && nombre) out[login] = nombre
+  }
+  if (!rpc.error) {
+    for (const e of (rpc.data ?? []) as unknown as { pos_login: string | null; nombre: string | null }[]) {
+      const login = (e.pos_login ?? '').trim()
+      const nombre = (e.nombre ?? '').trim()
+      if (login && nombre) out[login] = nombre
+    }
   }
   return out
 }

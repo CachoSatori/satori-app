@@ -121,7 +121,7 @@ test('salud: dice qué está configurado, sin valores', async () => {
 
 test('LC-DES-07: /api/alta sin TURNSTILE_SECRET → 503 y no llama a la base; Turnstile falla → 403', async () => {
   llamadas = []
-  const cuerpo = JSON.stringify({ nombre: 'Ana Ficticia', whatsapp: '60000000', acepto: 'v1', turnstile: 'token-de-prueba-123' })
+  const cuerpo = JSON.stringify({ nombre: 'Ana Ficticia', whatsapp: '80000020', acepto: 'v1', turnstile: 'token-de-prueba-123' })
   assert.equal((await manejar(pedido('alta', 'POST', cuerpo), conLimite(), 'alta')).status, 503)
   assert.equal(llamadas.length, 0)
   const fetchViejo = globalThis.fetch
@@ -149,13 +149,13 @@ test('LC-DES-07: /api/alta con Turnstile OK llama a club_socio_autoalta con dato
   }
   try {
     const env = { ...conLimite(), TURNSTILE_SECRET: 's' }
-    const cuerpo = JSON.stringify({ nombre: ' Ana ', whatsapp: '60000000', acepto: 'v1', ref: 'abcdefgh', turnstile: 'token-de-prueba-123', cedula: '1', mayor_edad: true })
+    const cuerpo = JSON.stringify({ nombre: ' Ana ', whatsapp: '80000020', acepto: 'v1', ref: 'abcdefgh', turnstile: 'token-de-prueba-123', cedula: '1', mayor_edad: true })
     const r = await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')
     assert.equal(r.status, 200)
     const base = llamadas.find(l => String(l.url).endsWith('/rest/v1/rpc/club_socio_autoalta'))
     assert.ok(base)
     assert.equal(base.init.headers['x-club-web'], 'clave-de-prueba')
-    assert.deepEqual(JSON.parse(base.init.body), { p_datos: { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1', ref: 'ABCDEFGH', mayor_edad: true } })
+    assert.deepEqual(JSON.parse(base.init.body), { p_datos: { nombre: 'Ana', whatsapp: '80000020', acepto: 'v1', ref: 'ABCDEFGH', mayor_edad: true } })
     // LC-ML: el local viaja solo si es un id válido; con dos encendidos y sin local, la base pide elegir
     llamadas = []
     await manejar(pedido('alta', 'POST', JSON.stringify({ ...JSON.parse(cuerpo), local: 'local-prueba' })), env, 'alta')
@@ -183,7 +183,7 @@ test('D6 A: /api/alta exige mayor_edad === true y filtra el cumpleaños (día/me
   const datosBase = l => l.filter(x => String(x.url).endsWith('/rest/v1/rpc/club_socio_autoalta'))
   try {
     const env = { ...conLimite(), TURNSTILE_SECRET: 's' }
-    const b0 = { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1.2', turnstile: 'token-de-prueba-123' }
+    const b0 = { nombre: 'Ana', whatsapp: '80000020', acepto: 'v1.2', turnstile: 'token-de-prueba-123' }
     const enviar = async extra => (await manejar(pedido('alta', 'POST', JSON.stringify({ ...b0, ...extra })), env, 'alta')).status
     // sin mayor de 18, o con algo que no es `true` literal → 400
     for (const extra of [{}, { mayor_edad: false }, { mayor_edad: 'true' }, { mayor_edad: 1 }]) {
@@ -203,7 +203,7 @@ test('D6 A: /api/alta exige mayor_edad === true y filtra el cumpleaños (día/me
     llamadas = []
     assert.equal(await enviar({ mayor_edad: true, cumple_dia: 29, cumple_mes: 2, cumple_permiso: true }), 200)
     assert.deepEqual(JSON.parse(datosBase(llamadas)[0].init.body).p_datos,
-      { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1.2', ref: '', mayor_edad: true, cumple_dia: 29, cumple_mes: 2, cumple_permiso: true })
+      { nombre: 'Ana', whatsapp: '80000020', acepto: 'v1.2', ref: '', mayor_edad: true, cumple_dia: 29, cumple_mes: 2, cumple_permiso: true })
     // sin cumpleaños: no viaja ninguna clave de cumpleaños
     llamadas = []
     assert.equal(await enviar({ mayor_edad: true }), 200)
@@ -231,7 +231,7 @@ test('CLAUDE-HALL-04: prefijo de red /24 (IPv4) y /64 (IPv6); /api/alta pide el 
   assert.equal(prefijoRed('2001:DB8:0:0:ffff::9'), '2001:db8:0:0::/64')
   const claves = []
   const env = { ...base, RL_LEER: lim(true), RL_CREAR: { limit: async ({ key }) => { claves.push(key); return { success: !key.startsWith('alta-red:') } } } }
-  const cuerpo = JSON.stringify({ nombre: 'Ana', whatsapp: '60000000', acepto: 'v1', turnstile: 'token-de-prueba-123' })
+  const cuerpo = JSON.stringify({ nombre: 'Ana', whatsapp: '80000020', acepto: 'v1', turnstile: 'token-de-prueba-123' })
   const r = await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')
   assert.equal(r.status, 429)
   assert.deepEqual(claves, ['alta:203.0.113.7', 'alta-red:203.0.113.0/24'])
@@ -299,17 +299,17 @@ test('Grok 24: /api/cupon pide el tope por IP y por prefijo de red (/24 y /64), 
 
 test('Grok 63: el opt-in del turista exige la versión del aviso; la base la recibe', async () => {
   llamadas = []
-  const sin = JSON.stringify({ contacto: { whatsapp: '60000000', optin: true } })
+  const sin = JSON.stringify({ contacto: { whatsapp: '80000020', optin: true } })
   const r1 = await manejar(pedido('cupon/ABCDEFGH23/contacto', 'POST', sin), conLimite(), 'cupon/ABCDEFGH23/contacto')
   assert.equal(r1.status, 400); assert.equal(llamadas.length, 0)
-  const mal = JSON.stringify({ contacto: { whatsapp: '60000000', optin: true, acepto: 'uno' } })
+  const mal = JSON.stringify({ contacto: { whatsapp: '80000020', optin: true, acepto: 'uno' } })
   assert.equal((await manejar(pedido('cupon/ABCDEFGH23/contacto', 'POST', mal), conLimite(), 'cupon/ABCDEFGH23/contacto')).status, 400)
-  const con = JSON.stringify({ contacto: { whatsapp: '60000000', optin: true, acepto: 'v1', extra: 'x' } })
+  const con = JSON.stringify({ contacto: { whatsapp: '80000020', optin: true, acepto: 'v1', extra: 'x' } })
   const r2 = await manejar(pedido('cupon/ABCDEFGH23/contacto', 'POST', con), conLimite(), 'cupon/ABCDEFGH23/contacto')
   assert.equal(r2.status, 200)
   const args = JSON.parse(llamadas[0].init.body)
   assert.ok(String(llamadas[0].url).endsWith('/rpc/club_cupon_contacto'))
-  assert.deepEqual(args.p_contacto, { nombre: '', whatsapp: '60000000', email: '', optin: true, acepto: 'v1' })
+  assert.deepEqual(args.p_contacto, { nombre: '', whatsapp: '80000020', email: '', optin: true, acepto: 'v1' })
 })
 
 test('Grok 63 + 136 + 183: baja del turista → POST /api/baja con la llave en el CUERPO; en la ruta ya no; GET → 405; llave mala → 404; tope', async () => {

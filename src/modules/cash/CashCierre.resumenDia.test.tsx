@@ -124,6 +124,18 @@ describe('Cierre del día — «Resumen del día» obligatorio', () => {
     expect(cuadro().value).toBe('Personal:\nEmergencia: ')
   })
 
+  it('con el modal abierto, si se borra el resumen, «CONFIRMAR» no cierra (botón del modal + handleConfirmCompleto)', async () => {
+    await preparar()
+    tocar('Sin novedades')
+    fireEvent.click(botonCierre())
+    const confirmar = (await screen.findByText(/CONFIRMAR CIERRE DEL DÍA/)) as HTMLButtonElement
+    fireEvent.change(cuadro(), { target: { value: '  ' } })   // el cuadro sigue en la pantalla debajo del modal
+    expect(confirmar.disabled).toBe(true)
+    fireEvent.click(confirmar)
+    await new Promise(r => setTimeout(r, 0))
+    expect(api.cerrarDiaCompleto).not.toHaveBeenCalled()
+  })
+
   it('el resumen viaja en `notas` (sin espacios de los bordes) a la RPC de siempre', async () => {
     await preparar()
     tocar('Personal')

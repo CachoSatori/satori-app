@@ -2,7 +2,8 @@
 // PreToolUse de Bash y de las herramientas MCP de SQL (ver .claude/settings.json y scripts/hooks/README.md).
 // Frena con exit 2 (el motivo va a stderr, que lo lee el modelo):
 //   · leer .env* por Bash;
-//   · escribir por Bash las marcas que habilitan (sha firmado, OK de la noche, turno de prod);
+//   · escribir por Bash las marcas que habilitan (sha firmado, OK de la noche, turno de prod); git que trae un árbol con
+//     marcas (ls-tree antes); git add -f que alcanza .claude/. Barrera blanda: la fuerte es la firma + SHA por REST + main protegida;
 //   · git push a main o con --force / -f / +refspec;
 //   · merge de PR fuera de la regla D1 (hora CR) o con una cabeza que no es el SHA firmado (PR solo de .md: exento del SHA);
 //   · SQL con drop / delete / truncate fuera de begin … rollback; SQL a prod sin turno de prod; ref no literal;
@@ -29,6 +30,7 @@ import { leerMarca, okNocheValido, turnoProdValido, shasFirmados, shaFirmadoCoin
  *   ramaActual: (dir: string) => string,
  *   consultarPR: (selector: string | null, repo: string, cwd: string) => InfoPR,
  *   leerArchivo: (ruta: string) => string | null,
+ *   arbolDe: (dir: string, ref: string) => { archivos: string[] } | { error: string } | null,
  * }} Contexto
  */
 
@@ -223,7 +225,40 @@ const RE_MARCA_ARCHIVO = /(?:^|\/)(?:sha-firmado|ok-dueno-noche|turno-prod|migra
 const LECTURAS = new Set(['cat', 'jq', 'head', 'tail', 'less', 'more', 'ls', 'stat', 'wc', 'grep', 'egrep', 'fgrep', 'rg', 'diff', 'cmp',
   'sha256sum', 'sha1sum', 'md5sum', 'file', 'test', '[', '[[', 'echo', 'printf', 'true', 'pwd', 'realpath', 'readlink', 'basename', 'dirname'])
 const GIT_LECTURAS = new Set(['diff', 'log', 'show', 'status', 'ls-files', 'add', 'commit', 'hash-object', 'check-ignore', 'blame', 'grep', 'rev-parse', 'cat-file'])
-const RE_INTERPRETE_POR_TUBO = /\|\s*(?:sudo\s+|env\s+(?:\w+=\S*\s+)*)?(?:\S*\/)?(?:bash|sh|zsh|dash|ksh|python[\d.]*|node|perl|ruby|php)(?:\s+-[A-Za-z]+)*\s*(?=$|[|;&)\n])/
+const RE_INTERPRETE_POR_TUBO = /\|\s*(?:sudo\s+)?(?:(?:\S*\/)?env\s+(?:-\S*\s+|\w+=\S*\s+)*)*(?:\S*\/)?(?:bash|sh|zsh|dash|ksh|python[\d.]*|node|perl|ruby|php)(?:\s+-[A-Za-z]*)*\s*(?=$|[|;&)\n])/
+
+// Globs que el shell expande a `.claude` o a una marca (`.cla*e`, `.c?aude`, `sha-fir*.local`). Sin dotglob, un patrón
+// solo alcanza `.claude` si empieza con un punto literal; para las marcas se piden 4+ caracteres literales (así `*` o
+// `/tmp/d/*` no cuentan).
+const NOMBRES_PROTEGIDOS = ['sha-firmado.local', 'ok-dueno-noche.local', 'turno-prod.local', 'migracion-firmada.local', 'settings.local.json']
+function globARegex(seg) {
+  let r = ''
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i]
+    if (c === '*') r += '.*'
+    else if (c === '?') r += '.'
+    else if (c === '[') {
+      const fin = seg.indexOf(']', i + 2)
+      if (fin === -1) { r += '\\['; continue }
+      const clase = seg.slice(i + 1, fin).replace(/^!/, '^').replace(/\\/g, '\\\\')
+      r += `[${clase}]`
+      i = fin
+    } else r += c.replace(/[.+^${}()|\\]/g, '\\$&')
+  }
+  try { return new RegExp(`^${r}$`) } catch { return /^/ } // patrón ilegible: se trata como si alcanzara (falla cerrado)
+}
+/** ¿Algún segmento con glob de esta palabra alcanza `.claude` o el nombre de una marca? */
+export function globNombraProtegido(palabra) {
+  for (const seg of String(palabra).split('/')) {
+    if (!/[*?[]/.test(seg)) continue
+    const re = globARegex(seg)
+    if (seg.length > 1 && seg[0] === '.' && re.test('.claude')) return true
+    if (seg.replace(/\[[^\]]*\]|[*?]/g, '').length >= 4 && NOMBRES_PROTEGIDOS.some(n => re.test(n))) return true
+  }
+  return false
+}
+/** ¿La palabra (ya sin comillas) nombra una carpeta `.claude`, directo o por glob? */
+const nombraClaude = a => RE_DIR_CLAUDE.test(a) || RE_DIR_CLAUDE.test('/' + a) || globNombraProtegido(a)
 const RE_CODIGO_ILEGIBLE = /(?:^|[\s;&|(])(?:bash|sh|zsh|dash|ksh|source|\.)\s+<\(|\beval\b[^\n;|&]*\$/
 
 /** ¿Este comando simple es una lectura evidente (o borra una marca: revoca)? */
@@ -237,12 +272,12 @@ function lecturaEvidente(s) {
     return GIT_LECTURAS.has(sub) && !resto.some(a => a === '-o' || a.startsWith('--output'))
   }
   if (prog === 'gh') return !args.some(a => ['checkout', 'clone', 'download'].includes(a))
-  if (prog === 'cd') return !pos.some(a => RE_DIR_CLAUDE.test(a) || RE_DIR_CLAUDE.test('/' + a))
+  if (prog === 'cd') return !pos.some(nombraClaude)
   if (prog === 'cp') {
     // Solo copiar HACIA /tmp: sin -t / --target-directory (cambian cuál argumento es el destino) y sin «..».
     if (args.some(a => a === '-t' || a.startsWith('--target-directory') || /^-[a-zA-Z]*t/.test(a))) return false
     const d = pos[pos.length - 1] ?? ''
-    return pos.length >= 2 && d.startsWith('/tmp/') && !d.includes('..') && !RE_NOMBRE_PROTEGIDO.test(d) && !RE_DIR_CLAUDE.test(d)
+    return pos.length >= 2 && d.startsWith('/tmp/') && !d.includes('..') && !RE_NOMBRE_PROTEGIDO.test(d) && !nombraClaude(d)
   }
   if (prog === 'rm' || prog === 'unlink') return pos.length > 0 && pos.every(a => RE_MARCA_ARCHIVO.test(a))
   return false
@@ -278,16 +313,81 @@ export function textoSinComillas(cmd) {
 
 /** @returns {string | null} */
 export function evaluarZonaProtegida(cmd) {
-  // Comillas vacías y escapes sueltos tampoco esconden el intérprete (`| ba""sh`, `| b\ash`).
-  const sinVacias = cmd.replace(/""|''|\\(?=[A-Za-z])/g, '')
-  if ([cmd, sinVacias].some(t => RE_INTERPRETE_POR_TUBO.test(t) || RE_CODIGO_ILEGIBLE.test(t))) {
+  // Las comillas y los escapes tampoco esconden el intérprete (`| ba""sh`, `| "bash"`, `| b\ash`, `| /usr/bin/env bash`).
+  const sinComillas = cmd.replace(/["'\\]/g, '')
+  if ([cmd, sinComillas].some(t => RE_INTERPRETE_POR_TUBO.test(t) || RE_CODIGO_ILEGIBLE.test(t))) {
     return 'No se pasa código a un intérprete por un tubo, por <(…) ni por eval de una variable (… | bash, base64 -d | sh): la guardia no lo puede leer. Escribí el comando tal cual.'
   }
   const limpio = textoSinComillas(cmd)
-  if (![cmd, limpio].some(t => RE_NOMBRE_PROTEGIDO.test(t) || RE_DIR_CLAUDE.test(t))) return null
+  const palabras = comandos(cmd).flatMap(s => [...s.palabras, ...s.redirecciones.map(r => r.destino)])
+  if (![cmd, limpio].some(t => RE_NOMBRE_PROTEGIDO.test(t) || RE_DIR_CLAUDE.test(t)) && !palabras.some(globNombraProtegido)) return null
   const malo = comandos(cmd).find(s => s.palabras.length > 0 && !lecturaEvidente(s))
   if (!malo) return null
   return `No se escribe por Bash una marca de habilitación ni la configuración de Claude Code: un comando que nombra .claude/, una marca o settings.local.json solo puede leer (cat, jq, git diff…) o borrar una marca (rm, revoca); «${malo.palabras.slice(0, 3).join(' ')}» no es lectura. La marca la escribe la sesión principal con Write y la firma el dueño (ver scripts/hooks/README.md).`
+}
+
+// ---- git que escribe el árbol de trabajo desde otro árbol (#322) -----------------------------------------------------
+// Un repo armado a mano + `git fetch` + `git checkout otra -- .` escribiría una marca falsa. Antes de estos subcomandos se
+// lista el árbol de destino (`git ls-tree -r --name-only`) y se niega si trae una marca o settings.local.json.
+const GIT_TRAEN_ARBOL = new Set(['checkout', 'restore', 'reset', 'switch', 'merge', 'stash', 'pull', 'cherry-pick', 'rebase'])
+const RE_MARCA_EN_ARBOL = /^\.claude\/(?:.*\.local|settings\.local\.json)$/
+const RUTA_TODO = new Set(['.', './', ':/', ':/.', ':'])
+
+/**
+ * Árbol de un ref: null = no es un ref (es una ruta); `{ error }` = es un ref pero ls-tree falló (falla cerrado).
+ * @returns {{ archivos: string[] } | { error: string } | null}
+ */
+export function arbolGit(dir, ref) {
+  const rp = spawnSync('git', ['-C', dir, 'rev-parse', '--verify', '--quiet', `${ref}^{tree}`], { encoding: 'utf8', timeout: 10_000 })
+  if (rp.status !== 0 || !rp.stdout.trim()) return null
+  const ls = spawnSync('git', ['-C', dir, 'ls-tree', '-r', '--name-only', rp.stdout.trim()], { encoding: 'utf8', timeout: 10_000, maxBuffer: 64 * 1024 * 1024 })
+  if (ls.status !== 0) return { error: (ls.stderr || 'git ls-tree falló').trim().split('\n')[0] }
+  return { archivos: ls.stdout.split('\n').filter(Boolean) }
+}
+
+/** @returns {string | null} */
+export function evaluarGitArbol(sub, resto, base, ctx) {
+  const corte = resto.indexOf('--')
+  const antes = corte === -1 ? resto : resto.slice(0, corte)
+  const despues = corte === -1 ? [] : resto.slice(corte + 1)
+  const candidatos = []
+  for (const a of antes) {
+    const v = /^--(?:source|onto)=(.+)$/.exec(a)
+    if (v) candidatos.push(v[1])
+    else if (!a.startsWith('-')) candidatos.push(a)
+  }
+  if (sub === 'stash' && candidatos.some(a => ['pop', 'apply', 'branch'].includes(a)) && !candidatos.some(a => /^stash@\{\d+\}$/.test(a))) candidatos.push('stash@{0}')
+  const rutas = [...despues]
+  let determinado = false
+  for (const c of candidatos) {
+    const extras = sub === 'stash' && /^stash@/.test(c) ? [c, `${c}^3`] : [c] // ^3: los no versionados del stash
+    let esRef = false
+    for (const ref of extras) {
+      const arbol = ctx.arbolDe(base, ref)
+      if (arbol === null) continue
+      esRef = true
+      if ('error' in arbol) return `git ${sub}: no pude listar el árbol de «${ref}» (${arbol.error}); sin verificar que no trae marcas, no pasa.`
+      const marca = arbol.archivos.find(f => RE_MARCA_EN_ARBOL.test(f))
+      if (marca) return `git ${sub}: «${ref}» trae ${marca} versionado; escribiría una marca o la configuración local en .claude/. No pasa.`
+    }
+    if (esRef) determinado = true
+    else rutas.push(c)
+  }
+  if (!determinado && rutas.some(r => RUTA_TODO.has(r))) return `git ${sub} sobre «.» sin un árbol de destino que la guardia pueda revisar: nombrá los archivos puntuales.`
+  return null
+}
+
+/** `git add -f` que alcanza .claude/ (la ruta, `.`, la raíz o una carpeta que la contiene, `-A`). @returns {string | null} */
+export function evaluarGitAddForzado(resto, base, ctx) {
+  if (!resto.some(a => a === '--force' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a))) return null
+  const rutas = resto.filter(a => !a.startsWith('-'))
+  const raiz = resolve(ctx.raiz)
+  const alcanza = rutas.length === 0 || resto.some(a => a === '-A' || a === '--all' || /^-[a-zA-Z]*A/.test(a)) || rutas.some(r => {
+    if (nombraClaude(r) || RUTA_TODO.has(r) || r.startsWith(':')) return true
+    const abs = resolve(base, r)
+    return abs === raiz || raiz.startsWith(abs.endsWith('/') ? abs : abs + '/')
+  })
+  return alcanza ? 'git add -f que alcanza .claude/: las marcas y settings.local.json no se versionan (el gate lo controla). Agregá los archivos puntuales sin -f.' : null
 }
 
 /** @param {string} cmd @param {Contexto} ctx @returns {string | null} motivo del bloqueo */
@@ -324,9 +424,17 @@ export function evaluarBash(cmd, ctx) {
       const { sub, resto, dir } = subcomandoGit(args)
       // `git reset --hard` y `git switch` / `checkout` pasan (sincronizar un worktree): con la carpeta actual en .claude/ o si
       // el comando nombra .claude/, ya los negaron evaluarCwdProtegido / evaluarZonaProtegida. Que ninguna rama traiga una
-      // marca versionada lo cuida el gate (scripts/ci/marcas-versionadas.test.ts).
+      // marca versionada lo cuida el gate (scripts/ci/marcas-versionadas.test.ts); un árbol de destino con marcas, evaluarGitArbol.
+      const base = dir ? resolve(ctx.cwd, dir) : ctx.cwd
+      if (GIT_TRAEN_ARBOL.has(sub)) {
+        const m = evaluarGitArbol(sub, resto, base, ctx)
+        if (m) return `Bloqueado: ${m}`
+      }
+      if (sub === 'add') {
+        const m = evaluarGitAddForzado(resto, base, ctx)
+        if (m) return `Bloqueado: ${m}`
+      }
       if (sub === 'push') {
-        const base = dir ? resolve(ctx.cwd, dir) : ctx.cwd
         const m = evaluarPush(resto, () => ctx.ramaActual(base))
         if (m) return `Bloqueado: ${m}.`
       }
@@ -436,6 +544,7 @@ export function main() {
     ramaActual: ramaActualGit,
     consultarPR: consultarPRgh,
     leerArchivo: ruta => { try { return readFileSync(isAbsolute(ruta) ? ruta : resolve(cwd, ruta), 'utf8') } catch { return null } },
+    arbolDe: arbolGit,
   }
   const herramienta = String(entrada.tool_name ?? '')
   let motivo = null

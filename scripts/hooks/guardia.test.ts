@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 // @ts-expect-error módulo .mjs sin tipos
-import { evaluarBash, evaluarMerge, evaluarMcpSupabase, rutasDeArchivo, psqlRemoto } from './guardia.mjs'
+import { evaluarBash, evaluarMerge, evaluarMcpSupabase, rutasDeArchivo, psqlRemoto, arbolGit, globNombraProtegido } from './guardia.mjs'
 // @ts-expect-error módulo .mjs sin tipos
 import { relojCR, ventanaD1 } from './hora.mjs'
 // @ts-expect-error módulo .mjs sin tipos
@@ -20,13 +20,15 @@ const CABEZA = 'abcdef1234567890abcdef1234567890abcdef12'
 let raiz: string
 
 type InfoPR = { numero: number, cabeza: string, archivos: string[] } | { error: string }
-function ctx(opc: { ahora?: string, env?: Record<string, string>, rama?: string, pr?: InfoPR } = {}) {
+type Arbol = { archivos: string[] } | { error: string } | null
+function ctx(opc: { ahora?: string, env?: Record<string, string>, rama?: string, pr?: InfoPR, arboles?: Record<string, Arbol> } = {}) {
   return {
     raiz, cwd: raiz, env: opc.env ?? {},
     ahora: new Date(opc.ahora ?? '2026-11-20T15:00:00Z'), // 09:00 CR: ventana libre
     ramaActual: () => opc.rama ?? 'claude/tema',
     consultarPR: () => opc.pr ?? { numero: 305, cabeza: CABEZA, archivos: ['src/a.ts'] },
     leerArchivo: () => null,
+    arbolDe: (_dir: string, ref: string): Arbol => opc.arboles?.[ref] ?? null, // por defecto: no es un ref
   }
 }
 function marca(nombre: string, texto: string) { writeFileSync(join(raiz, '.claude', nombre), texto) }
@@ -282,6 +284,77 @@ describe('comillas y escapes no esconden .claude/ ni la marca (#317, menores)', 
   // Leer sigue pasando aunque venga con comillas.
   for (const c of ['cat ".claude/settings.json"', "jq . '.claude'/settings.json", 'ls .cla""ude', 'echo "a" && echo \'b\''])
     it(`deja pasar: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
+})
+
+describe('intérprete por tubo y globs (#322)', () => {
+  const bloquea = [
+    'cat /tmp/a | "bash"', "cat /tmp/a | 'sh' -s", 'cat /tmp/a | /usr/bin/env bash', 'cat /tmp/a | env -i python3', 'cat /tmp/a | env X=1 /usr/bin/env node',
+    'cd .cla*e && cp /tmp/d/* .', 'cd .c?aude', 'cp /tmp/x .c[l]aude/', 'cp /tmp/x .cla*/turno-prod.local', 'mv /tmp/d/x .claud?/',
+    'cp /tmp/firma .claude/sha-fir*.local', 'cp /tmp/firma x/ok-dueno-n?che.local',
+  ]
+  for (const c of bloquea) it(`bloquea: ${c}`, () => expect(evaluarBash(c, ctx())).not.toBeNull())
+  for (const c of ['cp /tmp/d/* .', 'ls *', 'cp src/*.ts /tmp/x/', 'cat /tmp/a | grep bash', 'npx vitest run src/*', 'ls .c*', 'git add src/*.ts'])
+    it(`deja pasar: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
+  it('globNombraProtegido: punto literal para .claude, 4+ literales para una marca', () => {
+    expect(globNombraProtegido('.cla*e')).toBe(true)
+    expect(globNombraProtegido('*claude')).toBe(false) // sin dotglob no alcanza .claude
+    expect(globNombraProtegido('/tmp/d/*')).toBe(false)
+    expect(globNombraProtegido('turno-*')).toBe(true)
+  })
+})
+
+describe('git con árbol de destino y git add -f (#322)', () => {
+  const conMarca = { archivos: ['src/a.ts', '.claude/settings.json', '.claude/sha-firmado.local'] }
+  const conLocal = { archivos: ['.claude/settings.local.json'] }
+  const limpio = { archivos: ['src/a.ts', '.claude/settings.json'] }
+  const arboles = { otra: conMarca, FETCH_HEAD: conMarca, 'origin/main': limpio, main: limpio, local: conLocal, 'stash@{0}^3': conMarca, rota: { error: 'fatal: bad object' } }
+  const c = () => ctx({ arboles })
+  const bloquea = [
+    'git checkout otra -- .', 'git checkout FETCH_HEAD -- src/a.ts', 'git switch otra', 'git checkout otra', 'git reset --hard otra', 'git -C /home/x/wt reset --hard FETCH_HEAD',
+    'git restore --source=otra --staged --worktree .', 'git restore -s otra src/a.ts', 'git merge FETCH_HEAD', 'git cherry-pick otra', 'git rebase --onto otra main',
+    'git pull origin otra', 'git stash pop', 'git switch local', 'git fetch /tmp/falso otra && git checkout FETCH_HEAD -- . && git restore --staged .',
+    'git checkout rota', // ls-tree falla: falla cerrado
+    'git checkout -- .', 'git restore .', 'git restore --staged .', // sin árbol que revisar y con «.»
+  ]
+  for (const k of bloquea) it(`bloquea: ${k}`, () => expect(evaluarBash(k, c())).toMatch(/Bloqueado/))
+  const pasa = [
+    'git reset --hard origin/main', 'git reset --hard', 'git switch main', 'git switch -c claude/x origin/main', 'git checkout main -- .', 'git merge origin/main',
+    'git restore src/a.ts', 'git checkout -- src/a.ts', 'git stash', 'git stash list', 'git pull', 'git rebase origin/main',
+  ]
+  for (const k of pasa) it(`deja pasar: ${k}`, () => expect(evaluarBash(k, c())).toBeNull())
+
+  const addBloquea = ['git add -f .claude/sha-firmado.local', 'git add --force .claude/', 'git add -f .', 'git add -fA', 'git add -f -A', 'git add -f :/', 'git add -f .cla*e',
+    `git add -f ${'$'}{PWD}/.claude/x.local`]
+  for (const k of addBloquea) it(`git add forzado bloquea: ${k}`, () => expect(evaluarBash(k, c())).not.toBeNull())
+  it('git add -f de la raíz o de una carpeta que la contiene: bloquea; fuera de .claude: pasa', () => {
+    expect(evaluarBash(`git add -f ${raiz}`, c())).toMatch(/add -f/)
+    expect(evaluarBash(`git -C ${raiz} add -f ..`, c())).toMatch(/add -f/)
+    expect(evaluarBash('git add -f dist/x.js', c())).toBeNull()
+    expect(evaluarBash('git add .', c())).toBeNull()
+    expect(evaluarBash('git add -A', c())).toBeNull()
+  })
+
+  it('con git real: una rama con una marca versionada no se trae; ls-tree de verdad', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'arbol-'))
+    try {
+      const g = (...a: string[]) => spawnSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t', ...a], { encoding: 'utf8' })
+      g('init', '-q', '-b', 'main')
+      writeFileSync(join(repo, 'a.txt'), 'a\n')
+      g('add', 'a.txt'); g('commit', '-qm', 'a')
+      g('switch', '-q', '-c', 'otra')
+      mkdirSync(join(repo, '.claude'))
+      writeFileSync(join(repo, '.claude', 'turno-prod.local'), 'falsa\n')
+      g('add', '-f', '.claude/turno-prod.local'); g('commit', '-qm', 'marca')
+      g('switch', '-q', 'main')
+      expect(arbolGit(repo, 'otra')).toEqual({ archivos: ['.claude/turno-prod.local', 'a.txt'] })
+      expect(arbolGit(repo, 'no-existe')).toBeNull()
+      const real = { ...ctx(), cwd: repo, raiz: repo, arbolDe: arbolGit }
+      expect(evaluarBash('git checkout otra -- .', real)).toMatch(/turno-prod\.local/)
+      expect(evaluarBash('git switch otra', real)).toMatch(/turno-prod\.local/)
+      expect(evaluarBash('git reset --hard main', real)).toBeNull()
+      expect(evaluarBash('git switch main', real)).toBeNull()
+    } finally { rmSync(repo, { recursive: true, force: true }) }
+  })
 })
 
 describe('SQL: drop / delete / truncate solo dentro de begin … rollback', () => {

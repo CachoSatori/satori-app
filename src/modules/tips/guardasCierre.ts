@@ -13,9 +13,16 @@
 
 import { calcTurno, BAR_ROLES, formatCRC, type DraftLine } from '../../shared/utils/tipCalculations'
 
+// `detalle` = el mismo aviso SIN cifra: se muestra cuando arriba ya está «Quedan ₡X sin repartir» (sinRepartir.ts),
+// para que la caja roja tenga un solo monto (ese, que es la salida real del reparto).
 export type AvisoCierre =
-  | { tipo: 'barra_sin_horas'; monto: number; texto: string }
-  | { tipo: 'general_sin_puntos'; monto: number; texto: string }
+  | { tipo: 'barra_sin_horas'; monto: number; texto: string; detalle: string }
+  | { tipo: 'general_sin_puntos'; monto: number; texto: string; detalle: string }
+
+export const DETALLE_BARRA_SIN_HORAS =
+  'Nadie de barra tiene horas cargadas. Cargá las horas de barra; si nadie de barra trabajó, avisá al owner.'
+export const DETALLE_GENERAL_SIN_PUNTOS =
+  'Nadie del turno tiene puntos. Revisá los roles o las horas antes de cerrar.'
 
 export function textoBarraSinHoras(monto: number): string {
   return `Hay ${formatCRC(monto)} de propina de barra y nadie de barra tiene horas cargadas. ` +
@@ -48,13 +55,13 @@ export function avisosCierrePropinas(
     .filter(l => l.active && BAR_ROLES.includes(l.role))
     .reduce((s, l) => s + (Number(l.hours) || 0), 0)
   if (barra > 0 && !(horasBarra > 0)) {
-    avisos.push({ tipo: 'barra_sin_horas', monto: barra, texto: textoBarraSinHoras(barra) })
+    avisos.push({ tipo: 'barra_sin_horas', monto: barra, texto: textoBarraSinHoras(barra), detalle: DETALLE_BARRA_SIN_HORAS })
   }
 
   // H2 — general: el pozo y los puntos salen del propio calcTurno (no se recalculan aparte).
   const { totals } = calcTurno(lines, pool_efectivo_crc, pool_efectivo_usd, 0, exchange_rate)
   if (totals.generalPool > 0 && !(totals.totalPoints > 0)) {
-    avisos.push({ tipo: 'general_sin_puntos', monto: totals.generalPool, texto: textoGeneralSinPuntos(totals.generalPool) })
+    avisos.push({ tipo: 'general_sin_puntos', monto: totals.generalPool, texto: textoGeneralSinPuntos(totals.generalPool), detalle: DETALLE_GENERAL_SIN_PUNTOS })
   }
 
   return avisos

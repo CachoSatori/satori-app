@@ -29,6 +29,7 @@ import {
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import { avisosCierrePropinas } from './guardasCierre'
+import { sinRepartirTurno } from './sinRepartir'
 import { availableForCobertura, eligibleRoster } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
 const TipQuincenal = lazy(() => import('./TipQuincenal'))
@@ -190,8 +191,8 @@ export default function TipsModule() {
   // frame con take_home: 0 ("₡ —"). Derivado en el render es síncrono: nunca hay un
   // frame en 0. MISMA llamada a calcTurno y MISMO merge que hacía el effect; calcTurno
   // es no-mutante (copia su input) → seguro en render.
-  const { displayLines, totals } = useMemo(() => {
-    if (!openSession) return { displayLines: lines, totals: null }
+  const { displayLines, totals, sinRepartir } = useMemo(() => {
+    if (!openSession) return { displayLines: lines, totals: null, sinRepartir: null }
     // Cobertura = trabajó ese puesto: el rol EFECTIVO (cubierto) define puntos y la
     // membresía del pool de barra.
     const linesForCalc = lines.map(l => {
@@ -214,7 +215,9 @@ export default function TipsModule() {
       pts_val:   updatedLines[i]?.pts_val   ?? 0,
       take_home: updatedLines[i]?.take_home ?? 0,
     }))
-    return { displayLines: merged, totals: t }
+    // Aviso de plata sin repartir (decisión del dueño 20-nov): sobre la salida de calcTurno con el rol
+    // EFECTIVO (updatedLines), no sobre `merged` (que lleva el rol natural). Solo avisa, no bloquea.
+    return { displayLines: merged, totals: t, sinRepartir: sinRepartirTurno({ totals: t, updatedLines }) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, coberturas, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate, openSession?.id])
 
@@ -873,9 +876,10 @@ export default function TipsModule() {
               {/* Cerrar turno */}
               {canOperate && lines.some(l => l.active) && (
                 <>
-                {avisosCierre.length > 0 && (
+                {(sinRepartir || avisosCierre.length > 0) && (
                   <div role="alert" data-testid="avisos-cierre" style={{ marginBottom: '0.6rem', padding: '0.6rem 0.8rem', borderLeft: '3px solid var(--c-laca)', background: 'var(--c-panel)', fontSize: '0.82rem', lineHeight: 1.4 }}>
-                    {avisosCierre.map(a => <div key={a.tipo}>⚠ {a.texto}</div>)}
+                    {sinRepartir && <div data-testid="aviso-sin-repartir" style={{ fontWeight: 700 }}>⚠ {sinRepartir.texto}</div>}
+                    {avisosCierre.map(a => <div key={a.tipo}>⚠ {sinRepartir ? a.detalle : a.texto}</div>)}
                   </div>
                 )}
                 <div className="tips-close-bar">

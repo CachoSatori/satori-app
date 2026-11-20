@@ -8,6 +8,8 @@ import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/dat
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 import { calcHistory, formatCRC } from '../../shared/utils/tipCalculations'
 import { getTipEntriesBySession } from '../../shared/api/tips'
+import { shiftLabel } from '../../shared/utils'
+import { sinRepartirHistoria, textoSinRepartirTurnoCerrado } from './sinRepartir'
 
 interface Props {
   sessions:   TipSession[]
@@ -15,6 +17,8 @@ interface Props {
   employees:  Employee[]
   rolePoints: RoleTipPoints[]
 }
+
+const ordenTurno = (shift: string) => (shift === 'AM' ? 0 : 1)
 
 function getMonths(sessions: TipSession[]): string[] {
   const m = new Set<string>()
@@ -118,6 +122,14 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
       .map(e => ({ ...e, promDia: (e.q1Days + e.q2Days) > 0 ? e.total / (e.q1Days + e.q2Days) : 0 }))
       .sort((a, b) => b.total - a.total)
   }, [q1Sessions, q2Sessions, mergedCache, empMap])
+
+  // Aviso de plata sin repartir (decisión del dueño 20-nov): turnos del mes cuyo reparto deja pozo que nadie
+  // cobra (p. ej. turnos cerrados antes de las guardas del 17-nov). Solo avisa; la planilla sale igual.
+  const avisosSinRepartir = monthSessions
+    .map(s => ({ s, aviso: mergedCache[s.id] ? sinRepartirHistoria(mergedCache[s.id]) : null }))
+    .filter((x): x is { s: TipSession; aviso: NonNullable<typeof x.aviso> } => x.aviso !== null)
+    // Por fecha y, dentro del día, Mediodía (AM) antes que Noche (PM).
+    .sort((a, b) => a.s.session_date.localeCompare(b.s.session_date) || ordenTurno(a.s.shift_type) - ordenTurno(b.s.shift_type))
 
   const q1Total    = q1Sessions.reduce((s, ss) => s + (mergedCache[ss.id]?.totalPool ?? 0), 0)
   const q2Total    = q2Sessions.reduce((s, ss) => s + (mergedCache[ss.id]?.totalPool ?? 0), 0)
@@ -241,6 +253,13 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
               </tfoot>
             </table>
           </div>
+          {avisosSinRepartir.length > 0 && (
+            <div role="alert" data-testid="aviso-sin-repartir" style={{ marginTop: '0.75rem', padding: '0.6rem 0.8rem', borderLeft: '3px solid var(--c-laca)', background: 'var(--c-panel)', fontSize: '0.82rem', lineHeight: 1.4 }}>
+              {avisosSinRepartir.map(({ s, aviso }) => (
+                <div key={s.id}>⚠ {textoSinRepartirTurnoCerrado(s.session_date, shiftLabel(s.shift_type), aviso)}</div>
+              ))}
+            </div>
+          )}
           <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               className="tips-btn-ghost"

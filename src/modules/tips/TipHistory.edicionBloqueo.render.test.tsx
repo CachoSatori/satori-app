@@ -52,6 +52,7 @@ describe('TipHistory — edición con las guardas H1/H2', () => {
   it('sin problema: sin aviso, «Guardar cambios» habilitado y guarda los payouts', async () => {
     const guardar = await abrirEdicion()
     expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByTestId('aviso-sin-repartir')).toBeNull()
     expect(guardar.disabled).toBe(false)
     fireEvent.click(guardar)
     await waitFor(() => expect(api.savePayouts).toHaveBeenCalledTimes(1))
@@ -61,9 +62,17 @@ describe('TipHistory — edición con las guardas H1/H2', () => {
     const guardar = await abrirEdicion()
     const horasBarra = screen.getAllByDisplayValue('8')[0]
     fireEvent.change(horasBarra, { target: { value: '0' } })
-    expect((await screen.findByRole('alert')).textContent).toContain('Hay ₡4.000 de propina de barra y nadie de barra tiene horas cargadas.')
+    const caja = (await screen.findByRole('alert')).textContent ?? ''
+    expect(caja).toContain('Nadie de barra tiene horas cargadas.')
+    expect(caja.match(/₡\s?[\d.]+/g)).toEqual(['₡4.000'])   // un solo monto en la caja roja
+    expect(screen.getByTestId('aviso-sin-repartir').textContent).toBe(
+      '⚠ Quedan ₡4.000 sin repartir: hay propina de barra y nadie de barra tiene horas. Revisá las horas o los puntos antes de guardar.')
     expect(guardar.disabled).toBe(true)
     fireEvent.click(guardar)
     expect(api.savePayouts).not.toHaveBeenCalled()
+    // Volver a cargar las horas de barra → el aviso se va.
+    fireEvent.change(horasBarra, { target: { value: '8' } })
+    await waitFor(() => expect(screen.queryByTestId('aviso-sin-repartir')).toBeNull())
+    expect(guardar.disabled).toBe(false)
   })
 })

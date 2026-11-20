@@ -47,6 +47,7 @@
 9. **Ventas 3.4 · reporte quincenal de excepciones con anotación** (spec en SPEC Ventas v2, #246).
 10. **Policy de `pos_mesas_internas` por local** (backlog del #294): hoy un manager lee la lista de todos los locales; limitar con `puede_ver_local`. 🖊️ toca permisos.
 11. **Ventas · «Contexto jueves» de «Hoy»** mostró un promedio mal mientras cargaba el histórico: revisar si mezcla días del Excel y del PoS en la comparativa de las 4 últimas ocurrencias.
+12. **Propinas · aviso sin repartir (#320), menores del verificador:** la propiedad «avisa ⇔ guardas» no cubre montos con céntimos (barra < ₡0,5 bloquea sin aviso) · falta una mutación del aviso con cobertura (rol efectivo vs natural en `TipsModule`) · «Quincenal» recalcula con los puntos y roles **actuales** de `role_tip_points`, no con los del turno (`payout_crc` guardado).
 
 ## 🟧 P1 — Seguridad, Edge y deploy
 1. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las funciones con su `verify_jwt` (`monthly-report` true v10+, `extract-document` true, `cierre-email` true, `pago-notificar` true, `ingest-ndf` false, `alta-empleado` true, `club-pase` false). Traer **antes** el código de prod (v10 de `monthly-report`, `8a8dfb6` de `extract-document`, `alta-empleado`) y copiar `[auth]`/`[api]` de prod (`disable_signup = true`, `site_url`, redirects, mínimo 8) o un merge los pisa. Hasta cerrarlo, ningún PR a `main` con `supabase/functions/` (regla 2).

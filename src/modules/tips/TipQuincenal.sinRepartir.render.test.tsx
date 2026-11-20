@@ -47,8 +47,22 @@ describe('TipQuincenal — aviso de plata sin repartir', () => {
     ])
     const aviso = await screen.findByTestId('aviso-sin-repartir')
     expect(aviso.textContent).toBe(
-      '⚠ 2026-11-18 · Mediodía — Quedan ₡2.500 sin repartir: hay propina de barra y nadie de barra tiene horas. ' +
-      'Revisá las horas o los puntos antes de guardar.')
+      '⚠ Turno del 2026-11-18 mediodía: quedaron ₡2.500 sin repartir (hay propina de barra y nadie de barra tiene horas).')
+    expect(aviso.textContent).not.toContain('guardar')
     expect((screen.getByRole('button', { name: /CSV planilla/ }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('dos turnos del mismo día con sobrante → Mediodía antes que Noche (aunque lleguen al revés)', async () => {
+    ENTRIES.s3 = [entrada('s3', 'e1', 5)]
+    ENTRIES.s4 = [entrada('s4', 'e1', 5)]
+    montar([
+      sesion('s3', '2026-11-20', 'PM', { pool_efectivo_crc: 1000, pool_barra_crc: 3000 }),
+      sesion('s4', '2026-11-20', 'AM', { pool_efectivo_crc: 1000, pool_barra_crc: 1500 }),
+    ])
+    const lineas = [...(await screen.findByTestId('aviso-sin-repartir')).children].map(d => d.textContent)
+    expect(lineas).toEqual([
+      '⚠ Turno del 2026-11-20 mediodía: quedaron ₡1.500 sin repartir (hay propina de barra y nadie de barra tiene horas).',
+      '⚠ Turno del 2026-11-20 noche: quedaron ₡3.000 sin repartir (hay propina de barra y nadie de barra tiene horas).',
+    ])
   })
 })

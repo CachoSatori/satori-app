@@ -62,7 +62,9 @@ describe('TipHistory — edición con las guardas H1/H2', () => {
     const guardar = await abrirEdicion()
     const horasBarra = screen.getAllByDisplayValue('8')[0]
     fireEvent.change(horasBarra, { target: { value: '0' } })
-    expect((await screen.findByRole('alert')).textContent).toContain('Hay ₡4.000 de propina de barra y nadie de barra tiene horas cargadas.')
+    const caja = (await screen.findByRole('alert')).textContent ?? ''
+    expect(caja).toContain('Nadie de barra tiene horas cargadas.')
+    expect(caja.match(/₡\s?[\d.]+/g)).toEqual(['₡4.000'])   // un solo monto en la caja roja
     expect(screen.getByTestId('aviso-sin-repartir').textContent).toBe(
       '⚠ Quedan ₡4.000 sin repartir: hay propina de barra y nadie de barra tiene horas. Revisá las horas o los puntos antes de guardar.')
     expect(guardar.disabled).toBe(true)

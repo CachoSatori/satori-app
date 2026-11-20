@@ -35,6 +35,8 @@ vi.mock('../../shared/api/tips', () => ({
 const EMPS = [
   { id: 'e1', full_name: 'Sala Uno', role: 'salonero', is_active: true },
   { id: 'e2', full_name: 'Barra Uno', role: 'barman', is_active: true },
+  { id: 'e3', full_name: 'Sala Dos', role: 'salonero', is_active: true },
+  { id: 'e4', full_name: 'Sala Tres', role: 'salonero', is_active: true },
 ]
 const PTS = [{ role: 'salonero', points: 10, recibe_propina: true }, { role: 'barman', points: 5, recibe_propina: true }]
 
@@ -72,7 +74,7 @@ describe('TipsModule — bloqueo del cierre por pozo que nadie cobra', () => {
     render(<TipsModule />)
     const b = await boton()
     const alerta = screen.getByRole('alert')
-    expect(alerta.textContent).toContain('Hay ₡7.500 de propina de barra y nadie de barra tiene horas cargadas.')
+    expect(alerta.textContent).toContain('Nadie de barra tiene horas cargadas. Cargá las horas de barra')
     // Aviso del 20-nov arriba del botón: monto sin repartir (salida del reparto) y motivo.
     expect(screen.getByTestId('aviso-sin-repartir').textContent).toBe(
       '⚠ Quedan ₡7.500 sin repartir: hay propina de barra y nadie de barra tiene horas. Revisá las horas o los puntos antes de guardar.')
@@ -96,12 +98,23 @@ describe('TipsModule — bloqueo del cierre por pozo que nadie cobra', () => {
     expect((b as HTMLButtonElement).disabled).toBe(false)
   })
 
+  it('un solo monto en la caja roja: barra ₡10.000 y 3 saloneros con ₡100 → «Quedan ₡10.001» y la guarda sin cifra', async () => {
+    // 3 × round(33,33) = ₡99 cobrados de ₡10.100 → quedan ₡10.001 (la guarda vieja decía «Hay ₡10.000»).
+    state.session = sesion({ pool_efectivo_crc: 100, pool_barra_crc: 10000 })
+    state.entries = [entrada('e1', 1), entrada('e3', 1), entrada('e4', 1)]
+    render(<TipsModule />)
+    await boton()
+    const caja = screen.getByRole('alert').textContent ?? ''
+    expect(caja).toContain('Quedan ₡10.001 sin repartir')
+    expect(caja.match(/₡\s?[\d.]+/g)).toEqual(['₡10.001'])
+  })
+
   it('H1 con cobertura: el barman cubrió sala → la barra queda sin horas → bloquea', async () => {
     state.session = sesion({ pool_barra_crc: 3000, pool_efectivo_crc: 1000 })
     state.entries = [entrada('e1', 6), entrada('e2', 8, 'salonero')]
     render(<TipsModule />)
     const b = await boton()
-    expect(screen.getByRole('alert').textContent).toContain('₡3.000 de propina de barra')
+    expect(screen.getByRole('alert').textContent).toContain('Quedan ₡3.000 sin repartir: hay propina de barra')
     expect((b as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -111,7 +124,7 @@ describe('TipsModule — bloqueo del cierre por pozo que nadie cobra', () => {
     // e1 con 0 horas igual queda marcado (tiene entrada) → aparece el botón.
     render(<TipsModule />)
     const b = await boton()
-    expect(screen.getByRole('alert').textContent).toContain('Hay ₡5.000 para repartir y nadie del turno tiene puntos.')
+    expect(screen.getByRole('alert').textContent).toContain('Nadie del turno tiene puntos. Revisá los roles o las horas antes de cerrar.')
     expect(screen.getByTestId('aviso-sin-repartir').textContent).toContain('Quedan ₡5.000 sin repartir: hay pozo para repartir y nadie del turno tiene puntos u horas.')
     expect((b as HTMLButtonElement).disabled).toBe(true)
   })

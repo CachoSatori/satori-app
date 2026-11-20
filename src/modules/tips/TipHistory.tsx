@@ -546,7 +546,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                   {(sinRepartir || avisosEdit.length > 0) && (
                     <div role="alert" data-testid="avisos-edicion" style={{ flexBasis: '100%', padding: '0.5rem 0.75rem', borderLeft: `3px solid ${RED}`, background: 'var(--c-fondo)', fontSize: '0.8rem', lineHeight: 1.4 }}>
                       {sinRepartir && <div data-testid="aviso-sin-repartir" style={{ fontWeight: 700 }}>⚠ {sinRepartir.texto}</div>}
-                      {avisosEdit.map(a => <div key={a.tipo}>⚠ {a.texto}</div>)}
+                      {avisosEdit.map(a => <div key={a.tipo}>⚠ {sinRepartir ? a.detalle : a.texto}</div>)}
                     </div>
                   )}
                   <button onClick={() => handleSaveEdit(modalSession, modalCalc)} disabled={saving || avisosEdit.length > 0}

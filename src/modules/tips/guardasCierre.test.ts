@@ -99,5 +99,7 @@ describe('H1 + H2 a la vez', () => {
     const av = avisosCierrePropinas([linea('b', 'barman', 0)], 3000, 0, 4000, TC)
     expect(av.map(a => a.tipo)).toEqual(['barra_sin_horas', 'general_sin_puntos'])
     expect(av.map(a => a.monto)).toEqual([4000, 3000])
+    // El detalle (lo que se ve junto a «Quedan ₡X sin repartir») no lleva cifra.
+    for (const a of av) expect(a.detalle).not.toMatch(/₡|\d/)
   })
 })

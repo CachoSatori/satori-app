@@ -879,7 +879,7 @@ export default function TipsModule() {
                 {(sinRepartir || avisosCierre.length > 0) && (
                   <div role="alert" data-testid="avisos-cierre" style={{ marginBottom: '0.6rem', padding: '0.6rem 0.8rem', borderLeft: '3px solid var(--c-laca)', background: 'var(--c-panel)', fontSize: '0.82rem', lineHeight: 1.4 }}>
                     {sinRepartir && <div data-testid="aviso-sin-repartir" style={{ fontWeight: 700 }}>⚠ {sinRepartir.texto}</div>}
-                    {avisosCierre.map(a => <div key={a.tipo}>⚠ {a.texto}</div>)}
+                    {avisosCierre.map(a => <div key={a.tipo}>⚠ {sinRepartir ? a.detalle : a.texto}</div>)}
                   </div>
                 )}
                 <div className="tips-close-bar">

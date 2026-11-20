@@ -43,6 +43,15 @@ export function textoSinRepartir(monto: number, motivos: MotivoSinRepartir[]): s
   return `Quedan ${formatCRC(monto)} sin repartir: ${motivo}. Revisá las horas o los puntos antes de guardar.`
 }
 
+/**
+ * Texto propio de «Quincenal» (ahí no se guarda nada): «Turno del 2026-11-18 mediodía: quedaron ₡2.500 sin
+ * repartir (<motivo>).» `turno` = etiqueta del turno («Mediodía» / «Noche»).
+ */
+export function textoSinRepartirTurnoCerrado(fecha: string, turno: string, aviso: Pick<SinRepartir, 'monto' | 'motivos'>): string {
+  const motivo = aviso.motivos.map(m => MOTIVO_TEXTO[m]).join(' y ')
+  return `Turno del ${fecha} ${turno.toLowerCase()}: quedaron ${formatCRC(aviso.monto)} sin repartir (${motivo}).`
+}
+
 /** Núcleo puro. `null` = no hay nada que avisar. */
 export function calcSinRepartir(pozo: Pozo, personas: PersonaReparto[]): SinRepartir | null {
   const cobrado = personas.reduce((s, p) => s + (Number(p.cobra) || 0), 0)

@@ -95,6 +95,26 @@ describe('guardas-pr: R04 con supabase/config.toml presente (ítem 11)', () => {
     escribir('supabase/config.toml', OK + '[functions.fantasma]\nverify_jwt = true\n'); commit('huerfano')
     expect(correr().status).toBe(1)
   })
+  it('lista blanca: [remotes] escrito con puntos o en línea, entrypoint y enabled → cae; project_id arriba → pasa', () => {
+    const casos = [
+      'remotes.prod.project_id = "ref-ficticio"\n' + OK,
+      'remotes = { prod = { project_id = "ref-ficticio" } }\n' + OK,
+      OK + '[functions.x.remotes]\nproject_id = "ref-ficticio"\n',
+      '[functions.x]\nverify_jwt = true\nentrypoint = "./otro.ts"\n',
+      '[functions.x]\nverify_jwt = true\nenabled = false\n',
+      '[functions.x]\nverify_jwt = true\nfunctions.x.enabled = false\n',
+      '[[functions.x]]\nverify_jwt = true\n',
+      'functions = { x = { verify_jwt = true } }\n',
+    ]
+    casos.forEach((texto, i) => {
+      escribir('supabase/config.toml', texto); commit(`caso ${i}`)
+      const r = correr()
+      expect(r.status, `caso ${i}: ${texto}`).toBe(1)
+      expect(r.salida).toMatch(/R04: supabase\/config\.toml/)
+    })
+    escribir('supabase/config.toml', 'project_id = "satori-app"\n' + OK); commit('project_id')
+    expect(correr().status).toBe(0)
+  })
   it('mutación: [remotes.*] → cae (aplicaría [auth]/[api] a otro proyecto)', () => {
     escribir('supabase/config.toml', OK + '[remotes.prod]\nproject_id = "ref-ficticio"\n'); commit('remotes')
     const r = correr()

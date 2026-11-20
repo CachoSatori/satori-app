@@ -32,7 +32,7 @@ describe('supabase/config.toml', () => {
     expect(problemasConfig(config, carpetas)).toEqual([])
     expect(carpetas).toEqual(Object.keys(PROD).sort())
   })
-  it('solo [functions.*]: sin [auth], [api], [db] ni [remotes] (la config de Auth/API de prod no se maneja desde acá)', () => {
+  it('solo [functions.*] y project_id: sin [auth], [api], [db] ni [remotes] (la config de Auth/API de prod no se maneja desde acá)', () => {
     expect(config.secciones.filter(s => !s.startsWith('functions.'))).toEqual([])
   })
   it('mutaciones: la regla cae con verify_jwt cambiado, bloque faltante o [remotes]', () => {
@@ -41,5 +41,13 @@ describe('supabase/config.toml', () => {
     expect(mal(texto.replace(/(\[functions\.club-pase\]\nverify_jwt = )false/, '$1true')).join()).toMatch(/club-pase/)
     expect(mal(texto.replace(/\[functions\.alta-empleado\]\nverify_jwt = true\n/, '')).join()).toMatch(/alta-empleado/)
     expect(mal(texto + '\n[remotes.x]\nproject_id = "ficticio"\n').join()).toMatch(/remotes/)
+  })
+  it('lista blanca: claves con puntos, tablas en línea, entrypoint o enabled hacen caer la regla', () => {
+    const mal = (t: string) => problemasConfig(leerConfig(t), carpetas) as string[]
+    expect(mal('remotes.prod.project_id = "ficticio"\n' + texto).join()).toMatch(/remotes/)
+    expect(mal('remotes = { prod = { project_id = "ficticio" } }\n' + texto).join()).toMatch(/remotes/)
+    expect(mal(texto.replace('[functions.club-pase]\nverify_jwt = false', '[functions.club-pase]\nverify_jwt = false\nentrypoint = "./otro.ts"')).join()).toMatch(/entrypoint/)
+    expect(mal(texto.replace('[functions.club-pase]\nverify_jwt = false', '[functions.club-pase]\nverify_jwt = false\nenabled = false')).join()).toMatch(/enabled/)
+    expect(mal(texto)).toEqual([])
   })
 })

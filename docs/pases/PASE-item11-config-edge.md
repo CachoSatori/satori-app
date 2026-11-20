@@ -7,7 +7,7 @@
 - **Pasa:** al mergear, Branching despliega en PROD las 8 funciones declaradas en `supabase/config.toml` con el código de
   `supabase/functions/` (y lo que importan de `src/shared/`), con el `verify_jwt` de cada una. El código es **el que corre hoy**.
 - **No pasa:** ninguna migración (este PR no trae `.sql`), ningún secreto, nada de `[auth]`/`[api]` (Branching los ignora en
-  prod sin `[remotes.*]`, y el archivo no tiene ninguno: lo prueban `supabase/config.test.ts` y R04). El agente del PoS no se toca.
+  prod sin `[remotes.*]`, y el archivo no tiene ninguno: lo prueban `supabase/config.test.ts` y R04, con lista blanca: solo `project_id` y `verify_jwt`). El agente del PoS no se toca.
 
 ## Fuente de cada función (código bajado de prod con `get_edge_function`, solo lectura, 20-nov)
 
@@ -41,10 +41,10 @@ consecutivo, clave FE, apertura ni topes de largo): este PR lo reemplaza por el 
 3. Personal y clientes: nada visible (mismo código).
 
 ## Humo después (solo lectura)
-- `list_edge_functions`: 8 funciones, versión +1, `verify_jwt` igual a la tabla.
+- `list_edge_functions`: las 8 funciones con versión +1, `verify_jwt` igual a la tabla y `ezbr_sha256` antes → después anotado.
 - `get_edge_function` de cada una = los archivos del merge.
-- `ingest-ndf`: `pos_ndf_cursor.last_poll_at` avanza y `last_error` null en los 2–3 ciclos siguientes.
-- Check «Supabase Preview» del merge en success.
+- Latido del PoS (`ingest-ndf`): `pos_ndf_cursor.last_poll_at` avanza y `last_error` null en los 2–3 ciclos siguientes.
+- Despliegue de `main` en Supabase sin error (el Preview por PR está desactivado).
 
 ## Criterios de parada
 - Algún `verify_jwt` distinto de la tabla, o `ingest-ndf` con 401 en el log → vuelta atrás de esa función ya.

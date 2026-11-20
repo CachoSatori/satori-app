@@ -7,8 +7,9 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    # labeled/unlabeled: la etiqueta `ok-dueno-edge` (excepción de la guarda R04) vuelve a correr el gate. edited: solo corre
-    # el Gate si cambió la BASE (ver el `if` del job); editar el título o el cuerpo del PR no gasta una corrida.
+    # labeled/unlabeled: la etiqueta `ok-dueno-edge` (excepción de la guarda R04) vuelve a correr el gate. edited: el Gate corre
+    # COMPLETO (un PR re-apuntado a otra base cambia contra qué se comparan las guardas); editar solo el título o el cuerpo
+    # también gasta una corrida, a propósito: saltarla dejaría el check requerido en «Skipped» (ver el comentario del job).
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled, edited]
   # Para que main también tenga su línea «GATE: PASS …» (sin base: las guardas del diff se saltan, lo dice el log).
   push:

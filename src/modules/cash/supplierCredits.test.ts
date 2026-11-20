@@ -1,6 +1,6 @@
 // Helpers puros del saldo a favor (mig 053). Encodean la MISMA matemática que la RPC apply_supplier_credit.
 import { describe, it, expect } from 'vitest'
-import { saldoCredito, saldoResidual, maxAplicable, distribuirCreditoFIFO, type CreditApplicationLike } from './supplierCredits'
+import { saldoCredito, saldoResidual, maxAplicable, distribuirCreditoFIFO, compararFIFO, type CreditApplicationLike } from './supplierCredits'
 
 const app = (o: Partial<CreditApplicationLike>): CreditApplicationLike => ({
   amount_applied: 0, reversed: false, credit_id: 'C', applied_to_movement_id: 'F', ...o,
@@ -78,5 +78,31 @@ describe('distribuirCreditoFIFO — reparte un crédito entre varias facturas (m
     expect(distribuirCreditoFIFO(0, [10000, 20000])).toEqual([0, 0])
     expect(distribuirCreditoFIFO(50000, [])).toEqual([])
     expect(distribuirCreditoFIFO(50000, [-5000, 30000])).toEqual([0, 30000])
+  })
+})
+
+// (20-nov, decisión del dueño) Orden del reparto: fecha de factura ↑ (sin fecha al final), después created_at ↑, después id ↑.
+// Mutación: volver a ordenar solo por created_at → caen «misma created_at» y «empate total»; nulls first → cae «sin fecha».
+describe('compararFIFO — orden total y fijo del reparto (R06)', () => {
+  const T = '2026-11-18T15:00:00.000000+00:00'
+  const f = (id: string, created_at: string, description = '') => ({ id, created_at, description })
+  const orden = (xs: ReturnType<typeof f>[]) => [...xs].sort(compararFIFO).map(x => x.id)
+
+  it('misma created_at, distinta fecha de factura → primero la factura más vieja', () => {
+    expect(orden([f('a', T, 'P · fact 2026-11-15'), f('b', T, 'P · fact 2026-11-12')])).toEqual(['b', 'a'])
+  })
+  it('la fecha de factura manda sobre created_at', () => {
+    expect(orden([f('a', '2026-11-10T12:00:00Z', 'P · fact 2026-11-09'), f('b', '2026-11-11T12:00:00Z', 'P · fact 2026-11-01')]))
+      .toEqual(['b', 'a'])
+  })
+  it('misma fecha de factura → created_at; empate total → id, sin importar el orden de entrada', () => {
+    const x = f('9f', T, 'P · fact 2026-11-12'), y = f('0a', T, 'P · fact 2026-11-12'), z = f('5c', '2026-11-17T09:00:00Z', 'P · fact 2026-11-12')
+    expect(orden([x, y, z])).toEqual(['5c', '0a', '9f'])
+    expect(orden([y, z, x])).toEqual(['5c', '0a', '9f'])
+    expect(orden([x, z, y])).toEqual(['5c', '0a', '9f'])
+  })
+  it('sin fecha de factura → al final; entre ellas, created_at y después id', () => {
+    expect(orden([f('s2', T), f('c', T, 'P · fact 2026-11-16'), f('s1', T), f('s0', '2026-11-01T12:00:00Z')]))
+      .toEqual(['c', 's0', 's1', 's2'])
   })
 })

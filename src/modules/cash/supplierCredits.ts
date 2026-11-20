@@ -5,6 +5,8 @@
 //   saldoResidual = factura.amount_crc − Σ(aplicaciones NO reversadas A esa factura)
 //   máximo aplicable de un crédito a una factura = min(saldoCredito, saldoResidual)
 
+import { fechaFacturaDeDescripcion } from '../../shared/utils/fechaFactura'
+
 export interface CreditApplicationLike {
   amount_applied: number
   reversed: boolean
@@ -52,6 +54,28 @@ export function maxAplicable(
   credito: SupplierCreditLike, factura: FacturaLike, applications: CreditApplicationLike[],
 ): number {
   return round2(Math.max(0, Math.min(saldoCredito(credito, applications), saldoResidual(factura, applications))))
+}
+
+export interface FacturaOrdenable {
+  id: string
+  created_at: string
+  description?: string | null
+}
+
+/**
+ * (20-nov, decisión del dueño) Orden FIFO del reparto, total y fijo (R06): fecha de factura ascendente (de la
+ * descripción «· fact AAAA-MM-DD»; sin fecha va al final), después `created_at`, después `id`. Así dos facturas
+ * con el mismo `created_at` nunca quedan en orden indefinido.
+ */
+export function compararFIFO(a: FacturaOrdenable, b: FacturaOrdenable): number {
+  const fa = fechaFacturaDeDescripcion(a.description), fb = fechaFacturaDeDescripcion(b.description)
+  if (fa !== fb) {
+    if (fa === null) return 1
+    if (fb === null) return -1
+    return fa < fb ? -1 : 1
+  }
+  if (a.created_at !== b.created_at) return a.created_at < b.created_at ? -1 : 1
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
 /**

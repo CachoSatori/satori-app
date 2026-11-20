@@ -87,4 +87,32 @@ describe('AplicarCreditoModal — reparte un crédito entre varias facturas (FIF
     ;(boton as unknown as Record<string, { onClick: () => void }>)[clave].onClick()
     expect(applySpy).not.toHaveBeenCalled()
   })
+  // (20-nov) Mutación: volver a `a.created_at.localeCompare(b.created_at)` en `ordered` → caen las dos.
+  it('misma created_at: el crédito va primero a la de fecha de factura más vieja (no al orden de llegada)', async () => {
+    const T = '2026-11-18T15:00:00Z'
+    const pendientes = [
+      fac({ id: 'f-nueva', created_at: T, amount_crc: 30000, description: 'Pescado · fact 2026-11-16' }),
+      fac({ id: 'f-vieja', created_at: T, amount_crc: 30000, description: 'Pescado · fact 2026-11-12' }),
+    ]
+    render(<AplicarCreditoModal supplier={supplier} credits={[credit({ amount_crc: 40000 })]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar \(/ }))
+    await screen.findByRole('button', { name: /Descargar comprobante/ })
+    const calls = applySpy.mock.calls.map(c => c[0] as { movement_id: string; amount: number })
+    expect(calls).toEqual([
+      expect.objectContaining({ movement_id: 'f-vieja', amount: 30000 }),
+      expect.objectContaining({ movement_id: 'f-nueva', amount: 10000 }),
+    ])
+  })
+  it('empate total (misma fecha de factura y created_at): desempata por id', async () => {
+    const T = '2026-11-18T15:00:00Z'
+    const pendientes = [
+      fac({ id: 'f-b', created_at: T, amount_crc: 30000, description: 'Pescado · fact 2026-11-12' }),
+      fac({ id: 'f-a', created_at: T, amount_crc: 30000, description: 'Pescado · fact 2026-11-12' }),
+    ]
+    render(<AplicarCreditoModal supplier={supplier} credits={[credit({ amount_crc: 40000 })]} applications={[]} pendientes={pendientes} onDone={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar \(/ }))
+    await screen.findByRole('button', { name: /Descargar comprobante/ })
+    const calls = applySpy.mock.calls.map(c => c[0] as { movement_id: string; amount: number })
+    expect(calls.map(c => [c.movement_id, c.amount])).toEqual([['f-a', 30000], ['f-b', 10000]])
+  })
 })

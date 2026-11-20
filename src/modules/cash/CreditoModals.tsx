@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react'
 import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '../../shared/types/database'
 import { createSupplierCredit, applySupplierCredit } from '../../shared/api/cash'
 import { fi } from './cashUtils'
-import { saldoCredito, saldoResidual, distribuirCreditoFIFO } from './supplierCredits'
+import { saldoCredito, saldoResidual, distribuirCreditoFIFO, compararFIFO } from './supplierCredits'
 import { parseMonto } from './montos'
 import { todayCR, dateCR } from '../../shared/utils'
 import { descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos } from './comprobante'
@@ -124,9 +124,9 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
   const misCreditos = useMemo(
     () => credits.filter(c => c.supplier_id === supplier.id && saldoCredito(c, applications) > 0),
     [credits, applications, supplier.id])
-  // FIFO = más viejas primero: la lista y el reparto van por fecha de creación ascendente.
+  // FIFO = más viejas primero (20-nov): la lista y el reparto van por fecha de factura, después created_at, después id.
   const ordered = useMemo(
-    () => [...pendientes].sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    () => [...pendientes].sort(compararFIFO),
     [pendientes])
 
   // Reparto FIFO puro para un crédito dado → { facturaId: montoStr } (solo montos > 0).

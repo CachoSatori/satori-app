@@ -235,6 +235,31 @@ describe('marcas y .claude por Bash: solo lecturas evidentes (barrera blanda)', 
   for (const c of pasa) it(`deja pasar: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
 })
 
+describe('camino de vuelta desde /tmp, cwd dentro de .claude y git reset --hard', () => {
+  const bloquea = [
+    'cp -t .claude /tmp/d/ok-dueno-noche.local', 'cp -t .claude /tmp/d/*', 'cp --target-directory=.claude /tmp/d/x', 'cp --target-directory .claude /tmp/d/x',
+    'cp -vt .claude /tmp/d/x', 'cp .claude/ok-dueno-noche.local /tmp/../home/x/.claude/', 'mv /tmp/d/x .claude/', 'mv -t .claude /tmp/d/x',
+    'cd .claude', 'cd .claude && cp /tmp/x .', 'cd ./.claude/', 'cd /home/x/wt/.claude/skills',
+    'git reset --hard', 'git reset --hard origin/otra', 'git -C /home/x reset --hard HEAD~1', 'git checkout otra -- .claude', 'git checkout otra -- .claude/settings.json',
+  ]
+  for (const c of bloquea) it(`bloquea: ${c}`, () => expect(evaluarBash(c, ctx())).not.toBeNull())
+  it('la cadena del verificador: copiar a /tmp pasa, volver no', () => {
+    expect(evaluarBash('cp .claude/ok-dueno-noche.local /tmp/d/', ctx())).toBeNull()
+    expect(evaluarBash("sed -i 's/306/305/' /tmp/d/*", ctx())).toBeNull() // fuera de .claude: no lo mira
+    expect(evaluarBash('cp -t .claude /tmp/d/*', ctx())).toMatch(/marca/)
+  })
+  it('con la carpeta actual dentro de .claude: todo se niega salvo un cd que salga', () => {
+    const adentro = { ...ctx(), cwd: join(raiz, '.claude') }
+    for (const c of ['cp /tmp/x .', 'ls', 'cat sha-firmado.local', 'echo x > a', 'cd skills', 'cd .', 'cd $HOME/.claude', 'cd .. && cp /tmp/x .claude/'])
+      expect(evaluarBash(c, adentro)).toMatch(/dentro de \.claude/)
+    expect(evaluarBash('cd ..', adentro)).toBeNull()
+    expect(evaluarBash(`cd ${raiz}`, adentro)).toBeNull()
+    expect(evaluarBash('cd ..', { ...ctx(), cwd: join(raiz, '.claude', 'skills') })).toMatch(/dentro de \.claude/) // sigue adentro
+  })
+  for (const c of ['git reset --soft HEAD~1', 'git reset HEAD a.ts', 'cd /home/claude/wt-x', 'cp .claude/settings.json /tmp/copia.json', 'git checkout -b claude/x origin/main'])
+    it(`deja pasar: ${c}`, () => expect(evaluarBash(c, ctx())).toBeNull())
+})
+
 describe('SQL: drop / delete / truncate solo dentro de begin … rollback', () => {
   const bloquea = ['delete from t', 'drop table t', 'truncate t', 'begin; delete from t; commit;', 'begin; delete from t;',
     'with x as (delete from t returning *) select * from x', "do $$ begin delete from t; end $$", 'alter table t drop column c',

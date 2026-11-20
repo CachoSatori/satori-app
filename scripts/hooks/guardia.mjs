@@ -221,7 +221,7 @@ const RE_NOMBRE_PROTEGIDO = /sha-firmado|ok-dueno-noche|turno-prod|migracion-fir
 const RE_DIR_CLAUDE = /(?:^|[\s/'"=:;(&|<>`$])\.claude(?=[/\\'"\s;|&)<>`*]|$)/
 const RE_MARCA_ARCHIVO = /(?:^|\/)(?:sha-firmado|ok-dueno-noche|turno-prod|migracion-firmada)\.local$/
 const LECTURAS = new Set(['cat', 'jq', 'head', 'tail', 'less', 'more', 'ls', 'stat', 'wc', 'grep', 'egrep', 'fgrep', 'rg', 'diff', 'cmp',
-  'sha256sum', 'sha1sum', 'md5sum', 'file', 'test', '[', '[[', 'echo', 'printf', 'true', 'pwd', 'realpath', 'readlink', 'basename', 'dirname', 'cd'])
+  'sha256sum', 'sha1sum', 'md5sum', 'file', 'test', '[', '[[', 'echo', 'printf', 'true', 'pwd', 'realpath', 'readlink', 'basename', 'dirname'])
 const GIT_LECTURAS = new Set(['diff', 'log', 'show', 'status', 'ls-files', 'add', 'commit', 'hash-object', 'check-ignore', 'blame', 'grep', 'rev-parse', 'cat-file'])
 const RE_INTERPRETE_POR_TUBO = /\|\s*(?:sudo\s+|env\s+(?:\w+=\S*\s+)*)?(?:\S*\/)?(?:bash|sh|zsh|dash|ksh|python[\d.]*|node|perl|ruby|php)(?:\s+-[A-Za-z]+)*\s*(?=$|[|;&)\n])/
 const RE_CODIGO_ILEGIBLE = /(?:^|[\s;&|(])(?:bash|sh|zsh|dash|ksh|source|\.)\s+<\(|\beval\b[^\n;|&]*\$/
@@ -237,9 +237,34 @@ function lecturaEvidente(s) {
     return GIT_LECTURAS.has(sub) && !resto.some(a => a === '-o' || a.startsWith('--output'))
   }
   if (prog === 'gh') return !args.some(a => ['checkout', 'clone', 'download'].includes(a))
-  if (prog === 'cp') { const d = pos[pos.length - 1] ?? ''; return pos.length >= 2 && d.startsWith('/tmp/') && !RE_NOMBRE_PROTEGIDO.test(d) && !RE_DIR_CLAUDE.test(d) }
+  if (prog === 'cd') return !pos.some(a => RE_DIR_CLAUDE.test(a) || RE_DIR_CLAUDE.test('/' + a))
+  if (prog === 'cp') {
+    // Solo copiar HACIA /tmp: sin -t / --target-directory (cambian cuál argumento es el destino) y sin «..».
+    if (args.some(a => a === '-t' || a.startsWith('--target-directory') || /^-[a-zA-Z]*t/.test(a))) return false
+    const d = pos[pos.length - 1] ?? ''
+    return pos.length >= 2 && d.startsWith('/tmp/') && !d.includes('..') && !RE_NOMBRE_PROTEGIDO.test(d) && !RE_DIR_CLAUDE.test(d)
+  }
   if (prog === 'rm' || prog === 'unlink') return pos.length > 0 && pos.every(a => RE_MARCA_ARCHIVO.test(a))
   return false
+}
+
+/** ¿La ruta está en una carpeta `.claude` o debajo? */
+const dentroDeClaude = ruta => /(?:^|[/\\])\.claude(?:[/\\]|$)/.test(String(ruta ?? ''))
+
+/**
+ * Carpeta actual dentro de `.claude/` (el cwd persiste entre llamadas: `cd .claude` y después `cp /tmp/x .`): se niega
+ * todo, salvo un `cd` que salga. @returns {string | null}
+ */
+export function evaluarCwdProtegido(cmd, cwd) {
+  if (!dentroDeClaude(cwd)) return null
+  const simples = comandos(cmd).filter(s => s.palabras.length > 0)
+  const ultimo = simples[simples.length - 1]
+  const soloCd = simples.length > 0 && simples.every(s => programa(s.palabras).prog === 'cd' && s.redirecciones.length === 0)
+  if (soloCd) {
+    const destino = programa(ultimo.palabras).args.filter(a => !a.startsWith('-'))[0]
+    if (destino && !destino.includes('$') && !dentroDeClaude(resolve(cwd, destino))) return null
+  }
+  return `La carpeta actual (${cwd}) está dentro de .claude/: ahí no corre ningún comando. Salí primero (cd a la raíz del proyecto).`
 }
 
 /** @returns {string | null} */
@@ -255,6 +280,8 @@ export function evaluarZonaProtegida(cmd) {
 
 /** @param {string} cmd @param {Contexto} ctx @returns {string | null} motivo del bloqueo */
 export function evaluarBash(cmd, ctx) {
+  const cwdMal = evaluarCwdProtegido(cmd, ctx.cwd)
+  if (cwdMal) return cwdMal
   const zona = evaluarZonaProtegida(cmd)
   if (zona) return zona
   for (const s of comandos(cmd)) {
@@ -283,6 +310,7 @@ export function evaluarBash(cmd, ctx) {
 
     if (prog === 'git') {
       const { sub, resto, dir } = subcomandoGit(args)
+      if (sub === 'reset' && resto.includes('--hard')) return 'Bloqueado: git reset --hard (puede pisar .claude/ y los cambios sin commitear). Usá git switch / git restore sobre archivos puntuales.'
       if (sub === 'push') {
         const base = dir ? resolve(ctx.cwd, dir) : ctx.cwd
         const m = evaluarPush(resto, () => ctx.ramaActual(base))

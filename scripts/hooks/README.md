@@ -47,7 +47,10 @@ Archivos `.claude/*.local` (los ignora `.gitignore` por `*.local`) **o** variabl
 sesión. Las escribe la sesión principal con `Write` y las firma el dueño tocando **Aprobar** en la app (ver abajo). Un
 subagente no puede por Write (lo frena `firma.mjs`). Por Bash la guardia frena lo que puede leer (ver tabla), pero es una
 **barrera blanda**: no expande variables ni decodifica nada, así que un comando armado para esconder el nombre de la marca
-y la carpeta puede pasarla. Lo que sostiene la firma es el pedido de permiso de `Write` y el clasificador del modo automático
+y la carpeta puede pasarla (p. ej. `python3 -c "open('.cl'+'aude/sha-fir'+'mado.local','w')…"` arma la ruta con `+` y no
+nombra ni la carpeta ni la marca). Además niega: `cp`/`mv` con `-t`/`--target-directory` o hacia `.claude/`, `cd` a
+`.claude/`, todo comando con la carpeta actual dentro de `.claude/` (salvo un `cd` que salga), `git reset --hard` y
+`git checkout <rama> -- .claude`. Revisarla queda en el backlog (PROMPT-CONTINUACION, P1 Seguridad). Lo que sostiene la firma es el pedido de permiso de `Write` y el clasificador del modo automático
 para lo demás; la guardia frena los errores, no a un agente decidido a esquivarla.
 Las líneas que empiezan con `# ` son comentarios (el texto «Aprobar = …» que pone el hook) y no cuentan.
 

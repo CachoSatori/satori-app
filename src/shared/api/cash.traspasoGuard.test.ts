@@ -8,7 +8,8 @@ import type { CashMovement } from '../types/database'
 
 // Estado del mock: fila "actual" para el read del guard + registro de escrituras.
 const state = vi.hoisted(() => ({
-  currentRow: null as null | { movement_type: string | null; subcategory: string | null },
+  // (20-nov) con montos: un cambio de tipo también valida el movimiento completo (validarMovimiento), leyendo la fila.
+  currentRow: null as null | { movement_type: string | null; subcategory: string | null; amount_crc?: number; amount_usd?: number },
   writes: [] as { op: string }[],
 }))
 
@@ -85,6 +86,7 @@ describe('cash.ts — guard de dirección de traspaso (ítem 1a)', () => {
     expect(state.writes).toHaveLength(0)
   })
   it('ACEPTA convertir a traspaso con dirección legible (Caja Fuerte → Banco)', async () => {
+    state.currentRow = { movement_type: 'ingreso', subcategory: 'x', amount_crc: 1000, amount_usd: 0 }
     await expect(updateCashMovement('id1', upd({ movement_type: 'traspaso', subcategory: 'Caja Fuerte → Banco' })))
       .resolves.toBeUndefined()
     expect(state.writes.some(w => w.op === 'update')).toBe(true)
@@ -103,7 +105,7 @@ describe('cash.ts — guard de dirección de traspaso (ítem 1a)', () => {
     await expect(updateCashMovement('id1', upd({ subcategory: 'cualquier cosa' }))).resolves.toBeUndefined()
   })
   it('con solo tipo=traspaso LEE la fila para la subcategory y acepta si es legible', async () => {
-    state.currentRow = { movement_type: 'ingreso', subcategory: 'Caja Fuerte → Banco' }
+    state.currentRow = { movement_type: 'ingreso', subcategory: 'Caja Fuerte → Banco', amount_crc: 1000, amount_usd: 0 }
     await expect(updateCashMovement('id1', upd({ movement_type: 'traspaso' }))).resolves.toBeUndefined()
   })
 })

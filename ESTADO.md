@@ -83,7 +83,7 @@ El código de `main` es el desplegado (Branching); las fuentes por rama de antes
 ### Numeración de migraciones
 > **Fuente de verdad:** `supabase/migraciones-reservadas.json` (origen → número final de cada una), que lee `supabase/migraciones.test.ts`. La tabla número a número está en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 
-1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **139**) · PASE A PROD **150–199** (solo renumeraciones del pase; próximo libre **195**). La **086** queda libre.
+1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **140**) · PASE A PROD **150–199** (solo renumeraciones del pase; próximo libre **196**; la 195 = origen 139, #323, sin aplicar). La **086** queda libre.
 2. Cada PR que agrega una migración actualiza el registro. El gate falla si no está registrada, queda fuera del bloque de su rama o repite número.
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199, en el mismo PR (archivo, rollback, pruebas, scripts), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
@@ -91,7 +91,7 @@ El código de `main` es el desplegado (Branching); las fuentes por rama de antes
 **Ledger de prod: 194**. Staging: 194 (189 omitida; faltan las filas viejas 065 y 066).
 
 Números registrados (lo exige el test; origen y destino en el JSON y en el histórico):
-| 075 | 078 | 080 | 081 | 082 | 083 | 084 | 085 | 087 | 088 | 089 | 090 | 091 | 092 | 093 | 094 | 095 | 096 | 097 | 098 | 099 | 100 | 101 | 102 | 103 | 104 | 105 | 106 | 107 | 108 | 109 | 110 | 111 | 112 | 113 | 114 | 115 | 116 | 117 | 118 | 119 | 120 | 121 | 122 | 124 | 125 | 126 | 127 | 128 | 129 | 130 | 131 | 132 | 133 | 134 | 135 | 136 | 137 | 138 | 150 | 151 | 153 | 155 | 156 | 157 | 158 | 159 | 160 | 161 | 162 | 163 | 164 | 165 | 166 | 167 | 168 | 169 | 170 | 171 | 172 | 173 | 174 | 175 | 176 | 177 | 178 | 179 | 180 | 181 | 182 | 183 | 184 | 185 | 186 | 187 | 188 | 189 | 190 | 191 | 192 | 193 | 194 |
+| 075 | 078 | 080 | 081 | 082 | 083 | 084 | 085 | 087 | 088 | 089 | 090 | 091 | 092 | 093 | 094 | 095 | 096 | 097 | 098 | 099 | 100 | 101 | 102 | 103 | 104 | 105 | 106 | 107 | 108 | 109 | 110 | 111 | 112 | 113 | 114 | 115 | 116 | 117 | 118 | 119 | 120 | 121 | 122 | 124 | 125 | 126 | 127 | 128 | 129 | 130 | 131 | 132 | 133 | 134 | 135 | 136 | 137 | 138 | 139 | 150 | 151 | 153 | 155 | 156 | 157 | 158 | 159 | 160 | 161 | 162 | 163 | 164 | 165 | 166 | 167 | 168 | 169 | 170 | 171 | 172 | 173 | 174 | 175 | 176 | 177 | 178 | 179 | 180 | 181 | 182 | 183 | 184 | 185 | 186 | 187 | 188 | 189 | 190 | 191 | 192 | 193 | 194 | 195 |
 
 ## 🔒 Abierto que sigue vigente
 - **Seguridad en prod:** 4 `SECURITY DEFINER` ejecutables por `anon` (`get_my_role`, `handle_new_user`, `log_movement_edit`, `unif_on_cash_movement`); sin `supabase/config.toml`.

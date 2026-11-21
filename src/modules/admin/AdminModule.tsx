@@ -8,10 +8,11 @@ import RolePointsConfig from './RolePointsConfig'
 import ExchangeRateWidget from './ExchangeRateWidget'
 import EmployeeHours from './EmployeeHours'
 import UserApprovals from './UserApprovals'
+import LocalesConfig from './LocalesConfig'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { enviarReporteMensual, mensajeReporte } from '../../shared/api/reporteMensual'
 
-type Tab = 'employees' | 'users' | 'rolepoints' | 'exchange' | 'hours'
+type Tab = 'employees' | 'users' | 'locales' | 'rolepoints' | 'exchange' | 'hours'
 
 
 export default function AdminModule() {
@@ -88,6 +89,7 @@ export default function AdminModule() {
             </span>
           )}
         </div>
+        <div className={`vt-nav-tab ${tab === 'locales' ? 'active' : ''}`} onClick={() => setTab('locales')}>Locales</div>
         <div className={`vt-nav-tab ${tab === 'rolepoints' ? 'active' : ''}`} onClick={() => setTab('rolepoints')}>Puntos por rol</div>
         <div className={`vt-nav-tab ${tab === 'exchange' ? 'active' : ''}`} onClick={() => setTab('exchange')}>Tipo de cambio</div>
         <div className={`vt-nav-tab ${tab === 'hours' ? 'active' : ''}`} onClick={() => setTab('hours')}>Horas trabajadas</div>
@@ -136,6 +138,9 @@ export default function AdminModule() {
         )}
         {tab === 'users' && (
           <UserApprovals employees={employees} currentUserId={profile?.id} onEmployeesChanged={refreshEmployees} />
+        )}
+        {tab === 'locales' && (
+          <LocalesConfig />
         )}
         {tab === 'rolepoints' && (
           <RolePointsConfig rolePoints={rolePoints} onRefresh={loadData} />

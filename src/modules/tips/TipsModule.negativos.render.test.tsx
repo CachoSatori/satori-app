@@ -8,8 +8,8 @@ type Entry = { id: string; employee_id: string; hours_worked: number; tip_amount
 const state: { session: Record<string, unknown> | null; entries: Entry[] } = { session: null, entries: [] }
 
 const api = vi.hoisted(() => ({
-  updateSessionPools: vi.fn(async (_id: string, _p: Record<string, number>) => {}),
-  upsertTipEntry: vi.fn(async (_e: Record<string, unknown>) => {}),
+  updateSessionPools: vi.fn<(id: string, pools: Record<string, number>) => Promise<void>>(async () => {}),
+  upsertTipEntry: vi.fn<(entrada: Record<string, unknown>) => Promise<void>>(async () => {}),
   closeTipSession: vi.fn(async () => {}),
   createTipSession: vi.fn(async () => ({ id: 'nuevo' })),
 }))

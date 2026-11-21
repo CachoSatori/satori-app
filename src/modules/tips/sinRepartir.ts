@@ -8,13 +8,14 @@
 // Motivos:
 //   · barra_sin_horas  — H1: pozo de barra > 0 y la barra suma 0 horas (misma condición que el sagrado, negada).
 //   · nadie_con_puntos — H2: pozo general > 0 y la suma de puntos es 0 (generalRate = 0).
+//   · pagado_menor     — turno cerrado (repartoPagado.ts): lo pagado no cubre el pozo por más del redondeo.
 //   · redondeo         — defensa: resto ≥ ₡1 por persona sin H1 ni H2. El redondeo por persona del sagrado
 //                        (H3) deja como máximo ₡0,5 por persona: eso NO se avisa.
 
 import { BAR_ROLES, formatCRC, type DraftLine, type HistoryCalc, type PoolTotals } from '../../shared/utils/tipCalculations'
 import type { UserRole } from '../../shared/types/database'
 
-export type MotivoSinRepartir = 'barra_sin_horas' | 'nadie_con_puntos' | 'redondeo'
+export type MotivoSinRepartir = 'barra_sin_horas' | 'nadie_con_puntos' | 'redondeo' | 'pagado_menor'
 
 export interface SinRepartir {
   /** Colones enteros que quedan sin repartir (totalPool − Σ cobrado, redondeado). */
@@ -36,6 +37,8 @@ const MOTIVO_TEXTO: Record<MotivoSinRepartir, string> = {
   barra_sin_horas: 'hay propina de barra y nadie de barra tiene horas',
   nadie_con_puntos: 'hay pozo para repartir y nadie del turno tiene puntos u horas',
   redondeo: 'el redondeo por persona dejó un resto',
+  // Solo sobre lo PAGADO de un turno cerrado (repartoPagado.ts): resto de más de ₡1 por persona sin H1 ni H2.
+  pagado_menor: 'lo pagado suma menos que el pozo: revisar este turno',
 }
 
 export function textoSinRepartir(monto: number, motivos: MotivoSinRepartir[]): string {

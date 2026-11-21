@@ -29,6 +29,7 @@ import {
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import { avisosCierrePropinas } from './guardasCierre'
+import { montoGuardable, validarTipoCambio, validarTurno } from './validarTurno'
 import { sinRepartirTurno } from './sinRepartir'
 import { availableForCobertura, eligibleRoster } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
@@ -239,10 +240,23 @@ export default function TipsModule() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, coberturas, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate, openSession?.id])
 
+  // ── Nada negativo (decisión del dueño 20-nov, validarTurno.ts): con un problema no se cierra ──
+  const problemaTurno = useMemo(() => {
+    if (!openSession) return null
+    return validarTurno({
+      lineas: lines.map(l => ({ nombre: l.employeeName, activa: l.active, hours: l.hours, propina_crc: l.propina_crc, propina_usd: l.propina_usd })),
+      efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate, openSession?.id])
+
   // ── Auto-guardar pools en Supabase ────────────────────────
   const scheduleSavePools = useCallback(() => {
     if (!openSession) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    // Nada negativo (20-nov): con un pozo negativo o que no es número, este autoguardado se saltea (el
+    // cierre muestra el motivo); lo que está en pantalla se guarda apenas se corrige. Las filas siguen.
+    if (![efectivoCRC, efectivoUSD, barraCRC, barraElecCRC].every(montoGuardable)) return
     saveTimerRef.current = setTimeout(() => {
       lastLocalWriteRef.current = Date.now()
       updateSessionPools(openSession.id, {
@@ -259,6 +273,9 @@ export default function TipsModule() {
   // ── Abrir sesión ──────────────────────────────────────────
   const handleCreateSession = async () => {
     if (!profile) return
+    // El tipo de cambio queda guardado en el turno: nunca 0 ni negativo (decisión del dueño 20-nov).
+    const tcMalo = validarTipoCambio(exchangeRate)
+    if (tcMalo) { setError(tcMalo); return }
     // Guard: nunca crear si ya existe un registro (abierto o cerrado) para esa fecha + turno
     const dup = sessions.find(s => s.session_date === fecha && s.shift_type === shiftType)
     if (dup) {
@@ -413,6 +430,8 @@ export default function TipsModule() {
     if (!line || !line.active) return
     const hours = Number(line.hours) || 0
     if (hours <= 0) return
+    // Propina negativa o que no es número: no se guarda esta fila (el cierre muestra el motivo).
+    if (!montoGuardable(line.propina_crc) || !montoGuardable(line.propina_usd)) return
     lastLocalWriteRef.current = Date.now()
     await upsertTipEntry({
       session_id:     openSession.id,
@@ -442,6 +461,7 @@ export default function TipsModule() {
     if (!openSession || !profile || !totals) return
     const workedLines = displayLines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
+    if (problemaTurno) { setError(problemaTurno); return }                 // defensa: el botón ya está deshabilitado
     if (avisosCierre.length) { setError(avisosCierre[0].texto); return }   // defensa: el botón ya está deshabilitado
     // 3 números que reconcilian: Total asignado = Efectivo ya en mano + Electrónico a entregar.
     const totalAsignado = Math.round(workedLines.reduce((s, l) => s + l.take_home, 0))
@@ -876,14 +896,18 @@ export default function TipsModule() {
               {/* Cerrar turno */}
               {canOperate && lines.some(l => l.active) && (
                 <>
-                {(sinRepartir || avisosCierre.length > 0) && (
+                {problemaTurno ? (
+                  <div role="alert" data-testid="avisos-cierre" style={{ marginBottom: '0.6rem', padding: '0.6rem 0.8rem', borderLeft: '3px solid var(--c-laca)', background: 'var(--c-panel)', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                    <div data-testid="aviso-negativos" style={{ fontWeight: 700 }}>⚠ {problemaTurno}</div>
+                  </div>
+                ) : (sinRepartir || avisosCierre.length > 0) && (
                   <div role="alert" data-testid="avisos-cierre" style={{ marginBottom: '0.6rem', padding: '0.6rem 0.8rem', borderLeft: '3px solid var(--c-laca)', background: 'var(--c-panel)', fontSize: '0.82rem', lineHeight: 1.4 }}>
                     {sinRepartir && <div data-testid="aviso-sin-repartir" style={{ fontWeight: 700 }}>⚠ {sinRepartir.texto}</div>}
                     {avisosCierre.map(a => <div key={a.tipo}>⚠ {sinRepartir ? a.detalle : a.texto}</div>)}
                   </div>
                 )}
                 <div className="tips-close-bar">
-                  <button className="tips-btn-danger" onClick={handleCloseSession} disabled={closing || avisosCierre.length > 0}>
+                  <button className="tips-btn-danger" onClick={handleCloseSession} disabled={closing || !!problemaTurno || avisosCierre.length > 0}>
                     {closing ? 'Cerrando…' : '▶ Cerrar turno y guardar payouts'}
                   </button>
                 </div>

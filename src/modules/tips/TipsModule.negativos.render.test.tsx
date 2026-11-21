@@ -8,6 +8,8 @@ type Entry = { id: string; employee_id: string; hours_worked: number; tip_amount
 const state: { session: Record<string, unknown> | null; entries: Entry[] } = { session: null, entries: [] }
 
 const api = vi.hoisted(() => ({
+  updateSessionPools: vi.fn(async (_id: string, _p: Record<string, number>) => {}),
+  upsertTipEntry: vi.fn(async (_e: Record<string, unknown>) => {}),
   closeTipSession: vi.fn(async () => {}),
   createTipSession: vi.fn(async () => ({ id: 'nuevo' })),
 }))
@@ -24,8 +26,8 @@ vi.mock('../../shared/api/tips', () => ({
   getAllEmployees: vi.fn(async () => EMPS),
   getRoleTipPoints: vi.fn(async () => PTS),
   createTipSession: api.createTipSession, deleteTipSession: vi.fn(), deleteTipEntry: vi.fn(),
-  upsertTipEntry: vi.fn(async () => {}),
-  updateSessionPools: vi.fn(async () => {}),
+  upsertTipEntry: api.upsertTipEntry,
+  updateSessionPools: api.updateSessionPools,
   savePayouts: vi.fn(async () => {}),
   closeTipSession: api.closeTipSession,
 }))
@@ -88,6 +90,39 @@ describe('TipsModule · cierre sin negativos', () => {
     fireEvent.change(screen.getByDisplayValue('20000'), { target: { value: '-20000' } })
     expect((await screen.findByTestId('aviso-negativos')).textContent).toBe('⚠ Los montos no pueden ser negativos: revisá «💵 Efectivo ₡».')
     expect(b.disabled).toBe(true)
+  })
+})
+
+describe('TipsModule · autoguardado del turno abierto sin negativos', () => {
+  it('pozo negativo → no se autoguarda el pozo; al corregirlo, sí', async () => {
+    state.session = sesion()
+    state.entries = [entrada('e1', 6), entrada('e2', 8)]
+    render(<TipsModule />)
+    await boton()
+    await new Promise(r => setTimeout(r, 900))           // deja pasar el autoguardado de la carga
+    api.updateSessionPools.mockClear()
+    fireEvent.change(screen.getByDisplayValue('20000'), { target: { value: '-20000' } })
+    await new Promise(r => setTimeout(r, 1000))          // el autoguardado espera 800 ms
+    expect(api.updateSessionPools).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByDisplayValue('-20000'), { target: { value: '15000' } })
+    await waitFor(() => expect(api.updateSessionPools).toHaveBeenCalledTimes(1), { timeout: 2000 })
+    expect(api.updateSessionPools.mock.calls[0][1]).toMatchObject({ pool_efectivo_crc: 15000 })
+  })
+
+  it('propina negativa → esa fila no se autoguarda al salir del campo; las demás sí', async () => {
+    state.session = sesion()
+    state.entries = [entrada('e1', 6), entrada('e2', 8)]
+    render(<TipsModule />)
+    await boton()
+    api.upsertTipEntry.mockClear()
+    const propina = inputsDe('Sala Uno')[1]
+    fireEvent.change(propina, { target: { value: '-500' } })
+    fireEvent.blur(propina)
+    const horasBarra = inputsDe('Barra Uno')[0]
+    fireEvent.change(horasBarra, { target: { value: '7' } })
+    fireEvent.blur(horasBarra)
+    await waitFor(() => expect(api.upsertTipEntry).toHaveBeenCalledTimes(1))
+    expect(api.upsertTipEntry.mock.calls[0][0]).toMatchObject({ employee_id: 'e2', hours_worked: 7 })
   })
 })
 

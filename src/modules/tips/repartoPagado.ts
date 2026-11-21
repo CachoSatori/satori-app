@@ -15,9 +15,9 @@
 //     nunca el recalculado.
 // `calcHistory` se sigue usando solo para nombre, rol efectivo y horas de cada fila visible.
 
-import { calcHistory, type HistoryCalc, type HistoryRow } from '../../shared/utils/tipCalculations'
+import { BAR_ROLES, calcHistory, type HistoryCalc, type HistoryRow } from '../../shared/utils/tipCalculations'
 import type { UserRole } from '../../shared/types/database'
-import { calcSinRepartir, sinRepartirHistoria, type SinRepartir } from './sinRepartir'
+import { calcSinRepartir, sinRepartirHistoria, textoSinRepartir, type SinRepartir } from './sinRepartir'
 
 export interface EntradaGuardada {
   employee_id:    string
@@ -59,8 +59,15 @@ export interface RepartoPagado extends HistoryCalc {
   sinDato:     number
   /** true = el turno no tiene `pool_total_crc` guardado: `totalPool` es el reconstruido. */
   pozoSinDato: boolean
-  /** true = faltan personas en la vista: ₡/pto, puntos totales y el desglose de barra no valen. */
+  /** true = faltan personas en la vista (no se puede editar desde acá). */
   incompleto:  boolean
+  /**
+   * true = «₡/pto», «Pts» y el desglose barra/servicio salen de lo GUARDADO y cuadran con lo pagado
+   * (generalRate = (pozo guardado − barra) / Σ puntos guardados, y cada fila de sala cobró sus puntos × esa
+   * tasa, ±₡1). false = no se pueden reconstruir de forma coherente: la pantalla los oculta y muestra solo
+   * lo pagado. Nunca se mezclan los puntos guardados con la tasa recalculada.
+   */
+  desgloseCoherente: boolean
   /** Plata del pozo que nadie cobró (aviso del #320), medida sobre lo pagado cuando está guardado. */
   sinRepartir: SinRepartir | null
 }
@@ -118,9 +125,20 @@ export function repartoPagado(
   const totalPool = pozoSinDato ? calc.totalPool : Number(sesion.pool_total_crc)
   const incompleto = ocultos.entradas > 0
   // Puntos guardados de TODAS las entradas (también las ocultas) si están todos; si no, los del cálculo.
-  const totalPoints = entradas.length > 0 && entradas.every(e => valido(e.points))
-    ? entradas.reduce((s, e) => s + Number(e.points), 0)
-    : calc.totalPoints
+  const puntosGuardados = entradas.length > 0 && entradas.every(e => valido(e.points))
+  const totalPoints = puntosGuardados ? entradas.reduce((s, e) => s + Number(e.points), 0) : calc.totalPoints
+
+  // Desglose desde lo guardado; si no cuadra con lo pagado, no se muestra (ver `desgloseCoherente`).
+  let desglose: { generalPool: number; generalRate: number } | null = null
+  if (sinDato === 0 && !pozoSinDato && !incompleto && puntosGuardados && totalPoints > 0) {
+    const generalPool = totalPool - calc.barraPool
+    const generalRate = generalPool / totalPoints
+    const cuadra = rows.every(r => {
+      const serv = r.pts_val * generalRate
+      return BAR_ROLES.includes(r.role) ? r.payout_crc - serv >= -1 : Math.abs(r.payout_crc - serv) <= 1
+    })
+    if (cuadra) desglose = { generalPool, generalRate }
+  }
 
   let sinRepartir: SinRepartir | null
   if (sinDato === 0 && !pozoSinDato) {
@@ -131,6 +149,10 @@ export function repartoPagado(
       ...ocultasEntradas.map(e => ({ role: (e.covered_role ?? '') as UserRole, hours: Number(e.hours_worked) || 0, cobra: Math.round(Number(e.payout_crc)) })),
     ]
     sinRepartir = calcSinRepartir({ totalPool, barraPool: calc.barraPool, generalPool: calc.generalPool, totalPoints }, personas)
+    // Sobre lo pagado, un resto de más de ₡1 por persona sin H1/H2 no es redondeo: lo pagado no cubre el pozo.
+    if (sinRepartir && sinRepartir.motivos.length === 1 && sinRepartir.motivos[0] === 'redondeo') {
+      sinRepartir = { ...sinRepartir, motivos: ['pagado_menor'], texto: textoSinRepartir(sinRepartir.monto, ['pagado_menor']) }
+    }
   } else if (!incompleto) {
     // Turno sin lo guardado y con todos a la vista: el aviso de #320 sale del reparto reconstruido
     // (solo como aviso; los montos por persona siguen «sin dato guardado»).
@@ -139,7 +161,17 @@ export function repartoPagado(
     sinRepartir = null   // sin lo guardado y con personas ocultas no se puede saber sin inventar
   }
 
-  return { ...calc, rows, totalPool, totalPoints, ocultos, sinDato, pozoSinDato, incompleto, sinRepartir }
+  return {
+    ...calc, rows, totalPool, totalPoints,
+    generalPool: desglose?.generalPool ?? calc.generalPool,
+    generalRate: desglose?.generalRate ?? calc.generalRate,
+    ocultos, sinDato, pozoSinDato, incompleto, desgloseCoherente: desglose !== null, sinRepartir,
+  }
+}
+
+/** Personas con pago en el turno: las de la vista más las ocultas (inactivas sin nombre). */
+export function personasDelTurno(c: HistoryCalc): number {
+  return c.rows.length + (esRepartoPagado(c) ? c.ocultos.entradas : 0)
 }
 
 export function esRepartoPagado(c: HistoryCalc | null | undefined): c is RepartoPagado {

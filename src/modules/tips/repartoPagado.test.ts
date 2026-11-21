@@ -105,6 +105,45 @@ describe('repartoPagado · aviso «sin repartir» (#320) sobre lo pagado', () =>
   })
 })
 
+describe('repartoPagado · ₡/pto, Pts y barra/serv de la MISMA fuente que lo pagado', () => {
+  it('puntos guardados que cuadran con lo pagado → tasa = (pozo − barra) / Σ puntos guardados', () => {
+    const r = repartoPagado(SES, [ent('a', 25000, 8, 100), ent('b', 20000, 8, 80), ent('c', 15000, 8, 60)], [emp('a'), emp('b'), emp('c')], PUNTOS)
+    expect(r.desgloseCoherente).toBe(true)
+    expect(r.totalPoints).toBe(240)
+    expect(r.generalRate).toBe(250)
+    expect(r.generalRate * r.totalPoints).toBe(r.totalPool - r.barraPool)
+  })
+
+  it('puntos guardados que NO cuadran (80/80/80 con 25.000/20.000/15.000) → desglose no coherente (se oculta)', () => {
+    const r = repartoPagado(SES, PAGADO, [emp('a'), emp('b'), emp('c')], PUNTOS)
+    expect(r.desgloseCoherente).toBe(false)
+  })
+
+  it('con barra: el barman cobra sus puntos × tasa + su parte de barra, y cuadra', () => {
+    const ses = { ...SES, pool_efectivo_crc: 10000, pool_barra_crc: 4000, pool_total_crc: 14000 }
+    const r = repartoPagado(ses, [ent('a', 6000, 6, 60), ent('b', 8000, 8, 40)], [emp('a'), emp('b', 'barman')], PUNTOS)
+    expect(r.desgloseCoherente).toBe(true)
+    expect(r.generalRate).toBe(100)
+  })
+
+  it('con personas ocultas o sin dato guardado no hay desglose', () => {
+    expect(repartoPagado(SES, PAGADO, [emp('a'), emp('b')], PUNTOS).desgloseCoherente).toBe(false)
+    expect(repartoPagado(SES, [ent('a', null, 8, 100)], [emp('a')], PUNTOS).desgloseCoherente).toBe(false)
+  })
+})
+
+describe('repartoPagado · lo pagado suma menos que el pozo', () => {
+  it('resto de miles sin H1/H2 → motivo «lo pagado suma menos que el pozo», no «redondeo»', () => {
+    const r = repartoPagado({ ...SES, pool_total_crc: 65000 }, PAGADO, [emp('a'), emp('b'), emp('c')], PUNTOS)
+    expect(r.sinRepartir).toMatchObject({ monto: 5000, motivos: ['pagado_menor'] })
+    expect(r.sinRepartir!.texto).toBe('Quedan ₡5.000 sin repartir: lo pagado suma menos que el pozo: revisar este turno. Revisá las horas o los puntos antes de guardar.')
+  })
+
+  it('menos de ₡1 por persona no se avisa', () => {
+    expect(repartoPagado({ ...SES, pool_total_crc: 60002 }, PAGADO, [emp('a'), emp('b'), emp('c')], PUNTOS).sinRepartir).toBeNull()
+  })
+})
+
 describe('avisosPagado / sumarFaltantes', () => {
   it('suma varios turnos y arma los avisos en palabras', () => {
     const t1 = repartoPagado(SES, PAGADO, [emp('a'), emp('b')], PUNTOS)

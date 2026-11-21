@@ -54,6 +54,13 @@ describe('Quincenal · lo pagado', () => {
     expect(aviso.textContent).toBe('⚠ Turno del 2026-11-05 noche: quedaron ₡4.000 sin repartir (hay propina de barra y nadie de barra tiene horas).')
   })
 
+  it('lo pagado suma menos que el pozo por miles (sin H1/H2) → «revisar este turno», no «redondeo»', async () => {
+    ENTRIES.s5 = [ent('s5', 'e1', 20000), ent('s5', 'e2', 20000)]
+    montar([sesion('s5', '2026-11-09', 45000)])
+    const aviso = await screen.findByTestId('aviso-sin-repartir')
+    expect(aviso.textContent).toBe('⚠ Turno del 2026-11-09 noche: quedaron ₡5.000 sin repartir (lo pagado suma menos que el pozo: revisar este turno).')
+  })
+
   it('un turno sin lo guardado: la persona marca «sin dato guardado» y no suma un recálculo', async () => {
     ENTRIES.s4 = [ent('s4', 'e1', null), ent('s4', 'e2', 20000)]
     montar([sesion('s4', '2026-11-07', 40000)])

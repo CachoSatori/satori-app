@@ -5,8 +5,8 @@ import { reconcilePropinaEgreso } from '../../shared/api/cash'
 import { calcTurno, formatCRC, formatNum, ROL_LABELS, ROL_ORDER, NO_PROPINA_ROLES, type HistoryCalc, type HistoryRow, type DraftLine } from '../../shared/utils/tipCalculations'
 import { avisosCierrePropinas } from './guardasCierre'
 import { sinRepartirTurno } from './sinRepartir'
-import { avisosPagado, esRepartoPagado, repartoPagado, sumarFaltantes, TEXTO_SIN_DATO } from './repartoPagado'
-import { validarTurno } from './validarTurno'
+import { avisosPagado, esRepartoPagado, personasDelTurno, repartoPagado, sumarFaltantes, TEXTO_SIN_DATO } from './repartoPagado'
+import { validarHorasEdicion, validarTurno } from './validarTurno'
 import { shiftLabel } from '../../shared/utils'
 
 interface Props {
@@ -55,8 +55,10 @@ function barraSplit(r: HistoryRow, generalRate: number) {
 // Lo pagado (repartoPagado.ts): una fila sin payout guardado dice «sin dato guardado», nunca un recálculo.
 const filaSinDato = (r: HistoryRow) => 'sinDato' in r && (r as { sinDato: boolean }).sinDato
 const montoFila = (r: HistoryRow) => (filaSinDato(r) ? TEXTO_SIN_DATO : formatCRC(r.payout_crc))
-// Con personas ocultas, ₡/pto, Pts y el desglose de barra (que salen del recálculo) no valen.
+// Con personas ocultas no se edita desde esta vista (el recálculo las dejaría afuera).
 const incompleto = (c: HistoryCalc | null | undefined) => esRepartoPagado(c) && c.incompleto
+// ₡/pto, Pts y barra/serv solo si salen de lo guardado y cuadran con lo pagado; si no, solo lo pagado.
+const sinDesglose = (c: HistoryCalc | null | undefined) => esRepartoPagado(c) && !c.desgloseCoherente
 const avisosDe = (c: HistoryCalc | null | undefined) => (esRepartoPagado(c) ? avisosPagado(sumarFaltantes([c]), formatCRC) : [])
 
 export default function TipHistory({ sessions, employees, rolePoints, onCalcReady, onDeleteSession, onSaved, isManager }: Props) {
@@ -193,6 +195,9 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
     // Guardas H1/H2 (mismas que el cierre): pozo que nadie puede cobrar → no se guarda.
     const avisos = avisosCierrePropinas(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), rate)
     if (avisos.length) { setEditErr(avisos[0].texto); return }
+    // 0 horas: la base lo rechaza (CHECK hours_worked > 0); mejor un mensaje claro que el error crudo.
+    const sinHoras = validarHorasEdicion(eRows.map(r => ({ nombre: r.employeeName, activa: r.active, hours: r.hours })))
+    if (sinHoras) { setEditErr(sinHoras); return }
 
     setSaving(true); setEditErr(null)
     try {
@@ -309,7 +314,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                 <div>
                   <div className="hist-fecha">{s.session_date} · {shiftLabel(s.shift_type)}</div>
                   <div className="hist-meta">
-                    {calc ? `${calc.rows.length} empleados` : 'Tocá para ver el detalle'}
+                    {calc ? `${personasDelTurno(calc)} ${personasDelTurno(calc) === 1 ? 'empleado' : 'empleados'}` : 'Tocá para ver el detalle'}
                     {filterEmp !== 'all' && calc && (() => {
                       const row = calc.rows.find(r => r.employeeId === filterEmp)
                       return row ? <span style={{ color: GOLD, marginLeft: '0.4rem' }}> · {row.employeeName}: {montoFila(row)}</span> : null
@@ -337,7 +342,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                       <div className="hist-pool-row">
                         <span>Pool <strong>{formatCRC(calc.totalPool)}</strong></span>
                         {calc.barraPool > 0 && <span>🍸 Barra <strong>{formatCRC(calc.barraPool)}</strong></span>}
-                        {!incompleto(calc) && <>
+                        {!sinDesglose(calc) && <>
                           <span>₡/pto <strong>{formatCRC(calc.generalRate)}</strong></span>
                           <span>Pts <strong>{formatNum(calc.totalPoints)}</strong></span>
                         </>}
@@ -349,13 +354,13 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                       )}
                       <div className="hist-emp-grid">
                         {(filteredRows ?? calc.rows).map(row => {
-                          const split = incompleto(calc) ? null : barraSplit(row, calc.generalRate)
+                          const split = sinDesglose(calc) ? null : barraSplit(row, calc.generalRate)
                           return (
                             <div key={row.employeeId} className="hist-emp-row" style={{ background: filterEmp === row.employeeId ? 'var(--c-oro-fondo)' : undefined }}>
                               <div>
                                 <div className="hist-emp-name" style={{ color: filterEmp === row.employeeId ? GOLD : undefined }}>{row.employeeName}</div>
                                 <div className="hist-emp-meta">
-                                  {ROL_LABELS[row.role]} · {row.hours}h · {formatNum(row.pts_val)} pts
+                                  {ROL_LABELS[row.role]} · {row.hours}h{!sinDesglose(calc) && <> · {formatNum(row.pts_val)} pts</>}
                                   {split && <span style={{ color: MUTED }}> · 🍸 barra {formatCRC(split.barra)} · serv {formatCRC(split.serv)}</span>}
                                 </div>
                               </div>
@@ -447,7 +452,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                     </thead>
                     <tbody>
                       {modalCalc.rows.map(row => {
-                        const split = incompleto(modalCalc) ? null : barraSplit(row, modalCalc.generalRate)
+                        const split = sinDesglose(modalCalc) ? null : barraSplit(row, modalCalc.generalRate)
                         return (
                           <tr key={row.employeeId} style={{ borderBottom: `1px solid ${BORDER}` }}>
                             <td style={{ padding: '0.4rem 0.3rem' }}>
@@ -459,7 +464,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                               </div>
                             </td>
                             <td style={{ textAlign: 'right', padding: '0.4rem 0.3rem', color: MUTED }}>{row.hours}</td>
-                            <td style={{ textAlign: 'right', padding: '0.4rem 0.3rem', color: MUTED }}>{formatNum(row.pts_val)}</td>
+                            <td style={{ textAlign: 'right', padding: '0.4rem 0.3rem', color: MUTED }}>{sinDesglose(modalCalc) ? '—' : formatNum(row.pts_val)}</td>
                             <td style={{ textAlign: 'right', padding: '0.4rem 0.3rem', fontWeight: 700, color: GOLD }}>{montoFila(row)}</td>
                           </tr>
                         )

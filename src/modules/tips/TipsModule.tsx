@@ -29,7 +29,7 @@ import {
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import { avisosCierrePropinas } from './guardasCierre'
-import { validarTipoCambio, validarTurno } from './validarTurno'
+import { montoGuardable, validarTipoCambio, validarTurno } from './validarTurno'
 import { sinRepartirTurno } from './sinRepartir'
 import { availableForCobertura, eligibleRoster } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
@@ -254,6 +254,9 @@ export default function TipsModule() {
   const scheduleSavePools = useCallback(() => {
     if (!openSession) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    // Nada negativo (20-nov): con un pozo negativo o que no es número, este autoguardado se saltea (el
+    // cierre muestra el motivo); lo que está en pantalla se guarda apenas se corrige. Las filas siguen.
+    if (![efectivoCRC, efectivoUSD, barraCRC, barraElecCRC].every(montoGuardable)) return
     saveTimerRef.current = setTimeout(() => {
       lastLocalWriteRef.current = Date.now()
       updateSessionPools(openSession.id, {
@@ -427,6 +430,8 @@ export default function TipsModule() {
     if (!line || !line.active) return
     const hours = Number(line.hours) || 0
     if (hours <= 0) return
+    // Propina negativa o que no es número: no se guarda esta fila (el cierre muestra el motivo).
+    if (!montoGuardable(line.propina_crc) || !montoGuardable(line.propina_usd)) return
     lastLocalWriteRef.current = Date.now()
     await upsertTipEntry({
       session_id:     openSession.id,

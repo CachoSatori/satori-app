@@ -33,6 +33,26 @@ export function validarTipoCambio(v: unknown): string | null {
   return Number.isFinite(n) && n > 0 ? null : TEXTO_TIPO_CAMBIO
 }
 
+/** Un monto se puede autoguardar: vacío (= 0) o número finito ≥ 0. */
+export function montoGuardable(v: unknown): boolean {
+  if (vacio(v)) return true
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0
+}
+
+/**
+ * Edición en «Historial»: cada persona marcada tiene que tener horas > 0 (la base lo exige con
+ * `tip_entries_hours_worked_check`; sin esto sale el error crudo del CHECK). null = todas con horas.
+ */
+export function validarHorasEdicion(lineas: readonly LineaTurno[]): string | null {
+  for (const l of lineas) {
+    if (!l.activa) continue
+    const h = num(l.hours)
+    if (!(h > 0)) return `${l.nombre} está marcado con 0 horas: cargale las horas que trabajó o desmarcalo.`
+  }
+  return null
+}
+
 /** Primer problema encontrado, en palabras para quien cierra o edita; null = se puede seguir. */
 export function validarTurno(d: DatosTurno): string | null {
   const pozo: [string, unknown][] = [

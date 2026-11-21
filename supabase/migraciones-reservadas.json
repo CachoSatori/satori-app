@@ -346,6 +346,12 @@
       "rama": "claude/mi-rendimiento-evolucion",
       "renumerada_a": "194"
     },
+    "139": {
+      "nombre": "locations_correo_base",
+      "bloque": "club",
+      "rama": "claude/correos-por-configuracion",
+      "renumerada_a": "195"
+    },
     "150": {
       "nombre": "club_satori_esquema",
       "bloque": "pase",
@@ -603,6 +609,12 @@
       "bloque": "pase",
       "rama": "claude/mi-rendimiento-evolucion",
       "origen": "138"
+    },
+    "195": {
+      "nombre": "locations_correo_base",
+      "bloque": "pase",
+      "rama": "claude/correos-por-configuracion",
+      "origen": "139"
     }
   }
 }

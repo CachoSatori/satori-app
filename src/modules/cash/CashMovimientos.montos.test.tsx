@@ -81,6 +81,15 @@ describe('Nuevo movimiento — montos', () => {
     expect(createDayMovement).not.toHaveBeenCalled()
     expect(screen.getByText(MSG_MONTO_CERO)).toBeTruthy()
   })
+  it('después de «Cancelar», el aviso del monto vacío no queda al volver a abrir', async () => {
+    await abrir()
+    await registrar()
+    expect(screen.getByText(MSG_MONTO_CERO)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByText(MSG_MONTO_CERO)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Nuevo movimiento/ }))
+    expect(screen.queryByText(MSG_MONTO_CERO)).toBeNull()
+  })
   it('cero: no registra y dice por qué', async () => {
     const modal = await abrir()
     fireEvent.change(within(modal).getAllByRole('spinbutton')[0], { target: { value: '0' } })

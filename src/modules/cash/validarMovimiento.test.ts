@@ -102,3 +102,14 @@ describe('validarMovimiento — edición de un movimiento guardado', () => {
     expect(err(validarMovimiento({ tipo: 'egreso_operativo', crc: 'x1', usd: 0 }, 'edicion'))).toBe(MSG_MONTO_INVALIDO)
   })
 })
+
+describe('texto de los avisos de monto', () => {
+  it('el ejemplo va con punto y SIN coma: con el navegador en otro idioma, «12500,50» queda 1250050', async () => {
+    const mod = await import('./validarMovimiento')
+    const msgs = Object.entries(mod).filter(([k]) => k.startsWith('MSG_')).map(([, v]) => String(v))
+    expect(msgs.length).toBeGreaterThan(5)
+    for (const m of msgs) expect(m).not.toMatch(/\d,\d|\d, o \d/)
+    expect(MSG_MONTO_INVALIDO).toContain('12500.50')
+    expect(MSG_MONTO_INVALIDO).toMatch(/punto para los decimales/)
+  })
+})

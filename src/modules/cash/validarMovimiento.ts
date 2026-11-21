@@ -15,7 +15,9 @@
 //     poner ₡ negativos); uno con $0 se puede editar en sus otros campos, no en el ₡. Si un ingreso con ₡
 //     negativos se pasa a egreso o a traspaso, quedaría negativo y el saldo daría mal: se rechaza.
 
-export const MSG_MONTO_INVALIDO = 'El monto no es un número. Escribí solo números (por ejemplo 12500 o 12500,50).'
+// Ejemplos SIN coma: en un cuadro type="number" con el navegador en otro idioma, la coma desaparece y «12500,50»
+// queda 1250050 (100 veces más). Con punto se lee igual en cualquier idioma.
+export const MSG_MONTO_INVALIDO = 'El monto no es un número. Escribí solo números, con punto para los decimales (por ejemplo 12500 o 12500.50).'
 export const MSG_MONTO_CERO = 'Ingresá un monto mayor a cero.'
 export const MSG_MONTO_NEGATIVO = 'El monto no puede ser negativo.'
 export const MSG_DOLARES_NEGATIVOS = 'El monto en dólares no puede ser negativo.'

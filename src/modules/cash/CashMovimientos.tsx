@@ -57,6 +57,8 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const [nmFecha, setNmFecha] = useState(todayStr())
   const [nmSaving, setNmSaving] = useState(false)
   const [nmErr, setNmErr] = useState<string | null>(null)
+  // Cerrar (Cancelar o tocar afuera) limpia el aviso: al volver a abrir no queda el error viejo.
+  const cerrarNuevo = () => { setNmOpen(false); setNmErr(null) }
   const guardarNuevo = async () => {
     const c = CONCEPTOS.find(x => x.id === nmConcepto)!
     // Montos (20-nov, ex #73): vacío, cero, no numérico o negativo → no se registra y se dice por qué.
@@ -415,13 +417,13 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           <input className="cd-filter-input" style={{ minWidth: 140 }} value={busq} placeholder="Buscar..."
             onChange={e => setBusq(e.target.value)} />
         </div>
-        <button className="cd-btn-green" style={{ fontSize: '0.8rem' }} onClick={() => { setNmErr(null); setNmFecha(todayStr()); setNmOpen(true) }}>+ Nuevo movimiento</button>
+        <button className="cd-btn-green" style={{ fontSize: '0.8rem' }} onClick={() => { setNmFecha(todayStr()); setNmOpen(true) }}>+ Nuevo movimiento</button>
         <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={exportCSV}>⬇ CSV</button>
       </div>
 
       {/* Modal: nuevo movimiento manual */}
       {nmOpen && (
-        <div className="cd-modal-overlay" onClick={() => setNmOpen(false)}>
+        <div className="cd-modal-overlay" onClick={cerrarNuevo}>
           <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
             <div className="cd-modal-title">Nuevo movimiento</div>
             <p style={{ fontSize: '0.74rem', color: 'var(--c-gris)', margin: '0.2rem 0 0.75rem' }}>
@@ -463,7 +465,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               </div>
             </div>
             <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
-              <button className="tips-btn-ghost" onClick={() => setNmOpen(false)} disabled={nmSaving}>Cancelar</button>
+              <button className="tips-btn-ghost" onClick={cerrarNuevo} disabled={nmSaving}>Cancelar</button>
               <button className="cd-btn-green" onClick={guardarNuevo} disabled={nmSaving}>
                 {nmSaving ? 'Guardando…' : '✓ Registrar'}
               </button>

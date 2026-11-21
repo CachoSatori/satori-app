@@ -200,3 +200,33 @@ describe('AgregarAsistente — monto negativo bloqueado (Ítem 2)', () => {
     expect(createSpy).not.toHaveBeenCalled()
   })
 })
+
+describe('AgregarAsistente — montos con validarMovimiento (20-nov, ex #73)', () => {
+  const btnConfirmar = () => screen.getByRole('button', { name: /Confirmar y registrar/ }) as HTMLButtonElement
+
+  it('cero: dice «Ingresá un monto mayor a cero», botón deshabilitado y NO crea', async () => {
+    renderAsistente('cajero')
+    setMonto('0')
+    expect(screen.getByText(/Ingresá un monto mayor a cero/)).toBeTruthy()
+    expect(btnConfirmar().disabled).toBe(true)
+    await confirmar()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('vacío: botón deshabilitado, sin aviso antes de escribir, y NO crea', async () => {
+    renderAsistente('cajero')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(btnConfirmar().disabled).toBe(true)
+    await confirmar()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('$ con monto y ₡ vacío: crea con ₡ 0 y los dólares', async () => {
+    renderAsistente('cajero')
+    fireEvent.change(screen.getByLabelText('Descripción'), { target: { value: 'pago de electricidad del mes' } })
+    fireEvent.change(screen.getByLabelText('Monto dólares'), { target: { value: '20' } })
+    await confirmar()
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    expect(createSpy.mock.calls[0][0]).toMatchObject({ amount_crc: 0, amount_usd: 20 })
+  })
+})

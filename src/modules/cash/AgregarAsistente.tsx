@@ -17,6 +17,7 @@ import { norm } from '../../shared/api/inventoryIngest'
 import { tipShiftToCaja, todayCR } from '../../shared/utils'
 import { avisoFechaFactura, fechaLarga, preguntaFechaAmbigua } from '../../shared/utils/fechaFactura'
 import { fi, fd } from './cashUtils'
+import { validarMovimiento } from './validarMovimiento'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { claveProveedor, matchSupplier, decidirAlias, puedeAprenderAlias, msgAliasGuardado } from '../../shared/utils/proveedorAlias'
 import { guardarAliasProveedor } from '../../shared/api/proveedorAlias'
@@ -379,10 +380,14 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     e.target.value = ''   // permite re-sacar la misma foto
   }
 
-  const amountCRC = Number(montoCRC) || 0
-  const amountUSD = Number(montoUSD) || 0
-  const montoOk = amountCRC > 0 || amountUSD > 0
-  const montoNegativo = amountCRC < 0 || amountUSD < 0   // Ítem 2: entrada manual no admite montos < 0
+  // Montos (20-nov, ex #73): misma regla que Nuevo movimiento y la API. Vacío, cero, no numérico o negativo no se
+  // registra; apenas el cajero escribe algo, el aviso dice por qué (antes `Number(x) || 0` callaba lo no numérico).
+  const validacionMonto = validarMovimiento(
+    { tipo: clase === 'ingreso' ? 'ingreso' : 'egreso', crc: montoCRC, usd: montoUSD }, 'alta')
+  const amountCRC = validacionMonto.ok ? validacionMonto.crc : 0
+  const amountUSD = validacionMonto.ok ? validacionMonto.usd : 0
+  const montoOk = validacionMonto.ok
+  const avisoMonto = !validacionMonto.ok && (montoCRC !== '' || montoUSD !== '') ? validacionMonto.error : null
 
   // Ingreso adicional: categoría + motivo completos (sino no se puede crear) y si el equivalente en
   // colones (crc + usd·tc) supera el umbral → hay que pedir autorización de gerencia antes de crear.
@@ -461,7 +466,6 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     if (photo && registradasRef.current.has(idx)) return
     setAviso(null)
     if (parecida && !esOtra) return   // (13-nov) aviso de factura parecida: hay que confirmar «Es otra»
-    if (montoNegativo) { setAviso('El monto no puede ser negativo.'); return }   // Ítem 2
     // Ingreso adicional: sin categoría o sin motivo NO se crea (se elimina el default mudo).
     if (clase === 'ingreso' && !ingresoCompleto) return
     if (faltaElegirFecha) { setAviso('Elegí la fecha de la factura antes de registrar.'); return }   // (14-nov)
@@ -820,9 +824,9 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             </div>
           </div>
         </div>
-        {montoNegativo && (
+        {avisoMonto && (
           <div className="cd-method-info pend" role="alert" style={{ marginTop: 4 }}>
-            ⚠ El monto no puede ser negativo.
+            ⚠ {avisoMonto}
           </div>
         )}
 
@@ -954,7 +958,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         )}
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" onClick={intentarCerrar} disabled={saving}>Cancelar</button>
-          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || montoNegativo || (clase === 'ingreso' && !ingresoCompleto) || (!!parecida && !esOtra) || faltaElegirFecha || saving}>
+          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || (clase === 'ingreso' && !ingresoCompleto) || (!!parecida && !esOtra) || faltaElegirFecha || saving}>
             {saving ? 'Registrando…' : '✓ Confirmar y registrar'}
           </button>
         </div>

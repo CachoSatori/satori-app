@@ -57,8 +57,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const [nmFecha, setNmFecha] = useState(todayStr())
   const [nmSaving, setNmSaving] = useState(false)
   const [nmErr, setNmErr] = useState<string | null>(null)
-  // Cerrar (Cancelar o tocar afuera) limpia el aviso: al volver a abrir no queda el error viejo.
-  const cerrarNuevo = () => { setNmOpen(false); setNmErr(null) }
+  // Cerrar (Cancelar o tocar afuera) limpia el aviso: al volver a abrir no queda el error viejo. También las marcas
+  // de cuadro ilegible (badInput): al reabrir los cuadros se montan sin ese texto, y una marca vieja haría decir
+  // «no es un número» con el ₡ vacío (21-nov).
+  const cerrarNuevo = () => { setNmOpen(false); setNmErr(null); setNmCrcMalo(false); setNmUsdMalo(false) }
   const guardarNuevo = async () => {
     const c = CONCEPTOS.find(x => x.id === nmConcepto)!
     // Montos (20-nov, ex #73): vacío, cero, no numérico o negativo → no se registra y se dice por qué.

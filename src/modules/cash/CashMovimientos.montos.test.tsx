@@ -90,6 +90,23 @@ describe('Nuevo movimiento — montos', () => {
     fireEvent.click(screen.getByRole('button', { name: /Nuevo movimiento/ }))
     expect(screen.queryByText(MSG_MONTO_CERO)).toBeNull()
   })
+  it('«Cancelar» con un cuadro ilegible: al volver a abrir (₡ vacío) no queda «no es un número» y registra', async () => {
+    const modal = await abrir()
+    const [crc, usd] = within(modal).getAllByRole('spinbutton') as HTMLInputElement[]
+    fireEvent.change(usd, { target: { value: '20' } })
+    ponerIlegible(crc)
+    await registrar()
+    expect(screen.getByText(MSG_MONTO_INVALIDO)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: /Nuevo movimiento/ }))
+    const modal2 = screen.getByText('Nuevo movimiento', { selector: '.cd-modal-title' }).closest('.cd-modal') as HTMLElement
+    const [crc2] = within(modal2).getAllByRole('spinbutton') as HTMLInputElement[]
+    expect(crc2.value).toBe('')
+    await registrar()
+    expect(screen.queryByText(MSG_MONTO_INVALIDO)).toBeNull()
+    expect(createDayMovement).toHaveBeenCalledTimes(1)
+    expect(createDayMovement.mock.calls[0][0]).toMatchObject({ amount_crc: 0, amount_usd: 20 })
+  })
   it('cero: no registra y dice por qué', async () => {
     const modal = await abrir()
     fireEvent.change(within(modal).getAllByRole('spinbutton')[0], { target: { value: '0' } })

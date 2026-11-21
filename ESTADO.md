@@ -4,16 +4,16 @@
 > (incluye el ESTADO íntegro previo a la poda del 20-nov).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega)
-**Al día: 2026-11-20 (tarde).** `main` = `7ce4ebe9` (merge #320). **Ledger prod = 194 · staging = 194** (la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
+**Al día: 2026-11-21 (~06:00 CR).** `main` = `f87fc30` (merge #322). **Ledger prod = 194 · staging = 194** (verificado el 21-nov; próximo libre del bloque 150–199: 195, reservado por #323; la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
 [docs/handoffs/HANDOFF-2026-11-20.md](docs/handoffs/HANDOFF-2026-11-20.md).
-- **Entró el 20-nov:** #307 (poda) · #306 (spec staging para agentes, firmada) · #309 (menores de #304) · #310 (FIFO de crédito, sin migración) · #313 (ítem 11: `config.toml` + Edge = prod) · #311 (Resumen del día obligatorio en el cierre) · #314 (`cierre-email` v18, en prod como v19) · #308 (hooks: deny + D1 nueva) · #316 (datos de análisis fuera del repo público) · #315 (spec de anonimizar staging, firmada D1/D3/D4/D5) · #318 y #319 (pruebas de caracterización y de propiedades) · #317 (firma del dueño como pedido «Aprobar») · #320 (aviso de propinas sin repartir).
+- **Entró el 20-nov:** #307 (poda) · #306 (spec staging para agentes, firmada) · #309 (menores de #304) · #310 (FIFO de crédito, sin migración) · #313 (ítem 11: `config.toml` + Edge = prod) · #311 (Resumen del día obligatorio en el cierre) · #314 (`cierre-email` v18, en prod como v19) · #308 (hooks: deny + D1 nueva) · #316 (datos de análisis fuera del repo público) · #315 (spec de anonimizar staging, firmada D1/D3/D4/D5) · #318 y #319 (pruebas de caracterización y de propiedades) · #317 (firma del dueño como pedido «Aprobar») · #320 (aviso de propinas sin repartir) · #321 (docs del cierre) · #322 (menores de la guardia del #317: `ls-tree`, `git add -f` a `.claude/`, comillas y escapes, `reset --hard` y `switch` permitidos; el gate controla las marcas versionadas).
 - **Cerrados sin merge:** #305, #312, #61, #235, #241, #242, #243, #245, #281, #283, #63, #73.
 - **Edge prod (después del ítem 11):** `monthly-report` v25 · `extract-document` v21 · `cierre-email` v19 · `pago-notificar` v17 · `ventas-dia-contador` v6 · `ingest-ndf` v14 (verify_jwt false) · `alta-empleado` v13 · `club-pase` v8 (verify_jwt false). **Desde el #313, cada merge que toca `supabase/functions/` despliega por Branching.** Agente PoS prod (`agente-fe`): latido OK.
 - **Protección de `main`:** «Gate» requerido · rama al día (`strict`) · sin excepción para admins. Las sesiones en la nube no pueden cambiarla (403). Arnés a prueba hasta el 3-dic.
 - **Decisiones del dueño:** Club en PAUSA hasta que Apple apruebe la Wallet · sin alerta de latido · **D1 (20-nov): 23:30–15:00 libre · 15:00–19:00 con OK del dueño · 19:00–23:30 solo urgente con OK** · PRs solo de `.md` se mergean sin OK únicamente de 23:30 a 15:00 · NO auto-merge de código.
-- **Firma (opción A, #317):** la sesión principal pide la firma con Write de la marca y el dueño toca «Aprobar» en la app. **No se probó en vivo** (la sesión del 20-nov tenía los hooks viejos): probarla el 21-nov con el primer merge de código.
+- **Firma (opción A, #317):** la sesión principal pide la firma con Write de la marca y el dueño toca «Aprobar» en la app. **No se probó en vivo** (la sesión del 20-nov tenía los hooks viejos): **sigue sin probar** (#322 no la cambia); se prueba con el primer merge de código del 21-nov.
 - **Pendiente del dueño:** cierre del 20-nov (Resumen del día + correo v19 + aviso de propinas) · correo de pago agrupado, paso 2 (pagar 2 de 3 facturas del proveedor de prueba) · próximo crédito real (#310) · #229 al lanzar el Club.
-- **Cola (en orden):** menores del #317 (comillas en `cd`; CI que verifique `git ls-files '.claude/*.local'` vacío; permitir `reset --keep`/`switch -C`) · script de anonimización de staging (spec firmada) · rehacer lo útil del #73 (Opus) · rehacer el #75 (Sonnet) · rama `staging` congelada (decidir) · métricas por PR · WhatsApp a proveedores F0 → F1a · cron del Club el 23-nov · costos de producto con Inventario · H3 de propinas (decidir).
+- **Cola (en orden):** script de anonimización de staging (PR #324; falta el OK del dueño a 3 decisiones y el OK de D5 para correrlo) · #73 rehecho en #325 (propinas) y #326 (caja) · #75 reemplazado por #323 (mig 195, falta firma) · rama `staging` congelada (decidir) · métricas por PR · WhatsApp a proveedores F0 → F1a · cron del Club el 23-nov · costos de producto con Inventario · H3 de propinas (decidir).
 - **Cron:** job 4 (quincena) **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov. Job 10 (`ventas-dia-contador`): primer envío 1-dic.
 - **Deploy:** `version.json` y `/api/salud` dan 403 por el proxy de la sesión: verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 
@@ -21,7 +21,7 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `7ce4ebe9` |
+| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `f87fc30` |
 | `staging` | sin cambios desde el 13/11 (`4726b7f`); su base ya está al día (ledger 194) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |

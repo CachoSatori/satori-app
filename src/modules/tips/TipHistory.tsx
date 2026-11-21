@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { TipSession, Employee, RoleTipPoints, UserRole } from '../../shared/types/database'
 import { getTipEntriesBySession, upsertTipEntry, deleteTipEntry, updateSessionPools, savePayouts, totalElectronicoCrc } from '../../shared/api/tips'
 import { reconcilePropinaEgreso } from '../../shared/api/cash'
-import { calcHistory, calcTurno, formatCRC, formatNum, ROL_LABELS, ROL_ORDER, NO_PROPINA_ROLES, type HistoryCalc, type HistoryRow, type DraftLine } from '../../shared/utils/tipCalculations'
+import { calcTurno, formatCRC, formatNum, ROL_LABELS, ROL_ORDER, NO_PROPINA_ROLES, type HistoryCalc, type HistoryRow, type DraftLine } from '../../shared/utils/tipCalculations'
 import { avisosCierrePropinas } from './guardasCierre'
 import { sinRepartirTurno } from './sinRepartir'
+import { avisosPagado, esRepartoPagado, repartoPagado, sumarFaltantes, TEXTO_SIN_DATO } from './repartoPagado'
+import { validarTurno } from './validarTurno'
 import { shiftLabel } from '../../shared/utils'
 
 interface Props {
@@ -45,10 +47,17 @@ function poolTotalOf(s: TipSession) {
 }
 // Desglose de barra para una fila: servicio (pool general por puntos) + pool barra (resto)
 function barraSplit(r: HistoryRow, generalRate: number) {
-  if (!BAR_ROLES.has(r.role)) return null
+  if (!BAR_ROLES.has(r.role) || filaSinDato(r)) return null
   const serv = Math.round(r.pts_val * generalRate)
   return { serv, barra: Math.max(0, r.payout_crc - serv) }
 }
+
+// Lo pagado (repartoPagado.ts): una fila sin payout guardado dice «sin dato guardado», nunca un recálculo.
+const filaSinDato = (r: HistoryRow) => 'sinDato' in r && (r as { sinDato: boolean }).sinDato
+const montoFila = (r: HistoryRow) => (filaSinDato(r) ? TEXTO_SIN_DATO : formatCRC(r.payout_crc))
+// Con personas ocultas, ₡/pto, Pts y el desglose de barra (que salen del recálculo) no valen.
+const incompleto = (c: HistoryCalc | null | undefined) => esRepartoPagado(c) && c.incompleto
+const avisosDe = (c: HistoryCalc | null | undefined) => (esRepartoPagado(c) ? avisosPagado(sumarFaltantes([c]), formatCRC) : [])
 
 export default function TipHistory({ sessions, employees, rolePoints, onCalcReady, onDeleteSession, onSaved, isManager }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -93,17 +102,8 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
     setLoadingId(s.id)
     try {
       const entries = await getTipEntriesBySession(s.id)
-      const calc = calcHistory(
-        entries.map(e => ({
-          employee_id: e.employee_id, hours_worked: e.hours_worked,
-          tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd,
-          points: e.points, payout_crc: e.payout_crc, covered_role: e.covered_role,
-        })),
-        employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
-        rolePoints,
-        // Barra = efectivo + electrónico → el reparto recomputado coincide con el payout guardado.
-        { pool_efectivo_crc: s.pool_efectivo_crc, pool_efectivo_usd: s.pool_efectivo_usd, pool_barra_crc: (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0), exchange_rate: s.exchange_rate },
-      )
+      // Lo PAGADO (decisión del dueño 20-nov): montos y pozo guardados, no recalculados (repartoPagado.ts).
+      const calc = repartoPagado(s, entries, employees, rolePoints)
       setCalcCache(prev => ({ ...prev, [s.id]: calc }))
       onCalcReady?.(s.id, calc)
       return calc
@@ -168,6 +168,8 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
 
   // ── Guardar cambios (replica exacta del cierre de turno) ──
   const handleSaveEdit = async (session: TipSession, prevCalc: HistoryCalc | null) => {
+    // Defensa: con personas ocultas el recálculo las dejaría afuera y pisaría lo pagado («✏ Editar» ya está gris).
+    if (incompleto(prevCalc)) { setEditErr('No se puede editar desde esta vista: faltan personas inactivas.'); return }
     const rate  = session.exchange_rate
     const draft = eRows.map(r => {
       const eff = (r.coveredRole || r.role) as UserRole  // rol efectivo: puntos + pool barra
@@ -182,6 +184,12 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
     // draft (rol efectivo) → se persiste abajo como fuente de verdad (mig 051).
     const { totals, updatedLines } = calcTurno(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), rate)
     if (!updatedLines.some(l => l.active)) { setEditErr('Marcá al menos un empleado que trabajó'); return }
+    // Nada negativo (decisión del dueño 20-nov): defensa; el botón ya está deshabilitado con el aviso.
+    const problema = validarTurno({
+      lineas: eRows.map(r => ({ nombre: r.employeeName, activa: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd })),
+      efectivoCRC: ePoolCRC, efectivoUSD: ePoolUSD, barraCRC: ePoolBarra, barraElecCRC: ePoolBarraElec, exchangeRate: rate,
+    })
+    if (problema) { setEditErr(problema); return }
     // Guardas H1/H2 (mismas que el cierre): pozo que nadie puede cobrar → no se guarda.
     const avisos = avisosCierrePropinas(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), rate)
     if (avisos.length) { setEditErr(avisos[0].texto); return }
@@ -253,7 +261,10 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
 
   function copySession(s: TipSession, calc: HistoryCalc) {
     const L = [`Propinas ${s.session_date} · ${shiftLabel(s.shift_type)}`, `Pool total: ${formatCRC(calc.totalPool)}`, '']
-    calc.rows.forEach(r => L.push(`• ${r.employeeName} (${ROL_LABELS[r.role]}, ${r.hours}h): ${formatCRC(r.payout_crc)}`))
+    calc.rows.forEach(r => L.push(`• ${r.employeeName} (${ROL_LABELS[r.role]}, ${r.hours}h): ${montoFila(r)}`))
+    if (esRepartoPagado(calc) && calc.ocultos.entradas > 0) {
+      L.push(`• Personas inactivas sin nombre en esta vista (${calc.ocultos.entradas}): ${formatCRC(calc.ocultos.pagado)}`)
+    }
     navigator.clipboard?.writeText(L.join('\n')).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }).catch(() => window.prompt('Copiá:', L.join('\n')))
   }
 
@@ -301,7 +312,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                     {calc ? `${calc.rows.length} empleados` : 'Tocá para ver el detalle'}
                     {filterEmp !== 'all' && calc && (() => {
                       const row = calc.rows.find(r => r.employeeId === filterEmp)
-                      return row ? <span style={{ color: GOLD, marginLeft: '0.4rem' }}> · {row.employeeName}: {formatCRC(row.payout_crc)}</span> : null
+                      return row ? <span style={{ color: GOLD, marginLeft: '0.4rem' }}> · {row.employeeName}: {montoFila(row)}</span> : null
                     })()}
                   </div>
                 </div>
@@ -326,12 +337,19 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                       <div className="hist-pool-row">
                         <span>Pool <strong>{formatCRC(calc.totalPool)}</strong></span>
                         {calc.barraPool > 0 && <span>🍸 Barra <strong>{formatCRC(calc.barraPool)}</strong></span>}
-                        <span>₡/pto <strong>{formatCRC(calc.generalRate)}</strong></span>
-                        <span>Pts <strong>{formatNum(calc.totalPoints)}</strong></span>
+                        {!incompleto(calc) && <>
+                          <span>₡/pto <strong>{formatCRC(calc.generalRate)}</strong></span>
+                          <span>Pts <strong>{formatNum(calc.totalPoints)}</strong></span>
+                        </>}
                       </div>
+                      {avisosDe(calc).length > 0 && (
+                        <div role="note" data-testid="hist-avisos-pagado" style={{ margin: '0.35rem 0', padding: '0.45rem 0.6rem', fontSize: '0.74rem', background: 'var(--c-oro-fondo)', borderLeft: `2px solid ${GOLD}`, color: MUTED }}>
+                          {avisosDe(calc).map(a => <div key={a}>⚠ {a}</div>)}
+                        </div>
+                      )}
                       <div className="hist-emp-grid">
                         {(filteredRows ?? calc.rows).map(row => {
-                          const split = barraSplit(row, calc.generalRate)
+                          const split = incompleto(calc) ? null : barraSplit(row, calc.generalRate)
                           return (
                             <div key={row.employeeId} className="hist-emp-row" style={{ background: filterEmp === row.employeeId ? 'var(--c-oro-fondo)' : undefined }}>
                               <div>
@@ -341,7 +359,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                                   {split && <span style={{ color: MUTED }}> · 🍸 barra {formatCRC(split.barra)} · serv {formatCRC(split.serv)}</span>}
                                 </div>
                               </div>
-                              <div className="hist-emp-take">{formatCRC(row.payout_crc)}</div>
+                              <div className="hist-emp-take">{montoFila(row)}</div>
                             </div>
                           )
                         })}
@@ -373,6 +391,12 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         const preview = previewDraft ? calcTurno(previewDraft, ...previewArgs) : null
         // Guardas H1/H2: con pozo que nadie cobra, «Guardar cambios» queda deshabilitado con aviso.
         const avisosEdit = previewDraft ? avisosCierrePropinas(previewDraft, ...previewArgs) : []
+        // Nada negativo (decisión del dueño 20-nov): con un problema, solo se muestra ese aviso y no se guarda.
+        const problemaEdit = editMode ? validarTurno({
+          lineas: eRows.map(r => ({ nombre: r.employeeName, activa: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd })),
+          efectivoCRC: ePoolCRC, efectivoUSD: ePoolUSD, barraCRC: ePoolBarra, barraElecCRC: ePoolBarraElec, exchangeRate: modalSession.exchange_rate,
+        }) : null
+        const bloqueaEdit = !!problemaEdit || avisosEdit.length > 0
         // Aviso de plata sin repartir (decisión del dueño 20-nov): sobre la salida del reparto. Solo avisa.
         const sinRepartir = preview ? sinRepartirTurno(preview) : null
         const payoutMap = new Map(preview?.updatedLines.map(l => [l.employeeId, Math.round(l.take_home)]) ?? [])
@@ -406,6 +430,12 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                 !modalCalc ? (
                   <div style={{ padding: '2rem', textAlign: 'center', color: MUTED }}>Cargando detalle…</div>
                 ) : (
+                  <>
+                  {avisosDe(modalCalc).length > 0 && (
+                    <div role="note" data-testid="modal-avisos-pagado" style={{ margin: '0 0 0.5rem', padding: '0.45rem 0.6rem', fontSize: '0.74rem', background: 'var(--c-oro-fondo)', borderLeft: `2px solid ${GOLD}`, color: MUTED }}>
+                      {avisosDe(modalCalc).map(a => <div key={a}>⚠ {a}</div>)}
+                    </div>
+                  )}
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                     <thead>
                       <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
@@ -417,7 +447,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                     </thead>
                     <tbody>
                       {modalCalc.rows.map(row => {
-                        const split = barraSplit(row, modalCalc.generalRate)
+                        const split = incompleto(modalCalc) ? null : barraSplit(row, modalCalc.generalRate)
                         return (
                           <tr key={row.employeeId} style={{ borderBottom: `1px solid ${BORDER}` }}>
                             <td style={{ padding: '0.4rem 0.3rem' }}>
@@ -430,12 +460,13 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                             </td>
                             <td style={{ textAlign: 'right', padding: '0.4rem 0.3rem', color: MUTED }}>{row.hours}</td>
                             <td style={{ textAlign: 'right', padding: '0.4rem 0.3rem', color: MUTED }}>{formatNum(row.pts_val)}</td>
-                            <td style={{ textAlign: 'right', padding: '0.4rem 0.3rem', fontWeight: 700, color: GOLD }}>{formatCRC(row.payout_crc)}</td>
+                            <td style={{ textAlign: 'right', padding: '0.4rem 0.3rem', fontWeight: 700, color: GOLD }}>{montoFila(row)}</td>
                           </tr>
                         )
                       })}
                     </tbody>
                   </table>
+                  </>
                 )
               ) : (
                 /* ── EDICIÓN — mini formulario tipo creación ── */
@@ -543,14 +574,18 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
             <div style={{ display: 'flex', gap: '0.5rem', padding: '0.875rem 1.25rem', borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap', justifyContent: 'flex-end', background: 'var(--c-panel)' }}>
               {editMode ? (
                 <>
-                  {(sinRepartir || avisosEdit.length > 0) && (
+                  {problemaEdit ? (
+                    <div role="alert" data-testid="avisos-edicion" style={{ flexBasis: '100%', padding: '0.5rem 0.75rem', borderLeft: `3px solid ${RED}`, background: 'var(--c-fondo)', fontSize: '0.8rem', lineHeight: 1.4 }}>
+                      <div data-testid="aviso-negativos" style={{ fontWeight: 700 }}>⚠ {problemaEdit}</div>
+                    </div>
+                  ) : (sinRepartir || avisosEdit.length > 0) && (
                     <div role="alert" data-testid="avisos-edicion" style={{ flexBasis: '100%', padding: '0.5rem 0.75rem', borderLeft: `3px solid ${RED}`, background: 'var(--c-fondo)', fontSize: '0.8rem', lineHeight: 1.4 }}>
                       {sinRepartir && <div data-testid="aviso-sin-repartir" style={{ fontWeight: 700 }}>⚠ {sinRepartir.texto}</div>}
                       {avisosEdit.map(a => <div key={a.tipo}>⚠ {sinRepartir ? a.detalle : a.texto}</div>)}
                     </div>
                   )}
-                  <button onClick={() => handleSaveEdit(modalSession, modalCalc)} disabled={saving || avisosEdit.length > 0}
-                    style={{ padding: '7px 16px', borderRadius: 4, border: `1px solid ${TEAL}`, background: TEAL, color: 'var(--c-fondo)', fontWeight: 700, fontSize: '0.82rem', cursor: (saving || avisosEdit.length > 0) ? 'default' : 'pointer', opacity: (saving || avisosEdit.length > 0) ? 0.6 : 1 }}>
+                  <button onClick={() => handleSaveEdit(modalSession, modalCalc)} disabled={saving || bloqueaEdit}
+                    style={{ padding: '7px 16px', borderRadius: 4, border: `1px solid ${TEAL}`, background: TEAL, color: 'var(--c-fondo)', fontWeight: 700, fontSize: '0.82rem', cursor: (saving || bloqueaEdit) ? 'default' : 'pointer', opacity: (saving || bloqueaEdit) ? 0.6 : 1 }}>
                     {saving ? 'Guardando…' : '💾 Guardar cambios'}
                   </button>
                   <button onClick={() => { setEditMode(false); setEditErr(null) }} disabled={saving}
@@ -561,8 +596,9 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
               ) : (
                 <>
                   {isManager && (
-                    <button onClick={() => startEdit(modalSession, modalCalc)} disabled={!modalCalc}
-                      style={{ padding: '7px 14px', borderRadius: 4, border: `1px solid ${TEAL}`, background: 'var(--c-teal-fondo)', color: TEAL, fontWeight: 700, fontSize: '0.8rem', cursor: modalCalc ? 'pointer' : 'default', opacity: modalCalc ? 1 : 0.5 }}>
+                    <button onClick={() => startEdit(modalSession, modalCalc)} disabled={!modalCalc || incompleto(modalCalc)}
+                      title={incompleto(modalCalc) ? 'No se puede editar desde esta vista: faltan personas inactivas y el recálculo pisaría lo que se les pagó.' : undefined}
+                      style={{ padding: '7px 14px', borderRadius: 4, border: `1px solid ${TEAL}`, background: 'var(--c-teal-fondo)', color: TEAL, fontWeight: 700, fontSize: '0.8rem', cursor: modalCalc && !incompleto(modalCalc) ? 'pointer' : 'default', opacity: modalCalc && !incompleto(modalCalc) ? 1 : 0.5 }}>
                       ✏ Editar
                     </button>
                   )}

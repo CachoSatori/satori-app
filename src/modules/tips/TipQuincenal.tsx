@@ -6,10 +6,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
-import { calcHistory, formatCRC } from '../../shared/utils/tipCalculations'
+import { formatCRC } from '../../shared/utils/tipCalculations'
 import { getTipEntriesBySession } from '../../shared/api/tips'
 import { shiftLabel } from '../../shared/utils'
 import { sinRepartirHistoria, textoSinRepartirTurnoCerrado } from './sinRepartir'
+import { avisosPagado, esRepartoPagado, repartoPagado, sumarFaltantes } from './repartoPagado'
 
 interface Props {
   sessions:   TipSession[]
@@ -55,26 +56,8 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
     setLoading(true)
     Promise.all(missing.map(async s => {
       const entries = await getTipEntriesBySession(s.id)
-      const calc = calcHistory(
-        entries.map(e => ({
-          employee_id:    e.employee_id,
-          hours_worked:   e.hours_worked,
-          tip_amount_crc: e.tip_amount_crc,
-          tip_amount_usd: e.tip_amount_usd,
-          points:         e.points,
-          payout_crc:     e.payout_crc,
-          covered_role:   e.covered_role,
-        })),
-        employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
-        rolePoints,
-        {
-          pool_efectivo_crc: s.pool_efectivo_crc,
-          pool_efectivo_usd: s.pool_efectivo_usd,
-          // Barra = efectivo + electrónico → el reparto recomputado coincide con el payout guardado.
-          pool_barra_crc:    (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0),
-          exchange_rate:     s.exchange_rate,
-        },
-      )
+      // Lo PAGADO (decisión del dueño 20-nov): montos y pozo guardados, no recalculados (repartoPagado.ts).
+      const calc = repartoPagado(s, entries, employees, rolePoints)
       return [s.id, calc] as [string, HistoryCalc]
     }))
     .then(results => {
@@ -95,7 +78,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
       id: string; name: string; role: string
       q1Days:0; q1Hours:0; q1Earn:0
       q2Days:0; q2Hours:0; q2Earn:0
-      total:0; promDia:0
+      total:0; promDia:0; sinDato:0
     }> = {}
 
     const processSession = (s: TipSession, isQ1: boolean) => {
@@ -106,9 +89,11 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
         if (!emp) continue
         if (!acc[emp.id]) acc[emp.id] = {
           id: emp.id, name: emp.full_name, role: emp.role,
-          q1Days:0, q1Hours:0, q1Earn:0, q2Days:0, q2Hours:0, q2Earn:0, total:0, promDia:0,
+          q1Days:0, q1Hours:0, q1Earn:0, q2Days:0, q2Hours:0, q2Earn:0, total:0, promDia:0, sinDato:0,
         } as typeof acc[string]
         const e = acc[emp.id]
+        // Turno sin payout guardado: cuenta el día y las horas, no suma plata (no se recalcula).
+        if ('sinDato' in row && row.sinDato) e.sinDato++
         if (isQ1) { e.q1Days++; e.q1Hours += row.hours; e.q1Earn += row.payout_crc }
         else      { e.q2Days++; e.q2Hours += row.hours; e.q2Earn += row.payout_crc }
         e.total += row.payout_crc
@@ -125,15 +110,28 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
 
   // Aviso de plata sin repartir (decisión del dueño 20-nov): turnos del mes cuyo reparto deja pozo que nadie
   // cobra (p. ej. turnos cerrados antes de las guardas del 17-nov). Solo avisa; la planilla sale igual.
+  // Con lo pagado, el aviso sale de repartoPagado (pozo guardado − lo pagado a cada uno, también a los ocultos).
   const avisosSinRepartir = monthSessions
-    .map(s => ({ s, aviso: mergedCache[s.id] ? sinRepartirHistoria(mergedCache[s.id]) : null }))
+    .map(s => {
+      const c = mergedCache[s.id]
+      return { s, aviso: !c ? null : esRepartoPagado(c) ? c.sinRepartir : sinRepartirHistoria(c) }
+    })
     .filter((x): x is { s: TipSession; aviso: NonNullable<typeof x.aviso> } => x.aviso !== null)
     // Por fecha y, dentro del día, Mediodía (AM) antes que Noche (PM).
     .sort((a, b) => a.s.session_date.localeCompare(b.s.session_date) || ordenTurno(a.s.shift_type) - ordenTurno(b.s.shift_type))
 
   const q1Total    = q1Sessions.reduce((s, ss) => s + (mergedCache[ss.id]?.totalPool ?? 0), 0)
   const q2Total    = q2Sessions.reduce((s, ss) => s + (mergedCache[ss.id]?.totalPool ?? 0), 0)
-  const grandTotal = empData.reduce((s, e) => s + e.total, 0)
+  // Pagos a personas que esta vista no puede leer (hoy inactivas): sin nombre, con lo que se les pagó.
+  const ocultosQ = (ss: TipSession[]) => ss.reduce((t, x) => {
+    const c = mergedCache[x.id]
+    return esRepartoPagado(c) ? { entradas: t.entradas + c.ocultos.entradas, pagado: t.pagado + c.ocultos.pagado } : t
+  }, { entradas: 0, pagado: 0 })
+  const ocultosQ1 = ocultosQ(q1Sessions)
+  const ocultosQ2 = ocultosQ(q2Sessions)
+  const hayOcultos = ocultosQ1.entradas + ocultosQ2.entradas > 0
+  const avisosMes = avisosPagado(sumarFaltantes(monthSessions.map(s => mergedCache[s.id])), formatCRC)
+  const grandTotal = empData.reduce((s, e) => s + e.total, 0) + ocultosQ1.pagado + ocultosQ2.pagado
 
   if (!months.length) {
     return (
@@ -168,6 +166,12 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
         </div>
       )}
 
+      {avisosMes.length > 0 && (
+        <div role="note" data-testid="quincenal-avisos-pagado" style={{ margin: '0 0 0.75rem', padding: '0.45rem 0.6rem', fontSize: '0.74rem', background: 'var(--c-oro-fondo)', borderLeft: '2px solid var(--c-oro-texto)', color: 'var(--c-gris)' }}>
+          {avisosMes.map(a => <div key={a}>⚠ {a}</div>)}
+        </div>
+      )}
+
       {/* Summary header */}
       <div style={{ background: 'var(--c-panel)', borderRadius: 2, padding: '1rem 1.25rem', marginBottom: '1rem', color: 'var(--c-tinta)' }}>
         <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1rem', fontWeight: 700, color: 'var(--c-oro-texto)', marginBottom: '0.75rem' }}>
@@ -188,7 +192,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
         </div>
       </div>
 
-      {empData.length === 0 && !loading ? (
+      {empData.length === 0 && !hayOcultos && !loading ? (
         <div className="tips-empty-state">
           <p className="tips-empty-text">No hay datos para este mes</p>
         </div>
@@ -223,6 +227,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
                       <div className="admin-emp-name">{e.name}</div>
                       <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)' }}>
                         {e.q1Days + e.q2Days} días · {(e.q1Hours + e.q2Hours).toFixed(1)}h
+                        {e.sinDato > 0 && <span data-testid="quincenal-sin-dato"> · {e.sinDato} sin dato guardado</span>}
                       </div>
                     </td>
                     <td style={{ textAlign: 'right', background: 'var(--c-fondo)', color: 'var(--c-gris)' }}>{e.q1Days || '—'}</td>
@@ -239,14 +244,32 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
                     <td style={{ textAlign: 'right', color: 'var(--c-gris)', fontSize: '0.78rem' }}>{formatCRC(e.promDia)}/día</td>
                   </tr>
                 ))}
+                {hayOcultos && (
+                  <tr className="admin-row" data-testid="quincenal-ocultos">
+                    <td>
+                      <div className="admin-emp-name">Personas inactivas</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--c-gris)' }}>sin nombre en esta vista · {ocultosQ1.entradas + ocultosQ2.entradas} pagos</div>
+                    </td>
+                    <td colSpan={2} style={{ background: 'var(--c-fondo)' }}></td>
+                    <td style={{ textAlign: 'right', background: 'var(--c-fondo)', fontWeight: 700, color: 'var(--t-teal)', borderRight: '1px solid var(--t-border)' }}>
+                      {ocultosQ1.pagado > 0 ? formatCRC(ocultosQ1.pagado) : '—'}
+                    </td>
+                    <td colSpan={2} style={{ background: 'var(--c-fondo)' }}></td>
+                    <td style={{ textAlign: 'right', background: 'var(--c-fondo)', fontWeight: 700, color: 'var(--c-oro-texto)', borderRight: '1px solid var(--t-border)' }}>
+                      {ocultosQ2.pagado > 0 ? formatCRC(ocultosQ2.pagado) : '—'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '0.9rem', color: 'var(--t-ink)' }}>{formatCRC(ocultosQ1.pagado + ocultosQ2.pagado)}</td>
+                    <td></td>
+                  </tr>
+                )}
               </tbody>
               <tfoot>
                 <tr style={{ background: 'var(--c-panel)', color: 'var(--c-tinta)', borderTop: '2px solid var(--c-tinta)', fontWeight: 700 }}>
                   <td style={{ padding: '0.6rem 0.75rem' }}>TOTAL</td>
                   <td colSpan={2} style={{ padding: '0.6rem 0.5rem' }}></td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid var(--c-linea)' }}>{formatCRC(empData.reduce((s,e) => s + e.q1Earn, 0))}</td>
+                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid var(--c-linea)' }}>{formatCRC(empData.reduce((s,e) => s + e.q1Earn, 0) + ocultosQ1.pagado)}</td>
                   <td colSpan={2} style={{ padding: '0.6rem 0.5rem' }}></td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid var(--c-linea)' }}>{formatCRC(empData.reduce((s,e) => s + e.q2Earn, 0))}</td>
+                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid var(--c-linea)' }}>{formatCRC(empData.reduce((s,e) => s + e.q2Earn, 0) + ocultosQ2.pagado)}</td>
                   <td style={{ textAlign: 'right', padding: '0.6rem 0.75rem', fontSize: '1rem' }}>{formatCRC(grandTotal)}</td>
                   <td></td>
                 </tr>
@@ -273,6 +296,11 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
                   e.q1Days, e.q1Hours.toFixed(1), e.q1Earn,
                   e.q2Days, e.q2Hours.toFixed(1), e.q2Earn,
                   e.total, e.promDia.toFixed(0),
+                ].map(v => `"${v}"`).join(','))
+                // Lo pagado a personas que esta vista no puede leer: una fila sin nombre, para que el total cuadre.
+                if (hayOcultos) rows.push([
+                  'Personas inactivas (sin nombre en esta vista)', '',
+                  '', '', ocultosQ1.pagado, '', '', ocultosQ2.pagado, ocultosQ1.pagado + ocultosQ2.pagado, '',
                 ].map(v => `"${v}"`).join(','))
                 const csv = BOM + [hdrs.join(','), ...rows].join('\n')
                 const a = document.createElement('a')

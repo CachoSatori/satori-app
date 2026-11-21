@@ -44,7 +44,7 @@ vi.mock('../offline/ordenEscrituras', async () => {
 
 import { createCashMovement, createDayMovement, updateCashMovement, MONTO_SIN_BASE } from './cash'
 import {
-  MSG_MONTO_CERO, MSG_MONTO_INVALIDO, MSG_MONTO_NEGATIVO, MSG_VUELTO_SOLO_INGRESO,
+  MSG_MONTO_CERO, MSG_MONTO_INVALIDO, MSG_MONTO_NEGATIVO, MSG_NEGATIVO_SOLO_INGRESO,
 } from '../../modules/cash/validarMovimiento'
 
 const setOnline = (onLine: boolean) =>
@@ -106,7 +106,7 @@ describe('updateCashMovement — valida el movimiento completo que quedaría', (
   it('sin conexión: vuelto pasado a egreso → rechaza y NO encola', async () => {
     setOnline(false)
     await expect(updateCashMovement('m1', upd({ movement_type: 'egreso_operativo' }), vuelto))
-      .rejects.toThrow(MSG_VUELTO_SOLO_INGRESO)
+      .rejects.toThrow(MSG_NEGATIVO_SOLO_INGRESO)
     nadaSalio()
   })
   it('sin conexión: editar un vuelto válido (₡ −5000 → −4000) → se encola', async () => {
@@ -130,7 +130,7 @@ describe('updateCashMovement — valida el movimiento completo que quedaría', (
   it('sin conexión y sin fila, pero con los tres campos → valida con eso', async () => {
     setOnline(false)
     await expect(updateCashMovement('m1', upd({ movement_type: 'egreso_operativo', amount_crc: -1, amount_usd: 0 })))
-      .rejects.toThrow(MSG_VUELTO_SOLO_INGRESO)
+      .rejects.toThrow(MSG_NEGATIVO_SOLO_INGRESO)
     nadaSalio()
     await expect(updateCashMovement('m1', upd({ movement_type: 'egreso_operativo', amount_crc: 1, amount_usd: 0 })))
       .resolves.toBeUndefined()
@@ -138,7 +138,7 @@ describe('updateCashMovement — valida el movimiento completo que quedaría', (
   })
   it('con conexión y sin la fila de la pantalla: lee la fila de la base y rechaza el egreso negativo', async () => {
     state.fila = { ...vuelto }
-    await expect(updateCashMovement('m1', upd({ movement_type: 'egreso_mercaderia' }))).rejects.toThrow(MSG_VUELTO_SOLO_INGRESO)
+    await expect(updateCashMovement('m1', upd({ movement_type: 'egreso_mercaderia' }))).rejects.toThrow(MSG_NEGATIVO_SOLO_INGRESO)
     expect(state.reads).toBe(1)
     nadaSalio()
   })

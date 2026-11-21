@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  leerMonto, validarMovimiento,
+  leerMonto, validarMovimiento, valorDelCuadro,
   MSG_MONTO_CERO, MSG_MONTO_INVALIDO, MSG_MONTO_NEGATIVO, MSG_DOLARES_NEGATIVOS,
-  MSG_VUELTO_SOLO_INGRESO, MSG_VUELTO_SIN_DOLARES,
+  MSG_NEGATIVO_SOLO_INGRESO, MSG_NEGATIVO_SIN_DOLARES,
 } from './validarMovimiento'
 
 // Montos de ejemplo, ficticios.
@@ -28,6 +28,16 @@ describe('leerMonto', () => {
     expect(leerMonto(Number.POSITIVE_INFINITY)).toBeNaN()
     expect(leerMonto({})).toBeNaN()
     expect(leerMonto(true)).toBeNaN()
+  })
+})
+
+describe('valorDelCuadro (cuadro type="number")', () => {
+  it('badInput → NaN (inválido), aunque el value llegue vacío; si no, el value tal cual', () => {
+    expect(valorDelCuadro({ value: '', validity: { badInput: true } })).toBeNaN()
+    expect(err(validarMovimiento({ tipo: 'egreso_operativo', crc: valorDelCuadro({ value: '', validity: { badInput: true } }), usd: 20 })))
+      .toBe(MSG_MONTO_INVALIDO)
+    expect(valorDelCuadro({ value: '', validity: { badInput: false } })).toBe('')
+    expect(valorDelCuadro({ value: '1500' })).toBe('1500')
   })
 })
 
@@ -69,12 +79,20 @@ describe('validarMovimiento — edición de un movimiento guardado', () => {
   })
   it('vuelto pasado a egreso (cambio de tipo) → rechazado: el egreso quedaría negativo', () => {
     for (const tipo of ['egreso_operativo', 'egreso_mercaderia', 'egreso_personal', 'traspaso']) {
-      expect(err(validarMovimiento({ ...vuelto, tipo }, 'edicion'))).toBe(MSG_VUELTO_SOLO_INGRESO)
+      expect(err(validarMovimiento({ ...vuelto, tipo }, 'edicion'))).toBe(MSG_NEGATIVO_SOLO_INGRESO)
     }
   })
+  it('«Ventas cierre» con ₡ negativos y $0 (ventas menos propinas pagadas): no pasa a egreso y el mensaje no habla de vuelto', () => {
+    const conPropinas = { tipo: 'ingreso', crc: -3000, usd: 0 }
+    expect(err(validarMovimiento({ ...conPropinas, tipo: 'egreso_operativo' }, 'edicion'))).toBe(MSG_NEGATIVO_SOLO_INGRESO)
+    // Lo que se permite no cambia: su ₡ no se edita a otro negativo.
+    expect(err(validarMovimiento({ ...conPropinas, crc: -2500 }, 'edicion'))).toBe(MSG_NEGATIVO_SIN_DOLARES)
+    expect(validarMovimiento({ ...conPropinas, crc: 2500 }, 'edicion')).toEqual({ ok: true, crc: 2500, usd: 0 })
+    for (const msg of [MSG_NEGATIVO_SOLO_INGRESO, MSG_NEGATIVO_SIN_DOLARES]) expect(msg).not.toMatch(/vuelto/i)
+  })
   it('vuelto sin dólares → rechazado', () => {
-    expect(err(validarMovimiento({ ...vuelto, usd: 0 }, 'edicion'))).toBe(MSG_VUELTO_SIN_DOLARES)
-    expect(err(validarMovimiento({ ...vuelto, usd: '' }, 'edicion'))).toBe(MSG_VUELTO_SIN_DOLARES)
+    expect(err(validarMovimiento({ ...vuelto, usd: 0 }, 'edicion'))).toBe(MSG_NEGATIVO_SIN_DOLARES)
+    expect(err(validarMovimiento({ ...vuelto, usd: '' }, 'edicion'))).toBe(MSG_NEGATIVO_SIN_DOLARES)
   })
   it('dólares negativos → rechazado siempre', () => {
     expect(err(validarMovimiento({ tipo: 'ingreso', crc: 1000, usd: -1 }, 'edicion'))).toBe(MSG_DOLARES_NEGATIVOS)

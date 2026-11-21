@@ -81,6 +81,9 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const [supplierName, setSupplierName] = useState('')
   const [montoCRC, setMontoCRC] = useState<number | ''>('')
   const [montoUSD, setMontoUSD] = useState<number | ''>('')
+  // badInput de cada cuadro (texto que no es número: el cuadro entrega '' y contaría como vacío).
+  const [crcMalo, setCrcMalo] = useState(false)
+  const [usdMalo, setUsdMalo] = useState(false)
   const [fechaFactura, setFechaFactura] = useState('')   // opcional; la fecha de REGISTRO es hoy (RN-1)
   // (14-nov) Fecha ambigua (las dos lecturas día/mes son posibles): las dos opciones, la más cercana a hoy primero.
   // Mientras haya duda no se registra: el usuario elige una o escribe la fecha a mano. Si después vacía el campo, la
@@ -150,7 +153,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   // Borra los campos del formulario (no la foto). Lo usan «← Volver» y el paso a la próxima factura de la misma foto.
   const limpiarCampos = () => {
-    setDescripcion(''); setSupplierName(''); setMontoCRC(''); setMontoUSD(''); setFechaFactura(''); setOpcionesFecha(null)
+    setDescripcion(''); setSupplierName(''); setMontoCRC(''); setMontoUSD(''); setCrcMalo(false); setUsdMalo(false); setFechaFactura(''); setOpcionesFecha(null)
     setPickedSupplierId(null); setClasePicked(null); setAliasLeido(null)
     setIngresoCategoria(''); setIngresoMotivo('')
     setPago(formas[0]); setAccountId('')
@@ -218,8 +221,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     if (ex.proveedor) { setSupplierName(ex.proveedor); setPickedSupplierId(null) }   // re-resolver por el nombre leído
     if (ex.concepto || ex.proveedor) setDescripcion(ex.concepto || ex.proveedor || '')
     if (ex.total != null) {
-      if (ex.moneda === 'USD') setMontoUSD(ex.total)
-      else setMontoCRC(ex.total)
+      if (ex.moneda === 'USD') { setMontoUSD(ex.total); setUsdMalo(false) }
+      else { setMontoCRC(ex.total); setCrcMalo(false) }
     }
     if (ex.fecha) setFechaFactura(ex.fecha)
     setOpcionesFecha(ex.fecha_origen === 'ambigua' && ex.fecha_opciones ? ex.fecha_opciones : null)
@@ -383,11 +386,11 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   // Montos (20-nov, ex #73): misma regla que Nuevo movimiento y la API. Vacío, cero, no numérico o negativo no se
   // registra; apenas el cajero escribe algo, el aviso dice por qué (antes `Number(x) || 0` callaba lo no numérico).
   const validacionMonto = validarMovimiento(
-    { tipo: clase === 'ingreso' ? 'ingreso' : 'egreso', crc: montoCRC, usd: montoUSD }, 'alta')
+    { tipo: clase === 'ingreso' ? 'ingreso' : 'egreso', crc: crcMalo ? Number.NaN : montoCRC, usd: usdMalo ? Number.NaN : montoUSD }, 'alta')
   const amountCRC = validacionMonto.ok ? validacionMonto.crc : 0
   const amountUSD = validacionMonto.ok ? validacionMonto.usd : 0
   const montoOk = validacionMonto.ok
-  const avisoMonto = !validacionMonto.ok && (montoCRC !== '' || montoUSD !== '') ? validacionMonto.error : null
+  const avisoMonto = !validacionMonto.ok && (montoCRC !== '' || montoUSD !== '' || crcMalo || usdMalo) ? validacionMonto.error : null
 
   // Ingreso adicional: categoría + motivo completos (sino no se puede crear) y si el equivalente en
   // colones (crc + usd·tc) supera el umbral → hay que pedir autorización de gerencia antes de crear.
@@ -812,7 +815,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             <div className="cd-monto-wrap">
               <span className="cd-prefix">₡</span>
               <input type="number" className="cd-monto-input" aria-label="Monto colones" placeholder="0" min={0} step="any"
-                value={montoCRC} onChange={e => setMontoCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                value={montoCRC} onInput={e => setCrcMalo(e.currentTarget.validity.badInput)}
+                onChange={e => setMontoCRC(e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
           </div>
           <div className="tips-field">
@@ -820,7 +824,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             <div className="cd-monto-wrap usd">
               <span className="cd-prefix">$</span>
               <input type="number" className="cd-monto-input" aria-label="Monto dólares" placeholder="0" min={0} step="any"
-                value={montoUSD} onChange={e => setMontoUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                value={montoUSD} onInput={e => setUsdMalo(e.currentTarget.validity.badInput)}
+                onChange={e => setMontoUSD(e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
           </div>
         </div>

@@ -32,7 +32,7 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import CashMovimientos from './CashMovimientos'
 import { todayCR } from '../../shared/utils'
-import { MSG_MONTO_CERO, MSG_MONTO_INVALIDO, MSG_VUELTO_SOLO_INGRESO } from './validarMovimiento'
+import { MSG_MONTO_CERO, MSG_MONTO_INVALIDO, MSG_NEGATIVO_SOLO_INGRESO } from './validarMovimiento'
 const { updateCashMovement, createDayMovement, getCierresDia } = cashApi
 
 const hoy = todayCR()
@@ -52,6 +52,13 @@ const vuelto = () => mkMov({
 const flush = async () => { await act(async () => { await new Promise(r => setTimeout(r, 0)) }) }
 const fila = (desc: string) => screen.getByDisplayValue(desc).closest('tr') as HTMLElement
 const celdas = (desc: string) => within(fila(desc)).getAllByRole('spinbutton') as HTMLInputElement[]
+// Cuadro type="number" con texto que no es número («12abc»): el navegador entrega value === '' y marca
+// validity.badInput. Se simula ESE estado (no un value que el navegador nunca entrega).
+const ponerIlegible = (input: HTMLInputElement, ilegible = true) => {
+  Object.defineProperty(input, 'validity', { configurable: true, get: () => ({ badInput: ilegible, valid: !ilegible }) })
+  fireEvent.change(input, { target: { value: '' } })
+  fireEvent.input(input)
+}
 const blurCon = async (input: HTMLInputElement, value: string) => {
   fireEvent.change(input, { target: { value } })
   await act(async () => { fireEvent.blur(input) })
@@ -80,6 +87,25 @@ describe('Nuevo movimiento — montos', () => {
     await registrar()
     expect(createDayMovement).not.toHaveBeenCalled()
     expect(screen.getByText(MSG_MONTO_CERO)).toBeTruthy()
+  })
+  it('no numérico (cuadro ₡ con badInput) con $ cargados: no registra ₡0 y dice por qué', async () => {
+    const modal = await abrir()
+    const [crc, usd] = within(modal).getAllByRole('spinbutton') as HTMLInputElement[]
+    fireEvent.change(usd, { target: { value: '20' } })
+    ponerIlegible(crc)
+    await registrar()
+    expect(createDayMovement).not.toHaveBeenCalled()
+    expect(screen.getByText(MSG_MONTO_INVALIDO)).toBeTruthy()
+  })
+  it('no numérico corregido (badInput se va): registra', async () => {
+    const modal = await abrir()
+    const [crc, usd] = within(modal).getAllByRole('spinbutton') as HTMLInputElement[]
+    fireEvent.change(usd, { target: { value: '20' } })
+    ponerIlegible(crc)
+    ponerIlegible(crc, false)
+    await registrar()
+    expect(createDayMovement).toHaveBeenCalledTimes(1)
+    expect(createDayMovement.mock.calls[0][0]).toMatchObject({ amount_crc: 0, amount_usd: 20 })
   })
   it('válido: registra con el número leído', async () => {
     const modal = await abrir()
@@ -110,13 +136,22 @@ describe('Tabla — edición de montos', () => {
     expect(window.alert).toHaveBeenCalledWith(MSG_MONTO_CERO)
     expect(updateCashMovement).not.toHaveBeenCalled()
   })
-  it('no numérico: avisa y NO guarda (ni ₡0 ni nada)', async () => {
-    render(<CashMovimientos movements={[mkMov({ description: 'gasto con letras' })]} sessions={[]} onRefresh={vi.fn()} />)
+  it('no numérico (cuadro con badInput) en una fila con ₡ y $: avisa y NO guarda ₡0', async () => {
+    render(<CashMovimientos movements={[mkMov({ description: 'gasto con letras', amount_usd: 20 })]} sessions={[]} onRefresh={vi.fn()} />)
     await flush()
     const [crc] = celdas('gasto con letras')
-    // El navegador entrega «» si el número no se puede leer; si entrega el texto, también se rechaza.
-    Object.defineProperty(crc, 'value', { configurable: true, get: () => '12abc', set: () => {} })
+    ponerIlegible(crc)
     await act(async () => { fireEvent.blur(crc) })
+    expect(window.alert).toHaveBeenCalledWith(MSG_MONTO_INVALIDO)
+    expect(updateCashMovement).not.toHaveBeenCalled()
+    expect(requireManager).not.toHaveBeenCalled()
+  })
+  it('no numérico (badInput) en los $ de una fila con ₡: avisa y NO guarda $0', async () => {
+    render(<CashMovimientos movements={[mkMov({ description: 'gasto usd letras', amount_usd: 20 })]} sessions={[]} onRefresh={vi.fn()} />)
+    await flush()
+    const usd = celdas('gasto usd letras')[1]
+    ponerIlegible(usd)
+    await act(async () => { fireEvent.blur(usd) })
     expect(window.alert).toHaveBeenCalledWith(MSG_MONTO_INVALIDO)
     expect(updateCashMovement).not.toHaveBeenCalled()
   })
@@ -152,7 +187,7 @@ describe('Tabla — edición de montos', () => {
     const tipo = within(fila('ventas con vuelto')).getAllByRole('combobox')
       .find(s => (s as HTMLSelectElement).value === 'ingreso') as HTMLSelectElement
     await act(async () => { fireEvent.change(tipo, { target: { value: 'egreso_operativo' } }) })
-    expect(window.alert).toHaveBeenCalledWith(MSG_VUELTO_SOLO_INGRESO)
+    expect(window.alert).toHaveBeenCalledWith(MSG_NEGATIVO_SOLO_INGRESO)
     expect(updateCashMovement).not.toHaveBeenCalled()
     expect(requireManager).not.toHaveBeenCalled()
     expect(onRefresh).toHaveBeenCalled()

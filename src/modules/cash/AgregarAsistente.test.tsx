@@ -221,6 +221,33 @@ describe('AgregarAsistente — montos con validarMovimiento (20-nov, ex #73)', (
     expect(createSpy).not.toHaveBeenCalled()
   })
 
+  // Cuadro type="number" con texto que no es número: el navegador entrega '' y marca validity.badInput.
+  const ponerIlegible = (input: HTMLElement, ilegible = true) => {
+    Object.defineProperty(input, 'validity', { configurable: true, get: () => ({ badInput: ilegible, valid: !ilegible }) })
+    fireEvent.change(input, { target: { value: '' } })
+    fireEvent.input(input)
+  }
+
+  it('no numérico (cuadro ₡ con badInput) con $ cargados: aviso, botón apagado y NO crea ₡0', async () => {
+    renderAsistente('cajero')
+    fireEvent.change(screen.getByLabelText('Descripción'), { target: { value: 'pago de electricidad del mes' } })
+    fireEvent.change(screen.getByLabelText('Monto dólares'), { target: { value: '20' } })
+    ponerIlegible(screen.getByLabelText('Monto colones'))
+    expect(screen.getByText(/El monto no es un número/)).toBeTruthy()
+    expect(btnConfirmar().disabled).toBe(true)
+    await confirmar()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('no numérico en $ (badInput) con ₡ cargados: tampoco crea', async () => {
+    renderAsistente('cajero')
+    setMonto('25000')
+    ponerIlegible(screen.getByLabelText('Monto dólares'))
+    expect(btnConfirmar().disabled).toBe(true)
+    await confirmar()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
   it('$ con monto y ₡ vacío: crea con ₡ 0 y los dólares', async () => {
     renderAsistente('cajero')
     fireEvent.change(screen.getByLabelText('Descripción'), { target: { value: 'pago de electricidad del mes' } })

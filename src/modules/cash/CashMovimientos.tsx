@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CashMovement, CashSession, MovementType } from '../../shared/types/database'
 import { updateCashMovement, deleteCashMovement, getCierresDia, createDayMovement } from '../../shared/api/cash'
 import { aprobacionPropinaFields } from './propinaPago'
-import { leerMonto, validarMovimiento } from './validarMovimiento'
+import { leerMonto, validarMovimiento, valorDelCuadro } from './validarMovimiento'
 import type { CashCierreDia } from '../../shared/types/database'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -50,6 +50,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const [nmConcepto, setNmConcepto] = useState<typeof CONCEPTOS[number]['id']>('banco_cf')
   const [nmCRC, setNmCRC] = useState<number | ''>('')
   const [nmUSD, setNmUSD] = useState<number | ''>('')
+  // badInput de cada cuadro (texto que no es número: el cuadro entrega '' y contaría como vacío).
+  const [nmCrcMalo, setNmCrcMalo] = useState(false)
+  const [nmUsdMalo, setNmUsdMalo] = useState(false)
   const [nmDesc, setNmDesc] = useState('')
   const [nmFecha, setNmFecha] = useState(todayStr())
   const [nmSaving, setNmSaving] = useState(false)
@@ -57,7 +60,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const guardarNuevo = async () => {
     const c = CONCEPTOS.find(x => x.id === nmConcepto)!
     // Montos (20-nov, ex #73): vacío, cero, no numérico o negativo → no se registra y se dice por qué.
-    const v = validarMovimiento({ tipo: c.type, crc: nmCRC, usd: nmUSD }, 'alta')
+    const v = validarMovimiento({ tipo: c.type, crc: nmCrcMalo ? Number.NaN : nmCRC, usd: nmUsdMalo ? Number.NaN : nmUSD }, 'alta')
     if (!v.ok) { setNmErr(v.error); return }
 
     // ── Guard de fecha (Ítem 4) ────────────────────────────────────────────────────────────────
@@ -84,7 +87,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         created_by: profile?.id ?? '', movement_type: c.type, amount_crc: v.crc, amount_usd: v.usd,
         description: nmDesc || c.label, subcategory: c.sub, method: c.method, caja_origen: c.caja, status: 'aprobado', fecha: nmFecha,
       })
-      setNmOpen(false); setNmCRC(''); setNmUSD(''); setNmDesc('')
+      setNmOpen(false); setNmCRC(''); setNmUSD(''); setNmCrcMalo(false); setNmUsdMalo(false); setNmDesc('')
       onRefresh()
     } catch (e) { setNmErr(e instanceof Error ? e.message : 'Error'); setNmSaving(false) }
   }
@@ -234,17 +237,19 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   }, [onRefresh, requireManager])
 
   // Montos editados en la tabla (20-nov, ex #73). Antes, `Number(x) || 0` guardaba ₡0 si la celda quedaba vacía o
-  // con algo que no era número, y un monto < 0 se rechazaba siempre (también el vuelto de un ingreso en dólares).
+  // con algo que no era número, y un monto < 0 se rechazaba siempre (también en un ingreso del cierre con dólares).
   // Ahora se valida el movimiento COMPLETO como quedaría: si no vale, avisa, la celda vuelve al monto guardado y no
   // se pide autorización ni se guarda nada. Si el monto no cambió, tampoco (antes pedía autorización igual).
   const handleMontoBlur = useCallback((m: CashMovement, field: 'amount_crc' | 'amount_usd', input: HTMLInputElement) => {
     const guardado = Number(m[field]) || 0
-    const nuevo = leerMonto(input.value)
+    // badInput («12abc»): el cuadro entrega '' y contaría como 0 → valorDelCuadro lo vuelve NaN (inválido).
+    const crudo = valorDelCuadro(input)
+    const nuevo = leerMonto(crudo)
     if (nuevo === guardado) return
     const v = validarMovimiento({
       tipo: m.movement_type,
-      crc: field === 'amount_crc' ? input.value : m.amount_crc,
-      usd: field === 'amount_usd' ? input.value : m.amount_usd,
+      crc: field === 'amount_crc' ? crudo : m.amount_crc,
+      usd: field === 'amount_usd' ? crudo : m.amount_usd,
     }, 'edicion')
     if (!v.ok) {
       window.alert(v.error)
@@ -255,7 +260,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     void handleFieldChange(m.id, field, field === 'amount_crc' ? v.crc : v.usd, m)
   }, [handleFieldChange, onRefresh])
 
-  // Cambio de tipo (20-nov, ex #73): un ingreso con vuelto (₡ negativos) que pasa a egreso dejaría un egreso negativo
+  // Cambio de tipo (20-nov, ex #73): un ingreso con ₡ negativos (del cierre) que pasa a egreso dejaría un egreso negativo
   // y el saldo daría mal. Se valida el movimiento con el tipo nuevo; si no vale, avisa y el select queda como estaba.
   const handleTipoChange = useCallback((m: CashMovement, tipo: string) => {
     const v = validarMovimiento({ tipo, crc: m.amount_crc, usd: m.amount_usd }, 'edicion')
@@ -432,11 +437,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
             <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
               <div className="tips-field">
                 <div className="tips-field-label">Monto ₡</div>
-                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" min={0} step="any" onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" min={0} step="any" onInput={e => setNmCrcMalo(e.currentTarget.validity.badInput)} onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Monto $ (opcional)</div>
-                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" min={0} step="any" onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" min={0} step="any" onInput={e => setNmUsdMalo(e.currentTarget.validity.badInput)} onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Fecha</div>

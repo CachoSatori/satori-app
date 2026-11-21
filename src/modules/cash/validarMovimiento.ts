@@ -8,19 +8,21 @@
 //   · cada monto es un número finito; vacío cuenta como 0 (la tabla muestra vacío cuando el monto es 0);
 //   · el movimiento entero no puede quedar en cero en las dos monedas;
 //   · dólares nunca negativos;
-//   · colones negativos SOLO en un ingreso con dólares: es el vuelto en colones de un cobro en dólares
-//     (así guarda el Cierre del Día las «Ventas cierre», recordCierreSales; el saldo lo cuenta bien).
-//     Una ALTA manual no los admite (Ítem 2); al EDITAR un vuelto que ya existe, sí, para que se pueda
-//     corregir sin romperlo. Si un vuelto se pasa a egreso, el egreso quedaría negativo: se rechaza.
+//   · colones negativos SOLO en un ingreso. Los guarda así el Cierre del Día en «Ventas cierre»
+//     (recordCierreSales): con dólares suele ser el vuelto en colones de cobros en dólares; con $0, las ventas
+//     en efectivo menos las propinas pagadas. El saldo los cuenta bien. Una ALTA manual no los admite (Ítem 2).
+//     Al EDITAR, se aceptan solo en un ingreso que también tiene dólares (lo de siempre: la tabla no dejaba
+//     poner ₡ negativos); uno con $0 se puede editar en sus otros campos, no en el ₡. Si un ingreso con ₡
+//     negativos se pasa a egreso o a traspaso, quedaría negativo y el saldo daría mal: se rechaza.
 
 export const MSG_MONTO_INVALIDO = 'El monto no es un número. Escribí solo números (por ejemplo 12500 o 12500,50).'
 export const MSG_MONTO_CERO = 'Ingresá un monto mayor a cero.'
 export const MSG_MONTO_NEGATIVO = 'El monto no puede ser negativo.'
 export const MSG_DOLARES_NEGATIVOS = 'El monto en dólares no puede ser negativo.'
-export const MSG_VUELTO_SOLO_INGRESO =
-  'Este movimiento tiene colones negativos (el vuelto de un cobro en dólares): solo puede ser un ingreso. Corregí el monto antes de cambiar el tipo.'
-export const MSG_VUELTO_SIN_DOLARES =
-  'Los colones negativos solo van en un ingreso con dólares (el vuelto). Cargá los dólares o ingresá un monto mayor a cero.'
+export const MSG_NEGATIVO_SOLO_INGRESO =
+  'Solo un ingreso puede tener colones negativos (así los guarda el Cierre del Día). Dejalo como ingreso o corregí el monto.'
+export const MSG_NEGATIVO_SIN_DOLARES =
+  'Al editar, los colones negativos solo se aceptan en un ingreso que también tiene dólares. Cargá los dólares o ingresá un monto mayor a cero.'
 
 /** `alta`: movimiento nuevo cargado a mano. `edicion`: cambio de tipo o de monto de uno que ya existe. */
 export type ContextoValidacion = 'alta' | 'edicion'
@@ -50,6 +52,15 @@ export function leerMonto(v: unknown): number {
   return Number(t.replace(',', '.'))
 }
 
+/**
+ * Lo que trae un cuadro de monto `type="number"`. Si el texto no se puede leer como número («12abc», «12e»), el
+ * navegador entrega `value === ''` y marca `validity.badInput`: sin mirarlo, eso contaría como vacío (= 0).
+ * Con badInput devuelve NaN, que validarMovimiento rechaza con MSG_MONTO_INVALIDO.
+ */
+export function valorDelCuadro(input: { value: string; validity?: { badInput?: boolean } | null }): string | number {
+  return input.validity?.badInput ? Number.NaN : input.value
+}
+
 export function validarMovimiento(m: MovimientoAValidar, contexto: ContextoValidacion = 'alta'): ResultadoValidacion {
   const crc = leerMonto(m.crc)
   const usd = leerMonto(m.usd)
@@ -57,9 +68,9 @@ export function validarMovimiento(m: MovimientoAValidar, contexto: ContextoValid
   if (usd < 0) return { ok: false, error: contexto === 'alta' ? MSG_MONTO_NEGATIVO : MSG_DOLARES_NEGATIVOS }
   if (crc < 0) {
     if (contexto === 'alta') return { ok: false, error: MSG_MONTO_NEGATIVO }
-    if (m.tipo !== 'ingreso') return { ok: false, error: MSG_VUELTO_SOLO_INGRESO }
-    if (usd === 0) return { ok: false, error: MSG_VUELTO_SIN_DOLARES }
-    return { ok: true, crc, usd }   // vuelto válido: ingreso con dólares y colones negativos
+    if (m.tipo !== 'ingreso') return { ok: false, error: MSG_NEGATIVO_SOLO_INGRESO }
+    if (usd === 0) return { ok: false, error: MSG_NEGATIVO_SIN_DOLARES }
+    return { ok: true, crc, usd }   // ingreso con dólares y colones negativos (p. ej. el vuelto): válido
   }
   if (crc === 0 && usd === 0) return { ok: false, error: MSG_MONTO_CERO }
   // `+ 0` normaliza -0 (un «-0» escrito a mano) a 0.

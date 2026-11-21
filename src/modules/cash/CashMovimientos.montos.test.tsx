@@ -123,6 +123,15 @@ describe('Nuevo movimiento — montos', () => {
     expect(createDayMovement).not.toHaveBeenCalled()
     expect(screen.getByText(MSG_MONTO_INVALIDO)).toBeTruthy()
   })
+  it('no numérico (cuadro $ con badInput) con ₡ cargados: no registra $0 y dice por qué', async () => {
+    const modal = await abrir()
+    const [crc, usd] = within(modal).getAllByRole('spinbutton') as HTMLInputElement[]
+    fireEvent.change(crc, { target: { value: '5000' } })
+    ponerIlegible(usd)
+    await registrar()
+    expect(createDayMovement).not.toHaveBeenCalled()
+    expect(screen.getByText(MSG_MONTO_INVALIDO)).toBeTruthy()
+  })
   it('no numérico corregido (badInput se va): registra', async () => {
     const modal = await abrir()
     const [crc, usd] = within(modal).getAllByRole('spinbutton') as HTMLInputElement[]

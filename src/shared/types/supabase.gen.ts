@@ -3310,6 +3310,7 @@ export type Database = {
       }
       locations: {
         Row: {
+          correo_base: string | null
           created_at: string
           id: string
           is_active: boolean
@@ -3317,6 +3318,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          correo_base?: string | null
           created_at?: string
           id: string
           is_active?: boolean
@@ -3324,6 +3326,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          correo_base?: string | null
           created_at?: string
           id?: string
           is_active?: boolean

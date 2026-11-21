@@ -5,6 +5,8 @@ import { pedidosCambioClave, pedirCambioClave, sacarPedidoCambioClave } from '..
 import { fechaHoraCR } from './bitacoraPermisos'
 
 import { ROLE_LABELS } from '../../shared/constants'
+import { getAliasDelLocal } from '../../shared/api/locales'
+import AliasCorreoTexto, { type AliasEstado } from './AliasCorreoTexto'
 import NuevoEmpleado from './NuevoEmpleado'
 import CambiosPermisos from './CambiosPermisos'
 
@@ -26,6 +28,15 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
   const [verCambios, setVerCambios] = useState<string | null>(null)   // B10: usuario con «Cambios» abierto
   // Mig 185: user_id → desde cuándo tiene pedido el cambio de contraseña (null = no se pudo leer)
   const [pedidos, setPedidos] = useState<Map<string, string> | null>(new Map())
+  // Mig 195: alias de alta con el correo base del local (de la base, no del build)
+  const [alias, setAlias] = useState<AliasEstado>({ estado: 'cargando' })
+  useEffect(() => {
+    let vivo = true
+    getAliasDelLocal()
+      .then(r => { if (vivo) setAlias({ estado: 'ok', ...r }) })
+      .catch(() => { if (vivo) setAlias({ estado: 'error' }) })
+    return () => { vivo = false }
+  }, [])
 
   const cargarPedidos = useCallback(async () => {
     try { setPedidos(new Map((await pedidosCambioClave()).map(p => [p.user_id, p.marcado_en]))) }
@@ -154,15 +165,15 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
       <div style={{ border: '1px solid var(--c-linea)', borderRadius: 4, padding: '0.75rem 0.875rem',
         marginBottom: '1.25rem', fontSize: '0.74rem', lineHeight: 1.6, color: 'var(--c-gris)' }}>
         <strong style={{ color: 'var(--c-tinta)' }}>¿Cómo dar de alta a alguien?</strong><br />
-        1. Tocá <strong>+ Nuevo empleado</strong> y cargá nombre, correo (el suyo o un alias
-        <code> satorisushibar+nombre@gmail.com</code>) y rol. Si ya está en Empleados, vinculalo.<br />
+        1. Tocá <strong>+ Nuevo empleado</strong> y cargá nombre, correo (el suyo o un alias{' '}
+        <AliasCorreoTexto a={alias} />) y rol. Si ya está en Empleados, vinculalo.<br />
         2. Copiá la <strong>contraseña temporal</strong> y entregásela en persona: no se vuelve a mostrar.<br />
         3. La persona entra con su correo y esa contraseña, elige una nueva y aterriza directo en su
         pantalla (cajero → Caja, bandeja proveedores → Registrar pago).
       </div>
 
       {nuevo && (
-        <NuevoEmpleado employees={employees} onClose={() => setNuevo(false)}
+        <NuevoEmpleado employees={employees} alias={alias} onClose={() => setNuevo(false)}
           onCreated={() => { load(); onEmployeesChanged?.() }} />
       )}
 

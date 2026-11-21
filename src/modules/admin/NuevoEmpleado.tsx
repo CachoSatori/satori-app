@@ -4,15 +4,18 @@
 import { useState } from 'react'
 import type { Employee, UserRole } from '../../shared/types/database'
 import { ROLE_LABELS } from '../../shared/constants'
+import AliasCorreoTexto, { type AliasEstado } from './AliasCorreoTexto'
 import { ROLES_ALTA, crearCuentaEmpleado, AltaEmpleadoError, type AltaEmpleadoResultado } from '../../shared/api/altaEmpleado'
 
 interface Props {
   employees: Employee[]
+  /** Mig 195: alias con el correo base del local (lo lee Admin → Usuarios). Sin él, se muestra «cargando». */
+  alias?: AliasEstado
   onClose: () => void
   onCreated: () => void
 }
 
-export default function NuevoEmpleado({ employees, onClose, onCreated }: Props) {
+export default function NuevoEmpleado({ employees, alias = { estado: 'cargando' }, onClose, onCreated }: Props) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<UserRole | ''>('')
@@ -98,7 +101,7 @@ export default function NuevoEmpleado({ employees, onClose, onCreated }: Props) 
             <label className="nuevo-emp-field">
               <span>Correo</span>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={saving} placeholder="nombre@ejemplo.com" />
-              <small>Si no tiene correo propio: <code>satorisushibar+nombre@gmail.com</code></small>
+              <small>Si no tiene correo propio: <AliasCorreoTexto a={alias} /></small>
             </label>
             <label className="nuevo-emp-field">
               <span>Rol</span>

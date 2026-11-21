@@ -4,16 +4,16 @@
 > (incluye el ESTADO íntegro previo a la poda del 20-nov).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega)
-**Al día: 2026-11-20 (tarde).** `main` = `7ce4ebe9` (merge #320). **Ledger prod = 194 · staging = 194** (la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
+**Al día: 2026-11-21 (~06:00 CR).** `main` = `f60c1831` (merge #323). **Ledger prod = 195 · staging = 194** (staging sin la 195: la batería se corrió con rollback; próximo libre del bloque 150–199: 196; la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
 [docs/handoffs/HANDOFF-2026-11-20.md](docs/handoffs/HANDOFF-2026-11-20.md).
-- **Entró el 20-nov:** #307 (poda) · #306 (spec staging para agentes, firmada) · #309 (menores de #304) · #310 (FIFO de crédito, sin migración) · #313 (ítem 11: `config.toml` + Edge = prod) · #311 (Resumen del día obligatorio en el cierre) · #314 (`cierre-email` v18, en prod como v19) · #308 (hooks: deny + D1 nueva) · #316 (datos de análisis fuera del repo público) · #315 (spec de anonimizar staging, firmada D1/D3/D4/D5) · #318 y #319 (pruebas de caracterización y de propiedades) · #317 (firma del dueño como pedido «Aprobar») · #320 (aviso de propinas sin repartir).
-- **Cerrados sin merge:** #305, #312, #61, #235, #241, #242, #243, #245, #281, #283, #63, #73.
+- **Entró el 20-nov:** #307 (poda) · #306 (spec staging para agentes, firmada) · #309 (menores de #304) · #310 (FIFO de crédito, sin migración) · #313 (ítem 11: `config.toml` + Edge = prod) · #311 (Resumen del día obligatorio en el cierre) · #314 (`cierre-email` v18, en prod como v19) · #308 (hooks: deny + D1 nueva) · #316 (datos de análisis fuera del repo público) · #315 (spec de anonimizar staging, firmada D1/D3/D4/D5) · #318 y #319 (pruebas de caracterización y de propiedades) · #317 (firma del dueño como pedido «Aprobar») · #320 (aviso de propinas sin repartir) · #321 (docs del cierre) · #322 (menores de la guardia del #317: `ls-tree`, `git add -f` a `.claude/`, comillas y escapes, `reset --hard` y `switch` permitidos; el gate controla las marcas versionadas) · **entró el 21-nov:** #323 (mig 195: correo base por local; firma del dueño por chat y SHA fijado por REST).
+- **Cerrados sin merge:** #75 (reemplazado por #323), #305, #312, #61, #235, #241, #242, #243, #245, #281, #283, #63, #73.
 - **Edge prod (después del ítem 11):** `monthly-report` v25 · `extract-document` v21 · `cierre-email` v19 · `pago-notificar` v17 · `ventas-dia-contador` v6 · `ingest-ndf` v14 (verify_jwt false) · `alta-empleado` v13 · `club-pase` v8 (verify_jwt false). **Desde el #313, cada merge que toca `supabase/functions/` despliega por Branching.** Agente PoS prod (`agente-fe`): latido OK.
 - **Protección de `main`:** «Gate» requerido · rama al día (`strict`) · sin excepción para admins. Las sesiones en la nube no pueden cambiarla (403). Arnés a prueba hasta el 3-dic.
 - **Decisiones del dueño:** Club en PAUSA hasta que Apple apruebe la Wallet · sin alerta de latido · **D1 (20-nov): 23:30–15:00 libre · 15:00–19:00 con OK del dueño · 19:00–23:30 solo urgente con OK** · PRs solo de `.md` se mergean sin OK únicamente de 23:30 a 15:00 · NO auto-merge de código.
-- **Firma (opción A, #317):** la sesión principal pide la firma con Write de la marca y el dueño toca «Aprobar» en la app. **No se probó en vivo** (la sesión del 20-nov tenía los hooks viejos): probarla el 21-nov con el primer merge de código.
+- **Firma (opción A, #317):** la sesión principal pide la firma con Write de la marca y el dueño toca «Aprobar» en la app. **La prueba del 21-nov FALLÓ sin riesgo:** en una sesión de la nube que clona el repo a mitad de conversación los hooks del repo no se cargan (sin «Aprobar», sin línea «# Aprobar =»). #323 se mergeó con la firma del dueño por chat y el SHA fijado por REST. Sigue sin probarse en una sesión que arranque ya con el repo clonado.
 - **Pendiente del dueño:** cierre del 20-nov (Resumen del día + correo v19 + aviso de propinas) · correo de pago agrupado, paso 2 (pagar 2 de 3 facturas del proveedor de prueba) · próximo crédito real (#310) · #229 al lanzar el Club.
-- **Cola (en orden):** menores del #317 (comillas en `cd`; CI que verifique `git ls-files '.claude/*.local'` vacío; permitir `reset --keep`/`switch -C`) · script de anonimización de staging (spec firmada) · rehacer lo útil del #73 (Opus) · rehacer el #75 (Sonnet) · rama `staging` congelada (decidir) · métricas por PR · WhatsApp a proveedores F0 → F1a · cron del Club el 23-nov · costos de producto con Inventario · H3 de propinas (decidir).
+- **Cola (en orden):** script de anonimización de staging (PR #324; falta el OK del dueño a 3 decisiones y el OK de D5 para correrlo) · #73 rehecho en #325 (propinas) y #326 (caja) · rama `staging` congelada (decidir) · métricas por PR · WhatsApp a proveedores F0 → F1a · cron del Club el 23-nov · costos de producto con Inventario · H3 de propinas (decidir).
 - **Cron:** job 4 (quincena) **NO volver a aplicar**. Job 8 (Club): repetir la verificación el 23-nov. Job 10 (`ventas-dia-contador`): primer envío 1-dic.
 - **Deploy:** `version.json` y `/api/salud` dan 403 por el proxy de la sesión: verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 
@@ -21,8 +21,8 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `7ce4ebe9` |
-| `staging` | sin cambios desde el 13/11 (`4726b7f`); su base ya está al día (ledger 194) |
+| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `f60c1831` |
+| `staging` | sin cambios desde el 13/11 (`4726b7f`); su base ya está al día (prod 195; staging 194) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
 | Gate | `bash scripts/ci/gate.sh` (único; mismo en CI y local) |
@@ -83,15 +83,15 @@ El código de `main` es el desplegado (Branching); las fuentes por rama de antes
 ### Numeración de migraciones
 > **Fuente de verdad:** `supabase/migraciones-reservadas.json` (origen → número final de cada una), que lee `supabase/migraciones.test.ts`. La tabla número a número está en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 
-1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **139**) · PASE A PROD **150–199** (solo renumeraciones del pase; próximo libre **195**). La **086** queda libre.
+1. **Bloques por rama:** CAJA / operación **087–99** (**lleno**; un número nuevo de caja hay que pedirlo al dueño) · CLUB SATORI + puente **100–149** (próximo libre **140**) · PASE A PROD **150–199** (solo renumeraciones del pase; próximo libre **196**; la 195 = origen 139, #323, sin aplicar). La **086** queda libre.
 2. Cada PR que agrega una migración actualiza el registro. El gate falla si no está registrada, queda fuera del bloque de su rama o repite número.
 3. **Pase a prod:** ninguna migración entra con número ≤ al último del ledger de prod; se renombra al siguiente libre del bloque 150–199, en el mismo PR (archivo, rollback, pruebas, scripts), con `origen` en el registro. Branching rechaza una versión menor que la última aplicada.
 4. Un número usado no se reutiliza. Las versiones son **texto**: `0090` y `0095` son históricas y distintas de `090` / `095`.
 
-**Ledger de prod: 194**. Staging: 194 (189 omitida; faltan las filas viejas 065 y 066).
+**Ledger de prod: 195**. Staging: 194 (189 omitida; faltan las filas viejas 065 y 066).
 
 Números registrados (lo exige el test; origen y destino en el JSON y en el histórico):
-| 075 | 078 | 080 | 081 | 082 | 083 | 084 | 085 | 087 | 088 | 089 | 090 | 091 | 092 | 093 | 094 | 095 | 096 | 097 | 098 | 099 | 100 | 101 | 102 | 103 | 104 | 105 | 106 | 107 | 108 | 109 | 110 | 111 | 112 | 113 | 114 | 115 | 116 | 117 | 118 | 119 | 120 | 121 | 122 | 124 | 125 | 126 | 127 | 128 | 129 | 130 | 131 | 132 | 133 | 134 | 135 | 136 | 137 | 138 | 150 | 151 | 153 | 155 | 156 | 157 | 158 | 159 | 160 | 161 | 162 | 163 | 164 | 165 | 166 | 167 | 168 | 169 | 170 | 171 | 172 | 173 | 174 | 175 | 176 | 177 | 178 | 179 | 180 | 181 | 182 | 183 | 184 | 185 | 186 | 187 | 188 | 189 | 190 | 191 | 192 | 193 | 194 |
+| 075 | 078 | 080 | 081 | 082 | 083 | 084 | 085 | 087 | 088 | 089 | 090 | 091 | 092 | 093 | 094 | 095 | 096 | 097 | 098 | 099 | 100 | 101 | 102 | 103 | 104 | 105 | 106 | 107 | 108 | 109 | 110 | 111 | 112 | 113 | 114 | 115 | 116 | 117 | 118 | 119 | 120 | 121 | 122 | 124 | 125 | 126 | 127 | 128 | 129 | 130 | 131 | 132 | 133 | 134 | 135 | 136 | 137 | 138 | 139 | 150 | 151 | 153 | 155 | 156 | 157 | 158 | 159 | 160 | 161 | 162 | 163 | 164 | 165 | 166 | 167 | 168 | 169 | 170 | 171 | 172 | 173 | 174 | 175 | 176 | 177 | 178 | 179 | 180 | 181 | 182 | 183 | 184 | 185 | 186 | 187 | 188 | 189 | 190 | 191 | 192 | 193 | 194 | 195 |
 
 ## 🔒 Abierto que sigue vigente
 - **Seguridad en prod:** 4 `SECURITY DEFINER` ejecutables por `anon` (`get_my_role`, `handle_new_user`, `log_movement_edit`, `unif_on_cash_movement`); sin `supabase/config.toml`.

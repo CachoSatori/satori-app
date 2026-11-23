@@ -44,7 +44,7 @@
 6. **Propinas · reparto semanal de cocina:** pasar la exclusión de un nombre fijo en el código a una marca en la base (🖊️ spec y firma: toca propinas).
 7. **Mi Rendimiento:** Semana → Por día (alcance con el dueño) · empleados inactivos sin nombre para el salonero (el RLS de `employees` muestra el código del PoS) · día sin pax muestra −100 % en vez de «sin dato».
 8. **🖊️ Umbrales del ICP** (hoy ≥13 % excelente, <10 % a mejorar): recalibrar; el histórico real da 5–9 % y el del equipo en octubre 10,6 % con el PoS.
-9. **Ventas 3.4 · reporte quincenal de excepciones con anotación** (spec en SPEC Ventas v2, #246).
+9. **Ventas 3.4 · reporte quincenal de excepciones con anotación** (spec en [docs/ventas/SPEC-ventas-v2.md](docs/ventas/SPEC-ventas-v2.md) §5.5 ítem 6, PR #330). Antes va la fase 3.5: unificar las vistas viejas en las 5 pestañas (§12).
 10. **Policy de `pos_mesas_internas` por local** (backlog del #294): hoy un manager lee la lista de todos los locales; limitar con `puede_ver_local`. 🖊️ toca permisos.
 11. **Ventas · «Contexto jueves» de «Hoy»** mostró un promedio mal mientras cargaba el histórico: revisar si mezcla días del Excel y del PoS en la comparativa de las 4 últimas ocurrencias.
 12. **Propinas · aviso sin repartir (#320), menores del verificador:** la propiedad «avisa ⇔ guardas» no cubre montos con céntimos (barra < ₡0,5 bloquea sin aviso) · falta una mutación del aviso con cobertura (rol efectivo vs natural en `TipsModule`) · «Quincenal» recalcula con los puntos y roles **actuales** de `role_tip_points`, no con los del turno (`payout_crc` guardado).

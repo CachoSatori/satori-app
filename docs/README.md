@@ -73,6 +73,9 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
   dueño.** Registro de clics en «Reservar», «Cómo llegar» y «Reseña» del Club (portal, cupón, cumpleaños) y embudo
   clic → reserva de OpenTable (import de CSV) → llegada → reseña. Detalle ligado a persona 13 meses, totales para
   siempre (año contra año); sin IP; aviso de privacidad v1.4 propuesto; plan en 5 PRs y 9 decisiones abiertas.
+- **[ventas/SPEC-ventas-v2.md](./ventas/SPEC-ventas-v2.md)** — ✅ **cerrada el 23-nov-2026.** Ventas ordenado en cinco
+  pestañas (Resumen · Productos · Equipo · Tiempos · Regalías), con el estado real por fase, las decisiones y los
+  criterios de aceptación de la unificación (fase 3.5). Cada PR necesita el OK del dueño; los de esquema, su firma.
 - **[SPEC-COMANDA-GAPS.md](./SPEC-COMANDA-GAPS.md)** — 3 gaps priorizados para decidir: **Comp vs
   Void** (P&L), **fire-by-prep-time** (el campo prep ya existe), **revenue centers**.
 

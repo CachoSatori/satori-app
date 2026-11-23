@@ -61,6 +61,9 @@ vi.mock('./VentasEvaluacion',     () => vista('evaluacion'))
 vi.mock('./VentasICP',            () => vista('icp'))
 vi.mock('./VentasCalendario',     () => vista('calendario'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
+vi.mock('./VentasResumen',        () => vista('resumen'))
+vi.mock('./VentasTiempos',        () => vista('tiempos'))
+vi.mock('./VentasMesasInternas',  () => vista('internas'))
 
 import * as fuente from './ventasFuente'
 import VentasModule from './VentasModule'
@@ -94,6 +97,21 @@ describe('VentasModule · carga a pedido (A5)', () => {
     expect(await texto()).toContain(`${id}|`)
     expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
     expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
+  })
+
+  // 3.5.1: el arranque pasa de «Hoy» a «Resumen», que lee lo suyo: entrar a Ventas ya no baja los 90 días.
+  it.each(['owner', 'manager', 'contador'])('%s: /ventas abre «Resumen» sin pedir los 90 días ni la historia', async r => {
+    role = r
+    abrir('/ventas')
+    expect(await texto()).toContain('resumen|')
+    expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
+    expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
+  })
+
+  it.each(['tab=resumen', 'tab=tiempos'])('?%s no pide los 90 días (criterio 12)', async q => {
+    abrir(`/ventas?${q}`)
+    expect(await texto()).toMatch(/^(resumen|tiempos)\|/)
+    expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
   })
 
   it('En vivo recibe las mismas metas de antes', async () => {

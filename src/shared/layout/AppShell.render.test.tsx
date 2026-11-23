@@ -37,10 +37,16 @@ describe('AppShell', () => {
     montar()
     const nav = lateral()
     for (const g of ['Operación', 'Ventas', 'Equipo', 'Gestión', 'Ajustes']) {
-      expect(within(nav).getByText(g)).toBeTruthy()
+      // «Equipo» es grupo y, desde el 3.5.1, también entrada de Ventas: aparece dos veces.
+      expect(within(nav).getAllByText(g).length).toBeGreaterThan(0)
     }
-    const hoy = within(nav).getByRole('link', { name: /Hoy/ })
-    expect(hoy.getAttribute('href')).toBe('/ventas?tab=hoy')
+    // 3.5.1: Ventas abre en sus seis entradas, la primera «Resumen».
+    const ventas = within(nav).getAllByRole('link').filter(a => a.getAttribute('href')?.startsWith('/ventas'))
+    expect(ventas.map(a => a.getAttribute('href'))).toEqual([
+      '/ventas?tab=resumen', '/ventas?tab=productos', '/ventas?tab=equipo', '/ventas?tab=tiempos',
+      '/ventas?tab=envivo', '/ventas?tab=ajustes',
+    ])
+    expect(within(nav).queryByRole('link', { name: /^.?Hoy$/ })).toBeNull()
     expect(within(nav).getByRole('link', { name: /Admin/ })).toBeTruthy()
     expect(screen.getByTestId('pantalla')).toBeTruthy()
   })
@@ -59,10 +65,15 @@ describe('AppShell', () => {
     expect(caja.getAttribute('aria-current')).toBe('page')
   })
 
-  it('marca la entrada de Ventas según ?tab=', () => {
-    montar('/ventas?tab=calendario')
-    const hist = within(lateral()).getByRole('link', { name: /Histórico/ })
-    expect(hist.getAttribute('aria-current')).toBe('page')
+  it.each([
+    ['/ventas?tab=calendario', '/ventas?tab=tiempos'],           // dirección vieja: Calendario vive en Tiempos
+    ['/ventas?tab=equipo&v=icp', '/ventas?tab=equipo'],
+    ['/ventas?tab=metas', '/ventas?tab=ajustes'],
+    ['/ventas', '/ventas?tab=resumen'],
+  ])('marca la entrada de Ventas según la dirección: %s → %s', (url, activa) => {
+    montar(url)
+    const marcadas = within(lateral()).getAllByRole('link').filter(a => a.getAttribute('aria-current') === 'page')
+    expect(marcadas.map(a => a.getAttribute('href'))).toEqual([activa])
   })
 
   it('cajero: barra con Inicio, Caja, Propinas, Club y «Más»; «Más» abre el resto', () => {

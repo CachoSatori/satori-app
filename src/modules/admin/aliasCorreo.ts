@@ -1,6 +1,7 @@
 // Alias de correo para empleados sin correo propio: «base+nombre@dominio», con el correo base DEL LOCAL guardado en la
 // base (`locations.correo_base`, mig 195; decisión del dueño 20-nov). Repo público: el correo no va en el código ni
 // en el build. Sin correo base cargado, la pantalla pide cargarlo en Admin → Locales.
+import { LOCAL_PRINCIPAL, localPorDefecto } from '../../shared/utils/ordenLocales'
 
 /** Lo que muestra la pantalla de alta cuando el local no tiene correo base. */
 export const FALTA_CORREO_LOCAL = 'Cargá el correo del local en Admin → Locales'
@@ -15,7 +16,7 @@ export const MAX_CORREO_BASE = 254
 export const PATRON_CORREO_BASE = /^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
 
 /** Local por defecto de la caja (default de `location_id` en la 091): se usa si no hay otro elegido. */
-export const LOCAL_POR_DEFECTO = 'santa-teresa'
+export const LOCAL_POR_DEFECTO = LOCAL_PRINCIPAL
 
 export interface LocalCorreo {
   id: string
@@ -49,12 +50,10 @@ export function validarCorreoBase(entrada: string): CorreoBaseValidado {
 
 /**
  * El local del alias: el que la app tiene elegido (`preferido`, el local con el que trabaja la pantalla) si está
- * encendido; si no, el local por defecto de la caja; si no, el primer local encendido (por id). Sin locales → null.
+ * encendido; si no, el local por defecto de la caja; si no, el primero encendido según D16 (`ordenLocales`). Sin locales → null.
  */
 export function localDelAlias(locales: LocalCorreo[], preferido: string | null): LocalCorreo | null {
-  const activos = locales.filter(l => l.is_active).sort((a, b) => a.id.localeCompare(b.id))
-  return activos.find(l => l.id === preferido)
-    ?? activos.find(l => l.id === LOCAL_POR_DEFECTO)
-    ?? activos[0]
-    ?? null
+  const activos = locales.filter(l => l.is_active)
+  const id = localPorDefecto(activos, preferido, l => ({ id: l.id, nombre: l.name, activo: l.is_active }))
+  return activos.find(l => l.id === id) ?? null
 }

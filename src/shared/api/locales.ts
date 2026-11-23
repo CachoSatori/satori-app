@@ -3,11 +3,13 @@
 import { supabase } from './supabase'
 import { aliasCorreoEjemplo, localDelAlias, validarCorreoBase, type LocalCorreo } from '../../modules/admin/aliasCorreo'
 import { localActual } from './club'
+import { ordenarLocales } from '../utils/ordenLocales'
 
 export async function getLocalesCorreo(): Promise<LocalCorreo[]> {
   const { data, error } = await supabase.from('locations').select('id, name, is_active, correo_base').order('id')
   if (error) throw new Error(error.message)
-  return (data ?? []) as LocalCorreo[]
+  // D16: activos primero, Santa Teresa primero, después alfabético.
+  return ordenarLocales((data ?? []) as LocalCorreo[], l => ({ id: l.id, nombre: l.name, activo: l.is_active }))
 }
 
 /** Guarda el correo base de UN local (vacío = borrar). Valida antes; la base vuelve a validar con el check de la 195. */

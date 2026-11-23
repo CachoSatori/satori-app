@@ -14,6 +14,7 @@
 // (antes del pase a prod), se cae a la lectura de siempre por la 067, que da lo mismo.
 
 import { supabase } from '../../shared/api/supabase'
+import { ordenarLocales } from '../../shared/utils/ordenLocales'
 import { getLineasDeTickets, getSaloneroNombres, getTicketsRango,
   type LineaNdfRow, type TicketVentaRow } from '../../shared/api/posNdf'
 import { rangoDeLecturaParaEstimar } from './indicadores'
@@ -256,5 +257,6 @@ export async function getLocalesVentas(rol: string): Promise<LocalVentas[]> {
     const mios = new Set(Array.isArray(r.data) ? (r.data as string[]) : [])
     locales = locales.filter(l => mios.has(l.id))
   }
-  return locales.sort((a, b) => a.id.localeCompare(b.id))
+  // D16: Santa Teresa primero, después alfabético (regla única en ordenLocales).
+  return ordenarLocales(locales)
 }

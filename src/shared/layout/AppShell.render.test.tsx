@@ -37,9 +37,10 @@ describe('AppShell', () => {
     montar()
     const nav = lateral()
     for (const g of ['Operación', 'Ventas', 'Equipo', 'Gestión', 'Ajustes']) {
-      // «Equipo» es grupo y, desde el 3.5.1, también entrada de Ventas: aparece dos veces.
-      expect(within(nav).getAllByText(g).length).toBeGreaterThan(0)
+      expect(within(nav).getByText(g)).toBeTruthy()
     }
+    // Dueño, 23-nov (#331): la entrada de Ventas es «Equipo de Ventas», no se confunde con el grupo «Equipo».
+    expect(within(nav).getByRole('link', { name: /Equipo de Ventas/ }).getAttribute('href')).toBe('/ventas?tab=equipo')
     // 3.5.1: Ventas abre en sus seis entradas, la primera «Resumen».
     const ventas = within(nav).getAllByRole('link').filter(a => a.getAttribute('href')?.startsWith('/ventas'))
     expect(ventas.map(a => a.getAttribute('href'))).toEqual([

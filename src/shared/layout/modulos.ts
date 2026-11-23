@@ -174,8 +174,11 @@ export function menuPara(role: string): GrupoMenu[] {
   }).filter(g => g.items.length > 0)
 }
 
-/** En el menú global, «Ajustes» de Ventas se aclara para no confundirse con el grupo «Ajustes». */
-const ENTRADA_LABEL: Record<string, string> = { ajustes: 'Ajustes de Ventas' }
+/**
+ * En el menú global, «Ajustes» y «Equipo» de Ventas se aclaran para no confundirse con los grupos del mismo
+ * nombre (decisión del dueño, 23-nov, #331). Adentro de Ventas siguen «Ajustes» y «Equipo».
+ */
+const ENTRADA_LABEL: Record<string, string> = { ajustes: 'Ajustes de Ventas', equipo: 'Equipo de Ventas' }
 
 function itemDe(m: Module): ItemMenu {
   return { key: m.id, moduloId: m.id, label: m.menuLabel ?? m.label, kanji: m.kanji, to: m.path }

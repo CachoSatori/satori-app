@@ -5,6 +5,7 @@
  */
 import { useEffect, useState } from 'react'
 import { getTablero, getLocalesClub, localActual, setCortesiaCostoPct, aClubError, type LocalClub, type TableroGrupo, type TableroMes } from '../../shared/api/club'
+import { localPorDefecto } from '../../shared/utils/ordenLocales'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, mesActualCR } from './estilos'
@@ -28,7 +29,7 @@ export default function Tablero() {
   useEffect(() => {
     getLocalesClub().then(l => {
       setLocales(l)
-      setLocal(act => act ?? l.find(x => x.activo)?.id ?? l[0]?.id ?? null)
+      setLocal(act => localPorDefecto(l, act) ?? act)
     }).catch(() => {})
   }, [])
   useEffect(() => {

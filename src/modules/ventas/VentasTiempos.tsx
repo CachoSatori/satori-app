@@ -22,6 +22,7 @@ import { cargarLecturaDeRangos, cargarTiempos, cargarTurnos, getLocalesVentas } 
 import { TAMANOS, type TiemposRpc } from './tiemposV2Rpc'
 import type { LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
+import { localPorDefecto } from '../../shared/utils/ordenLocales'
 
 /** «Tiempos» abre en el mes en curso, a la fecha («Mes» en la barra): con un solo día no hay día de semana ni calendario. */
 export const PERIODO_TIEMPOS = 'mesALaFecha' as const
@@ -47,8 +48,11 @@ export default function VentasTiempos() {
     getLocalesVentas(role).then(l => { if (vivo) setLocales(l) }).catch(() => { if (vivo) setLocales([]) })
     return () => { vivo = false }
   }, [role])
-  const local = estado.local && (locales.length === 0 || locales.some(l => l.id === estado.local))
-    ? estado.local : (locales[0]?.id ?? LOCAL_POR_DEFECTO)
+  // D16: el elegido en la URL si lo ve; si no, Santa Teresa; si no, el primero que ve. Antes de que lleguen los
+  // locales se respeta la URL y, sin URL, Santa Teresa.
+  const local = locales.length === 0
+    ? (estado.local ?? LOCAL_POR_DEFECTO)
+    : (localPorDefecto(locales, estado.local) ?? LOCAL_POR_DEFECTO)
 
   const clave = `${local}|${periodo.tipo}|${periodo.desde}|${periodo.hasta}|${baseA}|${baseB}`
   const [lectura, setLectura] = useState<{ clave: string; l: Lectura; turnos: FilaPromPaxRpc[] | null; tiempos: TiemposRpc | null } | null>(null)

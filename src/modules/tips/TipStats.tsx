@@ -6,7 +6,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
-import { formatCRC, calcHistory } from '../../shared/utils/tipCalculations'
+import { formatCRC } from '../../shared/utils/tipCalculations'
+import { avisosPagado, repartoPagado, sumarFaltantes } from './repartoPagado'
 import { getTipEntriesBySession, getAttendanceHistory } from '../../shared/api/tips'
 import type { AttendanceRow } from '../../shared/api/tips'
 import { ROLE_LABELS } from '../../shared/constants'
@@ -102,17 +103,8 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
       for (const s of missing) {
         try {
           const entries = await getTipEntriesBySession(s.id)
-          out[s.id] = calcHistory(
-            entries.map(e => ({
-              employee_id: e.employee_id, hours_worked: e.hours_worked,
-              tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd,
-              points: e.points, payout_crc: e.payout_crc, covered_role: e.covered_role,   // covered_role canónico (== Quincenal/correo): sala/barra por lo que se cubrió
-            })),
-            employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
-            rolePoints,
-            // Barra = efectivo + electrónico → el reparto recomputado coincide con el payout guardado.
-            { pool_efectivo_crc: s.pool_efectivo_crc, pool_efectivo_usd: s.pool_efectivo_usd, pool_barra_crc: (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0), exchange_rate: s.exchange_rate },
-          )
+          // «Recibió» = lo PAGADO (decisión del dueño 20-nov), igual que Historial y Quincenal (repartoPagado.ts).
+          out[s.id] = repartoPagado(s, entries, employees, rolePoints)
         } catch { /* ignorar sesión con error y seguir */ }
       }
       if (!cancelled) { setLocalCache(prev => ({ ...prev, ...out })); setLoading(false) }
@@ -179,6 +171,9 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
     }
     return Object.values(acc).sort((a, b) => b.total - a.total)
   }, [monthSessions, cache, empMap])
+
+  // Lo que no se puede mostrar con nombre o no tiene dato guardado: se avisa arriba de las tarjetas.
+  const avisosMes = useMemo(() => avisosPagado(sumarFaltantes(monthSessions.map(s => cache[s.id])), formatCRC), [monthSessions, cache])
 
   // Datáfono del mes: generado (tarjeta/efectivo individual) vs pool recibido.
   // Las sesiones viejas (pre-mayo) no tienen datáfono → generado = 0; el KPI
@@ -303,6 +298,11 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
         </div>
       ) : (
         <>
+          {avisosMes.length > 0 && (
+            <div role="note" data-testid="stats-avisos-pagado" style={{ margin: '0 0 0.75rem', padding: '0.45rem 0.6rem', fontSize: '0.74rem', background: 'var(--c-oro-fondo)', borderLeft: '2px solid var(--c-oro-texto)', color: 'var(--c-gris)' }}>
+              {avisosMes.map(a => <div key={a}>⚠ {a}</div>)}
+            </div>
+          )}
           {/* KPI cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.625rem', marginBottom: '1.25rem' }}>
             {[

@@ -41,11 +41,11 @@ describe('AppShell', () => {
     }
     // Dueño, 23-nov (#331): la entrada de Ventas es «Equipo de Ventas», no se confunde con el grupo «Equipo».
     expect(within(nav).getByRole('link', { name: /Equipo de Ventas/ }).getAttribute('href')).toBe('/ventas?tab=equipo')
-    // 3.5.1: Ventas abre en sus seis entradas, la primera «Resumen».
+    // 3.5.2: Ventas abre en sus siete entradas, la primera «Resumen»; «Regalías» después de «Tiempos».
     const ventas = within(nav).getAllByRole('link').filter(a => a.getAttribute('href')?.startsWith('/ventas'))
     expect(ventas.map(a => a.getAttribute('href'))).toEqual([
       '/ventas?tab=resumen', '/ventas?tab=productos', '/ventas?tab=equipo', '/ventas?tab=tiempos',
-      '/ventas?tab=envivo', '/ventas?tab=ajustes',
+      '/ventas?tab=regalias', '/ventas?tab=envivo', '/ventas?tab=ajustes',
     ])
     expect(within(nav).queryByRole('link', { name: /^.?Hoy$/ })).toBeNull()
     expect(within(nav).getByRole('link', { name: /Admin/ })).toBeTruthy()
@@ -71,6 +71,9 @@ describe('AppShell', () => {
     ['/ventas?tab=equipo&v=icp', '/ventas?tab=equipo'],
     ['/ventas?tab=metas', '/ventas?tab=ajustes'],
     ['/ventas', '/ventas?tab=resumen'],
+    ['/ventas?tab=hoy', '/ventas?tab=resumen'],                  // 3.5.2: «Hoy» se retiró, abre «Resumen»
+    ['/ventas?tab=resumen&v=analisis', '/ventas?tab=tiempos'],   // 3.5.2: «Análisis» pasó a «Tiempos»
+    ['/ventas?tab=regalias', '/ventas?tab=regalias'],
   ])('marca la entrada de Ventas según la dirección: %s → %s', (url, activa) => {
     montar(url)
     const marcadas = within(lateral()).getAllByRole('link').filter(a => a.getAttribute('aria-current') === 'page')

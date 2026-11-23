@@ -11,6 +11,12 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 let role = 'owner'
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { role } }) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
+// «Qué explica el cambio» (3.5.2) lee su RPC: acá no se prueba (ver __paridad__/resumen352.paridad.test.tsx).
+vi.mock('../../shared/api/posNdf', async orig => ({
+  ...(await orig<typeof import('../../shared/api/posNdf')>()),
+  getPromPaxAgregado: vi.fn(async () => []),
+  getSaloneroNombres: vi.fn(async () => ({})),
+}))
 
 import { datos } from './resumenV2.fixture'
 import { armarLectura, cifrasDelRango } from './resumenV2'
@@ -63,8 +69,9 @@ describe('VentasResumen', () => {
     expect(tarjeta.querySelector('.vt-kpi-val')!.textContent).toBe(fi(tot.ventaNeta))
     const fila = document.querySelector('[data-fila="total"]')!
     const celdas = [...fila.querySelectorAll('td')].map(td => td.textContent)
+    // 3.5.2: + Prom/PAX del período (salón ÷ PAX cargado), el mismo número que la fila TOTAL de la vieja «Ventas».
     expect(celdas).toEqual(['TOTAL', '', fi(tot.ventaBruta), fi(tot.iva), fi(tot.serv), fi(tot.ventaNeta),
-      fi(tot.salon), fi(tot.delivery), String(tot.pax)])
+      fi(tot.salon), fi(tot.delivery), String(tot.pax), fi(tot.promPax)])
     // Barra en palabras y la bajada con datos.
     expect(document.body.textContent).toContain('1 al 31 de octubre (31 días) contra el mes anterior (1–30 sep)')
     expect(document.body.textContent).toMatch(/Vas \d+ % (arriba|abajo) del mes anterior \(1–30 sep\)/)

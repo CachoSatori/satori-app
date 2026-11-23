@@ -22,6 +22,7 @@ import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/factur
 import { listLinkedDocs } from '../../shared/api/documents'
 import FacturaThumbs from '../../shared/FacturaThumbs'
 import AgregarAsistente from './AgregarAsistente'
+import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from './validarMovimiento'
 import type { Employee } from '../../shared/types/database'
 
 interface Props {
@@ -409,6 +410,11 @@ export default function CashTurno({
   const [draftSup,    setDraftSup]    = useState('')
   const [draftCRC,    setDraftCRC]    = useState<number | ''>('')
   const [draftUSD,    setDraftUSD]    = useState<number | ''>('')
+  // Los cuadros de monto del modal se leen del DOM al confirmar (valorDelCuadro, hallazgo 251): con texto ilegible
+  // («12abc», «-», «--450») el cuadro entrega '' y marca validity.badInput, y React NO dispara onChange si el valor
+  // leído no cambia ('' → ''). El estado solo no alcanza: contaría $0 sin avisar.
+  const draftCrcRef = useRef<HTMLInputElement>(null)
+  const draftUsdRef = useRef<HTMLInputElement>(null)
   const [draftMethod, setDraftMethod] = useState<string>('Efectivo')
   const [draftRef,    setDraftRef]    = useState('')
   const [supSearch,   setSupSearch]   = useState('')   // texto de búsqueda del proveedor
@@ -469,8 +475,17 @@ export default function CashTurno({
   }
 
   const confirmPago = async () => {
-    if (!draftSup || !Number(draftCRC) || movSaving) return  // proveedor + monto requeridos · anti doble-submit
-    if (Number(draftCRC) < 0 || Number(draftUSD) < 0) { onError('El monto no puede ser negativo.'); return }   // Ítem 2
+    // Montos PRIMERO (hallazgo 251): antes de pedir autorización y antes de borrar el movimiento viejo. Un $ ilegible
+    // («12abc», «-») llegaba como '' y se guardaba $0 sin aviso; al editar, además, el pago viejo ya estaba borrado.
+    // Se leen los cuadros con valorDelCuadro (badInput → NaN) y se valida el pago completo como quedaría. Si no vale:
+    // se avisa y no se toca nada (el modal queda abierto). Vacío sigue siendo 0.
+    const crcCuadro = draftCrcRef.current ? valorDelCuadro(draftCrcRef.current) : draftCRC
+    const usdCuadro = draftUsdRef.current ? valorDelCuadro(draftUsdRef.current) : draftUSD
+    // Ítem 2: un pago es siempre un egreso → nunca negativo (mismo texto de siempre).
+    if (leerMonto(crcCuadro) < 0 || leerMonto(usdCuadro) < 0) { onError(MSG_MONTO_NEGATIVO); return }
+    const vMonto = validarMovimiento({ tipo: 'egreso_mercaderia', crc: crcCuadro, usd: usdCuadro }, editId ? 'edicion' : 'alta')
+    if (!vMonto.ok) { onError(vMonto.error); return }
+    if (!draftSup || !vMonto.crc || movSaving) return  // proveedor + ₡ requeridos · anti doble-submit
     // Editar un pago YA guardado = reemplazo (borra el movimiento viejo + re-crea) → requiere la
     // MISMA autorización de gerencia que el borrado. Antes este camino llamaba la cascada SIN
     // credenciales y la RPC (mig 044) rechazaba al cajero con "No autorizado" sin pedirle nada.
@@ -507,8 +522,8 @@ export default function CashTurno({
       supplier_id:   draftSup,
       supplier_name: prov?.name ?? '',
       supplier_cat:  prov?.category ?? '',
-      amount_crc:    Number(draftCRC) || 0,
-      amount_usd:    Number(draftUSD) || 0,
+      amount_crc:    vMonto.crc,
+      amount_usd:    vMonto.usd,
       method:        draftMethod,
       reference:     draftRef,
       at:            old?.at ?? Date.now(),
@@ -1266,7 +1281,7 @@ export default function CashTurno({
                 <div className="tips-field-label">Monto ₡ colones</div>
                 <div className="cd-monto-wrap">
                   <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" aria-label="Monto ₡ del pago" value={draftCRC} placeholder="0" min={0} step="any" autoFocus
+                  <input type="number" className="cd-monto-input" aria-label="Monto ₡ del pago" ref={draftCrcRef} value={draftCRC} placeholder="0" min={0} step="any" autoFocus
                     onChange={e => setDraftCRC(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>
@@ -1274,7 +1289,7 @@ export default function CashTurno({
                 <div className="tips-field-label">Monto $ dólares</div>
                 <div className="cd-monto-wrap usd">
                   <span className="cd-prefix">$</span>
-                  <input type="number" className="cd-monto-input" aria-label="Monto $ del pago" value={draftUSD} placeholder="0" min={0} step="any"
+                  <input type="number" className="cd-monto-input" aria-label="Monto $ del pago" ref={draftUsdRef} value={draftUSD} placeholder="0" min={0} step="any"
                     onChange={e => setDraftUSD(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>

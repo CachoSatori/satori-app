@@ -22,6 +22,7 @@ vi.mock('../../shared/api/finance', () => ({
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import AgregarAsistente from './AgregarAsistente'
+import { teclearNumero } from './teclearNumero.testutil'
 
 const mkSupplier = (name: string, aliases: string[] | null = null): Supplier => ({
   id: name, name, category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
@@ -255,5 +256,41 @@ describe('AgregarAsistente — montos con validarMovimiento (20-nov, ex #73)', (
     await confirmar()
     expect(createSpy).toHaveBeenCalledTimes(1)
     expect(createSpy.mock.calls[0][0]).toMatchObject({ amount_crc: 0, amount_usd: 20 })
+  })
+})
+
+// R30 (23-nov): cuadro VACÍO al que se le escribe algo ilegible desde la primera tecla. El valor leído pasa de '' a ''
+// y React NO dispara onChange: solo el onInput de los cuadros se entera. teclearNumero manda UN solo evento `input`.
+describe('AgregarAsistente — cuadros vacíos con texto ilegible desde la primera tecla (R30)', () => {
+  const btnConfirmar = () => screen.getByRole('button', { name: /Confirmar y registrar/ }) as HTMLButtonElement
+  it('$ vacío + «-» con ₡ cargados: aviso, botón apagado y NO crea $0', async () => {
+    renderAsistente('cajero')
+    fireEvent.change(screen.getByLabelText('Descripción'), { target: { value: 'pago de electricidad del mes' } })
+    teclearNumero(screen.getByLabelText('Monto colones'), '25000')
+    teclearNumero(screen.getByLabelText('Monto dólares'), '-')
+    expect(screen.getByText(/El monto no es un número/)).toBeTruthy()
+    expect(btnConfirmar().disabled).toBe(true)
+    await confirmar()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+  it('₡ vacío + «--450» con $ cargados: aviso y NO crea ₡0', async () => {
+    renderAsistente('cajero')
+    fireEvent.change(screen.getByLabelText('Descripción'), { target: { value: 'pago de electricidad del mes' } })
+    teclearNumero(screen.getByLabelText('Monto dólares'), '20')
+    teclearNumero(screen.getByLabelText('Monto colones'), '--450')
+    expect(screen.getByText(/El monto no es un número/)).toBeTruthy()
+    await confirmar()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+  it('borrar el texto ilegible no deja la marca trabada: el aviso se va y crea con $0', async () => {
+    renderAsistente('cajero')
+    fireEvent.change(screen.getByLabelText('Descripción'), { target: { value: 'pago de electricidad del mes' } })
+    teclearNumero(screen.getByLabelText('Monto colones'), '25000')
+    teclearNumero(screen.getByLabelText('Monto dólares'), '-')
+    teclearNumero(screen.getByLabelText('Monto dólares'), '')
+    expect(screen.queryByText(/El monto no es un número/)).toBeNull()
+    await confirmar()
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    expect(createSpy.mock.calls[0][0]).toMatchObject({ amount_crc: 25000, amount_usd: 0 })
   })
 })

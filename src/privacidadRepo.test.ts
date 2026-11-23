@@ -50,9 +50,6 @@ const PENDIENTES: Record<string, string[]> = {
   'scripts/refresh-staging/prueba-viva-tarjeta.ts': [NEGOCIO],
   'scripts/refresh-staging/seed-apertura.ts': [NEGOCIO],
   'scripts/t0-reconciliacion-cajas/prod-asiento-arranque.ts': [NEGOCIO],
-  // Texto que ve el personal al dar de alta a alguien sin correo propio (alias del correo del negocio).
-  'src/modules/admin/NuevoEmpleado.tsx': [NEGOCIO],
-  'src/modules/admin/UserApprovals.tsx': [NEGOCIO],
   // Destinatario por defecto si falta REPORT_TO_EMAIL (regla 2: nada bajo supabase/functions/ en un PR a main).
   'supabase/functions/cierre-email/index.ts': [DUENO],
   'supabase/functions/monthly-report/index.ts': [DUENO],

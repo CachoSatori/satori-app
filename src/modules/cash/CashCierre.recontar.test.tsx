@@ -90,7 +90,7 @@ describe('Cierre del día — «Recontar» una vez', () => {
   it('fuera → la diferencia se ve en vivo y el motivo todavía no se pide; al cerrar se ofrece recontar', async () => {
     await preparar(); contar(101500)                          // +₡1.500
     expect(screen.getByText(/al cerrar vas a poder recontar una vez/)).toBeTruthy()
-    expect(screen.queryByPlaceholderText('Descripción obligatoria…')).toBeNull()
+    expect(screen.queryByPlaceholderText('Ej.: vuelto mal dado en una mesa')).toBeNull()
     expect(botonCierre().disabled).toBe(false)
     fireEvent.click(botonCierre())
     expect(screen.getByText(/El conteo no cuadra/)).toBeTruthy()
@@ -119,7 +119,7 @@ describe('Cierre del día — «Recontar» una vez', () => {
     contar(98500)                                             // −₡1.500: sigue fuera
     expect(screen.getByText(/Diferencia detectada — registrá el motivo/)).toBeTruthy()
     expect(botonCierre().disabled).toBe(true)                 // sin motivo no cierra
-    fireEvent.change(screen.getByPlaceholderText('Descripción obligatoria…'), { target: { value: 'faltó cambio' } })
+    fireEvent.change(screen.getByPlaceholderText('Ej.: vuelto mal dado en una mesa'), { target: { value: 'faltó cambio' } })
     fireEvent.click(botonCierre())
     expect(screen.queryByText(/El conteo no cuadra/)).toBeNull()   // un solo reconteo
     const p = await confirmarResumen()
@@ -132,7 +132,7 @@ describe('Cierre del día — «Recontar» una vez', () => {
     fireEvent.click(botonCierre())
     fireEvent.click(screen.getByText(/No recontar/))
     expect(botonCierre().disabled).toBe(true)
-    fireEvent.change(screen.getByPlaceholderText('Descripción obligatoria…'), { target: { value: 'sin cambio' } })
+    fireEvent.change(screen.getByPlaceholderText('Ej.: vuelto mal dado en una mesa'), { target: { value: 'sin cambio' } })
     fireEvent.click(botonCierre())
     const p = await confirmarResumen()
     expect(p.cierre).toMatchObject({ diferencia_crc: -2000, primer_conteo_crc: null, primer_conteo_usd: null })

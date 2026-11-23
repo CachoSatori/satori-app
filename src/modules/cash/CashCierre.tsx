@@ -30,7 +30,10 @@ import {
 } from './cierrePozo'
 import { shiftLabel } from '../../shared/utils'
 import { avisoTipoCambio, errorTipoCambio, parseTipoCambio } from './tipoCambio'
-import { TEMAS_RESUMEN, SIN_NOVEDADES, AVISO_RESUMEN_VACIO, resumenVacio, agregarTema, type TemaResumen } from './resumenDia'
+import {
+  TEMAS_RESUMEN, SIN_NOVEDADES, AVISO_RESUMEN_VACIO, resumenVacio, agregarTema, type TemaResumen,
+  ETIQUETA_MOTIVO, PLACEHOLDER_MOTIVO, MOTIVO_MAX, PLACEHOLDER_RESUMEN, AVISO_RESUMEN_IGUAL_MOTIVO, resumenIgualMotivo,
+} from './resumenDia'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -286,8 +289,11 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   const requiresAjuste = cierreNecesitaAjuste(diferencia, difUSD)
   // Fuera de tolerancia el motivo se pide recién cuando ya se ofreció el reconteo (recontó o eligió no).
   const recuentoResuelto = primerConteo !== null || sinRecontar
+  // 21-nov: si el cierre pide motivo, el resumen del día no puede ser el mismo texto que el motivo.
+  const resumenRepiteMotivo = requiresAjuste && resumenIgualMotivo(notas, ajusteMotivo)
   const pedirCierre = () => {
     if (faltaResumen) { setError(AVISO_RESUMEN_VACIO); return }
+    if (resumenRepiteMotivo) { setError(AVISO_RESUMEN_IGUAL_MOTIVO); return }
     if (requiresAjuste && !recuentoResuelto) { setOfertaRecuento(true); return }
     setShowResumen(true)
   }
@@ -384,6 +390,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
       setError('⚠ Hay diferencia — el motivo es obligatorio antes de cerrar'); return
     }
     if (faltaResumen) { setError(AVISO_RESUMEN_VACIO); return }
+    if (resumenRepiteMotivo) { setError(AVISO_RESUMEN_IGUAL_MOTIVO); return }
     // Orden de fases: la noche NO se puede cerrar sin el Mediodía confirmado (Fase 1).
     // Sin `parcial`, las ventas de mediodía se perderían y el cierre quedaría a medias.
     if (!parcial) { setError('Cerrá primero el Mediodía (Fase 1) antes de cerrar la noche.'); return }
@@ -824,6 +831,32 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               {/* Propinas del día, debajo de las ventas de la Fase 2 (la fase en curso) */}
               {propinasDelDia}
 
+              {/* Resumen del día (obligatorio): ANTES del conteo y la diferencia (21-nov), para que no se confunda con el motivo */}
+              <div style={{ marginBottom:'0.75rem' }}>
+                <Field label="Resumen del día">
+                  <div role="group" aria-label="Temas del resumen" style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
+                    {TEMAS_RESUMEN.map(tema => (
+                      <button key={tema} type="button" onClick={() => tocarTema(tema)} className="tips-btn-ghost"
+                        style={{ padding:'0 12px', fontSize:'0.78rem' }}>
+                        {tema}
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => setNotas(SIN_NOVEDADES)} className="tips-btn-ghost"
+                      style={{ padding:'0 12px', fontSize:'0.78rem' }}>
+                      {SIN_NOVEDADES}
+                    </button>
+                  </div>
+                  <textarea ref={resumenRef} aria-label="Resumen del día" value={notas} onChange={e => setNotas(e.target.value)}
+                    rows={4} placeholder={PLACEHOLDER_RESUMEN}
+                    className="cierre-input"
+                    style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem', resize:'vertical', fontFamily:'inherit',
+                             ...(faltaResumen ? { border:'1px solid var(--c-laca)' } : {}) }} />
+                  {faltaResumen && (
+                    <div role="status" style={{ fontSize:'0.72rem', color:'var(--c-laca)', marginTop:4 }}>{AVISO_RESUMEN_VACIO}</div>
+                  )}
+                </Field>
+              </div>
+
               {/* Separaciones */}
               <Section title="Conteo físico — separaciones" icon="📊" color="var(--c-musgo)">
                 <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', marginBottom:'0.75rem' }}>
@@ -1004,49 +1037,33 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                           <span style={{ fontSize:'0.66rem', color:'var(--c-gris)' }}>(según el signo de la diferencia)</span>
                         </div>
                       </Field>
-                      <Field label="Motivo *">
+                      <Field label={ETIQUETA_MOTIVO}>
+                        {/* 21-nov: corto y distinto del «Resumen del día» (va en ajuste_motivo, no en notas). */}
                         <input value={ajusteMotivo} onChange={e => setAjusteMotivo(e.target.value)}
-                          placeholder="Descripción obligatoria…"
+                          aria-label="¿Por qué hubo diferencia?"
+                          placeholder={PLACEHOLDER_MOTIVO} maxLength={MOTIVO_MAX}
                           className="cierre-input"
-                          style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem', ...(ajusteMotivo ? {} : { border:'1px solid var(--c-laca)' }) }} />
+                          style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem',
+                                   ...(ajusteMotivo && !resumenRepiteMotivo ? {} : { border:'1px solid var(--c-laca)' }) }} />
+                        <div aria-label="Caracteres del motivo" style={{ fontSize:'0.66rem', color:'var(--c-gris)', textAlign:'right', marginTop:2 }}>
+                          {ajusteMotivo.length}/{MOTIVO_MAX}
+                        </div>
                       </Field>
                     </div>
+                    )}
+                    {resumenRepiteMotivo && (
+                      <div role="alert" style={{ fontSize:'0.72rem', color:'var(--c-laca)', marginTop:6 }}>{AVISO_RESUMEN_IGUAL_MOTIVO}</div>
                     )}
                   </div>
                 )}
               </Section>
 
-              {/* Resumen del día (obligatorio) + Confirmar */}
-              <div style={{ marginBottom:'0.75rem' }}>
-                <Field label="Resumen del día">
-                  <div role="group" aria-label="Temas del resumen" style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
-                    {TEMAS_RESUMEN.map(tema => (
-                      <button key={tema} type="button" onClick={() => tocarTema(tema)} className="tips-btn-ghost"
-                        style={{ padding:'0 12px', fontSize:'0.78rem' }}>
-                        {tema}
-                      </button>
-                    ))}
-                    <button type="button" onClick={() => setNotas(SIN_NOVEDADES)} className="tips-btn-ghost"
-                      style={{ padding:'0 12px', fontSize:'0.78rem' }}>
-                      {SIN_NOVEDADES}
-                    </button>
-                  </div>
-                  <textarea ref={resumenRef} aria-label="Resumen del día" value={notas} onChange={e => setNotas(e.target.value)}
-                    rows={4} placeholder="Qué pasó hoy: quejas, personal, emergencias, 86, mantenimiento…"
-                    className="cierre-input"
-                    style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem', resize:'vertical', fontFamily:'inherit',
-                             ...(faltaResumen ? { border:'1px solid var(--c-laca)' } : {}) }} />
-                  {faltaResumen && (
-                    <div role="status" style={{ fontSize:'0.72rem', color:'var(--c-laca)', marginTop:4 }}>{AVISO_RESUMEN_VACIO}</div>
-                  )}
-                </Field>
-              </div>
-
               <button
                 onClick={pedirCierre}
                 disabled={saving || turnoAbierto || ventasNVacias || (ventasNCeroReal && !confirmVentasCeroN)
                   || (postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && !confirmVentaBrutaN)
-                  || totalContadoCRC === 0 || (requiresAjuste && recuentoResuelto && !ajusteMotivo.trim()) || faltaResumen}
+                  || totalContadoCRC === 0 || (requiresAjuste && recuentoResuelto && !ajusteMotivo.trim()) || faltaResumen
+                  || resumenRepiteMotivo}
                 className="cierre-btn green">
                 👁 Revisar resumen y cerrar el día →
               </button>
@@ -1165,7 +1182,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
 
             <div className="cd-modal-actions">
               <button className="tips-btn-ghost" onClick={() => setShowResumen(false)}>Volver a editar</button>
-              <button className="cd-btn-green" disabled={saving || faltaResumen}
+              <button className="cd-btn-green" disabled={saving || faltaResumen || resumenRepiteMotivo}
                 onClick={() => { setShowResumen(false); handleConfirmCompleto() }}>
                 {saving ? 'Cerrando…' : '✓ CONFIRMAR CIERRE DEL DÍA'}
               </button>

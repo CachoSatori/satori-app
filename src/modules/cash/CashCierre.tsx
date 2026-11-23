@@ -22,6 +22,7 @@ import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
 import { ajusteTipoPorSigno } from './ajusteTipo'
+import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import { textoConfirmacionBorrado, type PlanBorradoDia } from './borrarDia'
 import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
 import {
@@ -40,6 +41,17 @@ const fi2 = (n: number | undefined) => fi(n ?? 0)
 interface Props { onRefresh: () => void; openSession?: CashSession | null; fechaInicial?: string }
 
 function N(v: number | ''): number { return Number(v) || 0 }
+
+// R31: nombres de los cuadros de monto como los ve el encargado (van en el aviso de cuadro ilegible).
+const C_VM_CRC = 'Ventas mediodía ₡'
+const C_VM_USD = 'Ventas mediodía $'
+const C_VN_CRC = 'Ventas noche ₡'
+const C_VN_USD = 'Ventas noche $'
+const C_RETIRO = 'Retiro dueños → banco ₡'
+// Las filas del conteo físico usan su rótulo de la tabla + moneda (mantener en sync con la tabla de separaciones).
+const FILAS_CONTEO = ['Caja Diaria mañana', 'Caja Registradora', 'Remanente CF']
+const CUADROS_FASE1 = [C_VM_CRC, C_VM_USD]
+const CUADROS_FASE2 = [C_VN_CRC, C_VN_USD, C_RETIRO, ...FILAS_CONTEO.flatMap(f => [`${f} ₡`, `${f} $`])]
 
 // Cuadre USD del cierre — espeja la fórmula CRC (saldo base + mediodía + noche).
 // En Caja Fuerte los dólares solo salen por retiro de socios o depósito a banco,
@@ -177,6 +189,17 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
 
   const efRealN = Math.round(N(vnCRC) - N(vnUSD) * tc)
 
+  // R31 (23-nov): cuadros de monto con texto ilegible («1500000-», «-», «12abc»). El cuadro entrega '' y N() lo volvía 0
+  // sin aviso (un retiro «1500000-» no se registraba). Cada MontoInput marca validity.badInput en onChange Y onInput
+  // (cuadro vacío + «-» no dispara onChange con React 19) y la marca se borra si el cuadro se desmonta. Antes de sellar
+  // o cerrar se avisa con el nombre del cuadro. Solo LECTURA: N() y las cuentas del cierre no cambian; los negativos
+  // siguen con su regla de siempre (post-corte, hayMontosNegativos).
+  const [ilegibles, setIlegibles] = useState<Record<string, boolean>>({})
+  const marcar = (nombre: string) => (malo: boolean) =>
+    setIlegibles(m => (!!m[nombre] === malo ? m : { ...m, [nombre]: malo }))
+  const cuadrosIlegibles = (nombres: string[]) =>
+    errorDeCuadros(nombres.map(nombre => ({ nombre, valor: '', ilegible: !!ilegibles[nombre] })))
+
   // Separaciones
   const [sepDiariaCRC,  setSepDiariaCRC]  = useState<number | ''>('')
   const [sepDiariaUSD,  setSepDiariaUSD]  = useState<number | ''>('')
@@ -292,6 +315,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // 21-nov: si el cierre pide motivo, el resumen del día no puede ser el mismo texto que el motivo.
   const resumenRepiteMotivo = requiresAjuste && resumenIgualMotivo(notas, ajusteMotivo)
   const pedirCierre = () => {
+    { const errCuadro = cuadrosIlegibles(CUADROS_FASE2); if (errCuadro) { setError(errCuadro); return } }
     if (faltaResumen) { setError(AVISO_RESUMEN_VACIO); return }
     if (resumenRepiteMotivo) { setError(AVISO_RESUMEN_IGUAL_MOTIVO); return }
     if (requiresAjuste && !recuentoResuelto) { setOfertaRecuento(true); return }
@@ -312,6 +336,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // El bloqueo por turno abierto vive donde importa: la Fase 2 (ver handleConfirmCompleto).
   const handleConfirmParcial = async () => {
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
+    { const errCuadro = cuadrosIlegibles(CUADROS_FASE1); if (errCuadro) { setError(errCuadro); return } }
     if (ventasMVacias) { setError('Ingresá las ventas de mediodía'); return }
     // El TC se sella con la Fase 1 (la Fase 2 usa el sellado): acá se valida una sola vez, sin redondear.
     { const errTc = errorTipoCambio(parseTipoCambio(tcTxt)); if (errTc) { setError(errTc); return } }
@@ -361,6 +386,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // ── Confirmar cierre completo (Fase 2) ───────────────────────
   const handleConfirmCompleto = async () => {
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
+    { const errCuadro = cuadrosIlegibles(CUADROS_FASE2); if (errCuadro) { setError(errCuadro); return } }
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
     if (!cajaProvCerrada) { setError('Cerrá primero la Caja Diaria de proveedores del día.'); return }
     if (ventasNVacias) { setError('Ingresá las ventas de noche'); return }
@@ -694,10 +720,10 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
             <Section title="Ventas mediodía" icon="☀️" color="var(--c-oro-texto)">
               <Row2>
                 <Field label={postCorte ? 'Ventas en efectivo BRUTAS ₡ (sin restar propinas)' : 'Ventas PoS ₡'}>
-                  <MontoInput prefix="₡" value={vmCRC} onChange={setVmCRC} />
+                  <MontoInput prefix="₡" value={vmCRC} onChange={setVmCRC} nombre={C_VM_CRC} ilegible={!!ilegibles[C_VM_CRC]} onIlegible={marcar(C_VM_CRC)} />
                 </Field>
                 <Field label={`Dólares físicos $ → ₡${N(vmUSD) > 0 ? (N(vmUSD)*tc).toLocaleString('es-CR') : '—'}`}>
-                  <MontoInput prefix="$" value={vmUSD} onChange={setVmUSD} />
+                  <MontoInput prefix="$" value={vmUSD} onChange={setVmUSD} nombre={C_VM_USD} ilegible={!!ilegibles[C_VM_USD]} onIlegible={marcar(C_VM_USD)} />
                 </Field>
               </Row2>
               {(N(vmCRC) > 0 || N(vmUSD) > 0) && (
@@ -783,10 +809,10 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               <Section title="Ventas noche" icon="🌙" color="var(--c-azul)">
                 <Row2>
                   <Field label="Ventas PoS ₡">
-                    <MontoInput prefix="₡" value={vnCRC} onChange={setVnCRC} />
+                    <MontoInput prefix="₡" value={vnCRC} onChange={setVnCRC} nombre={C_VN_CRC} ilegible={!!ilegibles[C_VN_CRC]} onIlegible={marcar(C_VN_CRC)} />
                   </Field>
                   <Field label={`Dólares $ → ₡${N(vnUSD) > 0 ? (N(vnUSD)*tc).toLocaleString('es-CR') : '—'}`}>
-                    <MontoInput prefix="$" value={vnUSD} onChange={setVnUSD} />
+                    <MontoInput prefix="$" value={vnUSD} onChange={setVnUSD} nombre={C_VN_USD} ilegible={!!ilegibles[C_VN_USD]} onIlegible={marcar(C_VN_USD)} />
                   </Field>
                 </Row2>
                 {(N(vnCRC) > 0 || N(vnUSD) > 0) && (
@@ -818,7 +844,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                     </div>
                   </Field>
                   <Field label="Retiro dueños → banco ₡">
-                    <MontoInput prefix="₡" value={retiroN} onChange={setRetiroN} />
+                    <MontoInput prefix="₡" value={retiroN} onChange={setRetiroN} nombre={C_RETIRO} ilegible={!!ilegibles[C_RETIRO]} onIlegible={marcar(C_RETIRO)} />
                   </Field>
                 </Row2>
                 {N(retiroN) > 0 && (
@@ -882,10 +908,12 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                           <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginTop:1 }}>{row.sub}</div>
                         </td>
                         <td style={{ padding:'0.3rem 0.5rem' }}>
-                          <MontoInput prefix="₡" value={row.crc} onChange={row.setCRC} compact />
+                          <MontoInput prefix="₡" value={row.crc} onChange={row.setCRC} compact
+                            nombre={`${row.label} ₡`} ilegible={!!ilegibles[`${row.label} ₡`]} onIlegible={marcar(`${row.label} ₡`)} />
                         </td>
                         <td style={{ padding:'0.3rem 0.5rem' }}>
-                          <MontoInput prefix="$" value={row.usd} onChange={row.setUSD} compact />
+                          <MontoInput prefix="$" value={row.usd} onChange={row.setUSD} compact
+                            nombre={`${row.label} $`} ilegible={!!ilegibles[`${row.label} $`]} onIlegible={marcar(`${row.label} $`)} />
                         </td>
                       </tr>
                     ))}
@@ -1240,18 +1268,31 @@ function Field({ label, children }: { label:string; children: React.ReactNode })
   )
 }
 
-function MontoInput({ prefix, value, onChange, compact }: {
+function MontoInput({ prefix, value, onChange, compact, nombre, ilegible, onIlegible }: {
   prefix: string; value: number|''; onChange: (v: number|'') => void; compact?: boolean
+  /** R31: nombre del cuadro (aria-label y aviso), marca de ilegible y cómo avisarla al padre. */
+  nombre?: string; ilegible?: boolean; onIlegible?: (malo: boolean) => void
 }) {
+  // Si el cuadro se desmonta, su marca de ilegible se borra: al volver a montarse no trae ese texto y una marca vieja
+  // haría decir «no es un número» con el cuadro vacío (lección del #326).
+  const onIlegibleRef = useRef(onIlegible)
+  useEffect(() => { onIlegibleRef.current = onIlegible })
+  useEffect(() => () => onIlegibleRef.current?.(false), [])
   return (
-    <div className="cierre-monto" style={{ height: compact ? 34 : 38 }}>
-      <span className="pfx" style={{ fontSize: compact ? '0.72rem' : '0.82rem' }}>{prefix}</span>
-      <input
-        type="number" min={0} step="any" value={value}
-        onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-        style={{ fontSize: compact ? '0.82rem' : '0.9rem' }}
-        placeholder="0"
-      />
-    </div>
+    <>
+      <div className="cierre-monto" style={{ height: compact ? 34 : 38, borderColor: ilegible ? 'var(--c-laca)' : undefined }}>
+        <span className="pfx" style={{ fontSize: compact ? '0.72rem' : '0.82rem' }}>{prefix}</span>
+        <input
+          type="number" min={0} step="any" value={value} aria-label={nombre} aria-invalid={ilegible || undefined}
+          onInput={e => onIlegible?.(marcaIlegible(e.currentTarget))}
+          onChange={e => { onIlegible?.(marcaIlegible(e.currentTarget)); onChange(e.target.value === '' ? '' : Number(e.target.value)) }}
+          style={{ fontSize: compact ? '0.82rem' : '0.9rem' }}
+          placeholder="0"
+        />
+      </div>
+      {ilegible && (
+        <div role="alert" style={{ fontSize: '0.66rem', color: 'var(--c-laca)', marginTop: 2 }}>No es un número — corregilo o borralo</div>
+      )}
+    </>
   )
 }

@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 //
 // En el DOM: el menú de Ventas con entradas y sub-pestañas, y la vista en la URL. Desde el 3.5.1
-// (SPEC-ventas-v2 §12.4): seis entradas, arranque en «Resumen» y redirección de los `?tab=` viejos.
+// (SPEC-ventas-v2 §12.4): arranque en «Resumen» y redirección de los `?tab=` viejos. Desde el 3.5.2: siete
+// entradas (con «Regalías»), «Resumen» sin sub-pestañas y «Hoy», «Ventas» e «Histórico» retiradas.
 // Las vistas se reemplazan por marcadores: acá se prueba la navegación, no el contenido.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest'
 import { useEffect } from 'react'
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
@@ -22,12 +23,9 @@ vi.mock('./ventasFuente', () => ({
 }))
 vi.mock('./AvisoFuentePos', () => ({ default: () => null }))
 const vista = (n: string) => ({ default: () => <div data-testid="vista">{n}</div> })
-vi.mock('./VentasHoy',            () => vista('hoy'))
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
-vi.mock('./VentasContabilidad',   () => vista('ventas'))
 vi.mock('./VentasSaloneros',      () => vista('saloneros'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
-vi.mock('./VentasHistorico',      () => vista('historico'))
 vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasAnalisis',       () => vista('analisis'))
 vi.mock('./VentasMetas',          () => vista('metas'))
@@ -41,6 +39,7 @@ vi.mock('./VentasMenuEng',        () => vista('menueng'))
 vi.mock('./VentasResumen',        () => vista('resumen'))
 vi.mock('./VentasTiempos',        () => vista('tiempos'))
 vi.mock('./VentasMesasInternas',  () => vista('internas'))
+vi.mock('./VentasRegalias',       () => vista('regalias'))
 
 import VentasModule from './VentasModule'
 import { TABS, ENTRADAS, CLAVE_V, entradasVisibles, labelDe, type Tab } from './ventasTabs'
@@ -74,8 +73,7 @@ const subMenu = (entrada: string) => screen.getByRole('tablist', { name: `Vistas
 
 /** SPEC §12.2: `?tab=` viejo → dirección nueva (escrita a mano: si cambia el mapa, cae). */
 const REDIRECCION: Record<string, string> = {
-  hoy: '/ventas?tab=resumen&v=hoy', ventas: '/ventas?tab=resumen&v=ventas',
-  historico: '/ventas?tab=resumen&v=historico', analisis: '/ventas?tab=resumen&v=analisis',
+  analisis: '/ventas?tab=tiempos&v=analisis',
   mix: '/ventas?tab=productos', menueng: '/ventas?tab=productos&v=menu',
   saloneros: '/ventas?tab=equipo', salolineas: '/ventas?tab=equipo&v=lineas',
   evaluacion: '/ventas?tab=equipo&v=evaluacion', icp: '/ventas?tab=equipo&v=icp',
@@ -94,21 +92,31 @@ describe('VentasModule · 3.5.1 menú y arranque', () => {
     expect(ultima.url).toBe('/ventas')
   })
 
-  it.each(['owner', 'manager', 'contador'])('%s ve seis botones: Resumen · Productos · Equipo · Tiempos · En vivo · Ajustes', async r => {
+  it.each(['owner', 'manager', 'contador'])('%s ve siete botones: Resumen · Productos · Equipo · Tiempos · Regalías · En vivo · Ajustes', async r => {
     role = r
     abrir('/ventas')
     await screen.findByTestId('vista')
     expect(within(menu()).getAllByRole('tab').map(t => t.textContent)).toEqual(
-      ['Resumen', 'Productos', 'Equipo', 'Tiempos', 'En vivo', 'Ajustes'],
+      ['Resumen', 'Productos', 'Equipo', 'Tiempos', 'Regalías', 'En vivo', 'Ajustes'],
     )
   })
 
-  it('«Resumen» lleva al lado «Hoy», «Ventas», «Histórico» y «Análisis»', async () => {
+  it('3.5.2: «Resumen» ya no tiene botones al lado; «Tiempos» lleva «Calendario» y «Análisis»', async () => {
     abrir('/ventas')
     await screen.findByTestId('vista')
-    expect(within(subMenu('Resumen')).getAllByRole('tab').map(t => t.textContent)).toEqual(
-      ['Resumen', 'Hoy', 'Ventas', 'Histórico', 'Análisis'],
-    )
+    expect(screen.queryByRole('tablist', { name: 'Vistas de Resumen' })).toBeNull()
+    fireEvent.click(within(menu()).getByRole('tab', { name: 'Tiempos' }))
+    await vi.waitFor(() => expect(screen.getByTestId('vista').textContent).toBe('tiempos'))
+    expect(within(subMenu('Tiempos')).getAllByRole('tab').map(t => t.textContent)).toEqual(['Tiempos', 'Calendario', 'Análisis'])
+  })
+
+  it.each(['owner', 'manager', 'contador'])('%s: «Regalías» abre su pantalla (el contador también, D7)', async r => {
+    role = r
+    abrir('/ventas')
+    await screen.findByTestId('vista')
+    fireEvent.click(within(menu()).getByRole('tab', { name: 'Regalías' }))
+    await vi.waitFor(() => expect(screen.getByTestId('vista').textContent).toBe('regalias'))
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=regalias'))
   })
 
   it('«En vivo» no lleva sub-pestañas', async () => {
@@ -154,10 +162,39 @@ describe('VentasModule · redirecciones (criterio 3)', () => {
     await vi.waitFor(() => expect(ultima.url).toBe('/caja'))
   })
 
-  it('la redirección conserva la barra (local y período)', async () => {
-    abrir('/ventas?tab=hoy&local=local-b&p=mes')
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=resumen&local=local-b&p=mes&v=hoy'))
-    expect((await screen.findByTestId('vista')).textContent).toBe('hoy')
+  it('la redirección conserva el local de la barra', async () => {
+    abrir('/ventas?tab=icp&local=local-b&p=mes')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=equipo&local=local-b&p=mes&v=icp'))
+    expect((await screen.findByTestId('vista')).textContent).toBe('icp')
+  })
+
+  // 3.5.2 (SPEC §12.2, D15): las retiradas abren «Resumen» con el período que las reemplaza, para los tres roles,
+  // desde el `?tab=` de antes y desde la dirección del 3.5.1. Reemplazan la dirección (sin paso extra en «Atrás»).
+  const RETIRADAS: [string, string][] = [
+    ['tab=hoy', '/ventas?tab=resumen&p=ayer'],
+    ['tab=ventas', '/ventas?tab=resumen&p=mesALaFecha'],
+    ['tab=historico', '/ventas?tab=resumen&p=rango&desde=2026-10-19&hasta=2026-11-17'],
+    ['tab=resumen&v=hoy', '/ventas?tab=resumen&p=ayer'],
+    ['tab=resumen&v=ventas', '/ventas?tab=resumen&p=mesALaFecha'],
+    ['tab=resumen&v=historico', '/ventas?tab=resumen&p=rango&desde=2026-10-19&hasta=2026-11-17'],
+    ['tab=resumen&v=analisis', '/ventas?tab=tiempos&v=analisis'],
+  ]
+  it.each(['owner', 'manager', 'contador'].flatMap(r => RETIRADAS.map(([q, a]) => [r, q, a] as const)))(
+    '%s con ?%s → %s', async (r, q, a) => {
+      // Reloj de noche en CR: 23:30 del 18-nov (05:30 UTC del 19). «Histórico» → los 30 días que terminan ayer.
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-11-19T05:30:00Z'))
+      onTestFinished(() => { vi.useRealTimers() })
+      role = r
+      abrir(`/ventas?${q}`, ['/'])
+      await vi.waitFor(() => expect(ultima.url).toBe(a))
+      expect(ultima.tipo).toBe('REPLACE')
+      expect((await screen.findByTestId('vista')).textContent).toBe(q.endsWith('analisis') ? 'analisis' : 'resumen')
+    })
+
+  it('una retirada con un día de otro período: queda el local, cambia el período y se limpia el día', async () => {
+    abrir('/ventas?tab=hoy&local=local-b&p=semana&d=2026-11-03')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=resumen&local=local-b&p=ayer'))
   })
 
   it.each([
@@ -246,17 +283,17 @@ describe('VentasModule · navegación', () => {
   })
 
   it('cambiar de pestaña deja una entrada en el historial: Atrás vuelve a la anterior', async () => {
-    abrir('/ventas?tab=resumen&v=historico')
+    abrir('/ventas?tab=tiempos&v=analisis')
     await screen.findByTestId('vista')
     fireEvent.click(within(menu()).getByRole('tab', { name: 'Productos' }))
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
     nav.atras()
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=resumen&v=historico'))
-    expect((await screen.findByTestId('vista')).textContent).toBe('historico')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=tiempos&v=analisis'))
+    expect((await screen.findByTestId('vista')).textContent).toBe('analisis')
   })
 
   it('la vista que abre cada dirección nueva es la misma para el owner', async () => {
-    const casos: [string, Tab][] = [['tab=resumen&v=hoy', 'hoy'], ['tab=ajustes&v=productos', 'config'], ['tab=tiempos&v=calendario', 'calendario']]
+    const casos: [string, Tab][] = [['tab=tiempos&v=analisis', 'analisis'], ['tab=ajustes&v=productos', 'config'], ['tab=tiempos&v=calendario', 'calendario'], ['tab=regalias', 'regalias']]
     for (const [q, vista] of casos) {
       cleanup()
       abrir(`/ventas?${q}`)

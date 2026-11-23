@@ -67,12 +67,12 @@ describe('B3 · Ventas en el menú', () => {
     }
   })
 
-  it.each(['owner', 'manager', 'contador'])('%s: 3.5.1, el menú lateral muestra las seis entradas de Ventas', role => {
+  it.each(['owner', 'manager', 'contador'])('%s: 3.5.2, el menú lateral muestra las siete entradas de Ventas (con «Regalías»)', role => {
     const ventas = menuPara(role).find(g => g.id === 'ventas')!
-    expect(ventas.items.map(i => i.label)).toEqual(['Resumen', 'Productos', 'Equipo de Ventas', 'Tiempos', 'En vivo', 'Ajustes de Ventas'])
+    expect(ventas.items.map(i => i.label)).toEqual(['Resumen', 'Productos', 'Equipo de Ventas', 'Tiempos', 'Regalías', 'En vivo', 'Ajustes de Ventas'])
     expect(ventas.items.map(i => i.to)).toEqual([
       '/ventas?tab=resumen', '/ventas?tab=productos', '/ventas?tab=equipo', '/ventas?tab=tiempos',
-      '/ventas?tab=envivo', '/ventas?tab=ajustes',
+      '/ventas?tab=regalias', '/ventas?tab=envivo', '/ventas?tab=ajustes',
     ])
   })
 

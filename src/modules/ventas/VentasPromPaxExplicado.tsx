@@ -1,4 +1,6 @@
-// ── Ventas → Análisis → «Prom/PAX explicado» (SPEC v2.3 §7) ────────────────────────────────
+// ── Ventas → «Prom/PAX explicado» (SPEC v2.3 §7) ────────────────────────────────────────────
+// 3.5.2: la sub-vista de «Análisis» se retiró; lo mismo vive en «Resumen» → «Qué explica el cambio»
+// (`QueExplicaElCambio`, abajo). El componente por defecto queda hasta la limpieza (3.5.5).
 //
 // Solo lectura, owner/manager/contador (la pestaña Análisis ya es solo para ellos; la barrera real
 // es el RPC 080, que valida rol + is_active en la base). Todo el cálculo vive en
@@ -10,7 +12,7 @@ import { todayCR } from '../../shared/utils'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
 import {
   cubrir, largoEnDias, periodoMes, periodoRango, periodoSemana, periodoTemporada,
-  type ModoComparacion, type Periodo, type TipoPeriodo,
+  type ModoComparacion, type Periodo, type Rango, type TipoPeriodo,
 } from './periodosPromPax'
 import { resolverPersonas } from './promPaxSaloneros'
 import { alinearPromPax, corteDe, rotulo } from './aLaFecha'
@@ -37,12 +39,12 @@ function descargar(nombre: string, csv: string) {
 }
 
 /** Pide los dos períodos: una sola llamada si caben juntos en 731 días; si no, dos. */
-async function cargar(actual: Periodo, comp: Periodo): Promise<FilaAgregada[]> {
+async function cargar(actual: Rango, comp: Rango, local: string = LOCAL_POR_DEFECTO): Promise<FilaAgregada[]> {
   const todo = cubrir(actual, comp)
-  if (largoEnDias(todo) <= 731) return getPromPaxAgregado(LOCAL_POR_DEFECTO, todo.desde, todo.hasta)
+  if (largoEnDias(todo) <= 731) return getPromPaxAgregado(local, todo.desde, todo.hasta)
   const [a, b] = await Promise.all([
-    getPromPaxAgregado(LOCAL_POR_DEFECTO, actual.desde, actual.hasta),
-    getPromPaxAgregado(LOCAL_POR_DEFECTO, comp.desde, comp.hasta),
+    getPromPaxAgregado(local, actual.desde, actual.hasta),
+    getPromPaxAgregado(local, comp.desde, comp.hasta),
   ])
   return [...a, ...b]
 }
@@ -188,17 +190,107 @@ export default function VentasPromPaxExplicado() {
   )
 }
 
+// ── Ventas v2 · 3.5.2: «Qué explica el cambio» dentro de «Resumen» (SPEC §5.1 ítem 6) ─────────────
+//
+// El mismo análisis (`analizar`, RPC 080), con el período y la base de la BARRA y el local elegido: arriba las
+// 1 a 3 frases y, a un clic, todo lo que mostraba «Análisis → Prom/PAX explicado» (tarjetas, tablas por turno,
+// día, salonero y semana, rendimiento y mezcla, CSV y filtro de turno).
+
+export interface QueExplicaProps {
+  local:  string
+  actual: Rango
+  /** La base contra la que se explica; `null` = sin comparación. */
+  base:   Rango | null
+  /** «mes anterior (1–30 sep)»: el nombre de la base con sus fechas, de la barra. */
+  nombreBase: string
+}
+
+export function QueExplicaElCambio({ local, actual, base, nombreBase }: QueExplicaProps) {
+  const [turno, setTurno] = useState<FiltroTurno>('ambos')
+  const [detalle, setDetalle] = useState(false)
+  const [carga, setCarga] = useState<{ clave: string; filas: FilaAgregada[] | null; error: string | null } | null>(null)
+  const [nombres, setNombres] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    getSaloneroNombres().then(setNombres).catch(() => { /* sin nombres: se usa el roster del código */ })
+  }, [])
+
+  const clave = base ? `${local}|${actual.desde}|${actual.hasta}|${base.desde}|${base.hasta}` : null
+  useEffect(() => {
+    if (!clave || !base) return
+    let vivo = true
+    cargar(actual, base, local)
+      .then(f => { if (vivo) setCarga({ clave, filas: f, error: null }) })
+      .catch(e => { if (vivo) setCarga({ clave, filas: null, error: e instanceof Error ? e.message : String(e) }) })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clave])
+
+  const vigente = carga && carga.clave === clave ? carga : null
+  const filas = vigente?.filas ?? null
+  const resolver = useMemo(() => resolverPersonas(nombres), [nombres])
+  const resumen = useMemo(() => (filas && base ? analizar(filas, actual, base, 'ambos', resolver) : null), [filas, actual, base, resolver])
+  const conTurno = useMemo(() => (filas && base ? analizar(filas, actual, base, turno, resolver) : null), [filas, actual, base, turno, resolver])
+
+  const titulo = <div className="vt-sl">Qué explica el cambio</div>
+  if (!base) {
+    return <div className="vt2-explica" data-bloque="explica">{titulo}<p className="vt2-nota">Sin comparación con {nombreBase}: no hay con qué explicar el cambio.</p></div>
+  }
+  return (
+    <div className="vt2-explica" data-bloque="explica">
+      {titulo}
+      <p className="vt2-nota">
+        Venta y venta por persona de salón contra {nombreBase}. Cuenta solo las personas cargadas (sin estimar las mesas
+        sin pax), como «Prom/PAX explicado».
+      </p>
+      {vigente?.error && <p className="vt2-nota" role="alert">No se pudo leer el detalle: {vigente.error}</p>}
+      {!vigente && <p className="vt2-nota" role="status">Leyendo…</p>}
+      {resumen && (
+        <div data-testid="explica-frases">
+          {resumen.explicacion.etiqueta && <div className="vt2-explica-etiqueta">{resumen.explicacion.etiqueta}</div>}
+          {resumen.explicacion.frases.slice(0, 3).map((f, i) => <p key={i} style={{ margin: '0 0 0.35rem' }}>{f}</p>)}
+        </div>
+      )}
+      {resumen && (
+        <details className="vt2-detalle" data-bloque="explica-detalle">
+          <summary>Ver el detalle (por turno, día, salonero y semana)</summary>
+          <div className="vt-tab-group" style={{ margin: '0.5rem 0' }}>
+            {(['mañana', 'noche', 'ambos'] as FiltroTurno[]).map(t => (
+              <button key={t} type="button" className={`vt-tab-btn ${turno === t ? 'active' : ''}`} onClick={() => setTurno(t)}>
+                {t === 'mañana' ? 'Mañana' : t === 'noche' ? 'Noche' : 'Ambos turnos'}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--c-gris)', marginBottom: '0.75rem' }}>
+            {diaLegible(actual.desde)} – {diaLegible(actual.hasta)} comparado con {nombreBase}. Turno por la hora de la factura
+            (mañana 6–16 h, noche 17–24 h; después de medianoche cuenta como noche del mismo día).
+          </div>
+          {conTurno && filas && (
+            <Contenido a={conTurno} turno={turno} detalle={detalle} setDetalle={setDetalle}
+              filasActual={filas} periodos={{ actual, comp: base }} resolver={resolver} embebido />
+          )}
+        </details>
+      )}
+    </div>
+  )
+}
+
 interface ContenidoProps {
   a: Analisis
   turno: FiltroTurno
   detalle: boolean
   setDetalle: (b: boolean) => void
   filasActual: FilaAgregada[]
-  periodos: { actual: Periodo; comp: Periodo }
+  periodos: { actual: Rango; comp: Rango }
   resolver: ReturnType<typeof resolverPersonas>
+  /**
+   * Adentro de «Resumen» (3.5.2): «Qué explica el cambio» ya está arriba con «Ambos turnos», así que acá no se repite.
+   * Con un turno elegido, sus frases van con el rótulo «Con el turno …».
+   */
+  embebido?: boolean
 }
 
-function Contenido({ a, turno, detalle, setDetalle, filasActual, periodos, resolver }: ContenidoProps) {
+function Contenido({ a, turno, detalle, setDetalle, filasActual, periodos, resolver, embebido = false }: ContenidoProps) {
   const tarjeta = (label: string, n: number | null, v: number | null, fmt: (x: number) => string) => {
     const d = n !== null && v !== null ? n - v : null
     const dp = d !== null && v ? d / v : null
@@ -238,11 +330,13 @@ function Contenido({ a, turno, detalle, setDetalle, filasActual, periodos, resol
         {tarjeta('Prom/PAX de salón', a.n.promPax, a.v.promPax, crc)}
       </div>
 
-      <div className="vt-sl">Qué explica el cambio</div>
+      {(!embebido || turno !== 'ambos') && <>
+      <div className="vt-sl">{embebido ? `Con el turno ${turno === 'mañana' ? 'mañana' : 'noche'}` : 'Qué explica el cambio'}</div>
       <div data-testid="pp-explicacion" style={{ background: 'var(--vt-panel)', color: 'var(--vt-ink)', border: '1px solid var(--vt-border)', padding: '0.875rem 1rem', borderRadius: 2, marginBottom: '1.25rem', lineHeight: 1.5 }}>
         {ex.etiqueta && <div style={{ fontSize: '0.72rem', color: 'var(--vt-gold-dark)', fontWeight: 700, marginBottom: '0.4rem' }}>{ex.etiqueta}</div>}
         {ex.frases.map((f, i) => <p key={i} style={{ margin: '0 0 0.35rem' }}>{f}</p>)}
       </div>
+      </>}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
         <button className="vt-tab-btn" onClick={() => setDetalle(!detalle)}>{detalle ? 'Ocultar detalle' : 'Ver detalle'}</button>

@@ -45,12 +45,9 @@ const vista = (n: string) => ({
     </div>
   ),
 })
-vi.mock('./VentasHoy',            () => vista('hoy'))
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
-vi.mock('./VentasContabilidad',   () => vista('ventas'))
 vi.mock('./VentasSaloneros',      () => vista('saloneros'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
-vi.mock('./VentasHistorico',      () => vista('historico'))
 vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasAnalisis',       () => vista('analisis'))
 vi.mock('./VentasMetas',          () => vista('metas'))
@@ -64,12 +61,13 @@ vi.mock('./VentasMenuEng',        () => vista('menueng'))
 vi.mock('./VentasResumen',        () => vista('resumen'))
 vi.mock('./VentasTiempos',        () => vista('tiempos'))
 vi.mock('./VentasMesasInternas',  () => vista('internas'))
+vi.mock('./VentasRegalias',       () => vista('regalias'))
 
 import * as fuente from './ventasFuente'
 import VentasModule from './VentasModule'
 import { TABS, VISTAS_SIN_DIAS, VISTAS_CON_FONDO } from './ventasTabs'
 
-const CON_HIST = new Set(['ventas', 'historico', 'mix', 'analisis', 'calendario', 'metas'])
+const CON_HIST = new Set(['mix', 'analisis', 'calendario', 'metas'])
 
 const abrir = (url: string) =>
   render(<MemoryRouter initialEntries={[url]}><VentasModule /></MemoryRouter>)
@@ -83,9 +81,9 @@ beforeEach(() => {
 })
 
 describe('ventasTabs · qué necesita cada vista', () => {
-  it('toda vista está en una sola clase: sin días, con fondo, o «Hoy»', () => {
+  it('toda vista está en una sola clase: sin días o con fondo («Hoy», la única que pedía solo los 90 días, se retiró)', () => {
     for (const t of TABS) {
-      const clases = [VISTAS_SIN_DIAS.has(t.id), VISTAS_CON_FONDO.has(t.id), t.id === 'hoy'].filter(Boolean)
+      const clases = [VISTAS_SIN_DIAS.has(t.id), VISTAS_CON_FONDO.has(t.id)].filter(Boolean)
       expect(clases, t.id).toHaveLength(1)
     }
   })
@@ -108,25 +106,16 @@ describe('VentasModule · carga a pedido (A5)', () => {
     expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
   })
 
-  it.each(['tab=resumen', 'tab=tiempos'])('?%s no pide los 90 días (criterio 12)', async q => {
+  it.each(['tab=resumen', 'tab=tiempos', 'tab=regalias', 'tab=hoy', 'tab=ventas', 'tab=historico'])('?%s no pide los 90 días ni la historia (criterio 12)', async q => {
     abrir(`/ventas?${q}`)
-    expect(await texto()).toMatch(/^(resumen|tiempos)\|/)
+    expect(await texto()).toMatch(/^(resumen|tiempos|regalias)\|/)
     expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
+    expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
   })
 
   it('En vivo recibe las mismas metas de antes', async () => {
     abrir('/ventas?tab=envivo')
     expect(await texto()).toContain('metas:si')
-  })
-
-  it('«Hoy» espera los 90 días y recibe lo mismo que antes, sin pedir la historia completa', async () => {
-    abrir('/ventas?tab=hoy')
-    await waitFor(() => expect(fuente.cargarDiasEager).toHaveBeenCalledTimes(1))
-    expect(screen.queryByTestId('vista')).toBeNull()  // todavía esperando los 90 días
-    resolverEager()
-    // Mismos días (90) y el mismo pm fusionado: curado + familia del PoS.
-    expect(await texto()).toBe('hoy|dias:2|hist:-|pm:ROLL,SAKE|metas:si')
-    expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
   })
 
   it.each([...VISTAS_CON_FONDO])('%s pide la historia completa y, al llegar, recibe lo mismo que antes', async id => {
@@ -142,16 +131,18 @@ describe('VentasModule · carga a pedido (A5)', () => {
     if (CON_HIST.has(id)) expect(await texto()).toContain('hist:pos')
   })
 
-  it('de «Hoy» a «Análisis»: la historia se pide recién al entrar, y una sola vez', async () => {
-    abrir('/ventas?tab=hoy')
-    await waitFor(() => expect(fuente.cargarDiasEager).toHaveBeenCalled())
-    resolverEager()
-    await screen.findByText(/^hoy\|/)
-    expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
+  it('de «Resumen» a «Análisis»: los 90 días y la historia se piden recién al entrar, y una sola vez', async () => {
+    abrir('/ventas?tab=resumen')
+    expect(await texto()).toContain('resumen|')
+    expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('tab', { name: 'Tiempos' }))
+    expect(await texto()).toContain('tiempos|')
     fireEvent.click(screen.getByRole('tab', { name: 'Análisis' }))
+    await waitFor(() => expect(fuente.cargarDiasEager).toHaveBeenCalledTimes(1))
+    resolverEager()
     await waitFor(() => expect(fuente.cargarDeFondo).toHaveBeenCalledTimes(1))
-    fireEvent.click(screen.getByRole('tab', { name: 'Histórico' }))
-    expect(await texto()).toContain('historico|')
+    fireEvent.click(screen.getByRole('tab', { name: 'Calendario' }))
+    expect(await texto()).toContain('calendario|')
     expect(fuente.cargarDeFondo).toHaveBeenCalledTimes(1)
     expect(fuente.cargarDiasEager).toHaveBeenCalledTimes(1)
   })

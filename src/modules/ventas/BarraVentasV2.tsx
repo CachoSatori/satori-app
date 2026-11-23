@@ -4,7 +4,7 @@
 // «Comparar con» (una base o «Los dos»); Desde y Hasta solo con Rango. Las opciones son todas las de antes (17:11).
 import type { PeriodoV2, TipoPeriodoV2 } from './periodos'
 import {
-  OPCIONES_COMPARAR, PERIODOS, ROTULO_PERIODO, basesDe, cambiarTipo, moverPeriodo, periodoEnPalabras,
+  OPCIONES_COMPARAR, PERIODOS, ROTULO_PERIODO, basesDe, cambiarTipo, moverPeriodo, periodoEnPalabras, periodoSinBases,
   rotuloComparar, type Comparar, type EstadoBarra,
 } from './barraVentasV2'
 import type { LocalVentas } from './resumenV2Datos'
@@ -16,9 +16,11 @@ interface Props {
   locales:  LocalVentas[]
   aviso?:   string | null
   onCambio: (e: EstadoBarra) => void
+  /** La pantalla no compara («Regalías» hasta la 3.4): sin «Comparar con» y el período en palabras sin bases. */
+  sinComparar?: boolean
 }
 
-export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambio }: Props) {
+export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambio, sinComparar = false }: Props) {
   const anterior = moverPeriodo(estado, periodo, -1)
   const siguiente = moverPeriodo(estado, periodo, 1)
   const local = localPorDefecto(locales, estado.local) ?? ''
@@ -60,7 +62,7 @@ export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambi
             </label>
           </>
         )}
-        {estado.tipo !== 'hoy' && (
+        {estado.tipo !== 'hoy' && !sinComparar && (
           <label className="vt2-campo">
             <span>Comparar con</span>
             <select className="date-filter" aria-label="Comparar con" value={estado.comparar}
@@ -70,7 +72,7 @@ export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambi
           </label>
         )}
       </div>
-      <div className="vt2-barra-palabras">{periodoEnPalabras(periodo, basesDe(estado.comparar))}</div>
+      <div className="vt2-barra-palabras">{sinComparar ? periodoSinBases(periodo) : periodoEnPalabras(periodo, basesDe(estado.comparar))}</div>
       {aviso && <div className="vt2-aviso" role="status">{aviso}. Se muestra «Ayer».</div>}
     </div>
   )

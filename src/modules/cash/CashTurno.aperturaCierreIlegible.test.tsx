@@ -1,0 +1,210 @@
+// @vitest-environment happy-dom
+//
+// R31 (23-nov, verificador independiente en Chrome real + React 19): la APERTURA y el CIERRE de la Caja Diaria no
+// guardan montos ilegibles. Un cuadro type="number" con «120000-450», «0-450» o «-» entrega value === '' y marca
+// validity.badInput; la pantalla lo guardaba como 0 sin aviso (la caja abría con ₡0; el cierre quedaba «contado ₡0»).
+// Ahora: aviso que nombra el cuadro y no se abre ni se cierra nada. Vacío sigue siendo 0. Con montos válidos, lo que se
+// guarda es igual que antes (pruebas de paridad al final).
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import type { CashSession } from '../../shared/types/database'
+
+const cashApi = vi.hoisted(() => ({
+  createCashSession: vi.fn(async (m: { session_date: string }) => ({ id: 's-new', ...m })),
+  closeCashSession: vi.fn(async (id: string, datos: Record<string, unknown>, por: string) => { void id; void datos; void por }),
+}))
+vi.mock('../../shared/api/cash', () => ({
+  createCashMovement: vi.fn(),
+  createCashSession: cashApi.createCashSession,
+  closeCashSession: cashApi.closeCashSession,
+  deleteCashMovement: vi.fn(),
+  getPreviousCierre: vi.fn(async () => null),
+  discardCashSession: vi.fn(),
+  upsertSupplier: vi.fn(),
+  updateMiddayCheck: vi.fn(),
+}))
+vi.mock('../../shared/hooks/useAuth', () => ({
+  useAuth: () => ({ profile: { id: 'u1', role: 'cajero', full_name: 'Caja Test' } }),
+}))
+vi.mock('../../shared/api/tips', () => ({
+  getActiveEmployees: vi.fn(async () => [{ id: 'e1', full_name: 'Caja Test' }]),
+  getTipPayoutsSince: vi.fn(async () => []),
+}))
+vi.mock('../../shared/api/exchangeRate', () => ({ getCurrentRate: vi.fn(async () => 500) }))
+vi.mock('../../shared/api/facturas', () => ({ uploadFacturaPhoto: vi.fn(), movementAttachments: vi.fn(() => []) }))
+vi.mock('../../shared/api/documents', () => ({ listLinkedDocs: vi.fn(async () => []) }))
+vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn(async () => ({ ok: true })) }))
+vi.mock('./deletionNote', () => ({ useDeletionNote: () => vi.fn(async () => 'nota') }))
+vi.mock('../../shared/FacturaThumbs', () => ({ default: () => null }))
+vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
+
+import CashTurno from './CashTurno'
+import { todayCR } from '../../shared/utils'
+
+const { createCashSession, closeCashSession } = cashApi
+
+// Escribe en un cuadro type="number" como el navegador: si el texto no es un número válido para HTML, el cuadro queda
+// con value === '' y validity.badInput; se dispara UN evento `input` (React decide si corre onChange: con '' → '' no).
+const FLOTANTE = /^-?(\d+(\.\d+)?|\.\d+)([eE][-+]?\d+)?$/
+function escribir(input: HTMLElement, texto: string) {
+  const legible = texto === '' || FLOTANTE.test(texto)
+  Object.defineProperty(input, 'validity', { configurable: true, get: () => ({ badInput: !legible, valid: legible }) })
+  fireEvent.input(input, { target: { value: legible ? texto : '' } })
+}
+
+// El cuadro se busca por el rótulo que ve el cajero (no por aria-label, que main no tiene): así la misma prueba corre
+// contra main y muestra el antes.
+const cuadro = (rotulo: string) =>
+  screen.getAllByText(rotulo).map(el => el.closest('.tips-field')?.querySelector('input')).find(Boolean) as HTMLInputElement
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: true, configurable: true })
+})
+
+// ── Apertura ────────────────────────────────────────────────────────────────────────────────────────────
+async function renderApertura() {
+  const onError = vi.fn()
+  render(
+    <CashTurno openSession={null} suppliers={[]} sessions={[]} sessionMovements={[]} allMovements={[]}
+      onSessionOpen={vi.fn()} onSessionClose={vi.fn()} onMovAdded={vi.fn()} onError={onError} onRefresh={vi.fn()} />,
+  )
+  await screen.findByRole('option', { name: 'Caja Test' })
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Caja Test' } })
+  return { onError }
+}
+const fondoCRC = () => cuadro('Caja Diaria — Proveedores (₡)')
+const fondoUSD = () => cuadro('$ Dólares (efectivo)')
+const abrir = async () => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: /CONFIRMAR APERTURA/i })) }) }
+
+describe('CashTurno · apertura — fondo ilegible no abre la caja (R31)', () => {
+  it('₡ con valor + «-450» detrás («120000-450»): avisa nombrando el cuadro y NO abre', async () => {
+    const { onError } = await renderApertura()
+    escribir(fondoCRC(), '120000')
+    escribir(fondoCRC(), '120000-450')
+    await abrir()
+    expect(createCashSession).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Caja Diaria — Proveedores \(₡\)».*no es un número/))
+  })
+
+  it('$ con «0-450» (el cuadro arranca en 0): avisa y NO abre', async () => {
+    const { onError } = await renderApertura()
+    escribir(fondoUSD(), '0-450')
+    await abrir()
+    expect(createCashSession).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«\$ Dólares \(efectivo\)».*no es un número/))
+  })
+
+  it('cuadro VACÍO + «-» desde la primera tecla (no dispara onChange): avisa y NO abre', async () => {
+    const { onError } = await renderApertura()
+    escribir(fondoCRC(), '')       // borra el 0
+    escribir(fondoCRC(), '-')      // '' → '': solo onInput se entera
+    await abrir()
+    expect(createCashSession).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Caja Diaria — Proveedores \(₡\)».*no es un número/))
+  })
+
+  it('negativo legible («-450»): avisa y NO abre', async () => {
+    const { onError } = await renderApertura()
+    escribir(fondoCRC(), '-450')
+    await abrir()
+    expect(createCashSession).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith('«Caja Diaria — Proveedores (₡)»: el monto no puede ser negativo.')
+  })
+
+  it('borrar el ilegible → vacío = 0: abre con ₡0', async () => {
+    await renderApertura()
+    escribir(fondoCRC(), '')
+    escribir(fondoCRC(), '-')
+    escribir(fondoCRC(), '')       // '' → '' otra vez: la marca se va por onInput
+    await abrir()
+    await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
+    expect(createCashSession.mock.calls[0][0]).toMatchObject({ initial_suppliers_crc: 0, initial_cash_usd: 0 })
+  })
+
+  it('paridad: montos válidos se guardan igual que en main', async () => {
+    await renderApertura()
+    escribir(fondoCRC(), '120000')
+    escribir(fondoUSD(), '35.5')
+    await abrir()
+    await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
+    expect(createCashSession.mock.calls[0][0]).toEqual({
+      session_date: todayCR(), shift_type: expect.any(String), opened_by: 'u1', cajero_name: 'Caja Test',
+      initial_cash_crc: 0, initial_cash_usd: 35.5, initial_suppliers_crc: 120000,
+    })
+  })
+})
+
+// ── Cierre del turno ────────────────────────────────────────────────────────────────────────────────────
+const session = {
+  id: 's1', cajero_name: 'Caja Test', shift_type: 'AM', session_date: '2026-07-01', status: 'open',
+  initial_suppliers_crc: 100000, initial_cash_usd: 0,
+} as unknown as CashSession
+
+function renderCierre() {
+  const onError = vi.fn()
+  const onSessionClose = vi.fn()
+  render(
+    <CashTurno openSession={session} suppliers={[]} sessions={[session]} sessionMovements={[]} allMovements={[]}
+      onSessionOpen={vi.fn()} onSessionClose={onSessionClose} onMovAdded={vi.fn()} onError={onError} onRefresh={vi.fn()} />,
+  )
+  return { onError, onSessionClose }
+}
+const contadoCRC = () => cuadro('Efectivo al cierre ₡')
+const contadoUSD = () => cuadro('Efectivo al cierre $')
+const verResumen = () => fireEvent.click(screen.getByRole('button', { name: /VER RESUMEN Y CONFIRMAR CIERRE/ }))
+const confirmarCierre = async () => {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Confirmar y cerrar turno/ })) })
+}
+
+describe('CashTurno · cierre del turno — efectivo contado ilegible no cierra (R31)', () => {
+  it('₡ con valor + «-450» detrás: «Ver resumen» avisa y no abre el resumen; se ve que no es un número', async () => {
+    const { onError } = renderCierre()
+    escribir(contadoCRC(), '100000')
+    escribir(contadoCRC(), '100000-450')
+    expect(screen.getByText(/El efectivo contado no es un número/)).toBeTruthy()
+    verResumen()
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Efectivo al cierre ₡».*no es un número/))
+    expect(screen.queryByRole('button', { name: /Confirmar y cerrar turno/ })).toBeNull()
+    expect(closeCashSession).not.toHaveBeenCalled()
+  })
+
+  it('resumen abierto con un monto válido y DESPUÉS «-» en el $ vacío: «Confirmar» avisa y NO cierra', async () => {
+    const { onError, onSessionClose } = renderCierre()
+    escribir(contadoCRC(), '100000')
+    verResumen()
+    escribir(contadoUSD(), '')
+    escribir(contadoUSD(), '-')      // cuadro vacío + «-»: solo onInput
+    await confirmarCierre()
+    expect(closeCashSession).not.toHaveBeenCalled()
+    expect(onSessionClose).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Efectivo al cierre \$».*no es un número/))
+  })
+
+  it('borrar el ilegible → vacío = 0: cierra con $0', async () => {
+    renderCierre()
+    escribir(contadoCRC(), '100000')
+    escribir(contadoUSD(), '')
+    escribir(contadoUSD(), '-')
+    escribir(contadoUSD(), '')
+    expect(screen.queryByText(/El efectivo contado no es un número/)).toBeNull()
+    verResumen()
+    await confirmarCierre()
+    await waitFor(() => expect(closeCashSession).toHaveBeenCalledTimes(1))
+    expect(closeCashSession.mock.calls[0][1]).toMatchObject({ final_cash_crc: 100000, final_cash_usd: 0 })
+  })
+
+  it('paridad: montos válidos se guardan igual que en main', async () => {
+    const { onSessionClose } = renderCierre()
+    escribir(contadoCRC(), '99500.5')
+    escribir(contadoUSD(), '12')
+    verResumen()
+    await confirmarCierre()
+    await waitFor(() => expect(onSessionClose).toHaveBeenCalled())
+    expect(closeCashSession.mock.calls[0]).toEqual([
+      's1',
+      { final_cash_crc: 99500.5, final_cash_usd: 12, final_safe_crc: 0, final_bank_crc: 0, notes: undefined },
+      'u1',
+    ])
+  })
+})

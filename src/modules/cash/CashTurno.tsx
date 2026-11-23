@@ -22,6 +22,8 @@ import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/factur
 import { listLinkedDocs } from '../../shared/api/documents'
 import FacturaThumbs from '../../shared/FacturaThumbs'
 import AgregarAsistente from './AgregarAsistente'
+import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from './validarMovimiento'
+import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import type { Employee } from '../../shared/types/database'
 
 interface Props {
@@ -100,6 +102,10 @@ export default function CashTurno({
   useState(() => { getActiveEmployees().then(setEmployees).catch(() => {}) })
   const [apProvCRC,  setApProvCRC]  = useState<number | ''>(0)   // fondo de la Caja Diaria (proveedores)
   const [apUSD,      setApUSD]      = useState<number | ''>(0)
+  // R31 (23-nov): marca de cuadro ilegible (validity.badInput) del fondo. Con «120000-» el cuadro entrega '' y la caja
+  // abría con ₡0 sin aviso. Se marca en onChange Y onInput (cuadro vacío + «-» no dispara onChange con React 19).
+  const [apProvCRCMalo, setApProvCRCMalo] = useState(false)
+  const [apUSDMalo,     setApUSDMalo]     = useState(false)
   const [tc,         setTc]         = useState<number>(640)       // tipo de cambio USD→CRC (del módulo Admin)
   // TC por defecto = el configurado en Admin (exchange_rates). Editable.
   useEffect(() => { getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {}) }, [])
@@ -262,6 +268,9 @@ export default function CashTurno({
   // Cierre form
   const [cierreCRC,   setCierreCRC]   = useState<number | ''>(0)
   const [cierreUSD,   setCierreUSD]   = useState<number | ''>(0)
+  // R31 (23-nov): marca de ilegible del efectivo contado al cierre (con texto ilegible se guardaba «contado ₡0»).
+  const [cierreCRCMalo, setCierreCRCMalo] = useState(false)
+  const [cierreUSDMalo, setCierreUSDMalo] = useState(false)
   const [cierreNotas, setCierreNotas] = useState('')
   const [showResumen, setShowResumen] = useState(false)
 
@@ -315,11 +324,23 @@ export default function CashTurno({
   const cierreVal    = Number(cierreCRC) || 0
   const diferencia   = cierreVal ? cierreVal - cajaDeberia : null
   const cuadra       = diferencia !== null && Math.abs(diferencia) < 500
+  // R31: el efectivo contado al cierre, ilegible o negativo, frena «Ver resumen» y el cierre (no cambia ninguna cuenta).
+  const errorCierreCuadros = () => errorDeCuadros([
+    { nombre: 'Efectivo al cierre ₡', valor: cierreCRC, ilegible: cierreCRCMalo },
+    { nombre: 'Efectivo al cierre $', valor: cierreUSD, ilegible: cierreUSDMalo },
+  ])
+  const cierreIlegible = cierreCRCMalo || cierreUSDMalo
 
   // ── Apertura ─────────────────────────────────────────────
   const handleApertura = useCallback(async () => {
     if (!profile) return
     if (!apCajero) { onError('Seleccioná un cajero'); return }
+    // R31: un fondo ilegible o negativo no abre la caja (antes abría con ₡0 / $0 sin aviso). Vacío sigue siendo 0.
+    const errFondo = errorDeCuadros([
+      { nombre: 'Caja Diaria — Proveedores (₡)', valor: apProvCRC, ilegible: apProvCRCMalo },
+      { nombre: '$ Dólares (efectivo)',          valor: apUSD,     ilegible: apUSDMalo },
+    ])
+    if (errFondo) { onError(errFondo); return }
     // Guard de fecha (Ítem 4): la Caja Diaria se abre SIEMPRE con la fecha de HOY. Los turnos no se
     // backdatean (ni al pasado ni al futuro), para NADIE. El input queda fijo en hoy; esto blinda el submit.
     if (apFecha !== today) { onError('La Caja Diaria se abre con la fecha de HOY — los turnos no se registran en otra fecha.'); return }
@@ -361,7 +382,7 @@ export default function CashTurno({
     } finally {
       setSaving(false)
     }
-  }, [profile, apCajero, apTurno, apFecha, apProvCRC, apUSD, carrySugerido, carryFrom, sessions, onSessionOpen, onError, today])
+  }, [profile, apCajero, apTurno, apFecha, apProvCRC, apUSD, apProvCRCMalo, apUSDMalo, carrySugerido, carryFrom, sessions, onSessionOpen, onError, today])
 
   // ── Add pago ──────────────────────────────────────────────
   // ── Crash-safe pago persistence ──────────────────────────
@@ -409,6 +430,11 @@ export default function CashTurno({
   const [draftSup,    setDraftSup]    = useState('')
   const [draftCRC,    setDraftCRC]    = useState<number | ''>('')
   const [draftUSD,    setDraftUSD]    = useState<number | ''>('')
+  // Los cuadros de monto del modal se leen del DOM al confirmar (valorDelCuadro, hallazgo 251): con texto ilegible
+  // («12abc», «-», «--450») el cuadro entrega '' y marca validity.badInput, y React NO dispara onChange si el valor
+  // leído no cambia ('' → ''). El estado solo no alcanza: contaría $0 sin avisar.
+  const draftCrcRef = useRef<HTMLInputElement>(null)
+  const draftUsdRef = useRef<HTMLInputElement>(null)
   const [draftMethod, setDraftMethod] = useState<string>('Efectivo')
   const [draftRef,    setDraftRef]    = useState('')
   const [supSearch,   setSupSearch]   = useState('')   // texto de búsqueda del proveedor
@@ -469,8 +495,17 @@ export default function CashTurno({
   }
 
   const confirmPago = async () => {
-    if (!draftSup || !Number(draftCRC) || movSaving) return  // proveedor + monto requeridos · anti doble-submit
-    if (Number(draftCRC) < 0 || Number(draftUSD) < 0) { onError('El monto no puede ser negativo.'); return }   // Ítem 2
+    // Montos PRIMERO (hallazgo 251): antes de pedir autorización y antes de borrar el movimiento viejo. Un $ ilegible
+    // («12abc», «-») llegaba como '' y se guardaba $0 sin aviso; al editar, además, el pago viejo ya estaba borrado.
+    // Se leen los cuadros con valorDelCuadro (badInput → NaN) y se valida el pago completo como quedaría. Si no vale:
+    // se avisa y no se toca nada (el modal queda abierto). Vacío sigue siendo 0.
+    const crcCuadro = draftCrcRef.current ? valorDelCuadro(draftCrcRef.current) : draftCRC
+    const usdCuadro = draftUsdRef.current ? valorDelCuadro(draftUsdRef.current) : draftUSD
+    // Ítem 2: un pago es siempre un egreso → nunca negativo (mismo texto de siempre).
+    if (leerMonto(crcCuadro) < 0 || leerMonto(usdCuadro) < 0) { onError(MSG_MONTO_NEGATIVO); return }
+    const vMonto = validarMovimiento({ tipo: 'egreso_mercaderia', crc: crcCuadro, usd: usdCuadro }, editId ? 'edicion' : 'alta')
+    if (!vMonto.ok) { onError(vMonto.error); return }
+    if (!draftSup || !vMonto.crc || movSaving) return  // proveedor + ₡ requeridos · anti doble-submit
     // Editar un pago YA guardado = reemplazo (borra el movimiento viejo + re-crea) → requiere la
     // MISMA autorización de gerencia que el borrado. Antes este camino llamaba la cascada SIN
     // credenciales y la RPC (mig 044) rechazaba al cajero con "No autorizado" sin pedirle nada.
@@ -507,8 +542,8 @@ export default function CashTurno({
       supplier_id:   draftSup,
       supplier_name: prov?.name ?? '',
       supplier_cat:  prov?.category ?? '',
-      amount_crc:    Number(draftCRC) || 0,
-      amount_usd:    Number(draftUSD) || 0,
+      amount_crc:    vMonto.crc,
+      amount_usd:    vMonto.usd,
       method:        draftMethod,
       reference:     draftRef,
       at:            old?.at ?? Date.now(),
@@ -595,6 +630,14 @@ export default function CashTurno({
       onError('El cierre de la Caja Diaria requiere conexión — los pagos quedan guardados en cola; cerrá cuando vuelva la señal.')
       return
     }
+    // R31: antes de persistir nada (pagos, ingresos o el cierre).
+    {
+      const errCont = errorDeCuadros([
+        { nombre: 'Efectivo al cierre ₡', valor: cierreCRC, ilegible: cierreCRCMalo },
+        { nombre: 'Efectivo al cierre $', valor: cierreUSD, ilegible: cierreUSDMalo },
+      ])
+      if (errCont) { setShowResumen(false); onError(errCont); return }
+    }
     setSaving(true)
     try {
       // Persistir cualquier pago a proveedor que aún no esté en DB.
@@ -648,7 +691,7 @@ export default function CashTurno({
     } finally {
       setSaving(false)
     }
-  }, [openSession, profile, pagos, ingresos, cierreCRC, cierreUSD, cierreNotas,
+  }, [openSession, profile, pagos, ingresos, cierreCRC, cierreUSD, cierreCRCMalo, cierreUSDMalo, cierreNotas,
       onSessionClose, onMovAdded, onError])
 
   // ────────────────────────────────────────────────────────
@@ -704,8 +747,9 @@ export default function CashTurno({
                   <div className="tips-field-label">Caja Diaria — Proveedores (₡)</div>
                   <div className="cd-monto-wrap">
                     <span className="cd-prefix">₡</span>
-                    <input type="number" className="cd-monto-input" value={apProvCRC} min={0} step={1000}
-                      placeholder="0" onChange={e => setApProvCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                    <input type="number" className="cd-monto-input" aria-label="Caja Diaria — Proveedores (₡)" value={apProvCRC} min={0} step={1000}
+                      placeholder="0" onInput={e => setApProvCRCMalo(marcaIlegible(e.currentTarget))}
+                      onChange={e => { setApProvCRCMalo(marcaIlegible(e.currentTarget)); setApProvCRC(e.target.value === '' ? '' : Number(e.target.value)) }} />
                   </div>
                   {carryFrom && (
                     <div style={{ fontSize: '0.66rem', color: 'var(--c-teal)', marginTop: 2 }}>
@@ -717,8 +761,9 @@ export default function CashTurno({
                   <div className="tips-field-label">$ Dólares (efectivo)</div>
                   <div className="cd-monto-wrap usd">
                     <span className="cd-prefix">$</span>
-                    <input type="number" className="cd-monto-input" value={apUSD} min={0} step={1}
-                      placeholder="0" onChange={e => setApUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                    <input type="number" className="cd-monto-input" aria-label="$ Dólares (efectivo)" value={apUSD} min={0} step={1}
+                      placeholder="0" onInput={e => setApUSDMalo(marcaIlegible(e.currentTarget))}
+                      onChange={e => { setApUSDMalo(marcaIlegible(e.currentTarget)); setApUSD(e.target.value === '' ? '' : Number(e.target.value)) }} />
                   </div>
                   {Number(apUSD) > 0 && (
                     <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginTop:2 }}>
@@ -1010,16 +1055,18 @@ export default function CashTurno({
                 <div className="tips-field-label">Efectivo al cierre ₡</div>
                 <div className="cd-monto-wrap">
                   <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={cierreCRC} min={0}
-                    placeholder="0" onChange={e => setCierreCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                  <input type="number" className="cd-monto-input" aria-label="Efectivo al cierre ₡" value={cierreCRC} min={0}
+                    placeholder="0" onInput={e => setCierreCRCMalo(marcaIlegible(e.currentTarget))}
+                    onChange={e => { setCierreCRCMalo(marcaIlegible(e.currentTarget)); setCierreCRC(e.target.value === '' ? '' : Number(e.target.value)) }} />
                 </div>
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Efectivo al cierre $</div>
                 <div className="cd-monto-wrap usd">
                   <span className="cd-prefix">$</span>
-                  <input type="number" className="cd-monto-input" value={cierreUSD} min={0}
-                    placeholder="0" onChange={e => setCierreUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                  <input type="number" className="cd-monto-input" aria-label="Efectivo al cierre $" value={cierreUSD} min={0}
+                    placeholder="0" onInput={e => setCierreUSDMalo(marcaIlegible(e.currentTarget))}
+                    onChange={e => { setCierreUSDMalo(marcaIlegible(e.currentTarget)); setCierreUSD(e.target.value === '' ? '' : Number(e.target.value)) }} />
                 </div>
               </div>
             </div>
@@ -1052,6 +1099,12 @@ export default function CashTurno({
               </div>
             </div>
 
+            {cierreIlegible && (
+              <div className="cd-cierre-resultado fail" role="alert">
+                <span>⚠</span>
+                <span>El efectivo contado no es un número: corregilo (o borralo) antes de cerrar.</span>
+              </div>
+            )}
             {cierreVal > 0 && (
               <div className={`cd-cierre-resultado ${cuadra ? 'ok' : 'fail'}`}>
                 <span>{cuadra ? '✓' : '⚠'}</span>
@@ -1070,7 +1123,7 @@ export default function CashTurno({
             </div>
 
             <button className="cd-btn-primary" style={{ marginTop: '1rem', width: '100%', justifyContent: 'center' }}
-              onClick={() => setShowResumen(true)}>
+              onClick={() => { const errCont = errorCierreCuadros(); if (errCont) { onError(errCont); return } setShowResumen(true) }}>
               👁 VER RESUMEN Y CONFIRMAR CIERRE
             </button>
           </div>
@@ -1266,7 +1319,7 @@ export default function CashTurno({
                 <div className="tips-field-label">Monto ₡ colones</div>
                 <div className="cd-monto-wrap">
                   <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" aria-label="Monto ₡ del pago" value={draftCRC} placeholder="0" min={0} step="any" autoFocus
+                  <input type="number" className="cd-monto-input" aria-label="Monto ₡ del pago" ref={draftCrcRef} value={draftCRC} placeholder="0" min={0} step="any" autoFocus
                     onChange={e => setDraftCRC(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>
@@ -1274,7 +1327,7 @@ export default function CashTurno({
                 <div className="tips-field-label">Monto $ dólares</div>
                 <div className="cd-monto-wrap usd">
                   <span className="cd-prefix">$</span>
-                  <input type="number" className="cd-monto-input" aria-label="Monto $ del pago" value={draftUSD} placeholder="0" min={0} step="any"
+                  <input type="number" className="cd-monto-input" aria-label="Monto $ del pago" ref={draftUsdRef} value={draftUSD} placeholder="0" min={0} step="any"
                     onChange={e => setDraftUSD(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>

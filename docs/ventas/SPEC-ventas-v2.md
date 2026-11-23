@@ -572,6 +572,12 @@ para la primera sub-vista de la entrada. Las vistas que todavía no se retiran u
 `?tab=tiempos&v=calendario`. Las de la tabla para «Mix», «Ing. Menú», «Por línea», «ICP», «Cajeros»,
 «Competencias», «Metas», «Productos» y «Mesas internas» ya son las definitivas.
 
+**Desde el 3.5.2:** «Hoy», «Ventas» e «Histórico» se retiraron: sus `?tab=` viejos y las direcciones del 3.5.1
+(`?tab=resumen&v=hoy|ventas|historico`) abren `?tab=resumen&p=ayer|mes|rango` (sin `d`, `desde` ni `hasta`).
+«Análisis», ya solo con «Año vs Año», pasa a ser sub-vista de «Tiempos» (`?tab=tiempos&v=analisis`; también abre ahí
+`?tab=resumen&v=analisis`) para que «Resumen» quede sin sub-pestañas, como dice §12.4; en la 3.5.3 pasa a
+`?tab=tiempos&p=anioALaFecha`. «Regalías» es `?tab=regalias`.
+
 ### 12.3 Qué entra sin la 3.1 ni la 3.4, y qué queda esperando
 
 **Entra ahora (sin esquema):** el menú y las redirecciones · todo «Resumen» · todo «Tiempos» · todo «Equipo» ·

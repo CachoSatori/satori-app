@@ -8,6 +8,8 @@ import {
   rotulo, totalesEnRango, variacion, type Rango, type Totales,
 } from './aLaFecha'
 
+// ⚠️ RETIRADA DEL MENÚ en el 3.5.3 (SPEC-ventas-v2 §12.4): ya no se abre desde Ventas. El archivo queda SOLO como
+// «lo de antes» de la prueba de paridad (`__paridad__/tiempos353.paridad.test.tsx`) y se borra en la 3.5.5.
 // Ventas v2 · 3.5.2 (SPEC §12.2): «Detalle anual», «Proyección» y «Prom/PAX explicado» se retiraron. Lo suyo
 // está en «Resumen» (períodos «Mes» y «Año a la fecha», «Meta de {mes}» y «Qué explica el cambio») y en
 // «Tiempos» → «Quincenas». Queda «Año vs Año», que pasa a «Tiempos» → «Meses y temporadas» en la 3.5.3.

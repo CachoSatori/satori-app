@@ -1,12 +1,14 @@
 // ── Ventas v2 · «Tiempos» (SPEC-ventas-v2 §5.4, fase 2.3) ──────────────────────────────────────
 // Barra global (la misma del Resumen, en la URL) + día de semana + hora y turno + quincenas +
-// tiempo sentado + calendario. El cálculo es `tiemposV2.ts`; la lectura, `tiemposV2Datos.ts` (190 + 193; sin la
-// 193, la 080 y el mapa solo de salón). Las mesas internas (Ajustes) son venta: solo salen del tiempo sentado.
-// Convive con «Calendario» y «Análisis» hasta la fase 3.5.
-// Queda para después: «Meses y temporadas» (§5.4 ítem 4) y las fechas especiales del calendario (fase 3).
+// tiempo sentado + meses y temporadas + calendario. El cálculo es `tiemposV2.ts` (y `mesesTemporadas.ts`); la
+// lectura, `tiemposV2Datos.ts` (190 + 193; sin la 193, la 080 y el mapa solo de salón). Las mesas internas (Ajustes)
+// son venta: solo salen del tiempo sentado.
+// 3.5.3 (SPEC §12.4): suma «Meses y temporadas» (§5.4 ítem 4, lo de «Análisis» → «Año vs Año») y se retiran
+// «Calendario» y «Análisis». Queda para después: las fechas especiales del calendario (4.x).
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
+import type { HistMap } from '../../shared/types/ventas'
 import type { FilaPromPaxRpc } from '../../shared/api/posNdf'
 import { fi } from './ventasUtils'
 import BarraVentasV2 from './BarraVentasV2'
@@ -23,6 +25,7 @@ import { TAMANOS, type TiemposRpc } from './tiemposV2Rpc'
 import type { LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
 import { localPorDefecto } from '../../shared/utils/ordenLocales'
+import MesesYTemporadas from './MesesYTemporadas'
 
 /** «Tiempos» abre en el mes en curso, a la fecha («Mes» en la barra): con un solo día no hay día de semana ni calendario. */
 export const PERIODO_TIEMPOS = 'mesALaFecha' as const
@@ -32,7 +35,10 @@ const fmtPct = (x: number | null) => x === null ? 'sin comparación'
 const claseCambio = (x: number | null) => x === null || Math.abs(x) < 0.05 ? 'gris' : x > 0 ? 'sube' : 'baja'
 const fmtVpp = (v: number | null) => v === null ? '—' : fi(Math.round(v))
 
-export default function VentasTiempos() {
+const SIN_HIST: HistMap = {}
+
+/** `hist`: `ventas_hist` anterior al corte del PoS (2023), lo liviano que el shell baja siempre (no los 90 días). */
+export default function VentasTiempos({ hist = SIN_HIST }: { hist?: HistMap } = {}) {
   const { profile } = useAuth()
   const role = profile?.role ?? ''
   const [sp, setSp] = useSearchParams()
@@ -102,12 +108,14 @@ export default function VentasTiempos() {
           Leyendo las ventas del PoS (el período, sus bases y las últimas 12 quincenas)…
         </div>
       )}
-      {listo && <Contenido periodo={periodo} quincenas={quincenas} l={listo.l} turnos={listo.turnos} tiempos={listo.tiempos} bases={basesDe(comparar)} leidas={[baseA, baseB]} />}
+      {listo && <Contenido local={local} hist={hist} periodo={periodo} quincenas={quincenas} l={listo.l} turnos={listo.turnos} tiempos={listo.tiempos} bases={basesDe(comparar)} leidas={[baseA, baseB]} />}
     </div>
   )
 }
 
 interface ContenidoProps {
+  local:     string
+  hist:      HistMap
   periodo:   PeriodoV2
   quincenas: PeriodoV2[]
   l:         Lectura
@@ -119,7 +127,7 @@ interface ContenidoProps {
   leidas:    [BaseId, BaseId]
 }
 
-function Contenido({ periodo, quincenas, l, turnos, tiempos, bases, leidas: [baseA, baseB] }: ContenidoProps) {
+function Contenido({ local, hist, periodo, quincenas, l, turnos, tiempos, bases, leidas: [baseA, baseB] }: ContenidoProps) {
   const d = useMemo(() => {
     const estimador = estimadorPorNeta(l.facturas)
     const p = cifrasDelRango(l, periodo)
@@ -317,6 +325,9 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, bases, leidas: [bas
         </div>
       </section>
 
+      {/* 4. Meses y temporadas (3.5.3: lo de «Análisis» → «Año vs Año») */}
+      <MesesYTemporadas local={local} ancla={periodo.ancla} hist={hist} />
+
       {/* 5. Calendario */}
       <section className="vt2t-bloque" data-bloque="calendario">
         <div className="vt-sl">Calendario</div>
@@ -348,7 +359,7 @@ function Contenido({ periodo, quincenas, l, turnos, tiempos, bases, leidas: [bas
             </div>
           ))}
         </div>
-        <p className="vt2-nota">Cada día es la venta neta de Contabilidad. Las fechas especiales (Semana Santa, feriados) se marcan en una fase siguiente.</p>
+        <p className="vt2-nota">Cada día es la venta neta de Contabilidad. Las personas y la venta por persona de cada día están en «Resumen» → «Detalle por día» (mismo período). Las fechas especiales (Semana Santa, feriados) se marcan en una fase siguiente.</p>
       </section>
     </>
   )

@@ -1,3 +1,5 @@
+// ⚠️ RETIRADA DEL MENÚ en el 3.5.3 (SPEC-ventas-v2 §12.4): ya no se abre desde Ventas. El archivo queda SOLO como
+// «lo de antes» de la prueba de paridad (`__paridad__/tiempos353.paridad.test.tsx`) y se borra en la 3.5.5.
 /**
  * VentasCalendario — Análisis por día de semana + listado histórico por mes
  * Port of renderSemana from SATORI DASHBOARD standalone

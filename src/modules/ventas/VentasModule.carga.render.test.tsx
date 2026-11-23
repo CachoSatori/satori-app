@@ -49,14 +49,12 @@ vi.mock('./VentasEnVivo',         () => vista('envivo'))
 vi.mock('./VentasSaloneros',      () => vista('saloneros'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
 vi.mock('./VentasMix',            () => vista('mix'))
-vi.mock('./VentasAnalisis',       () => vista('analisis'))
 vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
 vi.mock('./VentasConfig',         () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
 vi.mock('./VentasEvaluacion',     () => vista('evaluacion'))
 vi.mock('./VentasICP',            () => vista('icp'))
-vi.mock('./VentasCalendario',     () => vista('calendario'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
 vi.mock('./VentasResumen',        () => vista('resumen'))
 vi.mock('./VentasTiempos',        () => vista('tiempos'))
@@ -67,7 +65,7 @@ import * as fuente from './ventasFuente'
 import VentasModule from './VentasModule'
 import { TABS, VISTAS_SIN_DIAS, VISTAS_CON_FONDO } from './ventasTabs'
 
-const CON_HIST = new Set(['mix', 'analisis', 'calendario', 'metas'])
+const CON_HIST = new Set(['mix', 'metas'])
 
 const abrir = (url: string) =>
   render(<MemoryRouter initialEntries={[url]}><VentasModule /></MemoryRouter>)
@@ -106,7 +104,7 @@ describe('VentasModule · carga a pedido (A5)', () => {
     expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
   })
 
-  it.each(['tab=resumen', 'tab=tiempos', 'tab=regalias', 'tab=hoy', 'tab=ventas', 'tab=historico'])('?%s no pide los 90 días ni la historia (criterio 12)', async q => {
+  it.each(['tab=resumen', 'tab=tiempos', 'tab=regalias', 'tab=hoy', 'tab=ventas', 'tab=historico', 'tab=analisis', 'tab=calendario'])('?%s no pide los 90 días ni la historia (criterio 12)', async q => {
     abrir(`/ventas?${q}`)
     expect(await texto()).toMatch(/^(resumen|tiempos|regalias)\|/)
     expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
@@ -131,18 +129,26 @@ describe('VentasModule · carga a pedido (A5)', () => {
     if (CON_HIST.has(id)) expect(await texto()).toContain('hist:pos')
   })
 
-  it('de «Resumen» a «Análisis»: los 90 días y la historia se piden recién al entrar, y una sola vez', async () => {
+  it('3.5.3: «Tiempos» recibe solo `hist` (2023, lo liviano de siempre), sin `dias` ni `pm`', async () => {
+    abrir('/ventas?tab=tiempos')
+    expect(await texto()).toBe('tiempos|dias:-|hist:xls|pm:-|metas:-')
+    expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
+    expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
+  })
+
+  it('de «Resumen» a «Tiempos» y a «Productos»: los 90 días y la historia se piden recién al entrar a «Mix», y una sola vez', async () => {
     abrir('/ventas?tab=resumen')
     expect(await texto()).toContain('resumen|')
     expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('tab', { name: 'Tiempos' }))
     expect(await texto()).toContain('tiempos|')
-    fireEvent.click(screen.getByRole('tab', { name: 'Análisis' }))
+    expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('tab', { name: 'Productos' }))
     await waitFor(() => expect(fuente.cargarDiasEager).toHaveBeenCalledTimes(1))
     resolverEager()
     await waitFor(() => expect(fuente.cargarDeFondo).toHaveBeenCalledTimes(1))
-    fireEvent.click(screen.getByRole('tab', { name: 'Calendario' }))
-    expect(await texto()).toContain('calendario|')
+    fireEvent.click(screen.getByRole('tab', { name: 'Ing. Menú' }))
+    expect(await texto()).toContain('menueng|')
     expect(fuente.cargarDeFondo).toHaveBeenCalledTimes(1)
     expect(fuente.cargarDiasEager).toHaveBeenCalledTimes(1)
   })

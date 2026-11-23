@@ -467,7 +467,7 @@ coordinador (fuera del repo); esta tabla pasa a ser la referencia en el repo.
 | % de mano de obra y venta por hora trabajada | **Fuera de Ventas v2:** va con el módulo de horarios |
 | Qué sigue en Ventas | **La 3.5** (unificar las vistas viejas en las 5 pestañas) es la próxima tarea de construcción |
 
-### 10.3 Decididas por el dueño el 23-nov (antes abiertas)
+### 10.3 Decididas por el dueño el 23-nov
 
 | # | Decisión | Qué implica |
 |---|---|---|
@@ -475,6 +475,9 @@ coordinador (fuera del repo); esta tabla pasa a ser la referencia en el repo.
 | **D12** | **A** — el botón «→ Caja» de «Hoy» se retira con la vista | Se borra quien lo llama; ningún sagrado se toca. Va en el 3.5.2 |
 | **D13** | **A** — dos cifras: **anulaciones** (toda factura anulada) y, adentro, **refacturas** (anulada cuya mesa o pedido tiene otra factura cerrada en la misma jornada) | La función que las lee entra con la 3.4 (firma) |
 | **D14** | **A** — descuento sobre sus mesas (%) en «Equipo» con la 3.4; tiempo sentado por salonero en 4.x | Sin cambios en la 3.5 |
+| **D15** | Se **retira «Histórico»** (sin uso real según el dueño). Los datos viejos quedan en la base; las comparaciones contra el año anterior salen del PoS | Va en el 3.5.2, con «Hoy» y «Ventas» |
+| **D16** | **Santa Teresa primero** en todo selector o lista de locales (y por defecto). Hoy Nosara aparece primero estando inactivo. Regla general: locales activos primero, Santa Teresa por defecto; sigue todo multi-local | Arreglo aparte, ya (no espera la 3.5) |
+| **D17** | **«Ajustes → Productos» (catálogo manual) desaparece.** El catálogo sale del PoS (código, nombre, familia y categoría), sin clasificar a mano, siempre **ordenado por familia y categoría**. Lo único editable: **cuántas personas rinde** un producto (combo, botella para compartir) para la venta por persona; el costo, cuando llegue Inventario | Entra en la 3.1 (catálogo único por código, D8, firma). Hasta la 3.1 la vista queda como está |
 
 ## 11. Fuera de alcance
 

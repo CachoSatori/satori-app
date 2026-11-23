@@ -11,7 +11,7 @@ import type { CashSession } from '../../shared/types/database'
 
 const cashApi = vi.hoisted(() => ({
   createCashSession: vi.fn(async (m: { session_date: string }) => ({ id: 's-new', ...m })),
-  closeCashSession: vi.fn(async () => undefined),
+  closeCashSession: vi.fn(async (id: string, datos: Record<string, unknown>, por: string) => { void id; void datos; void por }),
 }))
 vi.mock('../../shared/api/cash', () => ({
   createCashMovement: vi.fn(),

@@ -66,6 +66,19 @@ describe('«Qué explica el cambio» (ítem 6)', () => {
     expect(document.querySelector('details[data-bloque="explica-detalle"]')).toBeTruthy()
   })
 
+  it('el título «Qué explica el cambio» aparece una sola vez, también con el detalle abierto', async () => {
+    abrir('p=mes&d=2026-10-01&c=anterior')
+    await screen.findByTestId('explica-frases')
+    const det = document.querySelector('details[data-bloque="explica-detalle"]') as HTMLDetailsElement
+    det.open = true
+    const titulos = () => [...document.querySelectorAll('.vt-sl')].filter(e => e.textContent === 'Qué explica el cambio').length
+    expect(titulos()).toBe(1)
+    // Con un turno elegido, sus frases van rotuladas por el turno, no con el título repetido.
+    fireEvent.click(screen.getByRole('button', { name: 'Noche' }))
+    expect(await screen.findByText('Con el turno noche')).toBeTruthy()
+    expect(titulos()).toBe(1)
+  })
+
   it('con «Año pasado, mismo día de semana» explica contra esa base', async () => {
     abrir('p=mes&d=2026-10-01&c=anio')
     await screen.findByTestId('explica-frases')

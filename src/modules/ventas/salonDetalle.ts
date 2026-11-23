@@ -82,6 +82,7 @@ export const FALTA_EN_REGALIAS = [
   'descuentos por programa (Local Club, hoteles, Club Satori)',
   'anulaciones y refacturas',
   'el detalle por salonero y por día',
+  'el valor servido de las regalías totales',
   'el cambio contra el período anterior y el año pasado',
   'el control de la quincena',
 ] as const

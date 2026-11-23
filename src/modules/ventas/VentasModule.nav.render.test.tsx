@@ -4,7 +4,7 @@
 // (SPEC-ventas-v2 §12.4): arranque en «Resumen» y redirección de los `?tab=` viejos. Desde el 3.5.2: siete
 // entradas (con «Regalías»), «Resumen» sin sub-pestañas y «Hoy», «Ventas» e «Histórico» retiradas.
 // Las vistas se reemplazan por marcadores: acá se prueba la navegación, no el contenido.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest'
 import { useEffect } from 'react'
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
@@ -172,15 +172,19 @@ describe('VentasModule · redirecciones (criterio 3)', () => {
   // desde el `?tab=` de antes y desde la dirección del 3.5.1. Reemplazan la dirección (sin paso extra en «Atrás»).
   const RETIRADAS: [string, string][] = [
     ['tab=hoy', '/ventas?tab=resumen&p=ayer'],
-    ['tab=ventas', '/ventas?tab=resumen&p=mes'],
-    ['tab=historico', '/ventas?tab=resumen&p=rango'],
+    ['tab=ventas', '/ventas?tab=resumen&p=mesALaFecha'],
+    ['tab=historico', '/ventas?tab=resumen&p=rango&desde=2026-10-19&hasta=2026-11-17'],
     ['tab=resumen&v=hoy', '/ventas?tab=resumen&p=ayer'],
-    ['tab=resumen&v=ventas', '/ventas?tab=resumen&p=mes'],
-    ['tab=resumen&v=historico', '/ventas?tab=resumen&p=rango'],
+    ['tab=resumen&v=ventas', '/ventas?tab=resumen&p=mesALaFecha'],
+    ['tab=resumen&v=historico', '/ventas?tab=resumen&p=rango&desde=2026-10-19&hasta=2026-11-17'],
     ['tab=resumen&v=analisis', '/ventas?tab=tiempos&v=analisis'],
   ]
   it.each(['owner', 'manager', 'contador'].flatMap(r => RETIRADAS.map(([q, a]) => [r, q, a] as const)))(
     '%s con ?%s → %s', async (r, q, a) => {
+      // Reloj de noche en CR: 23:30 del 18-nov (05:30 UTC del 19). «Histórico» → los 30 días que terminan ayer.
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-11-19T05:30:00Z'))
+      onTestFinished(() => { vi.useRealTimers() })
       role = r
       abrir(`/ventas?${q}`, ['/'])
       await vi.waitFor(() => expect(ultima.url).toBe(a))

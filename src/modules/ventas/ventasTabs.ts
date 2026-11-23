@@ -11,7 +11,8 @@
 // Los `?tab=<vista vieja>` siguen abriendo algo con sentido: se reemplaza la dirección por la nueva.
 // «Paridad» y «Cargar XLS» se retiraron el 16-nov: su `?tab=` viejo abre «Resumen».
 
-import type { TipoPeriodoV2 } from './periodos'
+import { todayCR } from '../../shared/utils'
+import { sumarDias, type TipoPeriodoV2 } from './periodos'
 
 export type Tab =
   | 'envivo' | 'saloneros' | 'salolineas' | 'evaluacion' | 'icp'
@@ -87,13 +88,16 @@ export const CLAVE_V: Record<Tab, string> = {
 
 /**
  * Las vistas RETIRADAS en el 3.5.2 (SPEC §12.2, D15) y a dónde lleva su enlace viejo: «Resumen» con el
- * período de la barra que la reemplaza. Vale para el `?tab=` de antes de la 3.5 y para la dirección del
- * 3.5.1 (`?tab=resumen&v=<vista>`).
+ * período de la barra que la reemplaza, el mismo con que abría la vista vieja. Vale para el `?tab=` de antes
+ * de la 3.5 y para la dirección del 3.5.1 (`?tab=resumen&v=<vista>`).
+ *   · «Hoy» abría el último día cerrado → «Ayer».
+ *   · «Ventas» abría el mes en curso → «Mes» a la fecha (`mesALaFecha`; `mes` sin día es el último cerrado).
+ *   · «Histórico» abría los últimos 30 días → «Rango» con los 30 días que terminan ayer (hoy no entra, D2).
  */
-export const RETIRADAS: Readonly<Record<'hoy' | 'ventas' | 'historico', { vista: Tab; p: TipoPeriodoV2 }>> = {
+export const RETIRADAS: Readonly<Record<'hoy' | 'ventas' | 'historico', { vista: Tab; p: TipoPeriodoV2; ultimosDias?: number }>> = {
   hoy:       { vista: 'resumen', p: 'ayer' },
-  ventas:    { vista: 'resumen', p: 'mes' },
-  historico: { vista: 'resumen', p: 'rango' },
+  ventas:    { vista: 'resumen', p: 'mesALaFecha' },
+  historico: { vista: 'resumen', p: 'rango', ultimosDias: 30 },
 }
 
 /**
@@ -136,7 +140,7 @@ export function direccionDe(vista: Tab): Direccion {
  * La corrección de la dirección. `tab === null` = se limpian `tab` y `v` (abre el arranque). `p`, si
  * viene, es el período de la barra que reemplaza a una vista retirada (y se limpian `d`, `desde`, `hasta`).
  */
-export interface Correccion { tab: EntradaId | null; v: string | null; p?: TipoPeriodoV2 }
+export interface Correccion { tab: EntradaId | null; v: string | null; p?: TipoPeriodoV2; desde?: string; hasta?: string }
 
 /**
  * Qué vista abre una dirección y, si hay que corregirla, la dirección que la reemplaza (sin sumar
@@ -149,15 +153,19 @@ export interface Correccion { tab: EntradaId | null; v: string | null; p?: TipoP
  *   · Lo que el rol no ve o no existe (incluidos `paridad` y `xls`) → «Resumen», dirección limpia.
  */
 export function resolverDireccion(
-  role: string, tab: string | null, v: string | null,
+  role: string, tab: string | null, v: string | null, hoy: string = todayCR(),
 ): { vista: Tab; corregir: Correccion | null } {
   const inicio = tabPorDefecto(role)
   const limpiar = { vista: inicio, corregir: { tab: null, v: null } }
   const retirada = (clave: keyof typeof RETIRADAS) => {
     const r = RETIRADAS[clave]
-    return puedeVer(role, r.vista)
-      ? { vista: r.vista, corregir: { ...direccionDe(r.vista), p: r.p } }
-      : limpiar
+    if (!puedeVer(role, r.vista)) return limpiar
+    const corregir: Correccion = { ...direccionDe(r.vista), p: r.p }
+    if (r.ultimosDias) {
+      corregir.hasta = sumarDias(hoy, -1)
+      corregir.desde = sumarDias(hoy, -r.ultimosDias)
+    }
+    return { vista: r.vista, corregir }
   }
   if (!tab) return v ? limpiar : { vista: inicio, corregir: null }
   const entrada = ENTRADA_POR_ID.get(tab)

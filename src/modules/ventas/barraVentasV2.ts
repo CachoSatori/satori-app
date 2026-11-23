@@ -206,6 +206,12 @@ export function cambiarTipo(e: EstadoBarra, p: PeriodoV2, tipo: TipoPeriodoV2): 
   return { ...e, tipo, dia: p.hasta, desde: undefined, hasta: undefined }
 }
 
+/** El período en palabras, sin comparación (pantallas que todavía no comparan, como «Regalías»). */
+export function periodoSinBases(p: PeriodoV2): string {
+  if (p.tipo === 'hoy') return 'Hoy está en curso: se mira en «En vivo», contra la misma hora.'
+  return `${p.rotulo}.${p.enCurso || p.hasta === p.N ? ' Hoy, en curso, no entra.' : ''}`
+}
+
 /**
  * «1 al 15 de noviembre (15 días) contra el mes anterior a la misma fecha (1–15 oct) y contra el año
  * pasado, mismo día de semana (2–16 nov 2025). Hoy, en curso, no entra.»

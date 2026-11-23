@@ -217,6 +217,8 @@ describe.each(PERIODOS)('paridad 3.5.2 · $nombre', ({ q, desde, hasta }) => {
     expect(valor('cortesias')).toBe(fi(gen.cortTotal))
     expect(valor('personal')).toBe(fi(gen.persTotal))
     expect(valor('desconocidos')).toBe(fi(desc.reduce((s, p) => s + p.m, 0)))
+    // Un solo producto de cortesía en la fixture: «el más grande», en singular (no «los 1 más grandes»).
+    expect(document.querySelector('[data-regalia="cortesias"] td:nth-child(4)')!.textContent).toMatch(/uds \(el más grande\)$/)
     // La fixture SÍ tiene cortesías y comida del personal en los tres períodos: la prueba no pasa en vacío.
     expect(gen.cortTotal).toBeGreaterThan(0)
     expect(gen.persTotal).toBeGreaterThan(0)

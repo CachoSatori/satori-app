@@ -22,10 +22,12 @@ const ROLES_DE_SIEMPRE: Record<Tab, string[]> = {
 }
 
 /** Las retiradas del 3.5.2 (D15) y el período de «Resumen» que las reemplaza (SPEC §12.2). */
+// Con «hoy» = 18-nov: «Ventas» abre el mes en curso a la fecha; «Histórico», los 30 días que terminan ayer.
+const HOY = '2026-11-18'
 const RETIRADA: Record<string, string> = {
   hoy:       'tab=resumen&p=ayer',
-  ventas:    'tab=resumen&p=mes',
-  historico: 'tab=resumen&p=rango',
+  ventas:    'tab=resumen&p=mesALaFecha',
+  historico: 'tab=resumen&p=rango&desde=2026-10-19&hasta=2026-11-17',
 }
 
 /**
@@ -52,8 +54,8 @@ const DIRECCION_NUEVA: Record<Tab, string> = {
   internas:     'tab=ajustes&v=internas',
 }
 
-const texto = (d: { tab: string | null; v: string | null; p?: string }) =>
-  d.tab === null ? '' : `tab=${d.tab}${d.v ? `&v=${d.v}` : ''}${d.p ? `&p=${d.p}` : ''}`
+const texto = (d: { tab: string | null; v: string | null; p?: string; desde?: string; hasta?: string }) =>
+  d.tab === null ? '' : `tab=${d.tab}${d.v ? `&v=${d.v}` : ''}${d.p ? `&p=${d.p}` : ''}${d.desde ? `&desde=${d.desde}&hasta=${d.hasta}` : ''}`
 
 describe('ventasTabs · 3.5.2 menú de siete entradas', () => {
   it.each(ROLES)('criterio 1: %s ve Resumen · Productos · Equipo · Tiempos · Regalías · En vivo · Ajustes, en ese orden', role => {
@@ -141,14 +143,14 @@ describe('ventasTabs · redirecciones de los ?tab= viejos (criterio 3)', () => {
 
   it.each(ROLES.flatMap(r => Object.keys(RETIRADA).map(t => [r, t] as const)))(
     '%s con ?tab=%s (retirada en el 3.5.2): abre «Resumen» con su período', (role, viejo) => {
-      const r = resolverDireccion(role, viejo, null)
+      const r = resolverDireccion(role, viejo, null, HOY)
       expect(r.vista).toBe('resumen')
       expect(texto(r.corregir!)).toBe(RETIRADA[viejo])
     })
 
   it.each(ROLES.flatMap(r => Object.keys(RETIRADA).map(t => [r, t] as const)))(
     '%s con la dirección del 3.5.1 ?tab=resumen&v=%s: abre «Resumen» con su período', (role, viejo) => {
-      const r = resolverDireccion(role, 'resumen', viejo)
+      const r = resolverDireccion(role, 'resumen', viejo, HOY)
       expect(r.vista).toBe('resumen')
       expect(texto(r.corregir!)).toBe(RETIRADA[viejo])
     })

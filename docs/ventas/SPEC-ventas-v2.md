@@ -532,9 +532,9 @@ Menú final, en este orden:
 | | 📤 compartir | «Resumen» → «Salón en detalle» | 3.5.2 | |
 | | «→ Caja» | D12 | 3.5.2 | |
 | En vivo (`envivo`) | Todo | Igual | — | igual |
-| Ventas (`ventas`) | Bruta, IVA, servicio, neta, salón, delivery, PAX, Prom/PAX; detalle por día; CSV; «🖨 Reporte» | «Resumen» → «Detalle por día» (se suma Prom/PAX por día y el botón del reporte) | 3.5.2 | `?tab=resumen&p=mes` |
+| Ventas (`ventas`) | Bruta, IVA, servicio, neta, salón, delivery, PAX, Prom/PAX; detalle por día; CSV; «🖨 Reporte» | «Resumen» → «Detalle por día» (se suma Prom/PAX por día y el botón del reporte) | 3.5.2 | `?tab=resumen&p=mesALaFecha` |
 | | Promedio por día de semana | «Tiempos» → «Día de semana» | 3.5.3 | |
-| Histórico (`historico`) | Rango libre | Barra → «Rango» | 3.5.2 | `?tab=resumen&p=rango` |
+| Histórico (`historico`) | Rango libre | Barra → «Rango» | 3.5.2 | `?tab=resumen&p=rango` (últimos 30 días hasta ayer) |
 | | Venta neta, salón, PAX, Prom/PAX, Beb/PAX, Ratio C/B | «Resumen» (cifras y «Salón en detalle») | 3.5.2 | |
 | | Prom/PAX — evolución (general y por salonero) | «Equipo» → ficha del salonero y fila del equipo | 3.5.4 | |
 | | Top productos del período | «Resumen» → «Salón en detalle». Con la 3.2 pasa a «Productos» | 3.5.2 | |
@@ -573,7 +573,9 @@ para la primera sub-vista de la entrada. Las vistas que todavía no se retiran u
 «Competencias», «Metas», «Productos» y «Mesas internas» ya son las definitivas.
 
 **Desde el 3.5.2:** «Hoy», «Ventas» e «Histórico» se retiraron: sus `?tab=` viejos y las direcciones del 3.5.1
-(`?tab=resumen&v=hoy|ventas|historico`) abren `?tab=resumen&p=ayer|mes|rango` (sin `d`, `desde` ni `hasta`).
+(`?tab=resumen&v=hoy|ventas|historico`) abren «Resumen» con el período con que abría la vista vieja:
+`?tab=resumen&p=ayer` · `&p=mesALaFecha` (el mes en curso; `mes` sin día es el último cerrado) · `&p=rango&desde=&hasta=`
+con los 30 días que terminan ayer (revisión del verificador del #336).
 «Análisis», ya solo con «Año vs Año», pasa a ser sub-vista de «Tiempos» (`?tab=tiempos&v=analisis`; también abre ahí
 `?tab=resumen&v=analisis`) para que «Resumen» quede sin sub-pestañas, como dice §12.4; en la 3.5.3 pasa a
 `?tab=tiempos&p=anioALaFecha`. «Regalías» es `?tab=regalias`.

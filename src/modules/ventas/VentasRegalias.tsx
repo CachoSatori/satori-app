@@ -61,7 +61,8 @@ export default function VentasRegalias() {
     return () => { vivo = false }
   }, [clave, local, periodo])
 
-  const barra = <BarraVentasV2 estado={estado} periodo={periodo} locales={locales} aviso={aviso}
+  // Sin «Comparar con»: «Regalías» todavía no compara (llega con la 3.4).
+  const barra = <BarraVentasV2 estado={estado} periodo={periodo} locales={locales} aviso={aviso} sinComparar
     onCambio={e => setSp(escribirBarra(sp, e))} />
 
   if (periodo.tipo === 'hoy') {
@@ -91,7 +92,8 @@ export default function VentasRegalias() {
   )
 }
 
-interface Fila { id: string; label: string; detalle: string; valor: number; cantidad: string }
+/** `valor: null` = el dato no está en las funciones de hoy: se muestra «—» (nunca ₡0). */
+interface Fila { id: string; label: string; detalle: string; valor: number | null; cantidad: string }
 
 function Contenido({ c, r, fechas }: { c: CifrasRango; r: RegaliasDeLineas; fechas: string }) {
   const neta = c.totales.ventaNeta
@@ -100,10 +102,12 @@ function Contenido({ c, r, fechas }: { c: CifrasRango; r: RegaliasDeLineas; fech
     { id: 'cortesias', label: 'Cortesías', detalle: 'productos clasificados como cortesía', valor: r.cortesias.total, cantidad: unidades(r.cortesias) },
     { id: 'personal', label: 'Consumo del personal', detalle: 'productos clasificados como comida del personal', valor: r.personal.total, cantidad: unidades(r.personal) },
     { id: 'duenos', label: 'Mesas de dueños', detalle: 'cuentas de salón de los dueños', valor: v.netaMesasDuenos, cantidad: `${v.mesasDuenos} ${v.mesasDuenos === 1 ? 'mesa' : 'mesas'}` },
-    { id: 'regaliasTotales', label: 'Regalías totales', detalle: 'cuentas de salón cerradas enteras como cortesía o sin cobro', valor: v.netaRegaliasTotales, cantidad: `${v.regaliasTotales} ${v.regaliasTotales === 1 ? 'cuenta' : 'cuentas'}` },
+    // La neta de una regalía total es ₡0 por definición: lo que vale es lo servido (lo que se habría cobrado), y ese
+    // dato no lo da ninguna función de hoy por cuenta. Va «—» con la cantidad; el valor llega con la 3.4.
+    { id: 'regaliasTotales', label: 'Regalías totales', detalle: 'cuentas de salón cerradas enteras como cortesía o sin cobro · el valor servido llega con la 3.4', valor: null, cantidad: `${v.regaliasTotales} ${v.regaliasTotales === 1 ? 'cuenta' : 'cuentas'}` },
     { id: 'desconocidos', label: 'Desconocidos', detalle: 'productos sin clasificar (los 8 más grandes)', valor: r.desconocidos.total, cantidad: unidades(r.desconocidos) },
   ]
-  const hayAlgo = filas.some(f => f.valor > 0) || v.mesasDuenos > 0 || v.regaliasTotales > 0
+  const hayAlgo = filas.some(f => (f.valor ?? 0) > 0) || v.mesasDuenos > 0 || v.regaliasTotales > 0
   const baseTxt = `% de la venta neta del período (${fechas}: ${fi(neta)})`
   return (
     <>
@@ -119,8 +123,8 @@ function Contenido({ c, r, fechas }: { c: CifrasRango; r: RegaliasDeLineas; fech
             {filas.map(f => (
               <tr key={f.id} data-regalia={f.id}>
                 <td><strong>{f.label}</strong><span className="vt2-sub">{f.detalle}</span></td>
-                <td className="r">{fi(f.valor)}</td>
-                <td className="r">{neta > 0 ? pct1(f.valor / neta * 100) : '—'}</td>
+                <td className="r">{f.valor === null ? '—' : fi(f.valor)}</td>
+                <td className="r">{f.valor !== null && neta > 0 ? pct1(f.valor / neta * 100) : '—'}</td>
                 <td className="r">{f.cantidad}</td>
               </tr>
             ))}
@@ -138,7 +142,8 @@ function Contenido({ c, r, fechas }: { c: CifrasRango; r: RegaliasDeLineas; fech
 
 const unidades = (g: GrupoRegalia) => {
   const u = g.prods.reduce((s, p) => s + p.q, 0)
-  return g.prods.length ? `${u} uds (los ${g.prods.length} más grandes)` : '—'
+  const n = g.prods.length
+  return n ? `${u} uds (${n === 1 ? 'el más grande' : `los ${n} más grandes`})` : '—'
 }
 
 function Tarjeta({ icono, titulo, color, g }: { icono: string; titulo: string; color: string; g: GrupoRegalia }) {

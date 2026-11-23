@@ -57,10 +57,25 @@ describe('VentasRegalias', () => {
     expect(tabla.querySelector('[data-regalia="duenos"]')!.textContent).toContain(`${oct.vpp.mesasDuenos} mesas`)
     expect(tabla.querySelector('[data-regalia="duenos"] td:nth-child(2)')!.textContent).toBe(fi(oct.vpp.netaMesasDuenos))
     expect(oct.vpp.mesasDuenos).toBeGreaterThan(0)
-    expect(tabla.querySelector('[data-regalia="regaliasTotales"] td:nth-child(2)')!.textContent).toBe(fi(oct.vpp.netaRegaliasTotales))
+    // Regalías totales: la neta es ₡0 por definición; nunca «₡0 · 0,0 %». Va la cantidad y «—» hasta la 3.4.
+    const rt = tabla.querySelector('[data-regalia="regaliasTotales"]')!
+    expect(oct.vpp.regaliasTotales).toBeGreaterThan(0)
+    expect(rt.querySelector('td:nth-child(2)')!.textContent).toBe('—')
+    expect(rt.querySelector('td:nth-child(3)')!.textContent).toBe('—')
+    expect(rt.querySelector('td:nth-child(4)')!.textContent).toBe(`${oct.vpp.regaliasTotales} cuentas`)
+    expect(rt.textContent).toContain('el valor servido llega con la 3.4')
+    expect(rt.textContent).not.toMatch(/₡0|0,0 %/)
     const aviso = document.querySelector('[data-bloque="regalias-falta"]')!.textContent!
     for (const falta of FALTA_EN_REGALIAS) expect(aviso).toContain(falta)
     expect(cargarLineas).toHaveBeenCalledWith('santa-teresa', expect.objectContaining({ desde: '2026-10-01', hasta: '2026-10-31' }))
+  })
+
+  it('la barra no ofrece «Comparar con» (la pantalla no compara) ni nombra bases', async () => {
+    abrir('p=mes&d=2026-10-01')
+    await screen.findByRole('table', { name: 'Regalías por tipo' })
+    expect(screen.getByLabelText('Período')).toBeTruthy()
+    expect(screen.queryByLabelText('Comparar con')).toBeNull()
+    expect(document.querySelector('.vt2-barra-palabras')!.textContent).not.toMatch(/contra/)
   })
 
   it('cada % nombra su base y sus fechas; ninguna palabra «índice»', async () => {

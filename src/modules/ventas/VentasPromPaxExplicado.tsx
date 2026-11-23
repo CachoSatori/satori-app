@@ -267,7 +267,7 @@ export function QueExplicaElCambio({ local, actual, base, nombreBase }: QueExpli
           </div>
           {conTurno && filas && (
             <Contenido a={conTurno} turno={turno} detalle={detalle} setDetalle={setDetalle}
-              filasActual={filas} periodos={{ actual, comp: base }} resolver={resolver} />
+              filasActual={filas} periodos={{ actual, comp: base }} resolver={resolver} embebido />
           )}
         </details>
       )}
@@ -283,9 +283,14 @@ interface ContenidoProps {
   filasActual: FilaAgregada[]
   periodos: { actual: Rango; comp: Rango }
   resolver: ReturnType<typeof resolverPersonas>
+  /**
+   * Adentro de «Resumen» (3.5.2): «Qué explica el cambio» ya está arriba con «Ambos turnos», así que acá no se repite.
+   * Con un turno elegido, sus frases van con el rótulo «Con el turno …».
+   */
+  embebido?: boolean
 }
 
-function Contenido({ a, turno, detalle, setDetalle, filasActual, periodos, resolver }: ContenidoProps) {
+function Contenido({ a, turno, detalle, setDetalle, filasActual, periodos, resolver, embebido = false }: ContenidoProps) {
   const tarjeta = (label: string, n: number | null, v: number | null, fmt: (x: number) => string) => {
     const d = n !== null && v !== null ? n - v : null
     const dp = d !== null && v ? d / v : null
@@ -325,11 +330,13 @@ function Contenido({ a, turno, detalle, setDetalle, filasActual, periodos, resol
         {tarjeta('Prom/PAX de salón', a.n.promPax, a.v.promPax, crc)}
       </div>
 
-      <div className="vt-sl">Qué explica el cambio</div>
+      {(!embebido || turno !== 'ambos') && <>
+      <div className="vt-sl">{embebido ? `Con el turno ${turno === 'mañana' ? 'mañana' : 'noche'}` : 'Qué explica el cambio'}</div>
       <div data-testid="pp-explicacion" style={{ background: 'var(--vt-panel)', color: 'var(--vt-ink)', border: '1px solid var(--vt-border)', padding: '0.875rem 1rem', borderRadius: 2, marginBottom: '1.25rem', lineHeight: 1.5 }}>
         {ex.etiqueta && <div style={{ fontSize: '0.72rem', color: 'var(--vt-gold-dark)', fontWeight: 700, marginBottom: '0.4rem' }}>{ex.etiqueta}</div>}
         {ex.frases.map((f, i) => <p key={i} style={{ margin: '0 0 0.35rem' }}>{f}</p>)}
       </div>
+      </>}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
         <button className="vt-tab-btn" onClick={() => setDetalle(!detalle)}>{detalle ? 'Ocultar detalle' : 'Ver detalle'}</button>

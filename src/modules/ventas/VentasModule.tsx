@@ -98,6 +98,7 @@ export default function VentasModule() {
     if (corregir.p) {
       next.set('p', corregir.p)
       next.delete('d'); next.delete('desde'); next.delete('hasta')
+      if (corregir.desde && corregir.hasta) { next.set('desde', corregir.desde); next.set('hasta', corregir.hasta) }
     }
     setSearchParams(next, { replace: true })
   }, [role, tabParam, vParam, searchParams, setSearchParams])

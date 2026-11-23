@@ -563,6 +563,12 @@ la tabla en el mismo PR. Una redirección reemplaza la dirección (no suma un pa
 el rol: si el rol no ve el destino, abre «Resumen». Entre la 3.5.1 y el PR que retira una vista, el enlace
 viejo abre esa vista como sub-vista de su pestaña nueva; al retirarla pasa a la dirección de la tabla.
 
+**Direcciones mientras conviven (3.5.1, `ventasTabs.ts` → `CLAVE_V`):** `?tab=<entrada>&v=<sub-vista>`, sin `v`
+para la primera sub-vista de la entrada. Las vistas que todavía no se retiran usan: `?tab=resumen&v=hoy` ·
+`&v=ventas` · `&v=historico` · `&v=analisis` · `?tab=equipo` (Saloneros) · `?tab=equipo&v=evaluacion` ·
+`?tab=tiempos&v=calendario`. Las de la tabla para «Mix», «Ing. Menú», «Por línea», «ICP», «Cajeros»,
+«Competencias», «Metas», «Productos» y «Mesas internas» ya son las definitivas.
+
 ### 12.3 Qué entra sin la 3.1 ni la 3.4, y qué queda esperando
 
 **Entra ahora (sin esquema):** el menú y las redirecciones · todo «Resumen» · todo «Tiempos» · todo «Equipo» ·

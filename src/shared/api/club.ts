@@ -4,6 +4,7 @@
  * TODA escritura va por funciones SECURITY DEFINER (la RLS bloquea el resto).
  */
 import { supabase } from './supabase'
+import { compararLocales, localPorDefecto } from '../utils/ordenLocales'
 
 type PgError = { message: string; hint?: string | null; code?: string } | null
 type RpcInvoke = (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: PgError }>
@@ -450,6 +451,8 @@ export const getLocalesClub = async (): Promise<LocalClub[]> =>
   (await leer(from<{ location_id: string; nombre: string | null; club_activo: boolean }>('club_config')
     .select('location_id,nombre,club_activo').order('location_id')))
     .map(r => ({ id: r.location_id, nombre: r.nombre ?? r.location_id, activo: r.club_activo === true }))
+    // D16: encendidos primero, Santa Teresa primero, después alfabético (regla única en ordenLocales).
+    .sort(compararLocales)
 /** 170: el manager solo ve y opera sus locales (`mis_locales()`, 091); el resto de los roles, igual que antes. */
 export function localesParaRol(locales: LocalClub[], rol: string | null | undefined, mios: string[] | null): LocalClub[] {
   if (rol !== 'manager') return locales
@@ -470,7 +473,7 @@ export async function asegurarLocalParaRol(rol: string | null | undefined): Prom
   if (rol !== 'manager') return
   const l = await getLocalesClubParaRol(rol)
   if (localClub && l.some(x => x.id === localClub)) return
-  elegirLocal(l.find(x => x.activo)?.id ?? l[0]?.id ?? null)
+  elegirLocal(localPorDefecto(l))
 }
 /** 158 · El link de reseña de Google de cada local (club-web lo muestra tras usar el cupón). Va aparte de getLocalesClub a
  * propósito: si la app llega antes que la columna, solo falla esto (en «Locales»), no el selector de locales. */

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getLocalesVentas, type LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
+import { localPorDefecto } from '../../shared/utils/ordenLocales'
 import { agregarMesaInterna, listarMesasInternas, normalizarMesa, quitarMesaInterna } from './mesasInternas'
 
 export default function VentasMesasInternas() {
@@ -21,10 +22,10 @@ export default function VentasMesasInternas() {
     getLocalesVentas(role).then(l => {
       if (!vivo) return
       setLocales(l)
-      if (l.length && !l.some(x => x.id === local)) setLocal(l[0].id)
+      if (l.length) setLocal(act => localPorDefecto(l, act) ?? act)
     }).catch(() => {})
     return () => { vivo = false }
-  }, [role]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [role])
 
   useEffect(() => {
     let vivo = true

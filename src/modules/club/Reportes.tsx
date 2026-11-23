@@ -5,6 +5,7 @@
  */
 import { useEffect, useState } from 'react'
 import { getReporteMes, getLocalesClubParaRol, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero, getReporteVisitas, type VisitasPorUsuario, exportarReporte, exportarContactosOfertas } from '../../shared/api/club'
+import { localPorDefecto } from '../../shared/utils/ordenLocales'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
@@ -39,7 +40,7 @@ export default function Reportes() {
     // 170: el manager solo ve sus locales; si el recordado no es suyo, arranca en uno que sí
     getLocalesClubParaRol(rol).then(l => {
       setLocales(l)
-      setLocal(act => (act && l.some(x => x.id === act) ? act : l.find(x => x.activo)?.id ?? l[0]?.id ?? null))
+      setLocal(act => localPorDefecto(l, act))
     }).catch(() => {})
   }, [rol])
   useEffect(() => {

@@ -14,6 +14,7 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { C, inputStyle } from './estilos'
 import { getLocalesClubParaRol, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, getClubUrl, getUmbrales, guardarUmbrales,
   type LocalClub, type UmbralesAlerta } from '../../shared/api/club'
+import { localPorDefecto } from '../../shared/utils/ordenLocales'
 import { configurarClubUrl } from './qrFormato'
 
 const Escanear = lazy(() => import('./Escanear'))
@@ -65,8 +66,9 @@ export default function ClubModule() {
       const l = await getLocalesClubParaRol(rol)
       setLocales(l)
       const vis = l.filter(x => x.activo || esOwner)
-      const elegido = vis.find(x => x.id === localActual()) ?? vis.find(x => x.activo) ?? vis[0] ?? null
-      elegirLocal(elegido?.id ?? null); setLocal(elegido?.id ?? null)
+      // D16: el recordado si lo ve; si no, Santa Teresa (encendida); si no, el primero (encendidos primero).
+      const elegido = localPorDefecto(vis, localActual())
+      elegirLocal(elegido); setLocal(elegido)
     } catch { setLocales([]) }
   }, [esOwner, rol])
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -182,8 +184,8 @@ const ETIQUETAS_UMBRAL: Array<[keyof UmbralesAlerta, string, number, number]> = 
 ]
 function Umbrales({ locales }: { locales: LocalClub[] }) {
   const [elegido, setElegido] = useState<string>('')
-  // Si la lista de locales llega después (o cambia), se usa el primero: nunca queda «Cargando…» sin local.
-  const local = locales.some(l => l.id === elegido) ? elegido : (locales[0]?.id ?? '')
+  // Si la lista de locales llega después (o cambia), se usa el de por defecto (D16): nunca queda «Cargando…» sin local.
+  const local = localPorDefecto(locales, elegido) ?? ''
   const [u, setU] = useState<UmbralesAlerta | null>(null)
   const [estado, setEstado] = useState<'cargando' | 'listo' | 'sin_config' | 'error'>('cargando')
   const [reintento, setReintento] = useState(0)

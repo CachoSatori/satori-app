@@ -33,6 +33,7 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 import CashMovimientos from './CashMovimientos'
 import { todayCR } from '../../shared/utils'
 import { MSG_MONTO_CERO, MSG_MONTO_INVALIDO, MSG_NEGATIVO_SOLO_INGRESO } from './validarMovimiento'
+import { teclearNumero } from './teclearNumero.testutil'
 const { updateCashMovement, createDayMovement, getCierresDia } = cashApi
 
 const hoy = todayCR()
@@ -235,5 +236,57 @@ describe('Tabla — edición de montos', () => {
     await act(async () => { fireEvent.change(tipo, { target: { value: 'ingreso' } }) })
     expect(updateCashMovement).toHaveBeenCalledWith('m1', { movement_type: 'ingreso' },
       { movement_type: 'egreso_operativo', amount_crc: 5000, amount_usd: 0 })
+  })
+})
+
+// R30 (23-nov): cuadro VACÍO al que se le escribe algo ilegible desde la primera tecla. El valor leído pasa de '' a ''
+// y React NO dispara onChange: solo onInput (o leer el cuadro al guardar) se entera. teclearNumero manda UN solo
+// evento `input`, como el navegador. Caen si se quita el onInput de los cuadros de Nuevo movimiento.
+describe('Cuadros vacíos con texto ilegible desde la primera tecla (R30)', () => {
+  const abrir = async () => {
+    render(<CashMovimientos movements={[]} sessions={[]} onRefresh={vi.fn()} />)
+    await flush()
+    fireEvent.click(screen.getByRole('button', { name: /Nuevo movimiento/ }))
+    const modal = screen.getByText('Nuevo movimiento', { selector: '.cd-modal-title' }).closest('.cd-modal') as HTMLElement
+    return within(modal).getAllByRole('spinbutton') as HTMLInputElement[]
+  }
+  const registrar = async () => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Registrar/ })) }) }
+
+  it('Nuevo movimiento: $ vacío + «-» con ₡ cargados → no registra $0 y dice por qué', async () => {
+    const [crc, usd] = await abrir()
+    teclearNumero(crc, '5000')
+    teclearNumero(usd, '-')
+    await registrar()
+    expect(createDayMovement).not.toHaveBeenCalled()
+    expect(screen.getByText(MSG_MONTO_INVALIDO)).toBeTruthy()
+  })
+  it('Nuevo movimiento: ₡ vacío + «--450» con $ cargados → no registra ₡0', async () => {
+    const [crc, usd] = await abrir()
+    teclearNumero(usd, '20')
+    teclearNumero(crc, '--450')
+    await registrar()
+    expect(createDayMovement).not.toHaveBeenCalled()
+    expect(screen.getByText(MSG_MONTO_INVALIDO)).toBeTruthy()
+  })
+  it('Nuevo movimiento: borrar el texto ilegible no deja la marca trabada → registra con $0', async () => {
+    const [crc, usd] = await abrir()
+    teclearNumero(crc, '5000')
+    teclearNumero(usd, '-')
+    teclearNumero(usd, '')
+    await registrar()
+    expect(screen.queryByText(MSG_MONTO_INVALIDO)).toBeNull()
+    expect(createDayMovement).toHaveBeenCalledTimes(1)
+    expect(createDayMovement.mock.calls[0][0]).toMatchObject({ amount_crc: 5000, amount_usd: 0 })
+  })
+  it('Tabla: celda $ vacía (guardado $0) + «-» al salir → avisa y NO guarda', async () => {
+    render(<CashMovimientos movements={[mkMov({ description: 'gasto usd vacío' })]} sessions={[]} onRefresh={vi.fn()} />)
+    await flush()
+    const usd = celdas('gasto usd vacío')[1]
+    expect(usd.value).toBe('')
+    teclearNumero(usd, '-')
+    await act(async () => { fireEvent.blur(usd) })
+    expect(window.alert).toHaveBeenCalledWith(MSG_MONTO_INVALIDO)
+    expect(updateCashMovement).not.toHaveBeenCalled()
+    expect(requireManager).not.toHaveBeenCalled()
   })
 })

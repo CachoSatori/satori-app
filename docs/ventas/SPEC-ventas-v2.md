@@ -252,7 +252,7 @@ La proyección anual por promedio simple se retira: con la temporada alta de por
 | Descuento por programa | % del descuento sobre la factura (descuento ÷ (neta + descuento)) contra el % de cada programa del local, con la misma tolerancia que usa el reporte de descuentos del Club | No. Se define en la 3.4. Una factura con descuento en solo algunas líneas queda «sin clasificar» hasta que haya descuento por línea (4.x) |
 | % regalado | (Cortesías + descuentos) ÷ (neta + cortesías + descuentos) | Con la 3.4 |
 | Anulaciones | Facturas `X`: cantidad, por día y por caja | **Dato sí, pantalla no.** Las `X` se guardan (el agente relee las facturas provisionales de las últimas 36 horas), pero toda función que lee Ventas filtra `C` |
-| **Refacturas** | Anulada (`X`) cuya mesa o pedido tiene otra factura cerrada en la misma jornada | No. Entra con la 3.4; la definición se confirma en D13 (§10.3) |
+| **Refacturas** | Anulada (`X`) cuya mesa o pedido tiene otra factura cerrada en la misma jornada | No. Entra con la 3.4; definición en D13 (§10.3, decidida 23-nov) |
 
 **Límites del dato, a medir con una consulta de solo lectura antes de la 3.4:** desde qué fecha hay facturas
 `X` guardadas (el backfill histórico lee solo cerradas) · si la anulada conserva su monto o queda en ₡0 (en el
@@ -467,35 +467,14 @@ coordinador (fuera del repo); esta tabla pasa a ser la referencia en el repo.
 | % de mano de obra y venta por hora trabajada | **Fuera de Ventas v2:** va con el módulo de horarios |
 | Qué sigue en Ventas | **La 3.5** (unificar las vistas viejas en las 5 pestañas) es la próxima tarea de construcción |
 
-### 10.3 Abiertas (para el dueño; ninguna frena el PR 3.5.1 — D11 y D12 hacen falta antes del 3.5.2)
+### 10.3 Decididas por el dueño el 23-nov (antes abiertas)
 
-**D11 — «Regalías» antes de la 3.4**
-- Opciones: (A) la pestaña aparece desde la 3.5 con lo que hoy existe (cortesías, consumo del personal, dueños
-  y «desconocidos» del período, lo mismo que el bloque de «Hoy») y un aviso de lo que falta (descuentos por
-  programa, anulaciones y refacturas, por salonero) · (B) no aparece hasta la 3.4; mientras tanto ese bloque
-  queda en «Resumen».
-- Recomendación: **A.** El menú queda definitivo de una vez y no se pierde el bloque de «Hoy».
-- ¿Firma?: OK + validación física. Sin esquema.
-
-**D12 — Botón «→ Caja» de «Hoy»**
-- Opciones: (A) retirarlo con la vista «Hoy» · (B) llevarlo a «Resumen».
-- Recomendación: **A.** Desde el corte del pozo está apagado siempre (la venta entra por el Cierre del Día y el
-  botón la duplicaría): hoy solo muestra el motivo. No se toca ningún sagrado: se borra quien lo llama.
-- ¿Firma?: OK del dueño (es un botón de plata, aunque esté apagado).
-
-**D13 — Qué cuenta como refactura**
-- Opciones: (A) dos cifras: **anulaciones** (toda factura anulada) y, adentro, **refacturas** (anulada cuya
-  mesa o pedido tiene otra factura cerrada en la misma jornada) · (B) una sola cifra de anulaciones.
-- Recomendación: **A.** Separa el error de carga que se rehízo de la anulación sin reemplazo, que es la que
-  hay que mirar.
-- ¿Firma?: OK ahora; la función que las lee lleva la firma de la 3.4.
-
-**D14 — Columnas nuevas en «Equipo» que sugiere el G-010**
-- Opciones: (A) descuento sobre sus mesas (%) cuando llegue la 3.4, y tiempo sentado por salonero más adelante
-  (4.x) · (B) las dos con la 3.4 · (C) ninguna.
-- Recomendación: **A.** El descuento por salonero sale de la misma función de la 3.4. El tiempo sentado por
-  salonero castiga a quien atiende mesas grandes y deja afuera las cuentas divididas: mejor esperar a medirlo bien.
-- ¿Firma?: OK; el dato llega con la firma de la 3.4.
+| # | Decisión | Qué implica |
+|---|---|---|
+| **D11** | **A** — «Regalías» aparece desde la 3.5 con lo que hoy existe (cortesías, consumo del personal, dueños y «desconocidos» del período) y un aviso de lo que falta (descuentos por programa, anulaciones y refacturas, por salonero) | Entra en el 3.5.2; OK + validación física. Sin esquema |
+| **D12** | **A** — el botón «→ Caja» de «Hoy» se retira con la vista | Se borra quien lo llama; ningún sagrado se toca. Va en el 3.5.2 |
+| **D13** | **A** — dos cifras: **anulaciones** (toda factura anulada) y, adentro, **refacturas** (anulada cuya mesa o pedido tiene otra factura cerrada en la misma jornada) | La función que las lee entra con la 3.4 (firma) |
+| **D14** | **A** — descuento sobre sus mesas (%) en «Equipo» con la 3.4; tiempo sentado por salonero en 4.x | Sin cambios en la 3.5 |
 
 ## 11. Fuera de alcance
 
@@ -529,7 +508,7 @@ Menú final, en este orden:
 | **Productos** | «Mix» · «Ing. Menú» (las de hoy, hasta la 3.2) |
 | **Equipo** | «Equipo» · «Por línea» · «ICP» · «Cajas y canales» · «Competencias» |
 | **Tiempos** | — |
-| **Regalías** | — (según D11) |
+| **Regalías** | — (desde el 3.5.2, D11 = A) |
 | **En vivo** | — |
 | **Ajustes** | «Metas» · «Productos» · «Mesas internas» |
 
@@ -587,7 +566,7 @@ viejo abre esa vista como sub-vista de su pestaña nueva; al retirarla pasa a la
 ### 12.3 Qué entra sin la 3.1 ni la 3.4, y qué queda esperando
 
 **Entra ahora (sin esquema):** el menú y las redirecciones · todo «Resumen» · todo «Tiempos» · todo «Equipo» ·
-«Ajustes» · «Regalías» con lo que hoy existe (si D11 = A). Las cifras que necesitan líneas (bebidas por
+«Ajustes» · «Regalías» con lo que hoy existe (D11 = A). Las cifras que necesitan líneas (bebidas por
 persona, relación comida/bebida, precio por ítem, top de productos) siguen saliendo del lector de hoy, sin
 cambiar la cuenta.
 
@@ -604,7 +583,7 @@ cambiar la cuenta.
 
 | PR | Qué hace | Qué ve el encargado |
 |---|---|---|
-| **3.5.1 Menú y redirecciones** | Seis entradas: Resumen · Productos · Equipo · Tiempos · En vivo · Ajustes («Regalías» se suma en el 3.5.2, si D11 = A). Las vistas viejas pasan, **sin tocarlas**, a ser sub-vistas de su pestaña nueva: «Resumen» lleva al lado «Hoy», «Ventas», «Histórico» y «Análisis»; «Tiempos» lleva «Calendario»; «Equipo» lleva «Saloneros», «Por línea», «Evaluación», «ICP», «Cajeros» y «Competencias»; «Productos» lleva «Mix» e «Ing. Menú»; «Ajustes» lleva «Metas», «Productos» y «Mesas internas». Redirecciones. Arranque en «Resumen» | Entra a Ventas y ve 6 botones en lugar de 10. Abre en «Resumen» con lo de ayer, no en «Hoy». Todo lo de antes sigue, con el mismo nombre, adentro de la pestaña que le corresponde. Sus enlaces guardados siguen abriendo |
+| **3.5.1 Menú y redirecciones** | Seis entradas: Resumen · Productos · Equipo · Tiempos · En vivo · Ajustes («Regalías» se suma en el 3.5.2, D11 = A). Las vistas viejas pasan, **sin tocarlas**, a ser sub-vistas de su pestaña nueva: «Resumen» lleva al lado «Hoy», «Ventas», «Histórico» y «Análisis»; «Tiempos» lleva «Calendario»; «Equipo» lleva «Saloneros», «Por línea», «Evaluación», «ICP», «Cajeros» y «Competencias»; «Productos» lleva «Mix» e «Ing. Menú»; «Ajustes» lleva «Metas», «Productos» y «Mesas internas». Redirecciones. Arranque en «Resumen» | Entra a Ventas y ve 6 botones en lugar de 10. Abre en «Resumen» con lo de ayer, no en «Hoy». Todo lo de antes sigue, con el mismo nombre, adentro de la pestaña que le corresponde. Sus enlaces guardados siguen abriendo |
 | **3.5.2 Resumen completo** | §5.1 ítems 6, 7 y 10, y la pestaña «Regalías» con el bloque de «Hoy» llevado al período (D11 = A). Se retiran «Hoy», «Ventas», «Histórico» y, de «Análisis», «Detalle anual», «Proyección» y «Prom/PAX explicado» | «Resumen» ya no tiene botones al lado y aparece «Regalías» en el menú. Para ver un día, elige «Ayer» y usa las flechas. «Qué explica el cambio» y el detalle del salón están en la misma pantalla. La proyección es una sola |
 | **3.5.3 Tiempos completo** | §5.4 ítem 4. Se retiran «Análisis» → «Año vs Año» y «Calendario» | «Tiempos» suma «Meses y temporadas»: el año contra el anterior, mes por mes, con el mes en curso a la fecha. «Análisis» y «Calendario» ya no están |
 | **3.5.4 Equipo** | §5.3: «Saloneros» y «Evaluación» se juntan en «Equipo», con la barra global; «Por línea», «ICP», «Cajas y canales» y «Competencias» quedan como sub-vistas | Una tabla del equipo con todas las columnas, con el mismo período y la misma comparación que «Resumen». Toca un salonero y ve su ficha |
@@ -622,7 +601,7 @@ nuevas con cifras); Sonnet para la guía si va en commit aparte.
 Valen para el estado final de la 3.5; cada PR cumple los que le tocan y lo dice en su descripción.
 
 1. **Menú.** `entradasVisibles('owner')` devuelve exactamente Resumen · Productos · Equipo · Tiempos · Regalías
-   · En vivo · Ajustes, en ese orden (Regalías según D11). El menú lateral de la app muestra las mismas.
+   · En vivo · Ajustes, en ese orden (Regalías desde el 3.5.2, D11 = A). El menú lateral de la app muestra las mismas.
    Prueba en `ventasTabs.test.ts` y `VentasModule.nav.render.test.tsx`.
 2. **Arranque.** `/ventas` sin `tab` abre «Resumen» con «Ayer» para owner, manager y contador; al contador, con
    «Detalle por día» desplegado.

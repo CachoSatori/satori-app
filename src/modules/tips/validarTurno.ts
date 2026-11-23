@@ -25,6 +25,23 @@ export interface DatosTurno {
 const vacio = (v: unknown) => v === '' || v === null || v === undefined
 const num = (v: unknown): number => (vacio(v) ? 0 : Number(v))
 
+// ── Lo que el cuadro muestra y el navegador no puede leer (validación física del dueño, 23-nov) ──────
+// Un <input type="number"> que muestra un texto que no es número (p. ej. «0-450»: el cuadro traía «0» y se
+// escribió «-450» detrás) devuelve `value === ""`, igual que vacío; solo `validity.badInput` lo distingue.
+// Antes eso se tomaba como vacío (= 0): el cuadro mostraba «-450», la validación veía 0 y el cierre guardaba
+// 0 sin avisar. Ahora el estado guarda NaN («ilegible»): `validarTurno` lo frena nombrando a la persona y
+// `montoGuardable` no lo autoguarda. Al input se le pasa '' (`valorInput`) para que React no borre lo que se ve.
+
+/** true si el input muestra algo que el navegador no puede leer como número. */
+export function esIlegible(el: { validity?: { badInput?: boolean } | null }): boolean {
+  return el.validity?.badInput === true
+}
+
+/** Valor para la prop `value` del input: lo ilegible (NaN) va como '' para que React no pise lo que se ve. */
+export function valorInput<T>(v: T): T | '' {
+  return typeof v === 'number' && Number.isNaN(v) ? '' : v
+}
+
 export const TEXTO_TIPO_CAMBIO = 'El tipo de cambio tiene que ser un número mayor que 0.'
 
 /** Tipo de cambio de un turno nuevo (o con dólares): número finito y mayor que 0. null = válido. */
@@ -61,18 +78,18 @@ export function validarTurno(d: DatosTurno): string | null {
   ]
   for (const [que, v] of pozo) {
     const n = num(v)
-    if (!Number.isFinite(n)) return `«${que}» no es un número válido.`
+    if (!Number.isFinite(n)) return `No se puede leer «${que}» (¿quedó un «-»?): borralo y escribilo de nuevo, solo con números.`
     if (n < 0) return `Los montos no pueden ser negativos: revisá «${que}».`
   }
   let hayDolares = num(d.efectivoUSD) > 0
   for (const l of d.lineas) {
     if (!l.activa) continue
     const h = num(l.hours)
-    if (!Number.isFinite(h)) return `Las horas de ${l.nombre} no son un número válido.`
+    if (!Number.isFinite(h)) return `No se pueden leer las horas de ${l.nombre} (¿quedó un «-»?): borralas y escribilas de nuevo, solo con números.`
     if (h < 0) return `Las horas no pueden ser negativas: revisá a ${l.nombre}.`
     for (const [que, v] of [['propina ₡', l.propina_crc], ['propina $', l.propina_usd]] as const) {
       const n = num(v)
-      if (!Number.isFinite(n)) return `La ${que} de ${l.nombre} no es un número válido.`
+      if (!Number.isFinite(n)) return `No se puede leer la ${que} de ${l.nombre} (¿quedó un «-»?): borrala y escribila de nuevo, solo con números.`
       if (n < 0) return `Los montos no pueden ser negativos: revisá la ${que} de ${l.nombre}.`
     }
     if (num(l.propina_usd) > 0) hayDolares = true

@@ -29,7 +29,7 @@ import {
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import { avisosCierrePropinas } from './guardasCierre'
-import { montoGuardable, validarTipoCambio, validarTurno } from './validarTurno'
+import { esIlegible, montoGuardable, validarTipoCambio, validarTurno, valorInput } from './validarTurno'
 import { sinRepartirTurno } from './sinRepartir'
 import { availableForCobertura, eligibleRoster } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
@@ -91,6 +91,9 @@ export default function TipsModule() {
   // Marca la última escritura local (autosave/toggle/blur/cobertura). El refetch de
   // realtime se pausa unos segundos después → no pisa la edición con el auto-eco.
   const lastLocalWriteRef = useRef(0)
+  // Cada recarga del turno abierto vuelve a montar los cuadros del pozo: si uno mostraba algo ilegible
+  // («20000-») y lo guardado es 0 (→ ''), React no lo borraría solo y se vería distinto de lo validado.
+  const [recarga, setRecarga] = useState(0)
 
   // ── Cargar datos ──────────────────────────────────────────
   const loadData = useCallback(async (opts?: { silent?: boolean }) => {
@@ -122,6 +125,7 @@ export default function TipsModule() {
         setShiftType(open.shift_type)
         setFecha(open.session_date)
         setExchangeRate(open.exchange_rate)
+        setRecarga(n => n + 1)
 
         // Cargar entradas
         const entries = await getTipEntriesBySession(open.id)
@@ -372,9 +376,10 @@ export default function TipsModule() {
   }
 
   // ── Cambiar horas ─────────────────────────────────────────
-  const handleHoursChange = (employeeId: string, val: string) => {
+  // `ilegible`: el cuadro muestra algo que el navegador no lee como número (validarTurno.ts) → NaN, no ''.
+  const handleHoursChange = (employeeId: string, val: string, ilegible = false) => {
     setLines(prev => prev.map(l =>
-      l.employeeId === employeeId ? { ...l, hours: val === '' ? '' : parseFloat(val) || '' } : l
+      l.employeeId === employeeId ? { ...l, hours: ilegible ? Number.NaN : val === '' ? '' : parseFloat(val) || '' } : l
     ))
   }
 
@@ -417,9 +422,9 @@ export default function TipsModule() {
   }
 
   // ── Cambiar propina ───────────────────────────────────────
-  const handlePropinaChange = (employeeId: string, field: 'propina_crc' | 'propina_usd', val: string) => {
+  const handlePropinaChange = (employeeId: string, field: 'propina_crc' | 'propina_usd', val: string, ilegible = false) => {
     setLines(prev => prev.map(l =>
-      l.employeeId === employeeId ? { ...l, [field]: val === '' ? '' : parseFloat(val) || '' } : l
+      l.employeeId === employeeId ? { ...l, [field]: ilegible ? Number.NaN : val === '' ? '' : parseFloat(val) || '' } : l
     ))
   }
 
@@ -627,8 +632,8 @@ export default function TipsModule() {
                 </div>
                 <div className="tips-field">
                   <div className="tips-field-label">Tipo de cambio (₡/USD)</div>
-                  <input type="number" className="tips-input-dark" value={exchangeRate} min={1} step="any"
-                    onChange={e => setExchangeRate(Number(e.target.value) || 640)} />
+                  <input type="number" className="tips-input-dark" value={valorInput(exchangeRate)} min={1} step="any"
+                    onChange={e => setExchangeRate(esIlegible(e.target) ? Number.NaN : Number(e.target.value) || 640)} />
                 </div>
               </div>
 
@@ -707,14 +712,14 @@ export default function TipsModule() {
                   <div className="tips-money-field">
                     <span className="tips-money-prefix">₡</span>
                     <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
-                      value={efectivoCRC}
-                      onChange={e => setEfectivoCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                      key={`ef-crc-${recarga}`} value={valorInput(efectivoCRC)}
+                      onChange={e => setEfectivoCRC(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
                   </div>
                   <div className="tips-money-field">
                     <span className="tips-money-prefix">$</span>
                     <input type="number" className="tips-money-input" placeholder="0.00" step={0.01} min={0}
-                      value={efectivoUSD}
-                      onChange={e => setEfectivoUSD(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                      key={`ef-usd-${recarga}`} value={valorInput(efectivoUSD)}
+                      onChange={e => setEfectivoUSD(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
                   </div>
                 </div>
                 <span className="tips-field-hint">Propina en efectivo al pool general</span>
@@ -748,8 +753,8 @@ export default function TipsModule() {
                               <span className="tips-money-prefix">₡</span>
                               <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                                 title="Barra efectivo — ya en mano de la barra, no genera cuenta por pagar"
-                                value={barraCRC}
-                                onChange={e => setBarraCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                                key={`barra-crc-${recarga}`} value={valorInput(barraCRC)}
+                                onChange={e => setBarraCRC(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
                             </div>
                           </div>
                           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
@@ -758,8 +763,8 @@ export default function TipsModule() {
                               <span className="tips-money-prefix">₡</span>
                               <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                                 title="Barra electrónico (datáfono/SINPE) — el encargado lo entrega, genera cuenta por pagar"
-                                value={barraElecCRC}
-                                onChange={e => setBarraElecCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                                key={`barra-elec-${recarga}`} value={valorInput(barraElecCRC)}
+                                onChange={e => setBarraElecCRC(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
                             </div>
                           </div>
                         </div>
@@ -799,8 +804,8 @@ export default function TipsModule() {
                               isManager={canOperate}
                               shiftType={shiftType}
                               onToggle={checked => !isCob && toggleLine(line.employeeId, checked)}
-                              onHoursChange={val => handleHoursChange(line.employeeId, val)}
-                              onPropinaChange={(field, val) => handlePropinaChange(line.employeeId, field, val)}
+                              onHoursChange={(val, ilegible) => handleHoursChange(line.employeeId, val, ilegible)}
+                              onPropinaChange={(field, val, ilegible) => handlePropinaChange(line.employeeId, field, val, ilegible)}
                               onBlur={() => handleLineBlur(line.employeeId)}
                             />
                           </div>
@@ -976,8 +981,8 @@ interface TipLineRowProps {
   isManager: boolean
   shiftType: 'AM' | 'PM'
   onToggle: (checked: boolean) => void
-  onHoursChange: (val: string) => void
-  onPropinaChange: (field: 'propina_crc' | 'propina_usd', val: string) => void
+  onHoursChange: (val: string, ilegible: boolean) => void
+  onPropinaChange: (field: 'propina_crc' | 'propina_usd', val: string, ilegible: boolean) => void
   onBlur: () => void
 }
 
@@ -1011,9 +1016,9 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
             <div className="tips-emp-field-label">Horas</div>
             <input
               type="number" className="tips-emp-input" min={0} max={24} step={0.25}
-              value={line.hours}
+              value={valorInput(line.hours)}
               placeholder={String(defaultHrs)}
-              onChange={e => onHoursChange(e.target.value)}
+              onChange={e => onHoursChange(e.target.value, esIlegible(e.target))}
               onBlur={onBlur}
               disabled={!isManager}
             />
@@ -1028,8 +1033,8 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
                   <span className="tips-money-sm-prefix">₡</span>
                   <input
                     type="number" className="tips-emp-input-money" min={0} step="any"
-                    value={line.propina_crc} placeholder="0"
-                    onChange={e => onPropinaChange('propina_crc', e.target.value)}
+                    value={valorInput(line.propina_crc)} placeholder="0"
+                    onChange={e => onPropinaChange('propina_crc', e.target.value, esIlegible(e.target))}
                     onBlur={onBlur}
                     disabled={!isManager}
                   />
@@ -1041,8 +1046,8 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
                   <span className="tips-money-sm-prefix">$</span>
                   <input
                     type="number" className="tips-emp-input-money" min={0} step={0.01}
-                    value={line.propina_usd} placeholder="0"
-                    onChange={e => onPropinaChange('propina_usd', e.target.value)}
+                    value={valorInput(line.propina_usd)} placeholder="0"
+                    onChange={e => onPropinaChange('propina_usd', e.target.value, esIlegible(e.target))}
                     onBlur={onBlur}
                     disabled={!isManager}
                   />

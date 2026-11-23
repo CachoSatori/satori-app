@@ -1,6 +1,6 @@
 // Nada negativo en el reparto (decisión del dueño, 20-nov-2026). Datos ficticios.
 import { describe, expect, it } from 'vitest'
-import { TEXTO_TIPO_CAMBIO, validarTipoCambio, validarTurno, type DatosTurno } from './validarTurno'
+import { TEXTO_TIPO_CAMBIO, esIlegible, montoGuardable, validarTipoCambio, validarTurno, valorInput, type DatosTurno } from './validarTurno'
 
 const base = (patch: Partial<DatosTurno> = {}): DatosTurno => ({
   lineas: [
@@ -44,9 +44,9 @@ describe('validarTurno', () => {
   })
 
   it('valores que no son números', () => {
-    expect(validarTurno(base({ efectivoCRC: 'abc' }))).toBe('«💵 Efectivo ₡» no es un número válido.')
-    expect(validarTurno(linea({ hours: Number.NaN }))).toBe('Las horas de Sala Uno no son un número válido.')
-    expect(validarTurno(linea({ propina_crc: Infinity }))).toBe('La propina ₡ de Sala Uno no es un número válido.')
+    expect(validarTurno(base({ efectivoCRC: 'abc' }))).toBe('No se puede leer «💵 Efectivo ₡» (¿quedó un «-»?): borralo y escribilo de nuevo, solo con números.')
+    expect(validarTurno(linea({ hours: Number.NaN }))).toBe('No se pueden leer las horas de Sala Uno (¿quedó un «-»?): borralas y escribilas de nuevo, solo con números.')
+    expect(validarTurno(linea({ propina_crc: Infinity }))).toBe('No se puede leer la propina ₡ de Sala Uno (¿quedó un «-»?): borrala y escribila de nuevo, solo con números.')
   })
 
   it('con dólares, el tipo de cambio tiene que ser > 0', () => {
@@ -64,4 +64,23 @@ describe('validarTurno', () => {
 describe('validarTipoCambio (turno nuevo)', () => {
   it.each([[500, null], [0.5, null], ['640', null], [0, TEXTO_TIPO_CAMBIO], [-640, TEXTO_TIPO_CAMBIO], ['', TEXTO_TIPO_CAMBIO], [null, TEXTO_TIPO_CAMBIO], [Number.NaN, TEXTO_TIPO_CAMBIO]])(
     '%s → %s', (v, esperado) => { expect(validarTipoCambio(v)).toBe(esperado) })
+})
+
+describe('cuadro ilegible (validación física del dueño, 23-nov)', () => {
+  it('esIlegible: solo con validity.badInput', () => {
+    expect(esIlegible({ validity: { badInput: true } })).toBe(true)
+    expect(esIlegible({ validity: { badInput: false } })).toBe(false)
+    expect(esIlegible({})).toBe(false)
+  })
+  it('valorInput: NaN va como \'\' (React no borra lo que se ve); lo demás, igual', () => {
+    expect(valorInput(Number.NaN)).toBe('')
+    expect(valorInput(0)).toBe(0)
+    expect(valorInput(-450)).toBe(-450)
+    expect(valorInput('')).toBe('')
+  })
+  it('NaN (ilegible) no se autoguarda y frena el cierre nombrando a la persona', () => {
+    expect(montoGuardable(Number.NaN)).toBe(false)
+    expect(validarTurno(base({ lineas: [{ nombre: 'Sala Uno', activa: true, hours: 8, propina_crc: Number.NaN }] })))
+      .toMatch(/^No se puede leer la propina ₡ de Sala Uno/)
+  })
 })

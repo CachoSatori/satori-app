@@ -6,7 +6,7 @@ import { calcTurno, formatCRC, formatNum, ROL_LABELS, ROL_ORDER, NO_PROPINA_ROLE
 import { avisosCierrePropinas } from './guardasCierre'
 import { sinRepartirTurno } from './sinRepartir'
 import { avisosPagado, esRepartoPagado, personasDelTurno, repartoPagado, sumarFaltantes, TEXTO_SIN_DATO } from './repartoPagado'
-import { validarHorasEdicion, validarTurno } from './validarTurno'
+import { esIlegible, validarHorasEdicion, validarTurno, valorInput } from './validarTurno'
 import { shiftLabel } from '../../shared/utils'
 
 interface Props {
@@ -480,25 +480,25 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: '0.6rem', marginBottom: '0.9rem' }}>
                     <div className="tips-field">
                       <div className="tips-field-label">💵 Efectivo ₡</div>
-                      <input type="number" className="tips-input-dark" min={0} step="any" value={ePoolCRC}
-                        onChange={e => setEPoolCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                      <input type="number" className="tips-input-dark" min={0} step="any" value={valorInput(ePoolCRC)}
+                        onChange={e => setEPoolCRC(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
                     <div className="tips-field">
                       <div className="tips-field-label">💵 Efectivo $</div>
-                      <input type="number" className="tips-input-dark" min={0} step={0.01} value={ePoolUSD}
-                        onChange={e => setEPoolUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                      <input type="number" className="tips-input-dark" min={0} step={0.01} value={valorInput(ePoolUSD)}
+                        onChange={e => setEPoolUSD(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
                     <div className="tips-field">
                       <div className="tips-field-label">🍸 Barra efectivo ₡</div>
-                      <input type="number" className="tips-input-dark" min={0} step="any" value={ePoolBarra}
+                      <input type="number" className="tips-input-dark" min={0} step="any" value={valorInput(ePoolBarra)}
                         title="Barra efectivo — ya en mano de la barra, no genera cuenta por pagar"
-                        onChange={e => setEPoolBarra(e.target.value === '' ? '' : Number(e.target.value))} />
+                        onChange={e => setEPoolBarra(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
                     <div className="tips-field">
                       <div className="tips-field-label">🍸 Barra electrónico ₡</div>
-                      <input type="number" className="tips-input-dark" min={0} step="any" value={ePoolBarraElec}
+                      <input type="number" className="tips-input-dark" min={0} step="any" value={valorInput(ePoolBarraElec)}
                         title="Barra electrónico (datáfono/SINPE) — el encargado lo entrega, genera cuenta por pagar"
-                        onChange={e => setEPoolBarraElec(e.target.value === '' ? '' : Number(e.target.value))} />
+                        onChange={e => setEPoolBarraElec(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
                   </div>
 
@@ -528,8 +528,8 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.45rem', paddingLeft: '1.6rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                               <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>Horas</span>
-                                <input type="number" className="tips-input-dark" min={0} step={0.5} value={r.hours} style={{ width: 70 }}
-                                  onChange={e => setRow(r.employeeId, { hours: e.target.value === '' ? '' : Number(e.target.value) })} />
+                                <input type="number" className="tips-input-dark" min={0} step={0.5} value={valorInput(r.hours)} style={{ width: 70 }}
+                                  onChange={e => setRow(r.employeeId, { hours: esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : Number(e.target.value) })} />
                               </label>
                               <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>👥 Cubrió como</span>
@@ -551,13 +551,13 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                                 <>
                                   <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                     <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>Electrónico ₡</span>
-                                    <input type="number" className="tips-input-dark" min={0} step="any" value={r.propina_crc} style={{ width: 90 }}
-                                      onChange={e => setRow(r.employeeId, { propina_crc: e.target.value === '' ? '' : Number(e.target.value) })} />
+                                    <input type="number" className="tips-input-dark" min={0} step="any" value={valorInput(r.propina_crc)} style={{ width: 90 }}
+                                      onChange={e => setRow(r.employeeId, { propina_crc: esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : Number(e.target.value) })} />
                                   </label>
                                   <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                     <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', color: MUTED, fontWeight: 700 }}>Electrónico $</span>
-                                    <input type="number" className="tips-input-dark" min={0} step={0.01} value={r.propina_usd} style={{ width: 80 }}
-                                      onChange={e => setRow(r.employeeId, { propina_usd: e.target.value === '' ? '' : Number(e.target.value) })} />
+                                    <input type="number" className="tips-input-dark" min={0} step={0.01} value={valorInput(r.propina_usd)} style={{ width: 80 }}
+                                      onChange={e => setRow(r.employeeId, { propina_usd: esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : Number(e.target.value) })} />
                                   </label>
                                 </>
                               )}

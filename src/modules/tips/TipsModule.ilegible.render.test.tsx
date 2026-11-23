@@ -41,6 +41,7 @@ const EMPS = [
   { id: 'e1', full_name: 'Ana Sala', role: 'salonero', is_active: true },
   { id: 'e2', full_name: 'Beto Sala', role: 'salonero', is_active: true },
   { id: 'e3', full_name: 'Barra Uno', role: 'barman', is_active: true },
+  { id: 'e4', full_name: 'Caro Sala', role: 'salonero', is_active: true },     // sin entrada: arranca desmarcada
 ]
 const PTS = [{ role: 'salonero', points: 10, recibe_propina: true }, { role: 'barman', points: 5, recibe_propina: true }]
 const SESION = {
@@ -160,4 +161,77 @@ describe('Turno actual · lo que se ve es lo que se valida (caso del dueño, 23-
     await waitFor(() => expect(aviso()).toBeNull())
     expect(textoVisible(efectivoUSD())).toBe('')              // antes quedaba «5-» a la vista con el estado en ''
   })
+})
+
+// Revisión del verificador (23-nov): con React 19, si el valor que React lee pasa de "" a "" NO dispara onChange
+// (verificado en Chrome headless con React 19: «-», «--», «--4» y borrar dan solo `input`, nunca `change`).
+// Un cuadro que arranca VACÍO y recibe algo ilegible desde la primera tecla, o uno ilegible que se borra, solo
+// se ve con onInput. Estas caen sin el onInput.
+describe('Turno actual · cuadro que arranca vacío o se borra (onInput)', () => {
+  it('pozo vacío: «--450» → aviso con «💵 Efectivo $» y botón deshabilitado', async () => {
+    const u = userEvent.setup()
+    render(<TipsModule />)
+    const b = await boton()
+    await u.type(efectivoUSD(), '--450')
+    expect(textoVisible(efectivoUSD())).toBe('--450')
+    await waitFor(() => expect(aviso()).toMatch(/«💵 Efectivo \$»/))
+    expect(b.disabled).toBe(true)
+  })
+
+  it('fila recién marcada (propina vacía): «--450» en ₡ → aviso con su nombre', async () => {
+    const u = userEvent.setup()
+    render(<TipsModule />)
+    const b = await boton()
+    await u.click(screen.getByRole('checkbox', { name: /Caro Sala/ }))
+    const crcCaro = await waitFor(() => inputsDe('Caro Sala')[1])
+    expect(textoVisible(crcCaro)).toBe('')
+    await u.type(crcCaro, '--450')
+    await waitFor(() => expect(aviso()).toMatch(/propina ₡ de Caro Sala/))
+    expect(b.disabled).toBe(true)
+  })
+
+  it('horas borradas y «--5» → aviso con el nombre', async () => {
+    const u = userEvent.setup()
+    render(<TipsModule />)
+    const b = await boton()
+    const horasAna = inputsDe('Ana Sala')[0]
+    await u.clear(horasAna)
+    await u.type(horasAna, '--5')
+    await waitFor(() => expect(aviso()).toMatch(/horas de Ana Sala/))
+    expect(b.disabled).toBe(true)
+  })
+
+  it('«0-450» y después borrarlo todo → vuelve a vacío = 0: sin aviso y el botón se habilita', async () => {
+    const u = userEvent.setup()
+    render(<TipsModule />)
+    const b = await boton()
+    const crcAna = inputsDe('Ana Sala')[1]
+    await u.type(crcAna, '-450')
+    await waitFor(() => expect(aviso()).toMatch(/propina ₡ de Ana Sala/))
+    await u.clear(crcAna)
+    expect(textoVisible(crcAna)).toBe('')
+    await waitFor(() => expect(aviso()).toBeNull())
+    expect(b.disabled).toBe(false)
+  })
+
+  it('quitar la cobertura con una propina ilegible y volver a marcar: el cuadro vacío no bloquea', async () => {
+    const u = userEvent.setup()
+    render(<TipsModule />)
+    const b = await boton()
+    await u.click(screen.getByRole('button', { name: /Agregar cobertura/ }))
+    const [empSel, rolSel] = screen.getAllByRole('combobox') as HTMLSelectElement[]
+    await u.selectOptions(empSel, 'e4')
+    await u.selectOptions(rolSel, 'salonero')
+    await u.click(screen.getByRole('button', { name: /^Agregar$/ }))
+    const crcCaro = await waitFor(() => inputsDe('Caro Sala')[1])
+    await u.type(crcCaro, '--450')
+    await waitFor(() => expect(aviso()).toMatch(/propina ₡ de Caro Sala/))
+    await u.click(screen.getByTitle('Quitar cobertura'))
+    await u.click(screen.getByRole('checkbox', { name: /Caro Sala/ }))
+    await waitFor(() => expect(inputsDe('Caro Sala')).toHaveLength(3))
+    expect(textoVisible(inputsDe('Caro Sala')[1])).toBe('')
+    await waitFor(() => expect(aviso()).toBeNull())
+    expect(b.disabled).toBe(false)
+  })
+
 })

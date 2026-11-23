@@ -29,7 +29,7 @@ import {
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import { avisosCierrePropinas } from './guardasCierre'
-import { esIlegible, montoGuardable, validarTipoCambio, validarTurno, valorInput } from './validarTurno'
+import { alEscribir, esIlegible, montoGuardable, sinIlegibles, validarTipoCambio, validarTurno, valorInput } from './validarTurno'
 import { sinRepartirTurno } from './sinRepartir'
 import { availableForCobertura, eligibleRoster } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
@@ -392,7 +392,7 @@ export default function TipsModule() {
     const defaultHours = shiftType === 'AM' ? 5 : 8
     setLines(prev => prev.map(l => {
       if (l.employeeId !== empId) return l
-      return { ...l, active: true, hours: defaultHours, pts_rol: ptsMap.get(coveredRole as import('../../shared/types/database').UserRole) ?? l.pts_rol }
+      return { ...sinIlegibles(l), active: true, hours: defaultHours, pts_rol: ptsMap.get(coveredRole as import('../../shared/types/database').UserRole) ?? l.pts_rol }
     }))
     setShowCobPicker(false); setCobEmpId(''); setCobRole('')
     // Persistir al toque: que la cobertura sobreviva un refetch (mismo shape que toggleLine).
@@ -413,7 +413,8 @@ export default function TipsModule() {
     setCoberturas(prev => { const n = { ...prev }; delete n[empId]; return n })
     setLines(prev => prev.map(l => {
       if (l.employeeId !== empId) return l
-      return { ...l, active: false, hours: '', pts_rol: ptsMap.get(l.role) ?? l.pts_rol }
+      // Lo ilegible de un cuadro que se oculta vuelve a vacío: al volver a marcarla no bloquearía sin verse.
+      return { ...sinIlegibles(l), active: false, hours: '', pts_rol: ptsMap.get(l.role) ?? l.pts_rol }
     }))
     // La línea queda inactiva: persistir la baja para que el refetch no la resucite.
     if (!openSession?.id) return
@@ -633,7 +634,7 @@ export default function TipsModule() {
                 <div className="tips-field">
                   <div className="tips-field-label">Tipo de cambio (₡/USD)</div>
                   <input type="number" className="tips-input-dark" value={valorInput(exchangeRate)} min={1} step="any"
-                    onChange={e => setExchangeRate(esIlegible(e.target) ? Number.NaN : Number(e.target.value) || 640)} />
+                    {...alEscribir(el => setExchangeRate(esIlegible(el) ? Number.NaN : Number(el.value) || 640))} />
                 </div>
               </div>
 
@@ -713,13 +714,13 @@ export default function TipsModule() {
                     <span className="tips-money-prefix">₡</span>
                     <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                       key={`ef-crc-${recarga}`} value={valorInput(efectivoCRC)}
-                      onChange={e => setEfectivoCRC(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                      {...alEscribir(el => setEfectivoCRC(esIlegible(el) ? Number.NaN : el.value === '' ? '' : parseFloat(el.value) || 0))} />
                   </div>
                   <div className="tips-money-field">
                     <span className="tips-money-prefix">$</span>
                     <input type="number" className="tips-money-input" placeholder="0.00" step={0.01} min={0}
                       key={`ef-usd-${recarga}`} value={valorInput(efectivoUSD)}
-                      onChange={e => setEfectivoUSD(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                      {...alEscribir(el => setEfectivoUSD(esIlegible(el) ? Number.NaN : el.value === '' ? '' : parseFloat(el.value) || 0))} />
                   </div>
                 </div>
                 <span className="tips-field-hint">Propina en efectivo al pool general</span>
@@ -754,7 +755,7 @@ export default function TipsModule() {
                               <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                                 title="Barra efectivo — ya en mano de la barra, no genera cuenta por pagar"
                                 key={`barra-crc-${recarga}`} value={valorInput(barraCRC)}
-                                onChange={e => setBarraCRC(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                                {...alEscribir(el => setBarraCRC(esIlegible(el) ? Number.NaN : el.value === '' ? '' : parseFloat(el.value) || 0))} />
                             </div>
                           </div>
                           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
@@ -764,7 +765,7 @@ export default function TipsModule() {
                               <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                                 title="Barra electrónico (datáfono/SINPE) — el encargado lo entrega, genera cuenta por pagar"
                                 key={`barra-elec-${recarga}`} value={valorInput(barraElecCRC)}
-                                onChange={e => setBarraElecCRC(esIlegible(e.target) ? Number.NaN : e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                                {...alEscribir(el => setBarraElecCRC(esIlegible(el) ? Number.NaN : el.value === '' ? '' : parseFloat(el.value) || 0))} />
                             </div>
                           </div>
                         </div>
@@ -1018,7 +1019,7 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
               type="number" className="tips-emp-input" min={0} max={24} step={0.25}
               value={valorInput(line.hours)}
               placeholder={String(defaultHrs)}
-              onChange={e => onHoursChange(e.target.value, esIlegible(e.target))}
+              {...alEscribir(el => onHoursChange(el.value, esIlegible(el)))}
               onBlur={onBlur}
               disabled={!isManager}
             />
@@ -1034,7 +1035,7 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
                   <input
                     type="number" className="tips-emp-input-money" min={0} step="any"
                     value={valorInput(line.propina_crc)} placeholder="0"
-                    onChange={e => onPropinaChange('propina_crc', e.target.value, esIlegible(e.target))}
+                    {...alEscribir(el => onPropinaChange('propina_crc', el.value, esIlegible(el)))}
                     onBlur={onBlur}
                     disabled={!isManager}
                   />
@@ -1047,7 +1048,7 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
                   <input
                     type="number" className="tips-emp-input-money" min={0} step={0.01}
                     value={valorInput(line.propina_usd)} placeholder="0"
-                    onChange={e => onPropinaChange('propina_usd', e.target.value, esIlegible(e.target))}
+                    {...alEscribir(el => onPropinaChange('propina_usd', el.value, esIlegible(el)))}
                     onBlur={onBlur}
                     disabled={!isManager}
                   />

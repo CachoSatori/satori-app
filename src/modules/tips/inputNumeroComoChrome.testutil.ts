@@ -6,6 +6,9 @@
 //   - `value` devuelve ese texto si es un número válido y "" si no;
 //   - `validity.badInput` es true cuando hay texto y no es número.
 // Verificado en Chrome headless (23-nov): «0-450» → value "" y badInput true; «-450» → value "-450".
+// Como el rastreador de valor de React lee `value` por este getter, también se reproduce que React 19 NO dispara
+// onChange cuando lo leído pasa de "" a "" (cuadro vacío + «--450», o borrar «0-450»); onInput sí llega. Visto en
+// Chrome headless con React 19 (23-nov): «-», «--», «--4» y borrar dieron solo `input`, ningún `change`.
 
 const NUMERO_VALIDO = /^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?$/
 const textos = new WeakMap<HTMLInputElement, string>()

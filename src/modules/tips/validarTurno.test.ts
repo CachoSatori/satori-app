@@ -1,6 +1,6 @@
 // Nada negativo en el reparto (decisión del dueño, 20-nov-2026). Datos ficticios.
 import { describe, expect, it } from 'vitest'
-import { TEXTO_TIPO_CAMBIO, esIlegible, montoGuardable, validarTipoCambio, validarTurno, valorInput, type DatosTurno } from './validarTurno'
+import { TEXTO_TIPO_CAMBIO, alEscribir, esIlegible, sinIlegibles, montoGuardable, validarTipoCambio, validarTurno, valorInput, type DatosTurno } from './validarTurno'
 
 const base = (patch: Partial<DatosTurno> = {}): DatosTurno => ({
   lineas: [
@@ -82,5 +82,19 @@ describe('cuadro ilegible (validación física del dueño, 23-nov)', () => {
     expect(montoGuardable(Number.NaN)).toBe(false)
     expect(validarTurno(base({ lineas: [{ nombre: 'Sala Uno', activa: true, hours: 8, propina_crc: Number.NaN }] })))
       .toMatch(/^No se puede leer la propina ₡ de Sala Uno/)
+  })
+})
+
+describe('alEscribir y sinIlegibles (revisión del verificador, 23-nov)', () => {
+  it('alEscribir: el mismo manejador en onChange y onInput (React 19 no avisa "" → "")', () => {
+    const vistos: unknown[] = []
+    const p = alEscribir(el => vistos.push(el))
+    const el = {} as HTMLInputElement
+    p.onChange({ currentTarget: el }); p.onInput({ currentTarget: el })
+    expect(vistos).toEqual([el, el])
+  })
+  it('sinIlegibles: NaN → \'\'; lo demás, igual', () => {
+    expect(sinIlegibles({ hours: Number.NaN, propina_crc: -450, propina_usd: '', active: true }))
+      .toEqual({ hours: '', propina_crc: -450, propina_usd: '', active: true })
   })
 })

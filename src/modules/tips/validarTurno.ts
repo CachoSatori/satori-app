@@ -37,6 +37,23 @@ export function esIlegible(el: { validity?: { badInput?: boolean } | null }): bo
   return el.validity?.badInput === true
 }
 
+/**
+ * onChange y onInput con el mismo manejador. React 19 dispara onChange solo si el `value` que lee cambia: un
+ * cuadro vacío que recibe algo ilegible («-», «--450») o uno ilegible que se borra pasa de "" a "" y onChange
+ * NO llega (verificado en Chrome headless, 23-nov); onInput llega siempre.
+ */
+export function alEscribir(f: (el: HTMLInputElement) => void) {
+  const h = (e: { currentTarget: HTMLInputElement }) => f(e.currentTarget)
+  return { onChange: h, onInput: h }
+}
+
+/** Lo ilegible (NaN) de una fila que se desmarca o cuyo cuadro se oculta vuelve a vacío: si no, bloquea sin verse. */
+export function sinIlegibles<T extends object>(fila: T): T {
+  const out = { ...fila } as Record<string, unknown>
+  for (const k of Object.keys(out)) if (typeof out[k] === 'number' && Number.isNaN(out[k])) out[k] = ''
+  return out as T
+}
+
 /** Valor para la prop `value` del input: lo ilegible (NaN) va como '' para que React no pise lo que se ve. */
 export function valorInput<T>(v: T): T | '' {
   return typeof v === 'number' && Number.isNaN(v) ? '' : v

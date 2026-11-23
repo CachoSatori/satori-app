@@ -112,3 +112,57 @@ describe('Historial → ✏ Editar · lo que se ve es lo que se valida (caso del
     expect(guardar.disabled).toBe(true)
   })
 })
+
+// Revisión del verificador (23-nov): React 19 no dispara onChange si el valor leído pasa de "" a "" (cuadro vacío
+// que recibe algo ilegible, o ilegible que se borra); onInput sí. Y lo ilegible de una fila que se desmarca o de
+// un cuadro que se oculta vuelve a vacío. Estas caen sin el onInput o sin esa limpieza.
+describe('Historial → ✏ Editar · cuadro vacío, borrado u oculto', () => {
+  const efUSD = () => screen.getAllByRole('spinbutton')[1] as HTMLInputElement
+
+  it('pozo vacío: «--450» → aviso con «💵 Efectivo $» y no guarda', async () => {
+    const u = userEvent.setup()
+    const guardar = await abrirEdicion(u)
+    await u.type(efUSD(), '--450')
+    expect(textoVisible(efUSD())).toBe('--450')
+    await waitFor(() => expect(aviso()).toMatch(/«💵 Efectivo \$»/))
+    expect(guardar.disabled).toBe(true)
+  })
+
+  it('«0-450» y después borrarlo todo → vacío = 0: sin aviso y «Guardar cambios» habilitado', async () => {
+    const u = userEvent.setup()
+    const guardar = await abrirEdicion(u)
+    const crcAna = inputsDe('Ana Sala')[1]
+    await u.type(crcAna, '-450')
+    await waitFor(() => expect(aviso()).toMatch(/propina ₡ de Ana Sala/))
+    await u.clear(crcAna)
+    expect(textoVisible(crcAna)).toBe('')
+    await waitFor(() => expect(aviso()).toBeNull())
+    expect(guardar.disabled).toBe(false)
+  })
+
+  it('desmarcar una fila con una propina ilegible y volver a marcarla: el cuadro vacío no bloquea', async () => {
+    const u = userEvent.setup()
+    const guardar = await abrirEdicion(u)
+    await u.type(inputsDe('Ana Sala')[1], '-450')
+    await waitFor(() => expect(aviso()).toMatch(/propina ₡ de Ana Sala/))
+    const chk = () => inputsDe('Ana Sala')[0].closest('div[style]')!.parentElement!.querySelector('input[type="checkbox"]') as HTMLInputElement
+    const marca = chk()
+    await u.click(marca)
+    await u.click(marca)
+    await waitFor(() => expect(inputsDe('Ana Sala')).toHaveLength(3))
+    expect(textoVisible(inputsDe('Ana Sala')[1])).toBe('')
+    await waitFor(() => expect(aviso()).toBeNull())
+    expect(guardar.disabled).toBe(false)
+  })
+
+  it('«Cubrió como» barra con una propina ilegible: el cuadro se oculta y no bloquea', async () => {
+    const u = userEvent.setup()
+    const guardar = await abrirEdicion(u)
+    await u.type(inputsDe('Ana Sala')[1], '-450')
+    await waitFor(() => expect(aviso()).toMatch(/propina ₡ de Ana Sala/))
+    const fila = inputsDe('Ana Sala')[0].closest('div[style]') as HTMLElement
+    await u.selectOptions(fila.querySelector('select') as HTMLSelectElement, 'barman')
+    await waitFor(() => expect(aviso()).toBeNull())
+    expect(guardar.disabled).toBe(false)
+  })
+})

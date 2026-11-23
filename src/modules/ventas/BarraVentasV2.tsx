@@ -8,6 +8,7 @@ import {
   rotuloComparar, type Comparar, type EstadoBarra,
 } from './barraVentasV2'
 import type { LocalVentas } from './resumenV2Datos'
+import { localPorDefecto } from '../../shared/utils/ordenLocales'
 
 interface Props {
   estado:   EstadoBarra
@@ -20,7 +21,7 @@ interface Props {
 export default function BarraVentasV2({ estado, periodo, locales, aviso, onCambio }: Props) {
   const anterior = moverPeriodo(estado, periodo, -1)
   const siguiente = moverPeriodo(estado, periodo, 1)
-  const local = estado.local ?? locales[0]?.id ?? ''
+  const local = localPorDefecto(locales, estado.local) ?? ''
   const valorPeriodo = estado.tipo === 'mesALaFecha' ? 'mes' : estado.tipo
   return (
     <div className="vt2-barra" role="group" aria-label="Período y comparación">

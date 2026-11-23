@@ -20,6 +20,7 @@ import { cargarLecturaResumen, getLocalesVentas, type LocalVentas } from './resu
 import { cargarLineasPeriodo, fechasDe } from './lineasPeriodo'
 import { FALTA_EN_REGALIAS, regaliasDeLineas, type GrupoRegalia, type RegaliasDeLineas } from './salonDetalle'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
+import { localPorDefecto } from '../../shared/utils/ordenLocales'
 import { fi } from './ventasUtils'
 
 const pct1 = (x: number) => `${x.toFixed(1).replace('.', ',')} %`
@@ -38,8 +39,11 @@ export default function VentasRegalias() {
     getLocalesVentas(role).then(l => { if (vivo) setLocales(l) }).catch(() => { if (vivo) setLocales([]) })
     return () => { vivo = false }
   }, [role])
-  const local = estado.local && (locales.length === 0 || locales.some(l => l.id === estado.local))
-    ? estado.local : (locales[0]?.id ?? LOCAL_POR_DEFECTO)
+  // D16 (#333): el elegido en la URL si lo ve; si no, Santa Teresa; si no, el primero que ve. Antes de que lleguen
+  // los locales se respeta la URL y, sin URL, Santa Teresa. Igual que «Resumen» y «Tiempos».
+  const local = locales.length === 0
+    ? (estado.local ?? LOCAL_POR_DEFECTO)
+    : (localPorDefecto(locales, estado.local) ?? LOCAL_POR_DEFECTO)
 
   const clave = `${local}|${periodo.tipo}|${periodo.desde}|${periodo.hasta}`
   const [datos, setDatos] = useState<{ clave: string; cifras: CifrasRango; lineas: RegaliasDeLineas } | null>(null)

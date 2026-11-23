@@ -12,8 +12,13 @@ import {
   variacionPct, paxEsConfiable, UMBRAL_PAX_CONFIABLE,
 } from './ventasEnVivoTypes'
 import type { LocalId, SnapshotEnVivo } from './ventasEnVivoTypes'
+import { localPorDefecto, ordenarLocales } from '../../shared/utils/ordenLocales'
 import type { CajeroDay, DiasMap, Meta } from '../../shared/types/ventas'
 import './ventasEnVivo.css'
+
+// D16: el orden de los chips lo pone la regla única (Santa Teresa primero), no la posición en `LOCALES`.
+// Se ordena acá y no en ventasEnVivoTypes.ts: ese archivo entra en el paquete de las Edge de correo.
+const LOCALES_ORDEN = ordenarLocales(LOCALES, l => ({ id: l.id, nombre: l.label }))
 
 // ╔══════════════════════════════════════════════════════════════════════════════════════╗
 // ║ Ventas · pestaña EN VIVO — el SUPERSET de «Hoy», leído de `pos_ndf`                     ║
@@ -148,7 +153,7 @@ const ORDEN_LABEL: Record<OrdenRanking, string> = {
 interface Props { metas?: Meta }
 
 export default function VentasEnVivo({ metas }: Props) {
-  const [local, setLocal]     = useState<LocalId>('santa-teresa')
+  const [local, setLocal]     = useState<LocalId>(() => (localPorDefecto(LOCALES_ORDEN) ?? LOCALES_ORDEN[0].id) as LocalId)
   const [snap, setSnap]       = useState<SnapshotEnVivo | null>(null)
   const [error, setError]     = useState<string | null>(null)
   const [ahora, setAhora]     = useState(() => Date.now())
@@ -626,7 +631,7 @@ export default function VentasEnVivo({ metas }: Props) {
         {/* ── Barra: local + frescura ───────────────────────────────────────── */}
         <div className="apos-bar">
           <div className="apos-locales" role="group" aria-label="Local">
-            {LOCALES.map(l => (
+            {LOCALES_ORDEN.map(l => (
               <button
                 key={l.id}
                 type="button"

@@ -27,6 +27,7 @@ import {
 } from './resumenV2'
 import { cargarLecturaRango, cargarLecturaResumen, getLocalesVentas, type LocalVentas } from './resumenV2Datos'
 import { LOCAL_POR_DEFECTO } from './ventasDiasDesdePos'
+import { localPorDefecto } from '../../shared/utils/ordenLocales'
 import { PRIMERA_JORNADA_POS } from './ventasFuente'
 
 const casiCero = (x: number) => Math.abs(x) < 0.05
@@ -61,8 +62,11 @@ export default function VentasResumen({ metas }: { metas?: Meta } = {}) {
     getLocalesVentas(role).then(l => { if (vivo) setLocales(l) }).catch(() => { if (vivo) setLocales([]) })
     return () => { vivo = false }
   }, [role])
-  const local = estado.local && (locales.length === 0 || locales.some(l => l.id === estado.local))
-    ? estado.local : (locales[0]?.id ?? LOCAL_POR_DEFECTO)
+  // D16: el elegido en la URL si lo ve; si no, Santa Teresa; si no, el primero que ve. Antes de que lleguen los
+  // locales se respeta la URL y, sin URL, Santa Teresa.
+  const local = locales.length === 0
+    ? (estado.local ?? LOCAL_POR_DEFECTO)
+    : (localPorDefecto(locales, estado.local) ?? LOCAL_POR_DEFECTO)
 
   const [lectura, setLectura] = useState<{ clave: string; l: Lectura } | null>(null)
   const [fallo, setFallo] = useState<{ clave: string; msg: string } | null>(null)

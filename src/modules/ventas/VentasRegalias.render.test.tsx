@@ -18,9 +18,10 @@ const lectura = armarLectura(fx.tickets, fx.lineas, {})
 const cargarLectura = vi.fn(async () => lectura)
 const cargarLineas = vi.fn(async (_l: string, r: { desde: string; hasta: string }) =>
   ({ dias: armarDiasMap(fx.tickets, fx.lineas, r, { uploadedAt: 'x', avisar: () => {} }).dias, pm: {} }))
+const locales = vi.hoisted(() => ({ lista: [{ id: 'santa-teresa', nombre: 'Local A' }] as { id: string; nombre: string }[] }))
 vi.mock('./resumenV2Datos', () => ({
   cargarLecturaResumen: (...a: unknown[]) => cargarLectura(...(a as [])),
-  getLocalesVentas: vi.fn(async () => [{ id: 'santa-teresa', nombre: 'Local A' }]),
+  getLocalesVentas: vi.fn(async () => locales.lista),
 }))
 vi.mock('./lineasPeriodo', async orig => ({
   ...(await orig<typeof import('./lineasPeriodo')>()),
@@ -39,6 +40,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-11-19T05:30:00Z'))
   role = 'owner'
+  locales.lista = [{ id: 'santa-teresa', nombre: 'Local A' }]
   cargarLectura.mockClear(); cargarLineas.mockClear()
 })
 afterEach(() => { cleanup(); vi.useRealTimers() })
@@ -83,5 +85,15 @@ describe('VentasRegalias', () => {
     expect(await screen.findByText(/las regalías del día se miran cuando cierra/)).toBeTruthy()
     expect(cargarLineas).not.toHaveBeenCalled()
     expect(cargarLectura).not.toHaveBeenCalled()
+  })
+  it('D16: con dos locales abre Santa Teresa aunque venga segunda; si la URL trae el otro y lo ve, lo respeta', async () => {
+    locales.lista = [{ id: 'local-b', nombre: 'Local B' }, { id: 'santa-teresa', nombre: 'Local A' }]
+    abrir('p=ayer')
+    await screen.findByRole('table', { name: 'Regalías por tipo' })
+    expect(cargarLineas.mock.calls.at(-1)![0]).toBe('santa-teresa')
+    cleanup(); cargarLineas.mockClear()
+    abrir('p=ayer&local=local-b')
+    await screen.findByRole('table', { name: 'Regalías por tipo' })
+    expect(cargarLineas.mock.calls.at(-1)![0]).toBe('local-b')
   })
 })

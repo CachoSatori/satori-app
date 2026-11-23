@@ -48,10 +48,18 @@ const C_VM_USD = 'Ventas mediodía $'
 const C_VN_CRC = 'Ventas noche ₡'
 const C_VN_USD = 'Ventas noche $'
 const C_RETIRO = 'Retiro dueños → banco ₡'
-// Las filas del conteo físico usan su rótulo de la tabla + moneda (mantener en sync con la tabla de separaciones).
-const FILAS_CONTEO = ['Caja Diaria mañana', 'Caja Registradora', 'Remanente CF']
+// Filas del conteo físico (tabla de separaciones). FUENTE ÚNICA: la tabla se dibuja recorriendo esta lista y el nombre
+// de cada cuadro (rótulo + moneda) sale de nombreConteo(), igual que en CUADROS_FASE2. Renombrar una fila cambia los
+// dos a la vez: su cuadro ilegible sigue frenando el cierre (CashCierre.montoIlegible.test.tsx recorre los 9 cuadros).
+// El orden importa: los valores de cada fila se toman por posición (valoresConteo, dentro del componente).
+const FILAS_CONTEO = [
+  { label: 'Caja Diaria mañana', sub: 'separación día siguiente', color: 'var(--c-musgo)' },
+  { label: 'Caja Registradora',  sub: 'para vuelto mañana',       color: 'var(--c-gris)' },
+  { label: 'Remanente CF',       sub: 'queda en Caja Fuerte',     color: '#8a5aa8' },
+] as const
+const nombreConteo = (label: string, moneda: '₡' | '$') => `${label} ${moneda}`
 const CUADROS_FASE1 = [C_VM_CRC, C_VM_USD]
-const CUADROS_FASE2 = [C_VN_CRC, C_VN_USD, C_RETIRO, ...FILAS_CONTEO.flatMap(f => [`${f} ₡`, `${f} $`])]
+const CUADROS_FASE2 = [C_VN_CRC, C_VN_USD, C_RETIRO, ...FILAS_CONTEO.flatMap(f => [nombreConteo(f.label, '₡'), nombreConteo(f.label, '$')])]
 
 // Cuadre USD del cierre — espeja la fórmula CRC (saldo base + mediodía + noche).
 // En Caja Fuerte los dólares solo salen por retiro de socios o depósito a banco,
@@ -208,6 +216,12 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   const [remCRC,        setRemCRC]        = useState<number | ''>('')
   const [remUSD,        setRemUSD]        = useState<number | ''>('')
 
+  // Valores de cada fila de FILAS_CONTEO, en el MISMO orden (Caja Diaria mañana · Caja Registradora · Remanente CF).
+  const valoresConteo = [
+    { crc: sepDiariaCRC, setCRC: setSepDiariaCRC, usd: sepDiariaUSD, setUSD: setSepDiariaUSD },
+    { crc: sepRegCRC,    setCRC: setSepRegCRC,    usd: sepRegUSD,    setUSD: setSepRegUSD },
+    { crc: remCRC,       setCRC: setRemCRC,       usd: remUSD,       setUSD: setRemUSD },
+  ]
   const totalContadoCRC = N(sepDiariaCRC) + N(sepRegCRC) + N(remCRC)
   const totalContadoUSD = N(sepDiariaUSD) + N(sepRegUSD) + N(remUSD)
 
@@ -897,11 +911,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                     </tr>
                   </thead>
                   <tbody>
-                    {[
-                      { label:'Caja Diaria mañana', sub:'separación día siguiente', color:'var(--c-musgo)', crc:sepDiariaCRC, setCRC:setSepDiariaCRC, usd:sepDiariaUSD, setUSD:setSepDiariaUSD },
-                      { label:'Caja Registradora',  sub:'para vuelto mañana',       color:'var(--c-gris)', crc:sepRegCRC,    setCRC:setSepRegCRC,    usd:sepRegUSD,    setUSD:setSepRegUSD    },
-                      { label:'Remanente CF',        sub:'queda en Caja Fuerte',     color:'#8a5aa8', crc:remCRC,       setCRC:setRemCRC,       usd:remUSD,       setUSD:setRemUSD       },
-                    ].map(row => (
+                    {FILAS_CONTEO.map((fila, i) => ({ ...fila, ...valoresConteo[i], nCRC: nombreConteo(fila.label, '₡'), nUSD: nombreConteo(fila.label, '$') })).map(row => (
                       <tr key={row.label} style={{ background: row.color === '#8a5aa8' ? 'rgba(138,90,168,.06)' : undefined }}>
                         <td style={{ padding:'0.625rem 0.75rem' }}>
                           <div style={{ fontSize:'0.8rem', fontWeight:600, color:row.color }}>{row.label}</div>
@@ -909,11 +919,11 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                         </td>
                         <td style={{ padding:'0.3rem 0.5rem' }}>
                           <MontoInput prefix="₡" value={row.crc} onChange={row.setCRC} compact
-                            nombre={`${row.label} ₡`} ilegible={!!ilegibles[`${row.label} ₡`]} onIlegible={marcar(`${row.label} ₡`)} />
+                            nombre={row.nCRC} ilegible={!!ilegibles[row.nCRC]} onIlegible={marcar(row.nCRC)} />
                         </td>
                         <td style={{ padding:'0.3rem 0.5rem' }}>
                           <MontoInput prefix="$" value={row.usd} onChange={row.setUSD} compact
-                            nombre={`${row.label} $`} ilegible={!!ilegibles[`${row.label} $`]} onIlegible={marcar(`${row.label} $`)} />
+                            nombre={row.nUSD} ilegible={!!ilegibles[row.nUSD]} onIlegible={marcar(row.nUSD)} />
                         </td>
                       </tr>
                     ))}

@@ -1,6 +1,6 @@
 {
-  "problemas": 75,
-  "medido_en": "claude/ventas-v2-352-resumen-regalias (23-nov-2026): 69 errores + 6 advertencias de `eslint .` (main 9cb3eafe daba 77; el 3.5.2 retira VentasHoy.tsx y VentasHistorico.tsx)",
+  "problemas": 76,
+  "medido_en": "claude/ventas-v2-352-resumen-regalias con main 6c33a76 juntado (23-nov-2026): 70 errores + 6 advertencias de `eslint .` (el 3.5.2 retira VentasHoy.tsx y VentasHistorico.tsx: −2 contra main)",
   "para_que": "Deuda de lint vieja (PROMPT-CONTINUACION §9). El CI (.github/workflows/ci.yml, job «Gate») falla si `eslint .` da MÁS problemas que este número; si da los mismos o menos, pasa.",
   "como_se_actualiza": "Cuando un PR baja la cuenta, el CI lo avisa: bajá este número en el mismo PR al valor nuevo. Subirlo solo con OK explícito del dueño y el motivo en el PR."
 }

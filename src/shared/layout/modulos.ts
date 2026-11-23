@@ -151,7 +151,7 @@ export function llevaMenu(role: string): boolean {
 
 /**
  * El menú global de un rol: los módulos de su grilla, agrupados. Ventas se abre en sus entradas
- * (`/ventas?tab=<primera vista visible de la entrada>`), con el mismo filtro por rol de A2.
+ * (`/ventas?tab=<entrada>`, 3.5.1: abre la primera sub-vista que el rol ve), con el mismo filtro por rol.
  */
 export function menuPara(role: string): GrupoMenu[] {
   const mods = modulosPara(role)
@@ -165,7 +165,7 @@ export function menuPara(role: string): GrupoMenu[] {
         if (entradas.length === 0) return [itemDe(m)]
         return entradas.map(e => ({
           key: `dashboard:${e.id}`, moduloId: m.id, label: ENTRADA_LABEL[e.id] ?? e.label, kanji: m.kanji,
-          to: `${m.path}?tab=${e.vistas[0]}`, entrada: e.id,
+          to: `${m.path}?tab=${e.id}`, entrada: e.id,
         }))
       }
       return [itemDe(m)]
@@ -174,8 +174,11 @@ export function menuPara(role: string): GrupoMenu[] {
   }).filter(g => g.items.length > 0)
 }
 
-/** En el menú global, «Ajustes» de Ventas se aclara para no confundirse con el grupo «Ajustes». */
-const ENTRADA_LABEL: Record<string, string> = { ajustes: 'Ajustes de Ventas' }
+/**
+ * En el menú global, «Ajustes» y «Equipo» de Ventas se aclaran para no confundirse con los grupos del mismo
+ * nombre (decisión del dueño, 23-nov, #331). Adentro de Ventas siguen «Ajustes» y «Equipo».
+ */
+const ENTRADA_LABEL: Record<string, string> = { ajustes: 'Ajustes de Ventas', equipo: 'Equipo de Ventas' }
 
 function itemDe(m: Module): ItemMenu {
   return { key: m.id, moduloId: m.id, label: m.menuLabel ?? m.label, kanji: m.kanji, to: m.path }

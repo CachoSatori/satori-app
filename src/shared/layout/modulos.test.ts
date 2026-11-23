@@ -63,20 +63,29 @@ describe('B3 · Ventas en el menú', () => {
     const esperadas = entradasVisibles(role)
     expect(ventas.items.map(i => i.entrada)).toEqual(esperadas.map(e => e.id))
     for (const [k, it] of ventas.items.entries()) {
-      expect(it.to).toBe(`/ventas?tab=${esperadas[k].vistas[0]}`)
+      expect(it.to).toBe(`/ventas?tab=${esperadas[k].id}`)
     }
   })
 
-  it('contador no ve «Ing. Menú» ni «Ajustes» de Ventas (mismo filtro de A2)', () => {
-    const labels = menuPara('contador').find(g => g.id === 'ventas')!.items.map(i => i.label)
-    expect(labels).not.toContain('Ing. Menú')
-    expect(labels).not.toContain('Ajustes de Ventas')
+  it.each(['owner', 'manager', 'contador'])('%s: 3.5.1, el menú lateral muestra las seis entradas de Ventas', role => {
+    const ventas = menuPara(role).find(g => g.id === 'ventas')!
+    expect(ventas.items.map(i => i.label)).toEqual(['Resumen', 'Productos', 'Equipo de Ventas', 'Tiempos', 'En vivo', 'Ajustes de Ventas'])
+    expect(ventas.items.map(i => i.to)).toEqual([
+      '/ventas?tab=resumen', '/ventas?tab=productos', '/ventas?tab=equipo', '/ventas?tab=tiempos',
+      '/ventas?tab=envivo', '/ventas?tab=ajustes',
+    ])
   })
 
-  it('owner: «Ajustes de Ventas» lleva a Productos (Paridad y Cargar XLS se retiraron el 16-nov)', () => {
+  it('contador no ve «Ing. Menú» (mismo filtro de siempre); «Ajustes de Ventas» le abre solo «Metas»', () => {
+    const items = menuPara('contador').find(g => g.id === 'ventas')!.items
+    expect(items.map(i => i.label)).not.toContain('Ing. Menú')
+    expect(entradasVisibles('contador').find(e => e.id === 'ajustes')!.vistas).toEqual(['metas'])
+  })
+
+  it('owner: «Ajustes de Ventas» lleva a Ajustes (abre «Metas»; Paridad y Cargar XLS se retiraron el 16-nov)', () => {
     const item = menuPara('owner').find(g => g.id === 'ventas')!.items.find(i => i.entrada === 'ajustes')!
     expect(item.label).toBe('Ajustes de Ventas')
-    expect(item.to).toBe('/ventas?tab=config')
+    expect(item.to).toBe('/ventas?tab=ajustes')
   })
 
   it('la barra inferior del cajero: Caja, Propinas, Club y «Más»', () => {

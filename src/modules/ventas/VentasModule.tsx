@@ -10,7 +10,7 @@ import { cargarDeFondo, cargarDiasEager, cargarHistEager, type EstadoPos } from 
 import AvisoFuentePos from './AvisoFuentePos'
 import './ventasNav.css'
 import {
-  type Tab, resolverTab, puedeVer, entradasVisibles, entradaDe, labelDe, VISTAS_SIN_DIAS, VISTAS_CON_FONDO,
+  type Tab, resolverDireccion, direccionDe, entradasVisibles, entradaDe, labelDe, VISTAS_SIN_DIAS, VISTAS_CON_FONDO,
 } from './ventasTabs'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
@@ -67,25 +67,36 @@ export default function VentasModule() {
   const navigate    = useNavigate()
   const role        = profile?.role ?? ''
 
-  // La vista activa vive en la URL (`/ventas?tab=<id>`). Sin `tab`, o con uno que el rol no
-  // ve, se abre la misma pestaña de arranque de antes del rediseño.
+  // La vista activa vive en la URL (`/ventas?tab=<entrada>&v=<sub-vista>`, 3.5.1). Sin `tab`
+  // abre «Resumen». Un `?tab=<vista vieja>` abre la misma vista de antes y la dirección se
+  // reemplaza por la nueva; uno que el rol no ve, o que no existe, abre «Resumen».
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const tab = resolverTab(role, tabParam)
+  const vParam   = searchParams.get('v')
+  const tab = resolverDireccion(role, tabParam, vParam).vista
   // Cambiar de pestaña agrega una entrada al historial: «Atrás» vuelve a la pestaña anterior.
+  // Los demás parámetros (la barra: local, período, comparación) se conservan.
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(searchParams)
-    next.set('tab', t)
+    const d = direccionDe(t)
+    next.set('tab', d.tab)
+    if (d.v) next.set('v', d.v)
+    else next.delete('v')
     setSearchParams(next)
   }
-  // Un `?tab=` inválido o de otro rol se limpia de la URL (sin entrada nueva en el historial).
-  // Se espera a tener el rol, para no borrar un `tab` válido mientras carga el perfil.
+  // Redirección: la dirección vieja o inválida se corrige sin entrada nueva en el historial.
+  // Se espera a tener el rol, para no tocar un `tab` válido mientras carga el perfil.
   useEffect(() => {
-    if (!role || !tabParam || puedeVer(role, tabParam)) return
+    if (!role) return
+    const { corregir } = resolverDireccion(role, tabParam, vParam)
+    if (!corregir) return
     const next = new URLSearchParams(searchParams)
-    next.delete('tab')
+    if (corregir.tab) next.set('tab', corregir.tab)
+    else next.delete('tab')
+    if (corregir.v) next.set('v', corregir.v)
+    else next.delete('v')
     setSearchParams(next, { replace: true })
-  }, [role, tabParam, searchParams, setSearchParams])
+  }, [role, tabParam, vParam, searchParams, setSearchParams])
   const entradas  = entradasVisibles(role)
   const entrada   = entradas.find(e => e.id === entradaDe(tab).id)
   const [error, setError]   = useState<string | null>(null)

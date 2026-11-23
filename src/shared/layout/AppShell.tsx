@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { ROLE_LABELS } from '../constants'
-import { entradaDe, resolverTab } from '../../modules/ventas/ventasTabs'
+import { entradaDe, resolverVista } from '../../modules/ventas/ventasTabs'
 import { barraPara, menuPara, type ItemMenu } from './modulos'
 import { useMenuVisible } from './useMenuVisible'
 import './AppShell.css'
@@ -20,8 +20,8 @@ function esActivo(item: { to: string; entrada?: string }, pathname: string, sear
   const enRuta = pathname === path || pathname.startsWith(path + '/')
   if (!enRuta) return false
   if (!item.entrada) return true
-  const tab = resolverTab(role, new URLSearchParams(search).get('tab'))
-  return entradaDe(tab).id === item.entrada
+  // Misma resolución que Ventas (3.5.1): `?tab=<entrada>&v=…` o una dirección vieja.
+  return entradaDe(resolverVista(role, new URLSearchParams(search))).id === item.entrada
 }
 
 const INICIO = { to: '/', label: 'Inicio', kanji: '家' }

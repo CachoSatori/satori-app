@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 //
-// Rediseño A2, en el DOM: el menú de Ventas con entradas y sub-pestañas, y la vista en la URL.
+// En el DOM: el menú de Ventas con entradas y sub-pestañas, y la vista en la URL. Desde el 3.5.1
+// (SPEC-ventas-v2 §12.4): seis entradas, arranque en «Resumen» y redirección de los `?tab=` viejos.
 // Las vistas se reemplazan por marcadores: acá se prueba la navegación, no el contenido.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useEffect } from 'react'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
 let role = 'owner'
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { role } }) }))
@@ -42,12 +43,13 @@ vi.mock('./VentasTiempos',        () => vista('tiempos'))
 vi.mock('./VentasMesasInternas',  () => vista('internas'))
 
 import VentasModule from './VentasModule'
-import { TABS } from './ventasTabs'
+import { TABS, ENTRADAS, CLAVE_V, entradasVisibles, labelDe, type Tab } from './ventasTabs'
 
-const ultima = { url: '' }
+const ultima = { url: '', tipo: '' }
 function Url() {
   const l = useLocation()
-  useEffect(() => { ultima.url = l.pathname + l.search }, [l])
+  const tipo = useNavigationType()
+  useEffect(() => { ultima.url = l.pathname + l.search; ultima.tipo = tipo }, [l, tipo])
   return null
 }
 
@@ -58,54 +60,170 @@ function Atras() {
   return null
 }
 
-function abrir(url: string) {
-  return render(<MemoryRouter initialEntries={[url]}><VentasModule /><Url /><Atras /></MemoryRouter>)
+function abrir(url: string, antes: string[] = []) {
+  const entradas = [...antes, url]
+  return render(
+    <MemoryRouter initialEntries={entradas} initialIndex={entradas.length - 1}>
+      <VentasModule /><Url /><Atras />
+    </MemoryRouter>,
+  )
 }
 
-beforeEach(() => { cleanup(); role = 'owner' })
+const menu = () => screen.getByRole('tablist', { name: 'Vistas de Ventas' })
+const subMenu = (entrada: string) => screen.getByRole('tablist', { name: `Vistas de ${entrada}` })
 
-describe('VentasModule · navegación', () => {
-  it.each(['owner', 'manager', 'contador'])('%s sin ?tab= abre «Hoy»', async r => {
+/** SPEC §12.2: `?tab=` viejo → dirección nueva (escrita a mano: si cambia el mapa, cae). */
+const REDIRECCION: Record<string, string> = {
+  hoy: '/ventas?tab=resumen&v=hoy', ventas: '/ventas?tab=resumen&v=ventas',
+  historico: '/ventas?tab=resumen&v=historico', analisis: '/ventas?tab=resumen&v=analisis',
+  mix: '/ventas?tab=productos', menueng: '/ventas?tab=productos&v=menu',
+  saloneros: '/ventas?tab=equipo', salolineas: '/ventas?tab=equipo&v=lineas',
+  evaluacion: '/ventas?tab=equipo&v=evaluacion', icp: '/ventas?tab=equipo&v=icp',
+  cajeros: '/ventas?tab=equipo&v=cajas', competencias: '/ventas?tab=equipo&v=competencias',
+  calendario: '/ventas?tab=tiempos&v=calendario',
+  metas: '/ventas?tab=ajustes', config: '/ventas?tab=ajustes&v=productos', internas: '/ventas?tab=ajustes&v=internas',
+}
+
+beforeEach(() => { cleanup(); role = 'owner'; ultima.url = ''; ultima.tipo = '' })
+
+describe('VentasModule · 3.5.1 menú y arranque', () => {
+  it.each(['owner', 'manager', 'contador'])('%s sin ?tab= abre «Resumen» y no escribe nada en la URL', async r => {
     role = r
     abrir('/ventas')
-    expect((await screen.findByTestId('vista')).textContent).toBe('hoy')
+    expect((await screen.findByTestId('vista')).textContent).toBe('resumen')
+    expect(ultima.url).toBe('/ventas')
   })
 
-  it.each(TABS.filter(t => t.roles.includes('owner')).map(t => t.id))('owner abre ?tab=%s', async id => {
-    abrir(`/ventas?tab=${id}`)
-    expect((await screen.findByTestId('vista')).textContent).toBe(id)
-  })
-
-  it('manager con ?tab=paridad (retirada el 16-nov) cae en «Hoy»', async () => {
-    role = 'manager'
-    abrir('/ventas?tab=paridad')
-    expect((await screen.findByTestId('vista')).textContent).toBe('hoy')
-  })
-
-  it('tocar una entrada abre su primera vista y la deja en la URL', async () => {
+  it.each(['owner', 'manager', 'contador'])('%s ve seis botones: Resumen · Productos · Equipo · Tiempos · En vivo · Ajustes', async r => {
+    role = r
     abrir('/ventas')
     await screen.findByTestId('vista')
-    fireEvent.click(screen.getByRole('tab', { name: 'Histórico' }))
-    expect((await screen.findByTestId('vista')).textContent).toBe('historico')
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=historico'))
-    fireEvent.click(screen.getByRole('tab', { name: 'Mix' }))
+    expect(within(menu()).getAllByRole('tab').map(t => t.textContent)).toEqual(
+      ['Resumen', 'Productos', 'Equipo', 'Tiempos', 'En vivo', 'Ajustes'],
+    )
+  })
+
+  it('«Resumen» lleva al lado «Hoy», «Ventas», «Histórico» y «Análisis»', async () => {
+    abrir('/ventas')
+    await screen.findByTestId('vista')
+    expect(within(subMenu('Resumen')).getAllByRole('tab').map(t => t.textContent)).toEqual(
+      ['Resumen', 'Hoy', 'Ventas', 'Histórico', 'Análisis'],
+    )
+  })
+
+  it('«En vivo» no lleva sub-pestañas', async () => {
+    abrir('/ventas?tab=envivo')
+    await screen.findByTestId('vista')
+    expect(screen.queryByRole('tablist', { name: /Vistas de En vivo/ })).toBeNull()
+  })
+})
+
+describe('VentasModule · cada vista vieja sigue accesible desde su pestaña nueva', () => {
+  const casos = ['owner', 'manager', 'contador'].flatMap(r =>
+    entradasVisibles(r).flatMap(e => e.vistas.map(v => [r, e.label, labelDe(v), v] as const)))
+
+  it.each(casos)('%s: «%s» → «%s»', async (r, entrada, etiqueta, vista) => {
+    role = r
+    abrir('/ventas')
+    await screen.findByTestId('vista')
+    const e = within(menu()).getByRole('tab', { name: entrada })
+    if (e.getAttribute('aria-selected') !== 'true') fireEvent.click(e)
+    const sub = screen.queryByRole('tablist', { name: `Vistas de ${entrada}` })
+    if (sub) fireEvent.click(within(sub).getByRole('tab', { name: etiqueta }))
+    await vi.waitFor(() => expect(screen.getByTestId('vista').textContent).toBe(vista))
+  })
+})
+
+describe('VentasModule · redirecciones (criterio 3)', () => {
+  const casos = ['owner', 'manager', 'contador'].flatMap(r => TABS.map(t => [r, t.id] as const))
+
+  it.each(casos)('%s con ?tab=%s: abre lo mismo de antes y reemplaza la dirección', async (r, viejo) => {
+    role = r
+    abrir(`/ventas?tab=${viejo}`, ['/'])
+    const ve = TABS.find(t => t.id === viejo)!.roles.includes(r)
+    expect((await screen.findByTestId('vista')).textContent).toBe(ve ? viejo : 'resumen')
+    const esperada = !ve ? '/ventas' : (REDIRECCION[viejo] ?? `/ventas?tab=${viejo}`)
+    await vi.waitFor(() => expect(ultima.url).toBe(esperada))
+    if (ultima.url !== `/ventas?tab=${viejo}`) expect(ultima.tipo).toBe('REPLACE')
+  })
+
+  it('la redirección no suma un paso al «Atrás»: vuelve a la pantalla anterior', async () => {
+    abrir('/ventas?tab=calendario', ['/caja'])
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=tiempos&v=calendario'))
+    nav.atras()
+    await vi.waitFor(() => expect(ultima.url).toBe('/caja'))
+  })
+
+  it('la redirección conserva la barra (local y período)', async () => {
+    abrir('/ventas?tab=hoy&local=local-b&p=mes')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=resumen&local=local-b&p=mes&v=hoy'))
+    expect((await screen.findByTestId('vista')).textContent).toBe('hoy')
+  })
+
+  it.each([
+    ['manager', 'paridad'],
+    ['owner', 'paridad'],
+    ['contador', 'xls'],
+    ['owner', 'no-existe'],
+  ])('%s con ?tab=%s: se limpia de la URL y abre «Resumen»', async (r, t) => {
+    role = r
+    abrir(`/ventas?tab=${t}`)
+    expect((await screen.findByTestId('vista')).textContent).toBe('resumen')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas'))
+  })
+
+  it('contador con la dirección nueva de una sub-vista que no ve (Equipo → Por línea): abre «Resumen»', async () => {
+    role = 'contador'
+    abrir('/ventas?tab=equipo&v=lineas')
+    expect((await screen.findByTestId('vista')).textContent).toBe('resumen')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas'))
+  })
+})
+
+describe('VentasModule · navegación', () => {
+  it('tocar una entrada abre su primera vista y deja la entrada en la URL', async () => {
+    abrir('/ventas')
+    await screen.findByTestId('vista')
+    fireEvent.click(within(menu()).getByRole('tab', { name: 'Productos' }))
     expect((await screen.findByTestId('vista')).textContent).toBe('mix')
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=mix'))
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
+    fireEvent.click(within(subMenu('Productos')).getByRole('tab', { name: 'Ing. Menú' }))
+    expect((await screen.findByTestId('vista')).textContent).toBe('menueng')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos&v=menu'))
+    fireEvent.click(within(subMenu('Productos')).getByRole('tab', { name: 'Mix' }))
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
   })
 
-  it('las sub-pestañas solo aparecen en entradas con varias vistas', async () => {
-    abrir('/ventas?tab=icp')
+  it('contador: «Equipo» abre «ICP» (la primera que ve)', async () => {
+    role = 'contador'
+    abrir('/ventas')
     await screen.findByTestId('vista')
-    expect(screen.getByRole('tablist', { name: 'Vistas de Saloneros' })).toBeTruthy()
-    cleanup()
-    abrir('/ventas?tab=metas')
-    await screen.findByTestId('vista')
-    expect(screen.queryByRole('tablist', { name: /Vistas de Metas/ })).toBeNull()
+    fireEvent.click(within(menu()).getByRole('tab', { name: 'Equipo' }))
+    expect((await screen.findByTestId('vista')).textContent).toBe('icp')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=equipo&v=icp'))
   })
 
-  // ── A7 · ARIA, teclado, historial y `?tab=` inválido ──────────────────────────────────
+  it('criterio 10: la barra se conserva al pasar de Resumen a Equipo y a Tiempos', async () => {
+    abrir('/ventas?tab=resumen&p=mes&local=local-b')
+    await screen.findByTestId('vista')
+    fireEvent.click(within(menu()).getByRole('tab', { name: 'Equipo' }))
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=equipo&p=mes&local=local-b'))
+    fireEvent.click(within(menu()).getByRole('tab', { name: 'Tiempos' }))
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=tiempos&p=mes&local=local-b'))
+  })
+
+  it('cada entrada con más de una vista tiene sub-pestañas', async () => {
+    for (const e of ENTRADAS.filter(x => x.vistas.length > 1)) {
+      cleanup()
+      abrir(`/ventas?tab=${e.id}`)
+      await screen.findByTestId('vista')
+      expect(within(subMenu(e.label)).getAllByRole('tab').map(t => t.textContent)).toEqual(e.vistas.map(labelDe))
+    }
+  })
+
+  // ── A7 · ARIA, teclado e historial ────────────────────────────────────────────────────
   it('cada pestaña controla el panel y el panel la nombra', async () => {
-    abrir('/ventas?tab=icp')
+    abrir(`/ventas?tab=equipo&v=${CLAVE_V.icp}`)
     await screen.findByTestId('vista')
     const panel = screen.getByRole('tabpanel')
     for (const t of screen.getAllByRole('tab')) expect(t.getAttribute('aria-controls')).toBe(panel.id)
@@ -114,44 +232,36 @@ describe('VentasModule · navegación', () => {
     expect(panel.getAttribute('aria-labelledby')).toBe(activa.id)
   })
 
-  it('flecha derecha e izquierda se mueven entre pestañas', async () => {
-    abrir('/ventas?tab=hoy')
+  it('flecha derecha e izquierda se mueven entre entradas', async () => {
+    abrir('/ventas?tab=envivo')
     await screen.findByTestId('vista')
-    const hoy = screen.getByRole('tab', { name: 'Hoy' })
-    hoy.focus()
-    fireEvent.keyDown(hoy, { key: 'ArrowRight' })
-    expect((await screen.findByTestId('vista')).textContent).toBe('resumen')
-    const resumen = screen.getByRole('tab', { name: 'Resumen' })
-    expect(document.activeElement).toBe(resumen)
-    fireEvent.keyDown(resumen, { key: 'ArrowLeft' })
-    await vi.waitFor(() => expect(screen.getByTestId('vista').textContent).toBe('hoy'))
+    const vivo = within(menu()).getByRole('tab', { name: 'En vivo' })
+    vivo.focus()
+    fireEvent.keyDown(vivo, { key: 'ArrowRight' })
+    expect((await screen.findByTestId('vista')).textContent).toBe('metas')
+    const ajustes = within(menu()).getByRole('tab', { name: 'Ajustes' })
+    expect(document.activeElement).toBe(ajustes)
+    fireEvent.keyDown(ajustes, { key: 'ArrowLeft' })
+    await vi.waitFor(() => expect(screen.getByTestId('vista').textContent).toBe('envivo'))
   })
 
   it('cambiar de pestaña deja una entrada en el historial: Atrás vuelve a la anterior', async () => {
-    abrir('/ventas?tab=historico')
+    abrir('/ventas?tab=resumen&v=historico')
     await screen.findByTestId('vista')
-    fireEvent.click(screen.getByRole('tab', { name: 'Mix' }))
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=mix'))
+    fireEvent.click(within(menu()).getByRole('tab', { name: 'Productos' }))
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
     nav.atras()
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=historico'))
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=resumen&v=historico'))
     expect((await screen.findByTestId('vista')).textContent).toBe('historico')
   })
 
-  it.each([
-    ['manager', 'paridad'],
-    ['owner', 'paridad'],
-    ['owner', 'xls'],
-    ['owner', 'no-existe'],
-  ])('%s con ?tab=%s: se limpia de la URL y abre «Hoy»', async (r, t) => {
-    role = r
-    abrir(`/ventas?tab=${t}`)
-    expect((await screen.findByTestId('vista')).textContent).toBe('hoy')
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas'))
-  })
-
-  it('sin ?tab= no se escribe nada en la URL', async () => {
-    abrir('/ventas')
-    await screen.findByTestId('vista')
-    expect(ultima.url).toBe('/ventas')
+  it('la vista que abre cada dirección nueva es la misma para el owner', async () => {
+    const casos: [string, Tab][] = [['tab=resumen&v=hoy', 'hoy'], ['tab=ajustes&v=productos', 'config'], ['tab=tiempos&v=calendario', 'calendario']]
+    for (const [q, vista] of casos) {
+      cleanup()
+      abrir(`/ventas?${q}`)
+      expect((await screen.findByTestId('vista')).textContent).toBe(vista)
+      expect(ultima.url).toBe(`/ventas?${q}`)
+    }
   })
 })

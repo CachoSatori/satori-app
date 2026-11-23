@@ -82,7 +82,9 @@ describe('A01 — escrituras con red respetan la cola', () => {
   })
   it('updateCashMovement con la fila pendiente/rechazada → update encolado, mira la fila correcta', async () => {
     state.encolar = true
-    await updateCashMovement('M', { amount_crc: 2000 } as Partial<CashMovement>)
+    // (20-nov) con la fila de la pantalla: la fila todavía no está en el servidor, la API valida sobre ella.
+    await updateCashMovement('M', { amount_crc: 2000 } as Partial<CashMovement>,
+      { movement_type: 'egreso_operativo', amount_crc: 1000, amount_usd: 0 })
     expect(state.keys).toContain(cashKey('M'))
     expect(enqueue.mock.calls[0][0]).toMatchObject({ op: 'update', payload: { match: { id: 'M' } } })
     expect(state.writes).toEqual([])

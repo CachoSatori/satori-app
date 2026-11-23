@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CashMovement, CashSession, MovementType } from '../../shared/types/database'
 import { updateCashMovement, deleteCashMovement, getCierresDia, createDayMovement } from '../../shared/api/cash'
 import { aprobacionPropinaFields } from './propinaPago'
+import { leerMonto, validarMovimiento, valorDelCuadro } from './validarMovimiento'
 import type { CashCierreDia } from '../../shared/types/database'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -49,14 +50,22 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const [nmConcepto, setNmConcepto] = useState<typeof CONCEPTOS[number]['id']>('banco_cf')
   const [nmCRC, setNmCRC] = useState<number | ''>('')
   const [nmUSD, setNmUSD] = useState<number | ''>('')
+  // badInput de cada cuadro (texto que no es número: el cuadro entrega '' y contaría como vacío).
+  const [nmCrcMalo, setNmCrcMalo] = useState(false)
+  const [nmUsdMalo, setNmUsdMalo] = useState(false)
   const [nmDesc, setNmDesc] = useState('')
   const [nmFecha, setNmFecha] = useState(todayStr())
   const [nmSaving, setNmSaving] = useState(false)
   const [nmErr, setNmErr] = useState<string | null>(null)
+  // Cerrar (Cancelar o tocar afuera) limpia el aviso: al volver a abrir no queda el error viejo. También las marcas
+  // de cuadro ilegible (badInput): al reabrir los cuadros se montan sin ese texto, y una marca vieja haría decir
+  // «no es un número» con el ₡ vacío (21-nov).
+  const cerrarNuevo = () => { setNmOpen(false); setNmErr(null); setNmCrcMalo(false); setNmUsdMalo(false) }
   const guardarNuevo = async () => {
     const c = CONCEPTOS.find(x => x.id === nmConcepto)!
-    if (!Number(nmCRC) && !Number(nmUSD)) { setNmErr('Ingresá un monto'); return }
-    if (Number(nmCRC) < 0 || Number(nmUSD) < 0) { setNmErr('El monto no puede ser negativo.'); return }   // Ítem 2
+    // Montos (20-nov, ex #73): vacío, cero, no numérico o negativo → no se registra y se dice por qué.
+    const v = validarMovimiento({ tipo: c.type, crc: nmCrcMalo ? Number.NaN : nmCRC, usd: nmUsdMalo ? Number.NaN : nmUSD }, 'alta')
+    if (!v.ok) { setNmErr(v.error); return }
 
     // ── Guard de fecha (Ítem 4) ────────────────────────────────────────────────────────────────
     // Default HOY. Futuro → bloqueado para TODOS. Pasado → solo owner/manager/contador (gate por ROL,
@@ -79,10 +88,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     setNmSaving(true); setNmErr(null)
     try {
       await createDayMovement({
-        created_by: profile?.id ?? '', movement_type: c.type, amount_crc: Number(nmCRC) || 0, amount_usd: Number(nmUSD) || 0,
+        created_by: profile?.id ?? '', movement_type: c.type, amount_crc: v.crc, amount_usd: v.usd,
         description: nmDesc || c.label, subcategory: c.sub, method: c.method, caja_origen: c.caja, status: 'aprobado', fecha: nmFecha,
       })
-      setNmOpen(false); setNmCRC(''); setNmUSD(''); setNmDesc('')
+      setNmOpen(false); setNmCRC(''); setNmUSD(''); setNmCrcMalo(false); setNmUsdMalo(false); setNmDesc('')
       onRefresh()
     } catch (e) { setNmErr(e instanceof Error ? e.message : 'Error'); setNmSaving(false) }
   }
@@ -202,12 +211,6 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   // por la MISMA vía que la pestaña Pendientes (banco), y para saberlo hay que mirar su
   // subcategory. El resto de los campos no lo necesitan y lo omiten.
   const handleFieldChange = useCallback(async (id: string, field: string, value: unknown, mov?: CashMovement) => {
-    // Guard de negativos (Ítem 2): un monto editado inline no puede quedar < 0 → revierte el input.
-    if ((field === 'amount_crc' || field === 'amount_usd') && typeof value === 'number' && value < 0) {
-      window.alert('El monto no puede ser negativo.')
-      onRefresh()
-      return
-    }
     // Editar un movimiento GUARDADO (montos, tipo, método…) requiere autorización de gerencia,
     // igual que borrarlo. owner/manager logueado pasa al instante; cajero → modal de contraseña.
     // Si cancela o falla, onRefresh() revierte lo que muestre el input.
@@ -221,7 +224,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
       const esAprobarPropina = field === 'status' && value === 'aprobado'
         && mov?.subcategory === 'Propinas por turno'
       const updates = esAprobarPropina ? aprobacionPropinaFields() : { [field]: value }
-      await updateCashMovement(id, updates as Partial<CashMovement>)
+      // Cambio de tipo o de monto: la API valida el movimiento COMPLETO sobre lo que muestra la fila.
+      const tocaMontos = field === 'movement_type' || field === 'amount_crc' || field === 'amount_usd'
+      if (tocaMontos && mov) {
+        await updateCashMovement(id, updates as Partial<CashMovement>,
+          { movement_type: mov.movement_type, amount_crc: mov.amount_crc, amount_usd: mov.amount_usd })
+      } else {
+        await updateCashMovement(id, updates as Partial<CashMovement>)
+      }
       onRefresh()
     } catch {
       // revert handled by onRefresh
@@ -229,6 +239,38 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
       setSaving(null)
     }
   }, [onRefresh, requireManager])
+
+  // Montos editados en la tabla (20-nov, ex #73). Antes, `Number(x) || 0` guardaba ₡0 si la celda quedaba vacía o
+  // con algo que no era número, y un monto < 0 se rechazaba siempre (también en un ingreso del cierre con dólares).
+  // Ahora se valida el movimiento COMPLETO como quedaría: si no vale, avisa, la celda vuelve al monto guardado y no
+  // se pide autorización ni se guarda nada. Si el monto no cambió, tampoco (antes pedía autorización igual).
+  const handleMontoBlur = useCallback((m: CashMovement, field: 'amount_crc' | 'amount_usd', input: HTMLInputElement) => {
+    const guardado = Number(m[field]) || 0
+    // badInput («12abc»): el cuadro entrega '' y contaría como 0 → valorDelCuadro lo vuelve NaN (inválido).
+    const crudo = valorDelCuadro(input)
+    const nuevo = leerMonto(crudo)
+    if (nuevo === guardado) return
+    const v = validarMovimiento({
+      tipo: m.movement_type,
+      crc: field === 'amount_crc' ? crudo : m.amount_crc,
+      usd: field === 'amount_usd' ? crudo : m.amount_usd,
+    }, 'edicion')
+    if (!v.ok) {
+      window.alert(v.error)
+      input.value = guardado ? String(guardado) : ''
+      onRefresh()
+      return
+    }
+    void handleFieldChange(m.id, field, field === 'amount_crc' ? v.crc : v.usd, m)
+  }, [handleFieldChange, onRefresh])
+
+  // Cambio de tipo (20-nov, ex #73): un ingreso con ₡ negativos (del cierre) que pasa a egreso dejaría un egreso negativo
+  // y el saldo daría mal. Se valida el movimiento con el tipo nuevo; si no vale, avisa y el select queda como estaba.
+  const handleTipoChange = useCallback((m: CashMovement, tipo: string) => {
+    const v = validarMovimiento({ tipo, crc: m.amount_crc, usd: m.amount_usd }, 'edicion')
+    if (!v.ok) { window.alert(v.error); onRefresh(); return }
+    void handleFieldChange(m.id, 'movement_type', tipo, m)
+  }, [handleFieldChange, onRefresh])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!window.confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return
@@ -377,13 +419,13 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           <input className="cd-filter-input" style={{ minWidth: 140 }} value={busq} placeholder="Buscar..."
             onChange={e => setBusq(e.target.value)} />
         </div>
-        <button className="cd-btn-green" style={{ fontSize: '0.8rem' }} onClick={() => { setNmErr(null); setNmFecha(todayStr()); setNmOpen(true) }}>+ Nuevo movimiento</button>
+        <button className="cd-btn-green" style={{ fontSize: '0.8rem' }} onClick={() => { setNmFecha(todayStr()); setNmOpen(true) }}>+ Nuevo movimiento</button>
         <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={exportCSV}>⬇ CSV</button>
       </div>
 
       {/* Modal: nuevo movimiento manual */}
       {nmOpen && (
-        <div className="cd-modal-overlay" onClick={() => setNmOpen(false)}>
+        <div className="cd-modal-overlay" onClick={cerrarNuevo}>
           <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
             <div className="cd-modal-title">Nuevo movimiento</div>
             <p style={{ fontSize: '0.74rem', color: 'var(--c-gris)', margin: '0.2rem 0 0.75rem' }}>
@@ -399,11 +441,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
             <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
               <div className="tips-field">
                 <div className="tips-field-label">Monto ₡</div>
-                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" min={0} step="any" onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" min={0} step="any" onInput={e => setNmCrcMalo(e.currentTarget.validity.badInput)} onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Monto $ (opcional)</div>
-                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" min={0} step="any" onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" min={0} step="any" onInput={e => setNmUsdMalo(e.currentTarget.validity.badInput)} onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Fecha</div>
@@ -425,8 +467,8 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               </div>
             </div>
             <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
-              <button className="tips-btn-ghost" onClick={() => setNmOpen(false)} disabled={nmSaving}>Cancelar</button>
-              <button className="cd-btn-green" onClick={guardarNuevo} disabled={nmSaving || (!Number(nmCRC) && !Number(nmUSD))}>
+              <button className="tips-btn-ghost" onClick={cerrarNuevo} disabled={nmSaving}>Cancelar</button>
+              <button className="cd-btn-green" onClick={guardarNuevo} disabled={nmSaving}>
                 {nmSaving ? 'Guardando…' : '✓ Registrar'}
               </button>
             </div>
@@ -505,7 +547,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   </td>
                   <td>
                     <select className="cd-tbl-select" value={m.movement_type}
-                      onChange={e => handleFieldChange(m.id, 'movement_type', e.target.value)}
+                      onChange={e => handleTipoChange(m, e.target.value)}
                       disabled={saving === m.id}>
                       {/* 'traspaso' NO se ofrece como destino de conversión (un traspaso necesita
                           dirección legible 'A → B', que este select no captura → quedaría indeterminado).
@@ -538,17 +580,17 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                       disabled={saving === m.id} />
                   </td>
                   <td className="r">
-                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number" min={0} step="any"
+                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number" step="any"
                       defaultValue={m.amount_crc || ''}
                       style={{ color: col, fontWeight: 600 }}
-                      onBlur={e => handleFieldChange(m.id, 'amount_crc', Number(e.target.value) || 0)}
+                      onBlur={e => handleMontoBlur(m, 'amount_crc', e.target)}
                       disabled={saving === m.id} />
                   </td>
                   <td className="r">
                     <input key={m.id + '-usd'} className="cd-tbl-input r" type="number" min={0} step="any"
                       defaultValue={m.amount_usd || ''}
                       style={{ color: 'var(--c-azul)' }}
-                      onBlur={e => handleFieldChange(m.id, 'amount_usd', Number(e.target.value) || 0)}
+                      onBlur={e => handleMontoBlur(m, 'amount_usd', e.target)}
                       disabled={saving === m.id} />
                   </td>
                   <td>

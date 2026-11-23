@@ -48,6 +48,7 @@
 10. **Policy de `pos_mesas_internas` por local** (backlog del #294): hoy un manager lee la lista de todos los locales; limitar con `puede_ver_local`. 🖊️ toca permisos.
 11. **Ventas · «Contexto jueves» de «Hoy»** mostró un promedio mal mientras cargaba el histórico: revisar si mezcla días del Excel y del PoS en la comparativa de las 4 últimas ocurrencias.
 12. **Propinas · aviso sin repartir (#320), menores del verificador:** la propiedad «avisa ⇔ guardas» no cubre montos con céntimos (barra < ₡0,5 bloquea sin aviso) · falta una mutación del aviso con cobertura (rol efectivo vs natural en `TipsModule`) · «Quincenal» recalcula con los puntos y roles **actuales** de `role_tip_points`, no con los del turno (`payout_crc` guardado).
+13. **Caja · 6 traspasos viejos con ₡ negativo (#326):** desde `validarMovimiento` ya no se editan sus montos ni los $ en la tabla (solo un ingreso con $ admite ₡ negativos al editar); decidir si se corrigen a mano (con firma) o se dejan.
 
 ## 🟧 P1 — Seguridad, Edge y deploy
 1. ~~Ítem 11 · `config.toml`~~: hecho (#313, 20-nov). Cada merge que toca `supabase/functions/` despliega por Branching (regla 2 de ESTADO).

@@ -6,6 +6,7 @@ import { enqueue, pendingOps } from '../offline/outbox'
 import { debeEncolarAhora, estadoFilaAhora, cashKey, BORRAR_PENDIENTE, BORRAR_RECHAZADA, BORRAR_SIN_ORDEN } from '../offline/ordenEscrituras'
 import { parseTraspaso } from '../../modules/cash/pozo'
 import { planBorradoDia, type MovimientoBorrable, type PlanBorradoDia } from '../../modules/cash/borrarDia'
+import { validarMovimiento, type ContextoValidacion } from '../../modules/cash/validarMovimiento'
 
 type Tables = Database['public']['Tables']
 
@@ -263,6 +264,8 @@ export async function createCashMovement(movement: {
   suggested_classification?: string
   suggested_confidence?: number
 }): Promise<CashMovement> {
+  // Montos (20-nov, ex #73): se valida ANTES de escribir y ANTES de encolar sin conexión.
+  assertMontosValidos(movement.movement_type, movement.amount_crc, movement.amount_usd, 'alta')
   // id y client_op_id se generan en el CLIENTE: así el replay offline es
   // idempotente (021: client_op_id UNIQUE) y las ediciones/borrados encolados
   // después referencian un id que será el mismo en el servidor.
@@ -345,6 +348,45 @@ async function queueCashMutation(op: 'update' | 'delete', payload: Record<string
 export const TRASPASO_SIN_DIRECCION =
   'No se puede guardar un traspaso sin dirección legible. Elegí origen → destino (ej. "Caja Fuerte → Banco").'
 
+// ── Guard de montos (20-nov, rehace lo útil del #73) ────────────────────────────────────────
+// Misma regla que las pantallas (validarMovimiento.ts). Corre al principio de createCashMovement,
+// createDayMovement y updateCashMovement: antes de escribir y antes de encolar sin conexión, así la cola
+// nunca recibe un movimiento inválido. Las altas automáticas del cierre (ventas, retiro, ajuste, apertura)
+// insertan directo y no pasan por acá: su lógica no se toca.
+function assertMontosValidos(tipo: string | null | undefined, crc: unknown, usd: unknown, contexto: ContextoValidacion): void {
+  const v = validarMovimiento({ tipo, crc, usd }, contexto)
+  if (!v.ok) throw new Error(v.error)
+}
+
+/** Tipo y montos de un movimiento guardado: base para validar un cambio de tipo o de un solo monto. */
+export type MontosActuales = Pick<CashMovement, 'movement_type' | 'amount_crc' | 'amount_usd'>
+
+export const MONTO_SIN_BASE =
+  'No se pudo validar el cambio de monto o de tipo: recargá la pantalla y reintentá.'
+
+/**
+ * Un update que toca el TIPO o un MONTO se valida con el movimiento COMPLETO que quedaría:
+ *   · si trae los tres campos, con eso;
+ *   · si trae una parte, sobre `actual` (lo que la pantalla tiene de esa fila, ya con la cola aplicada);
+ *   · sin `actual` y con conexión, sobre la fila leída de la base; sin `actual` y sin conexión (o si la fila
+ *     no se encuentra), se rechaza: a la cola no entra un cambio que no se pudo validar entero.
+ * Los updates de otros campos (estado, método, caja, descripción…) no pasan por acá.
+ */
+async function assertUpdateMontos(id: string, updates: Partial<CashMovement>, actual?: MontosActuales): Promise<void> {
+  const campos = ['movement_type', 'amount_crc', 'amount_usd'] as const
+  if (!campos.some(k => k in updates)) return
+  let base: Partial<MontosActuales> | null = actual ?? null
+  if (!base && !campos.every(k => k in updates)) {
+    if (isOffline()) throw new Error(MONTO_SIN_BASE)
+    const { data, error } = await supabase
+      .from('cash_movements').select('movement_type, amount_crc, amount_usd').eq('id', id).single()
+    if (error || !data) throw new Error(MONTO_SIN_BASE)
+    base = data as MontosActuales
+  }
+  const de = <K extends typeof campos[number]>(k: K) => (k in updates ? updates[k] : base?.[k])
+  assertMontosValidos(de('movement_type'), de('amount_crc'), de('amount_usd'), 'edicion')
+}
+
 function assertTraspasoLegible(
   movement_type: string | null | undefined,
   subcategory: string | null | undefined,
@@ -357,6 +399,7 @@ function assertTraspasoLegible(
 export async function updateCashMovement(
   id: string,
   updates: Partial<CashMovement>,
+  actual?: MontosActuales,   // tipo y montos que la pantalla tiene de esa fila (para validar un cambio parcial)
 ): Promise<void> {
   // Guard de dirección (ítem 1a): si el update toca el tipo y/o la subcategoría, validar el ESTADO
   // RESULTANTE. Atajo: si el tipo final NO es traspaso, no hay nada que validar (ni se lee la fila →
@@ -379,6 +422,9 @@ export async function updateCashMovement(
       assertTraspasoLegible(finalType, finalSub)
     }
   }
+
+  // Montos (20-nov, ex #73): el movimiento completo que quedaría, antes de escribir o de encolar.
+  await assertUpdateMontos(id, updates, actual)
 
   // _pending es un flag SOLO de cliente (proyección de la cola) — nunca viaja a la DB.
   const { _pending, ...clean } = updates
@@ -459,6 +505,8 @@ export async function createDayMovement(m: {
 }): Promise<string> {
   // Guard de dirección (ítem 1a): no crear un traspaso sin dirección legible.
   assertTraspasoLegible(m.movement_type, m.subcategory)
+  // Montos (20-nov, ex #73): se valida ANTES de escribir y ANTES de encolar sin conexión.
+  assertMontosValidos(m.movement_type, m.amount_crc, m.amount_usd ?? 0, 'alta')
   // ts = fecha del MOVIMIENTO (puede venir backdateada al mediodía). NO confundir con el
   // created_at del SOBRE de la cola, que debe ser el reloj real para ordenar bien el outbox.
   const ts = m.fecha ? `${m.fecha}T12:00:00Z` : new Date().toISOString()

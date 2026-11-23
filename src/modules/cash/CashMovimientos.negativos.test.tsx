@@ -81,6 +81,8 @@ describe('CashMovimientos · edición inline — monto negativo (Ítem 2)', () =
     fireEvent.change(crc, { target: { value: '7000' } })
     await act(async () => { fireEvent.blur(crc) })
     expect(window.alert).not.toHaveBeenCalled()
-    expect(updateCashMovement).toHaveBeenCalledWith('m1', { amount_crc: 7000 })
+    // 3er argumento (20-nov): tipo y montos de la fila, para que la API valide el movimiento completo.
+    expect(updateCashMovement).toHaveBeenCalledWith('m1', { amount_crc: 7000 },
+      { movement_type: 'egreso_operativo', amount_crc: 5000, amount_usd: 0 })
   })
 })

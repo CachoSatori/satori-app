@@ -29,6 +29,7 @@ import {
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import { avisosCierrePropinas } from './guardasCierre'
+import { alEscribir, esIlegible, montoGuardable, sinIlegibles, validarTipoCambio, validarTurno, valorInput } from './validarTurno'
 import { sinRepartirTurno } from './sinRepartir'
 import { availableForCobertura, eligibleRoster } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
@@ -90,6 +91,9 @@ export default function TipsModule() {
   // Marca la última escritura local (autosave/toggle/blur/cobertura). El refetch de
   // realtime se pausa unos segundos después → no pisa la edición con el auto-eco.
   const lastLocalWriteRef = useRef(0)
+  // Cada recarga del turno abierto vuelve a montar los cuadros del pozo: si uno mostraba algo ilegible
+  // («20000-») y lo guardado es 0 (→ ''), React no lo borraría solo y se vería distinto de lo validado.
+  const [recarga, setRecarga] = useState(0)
 
   // ── Cargar datos ──────────────────────────────────────────
   const loadData = useCallback(async (opts?: { silent?: boolean }) => {
@@ -121,6 +125,7 @@ export default function TipsModule() {
         setShiftType(open.shift_type)
         setFecha(open.session_date)
         setExchangeRate(open.exchange_rate)
+        setRecarga(n => n + 1)
 
         // Cargar entradas
         const entries = await getTipEntriesBySession(open.id)
@@ -239,10 +244,23 @@ export default function TipsModule() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, coberturas, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate, openSession?.id])
 
+  // ── Nada negativo (decisión del dueño 20-nov, validarTurno.ts): con un problema no se cierra ──
+  const problemaTurno = useMemo(() => {
+    if (!openSession) return null
+    return validarTurno({
+      lineas: lines.map(l => ({ nombre: l.employeeName, activa: l.active, hours: l.hours, propina_crc: l.propina_crc, propina_usd: l.propina_usd })),
+      efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate, openSession?.id])
+
   // ── Auto-guardar pools en Supabase ────────────────────────
   const scheduleSavePools = useCallback(() => {
     if (!openSession) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    // Nada negativo (20-nov): con un pozo negativo o que no es número, este autoguardado se saltea (el
+    // cierre muestra el motivo); lo que está en pantalla se guarda apenas se corrige. Las filas siguen.
+    if (![efectivoCRC, efectivoUSD, barraCRC, barraElecCRC].every(montoGuardable)) return
     saveTimerRef.current = setTimeout(() => {
       lastLocalWriteRef.current = Date.now()
       updateSessionPools(openSession.id, {
@@ -259,6 +277,9 @@ export default function TipsModule() {
   // ── Abrir sesión ──────────────────────────────────────────
   const handleCreateSession = async () => {
     if (!profile) return
+    // El tipo de cambio queda guardado en el turno: nunca 0 ni negativo (decisión del dueño 20-nov).
+    const tcMalo = validarTipoCambio(exchangeRate)
+    if (tcMalo) { setError(tcMalo); return }
     // Guard: nunca crear si ya existe un registro (abierto o cerrado) para esa fecha + turno
     const dup = sessions.find(s => s.session_date === fecha && s.shift_type === shiftType)
     if (dup) {
@@ -355,9 +376,10 @@ export default function TipsModule() {
   }
 
   // ── Cambiar horas ─────────────────────────────────────────
-  const handleHoursChange = (employeeId: string, val: string) => {
+  // `ilegible`: el cuadro muestra algo que el navegador no lee como número (validarTurno.ts) → NaN, no ''.
+  const handleHoursChange = (employeeId: string, val: string, ilegible = false) => {
     setLines(prev => prev.map(l =>
-      l.employeeId === employeeId ? { ...l, hours: val === '' ? '' : parseFloat(val) || '' } : l
+      l.employeeId === employeeId ? { ...l, hours: ilegible ? Number.NaN : val === '' ? '' : parseFloat(val) || '' } : l
     ))
   }
 
@@ -370,7 +392,7 @@ export default function TipsModule() {
     const defaultHours = shiftType === 'AM' ? 5 : 8
     setLines(prev => prev.map(l => {
       if (l.employeeId !== empId) return l
-      return { ...l, active: true, hours: defaultHours, pts_rol: ptsMap.get(coveredRole as import('../../shared/types/database').UserRole) ?? l.pts_rol }
+      return { ...sinIlegibles(l), active: true, hours: defaultHours, pts_rol: ptsMap.get(coveredRole as import('../../shared/types/database').UserRole) ?? l.pts_rol }
     }))
     setShowCobPicker(false); setCobEmpId(''); setCobRole('')
     // Persistir al toque: que la cobertura sobreviva un refetch (mismo shape que toggleLine).
@@ -391,7 +413,8 @@ export default function TipsModule() {
     setCoberturas(prev => { const n = { ...prev }; delete n[empId]; return n })
     setLines(prev => prev.map(l => {
       if (l.employeeId !== empId) return l
-      return { ...l, active: false, hours: '', pts_rol: ptsMap.get(l.role) ?? l.pts_rol }
+      // Lo ilegible de un cuadro que se oculta vuelve a vacío: al volver a marcarla no bloquearía sin verse.
+      return { ...sinIlegibles(l), active: false, hours: '', pts_rol: ptsMap.get(l.role) ?? l.pts_rol }
     }))
     // La línea queda inactiva: persistir la baja para que el refetch no la resucite.
     if (!openSession?.id) return
@@ -400,9 +423,9 @@ export default function TipsModule() {
   }
 
   // ── Cambiar propina ───────────────────────────────────────
-  const handlePropinaChange = (employeeId: string, field: 'propina_crc' | 'propina_usd', val: string) => {
+  const handlePropinaChange = (employeeId: string, field: 'propina_crc' | 'propina_usd', val: string, ilegible = false) => {
     setLines(prev => prev.map(l =>
-      l.employeeId === employeeId ? { ...l, [field]: val === '' ? '' : parseFloat(val) || '' } : l
+      l.employeeId === employeeId ? { ...l, [field]: ilegible ? Number.NaN : val === '' ? '' : parseFloat(val) || '' } : l
     ))
   }
 
@@ -413,6 +436,8 @@ export default function TipsModule() {
     if (!line || !line.active) return
     const hours = Number(line.hours) || 0
     if (hours <= 0) return
+    // Propina negativa o que no es número: no se guarda esta fila (el cierre muestra el motivo).
+    if (!montoGuardable(line.propina_crc) || !montoGuardable(line.propina_usd)) return
     lastLocalWriteRef.current = Date.now()
     await upsertTipEntry({
       session_id:     openSession.id,
@@ -442,6 +467,7 @@ export default function TipsModule() {
     if (!openSession || !profile || !totals) return
     const workedLines = displayLines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
+    if (problemaTurno) { setError(problemaTurno); return }                 // defensa: el botón ya está deshabilitado
     if (avisosCierre.length) { setError(avisosCierre[0].texto); return }   // defensa: el botón ya está deshabilitado
     // 3 números que reconcilian: Total asignado = Efectivo ya en mano + Electrónico a entregar.
     const totalAsignado = Math.round(workedLines.reduce((s, l) => s + l.take_home, 0))
@@ -607,8 +633,8 @@ export default function TipsModule() {
                 </div>
                 <div className="tips-field">
                   <div className="tips-field-label">Tipo de cambio (₡/USD)</div>
-                  <input type="number" className="tips-input-dark" value={exchangeRate} min={1} step="any"
-                    onChange={e => setExchangeRate(Number(e.target.value) || 640)} />
+                  <input type="number" className="tips-input-dark" value={valorInput(exchangeRate)} min={1} step="any"
+                    {...alEscribir(el => setExchangeRate(esIlegible(el) ? Number.NaN : Number(el.value) || 640))} />
                 </div>
               </div>
 
@@ -687,14 +713,14 @@ export default function TipsModule() {
                   <div className="tips-money-field">
                     <span className="tips-money-prefix">₡</span>
                     <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
-                      value={efectivoCRC}
-                      onChange={e => setEfectivoCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                      key={`ef-crc-${recarga}`} value={valorInput(efectivoCRC)}
+                      {...alEscribir(el => setEfectivoCRC(esIlegible(el) ? Number.NaN : el.value === '' ? '' : parseFloat(el.value) || 0))} />
                   </div>
                   <div className="tips-money-field">
                     <span className="tips-money-prefix">$</span>
                     <input type="number" className="tips-money-input" placeholder="0.00" step={0.01} min={0}
-                      value={efectivoUSD}
-                      onChange={e => setEfectivoUSD(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                      key={`ef-usd-${recarga}`} value={valorInput(efectivoUSD)}
+                      {...alEscribir(el => setEfectivoUSD(esIlegible(el) ? Number.NaN : el.value === '' ? '' : parseFloat(el.value) || 0))} />
                   </div>
                 </div>
                 <span className="tips-field-hint">Propina en efectivo al pool general</span>
@@ -728,8 +754,8 @@ export default function TipsModule() {
                               <span className="tips-money-prefix">₡</span>
                               <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                                 title="Barra efectivo — ya en mano de la barra, no genera cuenta por pagar"
-                                value={barraCRC}
-                                onChange={e => setBarraCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                                key={`barra-crc-${recarga}`} value={valorInput(barraCRC)}
+                                {...alEscribir(el => setBarraCRC(esIlegible(el) ? Number.NaN : el.value === '' ? '' : parseFloat(el.value) || 0))} />
                             </div>
                           </div>
                           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
@@ -738,8 +764,8 @@ export default function TipsModule() {
                               <span className="tips-money-prefix">₡</span>
                               <input type="number" className="tips-money-input" placeholder="0" step="any" min={0}
                                 title="Barra electrónico (datáfono/SINPE) — el encargado lo entrega, genera cuenta por pagar"
-                                value={barraElecCRC}
-                                onChange={e => setBarraElecCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                                key={`barra-elec-${recarga}`} value={valorInput(barraElecCRC)}
+                                {...alEscribir(el => setBarraElecCRC(esIlegible(el) ? Number.NaN : el.value === '' ? '' : parseFloat(el.value) || 0))} />
                             </div>
                           </div>
                         </div>
@@ -779,8 +805,8 @@ export default function TipsModule() {
                               isManager={canOperate}
                               shiftType={shiftType}
                               onToggle={checked => !isCob && toggleLine(line.employeeId, checked)}
-                              onHoursChange={val => handleHoursChange(line.employeeId, val)}
-                              onPropinaChange={(field, val) => handlePropinaChange(line.employeeId, field, val)}
+                              onHoursChange={(val, ilegible) => handleHoursChange(line.employeeId, val, ilegible)}
+                              onPropinaChange={(field, val, ilegible) => handlePropinaChange(line.employeeId, field, val, ilegible)}
                               onBlur={() => handleLineBlur(line.employeeId)}
                             />
                           </div>
@@ -876,14 +902,18 @@ export default function TipsModule() {
               {/* Cerrar turno */}
               {canOperate && lines.some(l => l.active) && (
                 <>
-                {(sinRepartir || avisosCierre.length > 0) && (
+                {problemaTurno ? (
+                  <div role="alert" data-testid="avisos-cierre" style={{ marginBottom: '0.6rem', padding: '0.6rem 0.8rem', borderLeft: '3px solid var(--c-laca)', background: 'var(--c-panel)', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                    <div data-testid="aviso-negativos" style={{ fontWeight: 700 }}>⚠ {problemaTurno}</div>
+                  </div>
+                ) : (sinRepartir || avisosCierre.length > 0) && (
                   <div role="alert" data-testid="avisos-cierre" style={{ marginBottom: '0.6rem', padding: '0.6rem 0.8rem', borderLeft: '3px solid var(--c-laca)', background: 'var(--c-panel)', fontSize: '0.82rem', lineHeight: 1.4 }}>
                     {sinRepartir && <div data-testid="aviso-sin-repartir" style={{ fontWeight: 700 }}>⚠ {sinRepartir.texto}</div>}
                     {avisosCierre.map(a => <div key={a.tipo}>⚠ {sinRepartir ? a.detalle : a.texto}</div>)}
                   </div>
                 )}
                 <div className="tips-close-bar">
-                  <button className="tips-btn-danger" onClick={handleCloseSession} disabled={closing || avisosCierre.length > 0}>
+                  <button className="tips-btn-danger" onClick={handleCloseSession} disabled={closing || !!problemaTurno || avisosCierre.length > 0}>
                     {closing ? 'Cerrando…' : '▶ Cerrar turno y guardar payouts'}
                   </button>
                 </div>
@@ -952,8 +982,8 @@ interface TipLineRowProps {
   isManager: boolean
   shiftType: 'AM' | 'PM'
   onToggle: (checked: boolean) => void
-  onHoursChange: (val: string) => void
-  onPropinaChange: (field: 'propina_crc' | 'propina_usd', val: string) => void
+  onHoursChange: (val: string, ilegible: boolean) => void
+  onPropinaChange: (field: 'propina_crc' | 'propina_usd', val: string, ilegible: boolean) => void
   onBlur: () => void
 }
 
@@ -987,9 +1017,9 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
             <div className="tips-emp-field-label">Horas</div>
             <input
               type="number" className="tips-emp-input" min={0} max={24} step={0.25}
-              value={line.hours}
+              value={valorInput(line.hours)}
               placeholder={String(defaultHrs)}
-              onChange={e => onHoursChange(e.target.value)}
+              {...alEscribir(el => onHoursChange(el.value, esIlegible(el)))}
               onBlur={onBlur}
               disabled={!isManager}
             />
@@ -1004,8 +1034,8 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
                   <span className="tips-money-sm-prefix">₡</span>
                   <input
                     type="number" className="tips-emp-input-money" min={0} step="any"
-                    value={line.propina_crc} placeholder="0"
-                    onChange={e => onPropinaChange('propina_crc', e.target.value)}
+                    value={valorInput(line.propina_crc)} placeholder="0"
+                    {...alEscribir(el => onPropinaChange('propina_crc', el.value, esIlegible(el)))}
                     onBlur={onBlur}
                     disabled={!isManager}
                   />
@@ -1017,8 +1047,8 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
                   <span className="tips-money-sm-prefix">$</span>
                   <input
                     type="number" className="tips-emp-input-money" min={0} step={0.01}
-                    value={line.propina_usd} placeholder="0"
-                    onChange={e => onPropinaChange('propina_usd', e.target.value)}
+                    value={valorInput(line.propina_usd)} placeholder="0"
+                    {...alEscribir(el => onPropinaChange('propina_usd', el.value, esIlegible(el)))}
                     onBlur={onBlur}
                     disabled={!isManager}
                   />

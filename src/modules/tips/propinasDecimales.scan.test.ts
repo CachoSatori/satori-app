@@ -42,15 +42,15 @@ function reconstruir(tag: string): HTMLInputElement {
 }
 
 const CASOS: [archivo: string, ancla: string, valor: string][] = [
-  ['modules/tips/TipsModule.tsx', 'value={efectivoCRC}', '15000.50'],
-  ['modules/tips/TipsModule.tsx', 'value={barraCRC}', '15000.50'],
-  ['modules/tips/TipsModule.tsx', 'value={barraElecCRC}', '15000.50'],
-  ['modules/tips/TipsModule.tsx', 'value={line.propina_crc}', '15000.50'],
-  ['modules/tips/TipsModule.tsx', 'value={exchangeRate}', '505.37'],
-  ['modules/tips/TipHistory.tsx', 'value={ePoolCRC}', '15000.50'],
-  ['modules/tips/TipHistory.tsx', 'value={ePoolBarra}', '15000.50'],
-  ['modules/tips/TipHistory.tsx', 'value={ePoolBarraElec}', '15000.50'],
-  ['modules/tips/TipHistory.tsx', 'value={r.propina_crc}', '15000.50'],
+  ['modules/tips/TipsModule.tsx', 'value={valorInput(efectivoCRC)}', '15000.50'],
+  ['modules/tips/TipsModule.tsx', 'value={valorInput(barraCRC)}', '15000.50'],
+  ['modules/tips/TipsModule.tsx', 'value={valorInput(barraElecCRC)}', '15000.50'],
+  ['modules/tips/TipsModule.tsx', 'value={valorInput(line.propina_crc)}', '15000.50'],
+  ['modules/tips/TipsModule.tsx', 'value={valorInput(exchangeRate)}', '505.37'],
+  ['modules/tips/TipHistory.tsx', 'value={valorInput(ePoolCRC)}', '15000.50'],
+  ['modules/tips/TipHistory.tsx', 'value={valorInput(ePoolBarra)}', '15000.50'],
+  ['modules/tips/TipHistory.tsx', 'value={valorInput(ePoolBarraElec)}', '15000.50'],
+  ['modules/tips/TipHistory.tsx', 'value={valorInput(r.propina_crc)}', '15000.50'],
 ]
 
 describe('Propinas: los inputs de ₡ y el tipo de cambio aceptan céntimos', () => {

@@ -7,6 +7,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { HistMap } from '../../shared/types/ventas'
 
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { role: 'owner' } }) }))
@@ -113,5 +115,50 @@ describe('«Tiempos» → «Meses y temporadas»', () => {
     const orden = [...document.querySelectorAll('[data-bloque]')].map(e => e.getAttribute('data-bloque'))
     expect(orden).toEqual(['dia-semana', 'hora-turno', 'sentados', 'quincenas', 'meses', 'calendario'])
     expect(seccion().querySelector('[data-nota="temporadas"]')!.textContent).toContain('elegí «Temporada» en el «Período» de arriba')
+  })
+  it('«Por trimestre»: un año sin días en ese trimestre dice «—», nunca «₡0» (como «Mes por mes»)', async () => {
+    await abrir()
+    await screen.findByRole('table', { name: 'Mes por mes' })
+    // T3 de 2025: la fixture de 2025 arranca en octubre. T4 de 2025 sí tiene ventas.
+    const neta = (q: number, y: number) => seccion().querySelector(`[data-trimestre="${q}"] [data-anio="${y}"] [data-dato="neta"]`)!.textContent
+    expect(neta(3, 2025)).toBe('—')
+    expect(neta(1, 2023)).toBe('—')
+    expect(neta(4, 2025)).toMatch(/^₡[\d.]+$/)
+    expect(neta(4, 2025)).not.toBe('₡0')
+    expect(seccion().querySelector('[data-trimestre]')!.closest('section')!.textContent).not.toMatch(/₡0(?![\d.,])/)
+  })
+})
+
+// Bug del verificador del #339 (23-nov): el ancho de 4 columnas iba en línea y le ganaba a la regla de pantalla
+// chica de `index.css`; a 390 px las tarjetas de 2024 y 2023 quedaban cortadas. happy-dom evalúa el @media.
+describe('«Meses y temporadas» en el teléfono (390 px, con el CSS de la app)', () => {
+  let estilo: HTMLStyleElement
+  const hd = () => (window as unknown as { happyDOM: { setViewport: (v: { width: number; height: number }) => void } }).happyDOM
+  // El viewport va ANTES de cargar el CSS: happy-dom evalúa el @media al insertar la hoja.
+  const conCss = (width: number) => {
+    hd().setViewport({ width, height: 800 })
+    estilo = document.createElement('style')
+    estilo.textContent = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8')
+    document.head.appendChild(estilo)
+  }
+  afterEach(() => { estilo.remove(); hd().setViewport({ width: 1024, height: 768 }) })
+
+  const grilla = () => seccion().querySelector('.vt-kpi[data-anio]')!.parentElement as HTMLElement
+
+  it('a 390 px las tarjetas por año se apilan (una columna) y no llevan el ancho en línea', async () => {
+    conCss(390)
+    await abrir()
+    await screen.findByRole('table', { name: 'Mes por mes' })
+    expect(window.innerWidth).toBe(390)
+    expect(grilla().style.gridTemplateColumns).toBe('')
+    expect(getComputedStyle(grilla()).gridTemplateColumns).toBe('1fr')
+  })
+
+  it('en escritorio, una columna por año (3 años → 3 columnas)', async () => {
+    conCss(1280)
+    await abrir()
+    await screen.findByRole('table', { name: 'Mes por mes' })
+    expect(grilla().style.getPropertyValue('--vt-anios')).toBe('3')
+    expect(getComputedStyle(grilla()).gridTemplateColumns).toMatch(/^repeat\(var\(--vt-anios, 4\), minmax\(0, 1fr\)\)$|^repeat\(3, minmax\(0(px)?, 1fr\)\)$/)
   })
 })

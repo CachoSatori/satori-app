@@ -6,7 +6,7 @@
 // Lee por su cuenta (en paralelo al resto de «Tiempos», sin frenarlo): los días del PoS desde su corte, por la misma
 // función de la 190 y la misma memoria por tramo (`cargarLecturaDeRangos`), y 2023 de `hist` (el resumen diario
 // viejo, que el shell baja siempre). Si falla, el resto de la pestaña se ve igual.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { HistMap } from '../../shared/types/ventas'
 import { fi } from './ventasUtils'
 import { corteDe, nombreMes, rotulo } from './aLaFecha'
@@ -107,7 +107,9 @@ function Cuerpo({ mt, vpp }: { mt: MesesTemporadas; vpp: Map<number, VentaPorPer
       </p>
 
       {/* Por año */}
-      <div className="vt-kpi-grid" style={{ gridTemplateColumns: `repeat(${Math.min(mt.anios.length, 4)}, 1fr)` }}>
+      {/* Las columnas por año van por variable y clase (no en línea): así la regla de pantalla chica de `index.css`
+          las apila en el teléfono (un estilo en línea le ganaba y cortaba las tarjetas a 390 px). */}
+      <div className="vt-kpi-grid vt-kpi-anios" style={{ '--vt-anios': Math.min(mt.anios.length, 4) } as CSSProperties}>
         {mt.tarjetas.map(t => {
           const v = vpp.get(t.anio)
           const vppTxt = v
@@ -185,7 +187,7 @@ function Cuerpo({ mt, vpp }: { mt: MesesTemporadas; vpp: Map<number, VentaPorPer
                 <div key={v.anio} data-anio={v.anio} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.4rem', paddingBottom: '0.4rem', borderBottom: '1px solid var(--c-linea)' }}>
                   <span style={{ fontSize: '0.78rem', color: 'var(--c-gris)' }}>{v.anio}</span>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--c-oro-texto)' }} data-dato="neta">{fi(v.t.ventaNeta)}</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--c-oro-texto)' }} data-dato="neta">{v.t.dias > 0 ? fi(v.t.ventaNeta) : '—'}</div>
                     {x && x.pct !== null && <div style={{ fontSize: '0.68rem' }}>{pct(x, 'trimestre')} <span className="vt2-delta-base">vs {x.contra}</span></div>}
                   </div>
                 </div>

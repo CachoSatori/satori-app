@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import type { DiasMap, HistMap } from '../../shared/types/ventas'
 import { getContabilidadDays, availableYears, fi } from './ventasUtils'
 // «A la fecha» (Ventas v2, fases 0.2 y 1.3): todo rango sale de `aLaFecha.ts`, que usa el motor
@@ -87,7 +87,7 @@ export default function VentasAnalisis({ dias, hist }: Props) {
             </div>
           )}
           {/* Annual KPI cards */}
-          <div className="vt-kpi-grid" style={{ gridTemplateColumns: `repeat(${Math.min(years.length, 4)}, 1fr)` }}>
+          <div className="vt-kpi-grid vt-kpi-anios" style={{ '--vt-anios': Math.min(years.length, 4) } as CSSProperties}>
             {years.map((y, i) => {
               const vivo = y === c.anio && anioVivo
               const d    = T(al(rangoAnioNatural(y), false))

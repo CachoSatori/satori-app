@@ -22,6 +22,8 @@
 //   3. «Calendario» viejo sumaba HOY (en curso) en el mes abierto; «Tiempos» no (D2). Se prueba hasta ayer.
 //   4. «Calendario» viejo promediaba cada día de semana sobre TODA la historia (2023 incluido); «Día de semana» lo hace
 //      sobre el período de la barra. Con «Rango» de todo el PoS da lo mismo (se prueba); 2023 ya no entra ahí.
+//   5. «Por trimestre»: un año sin ventas en el trimestre decía «₡0»; ahora «—» (sin comparación, como «Mes por mes»;
+//      verificador del #339). Con ventas, la misma cifra.
 //
 // Reloj fijo DE NOCHE en CR (23:30 del 18-nov = 05:30 UTC del 19): hoy = 18-nov, ayer = 17-nov.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -191,7 +193,7 @@ describe('paridad 3.5.3 · «Análisis» → «Año vs Año» = «Tiempos» → 
       const filas = [...card.querySelectorAll('[data-anio]')].map(d => [d.getAttribute('data-anio'), txt(d.querySelector('[data-dato="neta"]')),
         txt(d.querySelector('[data-cambio]'))])
       expect(filas.map(f => f[0])).toEqual(filasViejas[q - 1].map(f => f[0]))
-      expect(filas.map(f => f[1])).toEqual(filasViejas[q - 1].map(f => f[1]))
+      expect(filas.map(f => f[1])).toEqual(filasViejas[q - 1].map(f => (f[1] === '₡0' ? '—' : f[1])))
       for (const [i, f] of filas.entries()) igual1(filasViejas[q - 1][i][2] || '—', f[2] || '—')
     }
   })

@@ -27,8 +27,8 @@ import { Aviso } from '../../shared/ui/estandar'
 import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from './validarMovimiento'
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import {
-  reemplazarPago, aplicarReemplazos, reemplazosAbiertos, podarReemplazos, leerReemplazos, guardarReemplazos,
-  coincidePago, NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente, type DatosPago,
+  reemplazarPago, aplicarReemplazos, reemplazosAbiertos, anotarEnAparato, leerReemplazos, guardarReemplazos,
+  coincidePago, enCambioAbierto, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente, type DatosPago,
 } from './reemplazoPago'
 import type { Employee } from '../../shared/types/database'
 
@@ -173,12 +173,13 @@ export default function CashTurno({
   // Cambió el turno: se relee la anotación de ESE turno (ajuste de estado en el render, sin efecto).
   if (reemplazosDe.sid !== sessionId) setReemplazosDe({ sid: sessionId, lista: sessionId ? leerReemplazos(sessionId) : [] })
   const reemplazos = reemplazosDe.lista
-  // Escribe la anotación soltando de paso las terminadas (el viejo ya no está y el nuevo sí). Se guarda en el aparato
-  // ANTES del setState (no dentro del actualizador): las otras pestañas de Caja la leen en su próximo render
+  // Escribe la anotación soltando de paso las terminadas (el viejo ya no está y el nuevo sí). Parte de lo último
+  // guardado en el aparato (anotarEnAparato), no de la lista del último render: dos anotaciones seguidas no se pisan.
+  // Se guarda ANTES del setState (no dentro del actualizador): las otras pestañas de Caja la leen en su próximo render
   // (useReemplazosAparato) y el evento no puede dispararse mientras React renderiza.
   const anotarReemplazos = useCallback((fn: (prev: ReemplazoPendiente[]) => ReemplazoPendiente[]) => {
-    const lista = podarReemplazos(sessionMovementsBase, fn(reemplazos))
-    if (sessionId) guardarReemplazos(sessionId, lista)
+    if (!sessionId) return
+    const lista = anotarEnAparato(sessionId, reemplazos, fn, sessionMovementsBase)
     setReemplazosDe({ sid: sessionId, lista })
   }, [sessionId, sessionMovementsBase, reemplazos])
   const sessionMovements = useMemo(
@@ -510,6 +511,8 @@ export default function CashTurno({
   // El ALTA de pagos nuevos ahora es por el asistente "➕ Agregar" (F4.3c). El modal de pago sobrevive
   // SOLO para EDITAR un pago existente (openEditPago) y para el guardado en el cierre (persistPago).
   const openEditPago = (p: PagoRow) => {
+    // (ronda 3) El nuevo o el viejo de un cambio abierto no se editan: reemplazarlo rompería el par y contaría doble.
+    if (enCambioAbierto(p.persistedId, cambiosAbiertos)) { onError(MSG_PAGO_EN_CAMBIO); return }
     setEditId(p.id); setDraftSup(p.supplier_id); setDraftCRC(p.amount_crc); setDraftUSD(p.amount_usd)
     setDraftMethod(p.method); setDraftRef(p.reference)
     setSupSearch(suppliers.find(s => s.id === p.supplier_id)?.name ?? ''); setSupOpen(false)
@@ -519,6 +522,8 @@ export default function CashTurno({
 
   const removePago = async (id: string) => {
     const pago = displayPagos.find(p => p.id === id)
+    // (ronda 3) Tampoco se borra: el viejo volvería a contar y el aviso desaparecería sin terminar el cambio.
+    if (enCambioAbierto(pago?.persistedId, cambiosAbiertos)) { onError(MSG_PAGO_EN_CAMBIO); return }
     if (pago?.persistedId) {
       // Borrado de un pago YA guardado → requiere autorización de gerencia
       const auth = await requireManager()
@@ -589,8 +594,8 @@ export default function CashTurno({
       // queda anotado (se cuenta una vez) y el encargado ve qué monto quedó guardado.
       anotarReemplazos(prev => [...prev.filter(x => x.viejo !== r.reemplazo.viejo), r.reemplazo])
       onError(r.guardado
-        ? `Un intento anterior sí quedó guardado, pero con otro monto (${fi(r.guardado.amount_crc)}${r.guardado.amount_usd ? ` · $${r.guardado.amount_usd}` : ''}), no con lo que escribiste ahora. No se cuenta dos veces: tocá «Terminar el cambio» en el aviso rojo y después editá ese pago para dejar el monto correcto.`
-        : 'Un intento anterior sí quedó guardado y no se pudo confirmar con qué monto. No se cuenta dos veces: revisá el pago en la lista, tocá «Terminar el cambio» en el aviso rojo y, si hace falta, editalo.')
+        ? `Un intento anterior sí quedó guardado, pero con otro monto (${fi(r.guardado.amount_crc)}${r.guardado.amount_usd ? ` · $${r.guardado.amount_usd}` : ''}), no con lo que escribiste ahora. No se cuenta dos veces: tocá «Terminar el cambio» en el aviso rojo y, cuando el aviso desaparezca, editá ese pago para dejar el monto correcto.`
+        : 'Un intento anterior sí quedó guardado y no se pudo confirmar con qué monto. No se cuenta dos veces: revisá el pago en la lista, tocá «Terminar el cambio» en el aviso rojo y, cuando el aviso desaparezca, editalo si hace falta.')
       onRefresh()
       setPagoModal(false)
       return
@@ -639,6 +644,7 @@ export default function CashTurno({
     // MISMA autorización de gerencia que el borrado. Antes este camino llamaba la cascada SIN
     // credenciales y la RPC (mig 044) rechazaba al cajero con "No autorizado" sin pedirle nada.
     const old = editId ? displayPagos.find(p => p.id === editId) : null
+    if (enCambioAbierto(old?.persistedId, cambiosAbiertos)) { onError(MSG_PAGO_EN_CAMBIO); return }   // (ronda 3) segunda barrera
     // (hallazgo 252) Cambiar un pago guardado necesita la base: sin red, o con el pago todavía en la cola, el borrado
     // del viejo no se puede hacer. Se frena ANTES de crear nada (mismos textos que el borrado).
     if (old?.persistedId && typeof navigator !== 'undefined' && navigator.onLine === false) {

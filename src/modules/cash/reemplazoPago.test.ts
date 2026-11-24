@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { CashMovement } from '../../shared/types/database'
 import {
   reemplazarPago, aplicarReemplazos, reemplazosAbiertos, podarReemplazos, leerReemplazos, guardarReemplazos,
-  esDuplicado, claveReemplazos, coincidePago, leerTodosLosReemplazos, type ReemplazoPendiente, type DatosPago,
+  esDuplicado, claveReemplazos, coincidePago, leerTodosLosReemplazos, anotarEnAparato, enCambioAbierto, type ReemplazoPendiente, type DatosPago,
 } from './reemplazoPago'
 
 // Hallazgo 252: editar un pago guardado nunca deja un hueco. Datos ficticios.
@@ -159,6 +159,32 @@ describe('anotación en el aparato', () => {
     expect(leerTodosLosReemplazos(st)).toEqual([{ viejo: 'v1', nuevo: 'n1', at: 1 }, { viejo: 'v2', nuevo: 'n2', at: 2 }])
     expect(leerTodosLosReemplazos(null)).toEqual([])
     expect(leerTodosLosReemplazos({ getItem: () => null, key: () => { throw new Error('bloqueado') }, length: 1 })).toEqual([])
+  })
+
+  it('(ronda 3) anotarEnAparato: dos anotaciones seguidas con la MISMA lista vieja de memoria no se pisan', () => {
+    const st = memoria()
+    const r1: ReemplazoPendiente = { viejo: 'v1', nuevo: 'n1', at: 5 }
+    const r2: ReemplazoPendiente = { viejo: 'v2', nuevo: 'n2', at: 6 }
+    const movs = [mov('v1'), mov('n1'), mov('v2'), mov('n2')]
+    const vieja: ReemplazoPendiente[] = []                        // la del último render
+    anotarEnAparato('s1', vieja, prev => [...prev, r1], movs, st, 10)
+    const lista = anotarEnAparato('s1', vieja, prev => [...prev, r2], movs, st, 10)
+    expect(lista).toEqual([r1, r2])
+    expect(leerReemplazos('s1', st)).toEqual([r1, r2])
+  })
+
+  it('(ronda 3) anotarEnAparato sin almacenamiento parte de la memoria', () => {
+    const r1: ReemplazoPendiente = { viejo: 'v1', nuevo: 'n1', at: 5 }
+    const r2: ReemplazoPendiente = { viejo: 'v2', nuevo: 'n2', at: 6 }
+    expect(anotarEnAparato('s1', [r1], prev => [...prev, r2], [mov('v1'), mov('n1'), mov('v2'), mov('n2')], null, 10)).toEqual([r1, r2])
+  })
+
+  it('(ronda 3) enCambioAbierto: el viejo y el nuevo de un par abierto, nada más', () => {
+    const r: ReemplazoPendiente = { viejo: 'v', nuevo: 'n', at: 0 }
+    expect(enCambioAbierto('v', [r])).toBe(true)
+    expect(enCambioAbierto('n', [r])).toBe(true)
+    expect(enCambioAbierto('x', [r])).toBe(false)
+    expect(enCambioAbierto(null, [r])).toBe(false)
   })
 
   it('basura o almacenamiento que tira → lista vacía, sin romper', () => {

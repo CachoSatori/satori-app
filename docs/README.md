@@ -76,6 +76,10 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
 - **[ventas/SPEC-ventas-v2.md](./ventas/SPEC-ventas-v2.md)** — ✅ **cerrada el 23-nov-2026.** Ventas ordenado en cinco
   pestañas (Resumen · Productos · Equipo · Tiempos · Regalías), con el estado real por fase, las decisiones y los
   criterios de aceptación de la unificación (fase 3.5). Cada PR necesita el OK del dueño; los de esquema, su firma.
+- **[ventas/SPEC-3.1-catalogo.md](./ventas/SPEC-3.1-catalogo.md)** — ⏳ **24-nov-2026, propuesta; espera decisiones y firma del
+  dueño.** Ventas 3.1 (D8 y D17): catálogo único por código que sale del PoS, por local, ordenado por categoría y
+  familia; función `pos_ventas_productos`; a mano solo «cuántas personas rinde». Trae la migración 196 propuesta
+  (no aplicada), su vuelta atrás, la batería y 9 decisiones.
 - **[SPEC-COMANDA-GAPS.md](./SPEC-COMANDA-GAPS.md)** — 3 gaps priorizados para decidir: **Comp vs
   Void** (P&L), **fire-by-prep-time** (el campo prep ya existe), **revenue centers**.
 

@@ -95,6 +95,26 @@ describe('Puntos por rol · puntos ilegibles no se guardan como 0', () => {
     await waitFor(() => expect(H.upsert).toHaveBeenCalledWith('salonero', 10, false))
   })
 
+  // R35: el tope del cuadro (max 50) no lo hace cumplir el navegador fuera de un <form>; «1e3» se leía 1000 y se guardaba.
+  it.each(['1e3', '51', '60'])('más de 50 («%s») → aviso con el tope, botón apagado, no guarda', async texto => {
+    const u = userEvent.setup()
+    abrir()
+    await u.type(pts('Salonero'), texto, { initialSelectionStart: 0, initialSelectionEnd: 2 })
+    expect(aviso()).toContain('«Puntos / hora · Salonero»: los puntos van en números enteros de 0 a 50')
+    expect(guardar().disabled).toBe(true)
+    await u.click(guardar())
+    expect(H.upsert).not.toHaveBeenCalled()
+  })
+
+  it('50 justo es válido y se guarda', async () => {
+    const u = userEvent.setup()
+    abrir()
+    await u.type(pts('Salonero'), '50', { initialSelectionStart: 0, initialSelectionEnd: 2 })
+    expect(aviso()).toBeNull()
+    await u.click(guardar())
+    await waitFor(() => expect(H.upsert).toHaveBeenCalledWith('salonero', 50, true))
+  })
+
   it('número válido se guarda igual que antes', async () => {
     const u = userEvent.setup()
     abrir()

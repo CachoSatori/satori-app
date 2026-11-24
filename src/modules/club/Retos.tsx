@@ -17,6 +17,7 @@ import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
 import { todayCR } from '../../shared/utils'
 import { DIAS, problemaReto, resumenFranja } from './retosReglas'
+import { errorDeNumeros, numeroDe } from '../../shared/cuadrosNumericos'
 
 export default function Retos({ owner }: { owner: boolean }) {
   const [datos, setDatos] = useState<RetosLista | null>(null)
@@ -152,6 +153,10 @@ function FormReto({ inicial, locales, onCancelar, onGuardado }: {
     vence_dias: inicial?.vence_dias ?? 30, control_pct: inicial?.control_pct ?? 0,
     cortesias: Object.fromEntries(Object.entries(inicial?.cortesias ?? {}).map(([l, k]) => [l, k.id])),
   }))
+  // Los días del premio se escriben como texto y se leen al guardar (R35). Antes cada tecla borraba lo que no era dígito:
+  // «0-45» quedaba 45 y «3.5» quedaba 35, sin aviso. Entero de 7 a 90 (la regla de problemaReto).
+  const [venceTxt, setVenceTxt] = useState(() => String(inicial?.vence_dias ?? 30))
+  const avisoVence = errorDeNumeros([{ nombre: 'El premio vale (días)', valor: venceTxt, entero: true, min: 7, max: 90 }])
   const [cortDe, setCortDe] = useState<Record<string, Cortesia[]>>({})
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -166,12 +171,14 @@ function FormReto({ inicial, locales, onCancelar, onGuardado }: {
   }, [d.locales, cortDe])
 
   async function guardar() {
-    const p = problemaReto(d, todayCR())
+    if (avisoVence) { setError(avisoVence); return }
+    const vence_dias = numeroDe(venceTxt) as number
+    const p = problemaReto({ ...d, vence_dias }, todayCR())
     if (p) { setError(p); return }
     setEnviando(true); setError(null)
     const cortesias = Object.fromEntries(Object.entries(d.cortesias).filter(([l, k]) => d.locales.includes(l) && k))
     try {
-      await guardarReto(inicial?.id ?? null, { ...d, nombre: d.nombre.trim(), nombre_en: d.nombre_en.trim(), cortesias,
+      await guardarReto(inicial?.id ?? null, { ...d, vence_dias, nombre: d.nombre.trim(), nombre_en: d.nombre_en.trim(), cortesias,
         hora_desde: d.hora_desde || null, hora_hasta: d.hora_hasta || null })
       onGuardado(`Reto «${d.nombre.trim()}» guardado como borrador. Para que cuente, tocá «Armar».`)
     } catch (e) { setError(aClubError(e).message) }
@@ -208,7 +215,7 @@ function FormReto({ inicial, locales, onCancelar, onGuardado }: {
               {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={n}>{n}</option>)}
             </select></label>
           <label><span style={labelStyle}>El premio vale (días)</span>
-            <input value={String(d.vence_dias)} onChange={e => setD({ ...d, vence_dias: Number(e.target.value.replace(/\D/g, '')) || 0 })}
+            <input value={venceTxt} onChange={e => setVenceTxt(e.target.value)} aria-label="El premio vale (días)"
               inputMode="numeric" style={inputStyle} /></label>
         </div>
         <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
@@ -233,9 +240,10 @@ function FormReto({ inicial, locales, onCancelar, onGuardado }: {
           <input type="checkbox" checked={d.control_pct === 15} onChange={e => setD({ ...d, control_pct: e.target.checked ? 15 : 0 })} />
           Reservar 15 % sin reto (grupo de control: esos socios no lo ven; su beneficio de siempre no cambia)
         </label>
-        {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+        {avisoVence && <Aviso tono="error">{avisoVence}</Aviso>}
+        {error && error !== avisoVence && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn type="submit" disabled={enviando}>{enviando ? 'Guardando…' : 'Guardar borrador'}</Btn>
+          <Btn type="submit" disabled={enviando || !!avisoVence}>{enviando ? 'Guardando…' : 'Guardar borrador'}</Btn>
           <Btn variant="ghost" onClick={onCancelar}>Cancelar</Btn>
         </div>
       </form>

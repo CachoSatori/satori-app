@@ -158,7 +158,8 @@ export default function CashModule() {
   }
 
   return (
-    <div className="tips-module">
+    // `.est` (src/styles/estandar.css): fondo crema y tokens del estándar de los SOP, solo en Caja por ahora.
+    <div className="tips-module est">
       {/* Header */}
       <div className="cd-module-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

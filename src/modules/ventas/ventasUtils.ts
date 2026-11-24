@@ -729,16 +729,3 @@ export function dowAverages(days: ContabilidadDay[]): Record<number, { sum: numb
   return r
 }
 
-// ── Análisis helpers ──────────────────────────────────────────
-export function yearlyTotals(year: number, dias: DiasMap, hist: HistMap) {
-  const days = getContabilidadDays(year, null, dias, hist)
-  return {
-    ventaNeta:  days.reduce((s, d) => s + d.ventaNeta, 0),
-    ventaBruta: days.reduce((s, d) => s + d.ventaBruta, 0),
-    pax:        days.reduce((s, d) => s + d.pax, 0),
-    salon:      days.reduce((s, d) => s + d.salon, 0),
-    delivery:   days.reduce((s, d) => s + d.delivery, 0),
-    days:       days.length,
-    promPax:    0,
-  }
-}

@@ -5,6 +5,10 @@ import { todayCR } from '../../shared/utils'
 import { estadoCompetencia, progresoCompetencia } from './rangosPorDefecto'
 import { saveComp, deleteComp } from '../../shared/api/ventas'
 import { puedeEditarCompetencias } from '../../shared/permisosCompetencias'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
+
+// Puntos del formulario: '' vacío, NaN ilegible («0-450», «5-»). Se guardan como número (Comp no cambia). R35.
+type FormComp = Omit<Comp, 'id' | 'prods'> & { prods: { name: string; pts: number | '' }[] }
 
 interface Props {
   dias:  DiasMap
@@ -26,7 +30,7 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh, role }:
   const sals = allSaloneros(dias)
 
   // New comp form
-  const emptyComp = (): Omit<Comp, 'id'> => ({
+  const emptyComp = (): FormComp => ({
     nombre: '',
     tipo:   'semanal',
     inicio: todayISO(),
@@ -37,11 +41,16 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh, role }:
   })
   const [form, setForm] = useState(emptyComp())
 
+  // Antes `Number(x) || 1` guardaba 1 punto con texto ilegible («0-450», «5-»), con «0» o con el cuadro vacío, sin aviso.
+  const avisoPts = errorDeNumeros(form.prods.map((p, i) => ({
+    nombre: `Puntos · ${p.name.trim() || `producto ${i + 1}`}`, valor: p.pts, entero: true, min: 1, ejemplo: '2',
+  })))
+
   const handleSaveComp = async () => {
-    if (!puedeEditar || !form.nombre.trim()) return
+    if (!puedeEditar || !form.nombre.trim() || avisoPts) return
     setSaving(true)
     try {
-      await saveComp({ ...form, id: String(Date.now()) }, role)
+      await saveComp({ ...form, prods: form.prods.map(p => ({ name: p.name, pts: Number(p.pts) })), id: String(Date.now()) }, role)
       setForm(emptyComp())
       setTab('active')
       onRefresh()
@@ -219,12 +228,12 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh, role }:
                   setForm(prev => ({ ...prev, prods }))
                 }} />
               <input type="number" className="tips-input-dark" style={{ flex: 1, width: 60 }}
-                value={p.pts} min={1}
-                onChange={e => {
-                  const prods = [...form.prods]
-                  prods[i] = { ...prods[i], pts: Number(e.target.value) || 1 }
-                  setForm(prev => ({ ...prev, prods }))
-                }} />
+                aria-label={`Puntos · ${p.name.trim() || `producto ${i + 1}`}`}
+                value={valorInput(p.pts)} min={1}
+                {...alEscribir(el => {
+                  const pts = leerCuadro(el)
+                  setForm(prev => ({ ...prev, prods: prev.prods.map((x, j) => (j === i ? { ...x, pts } : x)) }))
+                })} />
               <span style={{ fontSize: '0.75rem', color: 'var(--c-gris)' }}>pts</span>
               <button className="cd-btn-remove"
                 onClick={() => setForm(p => ({ ...p, prods: p.prods.filter((_, j) => j !== i) }))}>×</button>
@@ -250,7 +259,8 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh, role }:
             ))}
           </div>
 
-          <button className="tips-btn-teal" onClick={handleSaveComp} disabled={saving || !form.nombre}>
+          {avisoPts && <p className="field-error" role="alert" style={{ marginBottom: '0.5rem' }}>{avisoPts}</p>}
+          <button className="tips-btn-teal" onClick={handleSaveComp} disabled={saving || !form.nombre || !!avisoPts}>
             {saving ? 'Guardando…' : '✓ Crear competencia'}
           </button>
         </div>

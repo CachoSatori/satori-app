@@ -7,6 +7,7 @@ import {
 } from '../../shared/api/crm'
 import type { LoyaltyRules, LoyaltyReward } from '../../shared/types/crm'
 import { DEFAULT_RULES, REWARD_CATEGORIES } from '../../shared/types/crm'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
 
 const selStyle: React.CSSProperties = { background: 'var(--t-ink,#111)', border: '1px solid #2a2a2a', color: '#f0ece4', padding: '5px 8px', borderRadius: 2, fontSize: '0.82rem' }
 
@@ -23,6 +24,7 @@ const RULE_FIELDS: Array<{ key: keyof LoyaltyRules; label: string; hint: string 
 
 export default function LoyaltyConfig() {
   const [rules, setRules]     = useState<LoyaltyRules>(DEFAULT_RULES)
+  const [guardadas, setGuardadas] = useState<LoyaltyRules>(DEFAULT_RULES)   // lo que hay en la base (para revisar solo lo cambiado)
   const [rewards, setRewards] = useState<LoyaltyReward[]>([])
   const [loading, setLoading] = useState(true)
   const [savingRules, setSavingRules] = useState(false)
@@ -32,24 +34,35 @@ export default function LoyaltyConfig() {
   // Nueva recompensa
   const [rName, setRName] = useState('')
   const [rDesc, setRDesc] = useState('')
-  const [rCost, setRCost] = useState('')
+  const [rCost, setRCost] = useState<number | ''>('')   // NaN = ilegible («0-450», «5-»)
   const [rCat,  setRCat]  = useState<string>('cortesia')
 
   async function load() {
     setLoading(true); setError(null)
     try {
       const [r, rw] = await Promise.all([getLoyaltyRules(), getRewards(false)])
-      setRules(r); setRewards(rw)
+      setRules(r); setGuardadas(r); setRewards(rw)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
     } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])
 
+  // Reglas: ilegible o negativo → aviso que nombra el cuadro y no se guarda (antes `Number('')` guardaba 0). Vacío = 0,
+  // como antes. Decimales permitidos (p. ej. puntos por ₡1.000). Solo se revisan las reglas que cambiaron (decisión del
+  // dueño, 24-nov): una regla vieja rara en la base no traba «Guardar reglas». R35.
+  const avisoReglas = errorDeNumeros(RULE_FIELDS
+    .filter(f => !Object.is(rules[f.key], guardadas[f.key]))
+    .map(f => ({ nombre: f.label, valor: rules[f.key], vacioVale: true })))
+  // Costo de la recompensa: entero de 0 en adelante (la columna es int). Vacío lo frena «obligatorio», como antes.
+  const avisoCosto = errorDeNumeros([{ nombre: 'Puntos (costo de la recompensa)', valor: rCost, entero: true, vacioVale: true }])
+
   async function handleSaveRules() {
+    if (avisoReglas) return
     setSavingRules(true); setError(null); setMsg(null)
     try {
       await saveLoyaltyRules(rules)
+      setGuardadas(rules)
       setMsg('✓ Reglas guardadas')
       setTimeout(() => setMsg(null), 3000)
     } catch (e) { setError(e instanceof Error ? e.message : 'Error') }
@@ -57,10 +70,11 @@ export default function LoyaltyConfig() {
   }
 
   async function handleAddReward() {
-    if (!rName.trim() || !rCost) { setError('Nombre y costo en puntos son obligatorios'); return }
+    if (!rName.trim() || rCost === '') { setError('Nombre y costo en puntos son obligatorios'); return }
+    if (avisoCosto) { setError(avisoCosto); return }
     setError(null)
     try {
-      await upsertReward({ name: rName.trim(), description: rDesc || null, points_cost: Number(rCost), category: rCat, active: true })
+      await upsertReward({ name: rName.trim(), description: rDesc || null, points_cost: rCost, category: rCat, active: true })
       setRName(''); setRDesc(''); setRCost(''); setRCat('cortesia')
       load()
     } catch (e) { setError(e instanceof Error ? e.message : 'Error') }
@@ -88,20 +102,21 @@ export default function LoyaltyConfig() {
           {RULE_FIELDS.map(f => (
             <div key={f.key}>
               <div style={{ fontSize: '0.62rem', color: '#777', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{f.label}</div>
-              <input type="number" value={rules[f.key]}
-                onChange={e => setRules(p => ({ ...p, [f.key]: Number(e.target.value) }))}
+              <input type="number" aria-label={f.label} value={valorInput(rules[f.key])}
+                {...alEscribir(el => { const v = leerCuadro(el); setRules(p => ({ ...p, [f.key]: v === '' ? 0 : v })) })}
                 style={{ ...selStyle, width: '100%', boxSizing: 'border-box' }} />
               <div style={{ fontSize: '0.58rem', color: '#555', marginTop: 1 }}>{f.hint}</div>
             </div>
           ))}
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.875rem' }}>
-          <button onClick={handleSaveRules} disabled={savingRules}
+          <button onClick={handleSaveRules} disabled={savingRules || !!avisoReglas}
             style={{ padding: '6px 16px', borderRadius: 2, background: 'var(--t-teal,#2a7a6a)', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
             {savingRules ? '⟳ Guardando…' : '✓ Guardar reglas'}
           </button>
           {msg && <span style={{ color: '#2a7a6a', fontSize: '0.8rem', fontWeight: 600 }}>{msg}</span>}
         </div>
+        {avisoReglas && <div className="field-error" role="alert" style={{ marginTop: '0.5rem' }}>{avisoReglas}</div>}
       </div>
 
       {/* Recompensas */}
@@ -134,18 +149,19 @@ export default function LoyaltyConfig() {
           <div style={{ fontSize: '0.62rem', color: '#777', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Nueva recompensa</div>
           <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
             <input value={rName} onChange={e => setRName(e.target.value)} placeholder="Nombre" style={{ ...selStyle, flex: '2 1 140px' }} />
-            <input type="number" value={rCost} onChange={e => setRCost(e.target.value)} placeholder="Puntos" style={{ ...selStyle, width: 80 }} />
+            <input type="number" aria-label="Puntos (costo de la recompensa)" value={valorInput(rCost)} {...alEscribir(el => setRCost(leerCuadro(el)))} placeholder="Puntos" style={{ ...selStyle, width: 80 }} />
             <select value={rCat} onChange={e => setRCat(e.target.value)} style={selStyle}>
               {REWARD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
             <input value={rDesc} onChange={e => setRDesc(e.target.value)} placeholder="Descripción (opcional)" style={{ ...selStyle, flex: 1 }} />
-            <button onClick={handleAddReward}
+            <button onClick={handleAddReward} disabled={!!avisoCosto}
               style={{ padding: '5px 14px', borderRadius: 2, background: 'var(--t-teal,#2a7a6a)', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               + Agregar
             </button>
           </div>
+          {avisoCosto && <div className="field-error" role="alert" style={{ marginTop: '0.4rem' }}>{avisoCosto}</div>}
         </div>
       </div>
     </div>

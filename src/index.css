@@ -52,6 +52,7 @@
   --c-oro:            #b48e50;   /* solo filetes y barra destacada de gráficos */
   --c-oro-texto:      #8a6a33;   /* oro como texto */
   --c-oro-fondo:      #f4f0e6;   /* fondo de «pendiente» */
+  --c-oro-fondo-texto: #f8f5ee;  /* fondo oro con texto oro CHICO encima: --c-oro-texto da 4,6:1 (sobre --c-oro-fondo, 4,4) */
   --c-laca:           #a3392d;   /* malo / alerta */
   --c-laca-fondo:     #f6e4e1;
   --c-laca-borde:     #e3bdb6;
@@ -2217,6 +2218,17 @@ html, body, #root {
   top: 0;
   z-index: 100;
 }
+/* Caja PR0 (24-nov): el título «Caja» se cortaba arriba al bajar en el celular. Causa: la cabecera y
+   las pestañas que la siguen eran las dos `sticky; top: 0` con el mismo z-index, así que al hacer
+   scroll las pestañas (más abajo en el DOM) se apoyaban en el mismo borde y tapaban la mitad de
+   arriba de la cabecera (el título), dejando asomar el subtítulo y los botones. No es el margen
+   seguro: la app no usa `viewport-fit=cover` y `env(safe-area-inset-top)` vale 0. Arreglo: si hay
+   pestañas pegadas debajo, la cabecera se va con el scroll y quedan fijas solo las pestañas.
+   Lo cuida src/modules/cash/cabeceraCaja.css.test.ts. */
+.cd-module-header:has(+ .cd-nav-tabs) {
+  position: relative;
+  top: auto;
+}
 
 /* ── Nav tabs (dark header bar) ─────────────────────────────── */
 .cd-nav-tabs {
@@ -2711,6 +2723,8 @@ html, body, #root {
 }
 .cd-cierre-resultado.ok   { background: var(--c-musgo-fondo); border: 1px solid var(--c-musgo-borde); color: var(--c-musgo-texto); }
 .cd-cierre-resultado.fail { background: var(--c-laca-fondo); border: 1px solid var(--c-laca-borde); color: var(--c-laca); }
+/* Sobrante fuera de tolerancia en oro (decisión del dueño 24-nov, SPEC-caja-estandar §8.2). */
+.cd-cierre-resultado.sobra { background: var(--c-oro-fondo-texto); border: 1px solid var(--c-oro); color: var(--c-oro-texto); }
 
 /* Resumen del Cierre del Día — filas claras (patrón Caja Diaria) */
 .cierre-resumen {
@@ -2776,6 +2790,7 @@ html, body, #root {
 }
 .cierre-resumen-usd.ok   { background: var(--c-musgo-fondo); border: 1px solid var(--c-musgo-borde); color: var(--c-musgo-texto); }
 .cierre-resumen-usd.fail { background: var(--c-laca-fondo); border: 1px solid var(--c-laca-borde); color: var(--c-laca); }
+.cierre-resumen-usd.sobra { background: var(--c-oro-fondo-texto); border: 1px solid var(--c-oro); color: var(--c-oro-texto); }
 
 /* móvil: columnas ₡/US$ más angostas para que la etiqueta respire */
 @media (max-width: 420px) {
@@ -3389,16 +3404,6 @@ html, body, #root {
   gap: 0;
 }
 /* Etiqueta de grupo (Operaciones, Equipo, Finanzas…) — estilo dashboard */
-.vt-nav-group {
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  color: var(--c-oro-texto);
-  font-weight: 700;
-  white-space: nowrap;
-  padding: 0 0.85rem 0 0.4rem;
-  align-self: center;
-}
-.vt-nav-group:not(:first-child) { border-left: 1px solid var(--c-linea); padding-left: 1rem; }
 
 /* Filtro de fecha desplegable (estilo Propinas) — reutilizable en toda la app */
 .date-filter {
@@ -3663,25 +3668,6 @@ html, body, #root {
   transition: width 0.4s ease;
 }
 
-/* ── Today header ───────────────────────────────────────────── */
-.vt-hoy-header {
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.875rem;
-  border-bottom: 1px solid var(--vt-border);
-}
-.vt-hoy-fecha {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: var(--vt-ink);
-}
-.vt-hoy-sub {
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  color: var(--vt-muted);
-  margin-top: 0.15rem;
-}
-
 /* ── Tables ─────────────────────────────────────────────────── */
 .vt-tbl-wrap { overflow-x: auto; margin-bottom: 1.5rem; }
 .vt-tbl {
@@ -3749,19 +3735,6 @@ html, body, #root {
 .vt-dow-val   { font-family: var(--font-mono); font-size: 0.88rem; font-weight: 700; color: var(--c-tinta); margin-top: 0.2rem; }
 .vt-dow-sub   { font-size: 0.6rem; color: var(--c-gris-claro); margin-top: 0.15rem; }
 
-/* ── Sort tabs ──────────────────────────────────────────────── */
-.vt-sort-tabs { display: inline-flex; gap: 0.25rem; }
-.vt-sort-tab {
-  padding: 0.15rem 0.5rem;
-  font-size: 0.62rem;
-  border: 1px solid var(--vt-border);
-  background: var(--vt-paper);
-  color: var(--vt-muted);
-  border-radius: 1px;
-  cursor: pointer;
-}
-.vt-sort-tab.active { background: var(--c-fondo); color: var(--c-oro-texto); border-color: var(--c-oro); }
-
 /* ── Product display ────────────────────────────────────────── */
 .vt-prod-controls {
   display: flex;
@@ -3826,157 +3799,6 @@ html, body, #root {
 .vt-prod-tipo.personal   { background: #f5e0e8; color: #7a1a4a; }
 .vt-prod-tipo.nofood     { background: #e8e0f5; color: #4a1a7a; }
 .vt-prod-tipo.desconocido{ background: #e8e8e8; color: #555; }
-
-/* ── Salonero cards ─────────────────────────────────────────── */
-.vt-sal-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 0.875rem;
-  margin-bottom: 1.5rem;
-}
-.vt-sal-card {
-  background: #fff;
-  border: 1px solid var(--vt-border);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.vt-sal-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 1rem 1.1rem 0.75rem;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.vt-sal-card-head:hover { background: var(--vt-panel); }
-.vt-sal-name {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--vt-ink);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-.vt-medal { font-size: 1rem; }
-.vt-sal-days {
-  font-size: 0.65rem;
-  color: var(--c-gris-texto);
-  font-weight: 400;
-  margin-left: 0.2rem;
-}
-.vt-sal-total {
-  font-family: var(--font-mono);
-  font-size: 1.2rem;
-  font-weight: 800;
-  color: var(--vt-ink);
-  margin-top: 0.3rem;
-}
-.vt-pct-bar {
-  height: 3px;
-  background: #eee;
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 0.5rem;
-}
-.vt-pct-fill { height: 100%; background: var(--c-oro); border-radius: 2px; transition: width 0.4s; }
-.vt-sal-pct { font-size: 0.65rem; color: var(--c-gris-texto); margin-top: 0.2rem; }
-.vt-vs-gen  { font-size: 0.72rem; font-weight: 700; }
-.vt-sal-kpis {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  border-top: 1px solid var(--vt-border);
-}
-.vt-sal-kpi {
-  padding: 0.6rem;
-  border-right: 1px solid var(--vt-border);
-  text-align: center;
-}
-.vt-sal-kpi:last-child { border-right: none; }
-.vt-sal-kpi-label { font-size: 0.72rem; letter-spacing: 0.02em; color: #555; }
-.vt-sal-kpi-val   { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; color: var(--vt-ink); margin-top: 0.2rem; }
-.vt-sal-detail {
-  padding: 0.875rem 1.1rem;
-  background: var(--vt-panel);
-  border-top: 1px solid var(--vt-border);
-}
-.vt-sal-prod-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.3rem 0;
-  border-bottom: 1px solid var(--vt-border);
-  font-size: 0.78rem;
-}
-.vt-sal-prod-row:last-child { border-bottom: none; }
-.vt-sal-metrics {
-  display: flex;
-  gap: 1.5rem;
-  font-size: 0.72rem;
-  color: #888;
-}
-.vt-sal-metrics div { display: flex; flex-direction: column; gap: 0.1rem; }
-
-/* ── Chart legend ───────────────────────────────────────────── */
-.vt-chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.75rem;
-}
-.vt-legend-btn {
-  padding: 0.2rem 0.625rem;
-  font-size: 0.65rem;
-  letter-spacing: 0.06em;
-  border: 1px solid;
-  background: transparent;
-  border-radius: 99px;
-  cursor: pointer;
-  color: #888;
-  transition: all 0.15s;
-}
-.vt-legend-btn.active { background: rgba(0,0,0,0.06); color: var(--vt-ink); }
-
-/* ── Mix ventas ─────────────────────────────────────────────── */
-.vt-mix-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
-}
-.vt-mix-table { background: #fff; border: 1px solid var(--vt-border); border-radius: 2px; }
-.vt-mix-tipo-hdr {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.625rem 1rem;
-  background: var(--c-panel);
-  color: var(--c-oro-texto);
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  font-weight: 700;
-  cursor: pointer;
-  border-bottom: 1px solid var(--c-oro);
-}
-.vt-mix-clas-hdr {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.5rem 1rem;
-  background: var(--vt-panel);
-  border-bottom: 1px solid var(--vt-border);
-  font-size: 0.72rem;
-  cursor: pointer;
-  font-weight: 600;
-}
-.vt-mix-prod-row {
-  display: grid;
-  grid-template-columns: 1fr 80px 80px 100px 70px;
-  gap: 0.5rem;
-  padding: 0.45rem 1rem;
-  border-bottom: 1px solid var(--vt-border);
-  font-size: 0.78rem;
-  align-items: center;
-}
-.vt-mix-prod-row:hover { background: var(--vt-panel); }
 
 /* ── Metas ──────────────────────────────────────────────────── */
 .vt-metas-grid {
@@ -4067,70 +3889,12 @@ html, body, #root {
   padding: 1.25rem;
 }
 
-/* ── XLS upload ─────────────────────────────────────────────── */
-.vt-drop-zone {
-  border: 2px dashed var(--vt-border);
-  border-radius: 3px;
-  padding: 3rem 2rem;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: var(--vt-paper);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-}
-.vt-drop-zone:hover,
-.vt-drop-zone.drag-over {
-  border-color: var(--vt-gold);
-  background: #fffdf5;
-}
-.vt-drop-icon  { font-size: 2.5rem; }
-.vt-drop-title {
-  font-family: var(--font-serif);
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--vt-ink);
-}
-.vt-drop-sub { font-size: 0.72rem; color: var(--vt-muted); }
-.vt-queue-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.6rem 0.875rem;
-  background: #fff;
-  border: 1px solid var(--vt-border);
-  border-radius: 2px;
-  margin-bottom: 0.4rem;
-  font-size: 0.82rem;
-}
-.vt-queue-item.done  { border-left: 3px solid var(--vt-green); }
-.vt-queue-item.error { border-left: 3px solid var(--vt-red); }
-.vt-file-list { display: flex; flex-direction: column; gap: 0.4rem; }
-.vt-file-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.6rem 0.875rem;
-  background: #fff;
-  border: 1px solid var(--vt-border);
-  border-radius: 2px;
-}
-.vt-file-row:hover { background: var(--vt-panel); }
-
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .vt-section { padding: 1rem; }
   .vt-kpi-grid { grid-template-columns: 1fr 1fr; }
   .vt-kpi-grid.vt-kpi-anios { grid-template-columns: 1fr 1fr; }
-  .vt-sal-cards { grid-template-columns: 1fr; }
-  .vt-sal-kpis { grid-template-columns: repeat(2, 1fr); }
   .vt-dow-grid { grid-template-columns: repeat(4, 1fr); }
-  .vt-mix-prod-row { grid-template-columns: 1fr 80px 90px; }
-  .vt-mix-prod-row > *:nth-child(4),
-  .vt-mix-prod-row > *:nth-child(5) { display: none; }
 }
 @media (max-width: 420px) {
   .vt-kpi-grid { grid-template-columns: 1fr; }
@@ -4214,11 +3978,6 @@ html, body, #root {
   font-size: max(16px, 0.85rem); /* iOS won't zoom on 16px+ */
 }
 
-/* ── VentasXLS drop zone — clearer visual ────────────────────── */
-.vt-drop-zone {
-  min-height: 180px;
-}
-
 /* ── Confirm tip close button — more visible warning ────────── */
 .tips-btn-danger {
   background: var(--t-red, var(--c-laca));
@@ -4232,19 +3991,10 @@ html, body, #root {
 /* ── CashTurno verificación delta color ─────────────────────── */
 .cd-cierre-resultado.ok   { font-weight: 600; }
 .cd-cierre-resultado.fail { font-weight: 600; animation: pulse-red 0.5s; }
+.cd-cierre-resultado.sobra { font-weight: 600; }
 @keyframes pulse-red {
   0%,100% { background: var(--c-laca-fondo); }
   50%     { background: #fad6d0; }
-}
-
-/* ── XLS spinner ────────────────────────────────────────────── */
-@keyframes vt-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-.vt-spin {
-  display: inline-block;
-  animation: vt-spin 1s linear infinite;
 }
 
 /* ── Ventas table utility classes ────────────────────────────── */
@@ -4319,53 +4069,6 @@ html, body, #root {
   background: var(--c-fondo);
   border: 1px solid var(--t-border);
   border-radius: 2px;
-}
-
-/* ── VentasHoy date navigation ───────────────────────────────── */
-.vt-hoy-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.875rem;
-  border-bottom: 1px solid var(--vt-border);
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-.vt-hoy-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.vt-day-nav-btn {
-  background: transparent;
-  border: 1px solid var(--vt-border);
-  border-radius: 2px;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 1rem;
-  color: var(--vt-muted);
-  transition: all 0.1s;
-}
-.vt-day-nav-btn:hover:not(:disabled) {
-  border-color: var(--vt-ink);
-  color: var(--vt-ink);
-}
-.vt-day-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-/* ── VentasConfig info box ───────────────────────────────────── */
-.vt-config-info {
-  padding: 0.75rem 1rem;
-  background: rgba(42,122,106,0.07);
-  border-left: 3px solid var(--vt-green);
-  border-radius: 0 2px 2px 0;
-  font-size: 0.82rem;
-  color: var(--vt-ink);
-  line-height: 1.5;
 }
 
 /* ── Resumen Diario module (estilo carta, B7) ─────────────────── */
@@ -4766,120 +4469,6 @@ html, body, #root {
   .sop-editor-row { flex-direction: column; }
 }
 
-/* ── VentasEvaluacion — evaluation cards ────────────────────── */
-.vt-eval-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 0.875rem;
-  margin-bottom: 1.5rem;
-}
-.vt-eval-card {
-  background: var(--vt-ink);
-  border-radius: 3px;
-  overflow: hidden;
-  color: var(--vt-paper);
-}
-.vt-eval-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 0.875rem 1rem;
-  border-bottom: 1px solid var(--c-gris-oscuro);
-}
-.vt-eval-rank {
-  font-size: 1.2rem;
-  flex-shrink: 0;
-}
-.vt-eval-name {
-  font-weight: 700;
-  font-size: 0.9rem;
-  color: var(--vt-paper);
-}
-.vt-eval-sub {
-  font-size: 0.72rem;
-  color: #555;
-  letter-spacing: 0.02em;
-  margin-top: 0.1rem;
-}
-.vt-eval-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-bottom: 1px solid var(--c-gris-oscuro);
-}
-.vt-eval-metric {
-  padding: 0.6rem 0.5rem;
-  border-right: 1px solid var(--c-gris-oscuro);
-  text-align: center;
-}
-.vt-eval-metric:last-child { border-right: none; }
-.vt-eval-metric-label {
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  color: var(--c-gris-medio);
-  margin-bottom: 0.2rem;
-}
-.vt-eval-metric-val {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--vt-paper);
-  line-height: 1.1;
-}
-.vt-eval-metric-pct {
-  font-size: 0.6rem;
-  margin-top: 0.15rem;
-}
-.vt-eval-consistencia {
-  padding: 0.75rem 1rem;
-}
-
-/* ── VentasMetas — proyección card ──────────────────────────── */
-.vt-meta-proyeccion {
-  background: var(--vt-ink);
-  border-radius: 3px;
-  padding: 1.25rem;
-  margin-bottom: 1.5rem;
-  color: var(--vt-paper);
-}
-.vt-meta-proy-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-}
-.vt-meta-proy-title {
-  font-family: var(--font-serif);
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--vt-gold);
-}
-.vt-meta-proy-sub {
-  font-size: 0.72rem;
-  color: #555;
-  letter-spacing: 0.02em;
-  margin-top: 0.1rem;
-}
-.vt-meta-proy-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 0.625rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--c-gris-oscuro);
-}
-.vt-meta-proy-stat { display: flex; flex-direction: column; gap: 0.1rem; }
-.vt-meta-proy-stat-label {
-  font-size: 0.72rem;
-  color: #555;
-  letter-spacing: 0.02em;
-}
-.vt-meta-proy-stat-val {
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  font-weight: 800;
-  color: var(--vt-paper);
-}
-
 /* ── Reporte Mensual (print-ready) ──────────────────────────── */
 .rpt-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 2000;
@@ -5100,12 +4689,8 @@ html, body, #root {
    Se unifican a --vt-paper para que el crema sea el único fondo (header de tabla
    queda oscuro por su propia regla, dando el contraste). */
 .vt-tbl,
-.vt-sal-card,
-.vt-mix-table,
 .vt-comp-card,
 .vt-comp-form,
-.vt-queue-item,
-.vt-file-row,
 .xr-history {
   background: var(--vt-paper);
 }

@@ -1,3 +1,7 @@
+// La vieja «Ventas» (Contabilidad). Fuera del menú desde el 3.5.2: su lugar es «Resumen» → «Detalle por día».
+// Ventas v2 · 3.5.5: NO se borra porque la importa la prueba de contrato de la Edge `ventas-dia-contador`
+// (`supabase/functions/ventas-dia-contador/contrato.test.tsx`), y un PR de limpieza no toca `supabase/functions/`
+// (regla 2, guarda R04). Se borra junto con esa prueba en un PR de Edge, con OK del dueño. No sumarle uso.
 import { useState, useMemo, lazy, Suspense, Fragment } from 'react'
 import type { DiasMap, HistMap, Meta, ProductMap } from '../../shared/types/ventas'
 import {

@@ -7,6 +7,9 @@ import { INGREDIENT_CATEGORIES, INGREDIENT_UNITS } from '../../shared/types/inve
 import { upsertIngredient, deleteIngredient } from '../../shared/api/inventario'
 import { getIngredientPrices, type IngredientPrice } from '../../shared/api/inventoryIngest'
 import { fi, todayCR } from '../../shared/utils'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
+
+const NUMERICOS = [['current_stock', 'Stock actual'], ['min_stock', 'Stock mínimo'], ['cost_per_unit', 'Costo/unidad ₡']] as const
 
 interface Props {
   ingredients: Ingredient[]
@@ -22,6 +25,7 @@ const EMPTY: Partial<Ingredient> = {
 export default function InvIngredientes({ ingredients, onRefresh, profile }: Props) {
   const [editId,   setEditId]   = useState<string | null>(null)    // null = new
   const [form,     setForm]     = useState<Partial<Ingredient>>(EMPTY)
+  const [orig,     setOrig]     = useState<Partial<Ingredient>>(EMPTY)   // lo de antes de editar (para revisar solo lo cambiado)
   const [saving,   setSaving]   = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error,    setError]    = useState<string | null>(null)
@@ -36,12 +40,20 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
   }, [editId])
   const isOwnerMgr = profile?.role === 'owner' || profile?.role === 'manager'
 
-  function startEdit(ing: Ingredient) { setEditId(ing.id); setForm({ ...ing }); setError(null) }
-  function startNew()                  { setEditId(null);   setForm({ ...EMPTY }); setError(null) }
+  function startEdit(ing: Ingredient) { setEditId(ing.id); setForm({ ...ing }); setOrig({ ...ing }); setError(null) }
+  function startNew()                  { setEditId(null);   setForm({ ...EMPTY }); setOrig({ ...EMPTY }); setError(null) }
   function cancelEdit()                { setEditId(null); setForm(EMPTY); setError(null) }
+
+  // Stock y costo: ilegible («0-450», «5-») → NaN; vacío → 0, como antes. Ilegible o negativo → aviso que nombra el
+  // cuadro y no se guarda (antes `Number(e.target.value)` guardaba 0). Solo lo que cambió: un stock viejo negativo
+  // (por consumo) no traba editar el nombre. R35.
+  const avisoNumeros = errorDeNumeros(NUMERICOS
+    .filter(([k]) => !Object.is(form[k], orig[k]))
+    .map(([k, nombre]) => ({ nombre, valor: form[k], vacioVale: true })))
 
   async function handleSave() {
     if (!form.name?.trim()) { setError('El nombre es obligatorio'); return }
+    if (avisoNumeros) { setError(avisoNumeros); return }
     setSaving(true); setError(null)
     try {
       await upsertIngredient({ ...form, name: form.name.trim() } as Ingredient)
@@ -211,13 +223,17 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
                     {(f.options ?? []).map(o => <option key={o}>{o}</option>)}
                   </select>
                 ) : (
-                  <input className="cd-tbl-input"
-                    type={f.type} step={f.step} placeholder={f.placeholder}
+                  f.type === 'number' ? (
+                  <input className="cd-tbl-input" aria-label={f.label}
+                    type="number" step={f.step} placeholder={f.placeholder}
+                    value={valorInput((form as Record<string,unknown>)[f.key] as number | '' ?? '')}
+                    {...alEscribir(el => { const v = leerCuadro(el); setForm(p => ({ ...p, [f.key]: v === '' ? 0 : v })) })} />
+                  ) : (
+                  <input className="cd-tbl-input" aria-label={f.label}
+                    type={f.type} placeholder={f.placeholder}
                     value={(form as Record<string,unknown>)[f.key] as string ?? ''}
-                    onChange={e => setForm(p => ({
-                      ...p,
-                      [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value
-                    }))} />
+                    onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                  )
                 )}
               </div>
             ))}
@@ -234,9 +250,10 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
             </div>
           )}
           <div style={{ display:'flex', gap:'0.5rem' }}>
+            {avisoNumeros && <div role="alert" style={{ color:'var(--c-laca)', fontSize:'0.78rem', alignSelf:'center' }}>{avisoNumeros}</div>}
             <button className="vt-range-btn"
               style={{ borderColor:'var(--c-musgo)', color:'var(--c-musgo)' }}
-              disabled={saving} onClick={handleSave}>
+              disabled={saving || !!avisoNumeros} onClick={handleSave}>
               {saving ? '⟳ Guardando…' : '✓ Guardar'}
             </button>
             <button className="vt-range-btn" onClick={cancelEdit}>Cancelar</button>

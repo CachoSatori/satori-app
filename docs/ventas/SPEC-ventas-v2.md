@@ -324,7 +324,7 @@ como están hoy (§12.3).
    con la del equipo en los mismos turnos de caja, ponderada por sus personas en cada turno. Consistencia,
    tendencia y racha son la cuenta de «Evaluación» sobre los días del período (la tendencia, 7 contra 7, solo con
    14 días trabajados o más). ICP del período por la regla 5 de `ESTADO.md`, del local elegido. Muestra chica:
-   menos de 30 personas en el período. Arriba, la venta por persona y las personas del equipo contra las bases.
+   menos de 10 personas por día del período, hasta 30 (con «Ayer», 10: si no, todo el ranking del día iría en gris). Arriba, la venta por persona y las personas del equipo contra las bases.
 2. **Ficha del salonero:** tendencia de 12 semanas, sus productos, comparación contra las bases.
 3. **Por línea:** las dos lentes de hoy, sin cambios.
 4. **ICP:** el de hoy, del restaurante y por salonero.

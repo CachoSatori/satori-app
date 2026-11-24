@@ -143,3 +143,10 @@ describe('ficha · 12 semanas', () => {
     expect(s[0].suya).toBeNull()
   })
 })
+
+describe('umbralMuestraChica', () => {
+  it('10 personas por día del período, hasta 30: «Ayer» no deja todo el ranking del día en gris', async () => {
+    const { umbralMuestraChica } = await import('./equipoV2')
+    expect([1, 2, 3, 4, 31].map(umbralMuestraChica)).toEqual([10, 20, 30, 30, 30])
+  })
+})

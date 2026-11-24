@@ -22,7 +22,7 @@ import BarraVentasV2 from './BarraVentasV2'
 import { baseConFechas, basesDe, escribirBarra, leerBarra, periodoDeBarra, rotuloBase } from './barraVentasV2'
 import {
   armarEquipo, doceSemanas, evaluarEquipo, icpPorNombre, normNombreIcp, ordenarEquipo, ventana12Semanas, vppPorSalonero,
-  DIAS_PARA_TENDENCIA, MUESTRA_CHICA_SALONERO, type Equipo, type Evaluacion, type FilaEquipo, type IcpFila, type OrdenEquipo,
+  DIAS_PARA_TENDENCIA, umbralMuestraChica, type Equipo, type Evaluacion, type FilaEquipo, type IcpFila, type OrdenEquipo,
 } from './equipoV2'
 import { getPropinasRango } from './equipoPropinas'
 import { ventaPorPersona, type VentaPorPersona } from './indicadores'
@@ -142,7 +142,7 @@ function Contenido({ d, periodo, bases, metas, detalle, local }: ContenidoProps)
   const { lectura, lineas } = d
   const fechas = useMemo(() => fechasDe(lineas.dias, periodo), [lineas, periodo])
   const vpp = useMemo(() => vppPorSalonero(lectura.facturas, lectura.nombres, periodo), [lectura, periodo])
-  const equipo: Equipo = useMemo(() => armarEquipo(lineas.dias, lineas.pm, fechas, vpp.porNombre), [lineas, fechas, vpp])
+  const equipo: Equipo = useMemo(() => armarEquipo(lineas.dias, lineas.pm, fechas, vpp.porNombre, umbralMuestraChica(periodo.dias)), [lineas, fechas, vpp, periodo.dias])
   const evaluacion = useMemo(
     () => detalle ? evaluarEquipo(equipo.filas.map(f => f.nombre), fechas, lineas.dias, lineas.pm, metas) : null,
     [detalle, equipo, fechas, lineas, metas],
@@ -182,10 +182,13 @@ function Contenido({ d, periodo, bases, metas, detalle, local }: ContenidoProps)
 
       <div className="vt-kpi-grid vt2-cifras">
         <Cifra id="vpp" label="Venta por persona del equipo" valor={fmtVpp(eq.valor)} periodo={periodo}
-          cmps={cifrasBase.map(c => ({ id: c.id, actual: eq.valor, base: c.v?.valor ?? null, txt: fmtVpp(c.v?.valor), chica: personasD4(eq) < MUESTRA_CHICA_SALONERO }))}
+          cmps={cifrasBase.map(c => ({ id: c.id, actual: eq.valor, base: c.v?.valor ?? null, txt: fmtVpp(c.v?.valor), chica: personasD4(eq) < umbralMuestraChica(periodo.dias) }))}
           sub={`Neta de salón ÷ personas de salón; incluye ${pct1(eq.pctEstimado)} estimado (como «Resumen»).`} />
         <Cifra id="personas" label="Personas (cargadas + estimadas)" valor={personasD4(eq).toLocaleString('es-CR')} periodo={periodo}
-          cmps={cifrasBase.map(c => ({ id: c.id, actual: personasD4(eq), base: c.v ? personasD4(c.v) : null, txt: c.v ? String(personasD4(c.v)) : '—' }))} />
+          cmps={cifrasBase.map(c => {
+            const b = c.v && c.v.facturasSalon > 0 ? personasD4(c.v) : null
+            return { id: c.id, actual: personasD4(eq), base: b, txt: b === null ? '—' : b.toLocaleString('es-CR') }
+          })} />
         <Cifra id="venta" label="Venta de saloneros" valor={fi(equipo.general.venta)} periodo={periodo} cmps={[]}
           sub={`${fechas.length} ${fechas.length === 1 ? 'día' : 'días'} · por factura, como «Saloneros»`} />
       </div>
@@ -207,7 +210,7 @@ function Contenido({ d, periodo, bases, metas, detalle, local }: ContenidoProps)
               <th>#</th>
               <th style={{ textAlign: 'left' }}>Salonero</th>
               <th className="r">Venta</th>
-              <th className="r">Personas</th>
+              <th className="r">Personas (PAX)</th>
               <th className="r">Venta por persona</th>
               <th className="r">vs equipo de su turno</th>
               <th className="r">Prom/PAX cargado</th>
@@ -261,8 +264,8 @@ function Contenido({ d, periodo, bases, metas, detalle, local }: ContenidoProps)
       <div className="vt2-nota" style={{ marginTop: '0.5rem' }}>
         Venta por persona: neta de salón de SUS mesas ÷ sus personas, con las mesas sin pax estimadas (D4, como «Resumen»).
         «Prom/PAX cargado» es la cifra de antes, solo con personas cargadas. «vs equipo de su turno»: contra la venta por
-        persona del equipo en los mismos turnos de caja que trabajó. En gris: menos de {MUESTRA_CHICA_SALONERO} personas en el
-        período (muestra chica).
+        persona del equipo en los mismos turnos de caja que trabajó. En gris: menos de {umbralMuestraChica(periodo.dias)} personas en el
+        período (muestra chica; 10 por día, hasta 30).
         {detalle && ` ICP = propina electrónica declarada ÷ neta de sus mesas (sin el 10 % de servicio; barra: no aplica).
         Consistencia = % de sus días sobre el Prom/PAX del restaurante ese día. Tendencia = últimos 7 días trabajados contra
         los 7 anteriores (hace falta ${DIAS_PARA_TENDENCIA} días trabajados en el período). Racha = días seguidos sobre su meta de Prom/PAX.`}
@@ -307,7 +310,8 @@ function FilaTabla({ f, i, metas, detalle, ev, icp, abierta, onAbrir }: {
   icp: IcpFila | undefined
   abierta: boolean; onAbrir: () => void
 }) {
-  const gris = f.muestraChica ? { color: 'var(--c-gris)' } : undefined
+  // Muestra chica: la fila entera atenuada (las celdas de la tabla traen su propio color, así que no alcanza con `color`).
+  const gris = f.muestraChica ? { color: 'var(--c-gris)', opacity: 0.6 } : undefined
   const metaPP = getMeta(metas, f.nombre, 'promPax')
   const metaBP = getMeta(metas, f.nombre, 'bebPax')
   const vt = f.vpp?.vsTurno ?? null

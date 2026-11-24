@@ -60,7 +60,7 @@ const abrir = async (q = '') => {
   return r
 }
 const encabezados = () => [...document.querySelectorAll('table[aria-label="Equipo"] thead th')].map(th => th.textContent)
-const RANKING = ['#', 'Salonero', 'Venta', 'Personas', 'Venta por persona', 'vs equipo de su turno', 'Prom/PAX cargado',
+const RANKING = ['#', 'Salonero', 'Venta', 'Personas (PAX)', 'Venta por persona', 'vs equipo de su turno', 'Prom/PAX cargado',
   'Beb/PAX', 'Comida/bebida', 'Prom/plato', 'Ticket/ítem']
 const DETALLE = ['ICP', '% meta', 'Días', 'Consistencia', 'Tendencia', 'Racha']
 

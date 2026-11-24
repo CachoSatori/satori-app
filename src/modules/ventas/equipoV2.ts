@@ -32,6 +32,14 @@ import {
 /** Debajo de esta cantidad de personas (cargadas) en el período, la fila de un salonero va en gris. */
 export const MUESTRA_CHICA_SALONERO = 30
 
+/**
+ * El umbral de muestra chica para un período de `dias` días: 30 personas, pero no más de 10 por día. Con «Ayer»
+ * (el «Ranking del día») son 10: con 30 todo el ranking de un día saldría en gris.
+ */
+export function umbralMuestraChica(dias: number): number {
+  return Math.min(MUESTRA_CHICA_SALONERO, 10 * Math.max(1, dias))
+}
+
 /** Con menos días trabajados que esto en el período, la tendencia (7 contra 7) no se calcula. */
 export const DIAS_PARA_TENDENCIA = 14
 
@@ -186,6 +194,8 @@ export function armarEquipo(
   pm: ProductMap,
   fechas: readonly string[],
   vpp: Map<string, VppSalonero> | null,
+  /** Personas debajo de las cuales la fila va en gris (`umbralMuestraChica` del período). */
+  umbral: number = MUESTRA_CHICA_SALONERO,
 ): Equipo {
   const ds = [...fechas]
   const gen = aggGeneral(ds, dias, pm)
@@ -198,7 +208,7 @@ export function armarEquipo(
       promPlato: s.promPlato, promBebida: s.promBebida, ticketItem: s.promTicket, dias: s.days,
       pctDelEquipo: gen.total > 0 ? (s.total / gen.total) * 100 : 0,
       vpp: vpp?.get(s.nombre) ?? null,
-      muestraChica: s.pax < MUESTRA_CHICA_SALONERO,
+      muestraChica: s.pax < umbral,
       productos: topProds(s.prods, 'monto', 5).map(p => ({ nombre: p.nombre, q: p.q, m: p.m })),
     }))
   return {

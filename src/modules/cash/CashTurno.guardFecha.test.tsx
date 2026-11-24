@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { todayCR } from '../../shared/utils'
+import { RELOJES_CR, conRelojCR } from '../../test/relojCR.testutil'
 
 const cashApi = vi.hoisted(() => ({
   createCashSession: vi.fn(async (m: { session_date: string }) => ({ id: 's-new', ...m })),
@@ -39,7 +40,8 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 import CashTurno from './CashTurno'
 const { createCashSession } = cashApi
 
-const hoy = todayCR()
+// R34: «hoy» sale del reloj FIJO de cada caso de la matriz (beforeEach), no de la fecha real al importar.
+let hoy = ''
 const PASADO = '2020-01-01'   // < hoy siempre
 const FUTURO = '2999-12-31'   // > hoy siempre
 
@@ -59,34 +61,40 @@ const abrir = () => fireEvent.click(screen.getByRole('button', { name: /CONFIRMA
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('CashTurno · apertura fija en HOY (Ítem 4)', () => {
-  it('el input de fecha queda acotado a hoy (min = max = hoy)', () => {
-    renderApertura()
-    expect(fechaInput().getAttribute('min')).toBe(hoy)
-    expect(fechaInput().getAttribute('max')).toBe(hoy)
-  })
+describe.each(RELOJES_CR)('reloj fijo $hoy · $caso', reloj => {
+  conRelojCR(reloj)
+  beforeEach(() => { hoy = todayCR() })
 
-  it('fecha PASADA → no abre el turno y avisa', () => {
-    const { onError } = renderApertura()
-    fireEvent.change(fechaInput(), { target: { value: PASADO } })
-    abrir()
-    expect(createCashSession).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/HOY/))
-  })
+  describe('CashTurno · apertura fija en HOY (Ítem 4)', () => {
+    it('el input de fecha queda acotado a hoy (min = max = hoy)', () => {
+      renderApertura()
+      expect(fechaInput().getAttribute('min')).toBe(hoy)
+      expect(fechaInput().getAttribute('max')).toBe(hoy)
+      expect(hoy).toBe(reloj.hoy)   // la fecha de CR, no la UTC (a las 23:30 CR ya es mañana en UTC)
+    })
 
-  it('fecha FUTURA → no abre el turno y avisa', () => {
-    const { onError } = renderApertura()
-    fireEvent.change(fechaInput(), { target: { value: FUTURO } })
-    abrir()
-    expect(createCashSession).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/HOY/))
-  })
+    it('fecha PASADA → no abre el turno y avisa', () => {
+      const { onError } = renderApertura()
+      fireEvent.change(fechaInput(), { target: { value: PASADO } })
+      abrir()
+      expect(createCashSession).not.toHaveBeenCalled()
+      expect(onError).toHaveBeenCalledWith(expect.stringMatching(/HOY/))
+    })
 
-  it('fecha HOY → abre el turno con session_date = hoy', async () => {
-    renderApertura()
-    fireEvent.change(fechaInput(), { target: { value: hoy } })
-    abrir()
-    await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
-    expect(createCashSession.mock.calls[0][0].session_date).toBe(hoy)
+    it('fecha FUTURA → no abre el turno y avisa', () => {
+      const { onError } = renderApertura()
+      fireEvent.change(fechaInput(), { target: { value: FUTURO } })
+      abrir()
+      expect(createCashSession).not.toHaveBeenCalled()
+      expect(onError).toHaveBeenCalledWith(expect.stringMatching(/HOY/))
+    })
+
+    it('fecha HOY → abre el turno con session_date = hoy', async () => {
+      renderApertura()
+      fireEvent.change(fechaInput(), { target: { value: hoy } })
+      abrir()
+      await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
+      expect(createCashSession.mock.calls[0][0].session_date).toBe(hoy)
+    })
   })
-})
+})   // describe.each(RELOJES_CR)

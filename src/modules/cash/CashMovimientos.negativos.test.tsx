@@ -30,59 +30,66 @@ vi.mock('../../shared/FacturaVerify', () => ({ default: () => null }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import CashMovimientos from './CashMovimientos'
-import { todayCR } from '../../shared/utils'
+import { RELOJES_CR, conRelojCR } from '../../test/relojCR.testutil'
 const { updateCashMovement, createDayMovement, getCierresDia } = cashApi
 
-const hoy = todayCR()
+// R34: el reloj se fija a las 23:30 CR en cada caso de la matriz (beforeEach). El movimiento se crea EN ESE
+// INSTANTE (`new Date().toISOString()`), que en UTC ya es el día siguiente: la pantalla tiene que leerlo como
+// de HOY en Costa Rica (`dateCR`), no por el prefijo UTC.
+const ahora = () => new Date().toISOString()
 const mkMov = (over: Partial<CashMovement>): CashMovement => ({
   id: 'm1', session_id: null, created_by: 'u1', movement_type: 'egreso_operativo',
   amount_crc: 5000, amount_usd: 0, currency: 'CRC', exchange_rate: null,
   description: 'gasto suelto', subcategory: '', supplier_id: null, supplier_name: '', employee_name: '',
   method: 'Efectivo', shift: '', caja_origen: 'Caja Fuerte', status: 'aprobado', approved_by: null,
-  approved_at: null, account_id: null, created_at: `${hoy}T12:00:00Z`, updated_at: `${hoy}T12:00:00Z`, ...over,
+  approved_at: null, account_id: null, created_at: ahora(), updated_at: ahora(), ...over,
 } as unknown as CashMovement)
 
 const flush = async () => { await act(async () => { await new Promise(r => setTimeout(r, 0)) }) }
 
 beforeEach(() => { vi.clearAllMocks(); getCierresDia.mockResolvedValue([]); window.alert = vi.fn() })
 
-describe('CashMovimientos · Nuevo movimiento — monto negativo (Ítem 2)', () => {
-  it('₡ negativo: no crea y avisa', async () => {
-    render(<CashMovimientos movements={[]} sessions={[]} onRefresh={vi.fn()} />)
-    await flush()
-    fireEvent.click(screen.getByRole('button', { name: /Nuevo movimiento/ }))
-    const modal = screen.getByText('Nuevo movimiento').closest('.cd-modal') as HTMLElement
-    fireEvent.change(within(modal).getAllByRole('spinbutton')[0], { target: { value: '-100' } })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Registrar/ })) })
-    expect(createDayMovement).not.toHaveBeenCalled()
-    expect(screen.getByText(/no puede ser negativo/i)).toBeTruthy()
-  })
-})
+describe.each(RELOJES_CR)('reloj fijo $hoy · $caso', reloj => {
+  conRelojCR(reloj)
 
-describe('CashMovimientos · edición inline — monto negativo (Ítem 2)', () => {
-  it('blur de amount_crc a < 0: avisa, revierte (onRefresh) y NO updatea', async () => {
-    const onRefresh = vi.fn()
-    render(<CashMovimientos movements={[mkMov({ description: 'gasto editable' })]} sessions={[]} onRefresh={onRefresh} />)
-    await flush()
-    const fila = screen.getByDisplayValue('gasto editable').closest('tr') as HTMLElement
-    const crc = within(fila).getAllByRole('spinbutton')[0]
-    fireEvent.change(crc, { target: { value: '-100' } })
-    await act(async () => { fireEvent.blur(crc) })
-    expect(window.alert).toHaveBeenCalled()
-    expect(onRefresh).toHaveBeenCalled()
-    expect(updateCashMovement).not.toHaveBeenCalled()
+  describe('CashMovimientos · Nuevo movimiento — monto negativo (Ítem 2)', () => {
+    it('₡ negativo: no crea y avisa', async () => {
+      render(<CashMovimientos movements={[]} sessions={[]} onRefresh={vi.fn()} />)
+      await flush()
+      fireEvent.click(screen.getByRole('button', { name: /Nuevo movimiento/ }))
+      const modal = screen.getByText('Nuevo movimiento').closest('.cd-modal') as HTMLElement
+      fireEvent.change(within(modal).getAllByRole('spinbutton')[0], { target: { value: '-100' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Registrar/ })) })
+      expect(createDayMovement).not.toHaveBeenCalled()
+      expect(screen.getByText(/no puede ser negativo/i)).toBeTruthy()
+    })
   })
 
-  it('blur de amount_crc a un valor válido (≥ 0): sí updatea', async () => {
-    render(<CashMovimientos movements={[mkMov({ description: 'gasto ok' })]} sessions={[]} onRefresh={vi.fn()} />)
-    await flush()
-    const fila = screen.getByDisplayValue('gasto ok').closest('tr') as HTMLElement
-    const crc = within(fila).getAllByRole('spinbutton')[0]
-    fireEvent.change(crc, { target: { value: '7000' } })
-    await act(async () => { fireEvent.blur(crc) })
-    expect(window.alert).not.toHaveBeenCalled()
-    // 3er argumento (20-nov): tipo y montos de la fila, para que la API valide el movimiento completo.
-    expect(updateCashMovement).toHaveBeenCalledWith('m1', { amount_crc: 7000 },
-      { movement_type: 'egreso_operativo', amount_crc: 5000, amount_usd: 0 })
+  describe('CashMovimientos · edición inline — monto negativo (Ítem 2)', () => {
+    it('blur de amount_crc a < 0: avisa, revierte (onRefresh) y NO updatea', async () => {
+      const onRefresh = vi.fn()
+      render(<CashMovimientos movements={[mkMov({ description: 'gasto editable' })]} sessions={[]} onRefresh={onRefresh} />)
+      await flush()
+      const fila = screen.getByDisplayValue('gasto editable').closest('tr') as HTMLElement
+      const crc = within(fila).getAllByRole('spinbutton')[0]
+      fireEvent.change(crc, { target: { value: '-100' } })
+      await act(async () => { fireEvent.blur(crc) })
+      expect(window.alert).toHaveBeenCalled()
+      expect(onRefresh).toHaveBeenCalled()
+      expect(updateCashMovement).not.toHaveBeenCalled()
+    })
+
+    it('blur de amount_crc a un valor válido (≥ 0): sí updatea', async () => {
+      render(<CashMovimientos movements={[mkMov({ description: 'gasto ok' })]} sessions={[]} onRefresh={vi.fn()} />)
+      await flush()
+      const fila = screen.getByDisplayValue('gasto ok').closest('tr') as HTMLElement
+      const crc = within(fila).getAllByRole('spinbutton')[0]
+      fireEvent.change(crc, { target: { value: '7000' } })
+      await act(async () => { fireEvent.blur(crc) })
+      expect(window.alert).not.toHaveBeenCalled()
+      // 3er argumento (20-nov): tipo y montos de la fila, para que la API valide el movimiento completo.
+      expect(updateCashMovement).toHaveBeenCalledWith('m1', { amount_crc: 7000 },
+        { movement_type: 'egreso_operativo', amount_crc: 5000, amount_usd: 0 })
+    })
   })
-})
+})   // describe.each(RELOJES_CR)

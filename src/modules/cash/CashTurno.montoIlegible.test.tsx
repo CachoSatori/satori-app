@@ -7,7 +7,7 @@
 // (un solo evento `input`, como el navegador: con el cuadro vacío React no dispara onChange, R30).
 // Harness espejo de CashTurno.negativos.test.tsx. Datos ficticios.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, act, within } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import type { CashSession, Supplier, CashMovement } from '../../shared/types/database'
 import { teclearNumero } from './teclearNumero.testutil'
 import { MSG_MONTO_INVALIDO } from './validarMovimiento'
@@ -117,20 +117,20 @@ describe('CashTurno · editar un pago GUARDADO — $ ilegible (251)', () => {
   })
 })
 
-describe('CashTurno · pago SIN GUARDAR (borrador que se crea al confirmar) — $ ilegible (251)', () => {
-  it('$ «-» en el borrador: avisa y NO llama a crear el movimiento', async () => {
+// (hallazgo 252) Antes, una edición cuyo alta fallaba dejaba el pago como borrador «sin guardar» (y el viejo ya
+// borrado). Ahora el viejo queda intacto y el modal sigue abierto para reintentar: el reintento también mira el $.
+describe('CashTurno · reintento tras un alta fallida — $ ilegible (251)', () => {
+  it('$ «-» en el reintento: avisa y NO llama a crear el movimiento', async () => {
     const { onError } = renderTurno()
-    // 1) Una edición cuyo alta falla (sin conexión) deja el pago como borrador «sin guardar».
+    // 1) Una edición cuyo alta falla deja el modal abierto (el pago viejo no se borró).
     createCashMovementSpy.mockRejectedValueOnce(new Error('sin conexión'))
     fireEvent.click(screen.getByTitle('Editar'))
     await guardar()
     expect(createCashMovementSpy).toHaveBeenCalledTimes(1)
-    const fila = screen.getByText(/sin guardar/).parentElement!.parentElement!.parentElement!
-    // 2) Al corregir el borrador con un $ ilegible no se crea nada.
-    fireEvent.click(within(fila).getByTitle('Editar'))
+    expect(deleteCashMovementSpy).not.toHaveBeenCalled()
+    // 2) Al reintentar con un $ ilegible no se crea nada.
     teclearNumero(usd(), '')
     teclearNumero(usd(), '-')
-    deleteCashMovementSpy.mockClear()
     await guardar()
     expect(onError).toHaveBeenCalledWith(MSG_MONTO_INVALIDO)
     expect(createCashMovementSpy).toHaveBeenCalledTimes(1)   // solo el intento del paso 1

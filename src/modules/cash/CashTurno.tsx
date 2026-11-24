@@ -25,6 +25,10 @@ import AgregarAsistente from './AgregarAsistente'
 import { Aviso } from '../../shared/ui/estandar'
 import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from './validarMovimiento'
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
+import {
+  reemplazarPago, aplicarReemplazos, reemplazosAbiertos, podarReemplazos, leerReemplazos, guardarReemplazos,
+  NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente,
+} from './reemplazoPago'
 import type { Employee } from '../../shared/types/database'
 
 interface Props {
@@ -74,7 +78,7 @@ interface PagoRow {
 }
 
 export default function CashTurno({
-  openSession, suppliers, sessions, sessionMovements, allMovements,
+  openSession, suppliers, sessions, sessionMovements: sessionMovementsBase, allMovements,
   onSessionOpen, onSessionClose, onMovAdded, onError, onRefresh,
 }: Props) {
   const { profile } = useAuth()
@@ -157,6 +161,29 @@ export default function CashTurno({
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apFecha, openSession])
+
+  // ── Cambios de pago sin terminar (hallazgo 252, reemplazoPago.ts) ──
+  // Editar un pago guardado crea el nuevo ANTES de borrar el viejo. Si el borrado no llegó (o el nuevo quedó en la
+  // cola), el par queda anotado en el aparato y el viejo no se cuenta mientras el nuevo esté a la vista. TODAS las
+  // cuentas de esta pantalla leen `sessionMovements` ya filtrado: así ninguna cuenta doble.
+  const sessionId = openSession?.id ?? null
+  const [reemplazosDe, setReemplazosDe] = useState<{ sid: string | null; lista: ReemplazoPendiente[] }>(
+    () => ({ sid: sessionId, lista: sessionId ? leerReemplazos(sessionId) : [] }))
+  // Cambió el turno: se relee la anotación de ESE turno (ajuste de estado en el render, sin efecto).
+  if (reemplazosDe.sid !== sessionId) setReemplazosDe({ sid: sessionId, lista: sessionId ? leerReemplazos(sessionId) : [] })
+  const reemplazos = reemplazosDe.lista
+  // Escribe la anotación soltando de paso las terminadas (el viejo ya no está y el nuevo sí).
+  const anotarReemplazos = useCallback((fn: (prev: ReemplazoPendiente[]) => ReemplazoPendiente[]) => {
+    setReemplazosDe(prev => {
+      const lista = podarReemplazos(sessionMovementsBase, fn(prev.lista))
+      if (sessionId) guardarReemplazos(sessionId, lista)
+      return { sid: sessionId, lista }
+    })
+  }, [sessionId, sessionMovementsBase])
+  const sessionMovements = useMemo(
+    () => aplicarReemplazos(sessionMovementsBase, reemplazos), [sessionMovementsBase, reemplazos])
+  const cambiosAbiertos = useMemo(
+    () => reemplazosAbiertos(sessionMovementsBase, reemplazos), [sessionMovementsBase, reemplazos])
 
   // Turno state: pagos + ingresos adicionales.
   // BUG A FIX: estos arrays guardan SÓLO borradores aún NO persistidos. Las listas
@@ -507,6 +534,75 @@ export default function CashTurno({
     }
   }
 
+  // ── Guardar el cambio de un pago YA guardado (hallazgo 252) ──
+  // Primero el NUEVO (con id fijo: un reintento del mismo cambio reusa el id y la base no duplica) y recién con el
+  // alta confirmada se borra el viejo por la cascada (nota automática + credenciales de gerencia, que la RPC
+  // re-valida y audita en movement_deletions.authorized_by, mig 044). Si el alta falla, el viejo queda intacto y el
+  // modal sigue abierto para reintentar. Si el nuevo quedó en cola o el borrado falló, el viejo no se cuenta (ver
+  // `reemplazos`) y el aviso ofrece «Terminar el cambio».
+  const altaCambioRef = useRef<{ viejo: string; id: string } | null>(null)
+  const guardarCambioDePago = async (
+    viejoId: string, auth: ManagerAuth,
+    d: { amount_crc: number; amount_usd: number; supplier_id: string; supplier_name: string; method: string; reference: string; attachments: string[] },
+  ) => {
+    if (!openSession || !profile) return
+    if (altaCambioRef.current?.viejo !== viejoId) altaCambioRef.current = { viejo: viejoId, id: crypto.randomUUID() }
+    const nuevoId = altaCambioRef.current.id
+    const r = await reemplazarPago(viejoId, nuevoId, {
+      crear: id => createCashMovement({
+        session_id:    openSession.id,
+        created_by:    profile.id,
+        movement_type: 'egreso_mercaderia',
+        amount_crc:    d.amount_crc,
+        amount_usd:    d.amount_usd,
+        currency:      'CRC',
+        exchange_rate: tc,
+        description:   d.reference || d.supplier_name || 'Proveedor',
+        subcategory:   'Proveedor mercadería',
+        supplier_id:   d.supplier_id || null,
+        supplier_name: d.supplier_name,
+        method:        d.method,
+        caja_origen:   d.method === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
+        shift:         tipShiftToCaja(openSession.shift_type),
+        attachments:   d.attachments,
+        ...MERCADERIA_CLASS,
+      }, { id }),
+      borrarViejo: () => deleteCashMovement(viejoId, NOTA_REEMPLAZO, auth.managerEmail, auth.managerPassword),
+    })
+    if (r.estado === 'sin_cambios') {
+      // Nada cambió: el pago anterior sigue guardado y contando. El modal queda abierto con lo tecleado.
+      onError(`No se pudo guardar el cambio (${r.error}). El pago anterior sigue igual. Reintentá con «Guardar cambios».`)
+      return
+    }
+    altaCambioRef.current = null
+    if (r.nuevo) onMovAdded(r.nuevo)
+    if (r.estado === 'falta_borrar') {
+      anotarReemplazos(prev => [...prev.filter(x => x.viejo !== r.reemplazo.viejo), r.reemplazo])
+      onError(r.error
+        ? `El pago nuevo quedó guardado, pero el anterior no se pudo borrar (${r.error}). No se cuenta dos veces: tocá «Terminar el cambio» en el aviso rojo.`
+        : 'El cambio quedó guardado en el aparato (sin señal). Cuando se sincronice, tocá «Terminar el cambio» en el aviso rojo.')
+    }
+    if (r.estado === 'listo' || !r.nuevo) onRefresh()
+    setPagoModal(false)
+  }
+
+  // Termina un cambio a medias: borra el pago viejo (el nuevo ya está en la base). Pide la misma autorización.
+  const [terminando, setTerminando] = useState(false)
+  const terminarCambio = async (r: ReemplazoPendiente) => {
+    if (terminando) return
+    const nuevo = sessionMovementsBase.find(m => m.id === r.nuevo)
+    if (nuevo?._pending) { onError('El pago nuevo todavía no se sincronizó. Esperá a que se sincronice (o tocá «⟳ Sincronizar ahora») y volvé a tocar «Terminar el cambio».'); return }
+    const auth = await requireManager()
+    if (!auth.ok) return
+    setTerminando(true)
+    try {
+      await deleteCashMovement(r.viejo, NOTA_REEMPLAZO, auth.managerEmail, auth.managerPassword)
+      anotarReemplazos(prev => prev.filter(x => x.viejo !== r.viejo))
+      onRefresh()
+    } catch (e) { onError(`No se pudo borrar el pago anterior: ${e instanceof Error ? e.message : 'reintentá'}. Sigue sin contarse dos veces.`) }
+    finally { setTerminando(false) }
+  }
+
   const confirmPago = async () => {
     // Montos PRIMERO (hallazgo 251): antes de pedir autorización y antes de borrar el movimiento viejo. Un $ ilegible
     // («12abc», «-») llegaba como '' y se guardaba $0 sin aviso; al editar, además, el pago viejo ya estaba borrado.
@@ -523,6 +619,14 @@ export default function CashTurno({
     // MISMA autorización de gerencia que el borrado. Antes este camino llamaba la cascada SIN
     // credenciales y la RPC (mig 044) rechazaba al cajero con "No autorizado" sin pedirle nada.
     const old = editId ? displayPagos.find(p => p.id === editId) : null
+    // (hallazgo 252) Cambiar un pago guardado necesita la base: sin red, o con el pago todavía en la cola, el borrado
+    // del viejo no se puede hacer. Se frena ANTES de crear nada (mismos textos que el borrado).
+    if (old?.persistedId && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      onError('Cambiar un pago guardado requiere conexión. Reintentá con internet.'); return
+    }
+    if (old?.persistedId && old.pending) {
+      onError('Este pago todavía no se sincronizó. Esperá a que se sincronice (o tocá «⟳ Sincronizar ahora») y después cambialo.'); return
+    }
     let auth: ManagerAuth = { ok: true }
     if (old?.persistedId) {
       auth = await requireManager()
@@ -541,14 +645,15 @@ export default function CashTurno({
     if (fotosFallidas > 0) {
       onError(`${fotosFallidas} foto(s) de la factura no se pudieron subir (¿sin conexión?). El pago se registra igual — volvé a editarlo con red para reintentar la foto.`)
     }
-    // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
+    // Las subidas ya hechas pasan a «previas»: si hay que reintentar el guardado, no se suben de nuevo.
+    setDraftFotos([]); setDraftFotosPrev(fotoPaths)
     if (old?.persistedId) {
-      // Edición = reemplazo: borra el movimiento viejo (cascada de inventario incluida) y re-crea.
-      // Nota automática (no es un borrado "a mano" del usuario, es parte del flujo de editar).
-      // Las credenciales de gerencia (si autorizó un cajero) viajan a la RPC, que las re-valida
-      // server-side y audita al autorizante en movement_deletions.authorized_by (mig 044).
-      try { await deleteCashMovement(old.persistedId, 'Reemplazo por edición de pago a proveedor', auth.managerEmail, auth.managerPassword); onRefresh() }
-      catch (e) { onError(`No se pudo reemplazar el pago anterior: ${e instanceof Error ? e.message : 'reintentá'}`); setMovSaving(false); return }
+      await guardarCambioDePago(old.persistedId, auth, {
+        amount_crc: vMonto.crc, amount_usd: vMonto.usd, supplier_id: draftSup, supplier_name: prov?.name ?? '',
+        method: draftMethod, reference: draftRef, attachments: fotoPaths,
+      })
+      setMovSaving(false)
+      return
     }
     const pago: PagoRow = {
       id:            old && !old.persistedId ? old.id : crypto.randomUUID(),
@@ -639,6 +744,8 @@ export default function CashTurno({
   // ── Confirmar cierre ──────────────────────────────────────
   const handleCierre = useCallback(async () => {
     if (!openSession || !profile) return
+    // (hallazgo 252) Con un cambio de pago a medias la base tiene los dos pagos: no se cierra hasta terminarlo.
+    if (cambiosAbiertos.length > 0) { setShowResumen(false); onError(MSG_CIERRE_CON_REEMPLAZO); return }
     if (!navigator.onLine) {
       onError('El cierre de la Caja Diaria requiere conexión — los pagos quedan guardados en cola; cerrá cuando vuelva la señal.')
       return
@@ -692,6 +799,7 @@ export default function CashTurno({
         },
         profile.id,
       ))
+      guardarReemplazos(openSession.id, [])   // turno cerrado: lo anotado de cambios ya no sirve
       onSessionClose()
       setPagos([])
       setIngresos([])
@@ -705,7 +813,7 @@ export default function CashTurno({
       setSaving(false)
     }
   }, [openSession, profile, pagos, ingresos, cierreCRC, cierreUSD, cierreCRCMalo, cierreUSDMalo, cierreNotas,
-      onSessionClose, onMovAdded, onError])
+      cambiosAbiertos, onSessionClose, onMovAdded, onError])
 
   // ────────────────────────────────────────────────────────
   // ── APERTURA VIEW ─────────────────────────────────────
@@ -851,6 +959,19 @@ export default function CashTurno({
       {cajaDeberia < 0 && (
         <Aviso tipo="atencion" titulo="Déficit en caja.">
           Si lo completaste con plata de Caja Fuerte, no registres nada: cerrá con lo que hay en la caja.
+        </Aviso>
+      )}
+      {/* (hallazgo 252) Cambio de pago a medias: el nuevo está guardado y el anterior todavía no se borró. */}
+      {cambiosAbiertos.length > 0 && (
+        <Aviso tipo="error" titulo="Cambio de pago sin terminar.">
+          El pago nuevo ya está guardado y el anterior todavía no se borró. En esta pantalla se cuenta una sola vez;
+          terminalo antes de cerrar la caja.{' '}
+          {cambiosAbiertos.map(r => (
+            <button key={r.viejo} type="button" className="tips-btn-ghost" disabled={terminando}
+              onClick={() => terminarCambio(r)}>
+              {terminando ? 'Terminando…' : 'Terminar el cambio'}
+            </button>
+          ))}
         </Aviso>
       )}
 

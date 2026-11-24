@@ -263,13 +263,15 @@ export async function createCashMovement(movement: {
   classification?: string
   suggested_classification?: string
   suggested_confidence?: number
-}): Promise<CashMovement> {
+}, opts?: { id?: string }): Promise<CashMovement> {
   // Montos (20-nov, ex #73): se valida ANTES de escribir y ANTES de encolar sin conexión.
   assertMontosValidos(movement.movement_type, movement.amount_crc, movement.amount_usd, 'alta')
   // id y client_op_id se generan en el CLIENTE: así el replay offline es
   // idempotente (021: client_op_id UNIQUE) y las ediciones/borrados encolados
   // después referencian un id que será el mismo en el servidor.
-  const id = crypto.randomUUID()
+  // `opts.id` (hallazgo 252): quien reintenta la MISMA alta pasa el mismo id → si el primer intento sí entró,
+  // la base rebota el duplicado (23505) en vez de crear otro movimiento.
+  const id = opts?.id ?? crypto.randomUUID()
   const now = new Date().toISOString()
   const row = {
     id,

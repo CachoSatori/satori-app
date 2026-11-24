@@ -24,6 +24,7 @@ const RULE_FIELDS: Array<{ key: keyof LoyaltyRules; label: string; hint: string 
 
 export default function LoyaltyConfig() {
   const [rules, setRules]     = useState<LoyaltyRules>(DEFAULT_RULES)
+  const [guardadas, setGuardadas] = useState<LoyaltyRules>(DEFAULT_RULES)   // lo que hay en la base (para revisar solo lo cambiado)
   const [rewards, setRewards] = useState<LoyaltyReward[]>([])
   const [loading, setLoading] = useState(true)
   const [savingRules, setSavingRules] = useState(false)
@@ -40,7 +41,7 @@ export default function LoyaltyConfig() {
     setLoading(true); setError(null)
     try {
       const [r, rw] = await Promise.all([getLoyaltyRules(), getRewards(false)])
-      setRules(r); setRewards(rw)
+      setRules(r); setGuardadas(r); setRewards(rw)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
     } finally { setLoading(false) }
@@ -48,8 +49,11 @@ export default function LoyaltyConfig() {
   useEffect(() => { load() }, [])
 
   // Reglas: ilegible o negativo → aviso que nombra el cuadro y no se guarda (antes `Number('')` guardaba 0). Vacío = 0,
-  // como antes. Decimales permitidos (p. ej. puntos por ₡1.000). R35.
-  const avisoReglas = errorDeNumeros(RULE_FIELDS.map(f => ({ nombre: f.label, valor: rules[f.key], vacioVale: true })))
+  // como antes. Decimales permitidos (p. ej. puntos por ₡1.000). Solo se revisan las reglas que cambiaron (decisión del
+  // dueño, 24-nov): una regla vieja rara en la base no traba «Guardar reglas». R35.
+  const avisoReglas = errorDeNumeros(RULE_FIELDS
+    .filter(f => !Object.is(rules[f.key], guardadas[f.key]))
+    .map(f => ({ nombre: f.label, valor: rules[f.key], vacioVale: true })))
   // Costo de la recompensa: entero de 0 en adelante (la columna es int). Vacío lo frena «obligatorio», como antes.
   const avisoCosto = errorDeNumeros([{ nombre: 'Puntos (costo de la recompensa)', valor: rCost, entero: true, vacioVale: true }])
 
@@ -58,6 +62,7 @@ export default function LoyaltyConfig() {
     setSavingRules(true); setError(null); setMsg(null)
     try {
       await saveLoyaltyRules(rules)
+      setGuardadas(rules)
       setMsg('✓ Reglas guardadas')
       setTimeout(() => setMsg(null), 3000)
     } catch (e) { setError(e instanceof Error ? e.message : 'Error') }

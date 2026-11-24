@@ -14,6 +14,7 @@ const CLIENTE: Customer = {
   wallet_pass_id: null, notes: null, active: true, created_at: '2026-01-01', updated_at: '2026-01-01',
 }
 const H = vi.hoisted(() => ({
+  reglas: vi.fn(async (): Promise<Record<string, number>> => ({})),
   addInteraction: vi.fn(async () => {}), saveLoyaltyRules: vi.fn(async () => {}), upsertReward: vi.fn(async () => {}),
 }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: 'owner', full_name: 'Prueba' } }) }))
@@ -21,7 +22,7 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => () => {} }))
 vi.mock('../../shared/api/crm', () => ({
   getCustomers: async () => [CLIENTE], upsertCustomer: vi.fn(), deactivateCustomer: vi.fn(),
   getInteractions: async () => [], addInteraction: H.addInteraction,
-  getLoyaltyRules: async () => ({ ...DEFAULT_RULES }), getRewards: async () => [],
+  getLoyaltyRules: async () => ({ ...DEFAULT_RULES, ...(await H.reglas()) }), getRewards: async () => [],
   saveLoyaltyRules: H.saveLoyaltyRules, upsertReward: H.upsertReward, deleteReward: vi.fn(),
 }))
 
@@ -78,6 +79,24 @@ describe('Fidelización · reglas y recompensas', () => {
     expect(boton(/Guardar reglas/).disabled).toBe(true)
     fireEvent.click(boton(/Guardar reglas/))
     expect(H.saveLoyaltyRules).not.toHaveBeenCalled()
+  })
+
+  it('una regla vieja negativa en la base no traba: se revisa solo lo cambiado (decisión del dueño 24-nov)', async () => {
+    H.reglas.mockResolvedValueOnce({ bonus_referral: -5 })
+    render(<LoyaltyConfig />)
+    teclearNumero(await screen.findByRole('spinbutton', { name: 'Bonus cumpleaños' }), '150')
+    expect(aviso()).toBeNull()
+    fireEvent.click(boton(/Guardar reglas/))
+    await waitFor(() => expect(H.saveLoyaltyRules).toHaveBeenCalled())
+    expect((H.saveLoyaltyRules.mock.calls[0] as unknown as [Record<string, number>])[0]).toMatchObject({ bonus_birthday: 150, bonus_referral: -5 })
+  })
+
+  it('si se toca la regla vieja negativa y queda negativa, avisa', async () => {
+    H.reglas.mockResolvedValueOnce({ bonus_referral: -5 })
+    render(<LoyaltyConfig />)
+    teclearNumero(await screen.findByRole('spinbutton', { name: 'Bonus referido' }), '-6')
+    expect(aviso()).toContain('«Bonus referido»')
+    expect(boton(/Guardar reglas/).disabled).toBe(true)
   })
 
   it('regla válida (con decimales) se guarda igual que antes', async () => {

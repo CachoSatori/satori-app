@@ -11,6 +11,7 @@ import type { Ingredient, Recipe } from '../../shared/types/inventario'
 const H = vi.hoisted(() => ({
   addMovement: vi.fn(async () => {}), setStockLevel: vi.fn(async () => {}),
   upsertRecipeIngredient: vi.fn(async () => {}),
+  upsertIngredient: vi.fn(async () => {}),
   createCashMovement: vi.fn(async () => {}),
   receta: { id: 'r1', product_name: 'ROLLO FICTICIO', yield_qty: 1, yield_unit: 'unidad', notes: '', created_at: 'x', updated_at: 'x' } as Recipe,
 }))
@@ -18,7 +19,9 @@ vi.mock('../../shared/api/inventario', () => ({
   addMovement: H.addMovement, setStockLevel: H.setStockLevel,
   getRecipes: async () => [H.receta], upsertRecipe: vi.fn(), getRecipeIngredients: async () => [],
   upsertRecipeIngredient: H.upsertRecipeIngredient, deleteRecipeIngredient: vi.fn(),
+  upsertIngredient: H.upsertIngredient, deleteIngredient: vi.fn(),
 }))
+vi.mock('../../shared/api/inventoryIngest', () => ({ getIngredientPrices: async () => [] }))
 vi.mock('../../shared/api/cash', () => ({ getOpenCashSession: async () => ({ id: 's1' }), createCashMovement: H.createCashMovement }))
 vi.mock('../../shared/api/ventas', () => ({ getProductMap: async () => ({}), updateProductInfo: vi.fn() }))
 
@@ -29,6 +32,7 @@ const ING: Ingredient = {
 
 import InvMovimientos from './InvMovimientos'
 import InvRecetas from './InvRecetas'
+import InvIngredientes from './InvIngredientes'
 
 beforeEach(() => { vi.clearAllMocks() })
 afterEach(() => { cleanup() })
@@ -110,5 +114,41 @@ describe('Recetas · cantidad y merma de un ingrediente', () => {
     fireEvent.click(boton('+ Agregar'))
     await waitFor(() => expect(H.upsertRecipeIngredient).toHaveBeenCalled())
     expect((H.upsertRecipeIngredient.mock.calls[0] as unknown as [Record<string, unknown>])[0]).toMatchObject({ quantity: 0.25, waste_factor: 0 })
+  })
+})
+
+describe('Ingredientes · stock actual, mínimo y costo/unidad', () => {
+  const nuevo = () => {
+    render(<InvIngredientes ingredients={[]} onRefresh={() => {}} profile={{ id: 'u1', role: 'owner' }} />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Nombre *' }), { target: { value: 'Arroz ficticio' } })
+  }
+
+  it.each([['Stock actual', '0-450'], ['Stock mínimo', '5-'], ['Costo/unidad ₡', '--'], ['Costo/unidad ₡', '-1250'], ['Stock actual', '-3']])(
+    '«%s» con «%s» → aviso con el cuadro, «✓ Guardar» apagado, no guarda', async (nombre, texto) => {
+      nuevo()
+      teclearNumero(cuadro(nombre), '')
+      teclearNumero(cuadro(nombre), texto)
+      expect(aviso()).toContain(`«${nombre}»`)
+      expect(boton('✓ Guardar').disabled).toBe(true)
+      fireEvent.click(boton('✓ Guardar'))
+      expect(H.upsertIngredient).not.toHaveBeenCalled()
+    })
+
+  it('valores válidos se guardan; vacío = 0 como antes', async () => {
+    nuevo()
+    teclearNumero(cuadro('Costo/unidad ₡'), '1250.5')
+    teclearNumero(cuadro('Stock mínimo'), '')
+    fireEvent.click(boton('✓ Guardar'))
+    await waitFor(() => expect(H.upsertIngredient).toHaveBeenCalled())
+    expect((H.upsertIngredient.mock.calls[0] as unknown as [Record<string, unknown>])[0]).toMatchObject({ cost_per_unit: 1250.5, min_stock: 0 })
+  })
+
+  it('un stock viejo negativo (por consumo) no traba editar otra cosa', async () => {
+    render(<InvIngredientes ingredients={[{ ...ING, current_stock: -2 }]} onRefresh={() => {}} profile={{ id: 'u1', role: 'owner' }} />)
+    fireEvent.click(boton('Editar'))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Proveedor' }), { target: { value: 'Proveedor Y' } })
+    expect(aviso()).toBeNull()
+    fireEvent.click(boton('✓ Guardar'))
+    await waitFor(() => expect(H.upsertIngredient).toHaveBeenCalled())
   })
 })

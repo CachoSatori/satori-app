@@ -42,6 +42,7 @@ vi.mock('./lineasPeriodo', async orig => ({
 }))
 
 import VentasEquipo from './VentasEquipo'
+import { cargarLecturaRango } from './resumenV2Datos'
 
 const METAS = { restaurante: {}, margen: {}, global: { promPax: 9_000, bebPax: 0, ratioCB: 0, ticketItem: 0, ventas: 0 }, salMetas: {} } as unknown as Meta
 
@@ -126,5 +127,39 @@ describe('«Equipo» · la barra global', () => {
   it('el local de la URL manda si el usuario lo ve', async () => {
     await abrir('p=ayer&local=nosara')
     await waitFor(() => expect(pedidos.some(p => p.fn === 'lineas' && p.local === 'nosara')).toBe(true))
+  })
+})
+
+describe('«Equipo» · la ficha no deja a la vista un error viejo (menor 2 del verificador del #340)', () => {
+  const alerta = () => document.querySelector('[data-testid="ficha-salonero"] [role="alert"]')
+  const filasEquipo = () => [...document.querySelectorAll('table[aria-label="Equipo"] tbody tr')]
+
+  it('falla la lectura de las 12 semanas con un salonero; al tocar otro, el error se va y se ven sus 12 semanas', async () => {
+    vi.mocked(cargarLecturaRango).mockRejectedValueOnce(new Error('caída de prueba'))
+    await abrir('p=mes&d=2026-11-17')
+    const [a, b] = filasEquipo()
+    expect(b).toBeDefined()
+    fireEvent.click(a)
+    await waitFor(() => expect(alerta()?.textContent).toContain('caída de prueba'))
+    fireEvent.click(b)
+    const ficha = await screen.findByTestId('ficha-salonero')
+    expect(ficha.textContent).toContain(b.getAttribute('data-salonero')!)
+    await screen.findByTestId('doce-semanas')
+    expect(alerta()).toBeNull()
+  })
+
+  it('cambiar de período cierra la ficha (se vuelve a leer el equipo): ni el error ni una respuesta tardía quedan a la vista', async () => {
+    let rechazar: (e: Error) => void = () => {}
+    vi.mocked(cargarLecturaRango).mockImplementationOnce(() => new Promise((_, rej) => { rechazar = rej }))
+    await abrir('p=mes&d=2026-11-17')
+    fireEvent.click(filasEquipo()[0])
+    await screen.findByText('Leyendo las 12 semanas…')
+    fireEvent.click(screen.getByRole('button', { name: 'Período anterior' }))
+    await waitFor(() => expect(pedidos).toContainEqual({ fn: 'lineas', local: 'santa-teresa', desde: '2026-10-01', hasta: '2026-10-31' }))
+    await screen.findByRole('table', { name: 'Equipo' })
+    rechazar(new Error('tardía de prueba'))
+    await new Promise(r => setTimeout(r, 0))
+    expect(screen.queryByTestId('ficha-salonero')).toBeNull()
+    expect(document.body.textContent).not.toContain('tardía de prueba')
   })
 })

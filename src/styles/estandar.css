@@ -76,7 +76,7 @@
 /* ── Píldora de estado ── */
 .est .est-pildora { display: inline-block; font: 500 12px/1 var(--font-sans); padding: 5px 9px; border-radius: 999px; white-space: nowrap; }
 .est .est-pildora.pagado    { color: var(--c-musgo);     background: var(--c-musgo-fondo); }
-.est .est-pildora.pendiente { color: var(--c-oro-texto); background: var(--c-oro-fondo); }
+.est .est-pildora.pendiente { color: var(--c-oro-texto); background: var(--c-oro-fondo-texto); }   /* 4,6:1 (con --c-oro-fondo, 4,4) */
 .est .est-pildora.rechazado { color: var(--c-laca);      background: var(--c-laca-fondo); }
 .est .est-pildora.neutro    { color: var(--c-gris);      background: var(--c-panel); }
 
@@ -112,4 +112,5 @@
 .est .est-btn.peligro .est-btn-detalle { flex-basis: 100%; color: var(--c-gris); font-weight: 400; font-size: 13px; }
 .est .est-btn.peligro-lleno { background: var(--c-laca); color: #fff; }
 .est .est-btn:disabled   { opacity: 0.38; cursor: default; }
-.est .est-btn:focus-visible { outline: 2px solid var(--c-oro); outline-offset: 2px; }
+/* Foco en tinta: el oro da 2,9:1 sobre crema (WCAG pide ≥ 3:1 para un contorno). */
+.est .est-btn:focus-visible { outline: 2px solid var(--c-tinta); outline-offset: 2px; }

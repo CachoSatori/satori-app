@@ -166,7 +166,9 @@ no cuadra», el resumen antes de confirmar y el bloque del motivo, que siguen co
 `src/shared/ui/estandar.tsx` (`Cifra`, `Cifras`, `Aviso`, `Pildora`, `Fases`, `Boton`) con pruebas, `@tabler/icons-react`
 3.52.0 fijo y `src/shared/ui/iconos.ts`. A diferencia del plan de §6 («sin pantallas»), por pedido del coordinador Caja ya
 lleva `.est` (fondo crema) y el primer ícono (flecha de «Deshacer cierre»). Las tarjetas internas siguen blancas hasta los
-PR 3–7. Las clases nuevas llevan prefijo `est-` para no chocar con las de `index.css` (`.pildora-*`, `.aviso`).
+PR 3–7. Las clases nuevas llevan prefijo `est-` para no chocar con las de `index.css` (`.pildora-*`, `.aviso`). Ronda 2 (verificador): foco
+de botones en tinta (15:1 sobre crema; el oro daba 2,9:1), píldora «pendiente» sobre `--c-oro-fondo-texto` (4,6:1) y guardas
+de prueba: contraste mínimo de los tokens, regla de foco, íconos solo por nombre y versión fija de Tabler.
 
 Texto original de las opciones:
 

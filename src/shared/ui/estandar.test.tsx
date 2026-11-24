@@ -115,3 +115,53 @@ describe('Íconos (src/shared/ui/iconos.ts)', () => {
     expect(malos).toEqual([])
   })
 })
+
+// ── Ronda 2 (verificador #349): guardas para lo que antes ninguna prueba cuidaba ──
+const lum = (h: string) => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] }
+const contraste = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
+// Valor hex de un token: primero en `.est` (estandar.css), si no en :root (index.css).
+const tokenHex = (n: string): string => {
+  for (const css of [leer('src/styles/estandar.css'), leer('src/index.css')]) {
+    const m = css.match(new RegExp(`${n}:\\s*([^;]+);`))
+    if (!m) continue
+    const v = m[1].trim()
+    if (v.startsWith('#')) return v
+    const ref = v.match(/^var\((--[\w-]+)\)$/)
+    if (ref) return tokenHex(ref[1])
+  }
+  throw new Error('token sin valor: ' + n)
+}
+
+describe('contraste mínimo de los tokens sobre la crema', () => {
+  const crema = () => tokenHex('--c-crema')
+  it.each([['--c-tinta'], ['--c-gris'], ['--c-oro-texto'], ['--c-laca'], ['--c-musgo']])('texto %s sobre crema ≥ 4,5:1', t => {
+    expect(contraste(tokenHex(t), crema())).toBeGreaterThanOrEqual(4.5)
+  })
+  it('píldora «pendiente»: oro-texto sobre su fondo ≥ 4,5:1 (12 px)', () => {
+    const css = leer('src/styles/estandar.css')
+    const fondo = css.match(/\.est-pildora\.pendiente \{[^}]*background:\s*var\((--[\w-]+)\)/)![1]
+    expect(contraste(tokenHex('--c-oro-texto'), tokenHex(fondo))).toBeGreaterThanOrEqual(4.5)
+  })
+  it('foco visible de los botones: contorno ≥ 3:1 sobre crema', () => {
+    const css = leer('src/styles/estandar.css')
+    const m = css.match(/\.est \.est-btn:focus-visible \{\s*outline:\s*2px solid var\((--[\w-]+)\)/)
+    expect(m, 'falta la regla de foco de .est-btn').not.toBeNull()
+    expect(contraste(tokenHex(m![1]), crema())).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('dependencia de íconos', () => {
+  it('iconos.ts exporta por nombre (nada de `export *`) y solo los diez de la lista', () => {
+    const src = leer('src/shared/ui/iconos.ts').replace(/\/\/.*$/gm, '')
+    expect(src).not.toMatch(/export\s*\*/)
+    const bloque = src.match(/export\s*\{([^}]*)\}\s*from\s*'@tabler\/icons-react'/)
+    expect(bloque).not.toBeNull()
+    const nombres = bloque![1].split(',').map(x => x.trim()).filter(Boolean).sort()
+    expect(nombres).toEqual(['IconArrowBackUp', 'IconCalendar', 'IconCheck', 'IconChevronDown', 'IconChevronRight', 'IconDownload', 'IconPencil', 'IconPlus', 'IconSearch', 'IconTrash'])
+  })
+  it('@tabler/icons-react con versión FIJA en package.json (sin ^ ni ~)', () => {
+    const pkg = JSON.parse(leer('package.json')) as { dependencies: Record<string, string> }
+    expect(pkg.dependencies['@tabler/icons-react']).toMatch(/^\d+\.\d+\.\d+$/)
+  })
+})

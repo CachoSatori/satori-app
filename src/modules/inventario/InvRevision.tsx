@@ -26,6 +26,7 @@ import {
   NONE, NEW, type EditLine, type InvLine,
 } from '../../shared/api/inventoryIngest'
 import InvLineTable from '../../shared/InvLineTable'
+import { errorDeLineas } from '../../shared/invLineasIlegibles'
 import type { Ingredient } from '../../shared/types/inventario'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import type { Database } from '../../shared/types/supabase.gen'
@@ -425,7 +426,11 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
     if (supplierId) await learnSupplierMappings(supplierId, learnLines)
   }
 
+  // Un cuadro ilegible (cantidad, factor o precio) frena Guardar y Completar: el aviso lo muestra la tabla (R29–R31).
+  const ilegible = errorDeLineas(lines)
+
   const guardar = async () => {
+    if (ilegible) { setErr(ilegible); return }
     setSaving(true); setErr(null); setSavedMsg(null)
     try {
       await persistMeta(decidedInvLines())
@@ -437,6 +442,7 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
   }
 
   const completar = async () => {
+    if (ilegible) { setErr(ilegible); return }
     setSaving(true); setErr(null); setSavedMsg(null)
     try {
       const resolved = await resolveEditLines(lines, ingredients, curSupName)
@@ -592,8 +598,8 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
             <>
               <button className="tips-btn-ghost" onClick={onClose} disabled={saving}>Cerrar</button>
               <button className="tips-btn-ghost" onClick={() => { setErr(null); setSavedMsg(null); setDiscarding(true) }} disabled={saving}>🗑 Descartar</button>
-              <button className="tips-btn-ghost" onClick={guardar} disabled={saving || !loaded}>{saving ? 'Guardando…' : '💾 Guardar'}</button>
-              <button className="cd-btn-green" onClick={completar} disabled={saving || !loaded || invCount === 0}>
+              <button className="tips-btn-ghost" onClick={guardar} disabled={saving || !loaded || !!ilegible}>{saving ? 'Guardando…' : '💾 Guardar'}</button>
+              <button className="cd-btn-green" onClick={completar} disabled={saving || !loaded || invCount === 0 || !!ilegible}>
                 {saving ? 'Completando…' : `✓ Completar (${invCount})`}
               </button>
             </>

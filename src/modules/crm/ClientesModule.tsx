@@ -21,6 +21,7 @@ import {
   computeEarnedPoints, DEFAULT_RULES,
 } from '../../shared/types/crm'
 import { fi } from '../../shared/utils'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
 const LoyaltyConfig = lazy(() => import('./LoyaltyConfig'))
 const CrmSegmentos  = lazy(() => import('./CrmSegmentos'))
 const CrmMetricas   = lazy(() => import('./CrmMetricas'))
@@ -60,9 +61,10 @@ export default function ClientesModule() {
   const [showInter, setShowInter] = useState(false)
   const [iType, setIType]   = useState<string>('visita')
   const [iChan, setIChan]   = useState<string>('presencial')
-  const [iAmount, setIAmount] = useState('')
-  const [iEarned, setIEarned] = useState('')
-  const [iSpent, setISpent]   = useState('')
+  // Cuadros numéricos: '' vacío (= 0, como antes), NaN ilegible («0-450», «5-»: el navegador da '' y badInput). R35.
+  const [iAmount, setIAmount] = useState<number | ''>('')
+  const [iEarned, setIEarned] = useState<number | ''>('')
+  const [iSpent, setISpent]   = useState<number | ''>('')
   const [iNotes, setINotes]   = useState('')
 
   const load = useCallback(async () => {
@@ -145,15 +147,16 @@ export default function ClientesModule() {
   }
 
   // Default de puntos según las reglas configuradas (gasto + bonus de contexto)
-  function onAmountChange(v: string) {
+  function onAmountChange(v: number | '') {
     setIAmount(v)
+    if (Number.isNaN(v)) return   // ilegible: no se recalculan los puntos con 0
     const amt = Number(v) || 0
     if (!selected) return
     const now = new Date()
     const lastSeen = selected.last_seen ? new Date(selected.last_seen) : null
     const firstVisitThisMonth = !lastSeen || lastSeen.getMonth() !== now.getMonth() || lastSeen.getFullYear() !== now.getFullYear()
     const birthdayMonth = !!selected.birth_date && Number(selected.birth_date.slice(5, 7)) === now.getMonth() + 1
-    setIEarned(String(computeEarnedPoints(amt, rules, { firstVisitThisMonth, birthdayMonth })))
+    setIEarned(computeEarnedPoints(amt, rules, { firstVisitThisMonth, birthdayMonth }))
   }
 
   // ── Canje de recompensa ──────────────────────────────────────
@@ -184,8 +187,16 @@ export default function ClientesModule() {
     }
   }
 
+  // Ilegible, negativo o puntos con decimales → aviso que nombra el cuadro y no se registra nada (antes `Number(x) || 0`).
+  const avisoInter = errorDeNumeros([
+    { nombre: 'Monto ₡', valor: iAmount, vacioVale: true },
+    { nombre: 'Puntos +', valor: iEarned, entero: true, vacioVale: true },
+    { nombre: 'Puntos −', valor: iSpent, entero: true, vacioVale: true },
+  ])
+
   async function handleAddInteraction() {
     if (!selected) return
+    if (avisoInter) return
     setSaving(true); setError(null)
     try {
       await addInteraction({
@@ -396,19 +407,20 @@ export default function ClientesModule() {
                           </select>
                         </Field>
                         <Field label="Monto ₡">
-                          <input type="number" step="any" value={iAmount} onChange={e => onAmountChange(e.target.value)} placeholder="0" style={{ ...selStyle, width: 90 }} />
+                          <input type="number" step="any" aria-label="Monto ₡" value={valorInput(iAmount)} {...alEscribir(el => onAmountChange(leerCuadro(el)))} placeholder="0" style={{ ...selStyle, width: 90 }} />
                         </Field>
                         <Field label="Puntos +">
-                          <input type="number" value={iEarned} onChange={e => setIEarned(e.target.value)} placeholder="0" style={{ ...selStyle, width: 70 }} />
+                          <input type="number" aria-label="Puntos +" value={valorInput(iEarned)} {...alEscribir(el => setIEarned(leerCuadro(el)))} placeholder="0" style={{ ...selStyle, width: 70 }} />
                         </Field>
                         <Field label="Puntos −">
-                          <input type="number" value={iSpent} onChange={e => setISpent(e.target.value)} placeholder="0" style={{ ...selStyle, width: 70 }} />
+                          <input type="number" aria-label="Puntos −" value={valorInput(iSpent)} {...alEscribir(el => setISpent(leerCuadro(el)))} placeholder="0" style={{ ...selStyle, width: 70 }} />
                         </Field>
                       </div>
                       <input value={iNotes} onChange={e => setINotes(e.target.value)} placeholder="Notas (opcional)"
                         style={{ width: '100%', boxSizing: 'border-box', ...selStyle, marginBottom: '0.5rem' }} />
+                      {avisoInter && <div className="field-error" role="alert" style={{ marginBottom: '0.5rem' }}>{avisoInter}</div>}
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={handleAddInteraction} disabled={saving}
+                        <button onClick={handleAddInteraction} disabled={saving || !!avisoInter}
                           style={{ padding: '5px 14px', borderRadius: 2, background: 'var(--t-teal,#2a7a6a)', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
                           {saving ? '⟳' : 'Guardar'}
                         </button>

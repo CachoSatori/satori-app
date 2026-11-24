@@ -82,11 +82,11 @@ grande —bebida en cervezas, vinos, cocteles—, sin cambiar nada de lo de acá
 
 | Orden | Categoría | Familias de Santa Teresa que la traen por defecto | ¿Es venta neta? | ¿Una persona la puede elegir para un código? |
 |---|---|---|---|---|
-| 1 | `comida` | 2, 3, 16, 13, 4, 29 · 9 BELIEVE, 11 y 15 (mixtas, §2.5) | Sí | Sí |
+| 1 | `comida` | 2, 3, 16, 13, 4, 29 · 9 Grupo C (mixta), 11 y 15 (mixtas, §2.5) | Sí | Sí |
 | 2 | `bebida` | 5 · 18 Y HAPPY HOUR · 25 y 1 (mixtas, §2.5) | Sí | Sí |
 | 3 | `menu_especial` | Ninguna: solo por código (hoy, el 192) | Sí | Sí |
 | 4 | `extras` | 22 | Sí | Sí |
-| 5 | `otros` | 7 ACADEMY SURFCAMP, 8 LAPOINT SURFCAMP y 14 PROMOCIONES, por código y hoy sin ventas · una familia que aparezca sin fila | Sí | Sí |
+| 5 | `otros` | 7 Grupo A (surf), 8 Grupo B (surf) y 14 PROMOCIONES, por código y hoy sin ventas · una familia que aparezca sin fila | Sí | Sí |
 | 6 | `merch` | 21, 23, 24, 26 · 10 REMERAS · 27 T-XABANICOS | Sí | Sí |
 | 7 | `giftcard` | 12 | Sí | No: la fija la familia |
 | 8 | `pax` | 19 | Sí | No: la fija la familia |
@@ -121,13 +121,17 @@ rotas a propósito a la vez, el reparto por categoría se rompe pero `neta_cts` 
   esas familias tienen cuentas propias (personas, mesas de dueños).
 - **Nombres leídos por el dueño en la PC del PoS (24-nov 15:43 CR) y decisiones (~15:50 CR):** la 198 carga las
   **29 familias** (1 a 29). La **familia 1 no existe en el PoS**: sus códigos vienen de una clasificación borrada; va
-  como «(clasificación borrada)» y su categoría es por código (su único código, a bebida). **9 BELIEVE es mixta**
+  como «(clasificación borrada)» y su categoría es por código (su único código, a bebida). **9 Grupo C (mixta) es mixta**
   (tapas, rolls, bebidas, postre): categoría por código como 11, 15 y 25 (A-2: un código nuevo toma la mayoría, hoy
   comida; sus dos códigos de la historia, a comida). **18 Y HAPPY HOUR → bebida · 10 REMERAS → merch · 17 X CORTESIAS
   → regalías** (no es venta; la fija la familia, como gift cards, pax y dueños) **· 6 PERSONAL → consumo del personal,
-  aparte** (fuera de la venta neta de carta) **· 7 y 8 (SURFCAMP) y 14 PROMOCIONES → por código** según lo que vendan
+  aparte** (fuera de la venta neta de carta) **· 7 y 8 (Grupo A y B, surf) y 14 PROMOCIONES → por código** según lo que vendan
   (hoy no tienen ninguna línea: un código nuevo entra en `otros` hasta que alguien le ponga la suya) **· 20
   Ingredientes → sin ventas.** 7, 8, 10, 14 y 18 no tienen líneas hoy (staging y prod, solo lectura).
+- **Rótulos neutros (decisión del dueño, 24-nov ~16:30 CR):** las familias 7, 8 y 9 llevan nombres de terceros y el
+  repo es público: la 198 las carga como «Grupo A (surf)», «Grupo B (surf)» y «Grupo C (mixta)». El nombre real lo
+  carga el dueño desde la app (Ajustes → Catálogo, 3.1b); hoy `pos_familias` no tiene puerta de escritura desde la
+  app, así que la 3.1b tiene que traer una (owner, solo el nombre) o una carga con firma.
 - **Regalías y personal no chocan con el modelo:** ya eran categorías fijas de la familia y fuera de la venta
   (`cortesia` = 17, `personal` = 6; `FAMILIAS_NO_VENTA`, firmada). **Forma mínima:** la clave de la base sigue siendo
   `cortesia` y la pantalla la rotula «Regalías» (3.1b); renombrar la clave tocaría el `check`, tres funciones y la
@@ -180,7 +184,7 @@ o carga a mano), que son diseño de Inventario ([SPEC-inventario-v0](../inventar
 
 **Decidido 24-nov (D-3):** el dueño dijo «todo está dentro de una gran primera categoría, comida o bebida, depende
 dónde esté». Los productos de las familias 11 (menú de año nuevo), 15 (eventos de terraza) y 25 (promociones) no
-van a «otros»: cada código lleva su categoría. **Segunda tanda (24-nov ~15:50 CR):** la 9 BELIEVE y la 1 (borrada)
+van a «otros»: cada código lleva su categoría. **Segunda tanda (24-nov ~15:50 CR):** la 9 Grupo C (mixta) y la 1 (borrada)
 también son mixtas: sus 3 códigos de la historia llevan la suya (166 y 207 de la 9 → comida; el 1 de la 1 →
 bebida). En total, **85 códigos** con categoría escrita. **La lista de 82 códigos quedó confirmada por el dueño el 24-nov**
 (segunda ronda), con dos cambios sobre la propuesta (698 y 740 a comida) y el 192 a `menu_especial`.
@@ -701,14 +705,14 @@ insert into public.pos_familias (local, familia, nombre, categoria, orden) value
   ('santa-teresa', 29, 'GREENSEASON',              'comida',       60),
   ('santa-teresa', 11, 'MENU AÑO NUEVO',           'comida',       70),  -- mixta, por código
   ('santa-teresa', 15, 'EVENTOS TERRAZA',          'comida',       80),  -- mixta, por código
-  ('santa-teresa',  9, 'BELIEVE',                  'comida',       90),  -- mixta, por código
+  ('santa-teresa',  9, 'Grupo C (mixta)',          'comida',       90),  -- mixta, por código · rótulo neutro (nombre real: Ajustes → Catálogo)
   ('santa-teresa',  5, 'BEBIDAS',                  'bebida',       10),
   ('santa-teresa', 18, 'Y HAPPY HOUR',             'bebida',       20),
   ('santa-teresa', 25, 'PROMOCIONES',              'bebida',       30),  -- mixta, por código (mismo nombre que la 14)
   ('santa-teresa',  1, '(clasificación borrada)',  'bebida',       40),  -- no existe en el PoS · por código
   ('santa-teresa', 22, 'EXTRAS',                   'extras',       10),
-  ('santa-teresa',  7, 'ACADEMY SURFCAMP',         'otros',        10),  -- por código
-  ('santa-teresa',  8, 'LAPOINT SURFCAMP',         'otros',        20),  -- por código
+  ('santa-teresa',  7, 'Grupo A (surf)',           'otros',        10),  -- por código · rótulo neutro
+  ('santa-teresa',  8, 'Grupo B (surf)',           'otros',        20),  -- por código · rótulo neutro
   ('santa-teresa', 14, 'PROMOCIONES',              'otros',        30),  -- por código
   ('santa-teresa', 21, 'TSHIRTS',                  'merch',        10),
   ('santa-teresa', 23, 'T-GORRAS',                 'merch',        20),
@@ -729,7 +733,7 @@ insert into public.pos_familias (local, familia, nombre, categoria, orden) value
 --     de product_map que solo difieren en mayúsculas: gana el mayor.
 --   · categoría = SOLO los códigos de las familias mixtas de santa-teresa: los 82 de 11, 15 y 25 (D-3, lista
 --     confirmada por el dueño el 24-nov), comida o bebida uno por uno y el 192 (ítem por comensal del menú cerrado)
---     a `menu_especial`; los 2 de la 9 BELIEVE (comida) y el 1 de la 1 borrada (bebida), los únicos que hay en
+--     a `menu_especial`; los 2 de la 9 Grupo C (mixta) (comida) y el 1 de la 1 borrada (bebida), los únicos que hay en
 --     staging y en prod (lectura del 24-nov). Solo se aplica si el código sigue en esas familias.
 -- `product_map.subclasificacion` NO se hereda: la subcategoría viene del PoS (3.1c).
 with pm as (
@@ -1228,7 +1232,7 @@ Fechas: las pruebas que usan «hoy» fijan el reloj a las 23:30 CR.
 | **A-3** | Qué categorías se eligen a mano | **A — decidido 24-nov.** Gift cards, pax y dueños las fija la familia. Se suma `menu_especial` a las que sí se eligen | §2.2 | Con la 198 |
 | **A-4** | El subgrupo | **Decidido 24-nov:** ni texto libre ni lista en la app. Viene del PoS | §11 | 3.1c, firma aparte |
 | **A-5** | Familias 1, 9 y 27 | **Decidido 24-nov:** tienen nombre en el PoS; se lee en la PC del PoS y se cargan en la 198 como las demás | §2.2, §6 | Con la 198 |
-| **A-6** | Nombres y categorías de las familias del PoS | **Decidido 24-nov ~15:50 CR** (lectura de 15:43): 1 no existe (borrada, por código) · 9 BELIEVE mixta · 18 → bebida · 10 → merch · 17 → regalías · 6 → personal, aparte · 7, 8 y 14 → por código · 20 sin ventas | §2.2, §2.5, §6 | Con la 198 |
+| **A-6** | Nombres y categorías de las familias del PoS | **Decidido 24-nov ~15:50 CR** (lectura de 15:43): 1 no existe (borrada, por código) · 9 Grupo C (mixta) mixta · 18 → bebida · 10 → merch · 17 → regalías · 6 → personal, aparte · 7, 8 y 14 → por código · 20 sin ventas | §2.2, §2.5, §6 | Con la 198 |
 | **B-1** | Unidades en ₡0 | **A — decidido 24-nov ~15:50 CR.** Solo cuentan las vendidas; las de ₡0 aparte como «incluidas» | §2.5.1 | Con la 3.2 |
 | **B-3** | Orden de `menu_especial` | **A — decidido 24-nov ~15:50 CR.** Tercera, al lado de comida y bebida | §2.2 | No (orden de pantalla) |
 | **D-9** | **Firma de la migración 198** | **Pendiente.** Va sobre el SHA del PR 3.1a, **después** de las lecturas previas en prod (solo lectura), los nombres de familia que faltan copiar y la corrida en staging. Alcance: 3 tablas, 1 disparador en `pos_ndf_ticket_lines`, 7 funciones, carga de 29 familias, herencia de «rinde» y la categoría de 85 códigos | §6, §7.3 | **Sí** |
@@ -1237,7 +1241,7 @@ Fechas: las pruebas que usan «hoy» fijan el reloj a las 23:30 CR.
 
 | # | Punto | Opciones (recomendada primero) | ¿Cuándo? |
 |---|---|---|---|
-| B-2 | ~~Nombres de familia~~ **Cargados** (24-nov tarde): 7 ACADEMY SURFCAMP · 8 LAPOINT SURFCAMP · 11 MENU AÑO NUEVO · 15 EVENTOS TERRAZA · 25 PROMOCIONES · 27 T-XABANICOS (merch) | — | Hecho |
+| B-2 | ~~Nombres de familia~~ **Cargados** (24-nov tarde): 7 Grupo A (surf) · 8 Grupo B (surf) (rótulos neutros) · 11 MENU AÑO NUEVO · 15 EVENTOS TERRAZA · 25 PROMOCIONES · 27 T-XABANICOS (merch) | — | Hecho |
 | B-4 | **Firma D-9** | Sobre el SHA del PR 3.1a | Después del PASE, los nombres y la corrida en staging |
 | B-5 | **Firma de la 3.1c** (agente en la PC del PoS + Edge `ingest-ndf` de prod + su migración) | Después del paso 0 y de su propia spec corta | Aparte; no bloquea la 3.1a |
 

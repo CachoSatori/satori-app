@@ -17,7 +17,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, cerrarDiaCompleto, deshacerCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, deleteCashMovement, saveCierreParcial, cerrarDiaCompleto, deshacerCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
@@ -37,6 +37,9 @@ import {
   TEMAS_RESUMEN, SIN_NOVEDADES, AVISO_RESUMEN_VACIO, resumenVacio, agregarTema, type TemaResumen,
   ETIQUETA_MOTIVO, PLACEHOLDER_MOTIVO, MOTIVO_MAX, PLACEHOLDER_RESUMEN, AVISO_RESUMEN_IGUAL_MOTIVO, resumenIgualMotivo,
 } from './resumenDia'
+import { useMovimientosSinReemplazados } from './useReemplazosAparato'
+import { MSG_FASE2_CON_REEMPLAZO, NOTA_REEMPLAZO, reemplazosDelDia, soltarReemplazo, type ReemplazoPendiente } from './reemplazoPago'
+import { Aviso } from '../../shared/ui/estandar'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -115,8 +118,19 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // descarta al confirmar bien o al cambiar de fecha (mig 071, idempotencia en la base).
   const cierreOpId = useRef<string | null>(null)
   useEffect(() => { cierreOpId.current = null }, [fecha])
-  const [movs,     setMovs]     = useState<CashMovement[]>([])   // ledger para saldoCajaFuerte
+  const [movsBase, setMovs]     = useState<CashMovement[]>([])   // ledger para saldoCajaFuerte
+  // (hallazgo 252, ronda 2) Un cambio de pago sin terminar deja el viejo y el nuevo en la base: TODAS las cuentas de
+  // esta pantalla (pozo, Caja Fuerte, propinas, guard de cadena) leen `movs` con el viejo fuera, misma regla que la
+  // Caja Diaria (aplicarReemplazos). La Fase 1 sella ventas y propinas, que un pago a proveedor no toca: sigue
+  // libre. La Noche (Fase 2) se frena mientras haya un cambio abierto (deja el ledger del día como base de mañana).
+  // Ronda 3 (I1): cada cambio abierto se revisa contra la base (`estadosCambio`); si el viejo ya no existe, se suelta
+  // solo y se recarga. El aviso de abajo trae «Terminar el cambio» / «Descartar el cambio» (antes solo estaba en la
+  // Caja Diaria del turno abierto, y si otro aparato cerraba ese turno la Noche quedaba trabada sin salida).
+  const { cuenta: movs, abiertos: cambiosAbiertos, estados: estadosCambio } =
+    useMovimientosSinReemplazados(movsBase, { alResolver: () => { void loadCierres() } })
   const [sessions, setSessions] = useState<CashSession[]>([])    // para gatear: caja de proveedores cerrada
+  // Solo frenan la Noche los cambios de ESTE día (una anotación de otro día no traba un cierre que no la incluye).
+  const cambiosDelDia = reemplazosDelDia(cambiosAbiertos, movsBase, sessions, fecha)
 
   const loadCierres = async () => {
     setLoading(true)
@@ -332,6 +346,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // 21-nov: si el cierre pide motivo, el resumen del día no puede ser el mismo texto que el motivo.
   const resumenRepiteMotivo = requiresAjuste && resumenIgualMotivo(notas, ajusteMotivo)
   const pedirCierre = () => {
+    if (cambiosDelDia.length > 0) { setError(MSG_FASE2_CON_REEMPLAZO); return }
     { const errCuadro = cuadrosIlegibles(CUADROS_FASE2); if (errCuadro) { setError(errCuadro); return } }
     if (faltaResumen) { setError(AVISO_RESUMEN_VACIO); return }
     if (resumenRepiteMotivo) { setError(AVISO_RESUMEN_IGUAL_MOTIVO); return }
@@ -405,6 +420,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     { const errCuadro = cuadrosIlegibles(CUADROS_FASE2); if (errCuadro) { setError(errCuadro); return } }
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
+    if (cambiosDelDia.length > 0) { setError(MSG_FASE2_CON_REEMPLAZO); return }
     if (!cajaProvCerrada) { setError('Cerrá primero la Caja Diaria de proveedores del día.'); return }
     if (ventasNVacias) { setError('Ingresá las ventas de noche'); return }
     if (postCorte && hayMontosNegativos([vnCRC, vnUSD, retiroN, sepDiariaCRC, sepDiariaUSD, sepRegCRC, sepRegUSD, remCRC, remUSD])) {
@@ -499,6 +515,32 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     } finally {
       setSaving(false)
     }
+  }
+
+  // ── Cambio de pago a medias (hallazgo 252, ronda 3 · I1) ──
+  // «Terminar el cambio»: borra el pago viejo (el nuevo ya está confirmado en la base) con la MISMA autorización y
+  // nota que la Caja Diaria. «Descartar el cambio»: el nuevo no existe en la base ni en la cola, así que el viejo es
+  // el pago que de verdad quedó; se suelta la anotación y vuelve a contar. Ninguno de los dos crea movimientos.
+  const [cambioEnCurso, setCambioEnCurso] = useState(false)
+  const terminarCambio = async (r: ReemplazoPendiente) => {
+    if (cambioEnCurso) return
+    const auth = await requireManager()
+    if (!auth.ok) return
+    setCambioEnCurso(true); setError(null)
+    try {
+      await deleteCashMovement(r.viejo, NOTA_REEMPLAZO, auth.managerEmail, auth.managerPassword)
+      soltarReemplazo(r.viejo)
+      setMsg('✓ Cambio de pago terminado: quedó solo el pago nuevo.')
+      await loadCierres(); onRefresh()
+    } catch (e) {
+      setError(`No se pudo borrar el pago anterior: ${e instanceof Error ? e.message : 'reintentá'}. Sigue sin contarse dos veces.`)
+    } finally { setCambioEnCurso(false) }
+  }
+  const descartarCambio = (r: ReemplazoPendiente) => {
+    if (!window.confirm('El pago nuevo no está guardado en la base. ¿Descartar el cambio?\n\nQueda el pago anterior, como está en la base. Si hace falta, editalo de nuevo en Caja Diaria.')) return
+    soltarReemplazo(r.viejo)
+    setMsg('✓ Cambio descartado: cuenta el pago anterior.')
+    void loadCierres()
   }
 
   // Deshacer SOLO el cierre del día (no toca los movimientos del día).
@@ -654,6 +696,36 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           ℹ Hay un turno de caja abierto{openSession?.cajero_name ? ` (${openSession.cajero_name})` : ''}. Podés sellar el <strong>Mediodía (Fase 1)</strong> igual.
           Para cerrar la <strong>Noche (Fase 2)</strong> sí hay que cerrar antes el turno en <strong>Caja Diaria</strong>.
         </div>
+      )}
+
+      {/* (hallazgo 252) Cambio de pago a medias: acá se cuenta una vez, se puede terminar (ronda 3) y la Noche espera
+          solo si el cambio es de este día. */}
+      {cambiosAbiertos.length > 0 && (
+        <Aviso tipo="error" titulo="Cambio de pago sin terminar.">
+          Un pago a proveedor quedó guardado dos veces un rato (el nuevo y el anterior). En esta pantalla se cuenta una
+          sola vez.{cambiosDelDia.length > 0 ? ' Para cerrar la Noche (Fase 2), primero terminá el cambio.' : ' Es de otro día: no frena este cierre.'}
+          {cambiosAbiertos.map(r => {
+            const e = estadosCambio[r.viejo]
+            const p = movsBase.find(m => m.id === r.nuevo)
+            return (
+              <div key={r.viejo} data-testid="cambio-abierto" style={{ marginTop: '0.4rem' }}>
+                {p && <span>{p.supplier_name || p.description || 'Pago'} · {fi(p.amount_crc)} </span>}
+                {e === 'en_cola' && <span>· el pago nuevo todavía no se sincronizó; esperá la señal.</span>}
+                {e === 'desconocido' && <span>· sin conexión para revisarlo; reintentá con internet.</span>}
+                {e === 'terminable' && (
+                  <button type="button" className="tips-btn-ghost" disabled={cambioEnCurso} onClick={() => terminarCambio(r)}>
+                    {cambioEnCurso ? 'Terminando…' : 'Terminar el cambio'}
+                  </button>
+                )}
+                {e === 'sin_nuevo' && (
+                  <button type="button" className="tips-btn-ghost" disabled={cambioEnCurso} onClick={() => descartarCambio(r)}>
+                    Descartar el cambio
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </Aviso>
       )}
 
       {/* Messages */}

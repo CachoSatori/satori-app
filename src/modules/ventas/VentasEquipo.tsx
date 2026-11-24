@@ -273,7 +273,7 @@ function Contenido({ d, periodo, bases, metas, detalle, local }: ContenidoProps)
 
       {detalle && ficha && (() => {
         const f = equipo.filas.find(x => x.nombre === ficha)
-        return f ? <Ficha f={f} periodo={periodo} bases={bases} lectura={lectura} local={local} onCerrar={() => setFicha(null)} /> : null
+        return f ? <Ficha key={f.nombre} f={f} periodo={periodo} bases={bases} lectura={lectura} local={local} onCerrar={() => setFicha(null)} /> : null
       })()}
     </>
   )
@@ -356,12 +356,16 @@ function Ficha({ f, periodo, bases, lectura, local, onCerrar }: {
   const ventana = useMemo(() => ventana12Semanas(periodo.hasta), [periodo.hasta])
   const claveV = `${local}|${ventana.desde}|${ventana.hasta}`
   const [doce, setDoce] = useState<{ clave: string; l: Lectura } | null>(null)
-  const [falloV, setFalloV] = useState<string | null>(null)
+  // El error lleva la clave de su ventana, como `doce`: al cambiar de período no queda a la vista el de la ventana
+  // anterior, y `vivo` impide que una respuesta tardía de esa ventana lo reponga. Al cambiar de salonero la ficha se
+  // monta de nuevo (`key` en el padre) y vuelve a leer: la caché de `cargarLecturaRango` no guarda los fallos.
+  const [fallo, setFallo] = useState<{ clave: string; msg: string } | null>(null)
+  const falloV = fallo && fallo.clave === claveV ? fallo.msg : null
   useEffect(() => {
     let vivo = true
     cargarLecturaRango(local, ventana)
       .then(l => { if (vivo) setDoce({ clave: claveV, l }) })
-      .catch(e => { if (vivo) setFalloV(e instanceof Error ? e.message : 'No se pudo leer el PoS') })
+      .catch(e => { if (vivo) setFallo({ clave: claveV, msg: e instanceof Error ? e.message : 'No se pudo leer el PoS' }) })
     return () => { vivo = false }
   }, [claveV, local, ventana])
   const semanas = useMemo(

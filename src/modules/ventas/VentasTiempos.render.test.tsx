@@ -160,9 +160,12 @@ describe('VentasTiempos', () => {
     const llamadas = cargar.mock.calls.length
     fireEvent.change(screen.getByLabelText('Comparar con'), { target: { value: 'anterior' } })
     await vi.waitFor(() => expect(ultima.url).toContain('c=anterior'))
-    expect(document.querySelectorAll('[data-dow="0"] [data-vs]')).toHaveLength(1)
-    expect(document.querySelector('[data-quincena="2026-11-01"] [data-vs="anioMismoDiaSemana"]')).toBeNull()
-    expect(document.body.textContent).not.toContain('contra el año pasado')
+    // La URL cambia antes del redibujo: se espera a que quede una sola columna y no se cuenta de inmediato.
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll('[data-dow="0"] [data-vs]')).toHaveLength(1)
+      expect(document.querySelector('[data-quincena="2026-11-01"] [data-vs="anioMismoDiaSemana"]')).toBeNull()
+      expect(document.body.textContent).not.toContain('contra el año pasado')
+    })
     expect(cargar.mock.calls.length).toBe(llamadas)
   })
 
@@ -171,8 +174,10 @@ describe('VentasTiempos', () => {
     await screen.findByRole('table', { name: 'Día de semana' })
     fireEvent.change(screen.getByLabelText('Comparar con'), { target: { value: 'anioFechas' } })
     await vi.waitFor(() => expect(ultima.url).toContain('c=anioFechas'))
-    await vi.waitFor(() => expect(document.querySelector('[data-dow="0"] [data-vs="anioMismasFechas"]')).not.toBeNull())
-    expect(document.querySelectorAll('[data-dow="0"] [data-vs]')).toHaveLength(1)
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-dow="0"] [data-vs="anioMismasFechas"]')).not.toBeNull()
+      expect(document.querySelectorAll('[data-dow="0"] [data-vs]')).toHaveLength(1)
+    })
     expect(cargar).toHaveBeenLastCalledWith('santa-teresa', expect.arrayContaining([{ desde: '2025-11-01', hasta: '2025-11-17' }]))
     expect(document.body.textContent).toContain('contra el año pasado, mismas fechas (1–17 nov 2025)')
     expect(document.querySelector('[data-dow="0"] [data-vs="anioMismasFechas"]')!.textContent).toBe('—') // el fixture no tiene 2025
@@ -199,8 +204,10 @@ describe('VentasTiempos', () => {
     expect(screen.queryByLabelText('Desde')).toBeNull()
     fireEvent.change(screen.getByLabelText('Período'), { target: { value: 'rango' } })
     await vi.waitFor(() => expect(ultima.url).toContain('p=rango'))
-    expect(screen.getByLabelText('Desde')).toBeTruthy()
-    expect(screen.getByLabelText('Hasta')).toBeTruthy()
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText('Desde')).toBeTruthy()
+      expect(screen.getByLabelText('Hasta')).toBeTruthy()
+    })
   })
 
   it('quincenas: 12 filas; la 1.ª de noviembre = Contabilidad del 1 al 15; la de ahora va a la fecha', async () => {

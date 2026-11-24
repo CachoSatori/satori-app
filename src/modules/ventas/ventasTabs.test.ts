@@ -1,7 +1,7 @@
 // Ventas v2 · 3.5.1, 3.5.2 y 3.5.4 (SPEC-ventas-v2 §12.4 y §12.5): el menú de siete entradas (con «Regalías», D11),
 // las vistas viejas como sub-vistas de su entrada nueva, las retiradas («Hoy», «Ventas», «Histórico», D15) que
 // abren «Resumen» con su período, «Saloneros» y «Evaluación» que abren «Equipo» (3.5.4), las redirecciones de los
-// `?tab=` viejos y los permisos (con la decisión del dueño del 23-nov 21:40: el contador ve «Equipo»).
+// `?tab=` viejos y los permisos (D18, dueño 23-nov 22:35: el contador ve «Equipo» completo, igual que gerencia).
 // Las tablas de este archivo están escritas a mano A PROPÓSITO (no se derivan de `ventasTabs.ts`):
 // si alguien cambia una entrada, una sub-vista, una dirección o un rol, una prueba cae.
 import { describe, it, expect } from 'vitest'
@@ -17,8 +17,8 @@ const OM  = ['owner', 'manager']
 /** Quién ve cada vista: los roles de ANTES de la 3.5 (SPEC §6: «No cambia ningún permiso»). */
 const ROLES_DE_SIEMPRE: Record<Tab, string[]> = {
   envivo: OMC, salolineas: OM, icp: OMC, cajeros: OMC,
-  // 3.5.4: «Equipo» junta «Saloneros» y «Evaluación» (que eran OM). DECISIÓN DEL DUEÑO 23-nov 21:40 CR: el contador ve
-  // el ranking («Ranking del día»). El detalle (evaluación, ICP por fila y ficha) sigue OM: `veDetalleEquipo`.
+  // 3.5.4: «Equipo» junta «Saloneros» y «Evaluación» (que eran OM). D18 (DUEÑO 23-nov 22:35 CR, corrige la de las 21:40):
+  // el contador ve «Equipo» completo —ranking y detalle (evaluación, ICP por fila y ficha)—, igual que OM: `veDetalleEquipo`.
   equipo: OMC,
   mix: OMC, analisis: OMC, calendario: OMC, menueng: OM, metas: OMC,
   competencias: OM, config: OM, resumen: OMC, tiempos: OMC, internas: OM,
@@ -134,9 +134,9 @@ describe('ventasTabs · permisos iguales que antes (criterio 8)', () => {
     expect(resolverDireccion(role, 'regalias', null)).toEqual({ vista: 'resumen', corregir: { tab: null, v: null } })
   })
 
-  it('DECISIÓN DEL DUEÑO 23-nov 21:40: el contador ve «Equipo» (el ranking), pero no su detalle (evaluación, ICP por fila, ficha)', () => {
+  it('D18 (dueño 23-nov 22:35): el contador ve «Equipo» completo, con su detalle (evaluación, ICP por fila, ficha), igual que gerencia', () => {
     expect(resolverDireccion('contador', 'equipo', null)).toEqual({ vista: 'equipo', corregir: null })
-    expect(veDetalleEquipo('contador')).toBe(false)
+    expect(veDetalleEquipo('contador')).toBe(true)
     expect(veDetalleEquipo('owner')).toBe(true)
     expect(veDetalleEquipo('manager')).toBe(true)
     for (const r of ['salonero', 'cajero', 'barman', 'cocina', '']) expect(veDetalleEquipo(r)).toBe(false)

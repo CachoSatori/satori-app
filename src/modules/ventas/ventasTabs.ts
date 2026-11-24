@@ -9,9 +9,9 @@
 //
 // 3.5.4 (§12.4, §5.3): «Saloneros» y «Evaluación» se RETIRAN y se juntan en «Equipo» (vista `equipo`, con la barra
 // global). «Cajeros» pasa a llamarse «Cajas y canales». Sub-vistas de «Equipo»: Equipo · Por línea · ICP · Cajas y
-// canales · Competencias. Decisión del dueño (23-nov 21:40 CR): el CONTADOR ve «Equipo» con el ranking (lo que era el
-// «Ranking del día» de «Hoy»); las columnas de evaluación y la ficha del salonero siguen solo para owner y manager
-// (`veDetalleEquipo`).
+// canales · Competencias. Decisión del dueño (D18, corregida el 23-nov 22:35 CR): el CONTADOR ve «Equipo» COMPLETO, igual
+// que gerencia (ranking, columnas de evaluación, ICP por salonero y ficha de 12 semanas), porque funciona casi como
+// gerente general y analiza los datos para decidir (`veDetalleEquipo`). Fuera de «Equipo» sus permisos no cambian.
 //
 // La dirección es `/ventas?tab=<entrada>&v=<sub-vista>` (sin `v`, la primera sub-vista que el rol ve).
 // Los `?tab=<vista vieja>` siguen abriendo algo con sentido: se reemplaza la dirección por la nueva.
@@ -33,8 +33,8 @@ export interface TabDef { id: Tab; label: string; roles: string[] }
  */
 export const TABS: TabDef[] = [
   { id: 'envivo',       label: 'En vivo',           roles: ['owner','manager','contador'] },
-  // Ventas v2 · 3.5.4 (SPEC §5.3): junta «Saloneros» y «Evaluación». El contador la ve (decisión del dueño, 23-nov
-  // 21:40 CR: el «Ranking del día»); el detalle (evaluación y ficha) es de owner y manager (`veDetalleEquipo`).
+  // Ventas v2 · 3.5.4 (SPEC §5.3): junta «Saloneros» y «Evaluación». El contador la ve completa, con el detalle
+  // (evaluación, ICP y ficha), igual que owner y manager (D18, dueño 23-nov 22:35 CR; `veDetalleEquipo`).
   { id: 'equipo',       label: 'Equipo',            roles: ['owner','manager','contador'] },
   { id: 'salolineas',   label: 'Por línea',         roles: ['owner','manager'] },
   { id: 'icp',          label: 'ICP',               roles: ['owner','manager','contador'] },
@@ -114,8 +114,11 @@ export const RETIRADAS: Readonly<Record<Retirada, { vista: Tab; p: TipoPeriodoV2
   evaluacion: { vista: 'equipo',  p: 'rango', ultimosDias: 30, desde: ['equipo'] },
 }
 
-/** Quién ve el DETALLE de «Equipo» (columnas de evaluación, ICP y ficha del salonero): SPEC §6. */
-export const ROLES_DETALLE_EQUIPO: readonly string[] = ['owner', 'manager']
+/**
+ * Quién ve el DETALLE de «Equipo» (columnas de evaluación, ICP y ficha del salonero): SPEC §6. D18 (dueño, 23-nov
+ * 22:35 CR): también el contador, igual que gerencia.
+ */
+export const ROLES_DETALLE_EQUIPO: readonly string[] = ['owner', 'manager', 'contador']
 export const veDetalleEquipo = (role: string): boolean => ROLES_DETALLE_EQUIPO.includes(role)
 
 /**

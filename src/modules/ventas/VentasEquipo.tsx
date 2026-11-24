@@ -5,9 +5,9 @@
 //   · `cargarLineasPeriodo` (el lector de siempre, solo el período): venta, personas, bebidas, comida/bebida,
 //     precios por ítem, días y productos de cada salonero (lo mismo que «Saloneros»);
 //   · `cargarLecturaResumen` (190, la misma del «Resumen»): la venta por persona D4 y su comparación con las bases;
-//   · owner y manager: propinas del período (ICP, regla 5) y, al abrir la ficha, 12 semanas (`cargarLecturaRango`).
-// Quién ve qué: los tres roles ven el ranking (decisión del dueño 23-nov 21:40 CR: el contador ve el «Ranking del
-// día»); las columnas de evaluación, el ICP y la ficha son de owner y manager (`veDetalleEquipo`, SPEC §6).
+//   · owner, manager y contador: propinas del período (ICP, regla 5) y, al abrir la ficha, 12 semanas (`cargarLecturaRango`).
+// Quién ve qué: los tres roles ven TODO «Equipo» —ranking, columnas de evaluación, ICP y ficha— (D18, decisión del
+// dueño 23-nov 22:35 CR: el contador igual que gerencia; `veDetalleEquipo`, SPEC §6).
 // Solo lectura. No arma ninguna fecha: todas salen de `periodos.ts` por la barra.
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -57,7 +57,7 @@ interface Datos {
   clave:    string
   lectura:  Lectura
   lineas:   LineasPeriodo
-  /** Solo owner y manager. `null` = no se pudieron leer (la columna dice «—»). */
+  /** Owner, manager y contador (D18). `null` = no se pudieron leer (la columna dice «—»). */
   propinas: AttendanceRow[] | null
   empleados: Employee[] | null
 }

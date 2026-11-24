@@ -12,7 +12,7 @@
 //     «Resumen» (`cargarLecturaResumen`): con personas estimadas en las mesas sin pax y sin mesas de dueños ni
 //     regalías totales. La del equipo da lo mismo que la del «Resumen» para el mismo período.
 //
-// Evaluación (owner y manager): consistencia, tendencia y racha con la cuenta de «Evaluación» (`calcAdvanced`,
+// Evaluación (owner, manager y contador, D18): consistencia, tendencia y racha con la cuenta de «Evaluación» (`calcAdvanced`,
 // portada tal cual), SOBRE LOS DÍAS DEL PERÍODO elegido, como hacía «Evaluación» con su selector (7 días, 30 días,
 // mes). Con menos de 14 días trabajados la tendencia no se calcula (la pantalla lo dice).
 //

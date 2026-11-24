@@ -3,7 +3,7 @@
 // En el DOM: el menú de Ventas con entradas y sub-pestañas, y la vista en la URL. Desde el 3.5.1
 // (SPEC-ventas-v2 §12.4): arranque en «Resumen» y redirección de los `?tab=` viejos. Desde el 3.5.2: siete
 // entradas (con «Regalías»), «Resumen» sin sub-pestañas y «Hoy», «Ventas» e «Histórico» retiradas. Desde el 3.5.4:
-// «Saloneros» y «Evaluación» retiradas, juntas en «Equipo» (que el contador también ve: decisión del dueño 23-nov 21:40).
+// «Saloneros» y «Evaluación» retiradas, juntas en «Equipo» (que el contador también ve completa: D18, dueño 23-nov 22:35).
 // Las vistas se reemplazan por marcadores: acá se prueba la navegación, no el contenido.
 import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest'
 import { useEffect } from 'react'
@@ -236,7 +236,7 @@ describe('VentasModule · navegación', () => {
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
   })
 
-  it('contador: «Equipo» abre «Equipo» (el ranking; decisión del dueño 23-nov 21:40) y ve Equipo · ICP · Cajas y canales', async () => {
+  it('contador: «Equipo» abre «Equipo» (completa; D18, dueño 23-nov 22:35) y ve Equipo · ICP · Cajas y canales', async () => {
     role = 'contador'
     abrir('/ventas')
     await screen.findByTestId('vista')

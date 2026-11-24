@@ -2,8 +2,9 @@
 //
 // Ventas v2 · 3.5.4 · «Equipo» en el DOM, por rol (SPEC-ventas-v2 §5.3, §6 y §12.5). Datos FICTICIOS (la fixture
 // del Resumen). Lo que se prueba:
-//   · Los tres roles ven el ranking (DECISIÓN DEL DUEÑO 23-nov 21:40 CR: el contador ve el «Ranking del día»).
-//   · Solo owner y manager ven las columnas de evaluación, el ICP y la ficha (§6); el contador no puede abrirla.
+//   · Los tres roles ven TODO «Equipo»: ranking, columnas de evaluación, ICP y ficha (D18, DECISIÓN DEL DUEÑO 23-nov
+//     22:35 CR: el contador igual que gerencia; corrige la de las 21:40, que le dejaba solo el ranking).
+//   · Cualquier otro rol que llegue a montar la vista ve solo el ranking, sin propinas ni ficha (§6).
 //   · La barra global: Santa Teresa por defecto (D16), cada % nombra su base y sus fechas (criterio 5), sin
 //     «índice» (criterio 6), «Hoy» no entra. Reloj fijo DE NOCHE en CR (23:30 del 18-nov = 05:30 UTC del 19).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -65,12 +66,14 @@ const RANKING = ['#', 'Salonero', 'Venta', 'Personas (PAX)', 'Venta por persona'
 const DETALLE = ['ICP', '% meta', 'Días', 'Consistencia', 'Tendencia', 'Racha']
 
 describe('«Equipo» · qué ve cada rol', () => {
-  it.each(['owner', 'manager'])('%s: el ranking más evaluación e ICP; tocar un salonero abre su ficha', async r => {
+  it.each(['owner', 'manager', 'contador'])('%s: el ranking más evaluación e ICP; tocar un salonero abre su ficha (D18: el contador igual)', async r => {
     role = r
     await abrir('p=mes&d=2026-11-17')
     expect(encabezados()).toEqual([...RANKING, ...DETALLE])
     expect(propinas).toHaveBeenCalledWith('2026-11-01', '2026-11-17', 'santa-teresa')
+    expect(empleados).toHaveBeenCalled()
     const fila = document.querySelector('table[aria-label="Equipo"] tbody tr')!
+    expect(fila.getAttribute('role')).toBe('button')
     fireEvent.click(fila)
     const ficha = await screen.findByTestId('ficha-salonero')
     expect(ficha.textContent).toContain(fila.getAttribute('data-salonero')!)
@@ -79,8 +82,8 @@ describe('«Equipo» · qué ve cada rol', () => {
     expect(pedidos).toContainEqual({ fn: 'rango', local: 'santa-teresa', desde: '2026-08-26', hasta: '2026-11-17' })
   })
 
-  it('contador (decisión del dueño 23-nov 21:40): ve el ranking, SIN evaluación, ICP ni ficha, y no se leen propinas', async () => {
-    role = 'contador'
+  it('un rol sin detalle (no debería llegar: la ruta es OMC) ve solo el ranking, sin propinas, empleados ni ficha', async () => {
+    role = 'salonero'
     await abrir('p=ayer')
     expect(encabezados()).toEqual(RANKING)
     expect(propinas).not.toHaveBeenCalled()

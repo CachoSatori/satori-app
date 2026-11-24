@@ -1,4 +1,4 @@
-# Continuación — backlog abierto y priorizado (al día: 2026-11-20, tarde)
+# Continuación — backlog abierto y priorizado (al día: 2026-11-23, cierre)
 
 > **Punto de arranque:** [ESTADO.md](ESTADO.md) (⚡ARRANQUE y reglas) y [docs/handoffs/HANDOFF-2026-11-20.md](docs/handoffs/HANDOFF-2026-11-20.md).
 > Solo lo **abierto**. Lo hecho y el detalle heredado (backlog de `staging` del 29/10, pases y olas de jun–jul, lo hecho del 05 y 10–11/11,
@@ -16,6 +16,7 @@
 3b. **👁️ Revisar en 20–30 días** (≈ 8–18/12) si se sigue pisando la clave FE de los tiquetes 04 (el agente toma `clave_fe` por consecutivo sin filtrar el tipo).
 3c. ~~Alerta de latido del agente~~: el dueño dijo que no por ahora (19/11).
 3d. **Recorrer con `satori-verificar` en staging Tiempos y Resumen** cuando haya sesión (capturas por rol).
+3e. **Cola del 23-nov (detalle en ⚡ARRANQUE):** Ventas 3.5.4 (#340, en verificación) → 3.5.5 limpieza · spec 3.1 catálogo (🖊️) · la precarga de la apertura pisa el monto tecleado · texto en Caja Diaria cuando queda en déficit · 11 cuadros numéricos con hueco · tope de 50 puntos no validado («1e3») · 3.4 Regalías (🖊️) · deuda multi-local 067/080/190 (🖊️).
 4. ~~Correos desplegados~~: en `main` y prod desde el ítem 11 (#313, #314); cerrados sin merge #241, #242, #243, #245, #235.
 4b. **🧹 A04 · sacar del repo el nombre de la PC del PoS** (`pos-bridge/README.md`, `pos-bridge/.env.example` y el ESTADO de la rama del agente): se hace en la rama del agente, no desde `main` ([R12](docs/REGLAS-POR-INCIDENTE.md)).
 4d. **Portal del socio (club-web):** pestañas con mayúscula uniforme «Tu red · Club Satori · Local» (decisión del dueño 17/11, B). Va en el próximo PR del portal.

@@ -1,13 +1,15 @@
-// Ventas v2 · 3.5.1, 3.5.2 y 3.5.3 (SPEC-ventas-v2 §12.4 y §12.5): el menú de siete entradas (con «Regalías», D11),
+// Ventas v2 · 3.5.1–3.5.4 (SPEC-ventas-v2 §12.4 y §12.5): el menú de siete entradas (con «Regalías», D11),
 // las vistas viejas como sub-vistas de su entrada nueva, las retiradas («Hoy», «Ventas», «Histórico», D15, que
-// abren «Resumen»; «Análisis» y «Calendario», 3.5.3, que abren «Tiempos») con su período, las redirecciones de los
-// `?tab=` viejos y los permisos de siempre.
+// abren «Resumen»; «Análisis» y «Calendario», 3.5.3, que abren «Tiempos»; «Saloneros» y «Evaluación», 3.5.4, que
+// abren «Equipo») con su período, las redirecciones de los `?tab=` viejos y los permisos (D18, dueño 23-nov 22:35:
+// el contador ve «Equipo» completo, igual que gerencia).
 // Las tablas de este archivo están escritas a mano A PROPÓSITO (no se derivan de `ventasTabs.ts`):
 // si alguien cambia una entrada, una sub-vista, una dirección o un rol, una prueba cae.
 import { describe, it, expect } from 'vitest'
 import {
+  puedeEditarCompetencias,
   TABS, ENTRADAS, CLAVE_V, tabPorDefecto, resolverDireccion, resolverVista, direccionDe, entradasVisibles,
-  entradaDe, type Tab,
+  entradaDe, veDetalleEquipo, type Tab,
 } from './ventasTabs'
 
 const ROLES = ['owner', 'manager', 'contador'] as const
@@ -16,9 +18,14 @@ const OM  = ['owner', 'manager']
 
 /** Quién ve cada vista: los roles de ANTES de la 3.5 (SPEC §6: «No cambia ningún permiso»). */
 const ROLES_DE_SIEMPRE: Record<Tab, string[]> = {
-  envivo: OMC, saloneros: OM, salolineas: OM, evaluacion: OM, icp: OMC, cajeros: OMC,
+  envivo: OMC, icp: OMC, cajeros: OMC,
+  // D18 ampliada (DUEÑO 23-nov ~23:50 CR): el contador ve «Por línea» completa y «Competencias» solo para mirar.
+  salolineas: OMC,
+  // 3.5.4: «Equipo» junta «Saloneros» y «Evaluación» (que eran OM). D18 (DUEÑO 23-nov 22:35 CR, corrige la de las 21:40):
+  // el contador ve «Equipo» completo —ranking y detalle (evaluación, ICP por fila y ficha)—, igual que OM: `veDetalleEquipo`.
+  equipo: OMC,
   mix: OMC, menueng: OM, metas: OMC,
-  competencias: OM, config: OM, resumen: OMC, tiempos: OMC, internas: OM,
+  competencias: OMC, config: OM, resumen: OMC, tiempos: OMC, internas: OM,
   regalias: OMC,   // 3.5.2: la ven los tres; el contador, completa (D7)
 }
 
@@ -41,6 +48,12 @@ const SUBVISTA_VIEJA: [string, string][] = [
   ['tiempos', 'analisis'], ['tiempos', 'calendario'],   // 3.5.1 (Calendario) y 3.5.2 (Análisis)
 ]
 
+/** Las retiradas del 3.5.4: abren «Equipo» con el período con que abría la vista vieja. */
+const RETIRADA_EQUIPO: Record<string, string> = {
+  saloneros:  'tab=equipo&p=ayer',
+  evaluacion: 'tab=equipo&p=rango&desde=2026-10-19&hasta=2026-11-17',
+}
+
 /**
  * SPEC §12.2/§12.4: cada `?tab=` viejo → su dirección nueva (entrada y `v`). Las vistas que se
  * retiran en el 3.5.2–3.5.4 abren, mientras tanto, como sub-vista de su entrada nueva.
@@ -50,9 +63,8 @@ const DIRECCION_NUEVA: Record<Tab, string> = {
   regalias:     'tab=regalias',
   mix:          'tab=productos',
   menueng:      'tab=productos&v=menu',
-  saloneros:    'tab=equipo',
+  equipo:       'tab=equipo',
   salolineas:   'tab=equipo&v=lineas',
-  evaluacion:   'tab=equipo&v=evaluacion',
   icp:          'tab=equipo&v=icp',
   cajeros:      'tab=equipo&v=cajas',
   competencias: 'tab=equipo&v=competencias',
@@ -71,12 +83,12 @@ describe('ventasTabs · menú de siete entradas (3.5.2; «Tiempos» sin sub-pest
     expect(entradasVisibles(role).map(e => e.label)).toEqual(['Resumen', 'Productos', 'Equipo', 'Tiempos', 'Regalías', 'En vivo', 'Ajustes'])
   })
 
-  it('15 vistas (19 − «Hoy», «Ventas», «Histórico», «Análisis», «Calendario» + «Regalías») y cada una en exactamente una entrada', () => {
-    expect(TABS).toHaveLength(15)
+  it('14 vistas (19 − «Hoy», «Ventas», «Histórico», «Análisis», «Calendario», «Saloneros», «Evaluación» + «Regalías», «Equipo») y cada una en exactamente una entrada', () => {
+    expect(TABS).toHaveLength(14)
     const enEntradas = ENTRADAS.flatMap(e => e.vistas)
-    expect(enEntradas).toHaveLength(15)
+    expect(enEntradas).toHaveLength(14)
     expect(new Set(enEntradas)).toEqual(new Set(TABS.map(t => t.id)))
-    for (const v of ['hoy', 'ventas', 'historico', 'analisis', 'calendario']) expect(TABS.map(t => t.id as string)).not.toContain(v)
+    for (const v of ['hoy', 'ventas', 'historico', 'analisis', 'calendario', 'saloneros', 'evaluacion']) expect(TABS.map(t => t.id as string)).not.toContain(v)
   })
 
   it('cada entrada lleva sus vistas, sin cambiarles el nombre; «Resumen» y «Tiempos» ya no llevan sub-pestañas (SPEC §12.4)', () => {
@@ -84,7 +96,7 @@ describe('ventasTabs · menú de siete entradas (3.5.2; «Tiempos» sin sub-pest
     expect(conNombres).toEqual({
       resumen:   ['Resumen'],
       productos: ['Mix', 'Ing. Menú'],
-      equipo:    ['Saloneros', 'Por línea', 'Evaluación', 'ICP', 'Cajeros', 'Competencias'],
+      equipo:    ['Equipo', 'Por línea', 'ICP', 'Cajas y canales', 'Competencias'],
       tiempos:   ['Tiempos'],
       regalias:  ['Regalías'],
       envivo:    ['En vivo'],
@@ -104,34 +116,51 @@ describe('ventasTabs · permisos iguales que antes (criterio 8)', () => {
   it.each([
     ['owner', {
       resumen: ['resumen'], productos: ['mix', 'menueng'],
-      equipo: ['saloneros', 'salolineas', 'evaluacion', 'icp', 'cajeros', 'competencias'],
+      equipo: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'],
       tiempos: ['tiempos'], regalias: ['regalias'], envivo: ['envivo'], ajustes: ['metas', 'config', 'internas'],
     }],
     ['manager', {
       resumen: ['resumen'], productos: ['mix', 'menueng'],
-      equipo: ['saloneros', 'salolineas', 'evaluacion', 'icp', 'cajeros', 'competencias'],
+      equipo: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'],
       tiempos: ['tiempos'], regalias: ['regalias'], envivo: ['envivo'], ajustes: ['metas', 'config', 'internas'],
     }],
     ['contador', {
       resumen: ['resumen'], productos: ['mix'],
-      equipo: ['icp', 'cajeros'],
+      equipo: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'],
       tiempos: ['tiempos'], regalias: ['regalias'], envivo: ['envivo'], ajustes: ['metas'],
     }],
   ])('%s: entradas y sub-vistas que ve', (role, esperado) => {
     expect(Object.fromEntries(entradasVisibles(role).map(e => [e.id, e.vistas]))).toEqual(esperado)
   })
 
-  it('el contador no ve «Ing. Menú», «Saloneros», «Por línea», «Evaluación», «Competencias», «Ajustes → Productos» ni «Mesas internas»', () => {
+  it('el contador no ve «Ing. Menú», «Ajustes → Productos» ni «Mesas internas»', () => {
     const ve = entradasVisibles('contador').flatMap(e => e.vistas)
-    for (const v of ['menueng', 'saloneros', 'salolineas', 'evaluacion', 'competencias', 'config', 'internas'] as Tab[]) {
+    for (const v of ['menueng', 'config', 'internas'] as Tab[]) {
       expect(ve).not.toContain(v)
       expect(resolverDireccion('contador', direccionDe(v).tab, CLAVE_V[v]).vista).toBe('resumen')
     }
   })
 
+  it('D18 ampliada (dueño 23-nov ~23:50): el contador abre «Por línea» y «Competencias»; solo owner y manager editan competencias', () => {
+    expect(resolverDireccion('contador', 'equipo', 'lineas')).toEqual({ vista: 'salolineas', corregir: null })
+    expect(resolverDireccion('contador', 'equipo', 'competencias')).toEqual({ vista: 'competencias', corregir: null })
+    expect(resolverDireccion('contador', 'salolineas', null)).toEqual({ vista: 'salolineas', corregir: { tab: 'equipo', v: 'lineas' } })
+    expect(puedeEditarCompetencias('owner')).toBe(true)
+    expect(puedeEditarCompetencias('manager')).toBe(true)
+    for (const r of ['contador', 'salonero', 'cajero', 'barman', 'cocina', '']) expect(puedeEditarCompetencias(r)).toBe(false)
+  })
+
   it.each(['salonero', 'cajero', 'barman', 'cocina'])('%s no ve ninguna entrada de Ventas', role => {
     expect(entradasVisibles(role)).toEqual([])
     expect(resolverDireccion(role, 'regalias', null)).toEqual({ vista: 'resumen', corregir: { tab: null, v: null } })
+  })
+
+  it('D18 (dueño 23-nov 22:35): el contador ve «Equipo» completo, con su detalle (evaluación, ICP por fila, ficha), igual que gerencia', () => {
+    expect(resolverDireccion('contador', 'equipo', null)).toEqual({ vista: 'equipo', corregir: null })
+    expect(veDetalleEquipo('contador')).toBe(true)
+    expect(veDetalleEquipo('owner')).toBe(true)
+    expect(veDetalleEquipo('manager')).toBe(true)
+    for (const r of ['salonero', 'cajero', 'barman', 'cocina', '']) expect(veDetalleEquipo(r)).toBe(false)
   })
 
   it('D7: el contador ve «Regalías» completa (la misma vista que owner y manager)', () => {
@@ -166,7 +195,24 @@ describe('ventasTabs · redirecciones de los ?tab= viejos (criterio 3)', () => {
       expect(texto(r.corregir!)).toBe(RETIRADA[v])
     })
 
-  it('una retirada solo se reconoce en la entrada donde vivió: ?tab=equipo&v=calendario o ?tab=resumen&v=calendario no', () => {
+  it.each(ROLES.flatMap(r => Object.keys(RETIRADA_EQUIPO).map(t => [r, t] as const)))(
+    '%s con ?tab=%s (retirada en el 3.5.4): abre «Equipo» con su período', (role, viejo) => {
+      const r = resolverDireccion(role, viejo, null, HOY)
+      expect(r.vista).toBe('equipo')
+      expect(texto(r.corregir!)).toBe(RETIRADA_EQUIPO[viejo])
+    })
+
+  it.each(ROLES.flatMap(r => Object.keys(RETIRADA_EQUIPO).map(t => [r, t] as const)))(
+    '%s con la dirección de sub-vista ?tab=equipo&v=%s (3.5.1–3.5.3): abre «Equipo» con su período', (role, viejo) => {
+      const r = resolverDireccion(role, 'equipo', viejo, HOY)
+      expect(r.vista).toBe('equipo')
+      expect(texto(r.corregir!)).toBe(RETIRADA_EQUIPO[viejo])
+    })
+
+  it('una retirada solo se reconoce en la entrada donde vivió', () => {
+    expect(resolverDireccion('owner', 'resumen', 'saloneros')).toEqual({ vista: 'resumen', corregir: { tab: null, v: null } })
+    expect(resolverDireccion('owner', 'tiempos', 'evaluacion')).toEqual({ vista: 'resumen', corregir: { tab: null, v: null } })
+    expect(resolverDireccion('owner', 'equipo', 'hoy')).toEqual({ vista: 'resumen', corregir: { tab: null, v: null } })
     expect(resolverDireccion('owner', 'equipo', 'calendario')).toEqual({ vista: 'resumen', corregir: { tab: null, v: null } })
     expect(resolverDireccion('owner', 'resumen', 'calendario')).toEqual({ vista: 'resumen', corregir: { tab: null, v: null } })
     expect(resolverDireccion('owner', 'tiempos', 'hoy')).toEqual({ vista: 'resumen', corregir: { tab: null, v: null } })
@@ -202,8 +248,8 @@ describe('ventasTabs · redirecciones de los ?tab= viejos (criterio 3)', () => {
   })
 
   it('sin `v`, la entrada abre la primera sub-vista que el rol ve', () => {
-    expect(resolverDireccion('owner', 'equipo', null).vista).toBe('saloneros')
-    expect(resolverDireccion('contador', 'equipo', null).vista).toBe('icp')
+    expect(resolverDireccion('owner', 'equipo', null).vista).toBe('equipo')
+    expect(resolverDireccion('contador', 'equipo', null).vista).toBe('equipo')
     expect(resolverDireccion('contador', 'ajustes', null).vista).toBe('metas')
     expect(resolverDireccion('owner', 'ajustes', null).vista).toBe('metas')
   })

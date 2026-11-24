@@ -1,3 +1,6 @@
+// ⚠️ RETIRADA DEL MENÚ en el 3.5.4 (SPEC-ventas-v2 §12.4): ya no se abre desde Ventas; lo suyo está en «Equipo»
+// (`VentasEquipo.tsx`). El archivo queda SOLO como «lo de antes» de la prueba de paridad
+// (`__paridad__/equipo354.paridad.test.tsx`) y se borra en la 3.5.5.
 import { useState, useMemo } from 'react'
 import { todayCR } from '../../shared/utils'
 

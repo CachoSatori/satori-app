@@ -4,19 +4,23 @@ import { aggSalonero, allSaloneros, datesInRange, allDates } from './ventasUtils
 import { todayCR } from '../../shared/utils'
 import { estadoCompetencia, progresoCompetencia } from './rangosPorDefecto'
 import { saveComp, deleteComp } from '../../shared/api/ventas'
+import { puedeEditarCompetencias } from '../../shared/permisosCompetencias'
 
 interface Props {
   dias:  DiasMap
   pm:    ProductMap
   comps: Comp[]
   onRefresh: () => void
+  /** Rol de quien mira. D18 (23-nov ~23:50 CR): el contador la ve solo para mirar (sin «+ Nueva» ni «×»). */
+  role: string
 }
 
 // «Hoy» en hora de Costa Rica: con la fecha UTC, desde las 18:00 CR una competencia que termina
 // hoy figuraba «Finalizada» en pleno servicio.
 const todayISO = (): string => todayCR()
 
-export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props) {
+export default function VentasCompetencias({ dias, pm, comps, onRefresh, role }: Props) {
+  const puedeEditar = puedeEditarCompetencias(role)
   const [tab, setTab] = useState<'active'|'new'>('active')
   const [saving, setSaving] = useState(false)
   const sals = allSaloneros(dias)
@@ -34,10 +38,10 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
   const [form, setForm] = useState(emptyComp())
 
   const handleSaveComp = async () => {
-    if (!form.nombre.trim()) return
+    if (!puedeEditar || !form.nombre.trim()) return
     setSaving(true)
     try {
-      await saveComp({ ...form, id: String(Date.now()) })
+      await saveComp({ ...form, id: String(Date.now()) }, role)
       setForm(emptyComp())
       setTab('active')
       onRefresh()
@@ -47,8 +51,9 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
   }
 
   const handleDelete = async (id: string) => {
+    if (!puedeEditar) return
     if (!window.confirm('¿Eliminar esta competencia?')) return
-    await deleteComp(id)
+    await deleteComp(id, role)
     onRefresh()
   }
 
@@ -74,8 +79,10 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
       <div className="vt-tab-group" style={{ marginBottom: '1.25rem' }}>
         <button className={`vt-tab-btn ${tab === 'active' ? 'active' : ''}`}
           onClick={() => setTab('active')}>Competencias ({comps.length})</button>
-        <button className={`vt-tab-btn ${tab === 'new' ? 'active' : ''}`}
-          onClick={() => setTab('new')}>+ Nueva</button>
+        {puedeEditar && (
+          <button className={`vt-tab-btn ${tab === 'new' ? 'active' : ''}`}
+            onClick={() => setTab('new')}>+ Nueva</button>
+        )}
       </div>
 
       {tab === 'active' && (
@@ -84,7 +91,7 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
             <div className="vt-empty">
               <div className="vt-empty-icon">🏆</div>
               <div className="vt-empty-title">Sin competencias</div>
-              <div className="vt-empty-sub">Creá una para motivar al equipo</div>
+              <div className="vt-empty-sub">{puedeEditar ? 'Creá una para motivar al equipo' : 'Gerencia todavía no creó ninguna'}</div>
             </div>
           )}
           {[...comps]
@@ -117,7 +124,9 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
                         onClick={() => setExpandedComp(expandedComp === c.id ? null : c.id)}>
                         {expandedComp === c.id ? '▲' : '▼ Ver ranking'}
                       </button>
-                      <button className="cd-mov-del" onClick={() => handleDelete(c.id)}>×</button>
+                      {puedeEditar && (
+                        <button className="cd-mov-del" aria-label={`Eliminar ${c.nombre}`} onClick={() => handleDelete(c.id)}>×</button>
+                      )}
                     </div>
                   </div>
 
@@ -162,7 +171,7 @@ export default function VentasCompetencias({ dias, pm, comps, onRefresh }: Props
         </>
       )}
 
-      {tab === 'new' && (
+      {puedeEditar && tab === 'new' && (
         <div className="vt-comp-form">
           <div className="cash-form-grid">
             <div className="tips-field cash-form-desc">

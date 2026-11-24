@@ -3,7 +3,8 @@
 // En el DOM: el menú de Ventas con entradas y sub-pestañas, y la vista en la URL. Desde el 3.5.1
 // (SPEC-ventas-v2 §12.4): arranque en «Resumen» y redirección de los `?tab=` viejos. Desde el 3.5.2: siete
 // entradas (con «Regalías»), «Resumen» sin sub-pestañas y «Hoy», «Ventas» e «Histórico» retiradas. Desde el 3.5.3:
-// «Tiempos» sin sub-pestañas; «Análisis» y «Calendario» retiradas (abren «Tiempos» con su período).
+// «Tiempos» sin sub-pestañas; «Análisis» y «Calendario» retiradas (abren «Tiempos» con su período). Desde el 3.5.4:
+// «Saloneros» y «Evaluación» retiradas, juntas en «Equipo» (que el contador también ve completa: D18, dueño 23-nov 22:35).
 // Las vistas se reemplazan por marcadores: acá se prueba la navegación, no el contenido.
 import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest'
 import { useEffect } from 'react'
@@ -25,14 +26,13 @@ vi.mock('./ventasFuente', () => ({
 vi.mock('./AvisoFuentePos', () => ({ default: () => null }))
 const vista = (n: string) => ({ default: () => <div data-testid="vista">{n}</div> })
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
-vi.mock('./VentasSaloneros',      () => vista('saloneros'))
+vi.mock('./VentasEquipo',         () => vista('equipo'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
 vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
 vi.mock('./VentasConfig',         () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
-vi.mock('./VentasEvaluacion',     () => vista('evaluacion'))
 vi.mock('./VentasICP',            () => vista('icp'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
 vi.mock('./VentasResumen',        () => vista('resumen'))
@@ -73,8 +73,7 @@ const subMenu = (entrada: string) => screen.getByRole('tablist', { name: `Vistas
 /** SPEC §12.2: `?tab=` viejo → dirección nueva (escrita a mano: si cambia el mapa, cae). */
 const REDIRECCION: Record<string, string> = {
   mix: '/ventas?tab=productos', menueng: '/ventas?tab=productos&v=menu',
-  saloneros: '/ventas?tab=equipo', salolineas: '/ventas?tab=equipo&v=lineas',
-  evaluacion: '/ventas?tab=equipo&v=evaluacion', icp: '/ventas?tab=equipo&v=icp',
+  salolineas: '/ventas?tab=equipo&v=lineas', icp: '/ventas?tab=equipo&v=icp',
   cajeros: '/ventas?tab=equipo&v=cajas', competencias: '/ventas?tab=equipo&v=competencias',
   metas: '/ventas?tab=ajustes', config: '/ventas?tab=ajustes&v=productos', internas: '/ventas?tab=ajustes&v=internas',
 }
@@ -182,6 +181,11 @@ describe('VentasModule · redirecciones (criterio 3)', () => {
     ['tab=tiempos&v=analisis', '/ventas?tab=tiempos&p=anioALaFecha'],
     ['tab=calendario', '/ventas?tab=tiempos&p=mesALaFecha'],
     ['tab=tiempos&v=calendario', '/ventas?tab=tiempos&p=mesALaFecha'],
+    // 3.5.4: «Saloneros» abría el último día → «Equipo», «Ayer»; «Evaluación», 30 días → «Equipo», «Rango».
+    ['tab=saloneros', '/ventas?tab=equipo&p=ayer'],
+    ['tab=evaluacion', '/ventas?tab=equipo&p=rango&desde=2026-10-19&hasta=2026-11-17'],
+    ['tab=equipo&v=saloneros', '/ventas?tab=equipo&p=ayer'],
+    ['tab=equipo&v=evaluacion', '/ventas?tab=equipo&p=rango&desde=2026-10-19&hasta=2026-11-17'],
   ]
   it.each(['owner', 'manager', 'contador'].flatMap(r => RETIRADAS.map(([q, a]) => [r, q, a] as const)))(
     '%s con ?%s → %s', async (r, q, a) => {
@@ -216,12 +220,20 @@ describe('VentasModule · redirecciones (criterio 3)', () => {
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas'))
   })
 
-  it('contador con la dirección nueva de una sub-vista que no ve (Equipo → Por línea): abre «Resumen»', async () => {
+  it('contador con la dirección nueva de una sub-vista que no ve (Productos → Ing. Menú): abre «Resumen»', async () => {
     role = 'contador'
-    abrir('/ventas?tab=equipo&v=lineas')
+    abrir('/ventas?tab=productos&v=menu')
     expect((await screen.findByTestId('vista')).textContent).toBe('resumen')
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas'))
   })
+
+  it.each([['lineas', 'salolineas'], ['competencias', 'competencias']])(
+    'D18 ampliada (dueño 23-nov ~23:50): el contador abre ?tab=equipo&v=%s sin corrección', async (v, vista) => {
+      role = 'contador'
+      abrir(`/ventas?tab=equipo&v=${v}`)
+      expect((await screen.findByTestId('vista')).textContent).toBe(vista)
+      expect(ultima.url).toBe(`/ventas?tab=equipo&v=${v}`)
+    })
 })
 
 describe('VentasModule · navegación', () => {
@@ -238,13 +250,14 @@ describe('VentasModule · navegación', () => {
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
   })
 
-  it('contador: «Equipo» abre «ICP» (la primera que ve)', async () => {
+  it('contador: «Equipo» abre «Equipo» (completa; D18, dueño 23-nov 22:35 y ~23:50) y ve las cinco sub-vistas', async () => {
     role = 'contador'
     abrir('/ventas')
     await screen.findByTestId('vista')
     fireEvent.click(within(menu()).getByRole('tab', { name: 'Equipo' }))
-    expect((await screen.findByTestId('vista')).textContent).toBe('icp')
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=equipo&v=icp'))
+    expect((await screen.findByTestId('vista')).textContent).toBe('equipo')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=equipo'))
+    expect(within(subMenu('Equipo')).getAllByRole('tab').map(t => t.textContent)).toEqual(['Equipo', 'Por línea', 'ICP', 'Cajas y canales', 'Competencias'])
   })
 
   it('criterio 10: la barra se conserva al pasar de Resumen a Equipo y a Tiempos', async () => {

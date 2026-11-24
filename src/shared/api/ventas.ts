@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { puedeEditarCompetencias, SIN_PERMISO_COMPETENCIAS } from '../permisosCompetencias'
 import type { HistDay, ProductInfo, Meta, Comp } from '../types/ventas'
 import type { Json } from '../types/supabase.gen'
 
@@ -122,7 +123,8 @@ export async function getComps(): Promise<Comp[]> {
   return ((data as unknown as Array<{ data: Comp }> ?? [])).map(r => r.data)
 }
 
-export async function saveComp(comp: Comp): Promise<void> {
+export async function saveComp(comp: Comp, role: string): Promise<void> {
+  if (!puedeEditarCompetencias(role)) throw new Error(SIN_PERMISO_COMPETENCIAS)
   // Delete-then-insert: avoids unreliable JSONB path filtering on UPDATE
   await supabase.from('ventas_comps').delete().filter('data->>id', 'eq', comp.id)
   const { error } = await supabase
@@ -131,6 +133,7 @@ export async function saveComp(comp: Comp): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-export async function deleteComp(compId: string): Promise<void> {
+export async function deleteComp(compId: string, role: string): Promise<void> {
+  if (!puedeEditarCompetencias(role)) throw new Error(SIN_PERMISO_COMPETENCIAS)
   await supabase.from('ventas_comps').delete().filter('data->>id', 'eq', compId)
 }

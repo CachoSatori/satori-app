@@ -120,7 +120,8 @@ describe('«Detalle por día» (ítem 7): «🖨 Reporte» del mes', () => {
     role = 'contador'
     abrir('p=mes&d=2026-10-01')
     expect(await screen.findByRole('button', { name: '🖨 Reporte' })).toBeTruthy()
-    expect((document.querySelector('details.vt2-detalle') as HTMLDetailsElement).open).toBe(true)
+    // El `<details>` del «Detalle por día» (no el primero con la clase: ver R32).
+    expect((screen.getByRole('table', { name: 'Detalle por día' }).closest('details') as HTMLDetailsElement).open).toBe(true)
   })
 })
 

@@ -77,12 +77,13 @@ describe('CashTurno · editar un pago GUARDADO — $ ilegible (251)', () => {
     expect(createCashMovementSpy).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: '✓ Guardar cambios' })).toBeTruthy()   // el modal queda abierto
   })
-  it('$ «0abc» (badInput): avisa y no toca nada', async () => {
+  it('$ «0abc» (badInput): avisa, NO pide autorización y no toca nada', async () => {
     const { onError } = renderTurno()
     fireEvent.click(screen.getByTitle('Editar'))
     teclearNumero(usd(), '0abc')
     await guardar()
     expect(onError).toHaveBeenCalledWith(MSG_MONTO_INVALIDO)
+    expect(requireManagerSpy).not.toHaveBeenCalled()   // el monto se mira ANTES de pedir la autorización del encargado
     expect(deleteCashMovementSpy).not.toHaveBeenCalled()
     expect(createCashMovementSpy).not.toHaveBeenCalled()
   })

@@ -67,12 +67,14 @@ describe('AppShell', () => {
   })
 
   it.each([
-    ['/ventas?tab=calendario', '/ventas?tab=tiempos'],           // dirección vieja: Calendario vive en Tiempos
+    ['/ventas?tab=calendario', '/ventas?tab=tiempos'],           // dirección vieja: lo de Calendario vive en Tiempos
     ['/ventas?tab=equipo&v=icp', '/ventas?tab=equipo'],
     ['/ventas?tab=metas', '/ventas?tab=ajustes'],
     ['/ventas', '/ventas?tab=resumen'],
     ['/ventas?tab=hoy', '/ventas?tab=resumen'],                  // 3.5.2: «Hoy» se retiró, abre «Resumen»
     ['/ventas?tab=resumen&v=analisis', '/ventas?tab=tiempos'],   // 3.5.2: «Análisis» pasó a «Tiempos»
+    ['/ventas?tab=analisis', '/ventas?tab=tiempos'],             // 3.5.3: «Análisis» se retiró: abre «Tiempos»
+    ['/ventas?tab=tiempos&v=calendario', '/ventas?tab=tiempos'], // 3.5.3: «Calendario» se retiró: abre «Tiempos»
     ['/ventas?tab=regalias', '/ventas?tab=regalias'],
   ])('marca la entrada de Ventas según la dirección: %s → %s', (url, activa) => {
     montar(url)

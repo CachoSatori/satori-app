@@ -7,6 +7,10 @@
 // con «Año vs Año» y pasa al lado de «Calendario», en «Tiempos» (su destino de la 3.5.3), así «Resumen» no
 // lleva sub-pestañas. Los roles de cada vista que queda son los mismos de antes.
 //
+// 3.5.3 (§12.4): se RETIRAN «Calendario» y «Análisis» (ya solo «Año vs Año»). Lo suyo quedó en «Tiempos»
+// («Meses y temporadas», «Calendario», «Día de semana») y en «Resumen» («Detalle por día»). «Tiempos» queda sin
+// sub-pestañas. Sus enlaces abren «Tiempos» con el período que las reemplaza.
+//
 // 3.5.4 (§12.4, §5.3): «Saloneros» y «Evaluación» se RETIRAN y se juntan en «Equipo» (vista `equipo`, con la barra
 // global). «Cajeros» pasa a llamarse «Cajas y canales». Sub-vistas de «Equipo»: Equipo · Por línea · ICP · Cajas y
 // canales · Competencias. Decisión del dueño (D18, corregida el 23-nov 22:35 CR): el CONTADOR ve «Equipo» COMPLETO, igual
@@ -22,7 +26,7 @@ import { sumarDias, type TipoPeriodoV2 } from './periodos'
 
 export type Tab =
   | 'envivo' | 'equipo' | 'salolineas' | 'icp'
-  | 'cajeros' | 'mix' | 'analisis' | 'calendario' | 'menueng' | 'metas'
+  | 'cajeros' | 'mix' | 'menueng' | 'metas'
   | 'competencias' | 'config' | 'resumen' | 'tiempos' | 'internas' | 'regalias'
 
 export interface TabDef { id: Tab; label: string; roles: string[] }
@@ -40,8 +44,6 @@ export const TABS: TabDef[] = [
   { id: 'icp',          label: 'ICP',               roles: ['owner','manager','contador'] },
   { id: 'cajeros',      label: 'Cajas y canales',   roles: ['owner','manager','contador'] },
   { id: 'mix',          label: 'Mix',               roles: ['owner','manager','contador'] },
-  { id: 'analisis',     label: 'Análisis',          roles: ['owner','manager','contador'] },
-  { id: 'calendario',   label: 'Calendario',        roles: ['owner','manager','contador'] },
   { id: 'menueng',      label: 'Ing. Menú',         roles: ['owner','manager'] },
   { id: 'metas',        label: 'Metas',             roles: ['owner','manager','contador'] },
   { id: 'competencias', label: 'Competencias',      roles: ['owner','manager'] },
@@ -71,7 +73,7 @@ export const ENTRADAS: Entrada[] = [
   { id: 'resumen',   label: 'Resumen',   vistas: ['resumen'] },
   { id: 'productos', label: 'Productos', vistas: ['mix', 'menueng'] },
   { id: 'equipo',    label: 'Equipo',    vistas: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'] },
-  { id: 'tiempos',   label: 'Tiempos',   vistas: ['tiempos', 'calendario', 'analisis'] },
+  { id: 'tiempos',   label: 'Tiempos',   vistas: ['tiempos'] },
   { id: 'regalias',  label: 'Regalías',  vistas: ['regalias'] },
   { id: 'envivo',    label: 'En vivo',   vistas: ['envivo'] },
   { id: 'ajustes',   label: 'Ajustes',   vistas: ['metas', 'config', 'internas'] },
@@ -87,30 +89,37 @@ export const CLAVE_V: Record<Tab, string> = {
   mix: 'mix', menueng: 'menu',
   equipo: 'equipo', salolineas: 'lineas', icp: 'icp', cajeros: 'cajas',
   competencias: 'competencias',
-  tiempos: 'tiempos', calendario: 'calendario', analisis: 'analisis',
+  tiempos: 'tiempos',
   regalias: 'regalias',
   envivo: 'envivo',
   metas: 'metas', config: 'productos', internas: 'internas',
 }
 
 /** Las vistas retiradas en la 3.5 (su `?tab=` de antes y su `v` mientras convivieron). */
-export type Retirada = 'hoy' | 'ventas' | 'historico' | 'saloneros' | 'evaluacion'
+export type Retirada = 'hoy' | 'ventas' | 'historico' | 'analisis' | 'calendario' | 'saloneros' | 'evaluacion'
 
 /**
  * Las vistas RETIRADAS y a dónde lleva su enlace viejo: la pestaña nueva con el período de la barra que la
  * reemplaza, el mismo con que abría la vista vieja (SPEC §12.2). Vale para el `?tab=` de antes de la 3.5 y
- * para la dirección de sub-vista que tuvieron mientras convivieron (`desde`: `?tab=<entrada>&v=<vista>`).
+ * para las direcciones de sub-vista que tuvieron mientras convivieron (`desde`: `?tab=<entrada>&v=<vista>`).
  *   · 3.5.2 (D15): «Hoy» abría el último día cerrado → «Resumen», «Ayer».
- *   · 3.5.2: «Ventas» abría el mes en curso → «Resumen», «Mes» a la fecha (`mesALaFecha`).
+ *   · 3.5.2: «Ventas» abría el mes en curso → «Resumen», «Mes» a la fecha (`mesALaFecha`; `mes` sin día es el
+ *     último cerrado).
  *   · 3.5.2: «Histórico» abría los últimos 30 días → «Resumen», «Rango» con los 30 días que terminan ayer.
+ *   · 3.5.3: «Análisis» (solo «Año vs Año») abría el año en curso a la fecha → «Tiempos», «Año a la fecha»
+ *     (ahí está «Meses y temporadas»). Su `v` vivió en «Resumen» (3.5.1) y en «Tiempos» (3.5.2).
+ *   · 3.5.3: «Calendario» abría con el mes en curso desplegado → «Tiempos», «Mes» a la fecha (el período con que
+ *     abre «Tiempos»; `mes` sin día sería el último cerrado, como en «Ventas»).
  *   · 3.5.4: «Saloneros» abría el último día → «Equipo», «Ayer» (el «Ranking del día»).
  *   · 3.5.4: «Evaluación» abría los últimos 30 días → «Equipo», «Rango» con los 30 días que terminan ayer.
  */
 export const RETIRADAS: Readonly<Record<Retirada, { vista: Tab; p: TipoPeriodoV2; ultimosDias?: number; desde: readonly EntradaId[] }>> = {
-  hoy:        { vista: 'resumen', p: 'ayer',        desde: ['resumen'] },
-  ventas:     { vista: 'resumen', p: 'mesALaFecha', desde: ['resumen'] },
+  hoy:        { vista: 'resumen', p: 'ayer',         desde: ['resumen'] },
+  ventas:     { vista: 'resumen', p: 'mesALaFecha',  desde: ['resumen'] },
   historico:  { vista: 'resumen', p: 'rango', ultimosDias: 30, desde: ['resumen'] },
-  saloneros:  { vista: 'equipo',  p: 'ayer',        desde: ['equipo'] },
+  analisis:   { vista: 'tiempos', p: 'anioALaFecha', desde: ['resumen', 'tiempos'] },
+  calendario: { vista: 'tiempos', p: 'mesALaFecha',  desde: ['tiempos'] },
+  saloneros:  { vista: 'equipo',  p: 'ayer',         desde: ['equipo'] },
   evaluacion: { vista: 'equipo',  p: 'rango', ultimosDias: 30, desde: ['equipo'] },
 }
 
@@ -120,14 +129,6 @@ export const RETIRADAS: Readonly<Record<Retirada, { vista: Tab; p: TipoPeriodoV2
  */
 export const ROLES_DETALLE_EQUIPO: readonly string[] = ['owner', 'manager', 'contador']
 export const veDetalleEquipo = (role: string): boolean => ROLES_DETALLE_EQUIPO.includes(role)
-
-/**
- * Direcciones del 3.5.1 de vistas que cambiaron de entrada en el 3.5.2: `?tab=resumen&v=analisis` →
- * «Tiempos» → «Análisis». Clave `<entrada>|<v>`.
- */
-const MOVIDAS: Readonly<Record<string, Tab>> = {
-  'resumen|analisis': 'analisis',
-}
 
 const TAB_POR_ID = new Map(TABS.map(t => [t.id, t]))
 const ENTRADA_POR_ID = new Map(ENTRADAS.map(e => [e.id as string, e]))
@@ -168,9 +169,8 @@ export interface Correccion { tab: EntradaId | null; v: string | null; p?: TipoP
  * un paso al «Atrás»).
  *   · `?tab=<entrada>[&v=<clave>]` → esa sub-vista, si el rol la ve.
  *   · `?tab=<vista vieja>` que el rol ve → esa vista; se reemplaza por su dirección nueva.
- *   · `?tab=hoy|ventas|historico|saloneros|evaluacion` (o la dirección de sub-vista que tuvo mientras convivió,
- *     `RETIRADAS[x].desde`) → su pestaña nueva con el período que la reemplaza (SPEC §12.2).
- *   · `?tab=resumen&v=analisis` (3.5.1) → «Tiempos» → «Análisis».
+ *   · `?tab=hoy|ventas|historico|analisis|calendario|saloneros|evaluacion` (o la dirección de sub-vista que
+ *     tuvo mientras convivió, `RETIRADAS[x].desde`) → su pestaña nueva con el período que la reemplaza (SPEC §12.2).
  *   · Lo que el rol no ve o no existe (incluidos `paridad` y `xls`) → «Resumen», dirección limpia.
  */
 export function resolverDireccion(
@@ -198,8 +198,6 @@ export function resolverDireccion(
     const vista = entrada.vistas.find(x => CLAVE_V[x] === v)
     if (vista) return puedeVer(role, vista) ? { vista, corregir: null } : limpiar
     if (esRetirada(v) && RETIRADAS[v].desde.includes(entrada.id)) return retirada(v)
-    const movida = MOVIDAS[`${tab}|${v}`]
-    if (movida) return puedeVer(role, movida) ? { vista: movida, corregir: direccionDe(movida) } : limpiar
     return limpiar
   }
   if (esRetirada(tab)) return retirada(tab)
@@ -236,15 +234,16 @@ export function labelDe(tab: Tab): string {
  * Vistas que no reciben `dias` ni `pm` (leen lo suyo): se pintan sin esperar la carga de los
  * 90 días del PoS. «Regalías» y «Equipo» (3.5.4) leen las líneas del período elegido en la barra
  * (`lineasPeriodo.ts`) y la 190; «Equipo» recibe solo `metas` (lo liviano que el shell baja siempre).
+ * «Tiempos» (3.5.3) lee sus años por la 190 y recibe solo `hist` (2023, lo liviano que el shell baja siempre).
  */
 export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas', 'resumen', 'tiempos', 'internas', 'regalias', 'equipo'])
 
 /**
- * Vistas que pueden mirar más atrás de los 90 días (año contra año, rangos «Todo», competencias
+ * Vistas que pueden mirar más atrás de los 90 días (Mix → Comparar, rangos «Todo», competencias
  * viejas, catálogo completo): al abrirse piden la historia completa del PoS (`cargarDeFondo`).
  * Mientras llega, muestran lo mismo que antes: los 90 días + el Excel.
  */
 export const VISTAS_CON_FONDO: ReadonlySet<Tab> = new Set<Tab>([
-  'analisis', 'calendario', 'mix', 'metas', 'menueng', 'icp',
+  'mix', 'metas', 'menueng', 'icp',
   'cajeros', 'competencias', 'config',
 ])

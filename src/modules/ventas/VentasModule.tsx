@@ -19,13 +19,11 @@ import {
 const VentasEnVivo       = lazy(() => import('./VentasEnVivo'))
 const VentasSaloneroLineas = lazy(() => import('./VentasSaloneroLineas'))
 const VentasMix          = lazy(() => import('./VentasMix'))
-const VentasAnalisis     = lazy(() => import('./VentasAnalisis'))
 const VentasMetas        = lazy(() => import('./VentasMetas'))
 const VentasCompetencias = lazy(() => import('./VentasCompetencias'))
 const VentasConfig       = lazy(() => import('./VentasConfig'))
 const VentasCajeros      = lazy(() => import('./VentasCajeros'))
 const VentasICP          = lazy(() => import('./VentasICP'))
-const VentasCalendario   = lazy(() => import('./VentasCalendario'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
 // Ventas v2 · fase 2.1: lee el PoS por su cuenta (no usa `dias`), con la barra global.
 const VentasResumen      = lazy(() => import('./VentasResumen'))
@@ -69,8 +67,8 @@ export default function VentasModule() {
   // La vista activa vive en la URL (`/ventas?tab=<entrada>&v=<sub-vista>`, 3.5.1). Sin `tab`
   // abre «Resumen». Un `?tab=<vista vieja>` abre la misma vista de antes y la dirección se
   // reemplaza por la nueva; uno que el rol no ve, o que no existe, abre «Resumen». Las vistas
-  // retiradas en el 3.5.2 («Hoy», «Ventas», «Histórico») abren «Resumen» con su período (`p`); las del 3.5.4
-  // («Saloneros», «Evaluación»), «Equipo» con el suyo.
+  // retiradas en el 3.5.2 («Hoy», «Ventas», «Histórico») abren «Resumen» con su período (`p`); las del 3.5.3
+  // («Análisis», «Calendario»), «Tiempos»; las del 3.5.4 («Saloneros», «Evaluación»), «Equipo» con el suyo.
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const vParam   = searchParams.get('v')
@@ -186,9 +184,9 @@ export default function VentasModule() {
     if (!fondoP.current) {
       const g = gen.current
       const vigente = () => g === gen.current
-      // La historia completa, en segundo plano: es lo que necesitan Análisis (año contra año)
-      // y Calendario. Hasta que llegue, esas pestañas muestran 2023 (`ventas_hist`)
-      // y los 90 días del eager.
+      // La historia completa, en segundo plano: la necesitan las vistas que miran más atrás de
+      // los 90 días (`VISTAS_CON_FONDO`). Hasta que llegue, muestran 2023 (`ventas_hist`) y los
+      // 90 días del eager.
       fondoP.current = Promise.all([pedirBase(), pedirEager()]).then(([{ p }, { h, dias: d90 }]) => {
         if (!vigente()) return
         setCargandoFondo(true)
@@ -302,8 +300,8 @@ export default function VentasModule() {
 
       <AvisoFuentePos estado={fuentePos} />
 
-      {/* La historia completa llega en segundo plano (P2-perf). Sin este aviso, Análisis y
-          Calendario parecen "mal" (sin 2024 en adelante) hasta que el PoS entra. */}
+      {/* La historia completa llega en segundo plano (P2-perf). Sin este aviso, las vistas que la
+          usan (Mix → Comparar, Metas…) parecen "mal" (sin 2024 en adelante) hasta que el PoS entra. */}
       {cargandoFondo && (
         <div style={{ margin: '0.75rem 1.5rem', fontSize: '0.75rem', color: 'var(--c-gris)' }}>
           Cargando la historia completa del PoS… mientras tanto se ven los últimos 90 días y 2023.
@@ -330,7 +328,7 @@ export default function VentasModule() {
               aria-labelledby={entrada && entrada.vistas.length > 1 ? idVista(tab) : idEntrada(entradaDe(tab).id)}
             >
               {tab === 'resumen'     && <VentasResumen metas={metas} />}
-              {tab === 'tiempos'     && <VentasTiempos />}
+              {tab === 'tiempos'     && <VentasTiempos hist={hist} />}
               {tab === 'regalias'    && <VentasRegalias />}
               {tab === 'internas'    && <VentasMesasInternas />}
               {tab === 'envivo'      && <VentasEnVivo       metas={metas} />}
@@ -339,8 +337,6 @@ export default function VentasModule() {
               {tab === 'icp'         && <VentasICP          dias={allDias} pm={pm} />}
               {tab === 'cajeros'     && <VentasCajeros      dias={allDias} />}
               {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} hist={hist} />}
-              {tab === 'analisis'    && <VentasAnalisis     dias={allDias} hist={hist} />}
-              {tab === 'calendario'  && <VentasCalendario   dias={allDias} hist={hist} pm={pm} />}
               {tab === 'menueng'    && <VentasMenuEng      dias={allDias} pm={pm} />}
               {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
               {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} />}

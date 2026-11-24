@@ -3497,6 +3497,9 @@ html, body, #root {
   gap: 0.625rem;
   margin-bottom: 1.5rem;
 }
+/* Una tarjeta por año (Ventas → «Meses y temporadas»): tantas columnas como años (hasta 4, en `--vt-anios`).
+   En pantalla chica la apilan las reglas de abajo; nunca un estilo en línea, que les ganaría y cortaría las tarjetas. */
+.vt-kpi-grid.vt-kpi-anios { grid-template-columns: repeat(var(--vt-anios, 4), minmax(0, 1fr)); }
 .vt-kpi {
   background: var(--c-panel);
   padding: 1.1rem 1rem;
@@ -4121,6 +4124,7 @@ html, body, #root {
 @media (max-width: 760px) {
   .vt-section { padding: 1rem; }
   .vt-kpi-grid { grid-template-columns: 1fr 1fr; }
+  .vt-kpi-grid.vt-kpi-anios { grid-template-columns: 1fr 1fr; }
   .vt-sal-cards { grid-template-columns: 1fr; }
   .vt-sal-kpis { grid-template-columns: repeat(2, 1fr); }
   .vt-dow-grid { grid-template-columns: repeat(4, 1fr); }
@@ -4130,6 +4134,7 @@ html, body, #root {
 }
 @media (max-width: 420px) {
   .vt-kpi-grid { grid-template-columns: 1fr; }
+  .vt-kpi-grid.vt-kpi-anios { grid-template-columns: 1fr; }
   .vt-nav-tab  { padding: 0.6rem 0.75rem; font-size: 0.6rem; }
 }
 

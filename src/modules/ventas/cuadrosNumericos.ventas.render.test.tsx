@@ -23,6 +23,7 @@ vi.mock('../../shared/api/ventas', () => ({
 import VentasMetas from './VentasMetas'
 import VentasConfig from './VentasConfig'
 import VentasCompetencias from './VentasCompetencias'
+import { getMeta } from './ventasUtils'
 
 let sacar: () => void
 beforeAll(() => { sacar = imitarInputNumeroDeChrome() })
@@ -145,5 +146,40 @@ describe('Competencias · puntos por producto', () => {
     fireEvent.click(boton(/Crear competencia/))
     await waitFor(() => expect(H.saveComp).toHaveBeenCalled())
     expect((H.saveComp.mock.calls[0] as unknown as [{ prods: unknown }])[0].prods).toEqual([{ name: 'ROLLO A', pts: 3 }])
+  })
+})
+
+describe('Metas individuales · vacía hereda la general (decisión del dueño, 24-nov)', () => {
+  const META_SAL = { ...METAS, salMetas: { 'Persona A': { promPax: 20000, bebPax: 2 } } } as unknown as Meta
+  const guardado = () => (H.saveMetas.mock.calls[0] as unknown as [Meta])[0]
+
+  it('borrar una meta propia no guarda 0: se quita y getMeta usa la general', async () => {
+    render(<VentasMetas dias={DIAS} hist={{}} metas={META_SAL} onMetasUpdated={() => {}} />)
+    teclearNumero(cuadro('Prom/PAX · Persona A'), '')
+    expect(cuadro('Prom/PAX · Persona A').value).toBe('')
+    expect(aviso()).toBeNull()
+    fireEvent.click(boton(/Guardar metas/))
+    await waitFor(() => expect(H.saveMetas).toHaveBeenCalled())
+    expect(guardado().salMetas['Persona A']).toEqual({ bebPax: 2 })
+    expect(getMeta(guardado(), 'Persona A', 'promPax')).toBe(15000)
+  })
+
+  it('sin ninguna meta propia, el salonero sale del mapa', async () => {
+    render(<VentasMetas dias={DIAS} hist={{}} metas={META_SAL} onMetasUpdated={() => {}} />)
+    teclearNumero(cuadro('Prom/PAX · Persona A'), '')
+    teclearNumero(cuadro('Beb/PAX · Persona A'), '')
+    fireEvent.click(boton(/Guardar metas/))
+    await waitFor(() => expect(H.saveMetas).toHaveBeenCalled())
+    expect('Persona A' in guardado().salMetas).toBe(false)
+  })
+
+  it('un 0 escrito a mano sí se guarda como meta propia; lo ilegible sigue con aviso', async () => {
+    render(<VentasMetas dias={DIAS} hist={{}} metas={META_SAL} onMetasUpdated={() => {}} />)
+    teclearNumero(cuadro('Prom/PAX · Persona A'), '5-')
+    expect(aviso()).toContain('«Prom/PAX · Persona A»')
+    teclearNumero(cuadro('Prom/PAX · Persona A'), '0')
+    fireEvent.click(boton(/Guardar metas/))
+    await waitFor(() => expect(H.saveMetas).toHaveBeenCalled())
+    expect(guardado().salMetas['Persona A'].promPax).toBe(0)
   })
 })

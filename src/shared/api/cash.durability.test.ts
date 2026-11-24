@@ -82,6 +82,24 @@ describe('cash.ts — durabilidad de escritura (socket zombi: el pago termina en
     expect(op.payload.client_op_id).toBe(resolved!.id)
   })
 
+  it('createCashMovement con opts.id (hallazgo 252): usa ESE id como id y client_op_id, también en la cola', async () => {
+    const { createCashMovement } = await import('./cash')
+    const fijo = '00000000-0000-4000-8000-000000000252'
+    const p = createCashMovement({
+      session_id: 's1', created_by: 'u1', movement_type: 'egreso_mercaderia',
+      amount_crc: 5000, amount_usd: 0, currency: 'CRC', exchange_rate: null,
+      description: 'Pago proveedor', method: 'Efectivo', caja_origen: 'Caja Proveedores',
+    }, { id: fijo })
+    await vi.advanceTimersByTimeAsync(15_100)
+    await vi.advanceTimersByTimeAsync(15_100)
+    const r = await p
+    expect(r.id).toBe(fijo)
+    const op = enqueueSpy.mock.calls[0][0]
+    expect(op.client_op_id).toBe(fijo)
+    expect(op.payload.id).toBe(fijo)
+    expect(op.payload.client_op_id).toBe(fijo)
+  })
+
   it('createDayMovement: ambos intentos vencen por timeout → RESUELVE con el id y encola en el outbox', async () => {
     const { createDayMovement } = await import('./cash')
 

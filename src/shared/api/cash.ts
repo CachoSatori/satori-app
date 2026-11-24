@@ -228,6 +228,16 @@ async function leerTodosLosMovimientos(sinceStr: string): Promise<CashMovement[]
   }
 }
 
+/**
+ * Un movimiento por id, directo de la base (sin caché ni cola). null = no está o el permiso no lo deja ver.
+ * Hallazgo 252: tras un alta que rebota por duplicado, se relee la fila para saber con qué datos quedó.
+ */
+export async function getCashMovementById(id: string): Promise<CashMovement | null> {
+  const { data, error } = await supabase.from('cash_movements').select('*').eq('id', id).maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data as CashMovement | null) ?? null
+}
+
 export async function getAllCashMovements(days = 1000): Promise<CashMovement[]> {
   const since = new Date()
   since.setDate(since.getDate() - days)
@@ -263,13 +273,15 @@ export async function createCashMovement(movement: {
   classification?: string
   suggested_classification?: string
   suggested_confidence?: number
-}): Promise<CashMovement> {
+}, opts?: { id?: string }): Promise<CashMovement> {
   // Montos (20-nov, ex #73): se valida ANTES de escribir y ANTES de encolar sin conexión.
   assertMontosValidos(movement.movement_type, movement.amount_crc, movement.amount_usd, 'alta')
   // id y client_op_id se generan en el CLIENTE: así el replay offline es
   // idempotente (021: client_op_id UNIQUE) y las ediciones/borrados encolados
   // después referencian un id que será el mismo en el servidor.
-  const id = crypto.randomUUID()
+  // `opts.id` (hallazgo 252): quien reintenta la MISMA alta pasa el mismo id → si el primer intento sí entró,
+  // la base rebota el duplicado (23505) en vez de crear otro movimiento.
+  const id = opts?.id ?? crypto.randomUUID()
   const now = new Date().toISOString()
   const row = {
     id,

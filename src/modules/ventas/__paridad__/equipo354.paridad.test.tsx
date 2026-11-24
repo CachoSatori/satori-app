@@ -159,8 +159,12 @@ describe.each(PERIODOS)('paridad 3.5.4 · $nombre', ({ q, desde, hasta }) => {
       expect(n.consistencia, nombre).toBe(`${v.consistencia} %`)
       expect(n.racha === '—' ? '—' : n.racha.replace(' d', ''), nombre).toBe(v.racha === '—' ? '—' : v.racha.replace('🔥', '').replace('d', ''))
       if (Number(v.dias) >= 14) {
-        const num = (s: string) => s.replace(/[▲▼+−\s%]/g, '').replace(',', '.').replace('-', '')
-        expect(num(n.tendencia), nombre).toBe(num(v.tendencia))
+        // CON su signo: ▼ / − / - es negativo; ▲ / + positivo (la vieja escribe «▼ 3.2%», la nueva «▼ −3,2 %»).
+        const conSigno = (s: string) => {
+          const v = Number(s.replace(/[▲▼+−\-\s%]/g, '').replace(',', '.'))
+          return v === 0 ? 0 : /[▼−-]/.test(s) ? -v : v
+        }
+        expect(conSigno(n.tendencia), `${nombre}: «${n.tendencia}» vs «${v.tendencia}»`).toBe(conSigno(v.tendencia))
       } else expect(n.tendencia, nombre).toBe('—')
     }
   })

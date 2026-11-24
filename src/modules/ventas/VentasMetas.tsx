@@ -65,14 +65,18 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
   const setGlobal = (key: keyof Meta['global'], val: number) =>
     setLocal(prev => ({ ...prev, global: { ...prev.global, [key]: val } }))
 
-  const setSalMeta = (sal: string, key: string, val: number) =>
-    setLocal(prev => ({
-      ...prev,
-      salMetas: {
-        ...prev.salMetas,
-        [sal]: { ...prev.salMetas?.[sal], [key]: val },
-      },
-    }))
+  // Meta individual VACÍA = hereda la general (decisión del dueño, 24-nov): se borra la clave del salonero (y el salonero
+  // si queda sin metas propias) en vez de guardar 0, que pisaba la general. `getMeta` ya cae a la general sin la clave.
+  const setSalMeta = (sal: string, key: string, val: number | '') =>
+    setLocal(prev => {
+      const propias: Record<string, number> = { ...prev.salMetas?.[sal] }
+      if (val === '') delete propias[key]
+      else propias[key] = val
+      const salMetas = { ...prev.salMetas }
+      if (Object.keys(propias).length) salMetas[sal] = propias
+      else delete salMetas[sal]
+      return { ...prev, salMetas }
+    })
 
   return (
     <div className="vt-section">
@@ -188,7 +192,7 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
                           <input type="number" className="vt-meta-input-sm"
                             aria-label={`${ETIQUETA_SAL[key]} · ${sal}`}
                             value={valorInput(sm[key] ?? '')}
-                            {...alEscribir(el => setSalMeta(sal, key, leerMeta(el)))}
+                            {...alEscribir(el => setSalMeta(sal, key, leerCuadro(el)))}
                             placeholder={String(local.global?.[key] ?? '')} />
                         </td>
                       ))}

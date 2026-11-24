@@ -1,5 +1,10 @@
 import type { Ingredient } from './types/inventario'
 import { N, NONE, NEW, type EditLine } from './api/inventoryIngest'
+import { alEscribir, esIlegible, valorInput } from '../modules/tips/validarTurno'
+import { errorDeLineas } from './invLineasIlegibles'
+
+// Cuadro `type="number"`: lo ilegible («0-450», «5-») queda NaN (no 0) y lo frena `errorDeLineas` (R29–R31).
+const leer = (el: HTMLInputElement): number => (esIlegible(el) ? Number.NaN : N(el.value))
 
 /**
  * Tabla editable de líneas de factura → ingrediente (dropdown + cantidad/factor/precio).
@@ -12,6 +17,7 @@ export default function InvLineTable({ lines, ingredients, onUpdate, onSelIngred
   onUpdate: (i: number, patch: Partial<EditLine>) => void
   onSelIngredient: (i: number, sel: string) => void
 }) {
+  const aviso = errorDeLineas(lines)
   return (
     <div style={{ overflowX: 'auto' }}>
       <table className="cd-tbl" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
@@ -35,7 +41,11 @@ export default function InvLineTable({ lines, ingredients, onUpdate, onSelIngred
                   {l.codigo && <div style={{ fontSize: '0.66rem', color: 'var(--t-muted)' }}>cód {l.codigo}</div>}
                 </td>
                 <td>
-                  <select className="cd-tbl-select" style={{ minWidth: 180 }} value={l.sel} onChange={e => onSelIngredient(i, e.target.value)}>
+                  <select className="cd-tbl-select" style={{ minWidth: 180 }} value={l.sel} onChange={e => {
+                    // Al apagar el factor («No es inventario»), lo ilegible vuelve a 1: si no, bloquearía sin verse al volver.
+                    if (e.target.value === NONE && Number.isNaN(l.factor)) onUpdate(i, { factor: 1 })
+                    onSelIngredient(i, e.target.value)
+                  }}>
                     <option value="">— elegir —</option>
                     <option value={NONE}>✕ No es inventario</option>
                     <option value={NEW}>+ Crear ingrediente</option>
@@ -51,20 +61,21 @@ export default function InvLineTable({ lines, ingredients, onUpdate, onSelIngred
                   )}
                 </td>
                 <td style={{ textAlign: 'right' }}>
-                  <input type="number" className="cd-tbl-input" value={l.cantidad} onChange={e => onUpdate(i, { cantidad: N(e.target.value) })} style={{ width: 60, textAlign: 'right' }} />
+                  <input type="number" className="cd-tbl-input" aria-label={`Cantidad: ${l.descripcion}`} value={valorInput(l.cantidad)} {...alEscribir(el => onUpdate(i, { cantidad: leer(el) }))} style={{ width: 60, textAlign: 'right' }} />
                 </td>
                 <td><input className="cd-tbl-input" value={l.unidad} onChange={e => onUpdate(i, { unidad: e.target.value })} style={{ width: 56 }} disabled={!esInv} /></td>
                 <td style={{ textAlign: 'right' }}>
-                  <input type="number" className="cd-tbl-input" value={l.factor} onChange={e => onUpdate(i, { factor: N(e.target.value) })} style={{ width: 64, textAlign: 'right' }} disabled={!esInv} />
+                  <input type="number" key={esInv ? 'factor' : 'factor-apagado'} className="cd-tbl-input" aria-label={`Factor: ${l.descripcion}`} value={valorInput(l.factor)} {...alEscribir(el => onUpdate(i, { factor: leer(el) }))} style={{ width: 64, textAlign: 'right' }} disabled={!esInv} />
                 </td>
                 <td style={{ textAlign: 'right' }}>
-                  <input type="number" step="any" className="cd-tbl-input" value={l.precio} onChange={e => onUpdate(i, { precio: N(e.target.value) })} style={{ width: 80, textAlign: 'right' }} />
+                  <input type="number" step="any" className="cd-tbl-input" aria-label={`Precio: ${l.descripcion}`} value={valorInput(l.precio)} {...alEscribir(el => onUpdate(i, { precio: leer(el) }))} style={{ width: 80, textAlign: 'right' }} />
                 </td>
               </tr>
             )
           })}
         </tbody>
       </table>
+      {aviso && <div className="tips-error" role="alert" style={{ marginTop: '0.5rem' }}><span>{aviso}</span></div>}
       <p style={{ fontSize: '0.68rem', color: 'var(--t-muted)', marginTop: '0.5rem' }}>
         Factor = cuántas unidades base entran por 1 unidad de factura (ej. caja de 12 → 12; kg → 1). Stock que entra = cantidad × factor. Precio base = precio ÷ factor.
       </p>

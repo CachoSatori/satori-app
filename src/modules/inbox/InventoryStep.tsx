@@ -7,6 +7,7 @@ import {
   resolveLine, resolveEditLines, norm, NONE, type EditLine,
 } from '../../shared/api/inventoryIngest'
 import InvLineTable from '../../shared/InvLineTable'
+import { errorDeLineas } from '../../shared/invLineasIlegibles'
 
 export default function InventoryStep({ doc, ingredients, suppliers, createdBy, onClose, onDone }: {
   doc: DocumentRow
@@ -47,7 +48,11 @@ export default function InventoryStep({ doc, ingredients, suppliers, createdBy, 
     upd(i, { sel, ...(ing ? { unidad: lines[i].unidad || ing.unit } : {}) })
   }
 
+  // Un cuadro ilegible (cantidad, factor o precio) frena el paso: el aviso lo muestra la tabla (R29–R31).
+  const ilegible = errorDeLineas(lines)
+
   const confirmar = async () => {
+    if (ilegible) { setErr(ilegible); return }
     setSaving(true); setErr(null)
     try {
       const sid = supplierId ?? await findOrCreateSupplier(ex?.proveedor || '', suppliers)
@@ -80,7 +85,7 @@ export default function InventoryStep({ doc, ingredients, suppliers, createdBy, 
 
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>
-          <button className="cd-btn-green" onClick={confirmar} disabled={saving || !loaded}>
+          <button className="cd-btn-green" onClick={confirmar} disabled={saving || !loaded || !!ilegible}>
             {saving ? 'Ingresando…' : `✓ Ingresar a inventario (${lines.filter(l => l.sel && l.sel !== NONE).length})`}
           </button>
         </div>

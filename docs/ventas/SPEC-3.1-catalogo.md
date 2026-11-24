@@ -86,8 +86,8 @@ grande —bebida en cervezas, vinos, cocteles—, sin cambiar nada de lo de acá
 | 2 | `bebida` | 5 · 18 Y HAPPY HOUR · 25 y 1 (mixtas, §2.5) | Sí | Sí |
 | 3 | `menu_especial` | Ninguna: solo por código (hoy, el 192) | Sí | Sí |
 | 4 | `extras` | 22 | Sí | Sí |
-| 5 | `otros` | 7 y 8 (SURFCAMP) y 14 PROMOCIONES, por código y hoy sin ventas · una familia que aparezca sin fila | Sí | Sí |
-| 6 | `merch` | 21, 23, 24, 26 · 10 REMERAS · 27 (nombre por copiar) | Sí | Sí |
+| 5 | `otros` | 7 ACADEMY SURFCAMP, 8 LAPOINT SURFCAMP y 14 PROMOCIONES, por código y hoy sin ventas · una familia que aparezca sin fila | Sí | Sí |
+| 6 | `merch` | 21, 23, 24, 26 · 10 REMERAS · 27 T-XABANICOS | Sí | Sí |
 | 7 | `giftcard` | 12 | Sí | No: la fija la familia |
 | 8 | `pax` | 19 | Sí | No: la fija la familia |
 | 9 | `duenos` | 28 | Sí | No: la fija la familia |
@@ -456,7 +456,7 @@ la regla; `pos_catalogo_refrescar(p_local)` aplica la misma sobre toda la histor
 >
 > **Qué trae (versión del 24-nov, con las decisiones):** 3 tablas, 1 disparador en `pos_ndf_ticket_lines`,
 > 7 funciones, la carga de las 29 familias de Santa Teresa (nombres leídos por el dueño en la PC del PoS el 24-nov
-> 15:43 CR; los de 7, 8, 11, 15, 25 y 27 todavía con «POR CONFIRMAR» en el archivo, §9.3.1 B-2), la herencia de
+> 15:43 CR; todos cargados), la herencia de
 > «rinde» y la categoría de los 85 códigos de las familias mixtas (§2.5). **Sin subcategoría** (va en la 3.1c, §11). El bloque de abajo es **el mismo texto** que se corrió en el Postgres
 > local (§8.1).
 
@@ -685,8 +685,7 @@ from (select distinct local from public.pos_ndf_tickets) x;
 
 -- Familias de santa-teresa: las 29 del PoS (`FAC_Clasificaciones`, leídas por el dueño el 24-nov 15:43 CR), menos las
 -- que no existen. Nombres como están en el PoS. La 1 NO existe en el PoS: sus códigos vienen de una clasificación
--- borrada y se cargan con un rótulo propio. Las marcadas «POR CONFIRMAR» llevan un nombre que falta copiar de la
--- lectura del dueño: el PR 3.1a NO puede salir así (lo frena una prueba del gate).
+-- borrada y se cargan con un rótulo propio. Ningún nombre puede quedar «POR CONFIRMAR» (lo frena una prueba del gate).
 -- Categoría (decisiones del dueño, 24-nov ~15:50 CR): la que ya usan las cuentas firmadas (comida 2,3,4,13,16,29 ·
 -- bebida 5 · fuera de la venta 6, 17 y 20) · 18 → bebida · 10 → merch · 17 → regalías (`cortesia`: no es venta,
 -- fijada por la familia) · 6 → consumo del personal (`personal`: aparte, fuera de la venta neta de carta) · 20 sin
@@ -700,23 +699,23 @@ insert into public.pos_familias (local, familia, nombre, categoria, orden) value
   ('santa-teresa', 13, 'KIDS MENU',                'comida',       40),
   ('santa-teresa',  4, 'POSTRES',                  'comida',       50),
   ('santa-teresa', 29, 'GREENSEASON',              'comida',       60),
-  ('santa-teresa', 11, 'MENU AÑO NUEVO',           'comida',       70),  -- nombre POR CONFIRMAR · mixta, por código
-  ('santa-teresa', 15, 'EVENTOS TERRAZA',          'comida',       80),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa', 11, 'MENU AÑO NUEVO',           'comida',       70),  -- mixta, por código
+  ('santa-teresa', 15, 'EVENTOS TERRAZA',          'comida',       80),  -- mixta, por código
   ('santa-teresa',  9, 'BELIEVE',                  'comida',       90),  -- mixta, por código
   ('santa-teresa',  5, 'BEBIDAS',                  'bebida',       10),
   ('santa-teresa', 18, 'Y HAPPY HOUR',             'bebida',       20),
-  ('santa-teresa', 25, 'POR CONFIRMAR (25)',       'bebida',       30),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa', 25, 'PROMOCIONES',              'bebida',       30),  -- mixta, por código (mismo nombre que la 14)
   ('santa-teresa',  1, '(clasificación borrada)',  'bebida',       40),  -- no existe en el PoS · por código
   ('santa-teresa', 22, 'EXTRAS',                   'extras',       10),
-  ('santa-teresa',  7, 'POR CONFIRMAR (7)',        'otros',        10),  -- nombre POR CONFIRMAR (SURFCAMP) · por código
-  ('santa-teresa',  8, 'POR CONFIRMAR (8)',        'otros',        20),  -- nombre POR CONFIRMAR (SURFCAMP) · por código
+  ('santa-teresa',  7, 'ACADEMY SURFCAMP',         'otros',        10),  -- por código
+  ('santa-teresa',  8, 'LAPOINT SURFCAMP',         'otros',        20),  -- por código
   ('santa-teresa', 14, 'PROMOCIONES',              'otros',        30),  -- por código
   ('santa-teresa', 21, 'TSHIRTS',                  'merch',        10),
   ('santa-teresa', 23, 'T-GORRAS',                 'merch',        20),
   ('santa-teresa', 24, 'T-DARUMAS',                'merch',        30),
   ('santa-teresa', 26, 'T-STICKERS',               'merch',        40),
   ('santa-teresa', 10, 'REMERAS',                  'merch',        50),
-  ('santa-teresa', 27, 'POR CONFIRMAR (27)',       'merch',        60),  -- nombre y categoría POR CONFIRMAR
+  ('santa-teresa', 27, 'T-XABANICOS',              'merch',        60),
   ('santa-teresa', 12, 'GIFT CARDS',               'giftcard',     10),
   ('santa-teresa', 19, 'A PAX',                    'pax',          10),
   ('santa-teresa', 28, 'XX DUEÑOS',                'duenos',       10),
@@ -1091,7 +1090,7 @@ v2). Eso se resuelve en la 3.2, con su prueba de paridad y sus excepciones firma
    (1, 9, 11, 15 y 25)** con su categoría (código, nombre, líneas y unidades) y los códigos de esas familias que
    prod tenga y la lista no · el antes y el después de comida, bebida, `menu_especial`, «otros» y bebidas por
    persona (§2.5.2) · **los nombres de las familias leídos en la PC del PoS** (solo lectura) contra la carga de
-   §6 (D-4 = A): leídos el 24-nov 15:43 CR; faltan copiar a la 198 los de 7, 8, 11, 15, 25 y 27 (§9.3.1 B-2).
+   §6 (D-4 = A): leídos el 24-nov 15:43 CR y cargados en la 198.
    **Sin esos nombres la 198 no se firma:** una prueba frena cualquier «POR CONFIRMAR» (§8.2).
 2. **3.1a:** corrida completa en staging y, con eso, **la firma (D-9) sobre el SHA del PR**. Entra la 198: el
    catálogo se llena desde la historia y se hereda lo cargado a mano. `product_map` queda intacto y nada lo lee
@@ -1238,7 +1237,7 @@ Fechas: las pruebas que usan «hoy» fijan el reloj a las 23:30 CR.
 
 | # | Punto | Opciones (recomendada primero) | ¿Cuándo? |
 |---|---|---|---|
-| B-2 | **Copiar los nombres de 7, 8, 11, 15, 25 y 27** de la lectura del 24-nov 15:43 (archivo `claude/POS-clasificaciones-2026-11-24.md` del proyecto) a la 198, y confirmar la categoría de la 27 (propuesta: merch). B-1 y B-3 ya están decididos (§9.3) | El coordinador los pasa al PR #357; la prueba del gate se pone verde | Antes de la firma |
+| B-2 | ~~Nombres de familia~~ **Cargados** (24-nov tarde): 7 ACADEMY SURFCAMP · 8 LAPOINT SURFCAMP · 11 MENU AÑO NUEVO · 15 EVENTOS TERRAZA · 25 PROMOCIONES · 27 T-XABANICOS (merch) | — | Hecho |
 | B-4 | **Firma D-9** | Sobre el SHA del PR 3.1a | Después del PASE, los nombres y la corrida en staging |
 | B-5 | **Firma de la 3.1c** (agente en la PC del PoS + Edge `ingest-ndf` de prod + su migración) | Después del paso 0 y de su propia spec corta | Aparte; no bloquea la 3.1a |
 

@@ -599,8 +599,9 @@ vista `equipo`). Sus `?tab=` viejos y sus direcciones de sub-vista (`?tab=equipo
 con el período con que abría la vista vieja: `&p=ayer` y `&p=rango` con los 30 días que terminan ayer. «Cajeros»
 se llama «Cajas y canales» (misma vista, `v=cajas`). El contador ve «Equipo» con el ranking (D18).
 **Archivos que se pisan con el 3.5.3 (#339):** `ventasTabs.ts` (los dos generalizan `RETIRADAS` con `desde`; el 3.5.4
-conserva `MOVIDAS` de «Análisis», que el 3.5.3 retira), `ventasTabs.test.ts`, `VentasModule.tsx`,
-`VentasModule.nav.render.test.tsx`, `VentasModule.carga.render.test.tsx`, esta SPEC y la guía 6.4. El segundo en
+conserva `MOVIDAS` de «Análisis», que el 3.5.3 retira), `ventasTabs.test.ts`,
+`VentasModule.nav.render.test.tsx`, `VentasModule.carga.render.test.tsx`, esta SPEC y la guía 6.4 (merge de prueba
+contra `b8fb3fb`; `VentasModule.tsx` junta solo). El segundo en
 mergear trae `main` y junta las dos listas de retiradas.
 
 ### 12.3 Qué entra sin la 3.1 ni la 3.4, y qué queda esperando

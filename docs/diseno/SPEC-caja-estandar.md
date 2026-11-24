@@ -11,7 +11,7 @@ Maqueta: [maqueta-caja-estandar.html](maqueta-caja-estandar.html) (estática, da
 | Títulos con la misma letra que el texto | Títulos en Cormorant Garamond 600 (30 / 21 px); texto y cifras en DM Sans |
 | Emojis como íconos | Fuera. Íconos de línea de Tabler (§3.6) solo donde ayudan: agregar, calendario, editar, borrar, deshacer |
 | Bordes gruesos y cajas dentro de cajas | Bloques separados por aire y un filete de 1 px; única caja: los campos |
-| El título «Caja» se corta arriba | Cabecera con `padding-top: env(safe-area-inset-top)`. **Causa probable, no confirmada:** hoy `.cd-module-header` es `sticky; top:0` sin ese margen. Se confirma en el teléfono en el PR 2 |
+| El título «Caja» se corta arriba | **Causa encontrada en el PR 0 (Chrome a 390 px; falta verla en el teléfono del dueño):** cabecera y pestañas eran las dos `sticky; top:0` y las pestañas tapaban el título al bajar (§8). Arreglado en el PR 0 |
 | «Diferencia ₡−1.951» en rojo, sin más | «Faltaron ₡1.951 · Fuera de tolerancia (₡500)» (§4) |
 | «Fase 1 — Mediodía (pendiente)» con el día cerrado | La barra deriva del cierre `completo` (§3.2). Hoy `CashCierre.tsx` mira solo la fila `parcial_mediodia`, que en los cierres nuevos no existe |
 
@@ -140,6 +140,25 @@ pasa igual: clase `.est` en su raíz, cabecera y pestañas del PR 2, y sus tarje
 valores suben a `:root` y la clase se elimina.
 
 ## 8. Decisiones para el dueño
+
+**Resueltas (24-nov ~01:55 CR, al aprobar la maqueta):**
+
+| # | Decisión | Quién |
+|---|---|---|
+| 1 | Fondo **crema** `#faf8f4` | el dueño |
+| 2 | Sobrante fuera de tolerancia en **oro** (verde = cuadra, laca = faltó) | el dueño |
+| 3 | Cifras en **DM Sans** | el dueño |
+| 4 | Movimientos: **lista de tarjetas en celular**, tabla en compu (PR aparte después del 6) | el dueño |
+| 5 | «Por qué hubo diferencia» en el día cerrado: **solo si se lee del movimiento de ajuste que la pantalla ya carga**; si exige una consulta nueva, queda afuera | recomendación de la spec (el dueño no la mencionó) |
+| 6 | `@tabler/icons-react` **sí**; Vaul se decide después de la prueba de §3.7 (empezar por la opción A) | recomendación de la spec (el dueño no la mencionó) |
+
+**PR 0 (24-nov):** barra de fases, «Diferencia» en palabras (en curso y día cerrado; helper `textoDiferencia.ts`, que el
+PR 3 iba a crear) y la causa real del título cortado: **no era el margen seguro** (la app no usa `viewport-fit=cover`,
+así que `env(safe-area-inset-top)` vale 0) sino que cabecera y pestañas eran las dos `sticky; top: 0` y al bajar las
+pestañas tapaban el título. La cabecera seguida de pestañas deja de ser sticky. Quedan para el PR 3/4: el modal «El conteo
+no cuadra», el resumen antes de confirmar y el bloque del motivo, que siguen con el monto con signo.
+
+Texto original de las opciones:
 
 1. **Fondo crema** en vez del blanco actual (el blanco fue una decisión anterior del rediseño). Recomendado: crema, como los SOP.
 2. **Sobrante fuera de tolerancia en oro**, no en verde como hoy: que sobre plata también es un error de caja. Recomendado: oro.

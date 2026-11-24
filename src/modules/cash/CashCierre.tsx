@@ -22,6 +22,7 @@ import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
 import { ajusteTipoPorSigno } from './ajusteTipo'
+import { estadoFases, ETIQUETA_MEDIODIA, ETIQUETA_NOCHE, textoDiferencia, lineaDolares, COLOR_TONO } from './textoDiferencia'
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import { textoConfirmacionBorrado, type PlanBorradoDia } from './borrarDia'
 import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
@@ -137,6 +138,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // Find partial (mediodía) and full (completo) for selected date
   const parcial  = cierres.find(c => c.tipo === 'parcial_mediodia')
   const completo = cierres.find(c => c.tipo === 'completo')
+  const fases    = estadoFases(!!parcial, !!completo)
   // El cierre de bóveda (Fase 2) requiere que la Caja Diaria de proveedores del día
   // ya esté CERRADA (paso propio en Caja Diaria), aunque haya estado en cero.
   const cajaProvCerrada = sessions.some(s => s.session_date === fecha && s.status === 'closed')
@@ -665,15 +667,17 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
       )}
 
       {/* Barra de fases */}
-      <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1.25rem' }}>
-        <div className={`cierre-fase ${parcial ? 'ok' : 'pend'}`}>
-          <span style={{ fontSize:'0.9rem' }}>{parcial ? '✅' : '☀️'}</span>
-          <span>Fase 1 — Mediodía {parcial ? '(sellado)' : '(pendiente)'}</span>
+      {/* Estado derivado de parcial Y completo (SPEC-caja-estandar §3.2): con el día cerrado las dos
+          fases van cerradas aunque no exista la fila `parcial_mediodia`. Solo presentación. */}
+      <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1.25rem' }} data-bloque="fases">
+        <div className={`cierre-fase ${fases.mediodia === 'sellado' ? 'ok' : 'pend'}`} data-fase="mediodia">
+          <span style={{ fontSize:'0.9rem' }}>{fases.mediodia === 'sellado' ? '✅' : '☀️'}</span>
+          <span>Fase 1 — Mediodía ({ETIQUETA_MEDIODIA[fases.mediodia]})</span>
         </div>
         <span style={{ color:'var(--c-gris-claro)', fontSize:'1rem', flexShrink:0 }}>→</span>
-        <div className={`cierre-fase ${completo ? 'ok' : parcial ? 'pend' : 'wait'}`}>
-          <span style={{ fontSize:'0.9rem' }}>{completo ? '✅' : '🌙'}</span>
-          <span>Fase 2 — Noche {completo ? '(cerrado)' : parcial ? '(en progreso)' : '(esperando)'}</span>
+        <div className={`cierre-fase ${fases.noche === 'cerrado' ? 'ok' : fases.noche === 'en-curso' ? 'pend' : 'wait'}`} data-fase="noche">
+          <span style={{ fontSize:'0.9rem' }}>{fases.noche === 'cerrado' ? '✅' : '🌙'}</span>
+          <span>Fase 2 — Noche ({ETIQUETA_NOCHE[fases.noche]})</span>
         </div>
       </div>
 
@@ -683,7 +687,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           <div style={{ fontSize:'0.88rem', fontWeight:700, color:'var(--c-musgo)', marginBottom:'1rem', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             ✅ Día cerrado — {fecha}
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.75rem', marginBottom:'1rem' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'0.75rem', marginBottom:'1rem' }}>
             {[
               { label:'Remanente CF',    val: completo.remanente_crc,    color:'var(--c-oro-texto)' },
               { label:'Caja Diaria mañana', val: completo.sep_diaria_crc, color:'var(--c-musgo)' },
@@ -695,28 +699,28 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 </div>
               </div>
             ))}
-            {/* Diferencia — ₡ y US$ discriminadas con signo y color por moneda (verde sobrante /
-                rojo faltante); una moneda en 0 no se muestra. ₡ del cierre guardado; US$ derivada
-                del movimiento de ajuste (Opción B). Solo presentación — la lógica no cambia. */}
-            <div style={{ background:'var(--c-fondo)', border:'1px solid var(--c-linea)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
-              <div style={{ fontSize:'0.6rem', color:'var(--c-gris)', letterSpacing:'0.1em', marginBottom:4 }}>Diferencia</div>
-              {completo.diferencia_crc === 0 && ajusteUsdCerrado === 0 ? (
-                <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.9rem', fontWeight:700, color:'var(--c-musgo)' }}>✓ Sin diferencia</div>
-              ) : (
-                <>
-                  {completo.diferencia_crc !== 0 && (
-                    <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'1.1rem', fontWeight:800, color: completo.diferencia_crc < 0 ? 'var(--c-laca)' : 'var(--c-musgo)' }}>
-                      {completo.diferencia_crc >= 0 ? '+' : ''}{fi2(completo.diferencia_crc)}
+            {/* Diferencia (SPEC-caja-estandar §4): «Cuadra» / «Faltaron ₡X» / «Sobraron ₡X» con la
+                tolerancia dicha en palabras; colores del dueño (cuadra musgo · faltó laca · sobró oro).
+                ₡ del cierre guardado; US$ derivada del movimiento de ajuste (Opción B: bajo US$1 no hay
+                ajuste → cuadra). Solo presentación — la lógica no cambia. */}
+            {(() => {
+              const tCrc = textoDiferencia(completo.diferencia_crc ?? 0, 'crc', true)
+              const lUsd = ajusteUsdCerrado !== 0 ? lineaDolares(ajusteUsdCerrado, true) : null
+              return (
+                <div data-bloque="diferencia" style={{ gridColumn:'1 / -1', background:'var(--c-fondo)', border:'1px solid var(--c-linea)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
+                  <div style={{ fontSize:'0.6rem', color:'var(--c-gris)', letterSpacing:'0.1em', marginBottom:4 }}>Diferencia</div>
+                  <div data-tono={tCrc.tono} style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'1.1rem', fontWeight:700, color: COLOR_TONO[tCrc.tono] }}>
+                    {tCrc.titular}
+                  </div>
+                  <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginTop:2 }}>{tCrc.nota}</div>
+                  {lUsd && (
+                    <div data-tono={lUsd.tono} style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.72rem', fontWeight:600, color: COLOR_TONO[lUsd.tono], marginTop:4 }}>
+                      {lUsd.texto}
                     </div>
                   )}
-                  {ajusteUsdCerrado !== 0 && (
-                    <div style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize: completo.diferencia_crc !== 0 ? '0.82rem' : '1.1rem', fontWeight:800, color: ajusteUsdCerrado < 0 ? 'var(--c-laca)' : 'var(--c-musgo)', marginTop: completo.diferencia_crc !== 0 ? 2 : 0 }}>
-                      US$ {ajusteUsdCerrado >= 0 ? '+' : ''}{ajusteUsdCerrado.toFixed(2)}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                </div>
+              )
+            })()}
           </div>
           {completo.notas && (
             <div style={{ fontSize:'0.78rem', color:'var(--c-gris)', padding:'0.5rem 0.75rem', background:'var(--c-panel)', borderRadius:2, whiteSpace:'pre-wrap' }}>
@@ -1022,15 +1026,26 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                         <span className="val">${totalContadoUSD.toFixed(2)}</span>
                       </div>
                     </div>
-                    <div className={`cd-cierre-resultado ${cuadra ? 'ok' : 'fail'}`}>
-                      <span>{cuadra ? '✅ Cuadra correctamente (₡)' : `⚠️ Diferencia ₡: ${diferencia! >= 0 ? '+' : ''}${fi2(diferencia ?? 0)}`}</span>
-                    </div>
-                    {deberiaUSD > 0 && (
-                      <div className={`cierre-resumen-usd ${cuadraUSD ? 'ok' : 'fail'}`}>
-                        Dólares: debería ${deberiaUSD.toFixed(2)} · contado ${totalContadoUSD.toFixed(2)}
-                        {cuadraUSD ? ' ✅' : ` ⚠️ ${difUSD! >= 0 ? '+' : ''}$${(difUSD ?? 0).toFixed(2)}`}
-                      </div>
-                    )}
+                    {/* SPEC-caja-estandar §4: en curso «Faltan / Sobran / Cuadra» con la tolerancia en
+                        palabras. El color sigue a `cuadra` / `cuadraUSD` de siempre (misma frontera). */}
+                    {(() => {
+                      const t = textoDiferencia(diferencia ?? 0, 'crc', false)
+                      return (
+                        <div className={`cd-cierre-resultado ${cuadra ? 'ok' : t.tono === 'oro' ? 'sobra' : 'fail'}`} data-bloque="diferencia" style={{ flexDirection:'column', alignItems:'flex-start', gap:2 }}>
+                          <span>Diferencia: {t.titular}</span>
+                          <span style={{ fontWeight:400, fontSize:'0.76rem' }}>{t.nota}</span>
+                        </div>
+                      )
+                    })()}
+                    {deberiaUSD > 0 && (() => {
+                      const l = lineaDolares(difUSD ?? 0, false)
+                      return (
+                        <div className={`cierre-resumen-usd ${cuadraUSD ? 'ok' : l.tono === 'oro' ? 'sobra' : 'fail'}`} data-bloque="diferencia-usd">
+                          <div>Dólares: debería ${deberiaUSD.toFixed(2)} · contado ${totalContadoUSD.toFixed(2)}</div>
+                          <div>{l.texto}</div>
+                        </div>
+                      )
+                    })()}
                   </>
                 )}
 

@@ -11,6 +11,8 @@ import type { CashCierreDia } from '../../shared/types/database'
 // Misma tolerancia que el gate de ajuste del cierre (CashCierre: Math.abs(dif) < 500).
 // Bajo la tolerancia se considera que el día CUADRÓ (no generó ajuste).
 export const OVER_SHORT_TOL = 500
+// Tolerancia en dólares (CashCierre: cuadraUSD = |difUSD| < 1). Solo la leen los carteles.
+export const OVER_SHORT_TOL_USD = 1
 
 export type OverShortEstado = 'sobrante' | 'faltante' | 'cuadro'
 

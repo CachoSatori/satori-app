@@ -2217,6 +2217,17 @@ html, body, #root {
   top: 0;
   z-index: 100;
 }
+/* Caja PR0 (24-nov): el título «Caja» se cortaba arriba al bajar en el celular. Causa: la cabecera y
+   las pestañas que la siguen eran las dos `sticky; top: 0` con el mismo z-index, así que al hacer
+   scroll las pestañas (más abajo en el DOM) se apoyaban en el mismo borde y tapaban la mitad de
+   arriba de la cabecera (el título), dejando asomar el subtítulo y los botones. No es el margen
+   seguro: la app no usa `viewport-fit=cover` y `env(safe-area-inset-top)` vale 0. Arreglo: si hay
+   pestañas pegadas debajo, la cabecera se va con el scroll y quedan fijas solo las pestañas.
+   Lo cuida src/modules/cash/cabeceraCaja.css.test.ts. */
+.cd-module-header:has(+ .cd-nav-tabs) {
+  position: relative;
+  top: auto;
+}
 
 /* ── Nav tabs (dark header bar) ─────────────────────────────── */
 .cd-nav-tabs {
@@ -2711,6 +2722,8 @@ html, body, #root {
 }
 .cd-cierre-resultado.ok   { background: var(--c-musgo-fondo); border: 1px solid var(--c-musgo-borde); color: var(--c-musgo-texto); }
 .cd-cierre-resultado.fail { background: var(--c-laca-fondo); border: 1px solid var(--c-laca-borde); color: var(--c-laca); }
+/* Sobrante fuera de tolerancia en oro (decisión del dueño 24-nov, SPEC-caja-estandar §8.2). */
+.cd-cierre-resultado.sobra { background: var(--c-oro-fondo); border: 1px solid var(--c-oro); color: var(--c-oro-texto); }
 
 /* Resumen del Cierre del Día — filas claras (patrón Caja Diaria) */
 .cierre-resumen {
@@ -2776,6 +2789,7 @@ html, body, #root {
 }
 .cierre-resumen-usd.ok   { background: var(--c-musgo-fondo); border: 1px solid var(--c-musgo-borde); color: var(--c-musgo-texto); }
 .cierre-resumen-usd.fail { background: var(--c-laca-fondo); border: 1px solid var(--c-laca-borde); color: var(--c-laca); }
+.cierre-resumen-usd.sobra { background: var(--c-oro-fondo); border: 1px solid var(--c-oro); color: var(--c-oro-texto); }
 
 /* móvil: columnas ₡/US$ más angostas para que la etiqueta respire */
 @media (max-width: 420px) {
@@ -4232,6 +4246,7 @@ html, body, #root {
 /* ── CashTurno verificación delta color ─────────────────────── */
 .cd-cierre-resultado.ok   { font-weight: 600; }
 .cd-cierre-resultado.fail { font-weight: 600; animation: pulse-red 0.5s; }
+.cd-cierre-resultado.sobra { font-weight: 600; }
 @keyframes pulse-red {
   0%,100% { background: var(--c-laca-fondo); }
   50%     { background: #fad6d0; }

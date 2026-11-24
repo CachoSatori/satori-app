@@ -553,7 +553,8 @@ describe('ventaPorPersonaDeTotales (contrato «una sola venta por persona»)', (
 // Fuera de `indicadores.ts` nadie divide «venta ÷ pax» por su cuenta en las pantallas migradas (fase 1.3).
 describe('guardia: las pantallas migradas usan la fórmula única', () => {
   const MIGRADOS = [
-    'src/modules/ventas/VentasAnalisis.tsx', 'src/modules/ventas/VentasCalendario.tsx',
+    // 3.5.5: «Análisis» y «Calendario» se borraron (su lugar es «Tiempos»: `mesesTemporadas.ts`, `tiemposV2.ts`).
+    'src/modules/ventas/MesesYTemporadas.tsx', 'src/modules/ventas/mesesTemporadas.ts', 'src/modules/ventas/VentasTiempos.tsx',
     'src/modules/ventas/ReporteMensual.tsx', 'src/modules/ventas/VentasContabilidad.tsx', 'src/modules/ventas/totalesVentas.ts',
     // 3.5.2: lo de «Hoy» (retirada) vive en «Resumen» → «Salón en detalle» y en «Regalías».
     'src/modules/ventas/salonDetalle.ts', 'src/modules/ventas/SalonEnDetalle.tsx', 'src/modules/ventas/VentasRegalias.tsx',

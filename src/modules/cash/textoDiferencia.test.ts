@@ -5,7 +5,9 @@ vi.mock('../../shared/api/exchangeRate', () => ({ getCurrentRate: vi.fn(async ()
 vi.mock('../../shared/api/tips', () => ({ getTipPayoutsSince: vi.fn(async () => []) }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: null }) }))
 vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn() }))
-import { estadoFases, textoDiferencia, lineaDolares, montoSinSigno } from './textoDiferencia'
+import { estadoFases, textoDiferencia, lineaDolares, montoSinSigno, resumenDiferencia } from './textoDiferencia'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { cierreNecesitaAjuste } from './CashCierre'
 
 describe('estadoFases — la barra sale de parcial Y completo', () => {
@@ -67,7 +69,7 @@ describe('dólares — línea aparte, tolerancia US$1', () => {
     expect(lineaDolares(-2, false)).toEqual({ texto: 'Dólares: faltan $2,00, fuera de tolerancia (US$1)', tono: 'laca' })
   })
   it('sobran fuera de tolerancia → oro; cerrado en pasado', () => {
-    expect(lineaDolares(3.5, true)).toEqual({ texto: 'Dólares: sobraron $3,50, fuera de tolerancia (US$1); quedó registrada como ajuste de cierre', tono: 'oro' })
+    expect(lineaDolares(3.5, true)).toEqual({ texto: 'Dólares: sobraron $3,50, fuera de tolerancia (US$1)', tono: 'oro' })
   })
   it('$0,999 no se muestra como $1,00 dentro de la tolerancia', () => {
     expect(lineaDolares(0.999, false).texto).toBe('Dólares: cuadra, sobran $0,99: dentro de la tolerancia (menos de US$1)')
@@ -86,5 +88,49 @@ describe('el cartel y el gate del ajuste usan la MISMA frontera', () => {
   })
   it.each(usd)('US$ %s: «fuera de tolerancia» ⇔ pide motivo', d => {
     expect(!textoDiferencia(d, 'usd', false).dentroTolerancia).toBe(cierreNecesitaAjuste(null, d))
+  })
+})
+
+describe('resumenDiferencia — el titular muestra el PEOR estado de las dos monedas (verificador #348)', () => {
+  it('solo ₡ (sin dato en US$): titular y nota de colones', () => {
+    const r = resumenDiferencia(-1951, null, true)
+    expect(r).toMatchObject({ titular: 'Faltaron ₡1.951', tono: 'laca', estado: 'faltante', pie: null })
+    expect(r.detalle).toEqual([{ texto: 'Fuera de tolerancia (₡500). Quedó registrada como ajuste de cierre.', tono: 'laca' }])
+  })
+  it('solo US$ fuera: el titular NO dice «Cuadra»', () => {
+    const r = resumenDiferencia(0, -2, true)
+    expect(r).toMatchObject({ titular: 'Faltaron $2,00', tono: 'laca', estado: 'faltante', pie: 'Quedó registrada como ajuste de cierre.' })
+    expect(r.detalle.map(l => l.texto)).toEqual(['Colones: cuadra, sin diferencia', 'Dólares: faltaron $2,00, fuera de tolerancia (US$1)'])
+  })
+  it('las dos faltan: un verbo y los dos montos', () => {
+    expect(resumenDiferencia(-1951, -2, true).titular).toBe('Faltaron ₡1.951 y $2,00')
+  })
+  it('una falta y la otra sobra: manda el faltante; el detalle trae las dos con su color', () => {
+    const r = resumenDiferencia(2300, -2, true)
+    expect(r).toMatchObject({ titular: 'Faltaron $2,00', tono: 'laca' })
+    expect(r.detalle).toEqual([
+      { texto: 'Colones: sobraron ₡2.300, fuera de tolerancia (₡500)', tono: 'oro' },
+      { texto: 'Dólares: faltaron $2,00, fuera de tolerancia (US$1)', tono: 'laca' },
+    ])
+    expect(resumenDiferencia(-1951, 3.5, false)).toMatchObject({ titular: 'Faltan ₡1.951', tono: 'laca' })
+  })
+  it('solo sobra: oro; todo dentro de tolerancia: Cuadra verde y sin pie', () => {
+    expect(resumenDiferencia(0, 3.5, true)).toMatchObject({ titular: 'Sobraron $3,50', tono: 'oro' })
+    expect(resumenDiferencia(-300, 0.4, true)).toMatchObject({ titular: 'Cuadra', tono: 'musgo', pie: null })
+  })
+})
+
+describe('contraste del oro con texto chico (verificador #348)', () => {
+  const lum = (h: string) => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] }
+  const contraste = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
+  const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
+  const token = (n: string) => css.match(new RegExp(`${n}:\\s*(#[0-9a-fA-F]{6})`))![1]
+  it('--c-oro-texto sobre --c-oro-fondo-texto ≥ 4,5:1', () => {
+    expect(contraste(token('--c-oro-texto'), token('--c-oro-fondo-texto'))).toBeGreaterThanOrEqual(4.5)
+  })
+  it('los carteles «sobra» usan ese fondo, no --c-oro-fondo (4,4:1)', () => {
+    expect(css).toMatch(/\.cd-cierre-resultado\.sobra \{ background: var\(--c-oro-fondo-texto\)/)
+    expect(css).toMatch(/\.cierre-resumen-usd\.sobra \{ background: var\(--c-oro-fondo-texto\)/)
   })
 })

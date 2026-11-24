@@ -22,7 +22,7 @@ import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
 import { ajusteTipoPorSigno } from './ajusteTipo'
-import { estadoFases, ETIQUETA_MEDIODIA, ETIQUETA_NOCHE, textoDiferencia, lineaDolares, COLOR_TONO } from './textoDiferencia'
+import { estadoFases, ETIQUETA_MEDIODIA, ETIQUETA_NOCHE, textoDiferencia, lineaDolares, resumenDiferencia, COLOR_TONO } from './textoDiferencia'
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import { textoConfirmacionBorrado, type PlanBorradoDia } from './borrarDia'
 import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
@@ -705,20 +705,18 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 ₡ del cierre guardado; US$ derivada del movimiento de ajuste (Opción B: bajo US$1 no hay
                 ajuste → cuadra). Solo presentación — la lógica no cambia. */}
             {(() => {
-              const tCrc = textoDiferencia(completo.diferencia_crc ?? 0, 'crc', true)
-              const lUsd = ajusteUsdCerrado !== 0 ? lineaDolares(ajusteUsdCerrado, true) : null
+              // Titular = el PEOR estado de las dos monedas (un faltante solo en US$ no se lee «Cuadra»).
+              const r = resumenDiferencia(completo.diferencia_crc ?? 0, ajusteUsdCerrado !== 0 ? ajusteUsdCerrado : null, true)
               return (
                 <div data-bloque="diferencia" style={{ gridColumn:'1 / -1', background:'var(--c-fondo)', border:'1px solid var(--c-linea)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
                   <div style={{ fontSize:'0.6rem', color:'var(--c-gris)', letterSpacing:'0.1em', marginBottom:4 }}>Diferencia</div>
-                  <div data-tono={tCrc.tono} style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'1.1rem', fontWeight:700, color: COLOR_TONO[tCrc.tono] }}>
-                    {tCrc.titular}
+                  <div data-tono={r.tono} data-titular style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'1.1rem', fontWeight:700, color: COLOR_TONO[r.tono] }}>
+                    {r.titular}
                   </div>
-                  <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginTop:2 }}>{tCrc.nota}</div>
-                  {lUsd && (
-                    <div data-tono={lUsd.tono} style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.72rem', fontWeight:600, color: COLOR_TONO[lUsd.tono], marginTop:4 }}>
-                      {lUsd.texto}
-                    </div>
-                  )}
+                  {r.detalle.map(l => (
+                    <div key={l.texto} data-linea style={{ fontSize:'0.7rem', fontWeight: r.detalle.length > 1 ? 600 : 400, color: r.detalle.length > 1 ? COLOR_TONO[l.tono] : 'var(--c-gris)', marginTop:2 }}>{l.texto}</div>
+                  ))}
+                  {r.pie && <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginTop:4 }}>{r.pie}</div>}
                 </div>
               )
             })()}
@@ -1051,9 +1049,13 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 )}
 
                 {/* Ajuste obligatorio si hay diferencia */}
-                {requiresAjuste && (
-                  <div style={{ background:'var(--c-laca-fondo)', border:'2px solid var(--c-laca)', borderRadius:2, padding:'0.875rem', marginBottom:'0.75rem' }}>
-                    <div style={{ fontSize:'0.82rem', fontWeight:700, color:'var(--c-laca)', marginBottom:'0.4rem' }}>
+                {requiresAjuste && (() => {
+                  // Un color por hecho (verificador #348): si nada falta y algo sobra, la caja va en oro, como el cartel.
+                  const sobraSolo = resumenDiferencia(cuadra ? 0 : (diferencia ?? 0), cuadraUSD ? null : difUSD, false).estado === 'sobrante'
+                  const cTxt = sobraSolo ? 'var(--c-oro-texto)' : 'var(--c-laca)'
+                  return (
+                  <div data-bloque="ajuste" data-tono={sobraSolo ? 'oro' : 'laca'} style={{ background: sobraSolo ? 'var(--c-oro-fondo-texto)' : 'var(--c-laca-fondo)', border:`2px solid ${sobraSolo ? 'var(--c-oro)' : 'var(--c-laca)'}`, borderRadius:2, padding:'0.875rem', marginBottom:'0.75rem' }}>
+                    <div style={{ fontSize:'0.82rem', fontWeight:700, color:cTxt, marginBottom:'0.4rem' }}>
                       {recuentoResuelto
                         ? '⚠ Diferencia detectada — registrá el motivo para cerrar'
                         : '⚠ Diferencia detectada — al cerrar vas a poder recontar una vez'}
@@ -1064,16 +1066,16 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                       {diferencia !== null && !cuadra && (
                         <>
                           <span style={{ fontSize:'0.66rem', color:'var(--c-gris)', letterSpacing:'0.1em' }}>₡ Colones</span>
-                          <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color:'var(--c-laca)' }}>
-                            {diferencia >= 0 ? '+' : ''}{fi2(diferencia)}
+                          <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color: COLOR_TONO[textoDiferencia(diferencia, 'crc', false).tono] }}>
+                            {textoDiferencia(diferencia, 'crc', false).titular}
                           </span>
                         </>
                       )}
                       {difUSD !== null && !cuadraUSD && (
                         <>
                           <span style={{ fontSize:'0.66rem', color:'var(--c-gris)', letterSpacing:'0.1em' }}>US$ Dólares</span>
-                          <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color:'var(--c-laca)' }}>
-                            {difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}
+                          <span style={{ fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color: COLOR_TONO[textoDiferencia(difUSD, 'usd', false).tono] }}>
+                            {textoDiferencia(difUSD, 'usd', false).titular}
                           </span>
                         </>
                       )}
@@ -1109,7 +1111,8 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                       <div role="alert" style={{ fontSize:'0.72rem', color:'var(--c-laca)', marginTop:6 }}>{AVISO_RESUMEN_IGUAL_MOTIVO}</div>
                     )}
                   </div>
-                )}
+                  )
+                })()}
               </Section>
 
               <button

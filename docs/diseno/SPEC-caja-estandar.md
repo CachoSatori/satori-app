@@ -155,7 +155,10 @@ valores suben a `:root` y la clase se elimina.
 **PR 0 (24-nov):** barra de fases, «Diferencia» en palabras (en curso y día cerrado; helper `textoDiferencia.ts`, que el
 PR 3 iba a crear) y la causa real del título cortado: **no era el margen seguro** (la app no usa `viewport-fit=cover`,
 así que `env(safe-area-inset-top)` vale 0) sino que cabecera y pestañas eran las dos `sticky; top: 0` y al bajar las
-pestañas tapaban el título. La cabecera seguida de pestañas deja de ser sticky. Quedan para el PR 3/4: el modal «El conteo
+pestañas tapaban el título. La cabecera seguida de pestañas deja de ser sticky. La regla también alcanza a **Mi Rendimiento**
+(su cabecera va seguida de `.cd-nav-tabs`): mismo arreglo, declarado en la guía 6.5. Ronda 2 (verificador): con dos
+monedas el titular del día cerrado muestra el **peor** estado (un faltante en US$ no se lee «Cuadra»); la caja del ajuste
+va en oro si solo sobra; fondo `--c-oro-fondo-texto` (#f8f5ee) para texto oro chico (4,6:1). Quedan para el PR 3/4: el modal «El conteo
 no cuadra», el resumen antes de confirmar y el bloque del motivo, que siguen con el monto con signo.
 
 **PR 1 (24-nov):** `src/styles/estandar.css` (tokens y clases `est-*`, todo bajo `.est`; redefine también los alias

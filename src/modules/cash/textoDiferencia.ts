@@ -82,13 +82,55 @@ export function textoDiferencia(dif: number, moneda: Moneda, cerrado: boolean): 
 
 /** Línea aparte para dólares: «Dólares: cuadra, sin diferencia» · «Dólares: faltan $2,00, fuera de tolerancia (US$1)». */
 export function lineaDolares(difUsd: number, cerrado: boolean): { texto: string; tono: TonoDiferencia } {
-  const t = textoDiferencia(difUsd, 'usd', cerrado)
+  return lineaMoneda(difUsd, 'usd', cerrado)
+}
+
+// ── Las dos monedas juntas: el titular muestra el PEOR estado (verificador #348) ──
+// Un faltante en cualquier moneda manda sobre un sobrante, y un sobrante sobre «cuadra». Así un día con
+// los colones bien y los dólares cortos no se lee como «Cuadra» grande en verde.
+const GRAVEDAD: Record<TextoDiferencia['estado'], number> = { cuadra: 0, sobrante: 1, faltante: 2 }
+
+export interface ResumenDiferencia {
+  estado:  TextoDiferencia['estado']
+  titular: string
+  tono:    TonoDiferencia
+  /** Una línea por moneda (solo si hay dólares; si no, la nota de colones). */
+  detalle: { texto: string; tono: TonoDiferencia }[]
+  /** Día cerrado con algo fuera de tolerancia: «Quedó registrada como ajuste de cierre.» */
+  pie:     string | null
+}
+
+/** Línea de una moneda: «Colones: cuadra, sin diferencia» · «Dólares: faltaron $2,00, fuera de tolerancia (US$1)». */
+export function lineaMoneda(dif: number, moneda: Moneda, cerrado: boolean): { texto: string; tono: TonoDiferencia } {
+  const nombre = moneda === 'crc' ? 'Colones' : 'Dólares'
+  const t = textoDiferencia(dif, moneda, cerrado)
+  const bajar = (x: string) => x.charAt(0).toLowerCase() + x.slice(1)
   if (t.estado === 'cuadra') {
-    const detalle = t.nota === 'Sin diferencia.' ? 'sin diferencia' : t.nota.charAt(0).toLowerCase() + t.nota.slice(1).replace(/\.$/, '')
-    return { texto: `Dólares: cuadra, ${detalle}`, tono: t.tono }
+    const detalle = t.nota === 'Sin diferencia.' ? 'sin diferencia' : bajar(t.nota).replace(/\.$/, '')
+    return { texto: `${nombre}: cuadra, ${detalle}`, tono: t.tono }
   }
-  const titular = t.titular.charAt(0).toLowerCase() + t.titular.slice(1)
-  return { texto: `Dólares: ${titular}, fuera de tolerancia (${TOL_TXT.usd})${cerrado ? '; quedó registrada como ajuste de cierre' : ''}`, tono: t.tono }
+  return { texto: `${nombre}: ${bajar(t.titular)}, fuera de tolerancia (${TOL_TXT[moneda]})`, tono: t.tono }
+}
+
+/** Diferencia del día con las dos monedas. `difUsd` null = no hay dato en dólares. */
+export function resumenDiferencia(difCrc: number, difUsd: number | null, cerrado: boolean): ResumenDiferencia {
+  const tC = textoDiferencia(difCrc, 'crc', cerrado)
+  const tU = difUsd === null ? null : textoDiferencia(difUsd, 'usd', cerrado)
+  const todas = tU ? [tC, tU] : [tC]
+  const peor = todas.reduce((a, b) => (GRAVEDAD[b.estado] > GRAVEDAD[a.estado] ? b : a))
+  let titular = 'Cuadra'
+  if (peor.estado !== 'cuadra') {
+    // «Faltaron ₡1.951 y $2,00»: un verbo y los montos de las monedas que comparten el peor estado.
+    const mismas = todas.filter(t => t.estado === peor.estado)
+    const verbo = peor.titular.split(' ')[0]
+    titular = `${verbo} ${mismas.map(t => t.titular.slice(verbo.length + 1)).join(' y ')}`
+  }
+  const fuera = todas.some(t => !t.dentroTolerancia)
+  return {
+    estado: peor.estado, titular, tono: peor.tono,
+    detalle: tU ? [lineaMoneda(difCrc, 'crc', cerrado), lineaMoneda(difUsd as number, 'usd', cerrado)] : [{ texto: tC.nota, tono: tC.tono }],
+    pie: cerrado && fuera && tU ? 'Quedó registrada como ajuste de cierre.' : null,
+  }
 }
 
 /** Variable CSS del tono (texto). */

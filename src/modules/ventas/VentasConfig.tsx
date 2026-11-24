@@ -12,6 +12,11 @@ import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { DiasMap, ProductMap } from '../../shared/types/ventas'
 import { saveProductMapItems } from '../../shared/api/ventas'
 import { todayCR } from '../../shared/utils'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput, type CuadroNumero } from '../../shared/cuadrosNumericos'
+
+// Cuadro de la tabla: ilegible («0-450», «5-») → NaN; vacío → 0, como antes. R35.
+const leerFila = (el: HTMLInputElement): number => { const v = leerCuadro(el); return v === '' ? 0 : v }
+const REGLA_MULT = { entero: true, min: 1, max: 20 } as const
 
 const PAGE_SIZE = 50
 
@@ -80,7 +85,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
   const [bulkTipo,  setBulkTipo]  = useState('')
   const [bulkClas,  setBulkClas]  = useState('')
   const [bulkSubcl, setBulkSubcl] = useState('')
-  const [bulkMult,  setBulkMult]  = useState('')
+  const [bulkMult,  setBulkMult]  = useState<number | ''>('')   // '' = no cambiar; NaN = ilegible
 
   const { clasForTipo, subclForKey } = useCascadeOptions(pm)
 
@@ -254,7 +259,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
 
   // ── Apply bulk edit to selected ──────────────────────────────
   function applyBulk() {
-    if (selected.size === 0) return
+    if (selected.size === 0 || avisoBulk) return
     setPending(prev => {
       const next = { ...prev }
       for (const n of selected) {
@@ -263,7 +268,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
         if (bulkTipo)  { upd.tipo = bulkTipo; upd.clasificacion = ''; upd.subclasificacion = '' }
         if (bulkClas)  { upd.clasificacion = bulkClas; upd.subclasificacion = '' }
         if (bulkSubcl) { upd.subclasificacion = bulkSubcl }
-        if (bulkMult)  { upd.multiplicador = Number(bulkMult) }
+        if (bulkMult !== '') { upd.multiplicador = bulkMult }
         next[n] = upd
       }
       return next
@@ -277,8 +282,18 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
   }
   function discardAll() { setPending({}); setSelected(new Set()) }
 
+  // ── Cuadros que no se pueden guardar ─────────────────────────
+  // Solo cuenta lo que cambió respecto de lo guardado (un valor viejo raro no traba un cambio de tipo). Multiplicador:
+  // entero de 1 a 20; costo: de 0 en adelante. Antes `Number('')` guardaba 0 con texto ilegible a la vista.
+  const avisoFilas = useMemo(() => errorDeNumeros(Object.entries(pending).flatMap(([n, e]): CuadroNumero[] => [
+    ...(e.multiplicador !== (pm[n]?.multiplicador ?? 1) ? [{ nombre: `Mult. × · ${n}`, valor: e.multiplicador, ...REGLA_MULT }] : []),
+    ...(e.costo_unitario !== (pm[n]?.costo_unitario ?? 0) ? [{ nombre: `Costo ₡ · ${n}`, valor: e.costo_unitario }] : []),
+  ])), [pending, pm])
+  const avisoBulk = errorDeNumeros([{ nombre: 'Mult. × (edición masiva)', valor: bulkMult, ...REGLA_MULT, vacioVale: true }])
+
   // ── Save all pending ─────────────────────────────────────────
   const handleSaveAll = useCallback(async () => {
+    if (avisoFilas) return
     const items = Object.entries(pending).map(([nombre, e]) => ({
       nombre,
       tipo:             e.tipo,
@@ -301,7 +316,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
     } finally {
       setSaving(false)
     }
-  }, [pending, onRefresh])
+  }, [pending, onRefresh, avisoFilas])
 
   const pendingCount = Object.keys(pending).length
 
@@ -351,7 +366,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
               </span>
               <button
                 style={{ padding:'0.35rem 1rem', borderRadius:2, background:'var(--c-tinta)', color:'var(--c-fondo)', fontWeight:800, fontSize:'0.82rem', border:'none', cursor:'pointer' }}
-                disabled={saving} onClick={handleSaveAll}>
+                disabled={saving || !!avisoFilas} onClick={handleSaveAll}>
                 {saving ? '⟳ Guardando…' : `💾 Guardar ${pendingCount} cambio${pendingCount > 1 ? 's' : ''}`}
               </button>
               <button
@@ -359,6 +374,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
                 onClick={discardAll}>
                 Descartar todo
               </button>
+              {avisoFilas && <span role="alert" style={{ color:'var(--vt-red)', fontSize:'0.78rem', fontWeight:600, flexBasis:'100%' }}>{avisoFilas}</span>}
             </>
           )}
         </div>
@@ -407,16 +423,18 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
             <div>
               <div style={{ fontSize:'0.62rem', color:'var(--c-gris)', marginBottom:2 }}>Mult. ×</div>
               <input className="cd-tbl-input" type="number" min={1} max={20} step={1}
-                placeholder="—" value={bulkMult} onChange={e => setBulkMult(e.target.value)}
+                aria-label="Mult. × (edición masiva)"
+                placeholder="—" value={valorInput(bulkMult)} {...alEscribir(el => setBulkMult(leerCuadro(el)))}
                 style={{ width:60 }} />
             </div>
             <button
               style={{ padding:'0.45rem 1rem', borderRadius:2, background:'var(--c-tinta)', color:'var(--c-fondo)', fontWeight:800, fontSize:'0.78rem', border:'none', cursor:'pointer', flexShrink:0 }}
               onClick={applyBulk}
-              disabled={!bulkTipo && !bulkClas && !bulkSubcl && !bulkMult}>
+              disabled={!!avisoBulk || (!bulkTipo && !bulkClas && !bulkSubcl && bulkMult === '')}>
               Aplicar a {selected.size}
             </button>
           </div>
+          {avisoBulk && <div role="alert" style={{ color:'var(--vt-red)', fontSize:'0.78rem', marginTop:'0.4rem' }}>{avisoBulk}</div>}
         </div>
       )}
 
@@ -508,7 +526,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
                   style={{ background: isSel ? 'var(--c-oro-fondo)' : dirty ? 'var(--c-panel)' : undefined }}>
                   {/* Checkbox */}
                   <td>
-                    <input type="checkbox" checked={isSel}
+                    <input type="checkbox" checked={isSel} aria-label={`Elegir ${nombre}`}
                       onChange={() => toggleSelect(nombre)} />
                   </td>
                   {/* Nombre */}
@@ -534,16 +552,18 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
                   {/* Multiplicador */}
                   <td className="r">
                     <input type="number" className="cd-tbl-input r"
-                      value={info.multiplicador} min={1} max={20} step={1}
+                      aria-label={`Mult. × · ${nombre}`}
+                      value={valorInput(info.multiplicador)} min={1} max={20} step={1}
                       style={{ width:44, color: info.multiplicador > 1 ? 'var(--c-oro-texto)' : undefined, fontWeight: info.multiplicador > 1 ? 700 : undefined }}
-                      onChange={e => setField(nombre, 'multiplicador', Number(e.target.value))} />
+                      {...alEscribir(el => setField(nombre, 'multiplicador', leerFila(el)))} />
                   </td>
                   {/* Costo */}
                   <td className="r">
                     <input type="number" className="cd-tbl-input r"
-                      value={info.costo_unitario} min={0} step={100}
+                      aria-label={`Costo ₡ · ${nombre}`}
+                      value={valorInput(info.costo_unitario)} min={0} step={100}
                       style={{ width:72, color: info.costo_unitario > 0 ? 'var(--c-musgo)' : undefined }}
-                      onChange={e => setField(nombre, 'costo_unitario', Number(e.target.value))} />
+                      {...alEscribir(el => setField(nombre, 'costo_unitario', leerFila(el)))} />
                   </td>
                   {/* Discard */}
                   <td>
@@ -591,7 +611,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
         <div style={{ position:'sticky', bottom:'1.25rem', display:'flex', justifyContent:'center', marginTop:'1rem' }}>
           <button
             style={{ padding:'0.625rem 2rem', borderRadius:24, background:'var(--c-tinta)', color:'var(--c-fondo)', fontWeight:800, fontSize:'0.88rem', border:'none', cursor:'pointer', boxShadow:'0 4px 16px rgba(0,0,0,0.5)' }}
-            disabled={saving} onClick={handleSaveAll}>
+            disabled={saving || !!avisoFilas} onClick={handleSaveAll}>
             {saving ? '⟳ Guardando…' : `💾 Guardar ${pendingCount} cambio${pendingCount > 1 ? 's' : ''}`}
           </button>
         </div>

@@ -2,7 +2,11 @@ import { useState } from 'react'
 import type { RoleTipPoints, UserRole } from '../../shared/types/database'
 import { upsertRoleTipConfig } from '../../shared/api/admin'
 import { ROLE_LABELS } from '../../shared/constants'
-import { alEscribir, esIlegible, valorInput } from '../tips/validarTurno'
+import { alEscribir, esIlegible, valorInput } from '../../shared/cuadrosNumericos'
+
+// Tope del cuadro (max={MAX_PUNTOS}). El navegador no lo hace cumplir fuera de un <form>: «1e3» se leía 1000 y se guardaba. R35.
+const MAX_PUNTOS = 50
+const puntosValen = (n: number) => Number.isInteger(n) && n >= 0 && n <= MAX_PUNTOS
 
 // Roles que participan en el pool de propinas
 const TIP_ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
@@ -35,9 +39,10 @@ export default function RolePointsConfig({ rolePoints, onRefresh }: Props) {
   // Puntos ilegibles («5-», «0-450»: el cuadro da '' y validity.badInput), decimales («.5», «2.5») o negativos →
   // aviso que nombra el rol y no se guarda nada. Antes `parseInt(x) || 0` guardaba 0 o truncaba (2.5 → 2) sin aviso.
   // Vacío sigue siendo 0. Solo cuentan los roles que reciben propina (en los otros el cuadro está apagado). R29–R31, R33.
-  const rolMalo = TIP_ROLES.find(r => getRcv(r) && !(Number.isInteger(getPts(r)) && getPts(r) >= 0))
+  // Más de 50 («1e3», «60») → mismo aviso (R35).
+  const rolMalo = TIP_ROLES.find(r => getRcv(r) && !puntosValen(getPts(r)))
   const aviso = rolMalo
-    ? `«Puntos / hora · ${ROLE_LABELS[rolMalo]}»: los puntos van en números enteros de 0 en adelante (por ejemplo 10). Corregilo o borralo para dejarlo en 0.`
+    ? `«Puntos / hora · ${ROLE_LABELS[rolMalo]}»: los puntos van en números enteros de 0 a ${MAX_PUNTOS} (por ejemplo 10). Corregilo o borralo para dejarlo en 0.`
     : null
 
   const handleSave = async () => {
@@ -97,7 +102,7 @@ export default function RolePointsConfig({ rolePoints, onRefresh }: Props) {
                     type="number"
                     key={rcv ? 'pts' : 'pts-apagado'}
                     min="0"
-                    max="50"
+                    max={MAX_PUNTOS}
                     step="1"
                     aria-label={`Puntos / hora: ${ROLE_LABELS[role]}`}
                     value={valorInput(getPts(role))}
@@ -118,7 +123,7 @@ export default function RolePointsConfig({ rolePoints, onRefresh }: Props) {
                         setEditingRcv(prev => ({ ...prev, [role]: recibe }))
                         // Al apagar el cuadro, lo inválido (ilegible, decimal, negativo) se descarta (vuelven los puntos guardados): si no, bloquearía sin verse.
                         if (!recibe) setEditingPts(prev => {
-                          if (!(role in prev) || (Number.isInteger(prev[role]) && prev[role] >= 0)) return prev
+                          if (!(role in prev) || puntosValen(prev[role])) return prev
                           const rest = { ...prev }; delete rest[role]; return rest
                         })
                       }}

@@ -4,6 +4,19 @@ import {
   availableMonths, allSaloneros, metaProgress, fmtMonthLabel,
 } from './ventasUtils'
 import { saveMetas } from '../../shared/api/ventas'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput, type CuadroNumero } from '../../shared/cuadrosNumericos'
+
+// Un cuadro ilegible («0-450», «5-») queda NaN; vacío sigue siendo 0, como antes. R35.
+const leerMeta = (el: HTMLInputElement): number => { const v = leerCuadro(el); return v === '' ? 0 : v }
+
+const GLOBALES: [keyof Meta['global'], string, number, string][] = [
+  ['promPax',    'Prom/PAX (₡)',    1000, '₡ '],
+  ['bebPax',     'Beb/PAX',         0.1,  ''],
+  ['ratioCB',    'Ratio C/B (₡)',   0.1,  ''],
+  ['ticketItem', 'Ticket/ítem (₡)', 500,  '₡ '],
+  ['ventas',     'Ventas/día (₡)',  50000,'₡ '],
+]
+const ETIQUETA_SAL: Record<keyof Meta['global'], string> = { promPax: 'Prom/PAX', bebPax: 'Beb/PAX', ratioCB: 'Ratio C/B', ticketItem: 'Ticket/ítem', ventas: 'Ventas/día' }
 
 interface Props {
   dias:  DiasMap
@@ -18,7 +31,22 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
   const [saving, setSaving] = useState(false)
   const [local, setLocal] = useState<Meta>(() => JSON.parse(JSON.stringify(metas)))
 
+  // Solo se revisan los cuadros que cambiaron (lo guardado de antes no traba): ilegible, negativo o margen > 100 → aviso
+  // que nombra el cuadro y no se guarda nada (antes `Number('')` guardaba 0 con texto ilegible a la vista).
+  const cambiados: CuadroNumero[] = [
+    ...months.slice(0, 12).flatMap(ym => [
+      ...(local.restaurante?.[ym] !== metas.restaurante?.[ym] ? [{ nombre: `Meta restaurante · ${fmtMonthLabel(ym)}`, valor: local.restaurante?.[ym], vacioVale: true }] : []),
+      ...(local.margen?.[ym] !== metas.margen?.[ym] ? [{ nombre: `% Margen bruto · ${fmtMonthLabel(ym)}`, valor: local.margen?.[ym], max: 100, vacioVale: true }] : []),
+    ]),
+    ...GLOBALES.filter(([k]) => local.global?.[k] !== metas.global?.[k]).map(([k, label]) => ({ nombre: label, valor: local.global?.[k], vacioVale: true })),
+    ...sals.flatMap(sal => (Object.keys(ETIQUETA_SAL) as (keyof Meta['global'])[])
+      .filter(k => local.salMetas?.[sal]?.[k] !== metas.salMetas?.[sal]?.[k])
+      .map(k => ({ nombre: `${ETIQUETA_SAL[k]} · ${sal}`, valor: local.salMetas?.[sal]?.[k], vacioVale: true }))),
+  ]
+  const aviso = errorDeNumeros(cambiados)
+
   const handleSave = async () => {
+    if (aviso) return
     setSaving(true)
     try {
       await saveMetas(local)
@@ -49,10 +77,11 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
   return (
     <div className="vt-section">
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-        <button className="tips-btn-teal" onClick={handleSave} disabled={saving}>
+        <button className="tips-btn-teal" onClick={handleSave} disabled={saving || !!aviso}>
           {saving ? 'Guardando…' : '✓ Guardar metas'}
         </button>
       </div>
+      {aviso && <p className="field-error" role="alert" style={{ marginBottom: '1rem' }}>{aviso}</p>}
 
       {/* 3.5.2 (SPEC §12.2): el seguimiento de la meta del mes (vendido, ritmo, proyección, falta para la meta y
           necesario por día) pasó a «Resumen» → «Meta de {mes}», con la proyección ponderada por día de semana. */}
@@ -72,8 +101,9 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
               <div className="cd-monto-wrap">
                 <span className="cd-prefix">₡</span>
                 <input type="number" className="cd-monto-input"
-                  value={local.restaurante?.[ym] ?? ''}
-                  onChange={e => setRestMeta(ym, Number(e.target.value))}
+                  aria-label={`Meta restaurante · ${fmtMonthLabel(ym)}`}
+                  value={valorInput(local.restaurante?.[ym] ?? '')}
+                  {...alEscribir(el => setRestMeta(ym, leerMeta(el)))}
                   min={0} step={100000} placeholder="0" />
               </div>
               {prog && (
@@ -103,8 +133,9 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
             <div className="cd-monto-wrap">
               <span className="cd-prefix">%</span>
               <input type="number" className="cd-monto-input"
-                value={local.margen?.[ym] ?? ''}
-                onChange={e => setMargen(ym, Number(e.target.value))}
+                aria-label={`% Margen bruto · ${fmtMonthLabel(ym)}`}
+                value={valorInput(local.margen?.[ym] ?? '')}
+                {...alEscribir(el => setMargen(ym, leerMeta(el)))}
                 min={0} max={100} step={0.5} placeholder="0" />
             </div>
           </div>
@@ -114,21 +145,16 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
       {/* Metas globales de performance */}
       <div className="vt-sl" style={{ marginTop: '1.5rem' }}>Metas de performance (generales)</div>
       <div className="vt-kpi-grid">
-        {([
-          ['promPax',    'Prom/PAX (₡)',    1000, '₡ '],
-          ['bebPax',     'Beb/PAX',         0.1,  ''],
-          ['ratioCB',    'Ratio C/B (₡)',   0.1,  ''],
-          ['ticketItem', 'Ticket/ítem (₡)', 500,  '₡ '],
-          ['ventas',     'Ventas/día (₡)',  50000,'₡ '],
-        ] as [keyof Meta['global'], string, number, string][]).map(([key, label, step, prefix]) => (
+        {GLOBALES.map(([key, label, step, prefix]) => (
           <div key={key} className="vt-kpi">
             <div className="vt-kpi-label">{label}</div>
             <div className="cd-monto-wrap">
               {prefix && <span className="cd-prefix">{prefix}</span>}
               <input type="number" className="cd-monto-input"
                 style={{ paddingLeft: prefix ? '1.75rem' : '0.6rem' }}
-                value={local.global?.[key] ?? ''}
-                onChange={e => setGlobal(key, Number(e.target.value))}
+                aria-label={label}
+                value={valorInput(local.global?.[key] ?? '')}
+                {...alEscribir(el => setGlobal(key, leerMeta(el)))}
                 min={0} step={step} />
             </div>
           </div>
@@ -160,8 +186,9 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
                       {(['promPax','bebPax','ratioCB','ticketItem','ventas'] as const).map(key => (
                         <td key={key} className="r">
                           <input type="number" className="vt-meta-input-sm"
-                            value={sm[key] ?? ''}
-                            onChange={e => setSalMeta(sal, key, Number(e.target.value))}
+                            aria-label={`${ETIQUETA_SAL[key]} · ${sal}`}
+                            value={valorInput(sm[key] ?? '')}
+                            {...alEscribir(el => setSalMeta(sal, key, leerMeta(el)))}
                             placeholder={String(local.global?.[key] ?? '')} />
                         </td>
                       ))}

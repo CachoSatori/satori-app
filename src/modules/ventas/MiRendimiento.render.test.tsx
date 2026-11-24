@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { addDays } from './miRendimientoUtils'
@@ -53,42 +53,57 @@ function pinfo(tipo: string): ProductInfo {
   return { tipo, clasificacion:'', subclasificacion:'', multiplicador:1, costo_unitario:0 }
 }
 
-const today = todayCR()
-const d0 = today
-const d1 = addDays(today, -2)
-const d2 = addDays(today, -9)
+// Reloj fijo (R: Gate rojo del 24-nov). Antes las fixtures salían de la fecha REAL y la prueba caía cada martes:
+// «esta semana» llega hasta ayer, así que el martes es solo el lunes, y la fixture (hoy, hoy−2, hoy−9) no tenía
+// turnos ni ese lunes ni el lunes anterior → una sola tabla de «Mi evolución». Ahora todo el archivo corre con el
+// reloj fijado de NOCHE en CR (23:30 CR = 05:30 UTC del día siguiente) en varias fechas, y la fixture trabaja AYER,
+// que siempre cae dentro de «esta semana» y «este mes» a la fecha (el motor de Ventas corta en ayer).
+const RELOJES = [
+  { hoy: '2026-11-24', iso: '2026-11-25T05:30:00Z', caso: 'martes (el que cayó)' },
+  { hoy: '2026-11-30', iso: '2026-12-01T05:30:00Z', caso: 'lunes, fin de mes' },
+  { hoy: '2026-12-31', iso: '2027-01-01T05:30:00Z', caso: '31-dic de noche (en UTC ya es 1-ene)' },
+  { hoy: '2027-01-01', iso: '2027-01-02T05:30:00Z', caso: '1-ene' },
+] as const
 
-const DIAS: DiasMap = {
-  [d0]: dia({
-    ANA:  sal({ pax:10, total:100000, com:60000,  beb:20000, iCom:30, iBeb:10, prods:[['Sushi Roll',5,50000],['Cerveza',10,20000]] }),
-    BETO: sal({ pax:8,  total:60000,  com:40000,  beb:15000, iCom:20, iBeb:8,  prods:[['Sushi Roll',3,30000]] }),
-  }),
-  [d1]: dia({
-    ANA:  sal({ pax:20, total:200000, com:120000, beb:40000, iCom:60, iBeb:20, prods:[['Sushi Roll',8,80000]] }),
-  }),
-  // Día null-safe: salonero sin pax/prods (campos faltantes → NULL desde base vieja)
-  [d2]: dia({ ANA: sal({ total:50000 }) }),
+function armar(today: string) {
+  const d0 = today
+  const d1 = addDays(today, -1)   // ayer: siempre dentro de la semana y el mes a la fecha
+  const d2 = addDays(today, -9)
+  const DIAS: DiasMap = {
+    [d0]: dia({
+      ANA:  sal({ pax:10, total:100000, com:60000,  beb:20000, iCom:30, iBeb:10, prods:[['Sushi Roll',5,50000],['Cerveza',10,20000]] }),
+      BETO: sal({ pax:8,  total:60000,  com:40000,  beb:15000, iCom:20, iBeb:8,  prods:[['Sushi Roll',3,30000]] }),
+    }),
+    [d1]: dia({
+      ANA:  sal({ pax:20, total:200000, com:120000, beb:40000, iCom:60, iBeb:20, prods:[['Sushi Roll',8,80000]] }),
+    }),
+    // Día null-safe: salonero sin pax/prods (campos faltantes → NULL desde base vieja)
+    [d2]: dia({ ANA: sal({ total:50000 }) }),
+  }
+  const COMPS: Comp[] = [
+    { id:'c1', nombre:'Reto Sushi', tipo:'semanal', inicio:d2, fin:d0, premio:'Cena', prods:[{ name:'Sushi Roll', pts:2 }], parts:['ANA','BETO'] },
+  ]
+  // Asistencia: propina COBRADA (payout, take-home) + propina electrónica GENERADA (tip_amount_*).
+  // Fila mía con USD (×TC), fila mía null-safe (tip_amount NULL) y fila de otro empleado (benchmark equipo).
+  const ATT: AttendanceRow[] = [
+    { session_date:d0, shift_type:'PM', employee_id:'e1', hours_worked:8, payout_crc:15000, points:10, tip_amount_crc:8000, tip_amount_usd:5,    exchange_rate:520 },
+    { session_date:d1, shift_type:'PM', employee_id:'e1', hours_worked:6, payout_crc:null,  points:8,  tip_amount_crc:null, tip_amount_usd:null, exchange_rate:520 },
+    { session_date:d0, shift_type:'PM', employee_id:'e2', hours_worked:8, payout_crc:12000, points:10, tip_amount_crc:6000, tip_amount_usd:0,    exchange_rate:520 },
+  ]
+  return { DIAS, COMPS, ATT }
 }
+let F = armar('2026-11-24')
+
 const PM: ProductMap = { 'Sushi Roll': pinfo('comida'), 'Cerveza': pinfo('bebida') }
 const METAS: Meta = { restaurante:{}, margen:{}, global:{ promPax:12000, bebPax:1.0, ratioCB:3.0, ticketItem:6000, ventas:150000 }, salMetas:{} }
-const COMPS: Comp[] = [
-  { id:'c1', nombre:'Reto Sushi', tipo:'semanal', inicio:d2, fin:d0, premio:'Cena', prods:[{ name:'Sushi Roll', pts:2 }], parts:['ANA','BETO'] },
-]
 const EMP = { id:'e1', full_name:'ANA', role:'salonero' } as unknown as Employee
-// Asistencia: propina COBRADA (payout, take-home) + propina electrónica GENERADA (tip_amount_*).
-// Fila mía con USD (×TC), fila mía null-safe (tip_amount NULL) y fila de otro empleado (benchmark equipo).
-const ATT: AttendanceRow[] = [
-  { session_date:d0, shift_type:'PM', employee_id:'e1', hours_worked:8, payout_crc:15000, points:10, tip_amount_crc:8000, tip_amount_usd:5,    exchange_rate:520 },
-  { session_date:d1, shift_type:'PM', employee_id:'e1', hours_worked:6, payout_crc:null,  points:8,  tip_amount_crc:null, tip_amount_usd:null, exchange_rate:520 },
-  { session_date:d0, shift_type:'PM', employee_id:'e2', hours_worked:8, payout_crc:12000, points:10, tip_amount_crc:6000, tip_amount_usd:0,    exchange_rate:520 },
-]
 
 function renderHub(props?: Partial<React.ComponentProps<typeof MiRendimiento>>) {
   return render(
     <MemoryRouter initialEntries={['/mi-rendimiento']}>
       <MiRendimiento
-        dias={DIAS} pm={PM} metas={METAS} comps={COMPS}
-        employee={EMP} attendance={ATT} noLink={false}
+        dias={F.DIAS} pm={PM} metas={METAS} comps={F.COMPS}
+        employee={EMP} attendance={F.ATT} noLink={false}
         {...props}
       />
     </MemoryRouter>,
@@ -98,183 +113,193 @@ function renderHub(props?: Partial<React.ComponentProps<typeof MiRendimiento>>) 
 const tabsOf = (c: HTMLElement) => Array.from(c.querySelectorAll('.cd-nav-tab')) as HTMLElement[]
 const TAB = { evolucion: 0, resumen: 1, dia: 2, productos: 3, semana: 4, propinas: 5, competencias: 6 } as const
 
-beforeEach(() => { _vaciarCacheEquipo(); H.llamadas = []; H.equipo = EQUIPO_OK; H.comp = COMP_OK })
+describe.each(RELOJES)('reloj fijo $hoy 23:30 CR · $caso', ({ hoy, iso }) => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(iso))
+    expect(todayCR()).toBe(hoy)   // el reloj quedó en la fecha CR que se quiere probar
+    F = armar(todayCR())
+  })
+  afterEach(() => { vi.useRealTimers() })
 
-describe('MiRendimiento · render (salonero con match)', () => {
-  beforeEach(() => { H.profile = { id:'u1', role:'salonero', full_name:'ANA' } })
+  beforeEach(() => { _vaciarCacheEquipo(); H.llamadas = []; H.equipo = EQUIPO_OK; H.comp = COMP_OK })
 
-  it('monta el hub, arranca en «Mi evolución» y muestra 7 pestañas', async () => {
-    const { container, getAllByText, findByText } = renderHub()
-    expect(getAllByText(/Mi Rendimiento/).length).toBeGreaterThan(0)
-    expect(tabsOf(container)).toHaveLength(7)
-    expect(tabsOf(container)[TAB.evolucion].className).toContain('active')
-    expect(await findByText('Esta semana vs la semana pasada')).toBeTruthy()
-    expect(await findByText('Este mes vs el mes pasado')).toBeTruthy()
-    expect(await findByText('Últimas 12 semanas')).toBeTruthy()
+  describe('MiRendimiento · render (salonero con match)', () => {
+    beforeEach(() => { H.profile = { id:'u1', role:'salonero', full_name:'ANA' } })
+
+    it('monta el hub, arranca en «Mi evolución» y muestra 7 pestañas', async () => {
+      const { container, getAllByText, findByText } = renderHub()
+      expect(getAllByText(/Mi Rendimiento/).length).toBeGreaterThan(0)
+      expect(tabsOf(container)).toHaveLength(7)
+      expect(tabsOf(container)[TAB.evolucion].className).toContain('active')
+      expect(await findByText('Esta semana vs la semana pasada')).toBeTruthy()
+      expect(await findByText('Este mes vs el mes pasado')).toBeTruthy()
+      expect(await findByText('Últimas 12 semanas')).toBeTruthy()
+    })
+
+    it('Mi evolución: misma semana/mes del año pasado (−364 días) y «sin datos del año pasado» si no trabajó', async () => {
+      const { findAllByTestId, findAllByText } = renderHub()
+      const anio = await findAllByTestId('evo-anio')
+      expect(anio[0].textContent).toMatch(/Misma semana del año pasado/)
+      expect(anio[1].textContent).toMatch(/Mismo mes del año pasado/)
+      expect(anio[0].textContent).toMatch(/sin datos del año pasado/)   // la fixture no tiene ventas de hace un año
+      expect((await findAllByText('Hace un año')).length).toBe(2)
+    })
+
+    it('Mi evolución: proporciones del local, ahora y el año pasado (siempre, sin plata total ni posición)', async () => {
+      const { findAllByTestId } = renderHub()
+      const local = await findAllByTestId('evo-local')
+      expect(local[0].textContent).toContain('Venta por PAX')
+      expect(local[0].textContent).toContain('₡9.000')
+      expect(local[0].textContent).toContain('₡8.000')
+    })
+
+    it('Mi evolución: «Tu lugar en el equipo» con posiciones y mediana, sin nombres de otros', async () => {
+      const { findByTestId, getByTestId, queryByText } = renderHub()
+      expect((await findByTestId('evo-ranking')).textContent).toContain('2.º de 5')
+      expect(getByTestId('evo-equipo').textContent).toContain('1.º de 5')   // venta por persona
+      expect(getByTestId('evo-equipo').textContent).toContain('₡9.500')     // mediana
+      expect(queryByText('BETO')).toBeNull()
+    })
+
+    it('recorre TODAS las pestañas sin reventar (incluye fixtures null-safe)', () => {
+      const { container } = renderHub()
+      expect(() => { for (const t of tabsOf(container)) fireEvent.click(t) }).not.toThrow()
+    })
+
+    it('Resumen muestra KPIs de unidades/promedios (sin Ventas ₡)', () => {
+      const { container, getByText, queryByText } = renderHub()
+      fireEvent.click(tabsOf(container)[TAB.resumen])
+      expect(getByText('Prom/PAX')).toBeTruthy()
+      expect(getByText('Comida/PAX (uds)')).toBeTruthy()
+      expect(getByText('Bebida/PAX (uds)')).toBeTruthy()
+      expect(queryByText('Ventas')).toBeNull()   // el empleado ya no ve ventas ₡ del local
+    })
+
+    // Mig 194: el ranking y «vs general» vuelven, con lo que devuelve la base (agregados).
+    it('Resumen: ranking y «vs general» salen de la 194', async () => {
+      const { container, findByText, findAllByText } = renderHub()
+      fireEvent.click(tabsOf(container)[TAB.resumen])
+      expect(await findByText(/de 5 en ventas ·/)).toBeTruthy()
+      expect((await findAllByText(/vs general/)).length).toBeGreaterThan(0)
+    })
+
+    it('Por día: «Yo vs restaurante» con el Prom/PAX del restaurante de la 194', async () => {
+      const { container, findByText, getAllByText } = renderHub()
+      fireEvent.click(tabsOf(container)[TAB.dia])
+      expect(await findByText(/Yo vs restaurante/)).toBeTruthy()
+      expect(getAllByText('₡8.800').length).toBeGreaterThan(0)
+    })
+
+    it('Productos separa Comidas / Bebidas en unidades (sin toggle ₡/uds)', () => {
+      const { container, getByText, getAllByText, queryByText } = renderHub()
+      fireEvent.click(tabsOf(container)[TAB.productos])
+      expect(getByText('Comidas')).toBeTruthy()
+      expect(getByText('Bebidas')).toBeTruthy()
+      expect(queryByText('Ver por')).toBeNull()          // toggle removido: siempre unidades
+      expect(getAllByText(/uds/).length).toBeGreaterThan(0)
+      expect(getAllByText(/Sushi Roll/).length).toBeGreaterThan(0)
+    })
+
+    it('Propinas: ICP electrónico propio + benchmark del equipo de la 194', async () => {
+      const { container, getByText, getAllByText, findByText } = renderHub()
+      fireEvent.click(tabsOf(container)[TAB.propinas])
+      expect(getAllByText(/ICP electrónico/).length).toBeGreaterThan(0)  // no "propinas cobradas"
+      expect(getByText(/generado/)).toBeTruthy()                          // numerador = generado
+      expect(getByText(/Total cobrado/)).toBeTruthy()                     // take-home (payout) intacto
+      expect(await findByText(/Equipo \(benchmark\)/)).toBeTruthy()
+      expect(getByText('3.4%')).toBeTruthy()
+      expect(() => fireEvent.click(getByText(/Mes ant\./))).not.toThrow()
+    })
+
+    it('Competencias: mi posición y el líder CON su nombre (decisión A), sin la tabla de otros', async () => {
+      const { container, getByText, findByText, queryByText } = renderHub()
+      fireEvent.click(tabsOf(container)[TAB.competencias])
+      expect(getByText('Reto Sushi')).toBeTruthy()
+      expect(getByText('Mis puntos')).toBeTruthy()
+      expect(await findByText('de 4')).toBeTruthy()
+      expect(getByText('Persona Líder Ficticia')).toBeTruthy()
+      expect(getByText('40 pts')).toBeTruthy()
+      expect(queryByText('BETO')).toBeNull()   // la tabla del resto no aparece
+    })
+
+    it('3 personas (grupo chico): sin posición ni promedios; proporciones del local e ICP del equipo sí', async () => {
+      H.equipo = EQUIPO_CHICO
+      const { container, findAllByText, queryByText, findByText, queryByTestId } = renderHub()
+      expect(queryByTestId('evo-ranking')).toBeNull()
+      expect(queryByTestId('evo-equipo')).toBeNull()
+      fireEvent.click(tabsOf(container)[TAB.resumen])
+      expect((await findAllByText(/vs general/)).length).toBeGreaterThan(0)
+      expect(queryByText(/en ventas ·/)).toBeNull()
+      expect((await findAllByText(/al menos 4 personas/)).length).toBeGreaterThan(0)
+      fireEvent.click(tabsOf(container)[TAB.dia])
+      expect(await findByText(/Yo vs restaurante/)).toBeTruthy()
+      fireEvent.click(tabsOf(container)[TAB.propinas])
+      expect(await findByText(/Equipo \(benchmark\)/)).toBeTruthy()   // el ICP del equipo, siempre
+      expect(queryByText('2.9%')).toBeTruthy()
+    })
+
+    it('sin la 194 (función no aplicada o error): avisa y no inventa comparaciones', async () => {
+      H.equipo = null
+      const { container, findAllByText, queryAllByText } = renderHub()
+      fireEvent.click(tabsOf(container)[TAB.resumen])
+      expect((await findAllByText(/no está disponible ahora/)).length).toBeGreaterThan(0)
+      expect(queryAllByText(/vs general/)).toHaveLength(0)
+    })
   })
 
-  it('Mi evolución: misma semana/mes del año pasado (−364 días) y «sin datos del año pasado» si no trabajó', async () => {
-    const { findAllByTestId, findAllByText } = renderHub()
-    const anio = await findAllByTestId('evo-anio')
-    expect(anio[0].textContent).toMatch(/Misma semana del año pasado/)
-    expect(anio[1].textContent).toMatch(/Mismo mes del año pasado/)
-    expect(anio[0].textContent).toMatch(/sin datos del año pasado/)   // la fixture no tiene ventas de hace un año
-    expect((await findAllByText('Hace un año')).length).toBe(2)
+  describe('MiRendimiento · gerencia (manager) ve las comparaciones con el equipo', () => {
+    beforeEach(() => { H.profile = { id:'u2', role:'manager', full_name:'ANA' } })
+
+    it('Por día, Resumen, Propinas y Competencias comparan con sus propios datos (sin pedir el período a la 194)', () => {
+      const { container, getByText, getAllByText } = renderHub()
+      fireEvent.click(tabsOf(container)[TAB.resumen])
+      expect(getByText(/en ventas ·/)).toBeTruthy()
+      expect(getAllByText(/vs general/).length).toBeGreaterThan(0)
+      fireEvent.click(tabsOf(container)[TAB.dia])
+      expect(getByText(/Yo vs restaurante/)).toBeTruthy()
+      fireEvent.click(tabsOf(container)[TAB.propinas])
+      expect(getByText(/Equipo \(benchmark\)/)).toBeTruthy()
+      fireEvent.click(tabsOf(container)[TAB.competencias])
+      expect(getByText('Líder')).toBeTruthy()
+      // Solo «Mi evolución» (semana y mes a la fecha) consulta la 194; el período y el ICP no.
+      expect(H.llamadas.length).toBeGreaterThanOrEqual(1)
+      expect(H.llamadas.length).toBeLessThanOrEqual(2)
+    })
   })
 
-  it('Mi evolución: proporciones del local, ahora y el año pasado (siempre, sin plata total ni posición)', async () => {
-    const { findAllByTestId } = renderHub()
-    const local = await findAllByTestId('evo-local')
-    expect(local[0].textContent).toContain('Venta por PAX')
-    expect(local[0].textContent).toContain('₡9.000')
-    expect(local[0].textContent).toContain('₡8.000')
+  describe('MiRendimiento · «Ver como» (owner) no consulta la 194', () => {
+    beforeEach(() => { H.profile = { id:'u3', role:'owner', full_name:'Dueño' } })
+    it('no llama a la función y no muestra «Tu lugar en el equipo»', () => {
+      const { container, queryByText } = renderHub({ verComo: true })
+      fireEvent.click(tabsOf(container)[TAB.evolucion])
+      expect(queryByText(/Tu lugar en el equipo/)).toBeNull()
+      expect(H.llamadas).toHaveLength(0)
+    })
   })
 
-  it('Mi evolución: «Tu lugar en el equipo» con posiciones y mediana, sin nombres de otros', async () => {
-    const { findByTestId, getByTestId, queryByText } = renderHub()
-    expect((await findByTestId('evo-ranking')).textContent).toContain('2.º de 5')
-    expect(getByTestId('evo-equipo').textContent).toContain('1.º de 5')   // venta por persona
-    expect(getByTestId('evo-equipo').textContent).toContain('₡9.500')     // mediana
-    expect(queryByText('BETO')).toBeNull()
+  describe('MiRendimiento · rol propinas-primero (cocina, sin match de ventas)', () => {
+    beforeEach(() => { H.profile = { id:'u9', role:'cocina', full_name:'ZZZ NoMatch' } })
+
+    it('arranca en Propinas y las sub-vistas de ventas invitan a ir a propinas', () => {
+      const { container, getAllByText, getByText } = renderHub()
+      expect(getAllByText(/Total cobrado/).length).toBeGreaterThan(0)
+      expect(() => fireEvent.click(tabsOf(container)[TAB.resumen])).not.toThrow()
+      expect(getByText(/Tu rol trabaja con propinas/)).toBeTruthy()
+      expect(H.llamadas).toHaveLength(0)   // sin ventas propias no se pide nada al equipo
+    })
   })
 
-  it('recorre TODAS las pestañas sin reventar (incluye fixtures null-safe)', () => {
-    const { container } = renderHub()
-    expect(() => { for (const t of tabsOf(container)) fireEvent.click(t) }).not.toThrow()
-  })
+  describe('MiRendimiento · perfil no vinculado', () => {
+    beforeEach(() => { H.profile = { id:'u0', role:'runner', full_name:'Sin Empleado' } })
 
-  it('Resumen muestra KPIs de unidades/promedios (sin Ventas ₡)', () => {
-    const { container, getByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[TAB.resumen])
-    expect(getByText('Prom/PAX')).toBeTruthy()
-    expect(getByText('Comida/PAX (uds)')).toBeTruthy()
-    expect(getByText('Bebida/PAX (uds)')).toBeTruthy()
-    expect(queryByText('Ventas')).toBeNull()   // el empleado ya no ve ventas ₡ del local
-  })
-
-  // Mig 194: el ranking y «vs general» vuelven, con lo que devuelve la base (agregados).
-  it('Resumen: ranking y «vs general» salen de la 194', async () => {
-    const { container, findByText, findAllByText } = renderHub()
-    fireEvent.click(tabsOf(container)[TAB.resumen])
-    expect(await findByText(/de 5 en ventas ·/)).toBeTruthy()
-    expect((await findAllByText(/vs general/)).length).toBeGreaterThan(0)
-  })
-
-  it('Por día: «Yo vs restaurante» con el Prom/PAX del restaurante de la 194', async () => {
-    const { container, findByText, getAllByText } = renderHub()
-    fireEvent.click(tabsOf(container)[TAB.dia])
-    expect(await findByText(/Yo vs restaurante/)).toBeTruthy()
-    expect(getAllByText('₡8.800').length).toBeGreaterThan(0)
-  })
-
-  it('Productos separa Comidas / Bebidas en unidades (sin toggle ₡/uds)', () => {
-    const { container, getByText, getAllByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[TAB.productos])
-    expect(getByText('Comidas')).toBeTruthy()
-    expect(getByText('Bebidas')).toBeTruthy()
-    expect(queryByText('Ver por')).toBeNull()          // toggle removido: siempre unidades
-    expect(getAllByText(/uds/).length).toBeGreaterThan(0)
-    expect(getAllByText(/Sushi Roll/).length).toBeGreaterThan(0)
-  })
-
-  it('Propinas: ICP electrónico propio + benchmark del equipo de la 194', async () => {
-    const { container, getByText, getAllByText, findByText } = renderHub()
-    fireEvent.click(tabsOf(container)[TAB.propinas])
-    expect(getAllByText(/ICP electrónico/).length).toBeGreaterThan(0)  // no "propinas cobradas"
-    expect(getByText(/generado/)).toBeTruthy()                          // numerador = generado
-    expect(getByText(/Total cobrado/)).toBeTruthy()                     // take-home (payout) intacto
-    expect(await findByText(/Equipo \(benchmark\)/)).toBeTruthy()
-    expect(getByText('3.4%')).toBeTruthy()
-    expect(() => fireEvent.click(getByText(/Mes ant\./))).not.toThrow()
-  })
-
-  it('Competencias: mi posición y el líder CON su nombre (decisión A), sin la tabla de otros', async () => {
-    const { container, getByText, findByText, queryByText } = renderHub()
-    fireEvent.click(tabsOf(container)[TAB.competencias])
-    expect(getByText('Reto Sushi')).toBeTruthy()
-    expect(getByText('Mis puntos')).toBeTruthy()
-    expect(await findByText('de 4')).toBeTruthy()
-    expect(getByText('Persona Líder Ficticia')).toBeTruthy()
-    expect(getByText('40 pts')).toBeTruthy()
-    expect(queryByText('BETO')).toBeNull()   // la tabla del resto no aparece
-  })
-
-  it('3 personas (grupo chico): sin posición ni promedios; proporciones del local e ICP del equipo sí', async () => {
-    H.equipo = EQUIPO_CHICO
-    const { container, findAllByText, queryByText, findByText, queryByTestId } = renderHub()
-    expect(queryByTestId('evo-ranking')).toBeNull()
-    expect(queryByTestId('evo-equipo')).toBeNull()
-    fireEvent.click(tabsOf(container)[TAB.resumen])
-    expect((await findAllByText(/vs general/)).length).toBeGreaterThan(0)
-    expect(queryByText(/en ventas ·/)).toBeNull()
-    expect((await findAllByText(/al menos 4 personas/)).length).toBeGreaterThan(0)
-    fireEvent.click(tabsOf(container)[TAB.dia])
-    expect(await findByText(/Yo vs restaurante/)).toBeTruthy()
-    fireEvent.click(tabsOf(container)[TAB.propinas])
-    expect(await findByText(/Equipo \(benchmark\)/)).toBeTruthy()   // el ICP del equipo, siempre
-    expect(queryByText('2.9%')).toBeTruthy()
-  })
-
-  it('sin la 194 (función no aplicada o error): avisa y no inventa comparaciones', async () => {
-    H.equipo = null
-    const { container, findAllByText, queryAllByText } = renderHub()
-    fireEvent.click(tabsOf(container)[TAB.resumen])
-    expect((await findAllByText(/no está disponible ahora/)).length).toBeGreaterThan(0)
-    expect(queryAllByText(/vs general/)).toHaveLength(0)
-  })
-})
-
-describe('MiRendimiento · gerencia (manager) ve las comparaciones con el equipo', () => {
-  beforeEach(() => { H.profile = { id:'u2', role:'manager', full_name:'ANA' } })
-
-  it('Por día, Resumen, Propinas y Competencias comparan con sus propios datos (sin pedir el período a la 194)', () => {
-    const { container, getByText, getAllByText } = renderHub()
-    fireEvent.click(tabsOf(container)[TAB.resumen])
-    expect(getByText(/en ventas ·/)).toBeTruthy()
-    expect(getAllByText(/vs general/).length).toBeGreaterThan(0)
-    fireEvent.click(tabsOf(container)[TAB.dia])
-    expect(getByText(/Yo vs restaurante/)).toBeTruthy()
-    fireEvent.click(tabsOf(container)[TAB.propinas])
-    expect(getByText(/Equipo \(benchmark\)/)).toBeTruthy()
-    fireEvent.click(tabsOf(container)[TAB.competencias])
-    expect(getByText('Líder')).toBeTruthy()
-    // Solo «Mi evolución» (semana y mes a la fecha) consulta la 194; el período y el ICP no.
-    expect(H.llamadas.length).toBeGreaterThanOrEqual(1)
-    expect(H.llamadas.length).toBeLessThanOrEqual(2)
-  })
-})
-
-describe('MiRendimiento · «Ver como» (owner) no consulta la 194', () => {
-  beforeEach(() => { H.profile = { id:'u3', role:'owner', full_name:'Dueño' } })
-  it('no llama a la función y no muestra «Tu lugar en el equipo»', () => {
-    const { container, queryByText } = renderHub({ verComo: true })
-    fireEvent.click(tabsOf(container)[TAB.evolucion])
-    expect(queryByText(/Tu lugar en el equipo/)).toBeNull()
-    expect(H.llamadas).toHaveLength(0)
-  })
-})
-
-describe('MiRendimiento · rol propinas-primero (cocina, sin match de ventas)', () => {
-  beforeEach(() => { H.profile = { id:'u9', role:'cocina', full_name:'ZZZ NoMatch' } })
-
-  it('arranca en Propinas y las sub-vistas de ventas invitan a ir a propinas', () => {
-    const { container, getAllByText, getByText } = renderHub()
-    expect(getAllByText(/Total cobrado/).length).toBeGreaterThan(0)
-    expect(() => fireEvent.click(tabsOf(container)[TAB.resumen])).not.toThrow()
-    expect(getByText(/Tu rol trabaja con propinas/)).toBeTruthy()
-    expect(H.llamadas).toHaveLength(0)   // sin ventas propias no se pide nada al equipo
-  })
-})
-
-describe('MiRendimiento · perfil no vinculado', () => {
-  beforeEach(() => { H.profile = { id:'u0', role:'runner', full_name:'Sin Empleado' } })
-
-  it('sin ventas ni empleado → aviso de perfil no vinculado (no revienta)', () => {
-    const { getByText } = render(
-      <MemoryRouter>
-        <MiRendimiento dias={{}} pm={{}} metas={METAS} comps={[]} employee={null} attendance={[]} noLink={true} />
-      </MemoryRouter>,
-    )
-    expect(getByText(/Perfil no vinculado/)).toBeTruthy()
+    it('sin ventas ni empleado → aviso de perfil no vinculado (no revienta)', () => {
+      const { getByText } = render(
+        <MemoryRouter>
+          <MiRendimiento dias={{}} pm={{}} metas={METAS} comps={[]} employee={null} attendance={[]} noLink={true} />
+        </MemoryRouter>,
+      )
+      expect(getByText(/Perfil no vinculado/)).toBeTruthy()
+    })
   })
 })

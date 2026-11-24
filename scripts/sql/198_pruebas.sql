@@ -182,7 +182,7 @@ select '09 todo código de santa-teresa en las familias mixtas 1, 9, 11, 15 y 25
                     where p.local = 'santa-teresa' and p.familia in (1, 9, 11, 15, 25) and a.categoria is null)
           from public.pos_producto_ajustes where local = 'santa-teresa');
 insert into _r198 (caso, ok, detalle)
-select '93 familias mixtas 1 y 9 (24-nov): el código de la 1 borrada va a bebida y el 166 de la 9 BELIEVE a comida (si están)',
+select '93 familias mixtas 1 y 9 (24-nov): el código de la 1 borrada va a bebida y el 166 de la 9 Grupo C (mixta) a comida (si están)',
        not exists (select 1 from public.pos_productos p left join public.pos_producto_ajustes a using (local, codigo)
                     where p.local = 'santa-teresa' and ((p.codigo = '1' and p.familia = 1 and a.categoria is distinct from 'bebida')
                                                      or (p.codigo = '166' and p.familia = 9 and a.categoria is distinct from 'comida')))
@@ -191,6 +191,14 @@ select '93 familias mixtas 1 y 9 (24-nov): el código de la 1 borrada va a bebid
        (select string_agg(p.codigo || '/' || p.familia || '=' || coalesce(a.categoria, '-'), ',' order by p.codigo)
           from public.pos_productos p left join public.pos_producto_ajustes a using (local, codigo)
          where p.local = 'santa-teresa' and p.familia in (1, 9));
+insert into _r198 (caso, ok, detalle)
+select '94 giftcard, pax y dueños los fija la familia: una categoría por código no los mueve (pos_categoria_efectiva)',
+       public.pos_categoria_efectiva(12, 'giftcard', 'comida') = 'giftcard'
+       and public.pos_categoria_efectiva(19, 'pax', 'bebida') = 'pax'
+       and public.pos_categoria_efectiva(28, 'duenos', 'otros') = 'duenos'
+       and public.pos_categoria_efectiva(3, 'comida', 'bebida') = 'bebida',
+       public.pos_categoria_efectiva(12, 'giftcard', 'comida') || ',' || public.pos_categoria_efectiva(19, 'pax', 'bebida')
+         || ',' || public.pos_categoria_efectiva(28, 'duenos', 'otros');
 insert into _r198 (caso, ok, detalle)
 select '10 lo cargado por la migración no tiene autor (actualizado_por null)',
        not exists (select 1 from public.pos_producto_ajustes where actualizado_por is not null), null;

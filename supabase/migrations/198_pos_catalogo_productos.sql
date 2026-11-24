@@ -238,14 +238,14 @@ insert into public.pos_familias (local, familia, nombre, categoria, orden) value
   ('santa-teresa', 29, 'GREENSEASON',              'comida',       60),
   ('santa-teresa', 11, 'MENU AÑO NUEVO',           'comida',       70),  -- mixta, por código
   ('santa-teresa', 15, 'EVENTOS TERRAZA',          'comida',       80),  -- mixta, por código
-  ('santa-teresa',  9, 'BELIEVE',                  'comida',       90),  -- mixta, por código
+  ('santa-teresa',  9, 'Grupo C (mixta)',          'comida',       90),  -- mixta, por código · rótulo neutro (nombre real: Ajustes → Catálogo)
   ('santa-teresa',  5, 'BEBIDAS',                  'bebida',       10),
   ('santa-teresa', 18, 'Y HAPPY HOUR',             'bebida',       20),
   ('santa-teresa', 25, 'PROMOCIONES',              'bebida',       30),  -- mixta, por código (mismo nombre que la 14)
   ('santa-teresa',  1, '(clasificación borrada)',  'bebida',       40),  -- no existe en el PoS · por código
   ('santa-teresa', 22, 'EXTRAS',                   'extras',       10),
-  ('santa-teresa',  7, 'ACADEMY SURFCAMP',         'otros',        10),  -- por código
-  ('santa-teresa',  8, 'LAPOINT SURFCAMP',         'otros',        20),  -- por código
+  ('santa-teresa',  7, 'Grupo A (surf)',           'otros',        10),  -- por código · rótulo neutro
+  ('santa-teresa',  8, 'Grupo B (surf)',           'otros',        20),  -- por código · rótulo neutro
   ('santa-teresa', 14, 'PROMOCIONES',              'otros',        30),  -- por código
   ('santa-teresa', 21, 'TSHIRTS',                  'merch',        10),
   ('santa-teresa', 23, 'T-GORRAS',                 'merch',        20),
@@ -266,7 +266,7 @@ insert into public.pos_familias (local, familia, nombre, categoria, orden) value
 --     de product_map que solo difieren en mayúsculas: gana el mayor.
 --   · categoría = SOLO los códigos de las familias mixtas de santa-teresa: los 82 de 11, 15 y 25 (D-3, lista
 --     confirmada por el dueño el 24-nov), comida o bebida uno por uno y el 192 (ítem por comensal del menú cerrado)
---     a `menu_especial`; los 2 de la 9 BELIEVE (comida) y el 1 de la 1 borrada (bebida), los únicos que hay en
+--     a `menu_especial`; los 2 de la 9 Grupo C (mixta) (comida) y el 1 de la 1 borrada (bebida), los únicos que hay en
 --     staging y en prod (lectura del 24-nov). Solo se aplica si el código sigue en esas familias.
 -- `product_map.subclasificacion` NO se hereda: la subcategoría viene del PoS (3.1c).
 with pm as (

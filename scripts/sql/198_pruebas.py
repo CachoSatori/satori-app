@@ -59,6 +59,7 @@ MUTACIONES: dict[str, tuple] = {
                                       "  constraint pos_familias_no_venta_chk check (true)\n", 0)], {'14'}, set()),
     'categoria_fuera_de_mixtas': ([(" and p.familia in (1, 9, 11, 15, 25)\n", "\n", 0)], {'08'}, set()),
     'mixtas_sin_1_y_9': ([(" and p.familia in (1, 9, 11, 15, 25)\n", " and p.familia in (11, 15, 25)\n", 0)], {'09', '93'}, set()),
+    'sin_regla_fijas': ([("    when p_de_familia in ('giftcard', 'pax', 'duenos') then p_de_familia\n", "", 0)], {'94'}, set()),
     'cero_cuenta_todas': ([("filter (where l.monto_cts = 0)", "filter (where true)", 0)], {'34'}, set()),
     'manager_lee_cualquier_local': ([(MGR, "  if false then", 1)], {'79'}, set()),
     'manager_catalogo_cualquier_local': ([(MGR, "  if false then", 2)], {'80'}, set()),

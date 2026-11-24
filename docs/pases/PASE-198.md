@@ -29,7 +29,7 @@
   leídas por el dueño el 24-nov 15:43 CR; la 1 no existe más en el PoS y va como «(clasificación borrada)»); «rinde»
   heredado de `product_map.multiplicador ≥ 2` (por nombre, sin mayúsculas ni espacios); la categoría de los **85
   códigos** de las familias mixtas: los 82 de 11, 15 y 25 (lista confirmada por el dueño el 24-nov; el 192 a
-  `menu_especial`), los 2 de la 9 BELIEVE (comida) y el 1 de la 1 (bebida).
+  `menu_especial`), los 2 de la 9 Grupo C (mixta) (comida) y el 1 de la 1 (bebida).
 
 **No pasa:** nada en `product_map`, la 067, la 190, la 193 ni la 194; ninguna policy nueva sobre `pos_ndf_*`; ninguna
 Edge (la `ingest-ndf` y el agente no se tocan); ningún sagrado. **Ninguna pantalla cambia**: la 3.1b y la 3.2 son las
@@ -42,25 +42,29 @@ El dueño leyó la tabla de familias del PoS (`FAC_Clasificaciones`) el **24-nov
 | Familia | Nombre en la 198 | Categoría | Estado |
 |---|---|---|---|
 | 1 | `(clasificación borrada)` | bebida (mixta, por código: el único código, a bebida) | **No existe en el PoS**: códigos de una clasificación borrada |
-| 9 | `BELIEVE` | comida (mixta, por código; A-2: un código nuevo toma la mayoría) | listo |
+| 9 | `Grupo C (mixta)` (rótulo neutro) | comida (mixta, por código; A-2: un código nuevo toma la mayoría) | listo |
 | 6 | `PERSONAL` | `personal` (consumo del personal, aparte, fuera de la venta neta) | listo |
 | 10 | `REMERAS` | merch | listo (sin ventas hoy) |
 | 14 | `PROMOCIONES` | `otros` (por código; sin ventas hoy) | listo |
 | 17 | `X CORTESIAS` | `cortesia` = **regalías** (no es venta; la fija la familia) | listo |
 | 18 | `Y HAPPY HOUR` | bebida | listo (sin ventas hoy) |
 | 20 | `Ingredientes` | `ingredientes` (sin ventas) | listo |
-| 7, 8 | `ACADEMY SURFCAMP` / `LAPOINT SURFCAMP` | `otros` (por código; sin ventas hoy) | listo |
+| 7, 8 | `Grupo A (surf)` / `Grupo B (surf)` (rótulos neutros) | `otros` (por código; sin ventas hoy) | listo |
 | 11 | `MENU AÑO NUEVO` | comida (mixta) | listo |
 | 15 | `EVENTOS TERRAZA` | comida (mixta) | listo |
 | 25 | `PROMOCIONES` (igual que la 14, así está en el PoS) | bebida (mixta) | listo |
 | 27 | `T-XABANICOS` | merch | listo |
 
-Los nombres van tal cual la lectura (mayúsculas y tildes como en el PoS; ninguna prueba pide otro formato). La 19 es «A PAX» y la 20 «Ingredientes». Con eso la prueba del gate pasa a verde: **la firma va sobre el SHA nuevo**.
+**Rótulos neutros (decisión del dueño, 24-nov ~16:30 CR, hallazgo I1 del verificador):** las familias 7, 8 y 9
+llevan nombres de terceros; el repo es público (`CLAUDE.md`), así que la 198 las carga como «Grupo A (surf)», «Grupo
+B (surf)» y «Grupo C (mixta)». El nombre real lo carga el dueño desde la app (Ajustes → Catálogo, 3.1b). Ojo: hoy
+`pos_familias` no tiene puerta de escritura desde la app; la 3.1b necesita una (o una carga con firma), a decidir en
+su spec. Los demás nombres van tal cual la lectura (mayúsculas y tildes como en el PoS; ninguna prueba pide otro formato). La 19 es «A PAX» y la 20 «Ingredientes». Con eso la prueba del gate pasa a verde: **la firma va sobre el SHA nuevo**.
 
 ## 3. Pruebas (antes de aplicar, R15)
 - **Postgres 16 vacío (local, 24-nov)**, con `scripts/sql/193_base_local.sql` + la 190 + `198_preludio_local.sql`,
   transacción descartada: `sudo -u postgres python3 scripts/sql/198_pruebas.py --psql dbname=<base> --local --mutar todas`
-  → **93/93 casos OK y 22/22 mutaciones muerden (24-nov tarde, tras la renumeración y las familias)** (lista y casos que caen en el PR). Con las tres defensas de la
+  → **94/94 casos OK y 23/23 mutaciones muerden (24-nov tarde, tras la renumeración, las familias y M2)** (lista y casos que caen en el PR). Con las tres defensas de la
   categoría rotas a la vez, el reparto por categoría se rompe pero la neta contra la 190 **no cae**.
 - **Staging (`hwiatgic…`): NO PROBADO.** El 24-nov el conector MCP pidió confirmación para la batería (lleva `drop` y
   `delete` dentro del `begin … rollback`) y nadie respondió a tiempo; por la regla 14 no se reescribió el SQL para
@@ -82,6 +86,10 @@ Los nombres van tal cual la lectura (mayúsculas y tildes como en el PoS; ningun
   códigos · **0 líneas con fracción de céntimo** (la 198 redondea por línea y la 190 por factura: con fracciones
   podrían separarse en un céntimo) · 0 disparadores en `pos_ndf_ticket_lines` · `to_regclass('public.pos_productos')`
   null. Después de la corrida, confirmar otra vez que es null.
+- **Medido en staging por el verificador (24-nov tarde, `begin … rollback`):** la tabla de líneas queda bloqueada
+  **≈4,4 s** (disparador creado a 0,47 s, fin de la migración a 4,9 s). La ingesta espera, no falla. **Decisión del
+  dueño (24-nov ~16:30 CR):** la 198 se aplica (merge → Branching) **después de las 23:30 CR**, fuera del servicio.
+  Mover el `create trigger` al final queda opcional.
 - **Si `disparador_hasta_fin_de_la_migracion_ms` pasa de unos segundos**: se mueve el `create trigger` al final del
   archivo (el lock dura milisegundos) y se suma, después del disparador, un `pos_catalogo_absorber` de las facturas
   entradas durante la migración. Es un cambio de la 198: nuevo SHA, se vuelve a correr la batería.
@@ -140,7 +148,7 @@ van solo los códigos (SPEC §2.5).
 | 2026-11-24 | dueño | Decisiones D-1…D-8 y A-1…A-5 (SPEC §9.3, dos rondas) |
 | 2026-11-24 | agente | PR 3.1a: Postgres local 92/92 y 21/21 mutaciones; staging NO PROBADO (§3); prod sin leer (§4) |
 | 2026-11-24 15:43 | dueño | Nombres de las familias leídos en la PC del PoS (§2); decisiones de categoría ~15:50 |
-| 2026-11-24 tarde | agente | Renumerada 196 → 198; familias 1, 9 (mixtas), 6, 10, 14, 17, 18, 20 y 7/8 cargadas; Postgres local 93/93 y 22/22 mutaciones; staging solo lecturas (códigos de 1, 9 y 27 = prod); nombres de 7, 8, 11, 15, 25 y 27 cargados después (§2) |
+| 2026-11-24 tarde | agente | Renumerada 196 → 198; familias 1, 9 (mixtas), 6, 10, 14, 17, 18, 20 y 7/8 cargadas; Postgres local 93/93 y 22/22 mutaciones (tras I1 y M2: 94/94 y 23/23); staging solo lecturas (códigos de 1, 9 y 27 = prod); nombres de 7, 8, 11, 15, 25 y 27 cargados después (§2) |
 | | sesión del dueño | Batería en staging con `--medir` (§3) y lecturas de prod (§4) |
 | | verificador | Revisión independiente: esquema, permisos y que la categoría no toque la neta |
 | | dueño | **Firma D-9** sobre el SHA exacto |

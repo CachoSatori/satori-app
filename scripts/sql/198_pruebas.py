@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Arma y corre scripts/sql/196_pruebas.sql (catálogo por código y pos_ventas_productos): llena los marcadores con el
-cuerpo de la 196 y el de su vuelta atrás, todo en una transacción que termina en ROLLBACK.
+Arma y corre scripts/sql/198_pruebas.sql (catálogo por código y pos_ventas_productos): llena los marcadores con el
+cuerpo de la 198 y el de su vuelta atrás, todo en una transacción que termina en ROLLBACK.
 
-  python3 scripts/sql/196_pruebas.py --armar [--medir] [--local] [--mutar X]   # imprime el SQL armado (MCP / editor)
-  python3 scripts/sql/196_pruebas.py --psql "<conexión>" [--local] [--mutar todas | X]   # corre con psql y dice si muerde
+  python3 scripts/sql/198_pruebas.py --armar [--medir] [--local] [--mutar X]   # imprime el SQL armado (MCP / editor)
+  python3 scripts/sql/198_pruebas.py --psql "<conexión>" [--local] [--mutar todas | X]   # corre con psql y dice si muerde
 
---local  : suma scripts/sql/196_preludio_local.sql (Postgres vacío con 193_base_local.sql + la 190).
+--local  : suma scripts/sql/198_preludio_local.sql (Postgres vacío con 193_base_local.sql + la 190).
 --compacto: sin líneas de comentario ni sangría (para pegar en el conector MCP, que tiene tope de tamaño).
---medir  : suma marcas de tiempo dentro de la 196 (crear el disparador, carga inicial, herencia, y del disparador al
+--medir  : suma marcas de tiempo dentro de la 198 (crear el disparador, carga inicial, herencia, y del disparador al
            final de la migración = lo que la tabla de líneas queda bloqueada para la ingesta dentro de la transacción).
 Corre en staging (ref hwiatgic…, con el conector MCP: se arma con --armar --medir y se pega) o en un Postgres local.
 Nunca contra PROD (ref yiczgdti…): la batería crea usuarios y facturas ficticias dentro de la transacción descartada.
@@ -18,10 +18,10 @@ import re, subprocess, sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
-MIG = RAIZ / 'supabase/migrations/196_pos_catalogo_productos.sql'
-ROLLBACK = RAIZ / 'scripts/sql/196_rollback.sql'
-PRELUDIO = RAIZ / 'scripts/sql/196_preludio_local.sql'
-BATERIA = RAIZ / 'scripts/sql/196_pruebas.sql'
+MIG = RAIZ / 'supabase/migrations/198_pos_catalogo_productos.sql'
+ROLLBACK = RAIZ / 'scripts/sql/198_rollback.sql'
+PRELUDIO = RAIZ / 'scripts/sql/198_preludio_local.sql'
+BATERIA = RAIZ / 'scripts/sql/198_pruebas.sql'
 
 MGR = "  if v_rol = 'manager' and not public.puede_ver_local(p_local) then"
 GERENCIA = "  if v_rol is null or v_rol not in ('owner', 'manager', 'contador') then"
@@ -34,7 +34,7 @@ POLITICA_PRODUCTOS = ("create policy pos_productos_leer on public.pos_productos\
                       "  using ((select public.get_my_role()) in ('owner', 'contador')\n"
                       "         or ((select public.get_my_role()) = 'manager' and public.puede_ver_local(local)));")
 
-# nombre → ([(texto de la 196, reemplazo, n.º de aparición o 0 = todas)], casos que tienen que caer, casos que NO pueden caer)
+# nombre → ([(texto de la 198, reemplazo, n.º de aparición o 0 = todas)], casos que tienen que caer, casos que NO pueden caer)
 MUTACIONES: dict[str, tuple] = {
     'fam17_es_venta': ([("filter (where l.familia is null or l.familia not in (6, 17, 20)), 0)",
                          "filter (where l.familia is null or l.familia not in (6, 20)), 0)", 0)], {'26', '27'}, set()),
@@ -69,19 +69,19 @@ MUTACIONES: dict[str, tuple] = {
                              "    nombre         = excluded.nombre,\n    familia        = excluded.familia,", 0)], {'22'}, set()),
     'politica_abierta': ([(POLITICA_PRODUCTOS, "create policy pos_productos_leer on public.pos_productos\n  for select to authenticated\n  using (true);", 0)],
                          {'78', '82', '83'}, set()),
-    'disparador_sin_captura': ([("  exception when others then\n    raise warning '196 pos_catalogo_registrar: % (%)', sqlerrm, sqlstate;\n", "", 0)],
+    'disparador_sin_captura': ([("  exception when others then\n    raise warning '198 pos_catalogo_registrar: % (%)', sqlerrm, sqlstate;\n", "", 0)],
                                {'89'}, set()),
     'internas_abiertas': ([("revoke all on function public.pos_categoria_efectiva(integer, text, text) from public, anon, authenticated;",
                             "grant execute on function public.pos_categoria_efectiva(integer, text, text) to authenticated;", 0)], {'86', '87'}, set()),
 }
 
-# --medir: (ancla en la 196, qué va antes, qué va después) — marcas de tiempo, no cambian nada de la migración.
+# --medir: (ancla en la 198, qué va antes, qué va después) — marcas de tiempo, no cambian nada de la migración.
 def _ms(k: str, desde: str) -> str:
-    return (f"insert into _m196 values ('{k}', round(extract(epoch from clock_timestamp() - "
-            f"current_setting('p196.{desde}')::timestamptz) * 1000)::text);")
+    return (f"insert into _m198 values ('{k}', round(extract(epoch from clock_timestamp() - "
+            f"current_setting('p198.{desde}')::timestamptz) * 1000)::text);")
 
 def _marca(k: str) -> str:
-    return f"select set_config('p196.{k}', clock_timestamp()::text, true);"
+    return f"select set_config('p198.{k}', clock_timestamp()::text, true);"
 
 MEDIR = [
     ("create trigger trg_pos_catalogo_registrar\n", _marca('t_trg'), None),
@@ -117,7 +117,7 @@ def armar(mutar: str | None = None, medir: bool = False, local: bool = False) ->
             cuerpo = cuerpo.replace(ancla, (antes + '\n' if antes else '') + ancla + (despues + '\n' if despues else ''))
         cuerpo += '\n' + _ms('disparador_hasta_fin_de_la_migracion_ms', 't_trg') + '\n'
     sql = BATERIA.read_text()
-    for marcador, texto in (('-- @@196@@\n', cuerpo + '\n'), ('-- @@196_rollback@@\n', ROLLBACK.read_text() + '\n'),
+    for marcador, texto in (('-- @@198@@\n', cuerpo + '\n'), ('-- @@198_rollback@@\n', ROLLBACK.read_text() + '\n'),
                             ('-- @@preludio@@\n', (PRELUDIO.read_text() + '\n') if local else '')):
         if sql.count(marcador) != 1:
             raise SystemExit(f'falta el marcador {marcador.strip()}')

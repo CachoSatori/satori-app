@@ -1,11 +1,11 @@
-// Mig 196 — catálogo por código (Ventas v2 3.1a). Lee la migración (patrón de contrato067/191) y frena:
+// Mig 198 — catálogo por código (Ventas v2 3.1a). Lee la migración (patrón de contrato067/191) y frena:
 //   · que cambie el orden de un arreglo que la app lee por posición (leería «unidades» donde va «monto»);
 //   · que se cuele un medio de pago, mesa, salonero, número de factura o `clase_ingreso` (regla 6);
 //   · que las TRES copias de la lista de categorías que una persona puede elegir dejen de coincidir, o que alguna
 //     habilite algo que no es venta (cortesia, personal, ingredientes);
 //   · que la definición firmada de lo que no es venta quede en dos lugares distintos;
-//   · que la 196 llegue a la firma con un nombre de familia «POR CONFIRMAR» o con una familia sin cargar;
-//   · que la vuelta atrás se olvide de algo que la 196 crea.
+//   · que la 198 llegue a la firma con un nombre de familia «POR CONFIRMAR» o con una familia sin cargar;
+//   · que la vuelta atrás se olvide de algo que la 198 crea.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -14,8 +14,8 @@ import { CATEGORIAS_EDITABLES, CATEGORIAS_FIJAS, CATEGORIAS_NO_VENTA } from '../
 import { parsearCatalogoProductos, parsearVentasProductos } from './posNdf'
 
 const raiz = path.resolve(__dirname, '../../..')
-const sql = fs.readFileSync(path.join(raiz, 'supabase/migrations/196_pos_catalogo_productos.sql'), 'utf8')
-const rollback = fs.readFileSync(path.join(raiz, 'scripts/sql/196_rollback.sql'), 'utf8')
+const sql = fs.readFileSync(path.join(raiz, 'supabase/migrations/198_pos_catalogo_productos.sql'), 'utf8')
+const rollback = fs.readFileSync(path.join(raiz, 'scripts/sql/198_rollback.sql'), 'utf8')
 const sinComentarios = (s: string) => s.replace(/--.*$/gm, '')
 const codigo = sinComentarios(sql)
 const plano = (s: string) => s.replace(/\s+/g, ' ')
@@ -49,7 +49,7 @@ function arreglo(fn: string, clave: string): string[] {
 
 const listaSql = (s: string): string[] => [...s.matchAll(/'([a-z_]+)'/g)].map(m => m[1])
 
-describe('mig 196 — forma de lo que devuelve (la app lee por posición)', () => {
+describe('mig 198 — forma de lo que devuelve (la app lee por posición)', () => {
   it('pos_ventas_productos.productos: [codigo, nombre, familia, canal, unidades, monto_cts, facturas, categoria, unidades_cero]', () => {
     expect(arreglo('pos_ventas_productos', 'productos')).toEqual([
       'pr.codigo', 'pr.nombre', 'pr.familia', 'pr.canal', 'pr.unidades', 'pr.monto_cts', 'pr.facturas', 'pr.categoria', 'pr.unidades_cero'])
@@ -76,7 +76,7 @@ describe('mig 196 — forma de lo que devuelve (la app lee por posición)', () =
     expect(plano(funcion('pos_catalogo_productos'))).toMatch(/returns jsonb/)
     expect(codigo).not.toMatch(/returns (setof|table)/i)
   })
-  it('el lector parsea cada posición donde la 196 la pone', () => {
+  it('el lector parsea cada posición donde la 198 la pone', () => {
     const r = parsearVentasProductos({
       productos: [['9001', 'X', 3, 'salon', 3, 710000, 2, 'comida', 1]], meses: [['2026-11', 3, 'salon', 3, 710000, 'comida']],
       catalogo: [['9001', 'X', 3, 2, '2026-11-01', '2026-11-20', 'comida']], familias: [[3, 'F', 'comida', 20]],
@@ -96,7 +96,7 @@ describe('mig 196 — forma de lo que devuelve (la app lee por posición)', () =
   })
 })
 
-describe('mig 196 — regla 6: nada de pagos, mesas, saloneros ni números de factura', () => {
+describe('mig 198 — regla 6: nada de pagos, mesas, saloneros ni números de factura', () => {
   const PROHIBIDAS = /efectivo|tarjeta|electronico|deposito|cheque|cxc|dolares|vuelto|descuento|clase_ingreso|salonero|cajero|mesa|numero_factura|numero_pedido|regalia|consecutivo|clave_fe/i
   for (const fn of ['pos_ventas_productos', 'pos_catalogo_productos', 'pos_catalogo_absorber', 'pos_producto_ajuste_guardar']) {
     it(`${fn} no nombra ninguna`, () => { expect(funcion(fn)).not.toMatch(PROHIBIDAS) })
@@ -108,7 +108,7 @@ describe('mig 196 — regla 6: nada de pagos, mesas, saloneros ni números de fa
   })
 })
 
-describe('mig 196 — la categoría nunca decide la venta', () => {
+describe('mig 198 — la categoría nunca decide la venta', () => {
   it('las tres copias de la lista que una persona puede elegir son iguales y = CATEGORIAS_EDITABLES', () => {
     const check = /categoria\s+text\s+check \(categoria in \(([^)]*)\)\)/.exec(codigo)
     expect(check, 'check de pos_producto_ajustes').not.toBeNull()
@@ -145,7 +145,7 @@ describe('mig 196 — la categoría nunca decide la venta', () => {
   })
 })
 
-/** La carga de `pos_familias` de la 196: familia, nombre, categoría y la línea entera (con su comentario). */
+/** La carga de `pos_familias` de la 198: familia, nombre, categoría y la línea entera (con su comentario). */
 function carga(): { familia: number; nombre: string; categoria: string; linea: string }[] {
   const i = sql.indexOf('insert into public.pos_familias (local, familia, nombre, categoria, orden) values')
   expect(i).toBeGreaterThan(0)
@@ -156,20 +156,20 @@ function carga(): { familia: number; nombre: string; categoria: string; linea: s
   }).filter((x): x is NonNullable<typeof x> => x !== null)
 }
 
-describe('mig 196 — la carga de familias de santa-teresa', () => {
+describe('mig 198 — la carga de familias de santa-teresa', () => {
   it('toda familia de FAMILIAS_CATALOGO (netaVenta.ts) tiene su fila, y ninguna de más', () => {
     expect(carga().map(f => f.familia).sort((a, b) => a - b)).toEqual([...FAMILIAS_CATALOGO].sort((a, b) => a - b))
   })
   // Prerrequisito de la firma (SPEC §7.3, D-4 = A): los nombres de 11, 15 y 25 (confirmar) y de 1, 9 y 27 (traer) se
   // leen en la PC del PoS. Mientras alguno diga «POR CONFIRMAR» —en el nombre o en el comentario de su fila— esta
-  // prueba FALLA A PROPÓSITO: la 196 no se firma ni se mergea así (PASE-196, prerrequisitos).
+  // prueba FALLA A PROPÓSITO: la 198 no se firma ni se mergea así (PASE-198, prerrequisitos).
   it('ningún nombre de familia queda «POR CONFIRMAR» (falla hasta que el dueño lea los seis en la PC del PoS)', () => {
     const pendientes = carga().filter(f => /POR CONFIRMAR/i.test(f.linea)).map(f => f.familia)
     expect(pendientes, `familias con el nombre sin confirmar: ${pendientes.join(', ')}`).toEqual([])
   })
 })
 
-describe('mig 196 — seguridad y vuelta atrás', () => {
+describe('mig 198 — seguridad y vuelta atrás', () => {
   const FUNCIONES = ['pos_catalogo_absorber', 'pos_catalogo_registrar', 'pos_catalogo_refrescar', 'pos_categoria_efectiva',
     'pos_ventas_productos', 'pos_catalogo_productos', 'pos_producto_ajuste_guardar']
   it('las siete funciones tienen search_path fijo; las de la API son security definer y revocadas a public/anon', () => {
@@ -197,14 +197,14 @@ describe('mig 196 — seguridad y vuelta atrás', () => {
     expect(plano(funcion('pos_catalogo_registrar'))).toMatch(/exception when others then raise warning/)
   })
   it('la guarda va antes de crear nada y conoce las siete funciones y las tres tablas', () => {
-    const g = codigo.indexOf('do $guarda196$')
+    const g = codigo.indexOf('do $guarda198$')
     expect(g).toBeGreaterThan(0)
     expect(g).toBeLessThan(codigo.indexOf('create table'))
-    const guarda = codigo.slice(g, codigo.indexOf('$guarda196$;'))
+    const guarda = codigo.slice(g, codigo.indexOf('$guarda198$;'))
     for (const fn of FUNCIONES) expect(guarda).toContain(`public.${fn}(`)
     for (const t of ['pos_familias', 'pos_productos', 'pos_producto_ajustes']) expect(guarda).toContain(`public.${t}'`)
   })
-  it('la vuelta atrás saca todo lo que la 196 crea y no toca el ledger', () => {
+  it('la vuelta atrás saca todo lo que la 198 crea y no toca el ledger', () => {
     const rb = sinComentarios(rollback)
     expect(rb).not.toMatch(/schema_migrations/i)
     expect(rb).toContain('drop trigger if exists trg_pos_catalogo_registrar on public.pos_ndf_ticket_lines;')

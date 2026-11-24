@@ -1,4 +1,4 @@
--- 196 · lecturas previas del pase (PASE-196 §4). SOLO LECTURA: `begin read only` … `rollback`, sirve en prod
+-- 198 · lecturas previas del pase (PASE-198 §4). SOLO LECTURA: `begin read only` … `rollback`, sirve en prod
 -- (yiczgdti…) y en staging (hwiatgic…). Un solo resultado (jsonb), para que entre en una llamada del conector.
 -- Devuelve CÓDIGOS y CONTEOS, nunca nombres de productos ni de personas (el repo es público): los nombres de la lista
 -- de los 82 códigos y de los que heredan «rinde» los mira el dueño en la consulta, no se copian al repo.
@@ -23,7 +23,7 @@ l as (
   from public.pos_ndf_tickets t join public.pos_ndf_ticket_lines x on x.ticket_id = t.id
   where t.local = 'santa-teresa'
 ),
--- categoría de HOY (antes de la 196: la familia; 11, 15 y 25 caen en «otros») y la de DESPUÉS (lista + mayoría)
+-- categoría de HOY (antes de la 198: la familia; 11, 15 y 25 caen en «otros») y la de DESPUÉS (lista + mayoría)
 c as (
   select l.*,
          case when familia in (2, 3, 4, 13, 16, 29) then 'comida' when familia = 5 then 'bebida'
@@ -55,7 +55,7 @@ bebidas as (
 )
 select jsonb_build_object(
   'ref_y_ledger', (select max(version) from supabase_migrations.schema_migrations),
-  'ya_existe_algo_de_la_196', jsonb_build_array(to_regclass('public.pos_familias'), to_regclass('public.pos_productos'),
+  'ya_existe_algo_de_la_198', jsonb_build_array(to_regclass('public.pos_familias'), to_regclass('public.pos_productos'),
       to_regclass('public.pos_producto_ajustes'), to_regprocedure('public.pos_ventas_productos(text,date,date)'),
       to_regprocedure('public.pos_catalogo_productos(text)'), to_regprocedure('public.pos_producto_ajuste_guardar(text,text,integer,text)')),
   'disparadores_en_lineas', (select count(*) from pg_trigger where tgrelid = 'public.pos_ndf_ticket_lines'::regclass and not tgisinternal),
@@ -88,5 +88,5 @@ select jsonb_build_object(
   'bebidas_por_persona_salon', (select jsonb_object_agg(p, jsonb_build_object('antes', round(u_antes::numeric / nullif(pax_salon, 0), 3),
       'despues', round(u_despues::numeric / nullif(pax_salon, 0), 3), 'incluidas_aparte', u_incluidas_despues,
       'unidades_antes', u_antes, 'unidades_despues', u_despues, 'pax', pax_salon)) from bebidas)
-) as lecturas_196;
+) as lecturas_198;
 rollback;

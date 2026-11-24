@@ -1,4 +1,4 @@
-// Ventas v2 · 3.1a — catalogoPos (puro). Datos FICTICIOS con la forma de `pos_ventas_productos` (mig 196).
+// Ventas v2 · 3.1a — catalogoPos (puro). Datos FICTICIOS con la forma de `pos_ventas_productos` (mig 198).
 import { describe, it, expect } from 'vitest'
 import { parsearVentasProductos, type VentasProductosRpc } from '../../shared/api/posNdf'
 import {

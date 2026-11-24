@@ -1,13 +1,13 @@
 // Ventas v2 · 3.1a — PARIDAD (SPEC-3.1-catalogo §8.2). Las MISMAS facturas ficticias por dos caminos:
 //   · el de hoy: `netaDelTicket` (`netaVenta.ts`, firmada) por factura, en céntimos como la 190 (Resumen), y `armarDia`
 //     (el armador de «En vivo» y de los días del PoS), que da salón / delivery en colones;
-//   · el nuevo: la forma de `pos_ventas_productos` (mig 196) —líneas sumadas por (código, familia de la línea, canal),
+//   · el nuevo: la forma de `pos_ventas_productos` (mig 198) —líneas sumadas por (código, familia de la línea, canal),
 //     céntimos por línea, facturas sin líneas aparte— leída con `parsearVentasProductos` y sumada con `catalogoPos`.
 // Tienen que dar la misma neta por día y canal, y por familia, al céntimo. Si no, «Productos» deja de cerrar contra
-// «Resumen». La simulación de la función vive acá (el SQL real lo cuida scripts/sql/196_pruebas.sql contra la 190).
+// «Resumen». La simulación de la función vive acá (el SQL real lo cuida scripts/sql/198_pruebas.sql contra la 190).
 //
-// Montos en céntimos enteros, como en el PoS (staging, 24-nov: 0 de 233.781 líneas con fracción de céntimo). La 196
-// redondea por LÍNEA y la 190 por FACTURA: con fracciones de céntimo podrían separarse en un céntimo (PASE-196 lo lee
+// Montos en céntimos enteros, como en el PoS (staging, 24-nov: 0 de 233.781 líneas con fracción de céntimo). La 198
+// redondea por LÍNEA y la 190 por FACTURA: con fracciones de céntimo podrían separarse en un céntimo (PASE-198 lo lee
 // en prod antes de la firma).
 import { describe, it, expect } from 'vitest'
 import { parsearVentasProductos, type LineaNdfRow, type TicketVentaRow } from '../../../shared/api/posNdf'
@@ -20,7 +20,7 @@ import { esLineaDeVenta, netaDelTicket } from '../netaVenta'
 const cts = (x: number) => Math.floor(x * 100 + 0.5)
 
 /** Lo que devolvería `pos_ventas_productos` para esas facturas (solo C), como jsonb. */
-function simular196(tickets: TicketVentaRow[], lineas: LineaNdfRow[]) {
+function simular198(tickets: TicketVentaRow[], lineas: LineaNdfRow[]) {
   const oficiales = tickets.filter(esTicketOficial)
   const porTicket = new Map<string, LineaNdfRow[]>()
   for (const x of lineas) porTicket.set(x.ticket_id, [...(porTicket.get(x.ticket_id) ?? []), x])
@@ -56,7 +56,7 @@ function caso() {
   return { tickets, lineas: ls }
 }
 
-describe('paridad 3.1a — la neta por día y canal: el camino de hoy = forma de la 196', () => {
+describe('paridad 3.1a — la neta por día y canal: el camino de hoy = forma de la 198', () => {
   const { tickets, lineas } = caso()
   const dias = [...new Set(tickets.map(x => diaCRDeFactura(x.fecha_registra)))].sort()
   it(`${dias.length} días, al céntimo (salón y delivery)`, () => {
@@ -66,7 +66,7 @@ describe('paridad 3.1a — la neta por día y canal: el camino de hoy = forma de
       const ids = new Set(delDia.map(x => x.id))
       const lDia = lineas.filter(x => ids.has(x.ticket_id))
       const viejo = armarDia(dia, delDia, lDia, '2026-11-24T05:30:00Z')
-      const nuevo = parsearVentasProductos(simular196(delDia, lDia))
+      const nuevo = parsearVentasProductos(simular198(delDia, lDia))
       const porCanal = netaPorCanal(nuevo)
       // las facturas sin líneas no tienen filas: van por su canal
       const sinLineas = delDia.filter(esTicketOficial).filter(x => !lDia.some(y => y.ticket_id === x.id))
@@ -90,7 +90,7 @@ describe('paridad 3.1a — la neta por día y canal: el camino de hoy = forma de
 })
 
 describe('paridad 3.1a — la neta por familia de la línea', () => {
-  it('Σ por familia (líneas de venta de facturas C) = netaPorFamilia de la forma de la 196', () => {
+  it('Σ por familia (líneas de venta de facturas C) = netaPorFamilia de la forma de la 198', () => {
     const { tickets, lineas } = caso()
     const oficiales = new Set(tickets.filter(esTicketOficial).map(x => x.id))
     const viejo = new Map<number | null, number>()
@@ -98,7 +98,7 @@ describe('paridad 3.1a — la neta por familia de la línea', () => {
       if (!oficiales.has(x.ticket_id) || !esLineaDeVenta(x.familia)) continue
       viejo.set(x.familia, (viejo.get(x.familia) ?? 0) + cts(x.monto ?? 0))
     }
-    const nuevo = netaPorFamilia(parsearVentasProductos(simular196(tickets, lineas)))
+    const nuevo = netaPorFamilia(parsearVentasProductos(simular198(tickets, lineas)))
     expect([...nuevo.entries()].sort()).toEqual([...viejo.entries()].sort())
     expect(nuevo.has(17)).toBe(false)   // la regalía (familia 17) no es venta
     expect(nuevo.has(20)).toBe(false)

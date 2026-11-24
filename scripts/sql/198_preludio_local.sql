@@ -1,9 +1,9 @@
--- 196_preludio_local · SOLO con `196_pruebas.py --local` (Postgres vacío armado con scripts/sql/193_base_local.sql + la
+-- 198_preludio_local · SOLO con `198_pruebas.py --local` (Postgres vacío armado con scripts/sql/193_base_local.sql + la
 -- 190). Corre DENTRO de la transacción descartada de la batería, antes de todo. En staging NO va: ahí esto ya existe.
 --   1. Privilegios por defecto como Supabase: toda tabla y función nueva de public nace con permisos para anon y
---      authenticated (por eso la 196 los revoca; sin esto, las pruebas de permisos no muerden).
---   2. `product_map` (la 196 hereda de ahí el «rinde»), con las columnas del baseline.
---   3. Facturas FICTICIAS de santa-teresa con códigos de la lista de la 196 (familias 11, 15 y 25), para que la herencia
+--      authenticated (por eso la 198 los revoca; sin esto, las pruebas de permisos no muerden).
+--   2. `product_map` (la 198 hereda de ahí el «rinde»), con las columnas del baseline.
+--   3. Facturas FICTICIAS de santa-teresa con códigos de la lista de la 198 (familias 11, 15 y 25), para que la herencia
 --      de categoría tenga algo que heredar: 124 y 192 en la 11, 930 y 519 en la 25, y 238 —que está en la lista— en la
 --      familia 3, que NO tiene que heredar nada. Nombres inventados.
 grant usage on schema public, auth to anon, authenticated;

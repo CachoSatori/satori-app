@@ -1,5 +1,5 @@
 // Ventas v2 · 3.1 — `product_map` queda CONGELADO (SPEC-3.1-catalogo §7.3): el catálogo nuevo es por código
-// (`pos_productos`, mig 196). Esta lista cerrada son los archivos que todavía leen o escriben `product_map` (por nombre).
+// (`pos_productos`, mig 198). Esta lista cerrada son los archivos que todavía leen o escriben `product_map` (por nombre).
 // Solo puede ACHICARSE: un archivo nuevo que vuelva a depender del catálogo por nombre hace caer la prueba, y uno que deja
 // de usarlo también (hay que sacarlo de la lista, para que no vuelva a entrar callado).
 import { describe, it, expect } from 'vitest'

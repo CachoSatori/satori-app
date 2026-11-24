@@ -1,9 +1,9 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 196 · Ventas v2 3.1: catálogo único por código desde el PoS + `pos_ventas_productos`   ║
+-- ║ 198 · Ventas v2 3.1: catálogo único por código desde el PoS + `pos_ventas_productos`   ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
 -- PR 3.1a (SPEC docs/ventas/SPEC-3.1-catalogo.md §6, PR #350). Entra a prod por merge → Branching, SOLO con la firma
--- del dueño (D-9) sobre el SHA del PR y con los seis nombres de familia confirmados en la PC del PoS (docs/pases/PASE-196.md).
+-- del dueño (D-9) sobre el SHA del PR y con los seis nombres de familia confirmados en la PC del PoS (docs/pases/PASE-198.md).
 -- D8 (catálogo único por código), D17 (el catálogo sale del PoS) y las decisiones del 24-nov: D-2 = C (categoría
 -- por código en la app), D-3 (las familias 11, 15 y 25 van a comida o bebida, código por código) y la categoría
 -- `menu_especial` (el ítem por comensal de un menú cerrado). La SUBCATEGORÍA no entra acá: viene del PoS (3.1c).
@@ -29,19 +29,19 @@
 --
 -- NO toca `pos_ndf_*` (salvo sumar el disparador), `product_map`, la 067, la 190, la 193 ni la 194.
 -- NO devuelve medios de pago, mesas, saloneros ni `clase_ingreso` (regla 6 de ESTADO).
--- Vuelta atrás: scripts/sql/196_rollback.sql. Pruebas: scripts/sql/196_pruebas.sql (terminan en ROLLBACK).
+-- Vuelta atrás: scripts/sql/198_rollback.sql. Pruebas: scripts/sql/198_pruebas.sql (terminan en ROLLBACK).
 
 -- ── 0. Guarda: si algo de esto ya existe, se para sin tocar nada ─────────────────────────
-do $guarda196$
+do $guarda198$
 declare
   o text;
 begin
   if to_regprocedure('public.puede_ver_local(text)') is null or to_regprocedure('public.get_my_role()') is null then
-    raise exception '196: falta puede_ver_local (091) o get_my_role';
+    raise exception '198: falta puede_ver_local (091) o get_my_role';
   end if;
   foreach o in array array['public.pos_familias', 'public.pos_productos', 'public.pos_producto_ajustes'] loop
     if to_regclass(o) is not null then
-      raise exception '196: % ya existe: se para sin tocar nada', o;
+      raise exception '198: % ya existe: se para sin tocar nada', o;
     end if;
   end loop;
   foreach o in array array['public.pos_catalogo_absorber(uuid[])', 'public.pos_catalogo_registrar()',
@@ -49,11 +49,11 @@ begin
                            'public.pos_ventas_productos(text,date,date)', 'public.pos_catalogo_productos(text)',
                            'public.pos_producto_ajuste_guardar(text,text,integer,text)'] loop
     if to_regprocedure(o) is not null then
-      raise exception '196: % ya existe: se para sin tocar nada', o;
+      raise exception '198: % ya existe: se para sin tocar nada', o;
     end if;
   end loop;
 end
-$guarda196$;
+$guarda198$;
 
 -- ── 1. Familias del PoS por local ────────────────────────────────────────────────────────
 create table public.pos_familias (
@@ -70,7 +70,7 @@ create table public.pos_familias (
     check ((familia in (6, 17, 20)) = (categoria in ('cortesia', 'personal', 'ingredientes')))
 );
 comment on table public.pos_familias is
-  'Mig 196. Familias del PoS (FAC_Clasificaciones) por local: nombre y categoría por defecto de sus productos. La carga la migración; nadie la edita desde la app. Una familia sin fila se muestra «Familia N» en «otros».';
+  'Mig 198. Familias del PoS (FAC_Clasificaciones) por local: nombre y categoría por defecto de sus productos. La carga la migración; nadie la edita desde la app. Una familia sin fila se muestra «Familia N» en «otros».';
 
 -- ── 2. Catálogo por código ───────────────────────────────────────────────────────────────
 create table public.pos_productos (
@@ -86,7 +86,7 @@ create table public.pos_productos (
 );
 create index pos_productos_local_familia_idx on public.pos_productos (local, familia);
 comment on table public.pos_productos is
-  'Mig 196. Catálogo único por (local, código) del PoS. Lo escribe SOLO el disparador de pos_ndf_ticket_lines (y pos_catalogo_refrescar). Nombre y familia = los de la factura más reciente. visto_* = día CR de la primera y la última factura (cualquier estado) que lo trae.';
+  'Mig 198. Catálogo único por (local, código) del PoS. Lo escribe SOLO el disparador de pos_ndf_ticket_lines (y pos_catalogo_refrescar). Nombre y familia = los de la factura más reciente. visto_* = día CR de la primera y la última factura (cualquier estado) que lo trae.';
 
 -- ── 3. Lo que carga una persona, por código ──────────────────────────────────────────────
 -- Sin fila = todo por defecto: rinde 1 y la categoría de su familia.
@@ -104,7 +104,7 @@ create table public.pos_producto_ajustes (
   constraint pos_producto_ajustes_algo_chk check (rinde_personas > 1 or categoria is not null)
 );
 comment on table public.pos_producto_ajustes is
-  'Mig 196. Lo que una persona carga por producto: cuántas personas rinde (1 a 20) y la categoría si no es la de su familia (null = hereda). Sin fila = todo por defecto. Se escribe solo por pos_producto_ajuste_guardar (owner; manager de su local). La categoría nunca cambia qué es venta neta.';
+  'Mig 198. Lo que una persona carga por producto: cuántas personas rinde (1 a 20) y la categoría si no es la de su familia (null = hereda). Sin fila = todo por defecto. Se escribe solo por pos_producto_ajuste_guardar (owner; manager de su local). La categoría nunca cambia qué es venta neta.';
 
 -- ── RLS: gerencia activa lee; el manager, solo sus locales; nadie escribe por la API ─────
 alter table public.pos_familias         enable row level security;
@@ -192,7 +192,7 @@ begin
   begin
     perform public.pos_catalogo_absorber(array(select distinct ticket_id from nuevas));
   exception when others then
-    raise warning '196 pos_catalogo_registrar: % (%)', sqlerrm, sqlstate;
+    raise warning '198 pos_catalogo_registrar: % (%)', sqlerrm, sqlstate;
   end;
   return null;
 end;
@@ -425,7 +425,7 @@ $function$;
 revoke all on function public.pos_ventas_productos(text, date, date) from public, anon;
 grant execute on function public.pos_ventas_productos(text, date, date) to authenticated;
 comment on function public.pos_ventas_productos(text, date, date) is
-  'Mig 196. Ventas v2 Productos: por (código, familia de la línea, canal) unidades, céntimos, facturas, categoría y unidades en ₡0; por mes × familia × canal × categoría; catálogo con «rinde» y categoría; familias con su categoría por defecto; neta_cts = la de la 190 (la decide la familia de la línea, nunca la categoría). Solo facturas C, día CR. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';
+  'Mig 198. Ventas v2 Productos: por (código, familia de la línea, canal) unidades, céntimos, facturas, categoría y unidades en ₡0; por mes × familia × canal × categoría; catálogo con «rinde» y categoría; familias con su categoría por defecto; neta_cts = la de la 190 (la decide la familia de la línea, nunca la categoría). Solo facturas C, día CR. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';
 
 -- ── 8. El catálogo entero, para «Ajustes → Catálogo» (solo lectura) ──────────────────────
 create function public.pos_catalogo_productos(p_local text)
@@ -469,7 +469,7 @@ $function$;
 revoke all on function public.pos_catalogo_productos(text) from public, anon;
 grant execute on function public.pos_catalogo_productos(text) to authenticated;
 comment on function public.pos_catalogo_productos(text) is
-  'Mig 196. Catálogo entero de un local para «Ajustes → Catálogo»: código, nombre, familia, categoría vigente, categoría cargada a mano, «rinde» y fechas. Solo lectura. Owner/manager/contador; manager solo sus locales.';
+  'Mig 198. Catálogo entero de un local para «Ajustes → Catálogo»: código, nombre, familia, categoría vigente, categoría cargada a mano, «rinde» y fechas. Solo lectura. Owner/manager/contador; manager solo sus locales.';
 
 -- ── 9. La única puerta de escritura de lo que carga una persona ──────────────────────────
 -- Guarda los DOS valores juntos (la pantalla manda la ficha entera): p_rinde 1 a 20 · p_categoria null = la de su
@@ -527,4 +527,4 @@ $function$;
 revoke all on function public.pos_producto_ajuste_guardar(text, text, integer, text) from public, anon;
 grant execute on function public.pos_producto_ajuste_guardar(text, text, integer, text) to authenticated;
 comment on function public.pos_producto_ajuste_guardar(text, text, integer, text) is
-  'Mig 196. Guarda lo que una persona carga de un producto: «rinde» (1 a 20) y categoría (null = la de su familia; solo comida, bebida, menu_especial, extras, merch u otros). Todo por defecto = borra el ajuste. Owner; manager solo de sus locales. No cambia qué es venta neta.';
+  'Mig 198. Guarda lo que una persona carga de un producto: «rinde» (1 a 20) y categoría (null = la de su familia; solo comida, bebida, menu_especial, extras, merch u otros). Todo por defecto = borra el ajuste. Owner; manager solo de sus locales. No cambia qué es venta neta.';

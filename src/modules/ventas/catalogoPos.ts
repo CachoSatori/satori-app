@@ -1,4 +1,4 @@
-// ── Ventas v2 · 3.1a — el catálogo por código del PoS (mig 196) — PURO ─────────────────────────────────────────
+// ── Ventas v2 · 3.1a — el catálogo por código del PoS (mig 198) — PURO ─────────────────────────────────────────
 //
 // Sin I/O, sin Supabase, sin reloj. Arma lo que la pantalla «Productos» (3.2) y «Ajustes → Catálogo» (3.1b) van a
 // mostrar a partir de lo que devuelven `pos_ventas_productos` y `pos_catalogo_productos` (lectores en
@@ -24,7 +24,7 @@ export const CATEGORIAS = [
 ] as const
 export type Categoria = (typeof CATEGORIAS)[number]
 
-/** Lo que una persona puede elegir para un código (la 196 lo valida en el `check`, en la función y lo devuelve). */
+/** Lo que una persona puede elegir para un código (la 198 lo valida en el `check`, en la función y lo devuelve). */
 export const CATEGORIAS_EDITABLES: readonly Categoria[] = ['comida', 'bebida', 'menu_especial', 'extras', 'merch', 'otros']
 /** Las que fija la familia: no se eligen a mano ni se le cambian a un producto. */
 export const CATEGORIAS_FIJAS: readonly Categoria[] = ['giftcard', 'pax', 'duenos', 'cortesia', 'personal', 'ingredientes']
@@ -128,7 +128,7 @@ export function montoPorCategoria(rpc: VentasProductosRpc): Map<string, number> 
 
 /**
  * La neta del período en céntimos, desde las filas: Σ de las líneas cuya FAMILIA es venta (`esLineaDeVenta`, la
- * firmada) + las facturas sin líneas. No mira categorías: es la misma cuenta que `neta_cts` de la 196 y la de la 190.
+ * firmada) + las facturas sin líneas. No mira categorías: es la misma cuenta que `neta_cts` de la 198 y la de la 190.
  */
 export function netaDeProductos(rpc: Pick<VentasProductosRpc, 'productos' | 'sinLineas'>): number {
   let cts = rpc.sinLineas.cts

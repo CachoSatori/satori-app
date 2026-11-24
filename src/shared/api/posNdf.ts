@@ -543,11 +543,11 @@ export async function getPromPaxAgregado(local: string, desde: string, hasta: st
   }))
 }
 
-// ── Catálogo por código y ventas por producto (mig 196, Ventas v2 3.1a) ─────────────────────
+// ── Catálogo por código y ventas por producto (mig 198, Ventas v2 3.1a) ─────────────────────
 //
 // SOLO LECTURA salvo `guardarAjusteProducto`, que es la única puerta de escritura de lo que carga una persona
-// («rinde» y categoría). Las tres devuelven/aceptan lo que la 196 define; la forma la cuida
-// `posNdf.contrato196.test.ts`. Ninguna trae medios de pago, mesas, saloneros ni `clase_ingreso` (regla 6).
+// («rinde» y categoría). Las tres devuelven/aceptan lo que la 198 define; la forma la cuida
+// `posNdf.contrato198.test.ts`. Ninguna trae medios de pago, mesas, saloneros ni `clase_ingreso` (regla 6).
 // Los arreglos crecen SOLO por el final (la 3.1c suma la subcategoría): acá se lee por posición.
 
 /** Una fila de `productos`: (código, familia de la línea, canal). `codigo` null = línea sin código, por nombre. */
@@ -684,7 +684,7 @@ export function parsearCatalogoProductos(json: unknown): CatalogoProductosRpc {
 }
 
 /**
- * `pos_ventas_productos` (mig 196): las ventas del período ya sumadas por producto, sin bajar líneas. Owner, contador
+ * `pos_ventas_productos` (mig 198): las ventas del período ya sumadas por producto, sin bajar líneas. Owner, contador
  * y el manager de sus locales (si no, 42501). Rango de días CR inclusivo, ≤ 731 días (si no, 22023).
  */
 export async function getVentasProductos(local: string, desde: string, hasta: string): Promise<VentasProductosRpc> {
@@ -693,7 +693,7 @@ export async function getVentasProductos(local: string, desde: string, hasta: st
   return parsearVentasProductos(data)
 }
 
-/** `pos_catalogo_productos` (mig 196): el catálogo entero del local, para «Ajustes → Catálogo» (3.1b). */
+/** `pos_catalogo_productos` (mig 198): el catálogo entero del local, para «Ajustes → Catálogo» (3.1b). */
 export async function getCatalogoProductos(local: string): Promise<CatalogoProductosRpc> {
   const { data, error } = await sb.rpc('pos_catalogo_productos', { p_local: local })
   if (error) throw new Error(error.message)
@@ -701,7 +701,7 @@ export async function getCatalogoProductos(local: string): Promise<CatalogoProdu
 }
 
 /**
- * `pos_producto_ajuste_guardar` (mig 196): guarda los DOS valores juntos (la ficha entera). `rinde` 1 a 20 ·
+ * `pos_producto_ajuste_guardar` (mig 198): guarda los DOS valores juntos (la ficha entera). `rinde` 1 a 20 ·
  * `categoria` null = la de su familia. Todo por defecto borra el ajuste. Owner y manager de su local; el resto 42501.
  * La categoría nunca cambia qué es venta neta.
  */

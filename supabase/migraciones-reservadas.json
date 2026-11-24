@@ -615,6 +615,18 @@
       "bloque": "pase",
       "rama": "claude/correos-por-configuracion",
       "origen": "139"
+    },
+    "141": {
+      "nombre": "ventas_comps_sin_contador",
+      "bloque": "club",
+      "rama": "claude/ventas-comps-sin-contador",
+      "renumerada_a": "197"
+    },
+    "197": {
+      "nombre": "ventas_comps_sin_contador",
+      "bloque": "pase",
+      "rama": "claude/ventas-comps-sin-contador",
+      "origen": "141"
     }
   }
 }

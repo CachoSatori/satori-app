@@ -3,10 +3,12 @@
 // `aplicarReemplazos`. Este hook las lee de todos los turnos y se entera cuando cambian (evento propio y `storage`
 // de otras pestañas del navegador).
 
-import { useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
-  EVENTO_REEMPLAZOS, leerTodosLosReemplazos, aplicarReemplazos, reemplazosAbiertos, type ReemplazoPendiente,
+  EVENTO_REEMPLAZOS, leerTodosLosReemplazos, aplicarReemplazos, reemplazosAbiertos, revisarCambioEnBase,
+  soltarReemplazo, type EstadoCambio, type ReemplazoPendiente,
 } from './reemplazoPago'
+import { getCashMovementById } from '../../shared/api/cash'
 
 const suscribir = (avisar: () => void) => {
   if (typeof window === 'undefined') return () => {}
@@ -21,11 +23,42 @@ const fotoServidor = () => '[]'
 /**
  * `cuenta`: los movimientos para TODAS las cuentas (el viejo de un cambio abierto no está).
  * `abiertos`: los cambios con el viejo y el nuevo a la vista (para avisar y frenar la Noche del Cierre del día).
+ * `estados`: (ronda 3) cómo está cada cambio abierto en la BASE, por id del viejo (revisarCambioEnBase). Si el viejo
+ * ya no existe, la anotación se suelta sola y se llama `alResolver` (recargar: la lista cargada quedó vieja).
  */
-export function useMovimientosSinReemplazados<M extends { id: string }>(movs: M[]): { cuenta: M[]; abiertos: ReemplazoPendiente[] } {
+export function useMovimientosSinReemplazados<M extends { id: string; _pending?: boolean }>(
+  movs: M[], opts?: { alResolver?: () => void },
+): { cuenta: M[]; abiertos: ReemplazoPendiente[]; estados: Record<string, EstadoCambio> } {
   const raw = useSyncExternalStore(suscribir, foto, fotoServidor)
-  return useMemo(() => {
+  const base = useMemo(() => {
     const lista = JSON.parse(raw) as ReemplazoPendiente[]
     return { cuenta: aplicarReemplazos(movs, lista), abiertos: reemplazosAbiertos(movs, lista) }
   }, [movs, raw])
+
+  const [estados, setEstados] = useState<Record<string, EstadoCambio>>({})
+  const alResolver = useRef(opts?.alResolver)
+  useEffect(() => { alResolver.current = opts?.alResolver })
+  // Clave estable de lo que hay que revisar: los pares abiertos y si el nuevo sigue en la cola.
+  const clave = base.abiertos
+    .map(r => `${r.viejo}>${r.nuevo}:${movs.some(m => m.id === r.nuevo && m._pending) ? 'c' : 'b'}`).join('|')
+  useEffect(() => {
+    if (!base.abiertos.length) return
+    let vivo = true
+    void (async () => {
+      const nuevos: Record<string, EstadoCambio> = {}
+      let soltados = 0
+      for (const r of base.abiertos) {
+        const e = await revisarCambioEnBase(r, movs, id => getCashMovementById(id))
+        nuevos[r.viejo] = e
+        if (e === 'resuelto') { soltarReemplazo(r.viejo); soltados++ }
+      }
+      if (!vivo) return
+      setEstados(nuevos)
+      if (soltados) alResolver.current?.()
+    })()
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clave])
+
+  return { ...base, estados }
 }

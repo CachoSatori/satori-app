@@ -75,7 +75,7 @@ export default function CashModule() {
   // (hallazgo 252, ronda 2) Un cambio de pago sin terminar deja el viejo y el nuevo en la base un rato. TODAS las
   // pestañas cuentan con `movsCuenta` (el viejo fuera, misma regla que la Caja Diaria: aplicarReemplazos). Solo la
   // Caja Diaria recibe además los del turno SIN filtrar, para ofrecer «Terminar el cambio».
-  const { cuenta: movsCuenta } = useMovimientosSinReemplazados(allMovements)
+  const { cuenta: movsCuenta } = useMovimientosSinReemplazados(allMovements, { alResolver: () => { void loadAll() } })
 
   const pendCount = movsCuenta.filter(m => m.status === 'pendiente').length
 

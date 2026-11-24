@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import type { CashMovement } from '../../shared/types/database'
 import {
   reemplazarPago, aplicarReemplazos, reemplazosAbiertos, podarReemplazos, leerReemplazos, guardarReemplazos,
-  esDuplicado, claveReemplazos, coincidePago, leerTodosLosReemplazos, type ReemplazoPendiente, type DatosPago,
+  esDuplicado, claveReemplazos, coincidePago, leerTodosLosReemplazos, revisarCambioEnBase, reemplazosDelDia, soltarReemplazo,
+  type ReemplazoPendiente, type DatosPago,
 } from './reemplazoPago'
 
 // Hallazgo 252: editar un pago guardado nunca deja un hueco. Datos ficticios.
@@ -168,5 +169,44 @@ describe('anotación en el aparato', () => {
     const roto = { getItem: () => { throw new Error('bloqueado') }, setItem: () => { throw new Error('bloqueado') }, removeItem: () => {} }
     expect(leerReemplazos('s1', roto)).toEqual([])
     expect(() => guardarReemplazos('s1', [{ viejo: 'v', nuevo: 'n', at: 1 }], roto)).not.toThrow()
+  })
+})
+
+// Ronda 3 (I1 del verificador): un cambio a medias nunca traba la Noche sin salida. Datos ficticios.
+describe('revisarCambioEnBase / reemplazosDelDia / soltarReemplazo (ronda 3)', () => {
+  const r: ReemplazoPendiente = { viejo: 'v', nuevo: 'n', at: 1 }
+  const base = (...ids: string[]) => async (id: string) => (ids.includes(id) ? { id } : null)
+
+  it('el viejo ya no está en la base → resuelto (aunque la lista cargada lo traiga)', async () => {
+    expect(await revisarCambioEnBase(r, [mov('v'), mov('n')], base('n'))).toBe('resuelto')
+  })
+  it('los dos en la base → terminable; el nuevo todavía en la cola → en_cola; sin el nuevo → sin_nuevo', async () => {
+    expect(await revisarCambioEnBase(r, [mov('v'), mov('n')], base('v', 'n'))).toBe('terminable')
+    expect(await revisarCambioEnBase(r, [mov('v'), mov('n', { _pending: true })], base('v'))).toBe('en_cola')
+    expect(await revisarCambioEnBase(r, [mov('v'), mov('n')], base('v'))).toBe('sin_nuevo')
+  })
+  it('sin señal → desconocido (no se suelta nada)', async () => {
+    expect(await revisarCambioEnBase(r, [], async () => { throw new Error('Failed to fetch') })).toBe('desconocido')
+  })
+  it('reemplazosDelDia: solo los del día; sin turno conocido cuenta (mejor frenar)', () => {
+    const movs = [mov('v', { session_id: 's1' }), mov('n', { session_id: 's1' }), mov('v2', { session_id: null }), mov('n2')]
+    const ses = [{ id: 's1', session_date: '2000-01-01' }]
+    const r2: ReemplazoPendiente = { viejo: 'v2', nuevo: 'n2', at: 1 }
+    expect(reemplazosDelDia([r, r2], movs, ses, '2000-01-01')).toEqual([r, r2])
+    expect(reemplazosDelDia([r, r2], movs, ses, '2000-01-02')).toEqual([r2])
+  })
+  it('soltarReemplazo quita ese viejo de TODOS los turnos y deja lo demás', () => {
+    const m = new Map<string, string>()
+    const st = {
+      getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v) },
+      removeItem: (k: string) => { m.delete(k) }, key: (i: number) => [...m.keys()][i] ?? null, get length() { return m.size },
+    }
+    m.set(claveReemplazos('s1'), JSON.stringify([r, { viejo: 'x', nuevo: 'y', at: 2 }]))
+    m.set(claveReemplazos('s2'), JSON.stringify([r]))
+    m.set('otra-cosa', 'igual')
+    soltarReemplazo('v', st)
+    expect(leerTodosLosReemplazos(st)).toEqual([{ viejo: 'x', nuevo: 'y', at: 2 }])
+    expect(m.has(claveReemplazos('s2'))).toBe(false)
+    expect(m.get('otra-cosa')).toBe('igual')
   })
 })

@@ -186,8 +186,78 @@ export function leerTodosLosReemplazos(st: AlmacenListable | null = almacen() as
   return out
 }
 
+/**
+ * Suelta la anotación de ESE pago viejo en todos los turnos del aparato (el cambio terminó, se descartó o se resolvió
+ * solo). Avisa a las otras pantallas de Caja con el mismo evento.
+ */
+export function soltarReemplazo(viejo: string, st: (Almacen & AlmacenListable) | null = almacen() as (Almacen & AlmacenListable) | null): void {
+  try {
+    if (!st) return
+    const claves: string[] = []
+    for (let i = 0; i < st.length; i++) { const k = st.key(i); if (k?.startsWith(PREFIJO_CLAVE)) claves.push(k) }
+    for (const k of claves) {
+      const sid = k.slice(PREFIJO_CLAVE.length)
+      const antes = leerReemplazos(sid, st)
+      const despues = antes.filter(r => r.viejo !== viejo)
+      if (despues.length !== antes.length) {
+        if (despues.length) st.setItem(k, JSON.stringify(despues)); else st.removeItem(k)
+      }
+    }
+  } catch { /* almacenamiento que tira: queda como estaba */ }
+  try { globalThis.dispatchEvent?.(new Event(EVENTO_REEMPLAZOS)) } catch { /* sin eventos */ }
+}
+
+// ── Ronda 3 (I1 del verificador): que un cambio a medias nunca trabe la Noche sin salida ─────────────────────────
+// Antes, el único botón para terminarlo estaba en la Caja Diaria del turno abierto. Si OTRO aparato cerraba ese turno,
+// en este aparato quedaba la anotación (sin vencer), el Cierre del día frenaba la Noche y el botón ya no estaba en
+// ninguna pantalla. Ahora: (a) cada cambio abierto se revisa contra la BASE (no contra la lista cargada) y se suelta
+// solo si el viejo ya no existe; (b) el aviso del Cierre del día trae «Terminar el cambio» (y «Descartar el cambio»
+// si el nuevo no existe en la base); (c) el freno de la Noche mira solo los cambios de ESE día.
+
+/**
+ * Cómo está un cambio abierto en la base:
+ *  - `resuelto`: el viejo ya no existe (otro aparato lo terminó o se borró) → la anotación se suelta sola.
+ *  - `terminable`: están los dos y el nuevo está confirmado → «Terminar el cambio» (borra el viejo).
+ *  - `en_cola`: el nuevo todavía está en la cola de este aparato → esperar a que se sincronice.
+ *  - `sin_nuevo`: el viejo está y el nuevo NO existe en la base ni en la cola → «Descartar el cambio» (el viejo
+ *    vuelve a contar, que es lo que de verdad hay en la base).
+ *  - `desconocido`: no se pudo consultar (sin señal): se deja como está.
+ */
+export type EstadoCambio = 'resuelto' | 'terminable' | 'en_cola' | 'sin_nuevo' | 'desconocido'
+
+export async function revisarCambioEnBase(
+  r: ReemplazoPendiente,
+  movs: { id: string; _pending?: boolean }[],
+  releer: (id: string) => Promise<{ id: string } | null>,
+): Promise<EstadoCambio> {
+  try {
+    if (!(await releer(r.viejo))) return 'resuelto'
+    if (movs.some(m => m.id === r.nuevo && m._pending)) return 'en_cola'
+    return (await releer(r.nuevo)) ? 'terminable' : 'sin_nuevo'
+  } catch { return 'desconocido' }
+}
+
+/**
+ * Los cambios abiertos que tocan el día `fecha` (por el turno del pago viejo o del nuevo). Una anotación de otro día
+ * no frena el cierre de este. Si no se sabe el día de ninguno de los dos (turno no cargado), cuenta: mejor frenar.
+ */
+export function reemplazosDelDia(
+  abiertos: ReemplazoPendiente[],
+  movs: { id: string; session_id?: string | null }[],
+  sessions: { id: string; session_date: string }[],
+  fecha: string,
+): ReemplazoPendiente[] {
+  const diaDeSesion = new Map(sessions.map(s => [s.id, s.session_date]))
+  const sesionDe = new Map(movs.map(m => [m.id, m.session_id ?? null]))
+  const dia = (id: string) => { const s = sesionDe.get(id); return s ? diaDeSesion.get(s) ?? null : null }
+  return abiertos.filter(r => {
+    const dv = dia(r.viejo), dn = dia(r.nuevo)
+    return (dv == null && dn == null) || dv === fecha || dn === fecha
+  })
+}
+
 export const MSG_FASE2_CON_REEMPLAZO =
-  'Antes de cerrar la Noche, terminá el cambio de pago que quedó a medias en Caja Diaria (aviso rojo, «Terminar el cambio»).'
+  'Antes de cerrar la Noche, terminá el cambio de pago que quedó a medias (aviso rojo arriba, «Terminar el cambio»).'
 
 export const MSG_CIERRE_CON_REEMPLAZO =
   'Antes de cerrar, terminá el cambio de pago que quedó a medias (aviso rojo arriba, «Terminar el cambio»).'

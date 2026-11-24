@@ -15,6 +15,9 @@ const api = vi.hoisted(() => ({
   getCierresDia:       vi.fn(async () => [] as unknown[]),
   getAllCashMovements: vi.fn(async () => [] as unknown[]),
   getCashSessions:     vi.fn(async () => [] as unknown[]),
+  // Ronda 3: la base «real» de la prueba (lo que devuelve releer por id) y el borrado del viejo.
+  getCashMovementById: vi.fn<(id: string) => Promise<unknown>>(async () => null),
+  deleteCashMovement:  vi.fn<(id: string, nota: string, e?: string, p?: string) => Promise<void>>(async () => {}),
 }))
 vi.mock('../../shared/api/cash', () => ({
   ...api,
@@ -38,7 +41,7 @@ vi.mock('./cierrePozo', async (orig) => {
 
 import CashCierre from './CashCierre'
 import { fi, todayStr } from './cashUtils'
-import { claveReemplazos, guardarReemplazos, MSG_FASE2_CON_REEMPLAZO } from './reemplazoPago'
+import { claveReemplazos, guardarReemplazos, leerTodosLosReemplazos, MSG_FASE2_CON_REEMPLAZO, NOTA_REEMPLAZO } from './reemplazoPago'
 
 const HOY = todayStr()
 const mov = (id: string, p: Partial<CashMovement>): CashMovement => ({
@@ -69,10 +72,10 @@ const anotar = () => localStorage.setItem(claveReemplazos('sHoy'), JSON.stringif
 const montos = () => Array.from(document.querySelectorAll<HTMLInputElement>('.cierre-monto input'))
 const setMonto = (el: HTMLInputElement, v: number) => fireEvent.change(el, { target: { value: String(v) } })
 // Fase 2: ventas de noche y un conteo cualquiera para que aparezca la verificación con el pozo.
-const llenarNoche = () => {
+const llenarNoche = (remanente = 81000) => {
   const m = montos()
   setMonto(m[0], 1000)     // ventas noche ₡
-  setMonto(m[7], 81000)    // Remanente CF ₡
+  setMonto(m[7], remanente) // Remanente CF ₡
   fireEvent.click(screen.getByRole('button', { name: 'Sin novedades' }))
 }
 
@@ -82,6 +85,8 @@ beforeEach(() => {
   api.getCierresDia.mockResolvedValue([parcialSellado])
   api.getAllCashMovements.mockResolvedValue([fondo, viejo, nuevo])
   api.getCashSessions.mockResolvedValue([sesionHoy])
+  // La base de la prueba tiene los tres (el cambio a medias es real): ninguna anotación se suelta sola.
+  api.getCashMovementById.mockImplementation(async (id: string) => [fondo, viejo, nuevo].find(m => m.id === id) ?? null)
 })
 
 describe('CashCierre · cambio de pago sin terminar (hallazgo 252, ronda 2)', () => {
@@ -142,5 +147,93 @@ describe('CashCierre · cambio de pago sin terminar (hallazgo 252, ronda 2)', ()
     act(() => { guardarReemplazos('sHoy', [{ viejo: 'mov-viejo', nuevo: 'mov-nuevo', at: Date.now() }]) })
     expect(screen.getByTestId('resumen-pozo').textContent).toBe(fi(80000))
     expect(screen.getByText('Cambio de pago sin terminar.')).toBeTruthy()
+  })
+
+  // M1: el SEGUNDO freno (al confirmar). Una anotación que llega con el resumen ya abierto (otra pestaña) no cierra.
+  it('M1: con el resumen abierto llega un cambio a medias → «Confirmar» no cierra y avisa', async () => {
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    const btn = await screen.findByText(/Revisar resumen y cerrar el día/)
+    llenarNoche(66000)
+    fireEvent.click(btn)
+    const confirmar = await screen.findByText('✓ CONFIRMAR CIERRE DEL DÍA')
+    act(() => { guardarReemplazos('sHoy', [{ viejo: 'mov-viejo', nuevo: 'mov-nuevo', at: Date.now() }]) })
+    fireEvent.click(confirmar)
+    expect(await screen.findByText(MSG_FASE2_CON_REEMPLAZO)).toBeTruthy()
+    expect(api.cerrarDiaCompleto).not.toHaveBeenCalled()
+  })
+})
+
+// Ronda 3 (I1 del verificador): el turno del cambio lo cerró OTRO aparato. Antes la Noche quedaba frenada y
+// «Terminar el cambio» no estaba en ninguna pantalla. Ahora se termina (o se descarta) desde el Cierre del día, la
+// anotación se suelta sola si el viejo ya no está en la base y una de otro día no frena este cierre.
+describe('CashCierre · cambio a medias con el turno ya cerrado (ronda 3, I1)', () => {
+  const enBase = (...ms: CashMovement[]) => api.getCashMovementById.mockImplementation(async (id: string) => ms.find(m => m.id === id) ?? null)
+
+  it('caso reproducido: turno cerrado + par abierto → «Terminar el cambio» en el Cierre del día destraba la Noche', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    api.deleteCashMovement.mockImplementation(async () => {
+      api.getAllCashMovements.mockResolvedValue([fondo, nuevo]); enBase(fondo, nuevo)
+    })
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    const terminar = await screen.findByRole('button', { name: 'Terminar el cambio' })
+    fireEvent.click(terminar)
+    await waitFor(() => expect(api.deleteCashMovement).toHaveBeenCalledTimes(1))
+    expect(api.deleteCashMovement.mock.calls[0].slice(0, 2)).toEqual(['mov-viejo', NOTA_REEMPLAZO])
+    await waitFor(() => expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull())
+    expect(leerTodosLosReemplazos()).toEqual([])
+    const btn = screen.getByText(/Revisar resumen y cerrar el día/)
+    llenarNoche(81000)
+    fireEvent.click(btn)
+    expect(await screen.findByText('Resumen del cierre del día')).toBeTruthy()
+    expect(screen.queryByText(MSG_FASE2_CON_REEMPLAZO)).toBeNull()
+  })
+
+  it('si falla el borrado, avisa y el pago sigue contándose una vez (la anotación queda)', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    api.deleteCashMovement.mockRejectedValue(new Error('Failed to fetch'))
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Terminar el cambio' }))
+    expect(await screen.findByText(/No se pudo borrar el pago anterior: Failed to fetch/)).toBeTruthy()
+    expect(leerTodosLosReemplazos()).toHaveLength(1)
+    llenarNoche()
+    expect(screen.getByTestId('resumen-pozo').textContent).toBe(fi(80000))
+  })
+
+  it('se resuelve sola: en la base el viejo ya no existe → se suelta la anotación y se recarga', async () => {
+    anotar(); enBase(fondo, nuevo)   // la lista cargada todavía trae el viejo (quedó vieja)
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    await waitFor(() => expect(leerTodosLosReemplazos()).toEqual([]))
+    await waitFor(() => expect(api.getAllCashMovements).toHaveBeenCalledTimes(2))
+  })
+
+  it('el nuevo no existe en la base → «Descartar el cambio»: el viejo vuelve a contar y la Noche no se frena', async () => {
+    anotar(); enBase(fondo, viejo)
+    window.confirm = vi.fn(() => true)
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    expect(screen.queryByRole('button', { name: 'Terminar el cambio' })).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'Descartar el cambio' }))
+    expect(leerTodosLosReemplazos()).toEqual([])
+    expect(api.deleteCashMovement).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull())
+    llenarNoche()
+    expect(screen.getByTestId('resumen-pozo').textContent).toBe(fi(65000))
+  })
+
+  it('un cambio de OTRO día no frena la Noche de hoy (se cuenta una vez y se puede terminar)', async () => {
+    const AYER = '2000-01-01'
+    const sesionAyer = { ...sesionHoy, id: 'sAyer', session_date: AYER } as CashSession
+    const vA = { ...viejo, session_id: 'sAyer' }, nA = { ...nuevo, session_id: 'sAyer' }
+    api.getAllCashMovements.mockResolvedValue([fondo, vA, nA])
+    api.getCashSessions.mockResolvedValue([sesionAyer, sesionHoy])
+    localStorage.setItem(claveReemplazos('sAyer'), JSON.stringify([{ viejo: 'mov-viejo', nuevo: 'mov-nuevo', at: Date.now() }]))
+    enBase(fondo, vA, nA)
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    const btn = await screen.findByText(/Revisar resumen y cerrar el día/)
+    expect(await screen.findByText(/Es de otro día: no frena este cierre/)).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Terminar el cambio' })).toBeTruthy()
+    llenarNoche(81000)
+    fireEvent.click(btn)
+    expect(await screen.findByText('Resumen del cierre del día')).toBeTruthy()
+    expect(screen.queryByText(MSG_FASE2_CON_REEMPLAZO)).toBeNull()
   })
 })

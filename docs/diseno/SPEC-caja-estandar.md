@@ -158,6 +158,13 @@ así que `env(safe-area-inset-top)` vale 0) sino que cabecera y pestañas eran l
 pestañas tapaban el título. La cabecera seguida de pestañas deja de ser sticky. Quedan para el PR 3/4: el modal «El conteo
 no cuadra», el resumen antes de confirmar y el bloque del motivo, que siguen con el monto con signo.
 
+**PR 1 (24-nov):** `src/styles/estandar.css` (tokens y clases `est-*`, todo bajo `.est`; redefine también los alias
+`--t-border`, `--t-panel`, `--vt-border`, `--vt-panel`, que `:root` resuelve con los valores viejos), piezas en
+`src/shared/ui/estandar.tsx` (`Cifra`, `Cifras`, `Aviso`, `Pildora`, `Fases`, `Boton`) con pruebas, `@tabler/icons-react`
+3.52.0 fijo y `src/shared/ui/iconos.ts`. A diferencia del plan de §6 («sin pantallas»), por pedido del coordinador Caja ya
+lleva `.est` (fondo crema) y el primer ícono (flecha de «Deshacer cierre»). Las tarjetas internas siguen blancas hasta los
+PR 3–7. Las clases nuevas llevan prefijo `est-` para no chocar con las de `index.css` (`.pildora-*`, `.aviso`).
+
 Texto original de las opciones:
 
 1. **Fondo crema** en vez del blanco actual (el blanco fue una decisión anterior del rediseño). Recomendado: crema, como los SOP.

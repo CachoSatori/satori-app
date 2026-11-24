@@ -31,6 +31,7 @@ import {
   hayMontosNegativos, mensajeDiasPendientes, ventaSospechosaDeSerNeta,
 } from './cierrePozo'
 import { shiftLabel } from '../../shared/utils'
+import { IconArrowBackUp, PROPS_ICONO } from '../../shared/ui/iconos'
 import { avisoTipoCambio, errorTipoCambio, parseTipoCambio } from './tipoCambio'
 import {
   TEMAS_RESUMEN, SIN_NOVEDADES, AVISO_RESUMEN_VACIO, resumenVacio, agregarTema, type TemaResumen,
@@ -637,8 +638,8 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
           {(parcial || completo) && (
             <button onClick={handleDeshacer} disabled={saving} title="Deshacer SOLO el cierre (no borra los movimientos del día)"
-              style={{ background:'transparent', border:'1px solid var(--c-laca)', color:'var(--c-laca)', borderRadius:2, padding:'5px 10px', fontSize:'0.76rem', cursor:'pointer' }}>
-              ↩ Deshacer cierre
+              style={{ background:'transparent', border:'1px solid var(--c-laca)', color:'var(--c-laca)', borderRadius:2, padding:'5px 10px', fontSize:'0.76rem', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:6 }}>
+              <IconArrowBackUp {...PROPS_ICONO} size={16} />Deshacer cierre
             </button>
           )}
           <input type="date" value={fecha} max={today}

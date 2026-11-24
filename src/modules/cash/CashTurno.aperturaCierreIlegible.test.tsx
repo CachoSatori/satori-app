@@ -43,7 +43,7 @@ vi.mock('../../shared/FacturaThumbs', () => ({ default: () => null }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import CashTurno from './CashTurno'
-import { todayCR } from '../../shared/utils'
+import { RELOJES_CR, conRelojCR } from '../../test/relojCR.testutil'
 
 const { createCashSession, closeCashSession } = cashApi
 
@@ -73,83 +73,89 @@ const fondoCRC = () => cuadro('Caja Diaria — Proveedores (₡)')
 const fondoUSD = () => cuadro('$ Dólares (efectivo)')
 const abrir = async () => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: /CONFIRMAR APERTURA/i })) }) }
 
-describe('CashTurno · apertura — fondo ilegible no abre la caja (R31)', () => {
-  it('₡ con valor + «-450» detrás («120000-450»): avisa nombrando el cuadro y NO abre', async () => {
-    const { onError } = await renderApertura()
-    teclearNumero(fondoCRC(), '120000')
-    teclearNumero(fondoCRC(), '120000-450')
-    await abrir()
-    expect(createCashSession).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Caja Diaria — Proveedores \(₡\)».*no es un número/))
-  })
+// R34: la apertura se guarda con `session_date = todayCR()`; corre con el reloj fijo a las 23:30 CR en las cuatro
+// fechas de la matriz (a esa hora la fecha UTC ya es la de mañana).
+describe.each(RELOJES_CR)('apertura con reloj fijo $hoy · $caso', reloj => {
+  conRelojCR(reloj)
 
-  it('$ con «0-450» (el cuadro arranca en 0): avisa y NO abre', async () => {
-    const { onError } = await renderApertura()
-    teclearNumero(fondoUSD(), '0-450')
-    await abrir()
-    expect(createCashSession).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«\$ Dólares \(efectivo\)».*no es un número/))
-  })
+  describe('CashTurno · apertura — fondo ilegible no abre la caja (R31)', () => {
+    it('₡ con valor + «-450» detrás («120000-450»): avisa nombrando el cuadro y NO abre', async () => {
+      const { onError } = await renderApertura()
+      teclearNumero(fondoCRC(), '120000')
+      teclearNumero(fondoCRC(), '120000-450')
+      await abrir()
+      expect(createCashSession).not.toHaveBeenCalled()
+      expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Caja Diaria — Proveedores \(₡\)».*no es un número/))
+    })
 
-  it('cuadro VACÍO + «-» desde la primera tecla (no dispara onChange): avisa y NO abre', async () => {
-    const { onError } = await renderApertura()
-    teclearNumero(fondoCRC(), '')       // borra el 0
-    teclearNumero(fondoCRC(), '-')      // '' → '': solo onInput se entera
-    await abrir()
-    expect(createCashSession).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Caja Diaria — Proveedores \(₡\)».*no es un número/))
-  })
+    it('$ con «0-450» (el cuadro arranca en 0): avisa y NO abre', async () => {
+      const { onError } = await renderApertura()
+      teclearNumero(fondoUSD(), '0-450')
+      await abrir()
+      expect(createCashSession).not.toHaveBeenCalled()
+      expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«\$ Dólares \(efectivo\)».*no es un número/))
+    })
 
-  it('negativo legible («-450»): avisa y NO abre', async () => {
-    const { onError } = await renderApertura()
-    teclearNumero(fondoCRC(), '-450')
-    await abrir()
-    expect(createCashSession).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledWith('«Caja Diaria — Proveedores (₡)»: el monto no puede ser negativo.')
-  })
+    it('cuadro VACÍO + «-» desde la primera tecla (no dispara onChange): avisa y NO abre', async () => {
+      const { onError } = await renderApertura()
+      teclearNumero(fondoCRC(), '')       // borra el 0
+      teclearNumero(fondoCRC(), '-')      // '' → '': solo onInput se entera
+      await abrir()
+      expect(createCashSession).not.toHaveBeenCalled()
+      expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Caja Diaria — Proveedores \(₡\)».*no es un número/))
+    })
 
-  it('borrar el ilegible → vacío = 0: abre con ₡0', async () => {
-    await renderApertura()
-    teclearNumero(fondoCRC(), '')
-    teclearNumero(fondoCRC(), '-')
-    teclearNumero(fondoCRC(), '')       // '' → '' otra vez: la marca se va por onInput
-    await abrir()
-    await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
-    expect(createCashSession.mock.calls[0][0]).toMatchObject({ initial_suppliers_crc: 0, initial_cash_usd: 0 })
-  })
+    it('negativo legible («-450»): avisa y NO abre', async () => {
+      const { onError } = await renderApertura()
+      teclearNumero(fondoCRC(), '-450')
+      await abrir()
+      expect(createCashSession).not.toHaveBeenCalled()
+      expect(onError).toHaveBeenCalledWith('«Caja Diaria — Proveedores (₡)»: el monto no puede ser negativo.')
+    })
 
-  // Verificador del #337: el monto del cierre anterior llega DESPUÉS de que el cajero tecleó algo ilegible. El cuadro
-  // pasa a mostrar ese número; la marca vieja no puede quedar (avisaba «no es un número» con un número a la vista).
-  it('precarga del cierre anterior DESPUÉS de teclear algo ilegible: borra la marca y abre con lo precargado', async () => {
-    let entregar: (c: Record<string, unknown>) => void = () => {}
-    prevApi.getPreviousCierre.mockImplementationOnce(() => new Promise(res => { entregar = res }))
-    const { onError } = await renderApertura()
-    teclearNumero(fondoCRC(), '')
-    teclearNumero(fondoCRC(), '-')
-    teclearNumero(fondoUSD(), '0abc')
-    await act(async () => { entregar({ session_date: '2026-06-30', sep_diaria_crc: 80000, sep_diaria_usd: 15 }) })
-    // Como en el navegador: al poner React un número en el cuadro, deja de estar badInput.
-    for (const c of [fondoCRC(), fondoUSD()]) Reflect.deleteProperty(c, 'validity')
-    expect(fondoCRC().value).toBe('80000')
-    expect(fondoUSD().value).toBe('15')
-    await abrir()
-    expect(onError).not.toHaveBeenCalledWith(expect.stringMatching(/no es un número/))
-    await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
-    expect(createCashSession.mock.calls[0][0]).toMatchObject({ initial_suppliers_crc: 80000, initial_cash_usd: 15 })
-  })
+    it('borrar el ilegible → vacío = 0: abre con ₡0', async () => {
+      await renderApertura()
+      teclearNumero(fondoCRC(), '')
+      teclearNumero(fondoCRC(), '-')
+      teclearNumero(fondoCRC(), '')       // '' → '' otra vez: la marca se va por onInput
+      await abrir()
+      await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
+      expect(createCashSession.mock.calls[0][0]).toMatchObject({ initial_suppliers_crc: 0, initial_cash_usd: 0 })
+    })
 
-  it('paridad: montos válidos se guardan igual que en main', async () => {
-    await renderApertura()
-    teclearNumero(fondoCRC(), '120000')
-    teclearNumero(fondoUSD(), '35.5')
-    await abrir()
-    await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
-    expect(createCashSession.mock.calls[0][0]).toEqual({
-      session_date: todayCR(), shift_type: expect.any(String), opened_by: 'u1', cajero_name: 'Caja Test',
-      initial_cash_crc: 0, initial_cash_usd: 35.5, initial_suppliers_crc: 120000,
+    // Verificador del #337: el monto del cierre anterior llega DESPUÉS de que el cajero tecleó algo ilegible. El cuadro
+    // pasa a mostrar ese número; la marca vieja no puede quedar (avisaba «no es un número» con un número a la vista).
+    it('precarga del cierre anterior DESPUÉS de teclear algo ilegible: borra la marca y abre con lo precargado', async () => {
+      let entregar: (c: Record<string, unknown>) => void = () => {}
+      prevApi.getPreviousCierre.mockImplementationOnce(() => new Promise(res => { entregar = res }))
+      const { onError } = await renderApertura()
+      teclearNumero(fondoCRC(), '')
+      teclearNumero(fondoCRC(), '-')
+      teclearNumero(fondoUSD(), '0abc')
+      await act(async () => { entregar({ session_date: '2026-06-30', sep_diaria_crc: 80000, sep_diaria_usd: 15 }) })
+      // Como en el navegador: al poner React un número en el cuadro, deja de estar badInput.
+      for (const c of [fondoCRC(), fondoUSD()]) Reflect.deleteProperty(c, 'validity')
+      expect(fondoCRC().value).toBe('80000')
+      expect(fondoUSD().value).toBe('15')
+      await abrir()
+      expect(onError).not.toHaveBeenCalledWith(expect.stringMatching(/no es un número/))
+      await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
+      expect(createCashSession.mock.calls[0][0]).toMatchObject({ initial_suppliers_crc: 80000, initial_cash_usd: 15 })
+    })
+
+    it('paridad: montos válidos se guardan igual que en main', async () => {
+      await renderApertura()
+      teclearNumero(fondoCRC(), '120000')
+      teclearNumero(fondoUSD(), '35.5')
+      await abrir()
+      await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
+      expect(createCashSession.mock.calls[0][0]).toEqual({
+        session_date: reloj.hoy, shift_type: expect.any(String), opened_by: 'u1', cajero_name: 'Caja Test',
+        initial_cash_crc: 0, initial_cash_usd: 35.5, initial_suppliers_crc: 120000,
+      })
     })
   })
-})
+})   // describe.each(RELOJES_CR) apertura
 
 // ── Cierre del turno ────────────────────────────────────────────────────────────────────────────────────
 const session = {

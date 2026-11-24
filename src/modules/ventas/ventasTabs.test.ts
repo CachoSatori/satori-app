@@ -6,6 +6,8 @@
 // Las tablas de este archivo están escritas a mano A PROPÓSITO (no se derivan de `ventasTabs.ts`):
 // si alguien cambia una entrada, una sub-vista, una dirección o un rol, una prueba cae.
 import { describe, it, expect } from 'vitest'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   puedeEditarCompetencias,
   TABS, ENTRADAS, CLAVE_V, tabPorDefecto, resolverDireccion, resolverVista, direccionDe, entradasVisibles,
@@ -89,6 +91,19 @@ describe('ventasTabs · menú de siete entradas (3.5.2; «Tiempos» sin sub-pest
     expect(enEntradas).toHaveLength(14)
     expect(new Set(enEntradas)).toEqual(new Set(TABS.map(t => t.id)))
     for (const v of ['hoy', 'ventas', 'historico', 'analisis', 'calendario', 'saloneros', 'evaluacion']) expect(TABS.map(t => t.id as string)).not.toContain(v)
+  })
+
+  it('3.5.5: los componentes de las vistas retiradas ya no están, ni nadie los importa (solo quedan sus redirecciones)', () => {
+    // «Ventas» (`VentasContabilidad.tsx`) queda a propósito: la importa la prueba de contrato de la Edge
+    // `ventas-dia-contador` (supabase/functions/, fuera de un PR de limpieza; regla 2). Está fuera del menú desde el 3.5.2.
+    const BORRADOS = ['VentasHoy', 'VentasHistorico', 'VentasAnalisis', 'VentasCalendario', 'VentasSaloneros', 'VentasEvaluacion']
+    const dir = 'src/modules/ventas'
+    for (const b of BORRADOS) expect(existsSync(join(dir, `${b}.tsx`)), b).toBe(false)
+    const fuentes = readdirSync(dir).filter(f => /\.tsx?$/.test(f)).map(f => readFileSync(join(dir, f), 'utf8'))
+    for (const b of BORRADOS) {
+      const importa = new RegExp(`from '\\./${b}'|import\\('\\./${b}'\\)`)
+      expect(fuentes.filter(s => importa.test(s)), b).toEqual([])
+    }
   })
 
   it('cada entrada lleva sus vistas, sin cambiarles el nombre; «Resumen» y «Tiempos» ya no llevan sub-pestañas (SPEC §12.4)', () => {

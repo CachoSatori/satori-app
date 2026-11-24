@@ -34,15 +34,16 @@ vi.mock('../../shared/FacturaVerify', () => ({ default: () => null }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import CashMovimientos from './CashMovimientos'
-import { todayCR } from '../../shared/utils'
+import { RELOJES_CR, conRelojCR } from '../../test/relojCR.testutil'
 const { updateCashMovement } = api
 
-// FECHA DEL FIXTURE EN HORA DE COSTA RICA, no UTC.
-// El filtro de Movimientos acota con `todayCR()`; un `new Date().toISOString()` da la fecha UTC,
-// que entre las 18:00 y la medianoche de CR ya es EL DÍA SIGUIENTE. El movimiento quedaba
-// fechado mañana, el filtro lo dejaba fuera y estos tests fallaban solo de noche — un flake
-// que no probaba nada del código.
-const hoy = todayCR()
+// FECHA EN HORA DE COSTA RICA, no UTC.
+// El filtro de Movimientos acota hasta `todayCR()` y fecha cada movimiento con `dateCR(created_at)`. Antes este
+// archivo tomaba el reloj real y fallaba solo de noche (de 18:00 a 24:00 CR la fecha UTC ya es la de mañana).
+// R34: ahora el reloj se FIJA a las 23:30 CR en cada caso de la matriz (beforeEach) y el movimiento se crea EN
+// ESE INSTANTE (`new Date().toISOString()`, que en UTC ya es el día siguiente): la pantalla tiene que leerlo
+// como de HOY en Costa Rica, no por el prefijo UTC.
+const ahora = () => new Date().toISOString()
 
 const mov = (over: Partial<CashMovement>) => ({
   id: 'm-base', session_id: null, created_by: 'u1', movement_type: 'egreso_operativo',
@@ -50,17 +51,17 @@ const mov = (over: Partial<CashMovement>) => ({
   description: 'gasto', subcategory: '', supplier_id: null,
   supplier_name: '', employee_name: '', method: 'Efectivo', shift: '',
   caja_origen: 'Caja Fuerte', status: 'pendiente', approved_by: null, approved_at: null,
-  account_id: null, created_at: `${hoy}T12:00:00Z`, updated_at: `${hoy}T12:00:00Z`,
+  account_id: null, created_at: ahora(), updated_at: ahora(),
   ...over,
 } as unknown as CashMovement)
 
 // La propina que dispara el bug: quedó pendiente con la sesión de SU día (ya cerrado).
-const propinaPendiente = mov({
+const propinaPendiente = () => mov({
   id: 'prop-1', movement_type: 'egreso_personal', subcategory: 'Propinas por turno',
   description: 'Propinas turno 2026-07-19 Noche', caja_origen: 'Registradora',
   session_id: 'ses-vieja', amount_crc: 30000,
 })
-const proveedorPendiente = mov({
+const proveedorPendiente = () => mov({
   id: 'prov-1', description: 'Factura 12', supplier_name: 'Proveedor de prueba 1', amount_crc: 50000,
 })
 
@@ -81,38 +82,42 @@ const cambiarEstado = (descripcionDeLaFila: string, a: 'Pagado' | 'Pendiente') =
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('CashMovimientos · aprobar una propina pendiente desde el select de estado', () => {
-  it('propina → se salda por BANCO (los 3 campos), no solo el status', async () => {
-    renderMovs([propinaPendiente, proveedorPendiente])
+describe.each(RELOJES_CR)('reloj fijo $hoy · $caso', reloj => {
+  conRelojCR(reloj)
 
-    cambiarEstado('Propinas turno 2026-07-19 Noche', 'Pagado')
+  describe('CashMovimientos · aprobar una propina pendiente desde el select de estado', () => {
+    it('propina → se salda por BANCO (los 3 campos), no solo el status', async () => {
+      renderMovs([propinaPendiente(), proveedorPendiente()])
 
-    await waitFor(() => expect(updateCashMovement).toHaveBeenCalledTimes(1))
-    expect(updateCashMovement.mock.calls[0][0]).toBe('prop-1')
-    expect(updateCashMovement.mock.calls[0][1]).toEqual({
-      status: 'aprobado', method: 'Transferencia', caja_origen: 'Banco',
+      cambiarEstado('Propinas turno 2026-07-19 Noche', 'Pagado')
+
+      await waitFor(() => expect(updateCashMovement).toHaveBeenCalledTimes(1))
+      expect(updateCashMovement.mock.calls[0][0]).toBe('prop-1')
+      expect(updateCashMovement.mock.calls[0][1]).toEqual({
+        status: 'aprobado', method: 'Transferencia', caja_origen: 'Banco',
+      })
+    })
+
+    it('proveedor → sigue siendo solo el status, sin tocar método ni caja', async () => {
+      renderMovs([propinaPendiente(), proveedorPendiente()])
+
+      cambiarEstado('Factura 12', 'Pagado')
+
+      await waitFor(() => expect(updateCashMovement).toHaveBeenCalledTimes(1))
+      expect(updateCashMovement.mock.calls[0][0]).toBe('prov-1')
+      expect(updateCashMovement.mock.calls[0][1]).toEqual({ status: 'aprobado' })
+    })
+
+    it('volver una propina a PENDIENTE no arrastra método ni caja — solo el status', async () => {
+      const propinaAprobada = mov({
+        ...propinaPendiente(), status: 'aprobado',
+      } as Partial<CashMovement>)
+      renderMovs([propinaAprobada])
+
+      cambiarEstado('Propinas turno 2026-07-19 Noche', 'Pendiente')
+
+      await waitFor(() => expect(updateCashMovement).toHaveBeenCalledTimes(1))
+      expect(updateCashMovement.mock.calls[0][1]).toEqual({ status: 'pendiente' })
     })
   })
-
-  it('proveedor → sigue siendo solo el status, sin tocar método ni caja', async () => {
-    renderMovs([propinaPendiente, proveedorPendiente])
-
-    cambiarEstado('Factura 12', 'Pagado')
-
-    await waitFor(() => expect(updateCashMovement).toHaveBeenCalledTimes(1))
-    expect(updateCashMovement.mock.calls[0][0]).toBe('prov-1')
-    expect(updateCashMovement.mock.calls[0][1]).toEqual({ status: 'aprobado' })
-  })
-
-  it('volver una propina a PENDIENTE no arrastra método ni caja — solo el status', async () => {
-    const propinaAprobada = mov({
-      ...propinaPendiente, status: 'aprobado',
-    } as Partial<CashMovement>)
-    renderMovs([propinaAprobada])
-
-    cambiarEstado('Propinas turno 2026-07-19 Noche', 'Pendiente')
-
-    await waitFor(() => expect(updateCashMovement).toHaveBeenCalledTimes(1))
-    expect(updateCashMovement.mock.calls[0][1]).toEqual({ status: 'pendiente' })
-  })
-})
+})   // describe.each(RELOJES_CR)

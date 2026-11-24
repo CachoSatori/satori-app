@@ -1025,13 +1025,14 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                       </div>
                     </div>
                     {/* SPEC-caja-estandar §4: en curso «Faltan / Sobran / Cuadra» con la tolerancia en
-                        palabras. El color sigue a `cuadra` / `cuadraUSD` de siempre (misma frontera). */}
+                        palabras. Titular = el PEOR estado de ₡ y US$ (verificador #348, ronda 2): si faltan
+                        dólares no dice «Cuadra». Misma frontera que `cuadra` / `cuadraUSD`. */}
                     {(() => {
-                      const t = textoDiferencia(diferencia ?? 0, 'crc', false)
+                      const r = resumenDiferencia(diferencia ?? 0, difUSD, false)
                       return (
-                        <div className={`cd-cierre-resultado ${cuadra ? 'ok' : t.tono === 'oro' ? 'sobra' : 'fail'}`} data-bloque="diferencia" style={{ flexDirection:'column', alignItems:'flex-start', gap:2 }}>
-                          <span>Diferencia: {t.titular}</span>
-                          <span style={{ fontWeight:400, fontSize:'0.76rem' }}>{t.nota}</span>
+                        <div className={`cd-cierre-resultado ${r.tono === 'musgo' ? 'ok' : r.tono === 'oro' ? 'sobra' : 'fail'}`} data-bloque="diferencia" data-tono={r.tono} style={{ flexDirection:'column', alignItems:'flex-start', gap:2 }}>
+                          <span data-titular>Diferencia: {r.titular}</span>
+                          {r.detalle.map(l => <span key={l.texto} data-linea style={{ fontWeight:400, fontSize:'0.76rem' }}>{l.texto}</span>)}
                         </div>
                       )
                     })()}

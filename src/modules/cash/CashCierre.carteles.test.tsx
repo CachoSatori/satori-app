@@ -173,6 +173,42 @@ describe('Diferencia en curso (verificación en vivo)', () => {
     expect(b.className).toContain('sobra')
     expect(b.className).not.toMatch(/\b(ok|fail)\b/)
   })
+  // Con dólares: [8]=Remanente CF $ (contado). Verificador #348, ronda 2.
+  const enCursoUsd = async (contadoCrc: number, contadoUsd: number) => {
+    // US$10 sellados al mediodía (vm_usd) → debería US$10; los colones no cambian.
+    api.getCierresDia.mockResolvedValue([fila('parcial_mediodia', { vm_usd: 10 })])
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    await screen.findByText(/Revisar resumen y cerrar el día/)
+    setMonto(montos()[0], 100000)
+    setMonto(montos()[7], contadoCrc)
+    setMonto(montos()[8], contadoUsd)
+    return bloqueDif()
+  }
+  const tit = (b: HTMLElement) => b.querySelector('[data-titular]')!.textContent
+  it('en curso, faltan SOLO dólares: «Faltan $2,00» en laca, no «Cuadra»', async () => {
+    const b = await enCursoUsd(100000, 8)
+    expect(tit(b)).toBe('Diferencia: Faltan $2,00')
+    expect(b.className).toContain('fail')
+    expect(b.textContent).toContain('Colones: cuadra, sin diferencia')
+    expect(b.textContent).toContain('Dólares: faltan $2,00, fuera de tolerancia (US$1)')
+  })
+  it('en curso, sobran SOLO dólares: oro', async () => {
+    const b = await enCursoUsd(100000, 13.5)
+    expect(tit(b)).toBe('Diferencia: Sobran $3,50')
+    expect(b.className).toContain('sobra')
+  })
+  it('en curso, faltan las dos: un verbo y los dos montos', async () => {
+    const b = await enCursoUsd(98049, 8)
+    expect(tit(b)).toBe('Diferencia: Faltan ₡1.951 y $2,00')
+    expect(b.className).toContain('fail')
+  })
+  it('en curso, sobran colones y faltan dólares: manda el faltante; las dos en el detalle', async () => {
+    const b = await enCursoUsd(102300, 8)
+    expect(tit(b)).toBe('Diferencia: Faltan $2,00')
+    expect(b.className).toContain('fail')
+    expect(b.textContent).toContain('Colones: sobran ₡2.300, fuera de tolerancia (₡500)')
+    expect(b.textContent).toContain('Dólares: faltan $2,00, fuera de tolerancia (US$1)')
+  })
   const cajaAjuste = () => document.querySelector('[data-bloque="ajuste"]') as HTMLElement
   it('sobrante: la caja del ajuste también va en oro y dice «Sobran», sin «+₡» en laca', async () => {
     await enCurso(102300)

@@ -163,31 +163,41 @@ select '07 «rinde» 1 no deja fila, lo que no existe en el PoS no pasa, y lo he
        pg_temp.ajustes('prueba-198') = '8001=5/- | 8002=2/- | 8003=2/- | 8005=20/-',
        pg_temp.ajustes('prueba-198');
 insert into _r198 (caso, ok, detalle)
-select '08 categoría heredada solo en códigos de las familias 11, 15 y 25',
+select '08 categoría heredada solo en códigos de las familias mixtas 1, 9, 11, 15 y 25',
        not exists (select 1 from public.pos_producto_ajustes a join public.pos_productos p using (local, codigo)
-                    where a.categoria is not null and (p.familia is null or p.familia not in (11, 15, 25))),
+                    where a.categoria is not null and (p.familia is null or p.familia not in (1, 9, 11, 15, 25))),
        (select string_agg(a.codigo || '/' || coalesce(p.familia::text, 'null'), ',') from public.pos_producto_ajustes a
-          join public.pos_productos p using (local, codigo) where a.categoria is not null and (p.familia is null or p.familia not in (11, 15, 25)));
+          join public.pos_productos p using (local, codigo) where a.categoria is not null and (p.familia is null or p.familia not in (1, 9, 11, 15, 25)));
 insert into _r198 (caso, ok, detalle)
-select '09 todo código de santa-teresa en las familias 11, 15 y 25 tiene su categoría (lista de 82 del 24-nov); el 192 va a menu_especial y ningún otro',
+select '09 todo código de santa-teresa en las familias mixtas 1, 9, 11, 15 y 25 tiene su categoría (82 del 24-nov + 166, 207 y 1); el 192 va a menu_especial y ningún otro',
        not exists (select 1 from public.pos_productos p left join public.pos_producto_ajustes a using (local, codigo)
-                    where p.local = 'santa-teresa' and p.familia in (11, 15, 25) and a.categoria is null)
+                    where p.local = 'santa-teresa' and p.familia in (1, 9, 11, 15, 25) and a.categoria is null)
        and not exists (select 1 from public.pos_producto_ajustes where categoria = 'menu_especial' and (local, codigo) <> ('santa-teresa', '192'))
        and coalesce((select a.categoria from public.pos_producto_ajustes a join public.pos_productos p using (local, codigo)
                       where p.local = 'santa-teresa' and p.codigo = '192' and p.familia = 11), 'menu_especial') = 'menu_especial',
        (select 'comida ' || count(*) filter (where categoria = 'comida') || ' · bebida ' || count(*) filter (where categoria = 'bebida')
-               || ' · menu_especial ' || count(*) filter (where categoria = 'menu_especial') || ' · sin categoría en 11/15/25: '
+               || ' · menu_especial ' || count(*) filter (where categoria = 'menu_especial') || ' · sin categoría en las mixtas: '
                || (select coalesce(string_agg(p.codigo, ',' order by p.codigo), '-') from public.pos_productos p
                      left join public.pos_producto_ajustes a using (local, codigo)
-                    where p.local = 'santa-teresa' and p.familia in (11, 15, 25) and a.categoria is null)
+                    where p.local = 'santa-teresa' and p.familia in (1, 9, 11, 15, 25) and a.categoria is null)
           from public.pos_producto_ajustes where local = 'santa-teresa');
+insert into _r198 (caso, ok, detalle)
+select '93 familias mixtas 1 y 9 (24-nov): el código de la 1 borrada va a bebida y el 166 de la 9 BELIEVE a comida (si están)',
+       not exists (select 1 from public.pos_productos p left join public.pos_producto_ajustes a using (local, codigo)
+                    where p.local = 'santa-teresa' and ((p.codigo = '1' and p.familia = 1 and a.categoria is distinct from 'bebida')
+                                                     or (p.codigo = '166' and p.familia = 9 and a.categoria is distinct from 'comida')))
+       and (select categoria from public.pos_familias where local = 'santa-teresa' and familia = 9) = 'comida'
+       and (select nombre from public.pos_familias where local = 'santa-teresa' and familia = 1) = '(clasificación borrada)',
+       (select string_agg(p.codigo || '/' || p.familia || '=' || coalesce(a.categoria, '-'), ',' order by p.codigo)
+          from public.pos_productos p left join public.pos_producto_ajustes a using (local, codigo)
+         where p.local = 'santa-teresa' and p.familia in (1, 9));
 insert into _r198 (caso, ok, detalle)
 select '10 lo cargado por la migración no tiene autor (actualizado_por null)',
        not exists (select 1 from public.pos_producto_ajustes where actualizado_por is not null), null;
 insert into _r198 (caso, ok, detalle)
-select '11 familias de santa-teresa: las 24 de FAMILIAS_CATALOGO (netaVenta.ts), ni una más',
+select '11 familias de santa-teresa: las 29 del PoS (FAMILIAS_CATALOGO de netaVenta.ts + 7, 8, 10, 14 y 18, sin ventas), ni una más',
        (select array_agg(familia order by familia) from public.pos_familias where local = 'santa-teresa')
-         = array[1, 2, 3, 4, 5, 6, 9, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+         = array[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
        (select array_agg(familia order by familia)::text from public.pos_familias where local = 'santa-teresa');
 insert into _r198 (caso, ok, detalle)
 select '12 fuera de la venta = {6, 17, 20} (cortesia, personal, ingredientes), igual que FAMILIAS_NO_VENTA',
@@ -204,8 +214,8 @@ select '14 la tabla de familias no acepta familia 17 en comida ni familia 3 en c
        and pg_temp.intentar($$insert into public.pos_familias (local, familia, nombre, categoria) values ('prueba-198-x', 3, 'X', 'cortesia')$$) = '23514',
        null;
 insert into _r198 (caso, ok, detalle)
-select '15 los nombres de familia marcados POR CONFIRMAR son, a lo sumo, los de 1, 9 y 27 (los de 11, 15 y 25 los marca el comentario)',
-       coalesce((select array_agg(familia order by familia) from public.pos_familias where nombre like 'POR CONFIRMAR%'), '{}') <@ array[1, 9, 27],
+select '15 los nombres de familia marcados POR CONFIRMAR son, a lo sumo, los de 7, 8, 25 y 27 (los de 11 y 15 los marca el comentario)',
+       coalesce((select array_agg(familia order by familia) from public.pos_familias where nombre like 'POR CONFIRMAR%'), '{}') <@ array[7, 8, 25, 27],
        (select coalesce(string_agg(familia::text, ',' order by familia), '-') from public.pos_familias where nombre like 'POR CONFIRMAR%');
 insert into _r198 (caso, ok, detalle)
 select '16 una factura anulada también registra el producto (8006)',

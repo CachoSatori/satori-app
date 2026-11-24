@@ -3,9 +3,9 @@
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
 -- PR 3.1a (SPEC docs/ventas/SPEC-3.1-catalogo.md §6, PR #350). Entra a prod por merge → Branching, SOLO con la firma
--- del dueño (D-9) sobre el SHA del PR y con los seis nombres de familia confirmados en la PC del PoS (docs/pases/PASE-198.md).
+-- del dueño (D-9) sobre el SHA del PR y con los nombres de familia leídos en la PC del PoS (docs/pases/PASE-198.md).
 -- D8 (catálogo único por código), D17 (el catálogo sale del PoS) y las decisiones del 24-nov: D-2 = C (categoría
--- por código en la app), D-3 (las familias 11, 15 y 25 van a comida o bebida, código por código) y la categoría
+-- por código en la app), D-3 (las familias mixtas 1, 9, 11, 15 y 25 van a comida o bebida, código por código) y la categoría
 -- `menu_especial` (el ítem por comensal de un menú cerrado). La SUBCATEGORÍA no entra acá: viene del PoS (3.1c).
 --
 -- Agrega (no reemplaza nada vivo; por eso no lleva guarda de md5, R13):
@@ -220,46 +220,55 @@ grant execute on function public.pos_catalogo_refrescar(text) to service_role;
 select x.local, public.pos_catalogo_refrescar(x.local) as productos
 from (select distinct local from public.pos_ndf_tickets) x;
 
--- Familias de santa-teresa: las 23 que tienen productos en las facturas y la 20 (ingredientes). Los nombres son los del PoS; los
--- marcados «POR CONFIRMAR» se leen en la PC del PoS (solo lectura) antes del pase. Las familias 1, 9 y 27 tienen
--- nombre en el PoS (no admite una familia sin nombre) pero no estaba en ninguna tabla de la app: el texto de acá
--- es un marcador y el PR 3.1a NO puede salir con él (lo frena una prueba). Categoría: la que ya usan las cuentas firmadas (comida 2,3,4,13,16,29 ·
--- bebida 5 · fuera de la venta 6, 17 y 20). Las familias 11, 15 y 25 mezclan comida y bebida (D-3, 24-nov): acá va
--- la categoría de un código NUEVO de esas familias (la de la mayoría de sus líneas); los códigos que ya existen
--- llevan la suya, uno por uno, más abajo.
+-- Familias de santa-teresa: las 29 del PoS (`FAC_Clasificaciones`, leídas por el dueño el 24-nov 15:43 CR), menos las
+-- que no existen. Nombres como están en el PoS. La 1 NO existe en el PoS: sus códigos vienen de una clasificación
+-- borrada y se cargan con un rótulo propio. Las marcadas «POR CONFIRMAR» llevan un nombre que falta copiar de la
+-- lectura del dueño: el PR 3.1a NO puede salir así (lo frena una prueba del gate).
+-- Categoría (decisiones del dueño, 24-nov ~15:50 CR): la que ya usan las cuentas firmadas (comida 2,3,4,13,16,29 ·
+-- bebida 5 · fuera de la venta 6, 17 y 20) · 18 → bebida · 10 → merch · 17 → regalías (`cortesia`: no es venta,
+-- fijada por la familia) · 6 → consumo del personal (`personal`: aparte, fuera de la venta neta de carta) · 20 sin
+-- ventas. MIXTAS, categoría por código (D-3 y A-2): 1, 9, 11, 15 y 25 llevan acá la categoría de un código NUEVO
+-- (la de la mayoría de sus líneas) y sus códigos de hoy la suya, uno por uno, más abajo. 7, 8 y 14 también van por
+-- código, pero hoy no tienen ninguna venta: un código nuevo entra en `otros` hasta que alguien le ponga la suya.
 insert into public.pos_familias (local, familia, nombre, categoria, orden) values
-  ('santa-teresa',  2, 'TAPAS ASIATICAS',      'comida',       10),
-  ('santa-teresa',  3, 'SUSHI ROLLS',          'comida',       20),
-  ('santa-teresa', 16, 'POKES BOWLS CEVICHES', 'comida',       30),
-  ('santa-teresa', 13, 'KIDS MENU',            'comida',       40),
-  ('santa-teresa',  4, 'POSTRES',              'comida',       50),
-  ('santa-teresa', 29, 'GREENSEASON',          'comida',       60),
-  ('santa-teresa', 11, 'MENU AÑO NUEVO',       'comida',       70),  -- nombre POR CONFIRMAR
-  ('santa-teresa', 15, 'EVENTOS TERRAZA',      'comida',       80),  -- nombre POR CONFIRMAR
-  ('santa-teresa',  9, 'POR CONFIRMAR (9)',    'comida',       90),  -- nombre y categoría POR CONFIRMAR
-  ('santa-teresa',  5, 'BEBIDAS',              'bebida',       10),
-  ('santa-teresa', 25, 'PROMOCIONES',          'bebida',       20),  -- nombre POR CONFIRMAR
-  ('santa-teresa',  1, 'POR CONFIRMAR (1)',    'bebida',       30),  -- nombre y categoría POR CONFIRMAR
-  ('santa-teresa', 22, 'EXTRAS',               'extras',       10),
-  ('santa-teresa', 21, 'TSHIRTS',              'merch',        10),
-  ('santa-teresa', 23, 'T-GORRAS',             'merch',        20),
-  ('santa-teresa', 24, 'T-DARUMAS',            'merch',        30),
-  ('santa-teresa', 26, 'T-STICKERS',           'merch',        40),
-  ('santa-teresa', 27, 'POR CONFIRMAR (27)',   'merch',        50),  -- nombre y categoría POR CONFIRMAR
-  ('santa-teresa', 12, 'GIFT CARDS',           'giftcard',     10),
-  ('santa-teresa', 19, 'A PAX',                'pax',          10),
-  ('santa-teresa', 28, 'XX DUEÑOS',            'duenos',       10),
-  ('santa-teresa', 17, 'X CORTESIAS',          'cortesia',     10),
-  ('santa-teresa',  6, 'PERSONAL',             'personal',     10),
-  ('santa-teresa', 20, 'INGREDIENTES',         'ingredientes', 10);
+  ('santa-teresa',  2, 'TAPAS ASIATICAS',          'comida',       10),
+  ('santa-teresa',  3, 'SUSHI ROLLS',              'comida',       20),
+  ('santa-teresa', 16, 'POKES BOWLS CEVICHES',     'comida',       30),
+  ('santa-teresa', 13, 'KIDS MENU',                'comida',       40),
+  ('santa-teresa',  4, 'POSTRES',                  'comida',       50),
+  ('santa-teresa', 29, 'GREENSEASON',              'comida',       60),
+  ('santa-teresa', 11, 'MENU AÑO NUEVO',           'comida',       70),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa', 15, 'EVENTOS TERRAZA',          'comida',       80),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa',  9, 'BELIEVE',                  'comida',       90),  -- mixta, por código
+  ('santa-teresa',  5, 'BEBIDAS',                  'bebida',       10),
+  ('santa-teresa', 18, 'Y HAPPY HOUR',             'bebida',       20),
+  ('santa-teresa', 25, 'POR CONFIRMAR (25)',       'bebida',       30),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa',  1, '(clasificación borrada)',  'bebida',       40),  -- no existe en el PoS · por código
+  ('santa-teresa', 22, 'EXTRAS',                   'extras',       10),
+  ('santa-teresa',  7, 'POR CONFIRMAR (7)',        'otros',        10),  -- nombre POR CONFIRMAR (SURFCAMP) · por código
+  ('santa-teresa',  8, 'POR CONFIRMAR (8)',        'otros',        20),  -- nombre POR CONFIRMAR (SURFCAMP) · por código
+  ('santa-teresa', 14, 'PROMOCIONES',              'otros',        30),  -- por código
+  ('santa-teresa', 21, 'TSHIRTS',                  'merch',        10),
+  ('santa-teresa', 23, 'T-GORRAS',                 'merch',        20),
+  ('santa-teresa', 24, 'T-DARUMAS',                'merch',        30),
+  ('santa-teresa', 26, 'T-STICKERS',               'merch',        40),
+  ('santa-teresa', 10, 'REMERAS',                  'merch',        50),
+  ('santa-teresa', 27, 'POR CONFIRMAR (27)',       'merch',        60),  -- nombre y categoría POR CONFIRMAR
+  ('santa-teresa', 12, 'GIFT CARDS',               'giftcard',     10),
+  ('santa-teresa', 19, 'A PAX',                    'pax',          10),
+  ('santa-teresa', 28, 'XX DUEÑOS',                'duenos',       10),
+  ('santa-teresa', 17, 'X CORTESIAS',              'cortesia',     10),
+  ('santa-teresa',  6, 'PERSONAL',                 'personal',     10),
+  ('santa-teresa', 20, 'Ingredientes',             'ingredientes', 10);
 
 -- Lo que ya estaba decidido, por código, en UNA sola carga:
 --   · «rinde»   = `product_map.multiplicador` ≥ 2 (tope 20), cruzando por nombre sin mirar mayúsculas ni espacios.
 --     Si varios códigos comparten el nombre, heredan todos (es lo que hoy pasa al cruzar por nombre). Dos filas
 --     de product_map que solo difieren en mayúsculas: gana el mayor.
---   · categoría = SOLO los 82 códigos de las familias 11, 15 y 25 de santa-teresa (D-3, lista confirmada por el
---     dueño el 24-nov): comida o bebida, uno por uno, y el 192 (ítem por comensal del menú cerrado) a
---     `menu_especial`. Solo se aplica si el código sigue en esas familias.
+--   · categoría = SOLO los códigos de las familias mixtas de santa-teresa: los 82 de 11, 15 y 25 (D-3, lista
+--     confirmada por el dueño el 24-nov), comida o bebida uno por uno y el 192 (ítem por comensal del menú cerrado)
+--     a `menu_especial`; los 2 de la 9 BELIEVE (comida) y el 1 de la 1 borrada (bebida), los únicos que hay en
+--     staging y en prod (lectura del 24-nov). Solo se aplica si el código sigue en esas familias.
 -- `product_map.subclasificacion` NO se hereda: la subcategoría viene del PoS (3.1c).
 with pm as (
   select upper(btrim(nombre)) as nom, max(least(multiplicador, 20)) as rinde
@@ -272,7 +281,8 @@ cc as (
     '124', '125', '373', '679', '680', '681', '682', '685', '686', '687', '688', '689', '691', '692', '693', '694', '698',
     '740',
     '304', '306', '577', '579',
-    '930', '934']) as codigo
+    '930', '934',
+    '166', '207']) as codigo
   union all
   select 'santa-teresa', 'bebida', unnest(array[
     '235', '238', '245', '643', '700', '701', '702', '714', '722', '727', '728', '738', '742', '743', '746', '747', '750',
@@ -280,7 +290,8 @@ cc as (
     '308', '312', '455',
     '5', '519', '559', '695', '843', '844', '860', '861', '862', '863', '864', '866', '867', '870', '871', '872', '879',
     '880', '881', '882', '917', '918', '921', '922', '925', '926', '1026', '1027', '1036', '1037', '1038', '1056',
-    '1057', '1062'])
+    '1057', '1062',
+    '1'])
   union all
   select 'santa-teresa', 'menu_especial', '192'
 )
@@ -288,7 +299,7 @@ insert into public.pos_producto_ajustes (local, codigo, rinde_personas, categori
 select p.local, p.codigo, coalesce(pm.rinde, 1), cc.categoria, null
 from public.pos_productos p
 left join pm on pm.nom = upper(btrim(p.nombre))
-left join cc on cc.local = p.local and cc.codigo = p.codigo and p.familia in (11, 15, 25)
+left join cc on cc.local = p.local and cc.codigo = p.codigo and p.familia in (1, 9, 11, 15, 25)
 where pm.rinde is not null or cc.categoria is not null;
 
 -- ── 6. La categoría que le toca a una línea: UNA sola definición ─────────────────────────

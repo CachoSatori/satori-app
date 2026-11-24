@@ -157,13 +157,29 @@ function carga(): { familia: number; nombre: string; categoria: string; linea: s
 }
 
 describe('mig 198 — la carga de familias de santa-teresa', () => {
-  it('toda familia de FAMILIAS_CATALOGO (netaVenta.ts) tiene su fila, y ninguna de más', () => {
-    expect(carga().map(f => f.familia).sort((a, b) => a - b)).toEqual([...FAMILIAS_CATALOGO].sort((a, b) => a - b))
+  it('decisiones del 24-nov: 9 mixta en comida, 18 bebida, 10 merch, 1 borrada, 7/8/14 por código en «otros»', () => {
+    const c = new Map(carga().map(f => [f.familia, f]))
+    expect(c.get(9)?.categoria).toBe('comida')
+    expect(c.get(18)?.categoria).toBe('bebida')
+    expect(c.get(10)?.categoria).toBe('merch')
+    expect(c.get(1)?.nombre).toBe('(clasificación borrada)')
+    expect([7, 8, 14].map(f => c.get(f)?.categoria)).toEqual(['otros', 'otros', 'otros'])
+    expect([17, 6, 20].map(f => c.get(f)?.categoria)).toEqual(['cortesia', 'personal', 'ingredientes'])
   })
-  // Prerrequisito de la firma (SPEC §7.3, D-4 = A): los nombres de 11, 15 y 25 (confirmar) y de 1, 9 y 27 (traer) se
-  // leen en la PC del PoS. Mientras alguno diga «POR CONFIRMAR» —en el nombre o en el comentario de su fila— esta
-  // prueba FALLA A PROPÓSITO: la 198 no se firma ni se mergea así (PASE-198, prerrequisitos).
-  it('ningún nombre de familia queda «POR CONFIRMAR» (falla hasta que el dueño lea los seis en la PC del PoS)', () => {
+  it('la herencia de categoría por código mira las cinco familias mixtas (1, 9, 11, 15, 25)', () => {
+    expect(sql).toContain('and cc.codigo = p.codigo and p.familia in (1, 9, 11, 15, 25)')
+  })
+  // Las 29 del PoS = FAMILIAS_CATALOGO (netaVenta.ts, las que tienen ventas) + las 5 que el dueño leyó en el PoS y hoy
+  // no tienen ninguna línea (7, 8, 10, 14, 18). FAMILIAS_CATALOGO no se toca acá: entra empaquetada en Edge (regla 2).
+  it('toda familia de FAMILIAS_CATALOGO (netaVenta.ts) tiene su fila; las de más son solo las 5 sin ventas', () => {
+    const sinVentas = [7, 8, 10, 14, 18]
+    expect(carga().map(f => f.familia).sort((a, b) => a - b))
+      .toEqual([...FAMILIAS_CATALOGO, ...sinVentas].sort((a, b) => a - b))
+  })
+  // Prerrequisito de la firma (SPEC §7.3, D-4 = A): los nombres salen de la lectura del dueño en la PC del PoS
+  // (24-nov 15:43 CR). Mientras alguno diga «POR CONFIRMAR» —en el nombre o en el comentario de su fila— esta prueba
+  // FALLA A PROPÓSITO: la 198 no se firma ni se mergea así (PASE-198, prerrequisitos).
+  it('ningún nombre de familia queda «POR CONFIRMAR» (falla hasta copiar los nombres leídos en la PC del PoS)', () => {
     const pendientes = carga().filter(f => /POR CONFIRMAR/i.test(f.linea)).map(f => f.familia)
     expect(pendientes, `familias con el nombre sin confirmar: ${pendientes.join(', ')}`).toEqual([])
   })

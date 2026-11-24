@@ -1,18 +1,18 @@
 -- 198 · lecturas previas del pase (PASE-198 §4). SOLO LECTURA: `begin read only` … `rollback`, sirve en prod
 -- (yiczgdti…) y en staging (hwiatgic…). Un solo resultado (jsonb), para que entre en una llamada del conector.
 -- Devuelve CÓDIGOS y CONTEOS, nunca nombres de productos ni de personas (el repo es público): los nombres de la lista
--- de los 82 códigos y de los que heredan «rinde» los mira el dueño en la consulta, no se copian al repo.
+-- de los 85 códigos de las familias mixtas y de los que heredan «rinde» los mira el dueño en la consulta, no se copian al repo.
 -- Fechas: «hoy» = 24-nov-2026 (último mes cerrado = octubre; 12 meses = 2025-11-24..2026-11-23; último 31-dic = 2025-12-31).
 begin read only;
 with
 lista (codigo, categoria) as (
   select unnest(array['124', '125', '373', '679', '680', '681', '682', '685', '686', '687', '688', '689', '691', '692', '693',
-                      '694', '698', '740', '304', '306', '577', '579', '930', '934']), 'comida'
+                      '694', '698', '740', '304', '306', '577', '579', '930', '934', '166', '207']), 'comida'
   union all
   select unnest(array['235', '238', '245', '643', '700', '701', '702', '714', '722', '727', '728', '738', '742', '743', '746',
                       '747', '750', '753', '757', '758', '308', '312', '455', '5', '519', '559', '695', '843', '844', '860',
                       '861', '862', '863', '864', '866', '867', '870', '871', '872', '879', '880', '881', '882', '917', '918',
-                      '921', '922', '925', '926', '1026', '1027', '1036', '1037', '1038', '1056', '1057', '1062']), 'bebida'
+                      '921', '922', '925', '926', '1026', '1027', '1036', '1037', '1038', '1056', '1057', '1062', '1']), 'bebida'
   union all select '192', 'menu_especial'
 ),
 l as (
@@ -23,14 +23,14 @@ l as (
   from public.pos_ndf_tickets t join public.pos_ndf_ticket_lines x on x.ticket_id = t.id
   where t.local = 'santa-teresa'
 ),
--- categoría de HOY (antes de la 198: la familia; 11, 15 y 25 caen en «otros») y la de DESPUÉS (lista + mayoría)
+-- categoría de HOY (antes de la 198: la familia; 1, 9, 11, 15 y 25 caen en «otros») y la de DESPUÉS (lista + mayoría)
 c as (
   select l.*,
          case when familia in (2, 3, 4, 13, 16, 29) then 'comida' when familia = 5 then 'bebida'
               when familia in (6, 17, 20) then 'no_venta' else 'otros' end as antes,
          case when familia in (6, 17, 20) then 'no_venta'
-              when familia in (11, 15, 25) then coalesce(li.categoria, case when familia = 25 then 'bebida' else 'comida' end)
-              when familia in (2, 3, 4, 13, 16, 29, 9) then 'comida' when familia in (5, 1) then 'bebida' else 'otros' end as despues
+              when familia in (1, 9, 11, 15, 25) then coalesce(li.categoria, case when familia in (1, 25) then 'bebida' else 'comida' end)
+              when familia in (2, 3, 4, 13, 16, 29) then 'comida' when familia in (5, 18) then 'bebida' else 'otros' end as despues
   from l left join lista li on li.codigo = l.codigo
 ),
 periodos (p, d, h) as (values ('ultimo_mes_cerrado', date '2026-10-01', date '2026-10-31'),
@@ -69,12 +69,13 @@ select jsonb_build_object(
               where nullif(btrim(codigo_producto), '') is not null group by 1
               having count(distinct btrim(nombre)) > 1 or count(distinct familia) > 1) x),
   'familias_con_productos', (select jsonb_agg(f order by f) from (select distinct familia f from l where familia is not null) x),
-  'codigos_11_15_25_por_familia', (select jsonb_object_agg(familia, n) from (select familia, count(distinct codigo) n from l
-              where familia in (11, 15, 25) group by 1) x),
-  'codigos_11_15_25_fuera_de_la_lista', (select coalesce(jsonb_agg(distinct codigo), '[]') from l where familia in (11, 15, 25)
+  'codigos_mixtas_por_familia', (select jsonb_object_agg(familia, n) from (select familia, count(distinct codigo) n from l
+              where familia in (1, 9, 11, 15, 25) group by 1) x),
+  'codigos_mixtas_fuera_de_la_lista', (select coalesce(jsonb_agg(distinct codigo), '[]') from l where familia in (1, 9, 11, 15, 25)
               and codigo not in (select codigo from lista)),
   'codigos_de_la_lista_en_otra_familia', (select coalesce(jsonb_agg(distinct codigo), '[]') from l join lista using (codigo)
-              where l.familia not in (11, 15, 25)),
+              where l.familia not in (1, 9, 11, 15, 25)),
+  'codigos_en_familias_por_codigo_sin_ventas', (select coalesce(jsonb_agg(distinct codigo), '[]') from l where familia in (7, 8, 14)),
   'familia_11_con_monto', (select coalesce(jsonb_agg(distinct codigo), '[]') from l where familia = 11 and cts <> 0),
   'product_map', jsonb_build_object('filas', (select count(*) from public.product_map),
       'multiplicador_mayor_a_1', (select count(*) from public.product_map where multiplicador >= 2),

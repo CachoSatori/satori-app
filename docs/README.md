@@ -78,9 +78,10 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
   criterios de aceptación de la unificación (fase 3.5). Cada PR necesita el OK del dueño; los de esquema, su firma.
 - **[ventas/SPEC-3.1-catalogo.md](./ventas/SPEC-3.1-catalogo.md)** — ⏳ **24-nov-2026, propuesta con las decisiones del dueño
   del 24-nov; falta la firma de la 196.** Ventas 3.1 (D8 y D17): catálogo único por código que sale del PoS, por
-  local, ordenado por categoría y familia; función `pos_ventas_productos`; por código se ajustan «rinde», categoría
-  y subgrupo (la categoría nunca cambia qué es venta neta). Trae la migración 196 propuesta (no aplicada), su
-  vuelta atrás, la batería con 19 mutaciones y lo que sigue abierto.
+  local, ordenado por categoría y familia; función `pos_ventas_productos`; por código se ajustan «rinde» y categoría
+  (la categoría nunca cambia qué es venta neta); categoría nueva `menu_especial`. Trae la migración 196 propuesta
+  (no aplicada), su vuelta atrás, la batería con 20 mutaciones, el encargo de la 3.1c (subcategoría desde el
+  agente del PoS, firma aparte) y lo que sigue abierto.
 - **[SPEC-COMANDA-GAPS.md](./SPEC-COMANDA-GAPS.md)** — 3 gaps priorizados para decidir: **Comp vs
   Void** (P&L), **fire-by-prep-time** (el campo prep ya existe), **revenue centers**.
 

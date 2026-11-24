@@ -31,7 +31,7 @@ const CASOS: [archivo: string, ancla: string][] = [
   ['modules/cash/CashTurno.tsx', 'aria-label="Monto ₡ del pago"'],
   ['modules/cash/CashTurno.tsx', 'aria-label="Monto $ del pago"'],
   ['modules/inbox/InboxModule.tsx', 'value={total}'],
-  ['shared/InvLineTable.tsx', 'value={l.precio}'],
+  ['shared/InvLineTable.tsx', 'value={valorInput(l.precio)}'],
   ['modules/crm/ClientesModule.tsx', 'value={iAmount}'],
 ]
 

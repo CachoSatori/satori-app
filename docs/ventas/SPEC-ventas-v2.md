@@ -370,9 +370,13 @@ No cambia ningún permiso: es el mismo reparto de `ventasTabs.ts`, pasado a las 
 decidida por el dueño el 23-nov (D18; a las 21:40 CR solo el ranking, corregida a las 22:35 CR):** el contador ve
 **todo** «Equipo» → «Equipo» igual que gerencia —el ranking, las columnas de evaluación, el ICP por salonero y la
 ficha de 12 semanas—, porque funciona casi como gerente general y analiza los datos para decidir
-(`veDetalleEquipo` en `ventasTabs.ts` incluye al contador). Fuera de eso no ve nada que antes no viera («Por línea» y
-«Competencias» siguen de owner y manager). Es permiso de pantalla: sin RLS ni migración (las propinas y empleados
-que lee son los mismos que ya lee en «ICP»).
+(`veDetalleEquipo` en `ventasTabs.ts` incluye al contador). **D18 ampliada (dueño, 23-nov ~23:50 CR):** también ve
+«Equipo» → «Por línea» completa y «Equipo» → «Competencias» **solo para mirar**: no aparecen «+ Nueva» ni «×», y
+`saveComp` / `deleteComp` rechazan su rol antes de tocar la base aunque una pantalla lo intentara
+(`puedeEditarCompetencias`, `src/shared/permisosCompetencias.ts`: owner y manager). Fuera de la entrada «Equipo» no ve
+nada que antes no viera. Es permiso de pantalla y de la capa de la API: sin RLS ni migración (las propinas, empleados y
+líneas del PoS que lee son los mismos que ya lee en «ICP» y en «Equipo»; la política `ventas_comps_write` de la 011
+todavía deja escribir al contador: cerrarlo en la base es una migración aparte, con firma).
 
 | Pantalla | owner | manager | contador |
 |---|---|---|---|
@@ -381,7 +385,8 @@ que lee son los mismos que ya lee en «ICP»).
 | Productos — ingeniería de menú | Sí | Sí | No |
 | Equipo — equipo: el ranking (venta, personas, venta por persona, vs su turno, bebidas, comida/bebida, precios) | Sí | Sí | **Sí** (D18, dueño 23-nov) |
 | Equipo — equipo: evaluación (ICP por fila, % meta, días, consistencia, tendencia, racha) y ficha del salonero | Sí | Sí | **Sí** (D18, dueño 23-nov 22:35 CR) |
-| Equipo — por línea, competencias | Sí | Sí | No |
+| Equipo — por línea | Sí | Sí | **Sí, completa** (D18 ampliada, dueño 23-nov ~23:50 CR) |
+| Equipo — competencias | Sí (crea y da de baja) | Sí (crea y da de baja) | **Solo mira** (D18 ampliada: sin «+ Nueva» ni «×»; la API rechaza su escritura) |
 | Equipo — ICP, cajas y canales | Sí | Sí | Sí |
 | Tiempos | Sí | Sí | Sí |
 | Regalías | Sí | Sí | **Sí, completa** (D7, 17-nov) |
@@ -495,7 +500,7 @@ coordinador (fuera del repo); esta tabla pasa a ser la referencia en el repo.
 | **D15** | Se **retira «Histórico»** (sin uso real según el dueño). Los datos viejos quedan en la base; las comparaciones contra el año anterior salen del PoS | Va en el 3.5.2, con «Hoy» y «Ventas» |
 | **D16** | **Santa Teresa primero** en todo selector o lista de locales (y por defecto). Hoy Nosara aparece primero estando inactivo. Regla general: locales activos primero, Santa Teresa por defecto; sigue todo multi-local | Arreglo aparte, ya (no espera la 3.5) |
 | **D17** | **«Ajustes → Productos» (catálogo manual) desaparece.** El catálogo sale del PoS (código, nombre, familia y categoría), sin clasificar a mano, siempre **ordenado por familia y categoría**. Lo único editable: **cuántas personas rinde** un producto (combo, botella para compartir) para la venta por persona; el costo, cuando llegue Inventario | Entra en la 3.1 (catálogo único por código, D8, firma). Hasta la 3.1 la vista queda como está |
-| **D18** | (23-nov 21:40 CR, **corregida a las 22:35 CR**, cambia §6) — el **contador ve TODO «Equipo» igual que gerencia**: ranking, columnas de evaluación, ICP por salonero y ficha de 12 semanas (funciona casi como gerente general y analiza los datos para decidir). A las 21:40 se había anotado solo el ranking | En el 3.5.4: `veDetalleEquipo` incluye al contador. Sus enlaces viejos `?tab=saloneros` y `?tab=evaluacion` abren ahí. Fuera de «Equipo» → «Equipo» no ve nada nuevo («Por línea» y «Competencias» siguen OM). Sin RLS ni migración |
+| **D18** | (23-nov 21:40 CR, **corregida a las 22:35 CR**, cambia §6) — el **contador ve TODO «Equipo» igual que gerencia**: ranking, columnas de evaluación, ICP por salonero y ficha de 12 semanas (funciona casi como gerente general y analiza los datos para decidir). A las 21:40 se había anotado solo el ranking | En el 3.5.4: `veDetalleEquipo` incluye al contador. Sus enlaces viejos `?tab=saloneros` y `?tab=evaluacion` abren ahí. **Ampliada el 23-nov ~23:50 CR:** también «Por línea» completa y «Competencias» solo para mirar (sin «+ Nueva» ni «×»; `saveComp`/`deleteComp` rechazan su rol: `puedeEditarCompetencias`). Fuera de la entrada «Equipo» no ve nada nuevo. Sin RLS ni migración (la base todavía le permite escribir `ventas_comps`: migración aparte, con firma) |
 
 ## 11. Fuera de alcance
 
@@ -618,7 +623,8 @@ período «Temporada» de la barra.
 **Desde el 3.5.4:** «Saloneros» y «Evaluación» se retiraron; las dos están en «Equipo» → «Equipo» (`?tab=equipo`,
 vista `equipo`). Sus `?tab=` viejos y sus direcciones de sub-vista (`?tab=equipo&v=saloneros|evaluacion`) abren «Equipo»
 con el período con que abría la vista vieja: `&p=ayer` y `&p=rango` con los 30 días que terminan ayer. «Cajeros»
-se llama «Cajas y canales» (misma vista, `v=cajas`). El contador ve «Equipo» completo, con evaluación, ICP y ficha (D18).
+se llama «Cajas y canales» (misma vista, `v=cajas`). El contador ve «Equipo» completo, con evaluación, ICP y ficha (D18), «Por línea» completa y «Competencias» solo para
+mirar (D18 ampliada, 23-nov ~23:50 CR).
 
 ### 12.3 Qué entra sin la 3.1 ni la 3.4, y qué queda esperando
 
@@ -681,8 +687,8 @@ Valen para el estado final de la 3.5; cada PR cumple los que le tocan y lo dice 
    3. «Contexto {día}» de «Hoy»: lo reemplaza la comparación contra el mismo día de la semana pasada.
 8. **Permisos iguales que hoy.** La tabla de §6, probada por (rol × sub-vista) en `ventasTabs.test.ts` y
    recorrida en staging con un usuario real de cada rol (regla 4). El contador ve «Regalías» completa (D7) y
-   ve «Equipo» → «Equipo» completo, con evaluación, ICP por fila y ficha (D18, 22:35); no ve «Ing. Menú», ni «Por
-   línea» ni «Competencias», ni «Ajustes → Productos» ni
+   ve «Equipo» → «Equipo» completo, con evaluación, ICP por fila y ficha (D18, 22:35), «Por línea» completa y
+   «Competencias» solo para mirar (D18 ampliada, ~23:50); no ve «Ing. Menú», ni «Ajustes → Productos» ni
    «Mesas internas» (de «Ajustes» ve solo «Metas»). El manager ve solo su local y no cambia las mesas internas. Sin migración ni cambio de RLS.
 9. **Multi-local.** Toda pantalla con barra lleva el selector de local; ningún archivo nuevo fija el local
    salvo como valor por defecto.

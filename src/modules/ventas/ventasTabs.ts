@@ -15,7 +15,9 @@
 // global). «Cajeros» pasa a llamarse «Cajas y canales». Sub-vistas de «Equipo»: Equipo · Por línea · ICP · Cajas y
 // canales · Competencias. Decisión del dueño (D18, corregida el 23-nov 22:35 CR): el CONTADOR ve «Equipo» COMPLETO, igual
 // que gerencia (ranking, columnas de evaluación, ICP por salonero y ficha de 12 semanas), porque funciona casi como
-// gerente general y analiza los datos para decidir (`veDetalleEquipo`). Fuera de «Equipo» sus permisos no cambian.
+// gerente general y analiza los datos para decidir (`veDetalleEquipo`). Ampliada el 23-nov ~23:50 CR: también ve
+// «Por línea» completa y «Competencias» SOLO PARA MIRAR (sin «+ Nueva» ni «×»; `saveComp`/`deleteComp` rechazan su rol).
+// Fuera de la entrada «Equipo» sus permisos no cambian.
 //
 // La dirección es `/ventas?tab=<entrada>&v=<sub-vista>` (sin `v`, la primera sub-vista que el rol ve).
 // Los `?tab=<vista vieja>` siguen abriendo algo con sentido: se reemplaza la dirección por la nueva.
@@ -23,6 +25,7 @@
 
 import { todayCR } from '../../shared/utils'
 import { sumarDias, type TipoPeriodoV2 } from './periodos'
+export { puedeEditarCompetencias, ROLES_EDITAN_COMPETENCIAS } from '../../shared/permisosCompetencias'
 
 export type Tab =
   | 'envivo' | 'equipo' | 'salolineas' | 'icp'
@@ -40,13 +43,15 @@ export const TABS: TabDef[] = [
   // Ventas v2 · 3.5.4 (SPEC §5.3): junta «Saloneros» y «Evaluación». El contador la ve completa, con el detalle
   // (evaluación, ICP y ficha), igual que owner y manager (D18, dueño 23-nov 22:35 CR; `veDetalleEquipo`).
   { id: 'equipo',       label: 'Equipo',            roles: ['owner','manager','contador'] },
-  { id: 'salolineas',   label: 'Por línea',         roles: ['owner','manager'] },
+  // D18 ampliada (dueño 23-nov ~23:50 CR): el contador ve «Por línea» completa y «Competencias» solo para mirar
+  // (crear y dar de baja: `puedeEditarCompetencias`, owner y manager).
+  { id: 'salolineas',   label: 'Por línea',         roles: ['owner','manager','contador'] },
   { id: 'icp',          label: 'ICP',               roles: ['owner','manager','contador'] },
   { id: 'cajeros',      label: 'Cajas y canales',   roles: ['owner','manager','contador'] },
   { id: 'mix',          label: 'Mix',               roles: ['owner','manager','contador'] },
   { id: 'menueng',      label: 'Ing. Menú',         roles: ['owner','manager'] },
   { id: 'metas',        label: 'Metas',             roles: ['owner','manager','contador'] },
-  { id: 'competencias', label: 'Competencias',      roles: ['owner','manager'] },
+  { id: 'competencias', label: 'Competencias',      roles: ['owner','manager','contador'] },
   { id: 'config',       label: 'Productos',         roles: ['owner','manager'] },
   // Ventas v2 · fase 2.1 (SPEC-ventas-v2 §5.1).
   { id: 'resumen',      label: 'Resumen',           roles: ['owner','manager','contador'] },

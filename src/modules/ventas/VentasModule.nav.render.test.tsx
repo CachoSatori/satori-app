@@ -220,12 +220,20 @@ describe('VentasModule · redirecciones (criterio 3)', () => {
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas'))
   })
 
-  it('contador con la dirección nueva de una sub-vista que no ve (Equipo → Por línea): abre «Resumen»', async () => {
+  it('contador con la dirección nueva de una sub-vista que no ve (Productos → Ing. Menú): abre «Resumen»', async () => {
     role = 'contador'
-    abrir('/ventas?tab=equipo&v=lineas')
+    abrir('/ventas?tab=productos&v=menu')
     expect((await screen.findByTestId('vista')).textContent).toBe('resumen')
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas'))
   })
+
+  it.each([['lineas', 'salolineas'], ['competencias', 'competencias']])(
+    'D18 ampliada (dueño 23-nov ~23:50): el contador abre ?tab=equipo&v=%s sin corrección', async (v, vista) => {
+      role = 'contador'
+      abrir(`/ventas?tab=equipo&v=${v}`)
+      expect((await screen.findByTestId('vista')).textContent).toBe(vista)
+      expect(ultima.url).toBe(`/ventas?tab=equipo&v=${v}`)
+    })
 })
 
 describe('VentasModule · navegación', () => {
@@ -242,14 +250,14 @@ describe('VentasModule · navegación', () => {
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
   })
 
-  it('contador: «Equipo» abre «Equipo» (completa; D18, dueño 23-nov 22:35) y ve Equipo · ICP · Cajas y canales', async () => {
+  it('contador: «Equipo» abre «Equipo» (completa; D18, dueño 23-nov 22:35 y ~23:50) y ve las cinco sub-vistas', async () => {
     role = 'contador'
     abrir('/ventas')
     await screen.findByTestId('vista')
     fireEvent.click(within(menu()).getByRole('tab', { name: 'Equipo' }))
     expect((await screen.findByTestId('vista')).textContent).toBe('equipo')
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=equipo'))
-    expect(within(subMenu('Equipo')).getAllByRole('tab').map(t => t.textContent)).toEqual(['Equipo', 'ICP', 'Cajas y canales'])
+    expect(within(subMenu('Equipo')).getAllByRole('tab').map(t => t.textContent)).toEqual(['Equipo', 'Por línea', 'ICP', 'Cajas y canales', 'Competencias'])
   })
 
   it('criterio 10: la barra se conserva al pasar de Resumen a Equipo y a Tiempos', async () => {

@@ -7,6 +7,7 @@
 // si alguien cambia una entrada, una sub-vista, una dirección o un rol, una prueba cae.
 import { describe, it, expect } from 'vitest'
 import {
+  puedeEditarCompetencias,
   TABS, ENTRADAS, CLAVE_V, tabPorDefecto, resolverDireccion, resolverVista, direccionDe, entradasVisibles,
   entradaDe, veDetalleEquipo, type Tab,
 } from './ventasTabs'
@@ -17,12 +18,14 @@ const OM  = ['owner', 'manager']
 
 /** Quién ve cada vista: los roles de ANTES de la 3.5 (SPEC §6: «No cambia ningún permiso»). */
 const ROLES_DE_SIEMPRE: Record<Tab, string[]> = {
-  envivo: OMC, salolineas: OM, icp: OMC, cajeros: OMC,
+  envivo: OMC, icp: OMC, cajeros: OMC,
+  // D18 ampliada (DUEÑO 23-nov ~23:50 CR): el contador ve «Por línea» completa y «Competencias» solo para mirar.
+  salolineas: OMC,
   // 3.5.4: «Equipo» junta «Saloneros» y «Evaluación» (que eran OM). D18 (DUEÑO 23-nov 22:35 CR, corrige la de las 21:40):
   // el contador ve «Equipo» completo —ranking y detalle (evaluación, ICP por fila y ficha)—, igual que OM: `veDetalleEquipo`.
   equipo: OMC,
   mix: OMC, menueng: OM, metas: OMC,
-  competencias: OM, config: OM, resumen: OMC, tiempos: OMC, internas: OM,
+  competencias: OMC, config: OM, resumen: OMC, tiempos: OMC, internas: OM,
   regalias: OMC,   // 3.5.2: la ven los tres; el contador, completa (D7)
 }
 
@@ -123,19 +126,28 @@ describe('ventasTabs · permisos iguales que antes (criterio 8)', () => {
     }],
     ['contador', {
       resumen: ['resumen'], productos: ['mix'],
-      equipo: ['equipo', 'icp', 'cajeros'],
+      equipo: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'],
       tiempos: ['tiempos'], regalias: ['regalias'], envivo: ['envivo'], ajustes: ['metas'],
     }],
   ])('%s: entradas y sub-vistas que ve', (role, esperado) => {
     expect(Object.fromEntries(entradasVisibles(role).map(e => [e.id, e.vistas]))).toEqual(esperado)
   })
 
-  it('el contador no ve «Ing. Menú», «Por línea», «Competencias», «Ajustes → Productos» ni «Mesas internas»', () => {
+  it('el contador no ve «Ing. Menú», «Ajustes → Productos» ni «Mesas internas»', () => {
     const ve = entradasVisibles('contador').flatMap(e => e.vistas)
-    for (const v of ['menueng', 'salolineas', 'competencias', 'config', 'internas'] as Tab[]) {
+    for (const v of ['menueng', 'config', 'internas'] as Tab[]) {
       expect(ve).not.toContain(v)
       expect(resolverDireccion('contador', direccionDe(v).tab, CLAVE_V[v]).vista).toBe('resumen')
     }
+  })
+
+  it('D18 ampliada (dueño 23-nov ~23:50): el contador abre «Por línea» y «Competencias»; solo owner y manager editan competencias', () => {
+    expect(resolverDireccion('contador', 'equipo', 'lineas')).toEqual({ vista: 'salolineas', corregir: null })
+    expect(resolverDireccion('contador', 'equipo', 'competencias')).toEqual({ vista: 'competencias', corregir: null })
+    expect(resolverDireccion('contador', 'salolineas', null)).toEqual({ vista: 'salolineas', corregir: { tab: 'equipo', v: 'lineas' } })
+    expect(puedeEditarCompetencias('owner')).toBe(true)
+    expect(puedeEditarCompetencias('manager')).toBe(true)
+    for (const r of ['contador', 'salonero', 'cajero', 'barman', 'cocina', '']) expect(puedeEditarCompetencias(r)).toBe(false)
   })
 
   it.each(['salonero', 'cajero', 'barman', 'cocina'])('%s no ve ninguna entrada de Ventas', role => {

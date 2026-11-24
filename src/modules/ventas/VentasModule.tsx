@@ -339,7 +339,7 @@ export default function VentasModule() {
               {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} hist={hist} />}
               {tab === 'menueng'    && <VentasMenuEng      dias={allDias} pm={pm} />}
               {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
-              {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} />}
+              {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} role={role} />}
               {tab === 'config'      && <VentasConfig       dias={allDias} pm={pm} onRefresh={loadAll} />}
             </div>
             )}

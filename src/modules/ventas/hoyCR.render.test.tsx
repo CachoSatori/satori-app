@@ -73,7 +73,7 @@ describe.each(MOMENTOS)('a las $hora del 30-nov', ({ utc }) => {
   })
 
   it('Competencias: la que termina hoy sigue «En curso» y el contador no se adelanta', () => {
-    render(<VentasCompetencias dias={{}} pm={{}} onRefresh={() => {}} comps={[
+    render(<VentasCompetencias dias={{}} pm={{}} onRefresh={() => {}} role="owner" comps={[
       comp({ id: 'a', nombre: 'Termina hoy', inicio: '2026-11-24', fin: HOY }),
       comp({ id: 'b', nombre: 'A mitad', inicio: '2026-11-28', fin: '2026-12-02' }),
     ]} />)
@@ -85,7 +85,7 @@ describe.each(MOMENTOS)('a las $hora del 30-nov', ({ utc }) => {
   })
 
   it('Competencias → «+ Nueva» propone inicio y fin = 30-nov', () => {
-    render(<VentasCompetencias dias={{}} pm={{}} onRefresh={() => {}} comps={[]} />)
+    render(<VentasCompetencias dias={{}} pm={{}} onRefresh={() => {}} role="owner" comps={[]} />)
     fireEvent.click(screen.getByText('+ Nueva'))
     expect(fechas()).toEqual([HOY, HOY])
   })

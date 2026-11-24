@@ -542,3 +542,171 @@ export async function getPromPaxAgregado(local: string, desde: string, hasta: st
     neta_sin_pax: Number(f.neta_sin_pax), tickets_sin_pax: Number(f.tickets_sin_pax),
   }))
 }
+
+// ── Catálogo por código y ventas por producto (mig 196, Ventas v2 3.1a) ─────────────────────
+//
+// SOLO LECTURA salvo `guardarAjusteProducto`, que es la única puerta de escritura de lo que carga una persona
+// («rinde» y categoría). Las tres devuelven/aceptan lo que la 196 define; la forma la cuida
+// `posNdf.contrato196.test.ts`. Ninguna trae medios de pago, mesas, saloneros ni `clase_ingreso` (regla 6).
+// Los arreglos crecen SOLO por el final (la 3.1c suma la subcategoría): acá se lee por posición.
+
+/** Una fila de `productos`: (código, familia de la línea, canal). `codigo` null = línea sin código, por nombre. */
+export interface VentaProductoRpc {
+  codigo:        string | null
+  nombre:        string | null
+  familia:       number | null
+  canal:         string
+  unidades:      number
+  montoCts:      number
+  facturas:      number
+  /** Categoría efectiva de esas líneas, ya resuelta por la base (`pos_categoria_efectiva`). La app no la recalcula. */
+  categoria:     string
+  /** Unidades de líneas en ₡0 (pasos de un menú cerrado, invitaciones). Están incluidas en `unidades`. */
+  unidadesCero:  number
+}
+
+/** Una fila de `meses`: (mes, familia, canal, categoría). */
+export interface VentaMesRpc {
+  mes:       string
+  familia:   number | null
+  canal:     string
+  unidades:  number
+  montoCts:  number
+  categoria: string
+}
+
+/** Producto del catálogo con su nombre y familia VIGENTES, su «rinde» y su categoría de hoy. */
+export interface CatalogoVentaRpc {
+  codigo:     string
+  nombre:     string
+  familia:    number | null
+  rinde:      number
+  vistoDesde: string
+  vistoHasta: string
+  categoria:  string
+}
+
+export interface FamiliaPosRpc {
+  familia:   number
+  nombre:    string
+  /** Categoría POR DEFECTO de los productos de la familia. */
+  categoria: string
+  orden:     number
+}
+
+export interface VentasProductosRpc {
+  productos:  VentaProductoRpc[]
+  meses:      VentaMesRpc[]
+  catalogo:   CatalogoVentaRpc[]
+  familias:   FamiliaPosRpc[]
+  sinLineas:  { facturas: number; cts: number }
+  /** = Σ `dias[].neta_cts` de `pos_ventas_resumen` (190) para el mismo local y rango. La decide la familia de la línea. */
+  netaCts:    number
+}
+
+/** Producto de «Ajustes → Catálogo»: `categoriaPropia` = la que cargó una persona (null = la de su familia). */
+export interface CatalogoAjusteRpc {
+  codigo:          string
+  nombre:          string
+  familia:         number | null
+  categoria:       string
+  categoriaPropia: string | null
+  rinde:           number
+  vistoDesde:      string
+  vistoHasta:      string
+}
+
+export interface CatalogoProductosRpc {
+  productos:           CatalogoAjusteRpc[]
+  familias:            FamiliaPosRpc[]
+  /** Lo que una persona puede elegir. Viaja con la respuesta para que la pantalla no guarde otra copia. */
+  categoriasEditables: string[]
+  /** Las que fija la familia: esos productos se muestran con la categoría bloqueada. */
+  categoriasFijas:     string[]
+}
+
+const numero = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v ?? 0) || 0)
+const numeroONull = (v: unknown): number | null => (v === null || v === undefined ? null : numero(v))
+const textoONull = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
+const tuplas = (v: unknown, clave: string, fn: string): unknown[][] => {
+  if (!Array.isArray(v) || v.some(x => !Array.isArray(x))) throw new Error(`${fn}: «${clave}» con forma inesperada`)
+  return v as unknown[][]
+}
+const familiasDe = (v: unknown, fn: string): FamiliaPosRpc[] =>
+  tuplas(v, 'familias', fn).map(([familia, nombre, categoria, orden]) => ({
+    familia: numero(familia), nombre: String(nombre ?? ''), categoria: String(categoria ?? 'otros'), orden: numero(orden),
+  }))
+
+/** Lo que devuelve `pos_ventas_productos`, por posición. Puro: lo usan el lector y las pruebas. */
+export function parsearVentasProductos(json: unknown): VentasProductosRpc {
+  const fn = 'pos_ventas_productos'
+  const o = json as Record<string, unknown> | null
+  if (!o || typeof o !== 'object') throw new Error(`${fn}: respuesta con forma inesperada`)
+  const sl = (o.sin_lineas ?? {}) as Record<string, unknown>
+  return {
+    productos: tuplas(o.productos, 'productos', fn).map(([codigo, nombre, familia, canal, unidades, monto, facturas, categoria, cero]) => ({
+      codigo: textoONull(codigo), nombre: textoONull(nombre), familia: numeroONull(familia), canal: String(canal ?? ''),
+      unidades: numero(unidades), montoCts: numero(monto), facturas: numero(facturas), categoria: String(categoria ?? 'otros'),
+      unidadesCero: numero(cero),
+    })),
+    meses: tuplas(o.meses, 'meses', fn).map(([mes, familia, canal, unidades, monto, categoria]) => ({
+      mes: String(mes), familia: numeroONull(familia), canal: String(canal ?? ''), unidades: numero(unidades),
+      montoCts: numero(monto), categoria: String(categoria ?? 'otros'),
+    })),
+    catalogo: tuplas(o.catalogo, 'catalogo', fn).map(([codigo, nombre, familia, rinde, desde, hasta, categoria]) => ({
+      codigo: String(codigo), nombre: String(nombre ?? codigo), familia: numeroONull(familia), rinde: numero(rinde) || 1,
+      vistoDesde: String(desde), vistoHasta: String(hasta), categoria: String(categoria ?? 'otros'),
+    })),
+    familias: familiasDe(o.familias, fn),
+    sinLineas: { facturas: numero(sl.facturas), cts: numero(sl.cts) },
+    netaCts: numero(o.neta_cts),
+  }
+}
+
+/** Lo que devuelve `pos_catalogo_productos`, por posición. */
+export function parsearCatalogoProductos(json: unknown): CatalogoProductosRpc {
+  const fn = 'pos_catalogo_productos'
+  const o = json as Record<string, unknown> | null
+  if (!o || typeof o !== 'object') throw new Error(`${fn}: respuesta con forma inesperada`)
+  const lista = (v: unknown, clave: string): string[] => {
+    if (!Array.isArray(v)) throw new Error(`${fn}: «${clave}» con forma inesperada`)
+    return v.map(String)
+  }
+  return {
+    productos: tuplas(o.productos, 'productos', fn).map(([codigo, nombre, familia, categoria, propia, rinde, desde, hasta]) => ({
+      codigo: String(codigo), nombre: String(nombre ?? codigo), familia: numeroONull(familia), categoria: String(categoria ?? 'otros'),
+      categoriaPropia: textoONull(propia), rinde: numero(rinde) || 1, vistoDesde: String(desde), vistoHasta: String(hasta),
+    })),
+    familias: familiasDe(o.familias, fn),
+    categoriasEditables: lista(o.categorias_editables, 'categorias_editables'),
+    categoriasFijas: lista(o.categorias_fijas, 'categorias_fijas'),
+  }
+}
+
+/**
+ * `pos_ventas_productos` (mig 196): las ventas del período ya sumadas por producto, sin bajar líneas. Owner, contador
+ * y el manager de sus locales (si no, 42501). Rango de días CR inclusivo, ≤ 731 días (si no, 22023).
+ */
+export async function getVentasProductos(local: string, desde: string, hasta: string): Promise<VentasProductosRpc> {
+  const { data, error } = await sb.rpc('pos_ventas_productos', { p_local: local, p_desde: desde, p_hasta: hasta })
+  if (error) throw new Error(error.message)
+  return parsearVentasProductos(data)
+}
+
+/** `pos_catalogo_productos` (mig 196): el catálogo entero del local, para «Ajustes → Catálogo» (3.1b). */
+export async function getCatalogoProductos(local: string): Promise<CatalogoProductosRpc> {
+  const { data, error } = await sb.rpc('pos_catalogo_productos', { p_local: local })
+  if (error) throw new Error(error.message)
+  return parsearCatalogoProductos(data)
+}
+
+/**
+ * `pos_producto_ajuste_guardar` (mig 196): guarda los DOS valores juntos (la ficha entera). `rinde` 1 a 20 ·
+ * `categoria` null = la de su familia. Todo por defecto borra el ajuste. Owner y manager de su local; el resto 42501.
+ * La categoría nunca cambia qué es venta neta.
+ */
+export async function guardarAjusteProducto(local: string, codigo: string, rinde: number, categoria: string | null): Promise<void> {
+  if (!Number.isInteger(rinde) || rinde < 1 || rinde > 20) throw new Error('«Rinde» tiene que ser un entero de 1 a 20')
+  const { error } = await sb.rpc('pos_producto_ajuste_guardar', { p_local: local, p_codigo: codigo, p_rinde: rinde, p_categoria: categoria })
+  if (error) throw new Error(error.message)
+}

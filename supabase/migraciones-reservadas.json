@@ -615,6 +615,18 @@
       "bloque": "pase",
       "rama": "claude/correos-por-configuracion",
       "origen": "139"
+    },
+    "140": {
+      "nombre": "pos_catalogo_productos",
+      "bloque": "club",
+      "rama": "claude/ventas-31a-catalogo",
+      "renumerada_a": "196"
+    },
+    "196": {
+      "nombre": "pos_catalogo_productos",
+      "bloque": "pase",
+      "rama": "claude/ventas-31a-catalogo",
+      "origen": "140"
     }
   }
 }

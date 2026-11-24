@@ -37,6 +37,9 @@ import {
   TEMAS_RESUMEN, SIN_NOVEDADES, AVISO_RESUMEN_VACIO, resumenVacio, agregarTema, type TemaResumen,
   ETIQUETA_MOTIVO, PLACEHOLDER_MOTIVO, MOTIVO_MAX, PLACEHOLDER_RESUMEN, AVISO_RESUMEN_IGUAL_MOTIVO, resumenIgualMotivo,
 } from './resumenDia'
+import { useMovimientosSinReemplazados } from './useReemplazosAparato'
+import { MSG_FASE2_CON_REEMPLAZO } from './reemplazoPago'
+import { Aviso } from '../../shared/ui/estandar'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -115,7 +118,12 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // descarta al confirmar bien o al cambiar de fecha (mig 071, idempotencia en la base).
   const cierreOpId = useRef<string | null>(null)
   useEffect(() => { cierreOpId.current = null }, [fecha])
-  const [movs,     setMovs]     = useState<CashMovement[]>([])   // ledger para saldoCajaFuerte
+  const [movsBase, setMovs]     = useState<CashMovement[]>([])   // ledger para saldoCajaFuerte
+  // (hallazgo 252, ronda 2) Un cambio de pago sin terminar deja el viejo y el nuevo en la base: TODAS las cuentas de
+  // esta pantalla (pozo, Caja Fuerte, propinas, guard de cadena) leen `movs` con el viejo fuera, misma regla que la
+  // Caja Diaria (aplicarReemplazos). La Fase 1 sella ventas y propinas, que un pago a proveedor no toca: sigue
+  // libre. La Noche (Fase 2) se frena mientras haya un cambio abierto (deja el ledger del día como base de mañana).
+  const { cuenta: movs, abiertos: cambiosAbiertos } = useMovimientosSinReemplazados(movsBase)
   const [sessions, setSessions] = useState<CashSession[]>([])    // para gatear: caja de proveedores cerrada
 
   const loadCierres = async () => {
@@ -332,6 +340,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // 21-nov: si el cierre pide motivo, el resumen del día no puede ser el mismo texto que el motivo.
   const resumenRepiteMotivo = requiresAjuste && resumenIgualMotivo(notas, ajusteMotivo)
   const pedirCierre = () => {
+    if (cambiosAbiertos.length > 0) { setError(MSG_FASE2_CON_REEMPLAZO); return }
     { const errCuadro = cuadrosIlegibles(CUADROS_FASE2); if (errCuadro) { setError(errCuadro); return } }
     if (faltaResumen) { setError(AVISO_RESUMEN_VACIO); return }
     if (resumenRepiteMotivo) { setError(AVISO_RESUMEN_IGUAL_MOTIVO); return }
@@ -405,6 +414,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     { const errCuadro = cuadrosIlegibles(CUADROS_FASE2); if (errCuadro) { setError(errCuadro); return } }
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
+    if (cambiosAbiertos.length > 0) { setError(MSG_FASE2_CON_REEMPLAZO); return }
     if (!cajaProvCerrada) { setError('Cerrá primero la Caja Diaria de proveedores del día.'); return }
     if (ventasNVacias) { setError('Ingresá las ventas de noche'); return }
     if (postCorte && hayMontosNegativos([vnCRC, vnUSD, retiroN, sepDiariaCRC, sepDiariaUSD, sepRegCRC, sepRegUSD, remCRC, remUSD])) {
@@ -654,6 +664,14 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           ℹ Hay un turno de caja abierto{openSession?.cajero_name ? ` (${openSession.cajero_name})` : ''}. Podés sellar el <strong>Mediodía (Fase 1)</strong> igual.
           Para cerrar la <strong>Noche (Fase 2)</strong> sí hay que cerrar antes el turno en <strong>Caja Diaria</strong>.
         </div>
+      )}
+
+      {/* (hallazgo 252) Cambio de pago a medias en Caja Diaria: acá se cuenta una vez y la Noche espera. */}
+      {cambiosAbiertos.length > 0 && (
+        <Aviso tipo="error" titulo="Cambio de pago sin terminar.">
+          Un pago a proveedor quedó guardado dos veces un rato (el nuevo y el anterior). En esta pantalla se cuenta una
+          sola vez. Para cerrar la Noche (Fase 2), primero tocá «Terminar el cambio» en Caja Diaria.
+        </Aviso>
       )}
 
       {/* Messages */}

@@ -25,6 +25,7 @@ vi.mock('../../shared/api/cash', () => ({
   createCashSession: vi.fn(),
   closeCashSession: h.closeCashSessionSpy,
   deleteCashMovement: h.deleteCashMovementSpy,
+  getCashMovementById: vi.fn(async (id: string) => h.db.find(r => r.id === id) ?? null),
   getPreviousCierre: vi.fn(async () => null),
   discardCashSession: vi.fn(),
   upsertSupplier: vi.fn(),
@@ -195,6 +196,38 @@ describe('CashTurno · editar un pago guardado no lo pierde si falla la red (hal
     expect(h.db.filter(r => r.amount_crc === 20000)).toHaveLength(1)   // una sola alta
     expect(h.db.map(r => r.id)).not.toContain('mov-viejo')
     expect(tarjeta('Gastado efectivo')).toBe(fi(20000))
+  })
+
+  it('(ronda 2) el reintento manda el monto ACTUAL con el mismo id', async () => {
+    h.createCashMovementSpy.mockRejectedValueOnce(new Error('Error 503 del servidor'))
+    montar()
+    await editarA('20000')
+    fireEvent.change(crc(), { target: { value: '25000' } })     // corrige el monto con el modal aún abierto
+    await guardar()
+    expect(h.createCashMovementSpy).toHaveBeenCalledTimes(2)
+    expect(h.createCashMovementSpy.mock.calls[1][0]).toMatchObject({ amount_crc: 25000 })
+    expect(h.createCashMovementSpy.mock.calls[1][1]?.id).toBe(h.createCashMovementSpy.mock.calls[0][1]?.id)
+    expect(h.db.map(r => r.amount_crc)).toEqual([25000])
+    expect(tarjeta('Gastado efectivo')).toBe(fi(25000))
+  })
+
+  it('(ronda 2) el 1er intento SÍ entró con otro monto y el reintento trae uno nuevo → no se borra el viejo, se cuenta una vez y avisa', async () => {
+    // Primer intento (20.000): entra a la base pero el cliente ve un error. El encargado corrige a 25.000 y reintenta:
+    // la base rebota el id (23505). Antes se tomaba como hecho y se borraba el viejo con el 20.000 en la base.
+    h.createCashMovementSpy.mockImplementationOnce(async (m: Record<string, unknown>, opts?: { id?: string }) => {
+      await altaOk(m, opts); throw new Error('Error 502 (respuesta perdida)')
+    })
+    const { onError } = montar()
+    await editarA('20000')
+    fireEvent.change(crc(), { target: { value: '25000' } })
+    await guardar()
+    expect(h.deleteCashMovementSpy).not.toHaveBeenCalled()                     // el viejo sigue en la base
+    expect(h.db.map(r => r.amount_crc).sort()).toEqual([15000, 20000])        // ninguna alta de 25.000
+    expect(onError).toHaveBeenLastCalledWith(expect.stringContaining(fi(20000)))
+    expect(onError).toHaveBeenLastCalledWith(expect.stringContaining('No se cuenta dos veces'))
+    expect(tarjeta('Gastado efectivo')).toBe(fi(20000))                       // una vez, no 35.000
+    expect(screen.getByText('Cambio de pago sin terminar.')).toBeTruthy()
+    expect(localStorage.getItem(claveReemplazos('s-252'))).toContain('mov-viejo')
   })
 
   it('el nuevo quedó en la cola (sin señal): el viejo no se borra todavía y no se cuenta doble', async () => {

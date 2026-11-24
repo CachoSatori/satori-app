@@ -228,6 +228,16 @@ async function leerTodosLosMovimientos(sinceStr: string): Promise<CashMovement[]
   }
 }
 
+/**
+ * Un movimiento por id, directo de la base (sin caché ni cola). null = no está o el permiso no lo deja ver.
+ * Hallazgo 252: tras un alta que rebota por duplicado, se relee la fila para saber con qué datos quedó.
+ */
+export async function getCashMovementById(id: string): Promise<CashMovement | null> {
+  const { data, error } = await supabase.from('cash_movements').select('*').eq('id', id).maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data as CashMovement | null) ?? null
+}
+
 export async function getAllCashMovements(days = 1000): Promise<CashMovement[]> {
   const since = new Date()
   since.setDate(since.getDate() - days)

@@ -7,6 +7,7 @@ import {
   closeCashSession,
   createCashMovement,
   deleteCashMovement,
+  getCashMovementById,
   getPreviousCierre,
   discardCashSession,
   upsertSupplier,
@@ -27,7 +28,7 @@ import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import {
   reemplazarPago, aplicarReemplazos, reemplazosAbiertos, podarReemplazos, leerReemplazos, guardarReemplazos,
-  NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente,
+  coincidePago, NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente, type DatosPago,
 } from './reemplazoPago'
 import type { Employee } from '../../shared/types/database'
 
@@ -172,14 +173,14 @@ export default function CashTurno({
   // Cambió el turno: se relee la anotación de ESE turno (ajuste de estado en el render, sin efecto).
   if (reemplazosDe.sid !== sessionId) setReemplazosDe({ sid: sessionId, lista: sessionId ? leerReemplazos(sessionId) : [] })
   const reemplazos = reemplazosDe.lista
-  // Escribe la anotación soltando de paso las terminadas (el viejo ya no está y el nuevo sí).
+  // Escribe la anotación soltando de paso las terminadas (el viejo ya no está y el nuevo sí). Se guarda en el aparato
+  // ANTES del setState (no dentro del actualizador): las otras pestañas de Caja la leen en su próximo render
+  // (useReemplazosAparato) y el evento no puede dispararse mientras React renderiza.
   const anotarReemplazos = useCallback((fn: (prev: ReemplazoPendiente[]) => ReemplazoPendiente[]) => {
-    setReemplazosDe(prev => {
-      const lista = podarReemplazos(sessionMovementsBase, fn(prev.lista))
-      if (sessionId) guardarReemplazos(sessionId, lista)
-      return { sid: sessionId, lista }
-    })
-  }, [sessionId, sessionMovementsBase])
+    const lista = podarReemplazos(sessionMovementsBase, fn(reemplazos))
+    if (sessionId) guardarReemplazos(sessionId, lista)
+    setReemplazosDe({ sid: sessionId, lista })
+  }, [sessionId, sessionMovementsBase, reemplazos])
   const sessionMovements = useMemo(
     () => aplicarReemplazos(sessionMovementsBase, reemplazos), [sessionMovementsBase, reemplazos])
   const cambiosAbiertos = useMemo(
@@ -540,6 +541,9 @@ export default function CashTurno({
   // re-valida y audita en movement_deletions.authorized_by, mig 044). Si el alta falla, el viejo queda intacto y el
   // modal sigue abierto para reintentar. Si el nuevo quedó en cola o el borrado falló, el viejo no se cuenta (ver
   // `reemplazos`) y el aviso ofrece «Terminar el cambio».
+  // Reintento (ronda 2): cada intento manda lo tecleado AHORA, siempre con el mismo id. Si la base dice «ya existe»,
+  // se relee esa fila y solo se borra el viejo si tiene estos mismos datos; si un intento anterior entró con otros
+  // (o no se pudo releer), no se borra nada, se cuenta una vez y se avisa con el monto que quedó.
   const altaCambioRef = useRef<{ viejo: string; id: string } | null>(null)
   const guardarCambioDePago = async (
     viejoId: string, auth: ManagerAuth,
@@ -548,26 +552,31 @@ export default function CashTurno({
     if (!openSession || !profile) return
     if (altaCambioRef.current?.viejo !== viejoId) altaCambioRef.current = { viejo: viejoId, id: crypto.randomUUID() }
     const nuevoId = altaCambioRef.current.id
+    const datos: DatosPago = {
+      amount_crc:  d.amount_crc,
+      amount_usd:  d.amount_usd,
+      supplier_id: d.supplier_id || null,
+      method:      d.method,
+      caja_origen: d.method === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
+      description: d.reference || d.supplier_name || 'Proveedor',
+      attachments: d.attachments,
+    }
     const r = await reemplazarPago(viejoId, nuevoId, {
       crear: id => createCashMovement({
+        ...datos,
         session_id:    openSession.id,
         created_by:    profile.id,
         movement_type: 'egreso_mercaderia',
-        amount_crc:    d.amount_crc,
-        amount_usd:    d.amount_usd,
         currency:      'CRC',
         exchange_rate: tc,
-        description:   d.reference || d.supplier_name || 'Proveedor',
         subcategory:   'Proveedor mercadería',
-        supplier_id:   d.supplier_id || null,
         supplier_name: d.supplier_name,
-        method:        d.method,
-        caja_origen:   d.method === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
         shift:         tipShiftToCaja(openSession.shift_type),
-        attachments:   d.attachments,
         ...MERCADERIA_CLASS,
       }, { id }),
       borrarViejo: () => deleteCashMovement(viejoId, NOTA_REEMPLAZO, auth.managerEmail, auth.managerPassword),
+      releer:      id => getCashMovementById(id),
+      coincide:    m => coincidePago(m, datos),
     })
     if (r.estado === 'sin_cambios') {
       // Nada cambió: el pago anterior sigue guardado y contando. El modal queda abierto con lo tecleado.
@@ -575,6 +584,17 @@ export default function CashTurno({
       return
     }
     altaCambioRef.current = null
+    if (r.estado === 'distinto') {
+      // Un intento anterior SÍ entró, pero con otros datos (o no se pudo confirmar). El viejo no se borra; el par
+      // queda anotado (se cuenta una vez) y el encargado ve qué monto quedó guardado.
+      anotarReemplazos(prev => [...prev.filter(x => x.viejo !== r.reemplazo.viejo), r.reemplazo])
+      onError(r.guardado
+        ? `Un intento anterior sí quedó guardado, pero con otro monto (${fi(r.guardado.amount_crc)}${r.guardado.amount_usd ? ` · $${r.guardado.amount_usd}` : ''}), no con lo que escribiste ahora. No se cuenta dos veces: tocá «Terminar el cambio» en el aviso rojo y después editá ese pago para dejar el monto correcto.`
+        : 'Un intento anterior sí quedó guardado y no se pudo confirmar con qué monto. No se cuenta dos veces: revisá el pago en la lista, tocá «Terminar el cambio» en el aviso rojo y, si hace falta, editalo.')
+      onRefresh()
+      setPagoModal(false)
+      return
+    }
     if (r.nuevo) onMovAdded(r.nuevo)
     if (r.estado === 'falta_borrar') {
       anotarReemplazos(prev => [...prev.filter(x => x.viejo !== r.reemplazo.viejo), r.reemplazo])

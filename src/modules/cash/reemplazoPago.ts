@@ -12,6 +12,15 @@
 //      se anota en el aparato (localStorage, por turno) y, mientras el nuevo esté a la vista, el viejo NO se cuenta
 //      (`aplicarReemplazos`). La pantalla avisa y ofrece «Terminar el cambio»; el cierre de la Caja Diaria se frena
 //      hasta terminarlo.
+//   4. Ronda 2 (Menor 1 del verificador): la MISMA regla vale para todo Caja, no solo para la Caja Diaria. CashModule
+//      (Movimientos, Proveedores, Pendientes, Resumen) y el Cierre del día leen las anotaciones de TODOS los turnos
+//      del aparato (`leerTodosLosReemplazos`) y pasan sus movimientos por `aplicarReemplazos`. El Cierre del día
+//      frena la Noche (Fase 2) mientras haya un cambio abierto (MSG_FASE2_CON_REEMPLAZO).
+//   5. Ronda 2 (Menor 3): un cambio usa UN id toda su vida, aunque entre intentos cambie el monto. Si el alta rebota
+//      por duplicado, se relee la fila por id y se compara con lo tecleado AHORA (`coincidePago`): igual → hecho y se
+//      borra el viejo; distinto (el primer intento entró con otros datos) o sin poder releer → NO se borra el viejo,
+//      el par se anota (se cuenta una vez) y se avisa con el monto que quedó (estado `distinto`). Un id nuevo nunca
+//      se usa: si el primer intento llegara tarde a la base, habría tres pagos.
 //
 // Sin React ni Supabase: se prueba con dependencias falsas (reemplazoPago.test.ts).
 
@@ -33,12 +42,21 @@ export type ResultadoReemplazo =
   | { estado: 'sin_cambios'; error: string }
   /** El nuevo existe (en la base o en la cola) y el viejo todavía no se borró. `error` null = en cola sin señal. */
   | { estado: 'falta_borrar'; nuevo: CashMovement | null; reemplazo: ReemplazoPendiente; error: string | null }
+  /**
+   * El alta rebotó por duplicado y la fila que ya está con ese id NO tiene lo tecleado ahora (un intento anterior
+   * entró con otros datos), o no se pudo releer (`guardado` null). El viejo NO se borra; el par queda anotado.
+   */
+  | { estado: 'distinto'; guardado: CashMovement | null; reemplazo: ReemplazoPendiente }
 
 export interface DepsReemplazo {
   /** Crea el movimiento nuevo con ESE id (createCashMovement con opts.id). */
   crear:       (id: string) => Promise<CashMovement>
   /** Borra el viejo por la cascada (deleteCashMovement con nota y credenciales). */
   borrarViejo: () => Promise<void>
+  /** Tras un duplicado: relee la fila con ese id (getCashMovementById). null = no está a la vista. */
+  releer:      (id: string) => Promise<CashMovement | null>
+  /** ¿La fila ya guardada tiene los datos de ESTE intento? (coincidePago con lo tecleado ahora) */
+  coincide:    (m: CashMovement) => boolean
   ahora?:      () => number
 }
 
@@ -49,22 +67,49 @@ export const esDuplicado = (e: unknown): boolean => /duplicate key|23505|already
 
 export async function reemplazarPago(viejoId: string, nuevoId: string, deps: DepsReemplazo): Promise<ResultadoReemplazo> {
   let nuevo: CashMovement | null
+  const reemplazo = (): ReemplazoPendiente => ({ viejo: viejoId, nuevo: nuevoId, at: (deps.ahora ?? Date.now)() })
   try {
     nuevo = await deps.crear(nuevoId)
   } catch (e) {
     if (!esDuplicado(e)) return { estado: 'sin_cambios', error: mensaje(e) }
-    nuevo = null   // ya estaba en la base: el intento anterior entró
+    // Ya estaba en la base: un intento anterior entró. ¿Con los datos de ahora? Solo así se borra el viejo.
+    let guardado: CashMovement | null
+    try { guardado = await deps.releer(nuevoId) } catch { guardado = null }
+    if (!guardado || !deps.coincide(guardado)) return { estado: 'distinto', guardado, reemplazo: reemplazo() }
+    nuevo = null
   }
-  const reemplazo: ReemplazoPendiente = { viejo: viejoId, nuevo: nuevoId, at: (deps.ahora ?? Date.now)() }
   // En la cola (sin señal): el viejo NO se borra hasta que el nuevo esté en la base. Si la cola lo rechazara, el
   // viejo sigue vivo y vuelve a contar solo (aplicarReemplazos solo lo oculta mientras el nuevo está a la vista).
-  if (nuevo?._pending) return { estado: 'falta_borrar', nuevo, reemplazo, error: null }
+  if (nuevo?._pending) return { estado: 'falta_borrar', nuevo, reemplazo: reemplazo(), error: null }
   try {
     await deps.borrarViejo()
     return { estado: 'listo', nuevo }
   } catch (e) {
-    return { estado: 'falta_borrar', nuevo, reemplazo, error: mensaje(e) }
+    return { estado: 'falta_borrar', nuevo, reemplazo: reemplazo(), error: mensaje(e) }
   }
+}
+
+/** Los campos de plata y de a quién se pagó que lleva el alta de un cambio de pago. */
+export interface DatosPago {
+  amount_crc:    number
+  amount_usd:    number
+  supplier_id:   string | null
+  method:        string
+  caja_origen:   string
+  description:   string
+  attachments:   string[]
+}
+
+/** ¿La fila guardada tiene ESTOS datos? (monto ₡ y $, proveedor, método, caja, nota y fotos, sin importar el orden). */
+export function coincidePago(m: Partial<CashMovement> & { attachments?: unknown }, d: DatosPago): boolean {
+  const fotos = (x: unknown) => (Array.isArray(x) ? x.map(String) : []).slice().sort().join('|')
+  return Number(m.amount_crc ?? 0) === Number(d.amount_crc)
+    && Number(m.amount_usd ?? 0) === Number(d.amount_usd)
+    && (m.supplier_id || null) === (d.supplier_id || null)
+    && (m.method ?? '') === d.method
+    && (m.caja_origen ?? '') === d.caja_origen
+    && (m.description ?? '') === d.description
+    && fotos(m.attachments) === fotos(d.attachments)
 }
 
 /**
@@ -98,9 +143,13 @@ export function podarReemplazos(movs: { id: string }[], reemplazos: ReemplazoPen
 // ── Anotación en el aparato (por turno) ───────────────────────────────────────────────────────────────────────────
 // localStorage puede faltar o tirar (modo privado, datos borrados): todo va en try/catch y sin él la pantalla
 // funciona igual (el riesgo vuelve a ser el de contar doble tras recargar, nunca el de perder un pago).
-export const claveReemplazos = (sessionId: string) => `satori:caja:reemplazos:${sessionId}`
+const PREFIJO_CLAVE = 'satori:caja:reemplazos:'
+export const claveReemplazos = (sessionId: string) => `${PREFIJO_CLAVE}${sessionId}`
+/** Evento del aparato: avisa a las otras pantallas de Caja que cambió una anotación (useReemplazosAparato). */
+export const EVENTO_REEMPLAZOS = 'satori:caja:reemplazos'
 
 type Almacen = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
+type AlmacenListable = Pick<Storage, 'getItem' | 'key' | 'length'>
 const almacen = (): Almacen | null => { try { return globalThis.localStorage ?? null } catch { return null } }
 
 export function leerReemplazos(sessionId: string, st: Almacen | null = almacen()): ReemplazoPendiente[] {
@@ -119,7 +168,26 @@ export function guardarReemplazos(sessionId: string, lista: ReemplazoPendiente[]
     if (lista.length) st?.setItem(claveReemplazos(sessionId), JSON.stringify(lista))
     else st?.removeItem(claveReemplazos(sessionId))
   } catch { /* sin almacenamiento: queda solo en memoria */ }
+  try { globalThis.dispatchEvent?.(new Event(EVENTO_REEMPLAZOS)) } catch { /* sin eventos: se relee al renderizar */ }
 }
+
+/**
+ * Las anotaciones de TODOS los turnos de este aparato (Movimientos, Proveedores, Pendientes, Resumen y el Cierre del
+ * día no tienen un turno abierto propio). Mismo formato y mismo filtro de basura que `leerReemplazos`.
+ */
+export function leerTodosLosReemplazos(st: AlmacenListable | null = almacen() as AlmacenListable | null): ReemplazoPendiente[] {
+  const out: ReemplazoPendiente[] = []
+  try {
+    if (!st) return out
+    const claves: string[] = []
+    for (let i = 0; i < st.length; i++) { const k = st.key(i); if (k?.startsWith(PREFIJO_CLAVE)) claves.push(k) }
+    for (const k of claves.sort()) out.push(...leerReemplazos(k.slice(PREFIJO_CLAVE.length), st as unknown as Almacen))
+  } catch { /* almacenamiento que tira: sin anotaciones */ }
+  return out
+}
+
+export const MSG_FASE2_CON_REEMPLAZO =
+  'Antes de cerrar la Noche, terminá el cambio de pago que quedó a medias en Caja Diaria (aviso rojo, «Terminar el cambio»).'
 
 export const MSG_CIERRE_CON_REEMPLAZO =
   'Antes de cerrar, terminá el cambio de pago que quedó a medias (aviso rojo arriba, «Terminar el cambio»).'

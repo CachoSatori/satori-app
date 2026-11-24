@@ -28,7 +28,7 @@ import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import {
   reemplazarPago, aplicarReemplazos, reemplazosAbiertos, anotarEnAparato, leerReemplazos, guardarReemplazos,
-  coincidePago, enCambioAbierto, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente, type DatosPago,
+  coincidePago, enCambioAbierto, revisarCambioEnBase, mensajeNoTerminable, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente, type DatosPago,
 } from './reemplazoPago'
 import type { Employee } from '../../shared/types/database'
 
@@ -621,6 +621,14 @@ export default function CashTurno({
     if (!auth.ok) return
     setTerminando(true)
     try {
+      // Ronda 4 (Menor 3): se relee la base ya autorizado y se borra el viejo solo si el nuevo sigue confirmado.
+      const e = await revisarCambioEnBase(r, sessionMovementsBase, id => getCashMovementById(id))
+      if (e !== 'terminable') {
+        if (e === 'resuelto') anotarReemplazos(prev => prev.filter(x => x.viejo !== r.viejo))
+        else onError(mensajeNoTerminable(e))
+        onRefresh()
+        return
+      }
       await deleteCashMovement(r.viejo, NOTA_REEMPLAZO, auth.managerEmail, auth.managerPassword)
       anotarReemplazos(prev => prev.filter(x => x.viejo !== r.viejo))
       onRefresh()

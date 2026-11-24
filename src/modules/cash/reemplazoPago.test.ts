@@ -219,7 +219,26 @@ describe('revisarCambioEnBase / reemplazosDelDia / soltarReemplazo (ronda 3)', (
     const ses = [{ id: 's1', session_date: '2000-01-01' }]
     const r2: ReemplazoPendiente = { viejo: 'v2', nuevo: 'n2', at: 1 }
     expect(reemplazosDelDia([r, r2], movs, ses, '2000-01-01')).toEqual([r, r2])
-    expect(reemplazosDelDia([r, r2], movs, ses, '2000-01-02')).toEqual([r2])
+    // Un cambio de un día POSTERIOR al que se cierra no lo frena.
+    expect(reemplazosDelDia([r, r2], movs, ses, '1999-12-31')).toEqual([r2])
+  })
+  // Ronda 4 (Menor 1): el pozo es acumulado; un par abierto de un día ANTERIOR entra en el «debería» de hoy.
+  it('reemplazosDelDia: un par abierto de un día anterior también frena la Noche de hoy', () => {
+    const movs = [mov('v', { session_id: 's1' }), mov('n', { session_id: 's1' })]
+    const ses = [{ id: 's1', session_date: '2000-01-01' }]
+    expect(reemplazosDelDia([r], movs, ses, '2000-01-02')).toEqual([r])
+    expect(reemplazosDelDia([r], movs, ses, '2000-02-15')).toEqual([r])
+    // Viejo de ayer y nuevo de hoy (o al revés): frena igual.
+    const ses2 = [{ id: 's1', session_date: '2000-01-01' }, { id: 's2', session_date: '2000-01-03' }]
+    expect(reemplazosDelDia([r], [mov('v', { session_id: 's2' }), mov('n', { session_id: 's1' })], ses2, '2000-01-02')).toEqual([r])
+  })
+  // Ronda 4 (Menor 2): sesión vencida → PostgREST da 200 vacío por RLS (sin error). No es «resuelto».
+  it('base vacía (sesión vencida, RLS sin error) → desconocido: no se suelta la anotación', async () => {
+    expect(await revisarCambioEnBase(r, [mov('v'), mov('n')], base())).toBe('desconocido')
+  })
+  it('el viejo no está y el nuevo tampoco → desconocido; solo con el nuevo en la base es resuelto', async () => {
+    expect(await revisarCambioEnBase(r, [mov('v'), mov('n', { _pending: true })], base())).toBe('desconocido')
+    expect(await revisarCambioEnBase(r, [mov('v'), mov('n')], base('n'))).toBe('resuelto')
   })
   it('soltarReemplazo quita ese viejo de TODOS los turnos y deja lo demás', () => {
     const m = new Map<string, string>()

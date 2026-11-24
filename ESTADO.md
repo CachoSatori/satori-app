@@ -4,7 +4,7 @@
 > (incluye el ESTADO íntegro previo a la poda del 20-nov).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega)
-**Al día: 2026-11-23 (~24:00 CR, cierre del día).** `main` = `f14e4778` (merge #341). **Ledger prod = 195 · staging = 195** (ningún merge del 23-nov tocó `supabase/`; próximo libre del bloque 150–199: 196; la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
+**Al día: 2026-11-24 (~00:25 CR).** `main` = `bbc2b196` (merge #343: reloj fijo en la prueba de MiRendimiento, que fallaba los martes; R34; OK del dueño en 2eabf571). **Ledger prod = 195 · staging = 195** (ningún merge del 23-nov tocó `supabase/`; próximo libre del bloque 150–199: 196; la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
 [docs/handoffs/HANDOFF-2026-11-20.md](docs/handoffs/HANDOFF-2026-11-20.md) (los handoffs del 21 al 23-nov viven en los documentos del proyecto de Claude, no en el repo).
 - **Entró el 23-nov (hora CR):** #330 (SPEC Ventas v2 cerrada; D11–D14) · #326 (caja: no guarda montos inválidos) · #331 (Ventas 3.5.1: menú de 6 pestañas) · #332 y #333 (D15–D17; Santa Teresa primero y por defecto) · **#338** caja, menores de #335/#337 (23:36, `94c6e019`; firma del dueño por chat en `cf36e713`) · **#339** Ventas 3.5.3 «Tiempos» (23:41, `ae75ea46`; OK del dueño en `39ea6fa0`; `ce1e934f` = main juntado, diff idéntico) · **#341** Bandeja y puntos por rol no guardan montos ilegibles; puntos solo enteros ≥ 0 (23:58, `f14e4778`; firma en `1de0bea4`; `d52de506` = main juntado, conflicto solo R32/R33 en docs). Deploys de Pages verdes. Lo del 20 y 21-nov: [ESTADO-HISTORICO](docs/historico/ESTADO-HISTORICO.md) y handoffs.
 - **Abierto:** **#340** Ventas 3.5.4 «Equipo» (borrador, en verificación; D18: el contador ve todo Equipo, «Por línea» completa y «Competencias» solo mirar) · #324 (anonimizar staging, sin correr; con el dueño presente) · #287, #262, #252 (puente, con firma).
@@ -23,7 +23,7 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `f14e4778` |
+| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `bbc2b196` |
 | `staging` | sin cambios desde el 13/11 (`5158698`, #167); su base ya está al día (prod 195; staging 195) |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |

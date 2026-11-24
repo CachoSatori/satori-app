@@ -3,7 +3,6 @@ import type { RoleTipPoints, UserRole } from '../../shared/types/database'
 import { upsertRoleTipConfig } from '../../shared/api/admin'
 import { ROLE_LABELS } from '../../shared/constants'
 import { alEscribir, esIlegible, valorInput } from '../tips/validarTurno'
-import { errorDeCuadros } from '../cash/cuadrosMonto'
 
 // Roles que participan en el pool de propinas
 const TIP_ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
@@ -33,12 +32,13 @@ export default function RolePointsConfig({ rolePoints, onRefresh }: Props) {
   const dirtyRoles = [...new Set([...Object.keys(editingPts), ...Object.keys(editingRcv)])] as UserRole[]
   const isDirty = dirtyRoles.length > 0
 
-  // Puntos ilegibles («5-», «0-450»: el cuadro da '' y validity.badInput) o negativos → aviso que nombra el rol y
-  // no se guarda nada (antes `parseInt('') || 0` guardaba 0 y sacaba al rol del reparto). Vacío sigue siendo 0.
-  // Solo cuentan los roles que reciben propina (en los otros el cuadro está apagado). R29–R31.
-  const aviso = errorDeCuadros(TIP_ROLES.filter(r => getRcv(r)).map(r => ({
-    nombre: `Puntos / hora · ${ROLE_LABELS[r]}`, valor: getPts(r), ilegible: Number.isNaN(getPts(r)),
-  })))
+  // Puntos ilegibles («5-», «0-450»: el cuadro da '' y validity.badInput), decimales («.5», «2.5») o negativos →
+  // aviso que nombra el rol y no se guarda nada. Antes `parseInt(x) || 0` guardaba 0 o truncaba (2.5 → 2) sin aviso.
+  // Vacío sigue siendo 0. Solo cuentan los roles que reciben propina (en los otros el cuadro está apagado). R29–R31, R33.
+  const rolMalo = TIP_ROLES.find(r => getRcv(r) && !(Number.isInteger(getPts(r)) && getPts(r) >= 0))
+  const aviso = rolMalo
+    ? `«Puntos / hora · ${ROLE_LABELS[rolMalo]}»: los puntos van en números enteros de 0 en adelante (por ejemplo 10). Corregilo o borralo para dejarlo en 0.`
+    : null
 
   const handleSave = async () => {
     if (aviso) { setError(aviso); return }
@@ -101,7 +101,7 @@ export default function RolePointsConfig({ rolePoints, onRefresh }: Props) {
                     step="1"
                     aria-label={`Puntos / hora: ${ROLE_LABELS[role]}`}
                     value={valorInput(getPts(role))}
-                    {...alEscribir(el => setEditingPts(prev => ({ ...prev, [role]: esIlegible(el) ? Number.NaN : parseInt(el.value) || 0 })))}
+                    {...alEscribir(el => setEditingPts(prev => ({ ...prev, [role]: esIlegible(el) ? Number.NaN : el.value === '' ? 0 : Number(el.value) })))}
                     className="tip-input"
                     style={{ width: '70px', opacity: rcv ? 1 : 0.4 }}
                     disabled={saving || !rcv}
@@ -116,9 +116,9 @@ export default function RolePointsConfig({ rolePoints, onRefresh }: Props) {
                       onChange={e => {
                         const recibe = e.target.checked
                         setEditingRcv(prev => ({ ...prev, [role]: recibe }))
-                        // Al apagar el cuadro, lo ilegible se descarta (vuelven los puntos guardados): si no, bloquearía sin verse.
+                        // Al apagar el cuadro, lo inválido (ilegible, decimal, negativo) se descarta (vuelven los puntos guardados): si no, bloquearía sin verse.
                         if (!recibe) setEditingPts(prev => {
-                          if (!Number.isNaN(prev[role])) return prev
+                          if (!(role in prev) || (Number.isInteger(prev[role]) && prev[role] >= 0)) return prev
                           const rest = { ...prev }; delete rest[role]; return rest
                         })
                       }}

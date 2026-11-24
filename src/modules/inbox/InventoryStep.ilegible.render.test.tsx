@@ -98,6 +98,17 @@ describe('Bandeja → Inventario · cuadros ilegibles no se guardan como 0', () 
     expect(H.commit.mock.calls[0][0].lines[0].precio_unitario).toBe(0)
   })
 
+  it('cantidad «0-450» y borrarla (de "" a "": solo llega onInput) destraba', async () => {
+    const u = userEvent.setup()
+    await abrir()
+    await u.type(cuadro('Cantidad'), '0-450', { initialSelectionStart: 0, initialSelectionEnd: 1 })
+    expect(textoVisible(cuadro('Cantidad'))).toBe('0-450')
+    expect(aviso()).toContain('«Cant. · Pescado ficticio»')
+    await u.clear(cuadro('Cantidad'))
+    expect(aviso()).toBeNull()
+    expect(boton().disabled).toBe(false)
+  })
+
   it('cuadro ilegible + «--» encima (de "" a "") sigue bloqueado', async () => {
     const u = userEvent.setup()
     await abrir()

@@ -52,6 +52,7 @@
   --c-oro:            #b48e50;   /* solo filetes y barra destacada de gráficos */
   --c-oro-texto:      #8a6a33;   /* oro como texto */
   --c-oro-fondo:      #f4f0e6;   /* fondo de «pendiente» */
+  --c-oro-fondo-texto: #f8f5ee;  /* fondo oro con texto oro CHICO encima: --c-oro-texto da 4,6:1 (sobre --c-oro-fondo, 4,4) */
   --c-laca:           #a3392d;   /* malo / alerta */
   --c-laca-fondo:     #f6e4e1;
   --c-laca-borde:     #e3bdb6;
@@ -2723,7 +2724,7 @@ html, body, #root {
 .cd-cierre-resultado.ok   { background: var(--c-musgo-fondo); border: 1px solid var(--c-musgo-borde); color: var(--c-musgo-texto); }
 .cd-cierre-resultado.fail { background: var(--c-laca-fondo); border: 1px solid var(--c-laca-borde); color: var(--c-laca); }
 /* Sobrante fuera de tolerancia en oro (decisión del dueño 24-nov, SPEC-caja-estandar §8.2). */
-.cd-cierre-resultado.sobra { background: var(--c-oro-fondo); border: 1px solid var(--c-oro); color: var(--c-oro-texto); }
+.cd-cierre-resultado.sobra { background: var(--c-oro-fondo-texto); border: 1px solid var(--c-oro); color: var(--c-oro-texto); }
 
 /* Resumen del Cierre del Día — filas claras (patrón Caja Diaria) */
 .cierre-resumen {
@@ -2789,7 +2790,7 @@ html, body, #root {
 }
 .cierre-resumen-usd.ok   { background: var(--c-musgo-fondo); border: 1px solid var(--c-musgo-borde); color: var(--c-musgo-texto); }
 .cierre-resumen-usd.fail { background: var(--c-laca-fondo); border: 1px solid var(--c-laca-borde); color: var(--c-laca); }
-.cierre-resumen-usd.sobra { background: var(--c-oro-fondo); border: 1px solid var(--c-oro); color: var(--c-oro-texto); }
+.cierre-resumen-usd.sobra { background: var(--c-oro-fondo-texto); border: 1px solid var(--c-oro); color: var(--c-oro-texto); }
 
 /* móvil: columnas ₡/US$ más angostas para que la etiqueta respire */
 @media (max-width: 420px) {

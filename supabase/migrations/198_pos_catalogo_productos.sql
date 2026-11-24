@@ -222,8 +222,7 @@ from (select distinct local from public.pos_ndf_tickets) x;
 
 -- Familias de santa-teresa: las 29 del PoS (`FAC_Clasificaciones`, leídas por el dueño el 24-nov 15:43 CR), menos las
 -- que no existen. Nombres como están en el PoS. La 1 NO existe en el PoS: sus códigos vienen de una clasificación
--- borrada y se cargan con un rótulo propio. Las marcadas «POR CONFIRMAR» llevan un nombre que falta copiar de la
--- lectura del dueño: el PR 3.1a NO puede salir así (lo frena una prueba del gate).
+-- borrada y se cargan con un rótulo propio. Ningún nombre puede quedar «POR CONFIRMAR» (lo frena una prueba del gate).
 -- Categoría (decisiones del dueño, 24-nov ~15:50 CR): la que ya usan las cuentas firmadas (comida 2,3,4,13,16,29 ·
 -- bebida 5 · fuera de la venta 6, 17 y 20) · 18 → bebida · 10 → merch · 17 → regalías (`cortesia`: no es venta,
 -- fijada por la familia) · 6 → consumo del personal (`personal`: aparte, fuera de la venta neta de carta) · 20 sin
@@ -237,23 +236,23 @@ insert into public.pos_familias (local, familia, nombre, categoria, orden) value
   ('santa-teresa', 13, 'KIDS MENU',                'comida',       40),
   ('santa-teresa',  4, 'POSTRES',                  'comida',       50),
   ('santa-teresa', 29, 'GREENSEASON',              'comida',       60),
-  ('santa-teresa', 11, 'MENU AÑO NUEVO',           'comida',       70),  -- nombre POR CONFIRMAR · mixta, por código
-  ('santa-teresa', 15, 'EVENTOS TERRAZA',          'comida',       80),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa', 11, 'MENU AÑO NUEVO',           'comida',       70),  -- mixta, por código
+  ('santa-teresa', 15, 'EVENTOS TERRAZA',          'comida',       80),  -- mixta, por código
   ('santa-teresa',  9, 'BELIEVE',                  'comida',       90),  -- mixta, por código
   ('santa-teresa',  5, 'BEBIDAS',                  'bebida',       10),
   ('santa-teresa', 18, 'Y HAPPY HOUR',             'bebida',       20),
-  ('santa-teresa', 25, 'POR CONFIRMAR (25)',       'bebida',       30),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa', 25, 'PROMOCIONES',              'bebida',       30),  -- mixta, por código (mismo nombre que la 14)
   ('santa-teresa',  1, '(clasificación borrada)',  'bebida',       40),  -- no existe en el PoS · por código
   ('santa-teresa', 22, 'EXTRAS',                   'extras',       10),
-  ('santa-teresa',  7, 'POR CONFIRMAR (7)',        'otros',        10),  -- nombre POR CONFIRMAR (SURFCAMP) · por código
-  ('santa-teresa',  8, 'POR CONFIRMAR (8)',        'otros',        20),  -- nombre POR CONFIRMAR (SURFCAMP) · por código
+  ('santa-teresa',  7, 'ACADEMY SURFCAMP',         'otros',        10),  -- por código
+  ('santa-teresa',  8, 'LAPOINT SURFCAMP',         'otros',        20),  -- por código
   ('santa-teresa', 14, 'PROMOCIONES',              'otros',        30),  -- por código
   ('santa-teresa', 21, 'TSHIRTS',                  'merch',        10),
   ('santa-teresa', 23, 'T-GORRAS',                 'merch',        20),
   ('santa-teresa', 24, 'T-DARUMAS',                'merch',        30),
   ('santa-teresa', 26, 'T-STICKERS',               'merch',        40),
   ('santa-teresa', 10, 'REMERAS',                  'merch',        50),
-  ('santa-teresa', 27, 'POR CONFIRMAR (27)',       'merch',        60),  -- nombre y categoría POR CONFIRMAR
+  ('santa-teresa', 27, 'T-XABANICOS',              'merch',        60),
   ('santa-teresa', 12, 'GIFT CARDS',               'giftcard',     10),
   ('santa-teresa', 19, 'A PAX',                    'pax',          10),
   ('santa-teresa', 28, 'XX DUEÑOS',                'duenos',       10),

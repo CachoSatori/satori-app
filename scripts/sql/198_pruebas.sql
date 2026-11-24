@@ -214,8 +214,8 @@ select '14 la tabla de familias no acepta familia 17 en comida ni familia 3 en c
        and pg_temp.intentar($$insert into public.pos_familias (local, familia, nombre, categoria) values ('prueba-198-x', 3, 'X', 'cortesia')$$) = '23514',
        null;
 insert into _r198 (caso, ok, detalle)
-select '15 los nombres de familia marcados POR CONFIRMAR son, a lo sumo, los de 7, 8, 25 y 27 (los de 11 y 15 los marca el comentario)',
-       coalesce((select array_agg(familia order by familia) from public.pos_familias where nombre like 'POR CONFIRMAR%'), '{}') <@ array[7, 8, 25, 27],
+select '15 ningún nombre de familia queda POR CONFIRMAR (nombres leídos por el dueño el 24-nov 15:43 CR)',
+       not exists (select 1 from public.pos_familias where nombre ilike '%POR CONFIRMAR%'),
        (select coalesce(string_agg(familia::text, ',' order by familia), '-') from public.pos_familias where nombre like 'POR CONFIRMAR%');
 insert into _r198 (caso, ok, detalle)
 select '16 una factura anulada también registra el producto (8006)',

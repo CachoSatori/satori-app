@@ -49,16 +49,13 @@ El dueño leyó la tabla de familias del PoS (`FAC_Clasificaciones`) el **24-nov
 | 17 | `X CORTESIAS` | `cortesia` = **regalías** (no es venta; la fija la familia) | listo |
 | 18 | `Y HAPPY HOUR` | bebida | listo (sin ventas hoy) |
 | 20 | `Ingredientes` | `ingredientes` (sin ventas) | listo |
-| 7, 8 | marcador `POR CONFIRMAR (7)` / `(8)` (SURFCAMP) | `otros` (por código; sin ventas hoy) | **falta copiar el nombre exacto** |
-| 11 | `MENU AÑO NUEVO` (propuesto) | comida (mixta) | **falta confirmar contra la lectura** |
-| 15 | `EVENTOS TERRAZA` (propuesto) | comida (mixta) | **falta confirmar contra la lectura** |
-| 25 | marcador `POR CONFIRMAR (25)` (la 14 es «PROMOCIONES») | bebida (mixta) | **falta copiar el nombre exacto** |
-| 27 | marcador `POR CONFIRMAR (27)` | merch | **falta copiar el nombre exacto y confirmar merch** |
+| 7, 8 | `ACADEMY SURFCAMP` / `LAPOINT SURFCAMP` | `otros` (por código; sin ventas hoy) | listo |
+| 11 | `MENU AÑO NUEVO` | comida (mixta) | listo |
+| 15 | `EVENTOS TERRAZA` | comida (mixta) | listo |
+| 25 | `PROMOCIONES` (igual que la 14, así está en el PoS) | bebida (mixta) | listo |
+| 27 | `T-XABANICOS` | merch | listo |
 
-El agente que hizo la renumeración no pudo leer el archivo del proyecto (su sesión no tenía la herramienta de
-Projects): los nombres de 7, 8, 11, 15, 25 y 27 se copian de ese archivo, se saca el comentario «POR CONFIRMAR» de
-esas filas, la prueba del gate pasa a verde y el SHA cambia: **la firma va sobre el SHA nuevo**. Conviene confirmar en
-la misma lectura que la 19 es «A PAX» y que la 20 se escribe «Ingredientes» (así la nombra `netaVenta.ts`).
+Los nombres van tal cual la lectura (mayúsculas y tildes como en el PoS; ninguna prueba pide otro formato). La 19 es «A PAX» y la 20 «Ingredientes». Con eso la prueba del gate pasa a verde: **la firma va sobre el SHA nuevo**.
 
 ## 3. Pruebas (antes de aplicar, R15)
 - **Postgres 16 vacío (local, 24-nov)**, con `scripts/sql/193_base_local.sql` + la 190 + `198_preludio_local.sql`,
@@ -143,7 +140,7 @@ van solo los códigos (SPEC §2.5).
 | 2026-11-24 | dueño | Decisiones D-1…D-8 y A-1…A-5 (SPEC §9.3, dos rondas) |
 | 2026-11-24 | agente | PR 3.1a: Postgres local 92/92 y 21/21 mutaciones; staging NO PROBADO (§3); prod sin leer (§4) |
 | 2026-11-24 15:43 | dueño | Nombres de las familias leídos en la PC del PoS (§2); decisiones de categoría ~15:50 |
-| 2026-11-24 tarde | agente | Renumerada 196 → 198; familias 1, 9 (mixtas), 6, 10, 14, 17, 18, 20 y 7/8 cargadas; Postgres local 93/93 y 22/22 mutaciones; staging solo lecturas (códigos de 1, 9 y 27 = prod); faltan los nombres de 7, 8, 11, 15, 25 y 27 (§2) |
+| 2026-11-24 tarde | agente | Renumerada 196 → 198; familias 1, 9 (mixtas), 6, 10, 14, 17, 18, 20 y 7/8 cargadas; Postgres local 93/93 y 22/22 mutaciones; staging solo lecturas (códigos de 1, 9 y 27 = prod); nombres de 7, 8, 11, 15, 25 y 27 cargados después (§2) |
 | | sesión del dueño | Batería en staging con `--medir` (§3) y lecturas de prod (§4) |
 | | verificador | Revisión independiente: esquema, permisos y que la categoría no toque la neta |
 | | dueño | **Firma D-9** sobre el SHA exacto |

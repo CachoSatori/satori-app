@@ -28,7 +28,7 @@ Verificado en el código y en los PRs, no en los handoffs. «Evidencia» es el a
 | 2.4 | Alerta de mesas sin pax en el correo diario y en Mi Rendimiento | — | **Parcial** | En pantalla sí: «Ayer: mesas sin pax» por salonero en Resumen (`alertaDeAyer`). El correo de cierre solo dice el % de personas estimadas (`supabase/functions/cierre-email/plantilla.ts`), sin la lista por salonero. Mi Rendimiento no avisa nada |
 | 3.1 | `pos_ventas_productos` + catálogo único por código | — | **Falta** (firma) | No hay migración ni función. El Mix sigue con `product_map` por nombre + familia del PoS (`fusionarProductMap`) |
 | 3.2 | «Productos» | — | **Falta** | Siguen «Mix», «Ing. Menú» y «Productos» (catálogo) como vistas viejas |
-| 3.3 | «Equipo» | — | **Falta** | Siguen «Saloneros», «Por línea», «Evaluación», «ICP», «Cajeros» y «Competencias». La migración 194 es de Mi Rendimiento (el equipo en agregados para el personal), no de esta pantalla |
+| 3.3 | «Equipo» | 3.5.4 (PR en borrador, 23-nov) | **En revisión** | `VentasEquipo.tsx`, `equipoV2.ts`: «Saloneros» y «Evaluación» juntas en «Equipo» con la barra global; «Por línea», «ICP», «Cajas y canales» y «Competencias» como sub-vistas. La migración 194 es de Mi Rendimiento, no de esta pantalla |
 | 3.4 | `pos_ventas_regalias` + «Regalías» | — | **Falta** (firma) | No hay pantalla ni función. Lo que hay hoy: el bloque «Regalías, Personal & Desconocidos» de «Hoy» y tres secciones del Mix |
 | 3.5 | Unificación en las 5 pestañas | — | **Falta. Es la próxima tarea** (decisión del 23-nov) | `ventasTabs.ts`: 19 vistas en 10 entradas. Alcance y criterios en §12 |
 | 4.x | Costos, margen, costo primo, RevPASH, fechas especiales | — | **Falta** | — |
@@ -317,6 +317,14 @@ como están hoy (§12.3).
 1. **Equipo:** una fila por salonero: venta, personas, venta por persona contra el equipo de su turno, bebidas
    por persona, relación comida/bebida, precio por ítem, ICP, días trabajados, consistencia, tendencia y racha.
    Muestra chica en gris. Junta «Saloneros» y «Evaluación».
+   **Cómo quedó en el 3.5.4 (`equipoV2.ts`):** abre con «Ayer» (el «Ranking del día» de la vieja «Hoy»). Venta,
+   personas, Prom/PAX cargado, bebidas por persona, comida/bebida, precio por plato y ticket por ítem salen del
+   lector de siempre (`aggSalonero`, lo mismo que «Saloneros»; paridad en `__paridad__/equipo354.paridad.test.tsx`).
+   La venta por persona es la D4 (190, la misma lectura que «Resumen») y «contra el equipo de su turno» la compara
+   con la del equipo en los mismos turnos de caja, ponderada por sus personas en cada turno. Consistencia,
+   tendencia y racha son la cuenta de «Evaluación» sobre los días del período (la tendencia, 7 contra 7, solo con
+   14 días trabajados o más). ICP del período por la regla 5 de `ESTADO.md`, del local elegido. Muestra chica:
+   menos de 30 personas en el período. Arriba, la venta por persona y las personas del equipo contra las bases.
 2. **Ficha del salonero:** tendencia de 12 semanas, sus productos, comparación contra las bases.
 3. **Por línea:** las dos lentes de hoy, sin cambios.
 4. **ICP:** el de hoy, del restaurante y por salonero.
@@ -357,14 +365,19 @@ como están hoy (§12.3).
 
 ## 6. Qué ve cada rol
 
-No cambia ningún permiso: es el mismo reparto de `ventasTabs.ts`, pasado a las pantallas nuevas.
+No cambia ningún permiso: es el mismo reparto de `ventasTabs.ts`, pasado a las pantallas nuevas. **Una excepción,
+decidida por el dueño el 23-nov a las 21:40 CR (D18):** el contador ve el «Ranking del día» de saloneros, que veía en
+«Hoy». Desde el 3.5.4 ve la sub-vista «Equipo» con el ranking; el detalle (evaluación, ICP por fila y ficha) sigue
+siendo de owner y manager (`veDetalleEquipo` en `ventasTabs.ts`). Es permiso de pantalla: sin RLS ni migración.
 
 | Pantalla | owner | manager | contador |
 |---|---|---|---|
 | Resumen | Sí | Sí | Sí (con «Detalle por día» desplegado) |
 | Productos — mix | Sí | Sí | Sí |
 | Productos — ingeniería de menú | Sí | Sí | No |
-| Equipo — equipo, ficha, por línea, competencias | Sí | Sí | No |
+| Equipo — equipo: el ranking (venta, personas, venta por persona, vs su turno, bebidas, comida/bebida, precios) | Sí | Sí | **Sí** (decisión del dueño, 23-nov 21:40 CR) |
+| Equipo — equipo: evaluación (ICP por fila, % meta, días, consistencia, tendencia, racha) y ficha del salonero | Sí | Sí | No |
+| Equipo — por línea, competencias | Sí | Sí | No |
 | Equipo — ICP, cajas y canales | Sí | Sí | Sí |
 | Tiempos | Sí | Sí | Sí |
 | Regalías | Sí | Sí | **Sí, completa** (D7, 17-nov) |
@@ -478,6 +491,7 @@ coordinador (fuera del repo); esta tabla pasa a ser la referencia en el repo.
 | **D15** | Se **retira «Histórico»** (sin uso real según el dueño). Los datos viejos quedan en la base; las comparaciones contra el año anterior salen del PoS | Va en el 3.5.2, con «Hoy» y «Ventas» |
 | **D16** | **Santa Teresa primero** en todo selector o lista de locales (y por defecto). Hoy Nosara aparece primero estando inactivo. Regla general: locales activos primero, Santa Teresa por defecto; sigue todo multi-local | Arreglo aparte, ya (no espera la 3.5) |
 | **D17** | **«Ajustes → Productos» (catálogo manual) desaparece.** El catálogo sale del PoS (código, nombre, familia y categoría), sin clasificar a mano, siempre **ordenado por familia y categoría**. Lo único editable: **cuántas personas rinde** un producto (combo, botella para compartir) para la venta por persona; el costo, cuando llegue Inventario | Entra en la 3.1 (catálogo único por código, D8, firma). Hasta la 3.1 la vista queda como está |
+| **D18** | (23-nov 21:40 CR, cambia §6) — el **contador SÍ ve el «Ranking del día»** de saloneros | En el 3.5.4: ve «Equipo» → «Equipo» con las columnas del ranking; sin evaluación, ICP por fila ni ficha. Sus enlaces viejos `?tab=saloneros` y `?tab=evaluacion` abren ahí |
 
 ## 11. Fuera de alcance
 
@@ -545,8 +559,8 @@ Menú final, en este orden:
 | Análisis → Prom/PAX explicado | Por turno, día de semana, salonero y semana; rendimiento y mezcla; CSV | «Resumen» → «Qué explica el cambio», completo a un clic | 3.5.2 | |
 | Calendario (`calendario`) | Promedios por día de semana | «Tiempos» → «Día de semana» | 3.5.3 | `?tab=tiempos&p=mes` |
 | | Detalle por fecha (ventas, PAX, Prom/PAX) | «Tiempos» → «Calendario» y «Resumen» → «Detalle por día» | 3.5.3 | |
-| Saloneros (`saloneros`) | Ranking en tarjetas o tabla: ventas, PAX, Prom/PAX, Beb/PAX, Ratio C/B, Prom/plato, Prom/bebida, Ticket/ítem; fila GENERAL | «Equipo» → «Equipo» | 3.5.4 | `?tab=equipo` |
-| Evaluación (`evaluacion`) | Días, % meta, consistencia, tendencia, racha; tendencia de 12 semanas | «Equipo» → «Equipo» (columnas) y ficha del salonero | 3.5.4 | `?tab=equipo` |
+| Saloneros (`saloneros`) | Ranking en tarjetas o tabla: ventas, PAX, Prom/PAX, Beb/PAX, Ratio C/B, Prom/plato, Prom/bebida, Ticket/ítem; fila GENERAL | «Equipo» → «Equipo» | 3.5.4 | `?tab=equipo&p=ayer` (abría el último día) |
+| Evaluación (`evaluacion`) | Días, % meta, consistencia, tendencia, racha; tendencia de 12 semanas | «Equipo» → «Equipo» (columnas) y ficha del salonero | 3.5.4 | `?tab=equipo&p=rango&desde=&hasta=` (abría los últimos 30 días: los 30 que terminan ayer) |
 | Por línea (`salolineas`) | Lente A (venta propia) y Lente B (mesa propia) | «Equipo» → «Por línea», igual | 3.5.4 | `?tab=equipo&v=lineas` |
 | ICP (`icp`) | ICP del restaurante y por salonero, tendencia, turnos, horas, cobrado del reparto | «Equipo» → «ICP», igual | 3.5.4 | `?tab=equipo&v=icp` |
 | Cajeros (`cajeros`) | Total por caja, delivery, otros canales, cuenta promedio, atribución por línea, detalle diario | «Equipo» → «Cajas y canales» | 3.5.4 | `?tab=equipo&v=cajas` |
@@ -579,6 +593,15 @@ con los 30 días que terminan ayer (revisión del verificador del #336).
 «Análisis», ya solo con «Año vs Año», pasa a ser sub-vista de «Tiempos» (`?tab=tiempos&v=analisis`; también abre ahí
 `?tab=resumen&v=analisis`) para que «Resumen» quede sin sub-pestañas, como dice §12.4; en la 3.5.3 pasa a
 `?tab=tiempos&p=anioALaFecha`. «Regalías» es `?tab=regalias`.
+
+**Desde el 3.5.4:** «Saloneros» y «Evaluación» se retiraron; las dos están en «Equipo» → «Equipo» (`?tab=equipo`,
+vista `equipo`). Sus `?tab=` viejos y sus direcciones de sub-vista (`?tab=equipo&v=saloneros|evaluacion`) abren «Equipo»
+con el período con que abría la vista vieja: `&p=ayer` y `&p=rango` con los 30 días que terminan ayer. «Cajeros»
+se llama «Cajas y canales» (misma vista, `v=cajas`). El contador ve «Equipo» con el ranking (D18).
+**Archivos que se pisan con el 3.5.3 (#339):** `ventasTabs.ts` (los dos generalizan `RETIRADAS` con `desde`; el 3.5.4
+conserva `MOVIDAS` de «Análisis», que el 3.5.3 retira), `ventasTabs.test.ts`, `VentasModule.tsx`,
+`VentasModule.nav.render.test.tsx`, `VentasModule.carga.render.test.tsx`, esta SPEC y la guía 6.4. El segundo en
+mergear trae `main` y junta las dos listas de retiradas.
 
 ### 12.3 Qué entra sin la 3.1 ni la 3.4, y qué queda esperando
 
@@ -641,7 +664,8 @@ Valen para el estado final de la 3.5; cada PR cumple los que le tocan y lo dice 
    3. «Contexto {día}» de «Hoy»: lo reemplaza la comparación contra el mismo día de la semana pasada.
 8. **Permisos iguales que hoy.** La tabla de §6, probada por (rol × sub-vista) en `ventasTabs.test.ts` y
    recorrida en staging con un usuario real de cada rol (regla 4). El contador ve «Regalías» completa (D7) y
-   no ve «Ing. Menú», ni las sub-vistas «Equipo», «Por línea» y «Competencias», ni «Ajustes → Productos» ni
+   no ve «Ing. Menú», ni el detalle de «Equipo» (evaluación, ICP por fila, ficha; D18: sí ve el ranking), ni «Por
+   línea» ni «Competencias», ni «Ajustes → Productos» ni
    «Mesas internas» (de «Ajustes» ve solo «Metas»). El manager ve solo su local y no cambia las mesas internas. Sin migración ni cambio de RLS.
 9. **Multi-local.** Toda pantalla con barra lleva el selector de local; ningún archivo nuevo fija el local
    salvo como valor por defecto.

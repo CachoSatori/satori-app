@@ -17,7 +17,6 @@ import {
 // Pestaña ADITIVA (preliminar, datos simulados). No recibe props: lee su propio snapshot del
 // mock y no toca `dias`, `pm` ni ninguna otra pestaña.
 const VentasEnVivo       = lazy(() => import('./VentasEnVivo'))
-const VentasSaloneros    = lazy(() => import('./VentasSaloneros'))
 const VentasSaloneroLineas = lazy(() => import('./VentasSaloneroLineas'))
 const VentasMix          = lazy(() => import('./VentasMix'))
 const VentasAnalisis     = lazy(() => import('./VentasAnalisis'))
@@ -25,7 +24,6 @@ const VentasMetas        = lazy(() => import('./VentasMetas'))
 const VentasCompetencias = lazy(() => import('./VentasCompetencias'))
 const VentasConfig       = lazy(() => import('./VentasConfig'))
 const VentasCajeros      = lazy(() => import('./VentasCajeros'))
-const VentasEvaluacion   = lazy(() => import('./VentasEvaluacion'))
 const VentasICP          = lazy(() => import('./VentasICP'))
 const VentasCalendario   = lazy(() => import('./VentasCalendario'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
@@ -35,6 +33,8 @@ const VentasTiempos      = lazy(() => import('./VentasTiempos'))
 const VentasMesasInternas = lazy(() => import('./VentasMesasInternas'))
 // Ventas v2 · 3.5.2 (D11 = A): lee lo suyo para el período de la barra.
 const VentasRegalias     = lazy(() => import('./VentasRegalias'))
+// Ventas v2 · 3.5.4: junta «Saloneros» y «Evaluación», con la barra global; lee lo suyo para el período.
+const VentasEquipo       = lazy(() => import('./VentasEquipo'))
 
 /** Ids de ARIA: cada pestaña controla el mismo panel de contenido. */
 const PANEL_ID = 'vt-panel'
@@ -69,7 +69,8 @@ export default function VentasModule() {
   // La vista activa vive en la URL (`/ventas?tab=<entrada>&v=<sub-vista>`, 3.5.1). Sin `tab`
   // abre «Resumen». Un `?tab=<vista vieja>` abre la misma vista de antes y la dirección se
   // reemplaza por la nueva; uno que el rol no ve, o que no existe, abre «Resumen». Las vistas
-  // retiradas en el 3.5.2 («Hoy», «Ventas», «Histórico») abren «Resumen» con su período (`p`).
+  // retiradas en el 3.5.2 («Hoy», «Ventas», «Histórico») abren «Resumen» con su período (`p`); las del 3.5.4
+  // («Saloneros», «Evaluación»), «Equipo» con el suyo.
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const vParam   = searchParams.get('v')
@@ -333,9 +334,8 @@ export default function VentasModule() {
               {tab === 'regalias'    && <VentasRegalias />}
               {tab === 'internas'    && <VentasMesasInternas />}
               {tab === 'envivo'      && <VentasEnVivo       metas={metas} />}
-              {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}
+              {tab === 'equipo'      && <VentasEquipo       metas={metas} />}
               {tab === 'salolineas'  && <VentasSaloneroLineas />}
-              {tab === 'evaluacion'  && <VentasEvaluacion   dias={allDias} pm={pm} metas={metas} />}
               {tab === 'icp'         && <VentasICP          dias={allDias} pm={pm} />}
               {tab === 'cajeros'     && <VentasCajeros      dias={allDias} />}
               {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} hist={hist} />}

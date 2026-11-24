@@ -2,7 +2,8 @@
 //
 // En el DOM: el menú de Ventas con entradas y sub-pestañas, y la vista en la URL. Desde el 3.5.1
 // (SPEC-ventas-v2 §12.4): arranque en «Resumen» y redirección de los `?tab=` viejos. Desde el 3.5.2: siete
-// entradas (con «Regalías»), «Resumen» sin sub-pestañas y «Hoy», «Ventas» e «Histórico» retiradas.
+// entradas (con «Regalías»), «Resumen» sin sub-pestañas y «Hoy», «Ventas» e «Histórico» retiradas. Desde el 3.5.4:
+// «Saloneros» y «Evaluación» retiradas, juntas en «Equipo» (que el contador también ve: decisión del dueño 23-nov 21:40).
 // Las vistas se reemplazan por marcadores: acá se prueba la navegación, no el contenido.
 import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest'
 import { useEffect } from 'react'
@@ -24,7 +25,7 @@ vi.mock('./ventasFuente', () => ({
 vi.mock('./AvisoFuentePos', () => ({ default: () => null }))
 const vista = (n: string) => ({ default: () => <div data-testid="vista">{n}</div> })
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
-vi.mock('./VentasSaloneros',      () => vista('saloneros'))
+vi.mock('./VentasEquipo',         () => vista('equipo'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
 vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasAnalisis',       () => vista('analisis'))
@@ -32,7 +33,6 @@ vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
 vi.mock('./VentasConfig',         () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
-vi.mock('./VentasEvaluacion',     () => vista('evaluacion'))
 vi.mock('./VentasICP',            () => vista('icp'))
 vi.mock('./VentasCalendario',     () => vista('calendario'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
@@ -75,8 +75,7 @@ const subMenu = (entrada: string) => screen.getByRole('tablist', { name: `Vistas
 const REDIRECCION: Record<string, string> = {
   analisis: '/ventas?tab=tiempos&v=analisis',
   mix: '/ventas?tab=productos', menueng: '/ventas?tab=productos&v=menu',
-  saloneros: '/ventas?tab=equipo', salolineas: '/ventas?tab=equipo&v=lineas',
-  evaluacion: '/ventas?tab=equipo&v=evaluacion', icp: '/ventas?tab=equipo&v=icp',
+  salolineas: '/ventas?tab=equipo&v=lineas', icp: '/ventas?tab=equipo&v=icp',
   cajeros: '/ventas?tab=equipo&v=cajas', competencias: '/ventas?tab=equipo&v=competencias',
   calendario: '/ventas?tab=tiempos&v=calendario',
   metas: '/ventas?tab=ajustes', config: '/ventas?tab=ajustes&v=productos', internas: '/ventas?tab=ajustes&v=internas',
@@ -178,6 +177,11 @@ describe('VentasModule · redirecciones (criterio 3)', () => {
     ['tab=resumen&v=ventas', '/ventas?tab=resumen&p=mesALaFecha'],
     ['tab=resumen&v=historico', '/ventas?tab=resumen&p=rango&desde=2026-10-19&hasta=2026-11-17'],
     ['tab=resumen&v=analisis', '/ventas?tab=tiempos&v=analisis'],
+    // 3.5.4: «Saloneros» abría el último día → «Equipo», «Ayer»; «Evaluación», 30 días → «Equipo», «Rango».
+    ['tab=saloneros', '/ventas?tab=equipo&p=ayer'],
+    ['tab=evaluacion', '/ventas?tab=equipo&p=rango&desde=2026-10-19&hasta=2026-11-17'],
+    ['tab=equipo&v=saloneros', '/ventas?tab=equipo&p=ayer'],
+    ['tab=equipo&v=evaluacion', '/ventas?tab=equipo&p=rango&desde=2026-10-19&hasta=2026-11-17'],
   ]
   it.each(['owner', 'manager', 'contador'].flatMap(r => RETIRADAS.map(([q, a]) => [r, q, a] as const)))(
     '%s con ?%s → %s', async (r, q, a) => {
@@ -189,7 +193,8 @@ describe('VentasModule · redirecciones (criterio 3)', () => {
       abrir(`/ventas?${q}`, ['/'])
       await vi.waitFor(() => expect(ultima.url).toBe(a))
       expect(ultima.tipo).toBe('REPLACE')
-      expect((await screen.findByTestId('vista')).textContent).toBe(q.endsWith('analisis') ? 'analisis' : 'resumen')
+      expect((await screen.findByTestId('vista')).textContent).toBe(
+        q.endsWith('analisis') ? 'analisis' : /saloneros|evaluacion/.test(q) ? 'equipo' : 'resumen')
     })
 
   it('una retirada con un día de otro período: queda el local, cambia el período y se limpia el día', async () => {
@@ -231,13 +236,14 @@ describe('VentasModule · navegación', () => {
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
   })
 
-  it('contador: «Equipo» abre «ICP» (la primera que ve)', async () => {
+  it('contador: «Equipo» abre «Equipo» (el ranking; decisión del dueño 23-nov 21:40) y ve Equipo · ICP · Cajas y canales', async () => {
     role = 'contador'
     abrir('/ventas')
     await screen.findByTestId('vista')
     fireEvent.click(within(menu()).getByRole('tab', { name: 'Equipo' }))
-    expect((await screen.findByTestId('vista')).textContent).toBe('icp')
-    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=equipo&v=icp'))
+    expect((await screen.findByTestId('vista')).textContent).toBe('equipo')
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=equipo'))
+    expect(within(subMenu('Equipo')).getAllByRole('tab').map(t => t.textContent)).toEqual(['Equipo', 'ICP', 'Cajas y canales'])
   })
 
   it('criterio 10: la barra se conserva al pasar de Resumen a Equipo y a Tiempos', async () => {

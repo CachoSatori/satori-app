@@ -46,7 +46,7 @@ const vista = (n: string) => ({
   ),
 })
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
-vi.mock('./VentasSaloneros',      () => vista('saloneros'))
+vi.mock('./VentasEquipo',         () => vista('equipo'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
 vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasAnalisis',       () => vista('analisis'))
@@ -54,7 +54,6 @@ vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
 vi.mock('./VentasConfig',         () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
-vi.mock('./VentasEvaluacion',     () => vista('evaluacion'))
 vi.mock('./VentasICP',            () => vista('icp'))
 vi.mock('./VentasCalendario',     () => vista('calendario'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
@@ -106,11 +105,17 @@ describe('VentasModule · carga a pedido (A5)', () => {
     expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
   })
 
-  it.each(['tab=resumen', 'tab=tiempos', 'tab=regalias', 'tab=hoy', 'tab=ventas', 'tab=historico'])('?%s no pide los 90 días ni la historia (criterio 12)', async q => {
+  it.each(['tab=resumen', 'tab=tiempos', 'tab=regalias', 'tab=hoy', 'tab=ventas', 'tab=historico', 'tab=equipo', 'tab=saloneros', 'tab=evaluacion'])('?%s no pide los 90 días ni la historia (criterio 12)', async q => {
     abrir(`/ventas?${q}`)
-    expect(await texto()).toMatch(/^(resumen|tiempos|regalias)\|/)
+    expect(await texto()).toMatch(/^(resumen|tiempos|regalias|equipo)\|/)
     expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
     expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
+  })
+
+  it.each(['owner', 'manager', 'contador'])('3.5.4: %s en «Equipo» recibe las metas (y nada de los 90 días)', async r => {
+    role = r
+    abrir('/ventas?tab=equipo')
+    expect(await texto()).toBe('equipo|dias:-|hist:-|pm:-|metas:si')
   })
 
   it('En vivo recibe las mismas metas de antes', async () => {

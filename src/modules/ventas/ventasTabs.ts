@@ -7,6 +7,12 @@
 // con «Año vs Año» y pasa al lado de «Calendario», en «Tiempos» (su destino de la 3.5.3), así «Resumen» no
 // lleva sub-pestañas. Los roles de cada vista que queda son los mismos de antes.
 //
+// 3.5.4 (§12.4, §5.3): «Saloneros» y «Evaluación» se RETIRAN y se juntan en «Equipo» (vista `equipo`, con la barra
+// global). «Cajeros» pasa a llamarse «Cajas y canales». Sub-vistas de «Equipo»: Equipo · Por línea · ICP · Cajas y
+// canales · Competencias. Decisión del dueño (23-nov 21:40 CR): el CONTADOR ve «Equipo» con el ranking (lo que era el
+// «Ranking del día» de «Hoy»); las columnas de evaluación y la ficha del salonero siguen solo para owner y manager
+// (`veDetalleEquipo`).
+//
 // La dirección es `/ventas?tab=<entrada>&v=<sub-vista>` (sin `v`, la primera sub-vista que el rol ve).
 // Los `?tab=<vista vieja>` siguen abriendo algo con sentido: se reemplaza la dirección por la nueva.
 // «Paridad» y «Cargar XLS» se retiraron el 16-nov: su `?tab=` viejo abre «Resumen».
@@ -15,7 +21,7 @@ import { todayCR } from '../../shared/utils'
 import { sumarDias, type TipoPeriodoV2 } from './periodos'
 
 export type Tab =
-  | 'envivo' | 'saloneros' | 'salolineas' | 'evaluacion' | 'icp'
+  | 'envivo' | 'equipo' | 'salolineas' | 'icp'
   | 'cajeros' | 'mix' | 'analisis' | 'calendario' | 'menueng' | 'metas'
   | 'competencias' | 'config' | 'resumen' | 'tiempos' | 'internas' | 'regalias'
 
@@ -27,11 +33,12 @@ export interface TabDef { id: Tab; label: string; roles: string[] }
  */
 export const TABS: TabDef[] = [
   { id: 'envivo',       label: 'En vivo',           roles: ['owner','manager','contador'] },
-  { id: 'saloneros',    label: 'Saloneros',         roles: ['owner','manager'] },
+  // Ventas v2 · 3.5.4 (SPEC §5.3): junta «Saloneros» y «Evaluación». El contador la ve (decisión del dueño, 23-nov
+  // 21:40 CR: el «Ranking del día»); el detalle (evaluación y ficha) es de owner y manager (`veDetalleEquipo`).
+  { id: 'equipo',       label: 'Equipo',            roles: ['owner','manager','contador'] },
   { id: 'salolineas',   label: 'Por línea',         roles: ['owner','manager'] },
-  { id: 'evaluacion',   label: 'Evaluación',        roles: ['owner','manager'] },
   { id: 'icp',          label: 'ICP',               roles: ['owner','manager','contador'] },
-  { id: 'cajeros',      label: 'Cajeros',           roles: ['owner','manager','contador'] },
+  { id: 'cajeros',      label: 'Cajas y canales',   roles: ['owner','manager','contador'] },
   { id: 'mix',          label: 'Mix',               roles: ['owner','manager','contador'] },
   { id: 'analisis',     label: 'Análisis',          roles: ['owner','manager','contador'] },
   { id: 'calendario',   label: 'Calendario',        roles: ['owner','manager','contador'] },
@@ -63,7 +70,7 @@ export interface Entrada { id: EntradaId; label: string; vistas: Tab[] }
 export const ENTRADAS: Entrada[] = [
   { id: 'resumen',   label: 'Resumen',   vistas: ['resumen'] },
   { id: 'productos', label: 'Productos', vistas: ['mix', 'menueng'] },
-  { id: 'equipo',    label: 'Equipo',    vistas: ['saloneros', 'salolineas', 'evaluacion', 'icp', 'cajeros', 'competencias'] },
+  { id: 'equipo',    label: 'Equipo',    vistas: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'] },
   { id: 'tiempos',   label: 'Tiempos',   vistas: ['tiempos', 'calendario', 'analisis'] },
   { id: 'regalias',  label: 'Regalías',  vistas: ['regalias'] },
   { id: 'envivo',    label: 'En vivo',   vistas: ['envivo'] },
@@ -78,7 +85,7 @@ export const ENTRADAS: Entrada[] = [
 export const CLAVE_V: Record<Tab, string> = {
   resumen: 'resumen',
   mix: 'mix', menueng: 'menu',
-  saloneros: 'saloneros', salolineas: 'lineas', evaluacion: 'evaluacion', icp: 'icp', cajeros: 'cajas',
+  equipo: 'equipo', salolineas: 'lineas', icp: 'icp', cajeros: 'cajas',
   competencias: 'competencias',
   tiempos: 'tiempos', calendario: 'calendario', analisis: 'analisis',
   regalias: 'regalias',
@@ -86,19 +93,30 @@ export const CLAVE_V: Record<Tab, string> = {
   metas: 'metas', config: 'productos', internas: 'internas',
 }
 
+/** Las vistas retiradas en la 3.5 (su `?tab=` de antes y su `v` mientras convivieron). */
+export type Retirada = 'hoy' | 'ventas' | 'historico' | 'saloneros' | 'evaluacion'
+
 /**
- * Las vistas RETIRADAS en el 3.5.2 (SPEC §12.2, D15) y a dónde lleva su enlace viejo: «Resumen» con el
- * período de la barra que la reemplaza, el mismo con que abría la vista vieja. Vale para el `?tab=` de antes
- * de la 3.5 y para la dirección del 3.5.1 (`?tab=resumen&v=<vista>`).
- *   · «Hoy» abría el último día cerrado → «Ayer».
- *   · «Ventas» abría el mes en curso → «Mes» a la fecha (`mesALaFecha`; `mes` sin día es el último cerrado).
- *   · «Histórico» abría los últimos 30 días → «Rango» con los 30 días que terminan ayer (hoy no entra, D2).
+ * Las vistas RETIRADAS y a dónde lleva su enlace viejo: la pestaña nueva con el período de la barra que la
+ * reemplaza, el mismo con que abría la vista vieja (SPEC §12.2). Vale para el `?tab=` de antes de la 3.5 y
+ * para la dirección de sub-vista que tuvieron mientras convivieron (`desde`: `?tab=<entrada>&v=<vista>`).
+ *   · 3.5.2 (D15): «Hoy» abría el último día cerrado → «Resumen», «Ayer».
+ *   · 3.5.2: «Ventas» abría el mes en curso → «Resumen», «Mes» a la fecha (`mesALaFecha`).
+ *   · 3.5.2: «Histórico» abría los últimos 30 días → «Resumen», «Rango» con los 30 días que terminan ayer.
+ *   · 3.5.4: «Saloneros» abría el último día → «Equipo», «Ayer» (el «Ranking del día»).
+ *   · 3.5.4: «Evaluación» abría los últimos 30 días → «Equipo», «Rango» con los 30 días que terminan ayer.
  */
-export const RETIRADAS: Readonly<Record<'hoy' | 'ventas' | 'historico', { vista: Tab; p: TipoPeriodoV2; ultimosDias?: number }>> = {
-  hoy:       { vista: 'resumen', p: 'ayer' },
-  ventas:    { vista: 'resumen', p: 'mesALaFecha' },
-  historico: { vista: 'resumen', p: 'rango', ultimosDias: 30 },
+export const RETIRADAS: Readonly<Record<Retirada, { vista: Tab; p: TipoPeriodoV2; ultimosDias?: number; desde: readonly EntradaId[] }>> = {
+  hoy:        { vista: 'resumen', p: 'ayer',        desde: ['resumen'] },
+  ventas:     { vista: 'resumen', p: 'mesALaFecha', desde: ['resumen'] },
+  historico:  { vista: 'resumen', p: 'rango', ultimosDias: 30, desde: ['resumen'] },
+  saloneros:  { vista: 'equipo',  p: 'ayer',        desde: ['equipo'] },
+  evaluacion: { vista: 'equipo',  p: 'rango', ultimosDias: 30, desde: ['equipo'] },
 }
+
+/** Quién ve el DETALLE de «Equipo» (columnas de evaluación, ICP y ficha del salonero): SPEC §6. */
+export const ROLES_DETALLE_EQUIPO: readonly string[] = ['owner', 'manager']
+export const veDetalleEquipo = (role: string): boolean => ROLES_DETALLE_EQUIPO.includes(role)
 
 /**
  * Direcciones del 3.5.1 de vistas que cambiaron de entrada en el 3.5.2: `?tab=resumen&v=analisis` →
@@ -110,7 +128,7 @@ const MOVIDAS: Readonly<Record<string, Tab>> = {
 
 const TAB_POR_ID = new Map(TABS.map(t => [t.id, t]))
 const ENTRADA_POR_ID = new Map(ENTRADAS.map(e => [e.id as string, e]))
-const esRetirada = (s: string | null): s is keyof typeof RETIRADAS =>
+const esRetirada = (s: string | null): s is Retirada =>
   !!s && Object.prototype.hasOwnProperty.call(RETIRADAS, s)
 
 export function vistasVisibles(role: string): TabDef[] {
@@ -147,8 +165,8 @@ export interface Correccion { tab: EntradaId | null; v: string | null; p?: TipoP
  * un paso al «Atrás»).
  *   · `?tab=<entrada>[&v=<clave>]` → esa sub-vista, si el rol la ve.
  *   · `?tab=<vista vieja>` que el rol ve → esa vista; se reemplaza por su dirección nueva.
- *   · `?tab=hoy|ventas|historico` (o `?tab=resumen&v=` de una de ellas, 3.5.1) → «Resumen» con el
- *     período que la reemplaza (SPEC §12.2).
+ *   · `?tab=hoy|ventas|historico|saloneros|evaluacion` (o la dirección de sub-vista que tuvo mientras convivió,
+ *     `RETIRADAS[x].desde`) → su pestaña nueva con el período que la reemplaza (SPEC §12.2).
  *   · `?tab=resumen&v=analisis` (3.5.1) → «Tiempos» → «Análisis».
  *   · Lo que el rol no ve o no existe (incluidos `paridad` y `xls`) → «Resumen», dirección limpia.
  */
@@ -157,7 +175,7 @@ export function resolverDireccion(
 ): { vista: Tab; corregir: Correccion | null } {
   const inicio = tabPorDefecto(role)
   const limpiar = { vista: inicio, corregir: { tab: null, v: null } }
-  const retirada = (clave: keyof typeof RETIRADAS) => {
+  const retirada = (clave: Retirada) => {
     const r = RETIRADAS[clave]
     if (!puedeVer(role, r.vista)) return limpiar
     const corregir: Correccion = { ...direccionDe(r.vista), p: r.p }
@@ -176,7 +194,7 @@ export function resolverDireccion(
     }
     const vista = entrada.vistas.find(x => CLAVE_V[x] === v)
     if (vista) return puedeVer(role, vista) ? { vista, corregir: null } : limpiar
-    if (tab === 'resumen' && esRetirada(v)) return retirada(v)
+    if (esRetirada(v) && RETIRADAS[v].desde.includes(entrada.id)) return retirada(v)
     const movida = MOVIDAS[`${tab}|${v}`]
     if (movida) return puedeVer(role, movida) ? { vista: movida, corregir: direccionDe(movida) } : limpiar
     return limpiar
@@ -213,9 +231,10 @@ export function labelDe(tab: Tab): string {
 
 /**
  * Vistas que no reciben `dias` ni `pm` (leen lo suyo): se pintan sin esperar la carga de los
- * 90 días del PoS. «Regalías» lee las líneas del período elegido en la barra (`lineasPeriodo.ts`).
+ * 90 días del PoS. «Regalías» y «Equipo» (3.5.4) leen las líneas del período elegido en la barra
+ * (`lineasPeriodo.ts`) y la 190; «Equipo» recibe solo `metas` (lo liviano que el shell baja siempre).
  */
-export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas', 'resumen', 'tiempos', 'internas', 'regalias'])
+export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas', 'resumen', 'tiempos', 'internas', 'regalias', 'equipo'])
 
 /**
  * Vistas que pueden mirar más atrás de los 90 días (año contra año, rangos «Todo», competencias
@@ -223,6 +242,6 @@ export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'saloli
  * Mientras llega, muestran lo mismo que antes: los 90 días + el Excel.
  */
 export const VISTAS_CON_FONDO: ReadonlySet<Tab> = new Set<Tab>([
-  'analisis', 'calendario', 'mix', 'metas', 'menueng', 'evaluacion', 'icp',
-  'saloneros', 'cajeros', 'competencias', 'config',
+  'analisis', 'calendario', 'mix', 'metas', 'menueng', 'icp',
+  'cajeros', 'competencias', 'config',
 ])

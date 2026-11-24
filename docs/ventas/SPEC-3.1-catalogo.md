@@ -3,11 +3,11 @@
 **Estado:** PROPUESTA con las **decisiones del dueño del 24-nov-2026** (dos rondas) ya incorporadas (§9.3), escrita contra
 `main` = `9312c23`. Desarrolla la fila 3.1 de [SPEC-ventas-v2.md](./SPEC-ventas-v2.md) (§0, §8 y §9) con las
 decisiones **D8** (catálogo único por código, firmada el 17-nov) y **D17** (el catálogo sale del PoS, 23-nov).
-**No autoriza código ni esquema.** La migración 196 de §6 es una propuesta escrita dentro de este documento: el
+**No autoriza código ni esquema.** La migración 198 de §6 es una propuesta escrita dentro de este documento: el
 archivo no existe en `supabase/migrations/` y no se aplicó en ninguna base. Falta **la firma del dueño** (🖊️, D-9),
 que va sobre el SHA del PR 3.1a. Donde el coordinador tuvo que interpretar una decisión dice **Lectura del
 coordinador** (lista en §9.4); lo que sigue abierto para el dueño está en §9.3.1. La subcategoría del PoS
-(cervezas, vinos, cocteles) **no** entra en la 196: va en la 3.1c, con su firma (§11).
+(cervezas, vinos, cocteles) **no** entra en la 198: va en la 3.1c, con su firma (§11).
 
 **Cómo se verificó:** lecturas de solo lectura en staging (`hwiatgic…`) para medir los datos (§2.5 y §7.1), y la
 migración con su batería en un Postgres 16 local y vacío (el método de `scripts/sql/193_base_local.sql`), en una
@@ -82,18 +82,18 @@ grande —bebida en cervezas, vinos, cocteles—, sin cambiar nada de lo de acá
 
 | Orden | Categoría | Familias de Santa Teresa que la traen por defecto | ¿Es venta neta? | ¿Una persona la puede elegir para un código? |
 |---|---|---|---|---|
-| 1 | `comida` | 2, 3, 16, 13, 4, 29 · 11 y 15 (mixtas, §2.5) · 9 (por confirmar) | Sí | Sí |
-| 2 | `bebida` | 5 · 25 (mixta, §2.5) · 1 (por confirmar) | Sí | Sí |
+| 1 | `comida` | 2, 3, 16, 13, 4, 29 · 9 BELIEVE, 11 y 15 (mixtas, §2.5) | Sí | Sí |
+| 2 | `bebida` | 5 · 18 Y HAPPY HOUR · 25 y 1 (mixtas, §2.5) | Sí | Sí |
 | 3 | `menu_especial` | Ninguna: solo por código (hoy, el 192) | Sí | Sí |
 | 4 | `extras` | 22 | Sí | Sí |
-| 5 | `otros` | Una familia que aparezca sin fila (hoy, ninguna) | Sí | Sí |
-| 6 | `merch` | 21, 23, 24, 26 · 27 (por confirmar) | Sí | Sí |
+| 5 | `otros` | 7 y 8 (SURFCAMP) y 14 PROMOCIONES, por código y hoy sin ventas · una familia que aparezca sin fila | Sí | Sí |
+| 6 | `merch` | 21, 23, 24, 26 · 10 REMERAS · 27 (nombre por copiar) | Sí | Sí |
 | 7 | `giftcard` | 12 | Sí | No: la fija la familia |
 | 8 | `pax` | 19 | Sí | No: la fija la familia |
 | 9 | `duenos` | 28 | Sí | No: la fija la familia |
-| 10 | `cortesia` | 17 | **No** | **No, nunca** |
-| 11 | `personal` | 6 | **No** | **No, nunca** |
-| 12 | `ingredientes` | 20 | **No** | **No, nunca** |
+| 10 | `cortesia` (se muestra **«Regalías»**) | 17 X CORTESIAS | **No** | **No, nunca** |
+| 11 | `personal` (consumo del personal, aparte) | 6 PERSONAL | **No** | **No, nunca** |
+| 12 | `ingredientes` | 20 Ingredientes (sin ventas) | **No** | **No, nunca** |
 
 **`menu_especial` (decidido 24-nov, segunda ronda):** categoría nueva para el **ítem por comensal de un menú
 cerrado** (hoy, el código 192 del menú de año nuevo). Es venta neta como cualquier otra. **Por qué va tercera y no
@@ -105,7 +105,7 @@ las dos) y en el mix es una línea propia que cierra contra la neta.
 **La regla que no se negocia: la categoría nunca decide la venta.** Qué plata es venta lo decide **solo la familia
 de la línea**: fuera de la venta = {6, 17, 20}, que es `FAMILIAS_NO_VENTA` (`netaVenta.ts`, firmada) y sigue
 intacta. La categoría por código solo **reparte lo que ya es venta** entre comida, bebida y las demás; no puede
-sacar ni meter un producto de la venta neta. La 196 lo cuida en tres lugares, y cada uno tiene su prueba (§8.1):
+sacar ni meter un producto de la venta neta. La 198 lo cuida en tres lugares, y cada uno tiene su prueba (§8.1):
 
 1. **La tabla** no acepta que una persona guarde `cortesia`, `personal` ni `ingredientes` (`check`), ni que una
    familia distinta de 6, 17 y 20 tenga una de esas tres categorías (y al revés).
@@ -119,10 +119,19 @@ rotas a propósito a la vez, el reparto por categoría se rompe pero `neta_cts` 
 
 - **Decidido 24-nov (A-3 = A):** `giftcard`, `pax` y `duenos` no se eligen a mano ni se le cambian a un producto:
   esas familias tienen cuentas propias (personas, mesas de dueños).
-- **Decidido 24-nov (A-5):** las familias 1, 9 y 27 **tienen nombre en el PoS** (no admite una familia sin
-  nombre); no estaba en ninguna tabla de la app. Se lee en la PC del PoS y se carga en la 196 como las demás. Con
-  eso las 23 familias que tienen productos en las facturas (y la 20, ingredientes) quedan con fila. Su categoría por defecto (1 → bebida,
-  9 → comida, 27 → merch) es una **lectura del coordinador** por lo que venden; se confirma con el nombre (§9.3.1).
+- **Nombres leídos por el dueño en la PC del PoS (24-nov 15:43 CR) y decisiones (~15:50 CR):** la 198 carga las
+  **29 familias** (1 a 29). La **familia 1 no existe en el PoS**: sus códigos vienen de una clasificación borrada; va
+  como «(clasificación borrada)» y su categoría es por código (su único código, a bebida). **9 BELIEVE es mixta**
+  (tapas, rolls, bebidas, postre): categoría por código como 11, 15 y 25 (A-2: un código nuevo toma la mayoría, hoy
+  comida; sus dos códigos de la historia, a comida). **18 Y HAPPY HOUR → bebida · 10 REMERAS → merch · 17 X CORTESIAS
+  → regalías** (no es venta; la fija la familia, como gift cards, pax y dueños) **· 6 PERSONAL → consumo del personal,
+  aparte** (fuera de la venta neta de carta) **· 7 y 8 (SURFCAMP) y 14 PROMOCIONES → por código** según lo que vendan
+  (hoy no tienen ninguna línea: un código nuevo entra en `otros` hasta que alguien le ponga la suya) **· 20
+  Ingredientes → sin ventas.** 7, 8, 10, 14 y 18 no tienen líneas hoy (staging y prod, solo lectura).
+- **Regalías y personal no chocan con el modelo:** ya eran categorías fijas de la familia y fuera de la venta
+  (`cortesia` = 17, `personal` = 6; `FAMILIAS_NO_VENTA`, firmada). **Forma mínima:** la clave de la base sigue siendo
+  `cortesia` y la pantalla la rotula «Regalías» (3.1b); renombrar la clave tocaría el `check`, tres funciones y la
+  app sin cambiar ningún número. Si el dueño prefiere la clave `regalias`, es un cambio de la 198 antes de la firma.
 - Una familia **nueva** que el PoS mande antes de que alguien la cargue se muestra **«Familia N»** dentro de
   `otros`, con un aviso. No se pierde plata ni se esconde.
 - Los nombres de familia se muestran como están en el PoS.
@@ -149,14 +158,14 @@ rotas a propósito a la vez, el reparto por categoría se rompe pero `neta_cts` 
   códigos de §2.5.
 - **Lo que no se carga a mano (decidido 24-nov, segunda ronda):** el subgrupo. La primera versión de esta spec
   lo proponía como texto editable heredado de `product_map.subclasificacion`; el dueño confirmó que ese segundo
-  nivel **ya existe en el PoS**, así que viene de ahí (§11) y la 196 no trae ni la columna ni la herencia.
+  nivel **ya existe en el PoS**, así que viene de ahí (§11) y la 198 no trae ni la columna ni la herencia.
 
 ### 2.4 El costo, cuando llegue Inventario
 
 **Decidido 24-nov (D-6 = A):** el costo a mano se deja de cargar con la 3.1b; los costos ya cargados quedan en
 `product_map`, «Ing. Menú» los sigue mostrando y se actualizan solo desde Recetas.
 
-No hay columna de costo en la 196, a propósito: un costo cambia en el tiempo y necesita vigencia y origen (receta
+No hay columna de costo en la 198, a propósito: un costo cambia en el tiempo y necesita vigencia y origen (receta
 o carga a mano), que son diseño de Inventario ([SPEC-inventario-v0](../inventario/SPEC-inventario-v0.md), F3
 «Recetas → consumo teórico»). Lo que esta spec deja preparado:
 
@@ -171,7 +180,9 @@ o carga a mano), que son diseño de Inventario ([SPEC-inventario-v0](../inventar
 
 **Decidido 24-nov (D-3):** el dueño dijo «todo está dentro de una gran primera categoría, comida o bebida, depende
 dónde esté». Los productos de las familias 11 (menú de año nuevo), 15 (eventos de terraza) y 25 (promociones) no
-van a «otros»: cada código lleva su categoría. **La lista de 82 códigos quedó confirmada por el dueño el 24-nov**
+van a «otros»: cada código lleva su categoría. **Segunda tanda (24-nov ~15:50 CR):** la 9 BELIEVE y la 1 (borrada)
+también son mixtas: sus 3 códigos de la historia llevan la suya (166 y 207 de la 9 → comida; el 1 de la 1 →
+bebida). En total, **85 códigos** con categoría escrita. **La lista de 82 códigos quedó confirmada por el dueño el 24-nov**
 (segunda ronda), con dos cambios sobre la propuesta (698 y 740 a comida) y el 192 a `menu_especial`.
 
 | Familia | Códigos | `comida` | `bebida` | `menu_especial` | Líneas (comida / bebida / menú) | Unidades (comida / bebida / menú) |
@@ -181,7 +192,7 @@ van a «otros»: cada código lleva su categoría. **La lista de 82 códigos que
 | 25 | 36 | 2 | 34 | — | 2 / 1.538 / — | 3 / 2.183 / — |
 | **Total** | **82** | **24** | **57** | **1** | **239 / 1.619 / 22** | **284 / 2.288 / 48** |
 
-(Staging, solo lectura, 24-nov; sin nombres. La lista con nombre va al `PASE-196`.)
+(Staging, solo lectura, 24-nov; sin nombres. La lista con nombre va al `PASE-198`.)
 
 | Familia | `comida` | `bebida` | `menu_especial` |
 |---|---|---|---|
@@ -190,10 +201,10 @@ van a «otros»: cada código lleva su categoría. **La lista de 82 códigos que
 | 25 | 930, 934 | 5, 519, 559, 695, 843, 844, 860, 861, 862, 863, 864, 866, 867, 870, 871, 872, 879, 880, 881, 882, 917, 918, 921, 922, 925, 926, 1026, 1027, 1036, 1037, 1038, 1056, 1057, 1062 | — |
 
 - **Cómo queda en la base:** los 82 códigos llevan su categoría escrita, uno por uno, en `pos_producto_ajustes`
-  (la carga la 196; `actualizado_por` null = cargado por la migración). Así un cambio posterior en la familia no
+  (la carga la 198; `actualizado_por` null = cargado por la migración). Así un cambio posterior en la familia no
   los mueve.
 - **Un código nuevo de esas familias (decidido 24-nov, A-2 = A):** toma la categoría de la mayoría de su familia
-  —**11 → comida, 15 → comida, 25 → bebida**— y aparece en «Catálogo» bajo el filtro «nuevos» para que alguien lo
+  —**11 → comida, 15 → comida, 25 → bebida, 9 → comida, 1 → bebida**; en 7, 8 y 14, sin historia, `otros`— y aparece en «Catálogo» bajo el filtro «nuevos» para que alguien lo
   confirme. El menú del próximo 31-dic va a traer códigos nuevos: el ítem por comensal de ese menú hay que pasarlo
   a `menu_especial` a mano (va a entrar como comida).
 
@@ -214,9 +225,10 @@ Eso pide una regla para las unidades en ₡0, que hoy no existe. Cuánto pesan (
 | Familia 25 | 2.186 | 250 |
 | Familia 15 | 65 | 0 |
 
-**Lo que hace la 196:** `pos_ventas_productos` devuelve, por producto, las `unidades` (todas) y aparte las
-`unidades_cero` (las de líneas con monto ₡0). No decide nada: deja el dato. **La regla propuesta** (se aplica en
-la 3.2, que es donde se ven estos números; punto abierto B-1 de §9.3.1):
+**Lo que hace la 198:** `pos_ventas_productos` devuelve, por producto, las `unidades` (todas) y aparte las
+`unidades_cero` (las de líneas con monto ₡0). No decide nada: deja el dato. **La regla, decidida por el dueño el
+24-nov ~15:50 CR (B-1 = A):** solo cuentan las unidades vendidas; las de ₡0 van aparte como «incluidas». Se aplica
+en la 3.2, que es donde se ven estos números (`catalogoPos.ts` ya la trae: `unidadesVendidas`, `precioPorItemCts`):
 
 | Indicador | Regla propuesta | Por qué |
 |---|---|---|
@@ -244,7 +256,7 @@ la 3.2, que es donde se ven estos números; punto abierto B-1 de §9.3.1):
 | El día 31-dic | Sí: aparece la línea `menu_especial`; con la regla de ₡0, comida, bebida y bebidas por persona de esa noche no se distorsionan | Se mide en el PASE |
 
 - **Cuándo se mueven:** con la **3.2**, que es la que lee el catálogo nuevo. La 3.1 no cambia ninguna pantalla.
-- **Se mide antes de la firma:** el `PASE-196` del PR 3.1a trae el antes y el después, en **prod** y en solo
+- **Se mide antes de la firma:** el `PASE-198` del PR 3.1a trae el antes y el después, en **prod** y en solo
   lectura, de comida, bebida, `menu_especial`, «otros» y bebidas por persona para el último mes cerrado, los
   últimos 12 meses y el último 31-dic. Si prod tiene códigos de esas familias que no están en la lista, salen en
   esa lectura.
@@ -369,7 +381,7 @@ inactivo.
 Un `check` más: no hay filas vacías (rinde 1 y sin categoría = no hay fila).
 
 **Esto es esquema nuevo respecto de la primera versión de la spec** (una columna, dos `check`, una categoría y
-dos funciones más): entra en la misma 196 y en la misma firma (D-9).
+dos funciones más): entra en la misma 198 y en la misma firma (D-9).
 
 **RLS de las tres:** activada. Una sola política por tabla, de **lectura**: owner y contador activos, y el manager
 solo en sus locales (`puede_ver_local`). **Ninguna política de escritura** y sin permisos de `insert`, `update` ni
@@ -421,7 +433,7 @@ la regla; `pos_catalogo_refrescar(p_local)` aplica la misma sobre toda la histor
 | `pos_catalogo_refrescar`, `pos_catalogo_absorber`, `pos_categoria_efectiva` | No (uso interno) | No | No | No | No |
 | Escribir las tablas por la API | No | No | No | No | No |
 
-- `pos_ndf_*` **siguen cerradas a gerencia** (regla 6 de `ESTADO.md`): la 196 no les cambia ninguna política;
+- `pos_ndf_*` **siguen cerradas a gerencia** (regla 6 de `ESTADO.md`): la 198 no les cambia ninguna política;
   solo les suma el disparador.
 - Las funciones nuevas **nacen** limitando al manager a su local (como la 193). La deuda de la 067, la 080 y la
   190 sigue aparte (backlog, con firma).
@@ -434,26 +446,29 @@ la regla; `pos_catalogo_refrescar(p_local)` aplica la misma sobre toda la histor
 - Las pantallas siguen el reparto de §6 de la SPEC de Ventas v2: sin cambios, salvo que «Ajustes — productos» pasa
   a llamarse «Ajustes — catálogo», con los mismos roles.
 
-## 6. Migración PROPUESTA `196_pos_catalogo_productos.sql`
+## 6. Migración PROPUESTA `198_pos_catalogo_productos.sql`
 
-> **No es un archivo del repo.** Se copia a `supabase/migrations/` recién en el PR 3.1a, con la firma. Número: 196,
-> el próximo libre del bloque 150–199 (`ESTADO.md`, 24-nov; ningún PR abierto lo usa). Si al mergear ya está
-> tomado, se renumera al siguiente libre en el mismo PR. El PR 3.1a también la registra en
-> `supabase/migraciones-reservadas.json` y en la tabla de `ESTADO.md`, y trae su `PASE-196`.
+> **El archivo vive en el PR 3.1a (#357)** (`supabase/migrations/198_pos_catalogo_productos.sql`); este bloque es su
+> copia al 24-nov tarde. **Número: 198.** Era la 196, pero la 197 entró antes a prod por Branching (#359, ledger
+> prod = 197) y una versión menor que la última aplicada ya no entra: se renumeró en el mismo PR (archivo, vuelta
+> atrás, pruebas, lecturas, PASE, registro y ESTADO). Si al mergear la 198 ya está tomada, se renumera otra vez al
+> siguiente libre del bloque 150–199.
 >
 > **Qué trae (versión del 24-nov, con las decisiones):** 3 tablas, 1 disparador en `pos_ndf_ticket_lines`,
-> 7 funciones, la carga de las 24 familias de Santa Teresa (seis con el nombre POR CONFIRMAR en la PC del PoS),
-> la herencia de «rinde» y la categoría de los 82 códigos de §2.5. **Sin subcategoría** (va en la 3.1c, §11). El bloque de abajo es **el mismo texto** que se corrió en el Postgres
+> 7 funciones, la carga de las 29 familias de Santa Teresa (nombres leídos por el dueño en la PC del PoS el 24-nov
+> 15:43 CR; los de 7, 8, 11, 15, 25 y 27 todavía con «POR CONFIRMAR» en el archivo, §9.3.1 B-2), la herencia de
+> «rinde» y la categoría de los 85 códigos de las familias mixtas (§2.5). **Sin subcategoría** (va en la 3.1c, §11). El bloque de abajo es **el mismo texto** que se corrió en el Postgres
 > local (§8.1).
 
 ```sql
 -- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 196 · Ventas v2 3.1: catálogo único por código desde el PoS + `pos_ventas_productos`   ║
+-- ║ 198 · Ventas v2 3.1: catálogo único por código desde el PoS + `pos_ventas_productos`   ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
--- PROPUESTA. Sin firma no se crea el archivo en supabase/migrations ni se aplica en ninguna base.
+-- PR 3.1a (SPEC docs/ventas/SPEC-3.1-catalogo.md §6, PR #350). Entra a prod por merge → Branching, SOLO con la firma
+-- del dueño (D-9) sobre el SHA del PR y con los nombres de familia leídos en la PC del PoS (docs/pases/PASE-198.md).
 -- D8 (catálogo único por código), D17 (el catálogo sale del PoS) y las decisiones del 24-nov: D-2 = C (categoría
--- por código en la app), D-3 (las familias 11, 15 y 25 van a comida o bebida, código por código) y la categoría
+-- por código en la app), D-3 (las familias mixtas 1, 9, 11, 15 y 25 van a comida o bebida, código por código) y la categoría
 -- `menu_especial` (el ítem por comensal de un menú cerrado). La SUBCATEGORÍA no entra acá: viene del PoS (3.1c).
 --
 -- Agrega (no reemplaza nada vivo; por eso no lleva guarda de md5, R13):
@@ -477,19 +492,19 @@ la regla; `pos_catalogo_refrescar(p_local)` aplica la misma sobre toda la histor
 --
 -- NO toca `pos_ndf_*` (salvo sumar el disparador), `product_map`, la 067, la 190, la 193 ni la 194.
 -- NO devuelve medios de pago, mesas, saloneros ni `clase_ingreso` (regla 6 de ESTADO).
--- Vuelta atrás: scripts/sql/196_rollback.sql. Pruebas: scripts/sql/196_pruebas.sql (terminan en ROLLBACK).
+-- Vuelta atrás: scripts/sql/198_rollback.sql. Pruebas: scripts/sql/198_pruebas.sql (terminan en ROLLBACK).
 
 -- ── 0. Guarda: si algo de esto ya existe, se para sin tocar nada ─────────────────────────
-do $guarda196$
+do $guarda198$
 declare
   o text;
 begin
   if to_regprocedure('public.puede_ver_local(text)') is null or to_regprocedure('public.get_my_role()') is null then
-    raise exception '196: falta puede_ver_local (091) o get_my_role';
+    raise exception '198: falta puede_ver_local (091) o get_my_role';
   end if;
   foreach o in array array['public.pos_familias', 'public.pos_productos', 'public.pos_producto_ajustes'] loop
     if to_regclass(o) is not null then
-      raise exception '196: % ya existe: se para sin tocar nada', o;
+      raise exception '198: % ya existe: se para sin tocar nada', o;
     end if;
   end loop;
   foreach o in array array['public.pos_catalogo_absorber(uuid[])', 'public.pos_catalogo_registrar()',
@@ -497,11 +512,11 @@ begin
                            'public.pos_ventas_productos(text,date,date)', 'public.pos_catalogo_productos(text)',
                            'public.pos_producto_ajuste_guardar(text,text,integer,text)'] loop
     if to_regprocedure(o) is not null then
-      raise exception '196: % ya existe: se para sin tocar nada', o;
+      raise exception '198: % ya existe: se para sin tocar nada', o;
     end if;
   end loop;
 end
-$guarda196$;
+$guarda198$;
 
 -- ── 1. Familias del PoS por local ────────────────────────────────────────────────────────
 create table public.pos_familias (
@@ -518,7 +533,7 @@ create table public.pos_familias (
     check ((familia in (6, 17, 20)) = (categoria in ('cortesia', 'personal', 'ingredientes')))
 );
 comment on table public.pos_familias is
-  'Mig 196. Familias del PoS (FAC_Clasificaciones) por local: nombre y categoría por defecto de sus productos. La carga la migración; nadie la edita desde la app. Una familia sin fila se muestra «Familia N» en «otros».';
+  'Mig 198. Familias del PoS (FAC_Clasificaciones) por local: nombre y categoría por defecto de sus productos. La carga la migración; nadie la edita desde la app. Una familia sin fila se muestra «Familia N» en «otros».';
 
 -- ── 2. Catálogo por código ───────────────────────────────────────────────────────────────
 create table public.pos_productos (
@@ -534,7 +549,7 @@ create table public.pos_productos (
 );
 create index pos_productos_local_familia_idx on public.pos_productos (local, familia);
 comment on table public.pos_productos is
-  'Mig 196. Catálogo único por (local, código) del PoS. Lo escribe SOLO el disparador de pos_ndf_ticket_lines (y pos_catalogo_refrescar). Nombre y familia = los de la factura más reciente. visto_* = día CR de la primera y la última factura (cualquier estado) que lo trae.';
+  'Mig 198. Catálogo único por (local, código) del PoS. Lo escribe SOLO el disparador de pos_ndf_ticket_lines (y pos_catalogo_refrescar). Nombre y familia = los de la factura más reciente. visto_* = día CR de la primera y la última factura (cualquier estado) que lo trae.';
 
 -- ── 3. Lo que carga una persona, por código ──────────────────────────────────────────────
 -- Sin fila = todo por defecto: rinde 1 y la categoría de su familia.
@@ -552,7 +567,7 @@ create table public.pos_producto_ajustes (
   constraint pos_producto_ajustes_algo_chk check (rinde_personas > 1 or categoria is not null)
 );
 comment on table public.pos_producto_ajustes is
-  'Mig 196. Lo que una persona carga por producto: cuántas personas rinde (1 a 20) y la categoría si no es la de su familia (null = hereda). Sin fila = todo por defecto. Se escribe solo por pos_producto_ajuste_guardar (owner; manager de su local). La categoría nunca cambia qué es venta neta.';
+  'Mig 198. Lo que una persona carga por producto: cuántas personas rinde (1 a 20) y la categoría si no es la de su familia (null = hereda). Sin fila = todo por defecto. Se escribe solo por pos_producto_ajuste_guardar (owner; manager de su local). La categoría nunca cambia qué es venta neta.';
 
 -- ── RLS: gerencia activa lee; el manager, solo sus locales; nadie escribe por la API ─────
 alter table public.pos_familias         enable row level security;
@@ -640,7 +655,7 @@ begin
   begin
     perform public.pos_catalogo_absorber(array(select distinct ticket_id from nuevas));
   exception when others then
-    raise warning '196 pos_catalogo_registrar: % (%)', sqlerrm, sqlstate;
+    raise warning '198 pos_catalogo_registrar: % (%)', sqlerrm, sqlstate;
   end;
   return null;
 end;
@@ -668,46 +683,55 @@ grant execute on function public.pos_catalogo_refrescar(text) to service_role;
 select x.local, public.pos_catalogo_refrescar(x.local) as productos
 from (select distinct local from public.pos_ndf_tickets) x;
 
--- Familias de santa-teresa: las 23 que tienen productos en las facturas y la 20 (ingredientes). Los nombres son los del PoS; los
--- marcados «POR CONFIRMAR» se leen en la PC del PoS (solo lectura) antes del pase. Las familias 1, 9 y 27 tienen
--- nombre en el PoS (no admite una familia sin nombre) pero no estaba en ninguna tabla de la app: el texto de acá
--- es un marcador y el PR 3.1a NO puede salir con él (lo frena una prueba). Categoría: la que ya usan las cuentas firmadas (comida 2,3,4,13,16,29 ·
--- bebida 5 · fuera de la venta 6, 17 y 20). Las familias 11, 15 y 25 mezclan comida y bebida (D-3, 24-nov): acá va
--- la categoría de un código NUEVO de esas familias (la de la mayoría de sus líneas); los códigos que ya existen
--- llevan la suya, uno por uno, más abajo.
+-- Familias de santa-teresa: las 29 del PoS (`FAC_Clasificaciones`, leídas por el dueño el 24-nov 15:43 CR), menos las
+-- que no existen. Nombres como están en el PoS. La 1 NO existe en el PoS: sus códigos vienen de una clasificación
+-- borrada y se cargan con un rótulo propio. Las marcadas «POR CONFIRMAR» llevan un nombre que falta copiar de la
+-- lectura del dueño: el PR 3.1a NO puede salir así (lo frena una prueba del gate).
+-- Categoría (decisiones del dueño, 24-nov ~15:50 CR): la que ya usan las cuentas firmadas (comida 2,3,4,13,16,29 ·
+-- bebida 5 · fuera de la venta 6, 17 y 20) · 18 → bebida · 10 → merch · 17 → regalías (`cortesia`: no es venta,
+-- fijada por la familia) · 6 → consumo del personal (`personal`: aparte, fuera de la venta neta de carta) · 20 sin
+-- ventas. MIXTAS, categoría por código (D-3 y A-2): 1, 9, 11, 15 y 25 llevan acá la categoría de un código NUEVO
+-- (la de la mayoría de sus líneas) y sus códigos de hoy la suya, uno por uno, más abajo. 7, 8 y 14 también van por
+-- código, pero hoy no tienen ninguna venta: un código nuevo entra en `otros` hasta que alguien le ponga la suya.
 insert into public.pos_familias (local, familia, nombre, categoria, orden) values
-  ('santa-teresa',  2, 'TAPAS ASIATICAS',      'comida',       10),
-  ('santa-teresa',  3, 'SUSHI ROLLS',          'comida',       20),
-  ('santa-teresa', 16, 'POKES BOWLS CEVICHES', 'comida',       30),
-  ('santa-teresa', 13, 'KIDS MENU',            'comida',       40),
-  ('santa-teresa',  4, 'POSTRES',              'comida',       50),
-  ('santa-teresa', 29, 'GREENSEASON',          'comida',       60),
-  ('santa-teresa', 11, 'MENU AÑO NUEVO',       'comida',       70),  -- nombre POR CONFIRMAR
-  ('santa-teresa', 15, 'EVENTOS TERRAZA',      'comida',       80),  -- nombre POR CONFIRMAR
-  ('santa-teresa',  9, 'POR CONFIRMAR (9)',    'comida',       90),  -- nombre y categoría POR CONFIRMAR
-  ('santa-teresa',  5, 'BEBIDAS',              'bebida',       10),
-  ('santa-teresa', 25, 'PROMOCIONES',          'bebida',       20),  -- nombre POR CONFIRMAR
-  ('santa-teresa',  1, 'POR CONFIRMAR (1)',    'bebida',       30),  -- nombre y categoría POR CONFIRMAR
-  ('santa-teresa', 22, 'EXTRAS',               'extras',       10),
-  ('santa-teresa', 21, 'TSHIRTS',              'merch',        10),
-  ('santa-teresa', 23, 'T-GORRAS',             'merch',        20),
-  ('santa-teresa', 24, 'T-DARUMAS',            'merch',        30),
-  ('santa-teresa', 26, 'T-STICKERS',           'merch',        40),
-  ('santa-teresa', 27, 'POR CONFIRMAR (27)',   'merch',        50),  -- nombre y categoría POR CONFIRMAR
-  ('santa-teresa', 12, 'GIFT CARDS',           'giftcard',     10),
-  ('santa-teresa', 19, 'A PAX',                'pax',          10),
-  ('santa-teresa', 28, 'XX DUEÑOS',            'duenos',       10),
-  ('santa-teresa', 17, 'X CORTESIAS',          'cortesia',     10),
-  ('santa-teresa',  6, 'PERSONAL',             'personal',     10),
-  ('santa-teresa', 20, 'INGREDIENTES',         'ingredientes', 10);
+  ('santa-teresa',  2, 'TAPAS ASIATICAS',          'comida',       10),
+  ('santa-teresa',  3, 'SUSHI ROLLS',              'comida',       20),
+  ('santa-teresa', 16, 'POKES BOWLS CEVICHES',     'comida',       30),
+  ('santa-teresa', 13, 'KIDS MENU',                'comida',       40),
+  ('santa-teresa',  4, 'POSTRES',                  'comida',       50),
+  ('santa-teresa', 29, 'GREENSEASON',              'comida',       60),
+  ('santa-teresa', 11, 'MENU AÑO NUEVO',           'comida',       70),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa', 15, 'EVENTOS TERRAZA',          'comida',       80),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa',  9, 'BELIEVE',                  'comida',       90),  -- mixta, por código
+  ('santa-teresa',  5, 'BEBIDAS',                  'bebida',       10),
+  ('santa-teresa', 18, 'Y HAPPY HOUR',             'bebida',       20),
+  ('santa-teresa', 25, 'POR CONFIRMAR (25)',       'bebida',       30),  -- nombre POR CONFIRMAR · mixta, por código
+  ('santa-teresa',  1, '(clasificación borrada)',  'bebida',       40),  -- no existe en el PoS · por código
+  ('santa-teresa', 22, 'EXTRAS',                   'extras',       10),
+  ('santa-teresa',  7, 'POR CONFIRMAR (7)',        'otros',        10),  -- nombre POR CONFIRMAR (SURFCAMP) · por código
+  ('santa-teresa',  8, 'POR CONFIRMAR (8)',        'otros',        20),  -- nombre POR CONFIRMAR (SURFCAMP) · por código
+  ('santa-teresa', 14, 'PROMOCIONES',              'otros',        30),  -- por código
+  ('santa-teresa', 21, 'TSHIRTS',                  'merch',        10),
+  ('santa-teresa', 23, 'T-GORRAS',                 'merch',        20),
+  ('santa-teresa', 24, 'T-DARUMAS',                'merch',        30),
+  ('santa-teresa', 26, 'T-STICKERS',               'merch',        40),
+  ('santa-teresa', 10, 'REMERAS',                  'merch',        50),
+  ('santa-teresa', 27, 'POR CONFIRMAR (27)',       'merch',        60),  -- nombre y categoría POR CONFIRMAR
+  ('santa-teresa', 12, 'GIFT CARDS',               'giftcard',     10),
+  ('santa-teresa', 19, 'A PAX',                    'pax',          10),
+  ('santa-teresa', 28, 'XX DUEÑOS',                'duenos',       10),
+  ('santa-teresa', 17, 'X CORTESIAS',              'cortesia',     10),
+  ('santa-teresa',  6, 'PERSONAL',                 'personal',     10),
+  ('santa-teresa', 20, 'Ingredientes',             'ingredientes', 10);
 
 -- Lo que ya estaba decidido, por código, en UNA sola carga:
 --   · «rinde»   = `product_map.multiplicador` ≥ 2 (tope 20), cruzando por nombre sin mirar mayúsculas ni espacios.
 --     Si varios códigos comparten el nombre, heredan todos (es lo que hoy pasa al cruzar por nombre). Dos filas
 --     de product_map que solo difieren en mayúsculas: gana el mayor.
---   · categoría = SOLO los 82 códigos de las familias 11, 15 y 25 de santa-teresa (D-3, lista confirmada por el
---     dueño el 24-nov): comida o bebida, uno por uno, y el 192 (ítem por comensal del menú cerrado) a
---     `menu_especial`. Solo se aplica si el código sigue en esas familias.
+--   · categoría = SOLO los códigos de las familias mixtas de santa-teresa: los 82 de 11, 15 y 25 (D-3, lista
+--     confirmada por el dueño el 24-nov), comida o bebida uno por uno y el 192 (ítem por comensal del menú cerrado)
+--     a `menu_especial`; los 2 de la 9 BELIEVE (comida) y el 1 de la 1 borrada (bebida), los únicos que hay en
+--     staging y en prod (lectura del 24-nov). Solo se aplica si el código sigue en esas familias.
 -- `product_map.subclasificacion` NO se hereda: la subcategoría viene del PoS (3.1c).
 with pm as (
   select upper(btrim(nombre)) as nom, max(least(multiplicador, 20)) as rinde
@@ -720,7 +744,8 @@ cc as (
     '124', '125', '373', '679', '680', '681', '682', '685', '686', '687', '688', '689', '691', '692', '693', '694', '698',
     '740',
     '304', '306', '577', '579',
-    '930', '934']) as codigo
+    '930', '934',
+    '166', '207']) as codigo
   union all
   select 'santa-teresa', 'bebida', unnest(array[
     '235', '238', '245', '643', '700', '701', '702', '714', '722', '727', '728', '738', '742', '743', '746', '747', '750',
@@ -728,7 +753,8 @@ cc as (
     '308', '312', '455',
     '5', '519', '559', '695', '843', '844', '860', '861', '862', '863', '864', '866', '867', '870', '871', '872', '879',
     '880', '881', '882', '917', '918', '921', '922', '925', '926', '1026', '1027', '1036', '1037', '1038', '1056',
-    '1057', '1062'])
+    '1057', '1062',
+    '1'])
   union all
   select 'santa-teresa', 'menu_especial', '192'
 )
@@ -736,7 +762,7 @@ insert into public.pos_producto_ajustes (local, codigo, rinde_personas, categori
 select p.local, p.codigo, coalesce(pm.rinde, 1), cc.categoria, null
 from public.pos_productos p
 left join pm on pm.nom = upper(btrim(p.nombre))
-left join cc on cc.local = p.local and cc.codigo = p.codigo and p.familia in (11, 15, 25)
+left join cc on cc.local = p.local and cc.codigo = p.codigo and p.familia in (1, 9, 11, 15, 25)
 where pm.rinde is not null or cc.categoria is not null;
 
 -- ── 6. La categoría que le toca a una línea: UNA sola definición ─────────────────────────
@@ -873,7 +899,7 @@ $function$;
 revoke all on function public.pos_ventas_productos(text, date, date) from public, anon;
 grant execute on function public.pos_ventas_productos(text, date, date) to authenticated;
 comment on function public.pos_ventas_productos(text, date, date) is
-  'Mig 196. Ventas v2 Productos: por (código, familia de la línea, canal) unidades, céntimos, facturas, categoría y unidades en ₡0; por mes × familia × canal × categoría; catálogo con «rinde» y categoría; familias con su categoría por defecto; neta_cts = la de la 190 (la decide la familia de la línea, nunca la categoría). Solo facturas C, día CR. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';
+  'Mig 198. Ventas v2 Productos: por (código, familia de la línea, canal) unidades, céntimos, facturas, categoría y unidades en ₡0; por mes × familia × canal × categoría; catálogo con «rinde» y categoría; familias con su categoría por defecto; neta_cts = la de la 190 (la decide la familia de la línea, nunca la categoría). Solo facturas C, día CR. Sin medios de pago. Owner/manager/contador; manager solo sus locales.';
 
 -- ── 8. El catálogo entero, para «Ajustes → Catálogo» (solo lectura) ──────────────────────
 create function public.pos_catalogo_productos(p_local text)
@@ -917,7 +943,7 @@ $function$;
 revoke all on function public.pos_catalogo_productos(text) from public, anon;
 grant execute on function public.pos_catalogo_productos(text) to authenticated;
 comment on function public.pos_catalogo_productos(text) is
-  'Mig 196. Catálogo entero de un local para «Ajustes → Catálogo»: código, nombre, familia, categoría vigente, categoría cargada a mano, «rinde» y fechas. Solo lectura. Owner/manager/contador; manager solo sus locales.';
+  'Mig 198. Catálogo entero de un local para «Ajustes → Catálogo»: código, nombre, familia, categoría vigente, categoría cargada a mano, «rinde» y fechas. Solo lectura. Owner/manager/contador; manager solo sus locales.';
 
 -- ── 9. La única puerta de escritura de lo que carga una persona ──────────────────────────
 -- Guarda los DOS valores juntos (la pantalla manda la ficha entera): p_rinde 1 a 20 · p_categoria null = la de su
@@ -975,15 +1001,15 @@ $function$;
 revoke all on function public.pos_producto_ajuste_guardar(text, text, integer, text) from public, anon;
 grant execute on function public.pos_producto_ajuste_guardar(text, text, integer, text) to authenticated;
 comment on function public.pos_producto_ajuste_guardar(text, text, integer, text) is
-  'Mig 196. Guarda lo que una persona carga de un producto: «rinde» (1 a 20) y categoría (null = la de su familia; solo comida, bebida, menu_especial, extras, merch u otros). Todo por defecto = borra el ajuste. Owner; manager solo de sus locales. No cambia qué es venta neta.';
+  'Mig 198. Guarda lo que una persona carga de un producto: «rinde» (1 a 20) y categoría (null = la de su familia; solo comida, bebida, menu_especial, extras, merch u otros). Todo por defecto = borra el ajuste. Owner; manager solo de sus locales. No cambia qué es venta neta.';
 ```
 
-### 6.1 Vuelta atrás propuesta `scripts/sql/196_rollback.sql`
+### 6.1 Vuelta atrás propuesta `scripts/sql/198_rollback.sql`
 
 ```sql
--- 196 · vuelta atrás. ANTES: guardar lo que cargó una persona («rinde» y categoría; no se puede rehacer):
+-- 198 · vuelta atrás. ANTES: guardar lo que cargó una persona («rinde» y categoría; no se puede rehacer):
 --   select * from public.pos_producto_ajustes order by local, codigo;
--- Y, en el mismo momento, el PR que saca el .sql de main (si queda, Branching lo reaplica). Si la 196 ya está
+-- Y, en el mismo momento, el PR que saca el .sql de main (si queda, Branching lo reaplica). Si la 198 ya está
 -- en el ledger de prod, el .sql NO se borra (regla 10): la vuelta atrás es una migración nueva con este cuerpo.
 drop trigger if exists trg_pos_catalogo_registrar on public.pos_ndf_ticket_lines;
 drop function if exists public.pos_ventas_productos(text, date, date);
@@ -1032,7 +1058,7 @@ se pierde es lo que una persona haya cargado en `pos_producto_ajustes` después 
 **Tres avisos sobre esta foto:**
 
 1. En staging `product_map` **no se refresca desde prod** (tiene 8 columnas del PoS propio que prod no tiene;
-   `scripts/refresh-staging/PLAN.md`). Las cifras de `product_map` de prod pueden ser otras: el `PASE-196` repite
+   `scripts/refresh-staging/PLAN.md`). Las cifras de `product_map` de prod pueden ser otras: el `PASE-198` repite
    estas lecturas en prod, en solo lectura, antes de la firma.
 2. En staging hay dos tablas con nombre parecido, `menu_families` y `menu_categories`: son del PoS propio y no
    tienen nada que ver con esta spec. Por eso las tablas nuevas se llaman `pos_*`.
@@ -1060,14 +1086,14 @@ v2). Eso se resuelve en la 3.2, con su prueba de paridad y sus excepciones firma
 
 ### 7.3 Pasos
 
-1. **PASE-196, lecturas previas (solo lectura, staging y prod), antes de la firma:** las de §7.1 · la lista de
-   códigos que van a heredar «rinde» (código, nombre y valor) · la lista de los **82 códigos de las familias 11,
-   15 y 25** con su categoría propuesta (código, nombre, líneas y unidades) y los códigos de esas familias que
+1. **PASE-198, lecturas previas (solo lectura, staging y prod), antes de la firma:** las de §7.1 · la lista de
+   códigos que van a heredar «rinde» (código, nombre y valor) · la lista de los **85 códigos de las familias mixtas
+   (1, 9, 11, 15 y 25)** con su categoría (código, nombre, líneas y unidades) y los códigos de esas familias que
    prod tenga y la lista no · el antes y el después de comida, bebida, `menu_especial`, «otros» y bebidas por
    persona (§2.5.2) · **los nombres de las familias leídos en la PC del PoS** (solo lectura) contra la carga de
-   §6 (D-4 = A): confirmar 11, 15 y 25 y traer los de 1, 9 y 27. Es la misma visita que el paso 0 de la 3.1c
-   (§11). **Sin esos seis nombres la 196 no se firma:** una prueba frena cualquier «POR CONFIRMAR» (§8.2).
-2. **3.1a:** corrida completa en staging y, con eso, **la firma (D-9) sobre el SHA del PR**. Entra la 196: el
+   §6 (D-4 = A): leídos el 24-nov 15:43 CR; faltan copiar a la 198 los de 7, 8, 11, 15, 25 y 27 (§9.3.1 B-2).
+   **Sin esos nombres la 198 no se firma:** una prueba frena cualquier «POR CONFIRMAR» (§8.2).
+2. **3.1a:** corrida completa en staging y, con eso, **la firma (D-9) sobre el SHA del PR**. Entra la 198: el
    catálogo se llena desde la historia y se hereda lo cargado a mano. `product_map` queda intacto y nada lo lee
    distinto.
 3. **3.1b:** «Ajustes → Productos» pasa a ser «Ajustes → Catálogo» y nadie más escribe `tipo`, `clasificacion`,
@@ -1081,7 +1107,7 @@ v2). Eso se resuelve en la 3.2, con su prueba de paridad y sus excepciones firma
 
 ### 8.1 SQL: batería en transacción descartada
 
-`scripts/sql/196_pruebas.sql` (anexo A), con el patrón de la 193: `begin` → migración → casos con un local
+`scripts/sql/198_pruebas.sql` (anexo A), con el patrón de la 193: `begin` → migración → casos con un local
 ficticio y sus propias facturas → vuelta atrás → `rollback`. Corre en staging o en un Postgres vacío con
 `scripts/sql/193_base_local.sql` + la 190.
 
@@ -1100,7 +1126,7 @@ ficticio y sus propias facturas → vuelta atrás → `rollback`. Corre en stagi
 | Guardado | Los dos valores entran juntos y queda quién lo guardó · el catálogo los devuelve · rinde 0, 21 o null y código desconocido → `22023` · todo por defecto borra la fila |
 | Validaciones | 732 días y rango invertido → `22023` |
 | Permisos | Owner y contador leen funciones y tablas · **manager: en su local guarda y lee; en un local ajeno → `42501` en la lectura, en el catálogo y en el guardado, 0 filas, y no queda nada escrito** · **contador no guarda «rinde» ni categoría (`42501`)** · salonero, cajero y sin sesión → `42501` y 0 filas · `anon` sin `execute` ni `select` · nadie escribe las tablas por la API, ni el owner · nadie llama `pos_categoria_efectiva`, `pos_catalogo_absorber` ni `pos_catalogo_refrescar` por la API |
-| Vuelta atrás | Después de `196_rollback.sql` no queda ninguna tabla, función ni disparador |
+| Vuelta atrás | Después de `198_rollback.sql` no queda ninguna tabla, función ni disparador |
 
 **Mutaciones (romper a propósito; 20 de 20 hicieron caer lo que dice):**
 
@@ -1138,16 +1164,16 @@ para la prueba; en staging usan los usuarios reales de cada rol.
 
 | Archivo | Qué cuida | Qué fallaría si se rompe |
 |---|---|---|
-| `src/shared/api/posNdf.contrato196.test.ts` | Lee el `.sql` (patrón de `contrato067` y `contrato191`): firma, orden de cada arreglo, y que no nombre medios de pago, mesa, salonero ni `clase_ingreso` | Alguien suma una columna de pago, o cambia el orden y la app lee «unidades» donde va «monto» |
+| `src/shared/api/posNdf.contrato198.test.ts` | Lee el `.sql` (patrón de `contrato067` y `contrato191`): firma, orden de cada arreglo, y que no nombre medios de pago, mesa, salonero ni `clase_ingreso` | Alguien suma una columna de pago, o cambia el orden y la app lee «unidades» donde va «monto» |
 | Mismo archivo | Las tres copias de la lista de categorías que una persona puede elegir (el `check` de la tabla, la función de guardado y `categorias_editables`) son iguales, y ninguna incluye `cortesia`, `personal` ni `ingredientes` | Alguien agrega una categoría en un lugar y no en los otros, o habilita marcar a mano algo que no es venta |
-| Mismo archivo | **Ningún nombre de familia de la carga dice «POR CONFIRMAR»**, y toda familia de `FAMILIAS_CATALOGO` (`netaVenta.ts`) tiene su fila | La 196 llega a la firma con un nombre inventado o con una familia sin cargar |
+| Mismo archivo | **Ningún nombre de familia de la carga dice «POR CONFIRMAR»**, y toda familia de `FAMILIAS_CATALOGO` (`netaVenta.ts`) tiene su fila | La 198 llega a la firma con un nombre inventado o con una familia sin cargar |
 | `src/modules/ventas/catalogoPos.test.ts` | Módulo puro nuevo: orden categoría → familia → nombre; familia sin fila → «Familia N» en `otros`; un código con dos familias en el período se muestra una vez; línea sin código; nombre vigente del catálogo; **la categoría de cada fila es la que manda la función** (la app no la recalcula); `menu_especial` va tercera; **unidades vendidas = unidades − unidades en ₡0**, y un producto con todas en ₡0 no tiene precio | El catálogo sale desordenado, un producto aparece dos veces, la app arma su propia regla de categoría, o un paso de menú aparece con precio ₡0 |
 | Mismo archivo | `FAMILIAS_NO_VENTA` de `netaVenta.ts` = el conjunto escrito en el `.sql` = las familias de categoría `cortesia`, `personal` e `ingredientes` de la carga; y **con cualquier categoría por código, la neta que suma el módulo no cambia** (misma entrada con y sin categorías cargadas → misma neta) | Una definición firmada queda en dos lugares que no coinciden, o una categoría mueve la venta |
 | `src/modules/ventas/__paridad__/productos31.paridad.test.ts` | Las mismas facturas ficticias por el camino viejo (`armarDia`) y por la forma de la función nueva dan la misma neta por familia y canal, al céntimo | «Productos» deja de cerrar contra «Resumen» |
 | `src/modules/ventas/ventasTabs.test.ts` | «Catálogo»: owner y manager; contador no. `?tab=ajustes&v=productos` y `?tab=config` abren «Catálogo» respetando el rol | Un rol ve lo que no debe o un enlace guardado se rompe |
 | `VentasCatalogo.render.test.tsx` | Lista todo el catálogo del local; el buscador y los filtros (categoría, familia, «los que cambié», «nuevos») filtran; guardar llama a la función con local, código y **los dos valores**; un producto de categoría fija muestra la categoría bloqueada; «volver a la de su familia» manda null; el manager no ve otro local; «rinde» fuera de 1–20 no se envía; no hay ningún campo de subcategoría; si la función devuelve error, la fila vuelve a su valor y se avisa | Se guarda un valor inválido, en el local equivocado, o se pisa un valor que la persona no tocó |
 | `src/productMapCongelado.test.ts` | Lista cerrada de archivos que todavía importan `getProductMap` o escriben `product_map`; solo puede achicarse | Código nuevo vuelve a depender del catálogo por nombre |
-| `supabase/migraciones.test.ts` (existente) | La 196 registrada, en su bloque y sin repetir | Número duplicado o sin registrar |
+| `supabase/migraciones.test.ts` (existente) | La 198 registrada, en su bloque y sin repetir | Número duplicado o sin registrar |
 
 Fechas: las pruebas que usan «hoy» fijan el reloj a las 23:30 CR.
 
@@ -1161,11 +1187,11 @@ Fechas: las pruebas que usan «hoy» fijan el reloj a las 23:30 CR.
 | Bloqueo de `pos_ndf_ticket_lines` al crear el disparador y hacer la carga inicial | Bajo: segundos, y el agente reintenta | Medirlo en staging en el 3.1a; pase en la franja libre, fuera del servicio |
 | Los nombres de familia marcados «POR CONFIRMAR» (11, 15, 25) salen de un solo producto que coincide | Medio: un rótulo equivocado en un reporte de gerencia | Prerrequisito del pase (D-4 = A): leerlos en la PC del PoS. Las familias 1, 9 y 27 no se cargan: salen «Familia N» |
 | **Una categoría por código saca o mete plata de la venta neta** | Sería grave: la neta es la cifra de Contabilidad | No puede pasar por diseño: la neta la decide la familia de la línea y no mira categorías. Tres defensas con prueba y mutación (§2.2, §8.1); con las tres rotas a la vez la neta sigue igual a la de la 190 |
-| **D-3 mueve comida/bebida y bebidas por persona** hacia atrás, en todo el histórico | Medio: cifras que el dueño ya miró cambian (poco: §2.5) | La neta total no cambia. Se mide antes y después en prod, en solo lectura, en el `PASE-196`, antes de la firma. El cambio se ve recién con la 3.2, con su prueba de paridad y su excepción firmada |
+| **D-3 mueve comida/bebida y bebidas por persona** hacia atrás, en todo el histórico | Medio: cifras que el dueño ya miró cambian (poco: §2.5) | La neta total no cambia. Se mide antes y después en prod, en solo lectura, en el `PASE-198`, antes de la firma. El cambio se ve recién con la 3.2, con su prueba de paridad y su excepción firmada |
 | Alguno de los 82 códigos quedó en la categoría equivocada | Bajo: se corrige en «Catálogo» en un toque y la neta no se mueve | La lista la confirmó el dueño el 24-nov; el PASE la muestra con nombres, contra prod |
 | El ítem por comensal del próximo menú cerrado entra como comida (código nuevo de la familia 11) | Bajo a medio: la plata de esa noche aparece en comida hasta que alguien lo pase a `menu_especial` | Filtro «nuevos»; anotarlo en la guía 6.4 (3.1b) como paso de cada menú cerrado |
 | La regla de unidades en ₡0 (§2.5.1) cambia «bebidas por persona» de hoy en −0,2 % | Bajo, pero es un número que ya se mira | Punto abierto B-1; va como excepción firmada de la 3.2, con su paridad |
-| La 196 se firma con un nombre de familia sin confirmar | Medio: un rótulo inventado en un reporte | Marcador «POR CONFIRMAR» en la carga y una prueba que lo frena (§8.2) |
+| La 198 se firma con un nombre de familia sin confirmar | Medio: un rótulo inventado en un reporte | Marcador «POR CONFIRMAR» en la carga y una prueba que lo frena (§8.2) |
 | Un código **nuevo** de las familias 11, 15 o 25 toma la categoría por defecto de su familia y no es la suya | Bajo a medio: pasa cada 31-dic y con cada promoción nueva | Filtro «nuevos» en «Catálogo» (visto por primera vez en los últimos 30 días). Punto abierto (§9.3.1) |
 | Una persona le pone a un producto una categoría que no es | Bajo: mueve el mix, no la venta | Lista corta de categorías; queda quién y cuándo; «volver a la de su familia» |
 | Entre la 3.2 y la 3.6, «bebidas por persona» de gerencia (catálogo nuevo) y la de Mi Rendimiento (función de la 194, por nombre) pueden diferir en lo que D-3 mueve | Bajo (§2.5) | Avisarlo en el PR de la 3.2; se iguala en la 3.6 |
@@ -1177,7 +1203,7 @@ Fechas: las pruebas que usan «hoy» fijan el reloj a las 23:30 CR.
 
 ### 9.2 Vuelta atrás
 
-- **3.1a:** `196_rollback.sql` (§6.1) y, en el mismo momento, el PR que saca el `.sql` de `main`; si ya está en el
+- **3.1a:** `198_rollback.sql` (§6.1) y, en el mismo momento, el PR que saca el `.sql` de `main`; si ya está en el
   ledger de prod, el `.sql` se queda y la vuelta atrás es una migración nueva (regla 10). Antes, guardar
   `pos_producto_ajustes`. Como nada viejo se toca, la app queda exactamente como hoy.
 - **Solo el disparador,** si diera problemas: `drop trigger trg_pos_catalogo_registrar on public.pos_ndf_ticket_lines`
@@ -1191,27 +1217,28 @@ Fechas: las pruebas que usan «hoy» fijan el reloj a las 23:30 CR.
 | # | Decisión | Qué se decidió | Dónde quedó | ¿Firma? |
 |---|---|---|---|---|
 | **D-1** | Qué quiere decir «cuántas personas rinde» | **A — decidido 24-nov.** Es el multiplicador de hoy: el producto cuenta como N unidades. No toca personas ni la venta por persona | §2.3 | No |
-| **D-2** | Un solo nivel del PoS o más | **C — decidido 24-nov,** ajustada en la segunda ronda. La **categoría** grande es por (local, código): por defecto la de su familia y editable por código. El **segundo nivel** (cerveza, vino, cocteles) **no** se carga a mano ni se hereda de `product_map`: existe en el PoS y viene de ahí (3.1c) | §2.2, §2.3, §4.3, §7.2, §11 | **Sí, esquema:** una columna y dos funciones más en la 196. La 3.1c, firma aparte |
-| **D-3** | Familias 11, 15 y 25 | **Decidido 24-nov:** «todo está dentro de una gran primera categoría, comida o bebida, depende dónde esté». Cada código lleva su categoría. **Lista de 82 confirmada** (segunda ronda): 24 a comida, 57 a bebida y el 192 a la categoría nueva `menu_especial` | §2.5 | **Sí:** mueve comida/bebida y bebidas por persona. Va con la 196, después de medir |
-| **D-4** | De dónde salen los nombres de las familias | **A — decidido 24-nov.** Los carga la migración, leídos en la PC del PoS. Segunda ronda: también los de las familias 1, 9 y 27 | §2.1, §2.2, §6, §7.3 | Sí, con la 196 |
+| **D-2** | Un solo nivel del PoS o más | **C — decidido 24-nov,** ajustada en la segunda ronda. La **categoría** grande es por (local, código): por defecto la de su familia y editable por código. El **segundo nivel** (cerveza, vino, cocteles) **no** se carga a mano ni se hereda de `product_map`: existe en el PoS y viene de ahí (3.1c) | §2.2, §2.3, §4.3, §7.2, §11 | **Sí, esquema:** una columna y dos funciones más en la 198. La 3.1c, firma aparte |
+| **D-3** | Familias 11, 15 y 25 | **Decidido 24-nov:** «todo está dentro de una gran primera categoría, comida o bebida, depende dónde esté». Cada código lleva su categoría. **Lista de 82 confirmada** (segunda ronda): 24 a comida, 57 a bebida y el 192 a la categoría nueva `menu_especial` | §2.5 | **Sí:** mueve comida/bebida y bebidas por persona. Va con la 198, después de medir |
+| **D-4** | De dónde salen los nombres de las familias | **A — decidido 24-nov.** Los carga la migración, leídos en la PC del PoS. Segunda ronda: también los de las familias 1, 9 y 27 | §2.1, §2.2, §6, §7.3 | Sí, con la 198 |
 | **D-5** | Dónde se edita | **B — decidido 24-nov.** Catálogo completo en Ajustes con buscador, con «rinde» y categoría editables por producto. Reemplaza «Ajustes → Rinde» | §1.3, §8.2, §9.5 | No (OK + validación física) |
 | **D-6** | El costo cargado a mano | **A — decidido 24-nov.** Se deja de cargar; queda en `product_map` y se actualiza desde Recetas | §2.4, §7.2 | No (OK + validación física) |
-| **D-7** | Quién edita | **A — decidido 24-nov.** Dueño y encargado de su local; el contador no | §5 | Va con la firma de la 196 |
-| **D-8** | Cómo se mantiene el catálogo al día | **A — decidido 24-nov.** Disparador en las líneas del PoS, con las protecciones de §4.4 | §4.4 | Sí, es la 196 |
-| **A-1** | La lista de 82 códigos | **Confirmada 24-nov** con dos cambios: 698 y 740 a comida. 308, 312 y 862 quedan en bebida | §2.5 | Con la 196 |
-| **A-2** | Un código nuevo de las familias 11, 15 o 25 | **A — decidido 24-nov.** Toma la categoría de la mayoría de su familia y aparece en «nuevos» | §2.5 | Con la 196 |
-| **A-3** | Qué categorías se eligen a mano | **A — decidido 24-nov.** Gift cards, pax y dueños las fija la familia. Se suma `menu_especial` a las que sí se eligen | §2.2 | Con la 196 |
+| **D-7** | Quién edita | **A — decidido 24-nov.** Dueño y encargado de su local; el contador no | §5 | Va con la firma de la 198 |
+| **D-8** | Cómo se mantiene el catálogo al día | **A — decidido 24-nov.** Disparador en las líneas del PoS, con las protecciones de §4.4 | §4.4 | Sí, es la 198 |
+| **A-1** | La lista de 82 códigos | **Confirmada 24-nov** con dos cambios: 698 y 740 a comida. 308, 312 y 862 quedan en bebida | §2.5 | Con la 198 |
+| **A-2** | Un código nuevo de las familias 11, 15 o 25 | **A — decidido 24-nov.** Toma la categoría de la mayoría de su familia y aparece en «nuevos» | §2.5 | Con la 198 |
+| **A-3** | Qué categorías se eligen a mano | **A — decidido 24-nov.** Gift cards, pax y dueños las fija la familia. Se suma `menu_especial` a las que sí se eligen | §2.2 | Con la 198 |
 | **A-4** | El subgrupo | **Decidido 24-nov:** ni texto libre ni lista en la app. Viene del PoS | §11 | 3.1c, firma aparte |
-| **A-5** | Familias 1, 9 y 27 | **Decidido 24-nov:** tienen nombre en el PoS; se lee en la PC del PoS y se cargan en la 196 como las demás | §2.2, §6 | Con la 196 |
-| **D-9** | **Firma de la migración 196** | **Pendiente.** Va sobre el SHA del PR 3.1a, **después** de las lecturas previas en prod (solo lectura), los seis nombres de familia y la corrida en staging. Alcance: 3 tablas, 1 disparador en `pos_ndf_ticket_lines`, 7 funciones, carga de 24 familias, herencia de «rinde» y la categoría de 82 códigos | §6, §7.3 | **Sí** |
+| **A-5** | Familias 1, 9 y 27 | **Decidido 24-nov:** tienen nombre en el PoS; se lee en la PC del PoS y se cargan en la 198 como las demás | §2.2, §6 | Con la 198 |
+| **A-6** | Nombres y categorías de las familias del PoS | **Decidido 24-nov ~15:50 CR** (lectura de 15:43): 1 no existe (borrada, por código) · 9 BELIEVE mixta · 18 → bebida · 10 → merch · 17 → regalías · 6 → personal, aparte · 7, 8 y 14 → por código · 20 sin ventas | §2.2, §2.5, §6 | Con la 198 |
+| **B-1** | Unidades en ₡0 | **A — decidido 24-nov ~15:50 CR.** Solo cuentan las vendidas; las de ₡0 aparte como «incluidas» | §2.5.1 | Con la 3.2 |
+| **B-3** | Orden de `menu_especial` | **A — decidido 24-nov ~15:50 CR.** Tercera, al lado de comida y bebida | §2.2 | No (orden de pantalla) |
+| **D-9** | **Firma de la migración 198** | **Pendiente.** Va sobre el SHA del PR 3.1a, **después** de las lecturas previas en prod (solo lectura), los nombres de familia que faltan copiar y la corrida en staging. Alcance: 3 tablas, 1 disparador en `pos_ndf_ticket_lines`, 7 funciones, carga de 29 familias, herencia de «rinde» y la categoría de 85 códigos | §6, §7.3 | **Sí** |
 
 #### 9.3.1 Lo que sigue abierto para el dueño
 
 | # | Punto | Opciones (recomendada primero) | ¿Cuándo? |
 |---|---|---|---|
-| B-1 | **Unidades en ₡0** (pasos de un menú cerrado, invitaciones): cómo cuentan en bebidas por persona y en el precio por ítem (§2.5.1) | **A:** solo cuentan las unidades vendidas; las de ₡0 se muestran aparte como «incluidas», y un producto todo en ₡0 no tiene precio. Baja «bebidas por persona» de hoy 0,2 % · B: cuentan todas las servidas (el 31-dic infla bebidas por persona y baja el precio promedio) | Con la 3.2 (la 196 ya deja el dato para las dos) |
-| B-2 | **Nombres de seis familias**, leídos en la PC del PoS: confirmar 11, 15 y 25; traer 1, 9 y 27. Y la categoría de 1, 9 y 27 (propuesta: bebida, comida y merch) | Leerlos, de a un paso, junto con el paso 0 de la 3.1c | Antes de la firma |
-| B-3 | **Dónde va `menu_especial` en el orden** | **A:** tercera, al lado de comida y bebida (es venta gastronómica) · B: entre `otros` y `merch` | Con la 3.2 (es orden de pantalla) |
+| B-2 | **Copiar los nombres de 7, 8, 11, 15, 25 y 27** de la lectura del 24-nov 15:43 (archivo `claude/POS-clasificaciones-2026-11-24.md` del proyecto) a la 198, y confirmar la categoría de la 27 (propuesta: merch). B-1 y B-3 ya están decididos (§9.3) | El coordinador los pasa al PR #357; la prueba del gate se pone verde | Antes de la firma |
 | B-4 | **Firma D-9** | Sobre el SHA del PR 3.1a | Después del PASE, los nombres y la corrida en staging |
 | B-5 | **Firma de la 3.1c** (agente en la PC del PoS + Edge `ingest-ndf` de prod + su migración) | Después del paso 0 y de su propia spec corta | Aparte; no bloquea la 3.1a |
 
@@ -1236,7 +1263,7 @@ anteriores quedaron resueltos por las dos rondas del 24-nov.
 
 | PR | Qué | Agente | Requiere |
 |---|---|---|---|
-| **3.1a** | Archivo de la 196, rollback, batería con las 20 mutaciones (`196_pruebas.sql` + `196_pruebas.py`), registro del número, **`PASE-196`** (lecturas previas en prod en solo lectura, lista de los 82 códigos con nombre, antes y después de D-3, los seis nombres de familia leídos en la PC del PoS), corrida completa en staging, lectores `getVentasProductos` y `getCatalogoProductos` y `guardarAjusteProducto` en `posNdf.ts`, módulo puro `catalogoPos.ts` y sus pruebas. **Sin subcategoría.** Sin pantalla. Título «⛔ NO MERGEAR sin OK —» | Opus + verificador independiente (esquema, permisos y que la categoría no toque la neta) | **Firma** (D-9), sobre el SHA del PR, después del PASE y la corrida en staging |
+| **3.1a** | Archivo de la 198, rollback, batería con las 20 mutaciones (`198_pruebas.sql` + `198_pruebas.py`), registro del número, **`PASE-198`** (lecturas previas en prod en solo lectura, lista de los 85 códigos con nombre, antes y después de D-3, los nombres de familia leídos en la PC del PoS), corrida completa en staging, lectores `getVentasProductos` y `getCatalogoProductos` y `guardarAjusteProducto` en `posNdf.ts`, módulo puro `catalogoPos.ts` y sus pruebas. **Sin subcategoría.** Sin pantalla. Título «⛔ NO MERGEAR sin OK —» | Opus + verificador independiente (esquema, permisos y que la categoría no toque la neta) | **Firma** (D-9), sobre el SHA del PR, después del PASE y la corrida en staging |
 | **3.1b** | «Ajustes → Catálogo» (`VentasCatalogo.tsx`): catálogo completo con buscador y filtros; «rinde» y categoría editables por producto. Se retira `VentasConfig.tsx` y la carga de costo a mano. Guía 6.4 e inventario de guías. Recorrida por rol en staging (`satori-verificar`) | Opus | OK + validación física |
 | **3.1c** | Catálogo desde el agente, con la subcategoría del PoS (§11): paso 0 en la PC del PoS, agente, Edge `ingest-ndf` y una migración aparte. No bloquea la 3.1a ni la 3.1b | Fable (spec corta tras el paso 0) → Opus + verificador | **Firma aparte** (agente en la PC del PoS + Edge de prod + migración) |
 | 3.2 | «Productos» definitiva (§5.2 de Ventas v2) sobre `pos_ventas_productos`. Acá se ve D-3 y se aplica la regla de unidades en ₡0 (B-1): actualiza §4.1 de la SPEC de Ventas v2 (comida, bebida, `menu_especial` y bebidas por persona) con su paridad y sus excepciones firmadas | Opus + verificador | OK + validación física |
@@ -1252,8 +1279,8 @@ anteriores quedaron resueltos por las dos rondas del 24-nov.
 - **Ventas por producto y salonero**, y por día: no las trae esta función.
 - **Historial de cambios de «rinde» y categoría** (solo queda el último cambio: quién y cuándo).
 - **Editar familias desde la app** (nombre, orden o categoría por defecto de una familia): las carga la migración.
-- **La subcategoría del PoS** (cerveza, vino, cocteles): fuera de la 196; es la 3.1c (§11).
-- **Aplicar la regla de unidades en ₡0** a los indicadores: la 196 solo deja el dato; la regla entra con la 3.2.
+- **La subcategoría del PoS** (cerveza, vino, cocteles): fuera de la 198; es la 3.1c (§11).
+- **Aplicar la regla de unidades en ₡0** a los indicadores: la 198 solo deja el dato; la regla entra con la 3.2.
 - **Catálogo de Nosara:** la estructura es por local desde el día uno; la carga de sus familias entra cuando
   tenga PoS.
 - **Catálogo del PoS propio** (`menu_families`, `menu_categories`, columnas extra de `product_map` en staging): otro
@@ -1261,7 +1288,7 @@ anteriores quedaron resueltos por las dos rondas del 24-nov.
 - **La deuda multi-local de la 067, la 080 y la 190,** y cerrar `ventas_comps_write` al contador: backlog, con firma.
 - **Archivos sagrados:** no se toca ninguno. `netaVenta.ts` no es sagrado, pero su definición está firmada y no cambia.
 
-## 11. 3.1c — catálogo desde el agente (fuera de la 196)
+## 11. 3.1c — catálogo desde el agente (fuera de la 198)
 
 **Decidido 24-nov (segunda ronda):** el segundo nivel de clasificación —dentro de bebida: cerveza, vino, cocteles
 clásicos, sin alcohol— **existe en el PoS**. Hoy no llega a la app porque el agente manda solo la familia de cada
@@ -1269,7 +1296,7 @@ línea de factura, y lee el catálogo de productos del PoS (`FAC_Productos`) ún
 mesas abiertas (migraciones 064 y 065). Entonces la subcategoría no se carga a mano ni se arma una lista en la app:
 **se trae del PoS.** La 3.1a sale sin ella.
 
-Esta sección es el encargo, no la spec: la forma exacta depende del paso 0. **Nada de esto está en la 196.**
+Esta sección es el encargo, no la spec: la forma exacta depende del paso 0. **Nada de esto está en la 198.**
 
 | Paso | Qué | Quién | Toca prod |
 |---|---|---|---|
@@ -1277,13 +1304,13 @@ Esta sección es el encargo, no la spec: la forma exacta depende del paso 0. **N
 | 1 | Spec corta de la 3.1c con lo que salió del paso 0: forma del dato, tabla, y qué pasa con nombre y familia cuando el catálogo los trae directo | Fable | No |
 | 2 | **El agente manda el catálogo:** por producto, código, nombre, familia y subcategoría. Al arrancar y cuando cambia (o una vez por día). Solo lectura sobre el PoS. Vive en la rama del agente, no en `main` | Opus | Sí: instalar la versión nueva en la PC del PoS |
 | 3 | **La Edge `ingest-ndf` recibe el catálogo** (mismo portón `x-ingest-secret`) y lo pasa a la base | Opus | Sí: versión nueva de una Edge de prod (regla 2) |
-| 4 | **Migración aparte** (el número libre de ese momento, no la 196): guarda la subcategoría por (local, código) y su nombre. `pos_ventas_productos` y `pos_catalogo_productos` la devuelven **al final** de cada arreglo, sin mover lo que ya se lee | Opus + verificador | Sí: esquema |
+| 4 | **Migración aparte** (el número libre de ese momento, no la 198): guarda la subcategoría por (local, código) y su nombre. `pos_ventas_productos` y `pos_catalogo_productos` la devuelven **al final** de cada arreglo, sin mover lo que ya se lee | Opus + verificador | Sí: esquema |
 | 5 | «Productos» (3.2) y «Catálogo» (3.1b) la muestran: bebida abierta en cervezas, vinos, cocteles. Solo lectura: en la app no se edita | Opus | No |
 
-- **Firma aparte de la 196,** una sola para los pasos 2, 3 y 4: agente en la PC del PoS, Edge `ingest-ndf` de prod
+- **Firma aparte de la 198,** una sola para los pasos 2, 3 y 4: agente en la PC del PoS, Edge `ingest-ndf` de prod
   y migración. Primero en staging, con el agente de staging.
 - **A decidir en su spec, no acá:** si con el catálogo del agente el nombre y la familia vigentes pasan a salir
-  de ahí (cubriría también productos que nunca se vendieron) y el disparador de la 196 queda de respaldo; y si
+  de ahí (cubriría también productos que nunca se vendieron) y el disparador de la 198 queda de respaldo; y si
   la subcategoría se guarda como columna de `pos_productos` o en tabla propia con su nombre.
 - **Mientras tanto:** bebida es una sola lista ordenada por familia. `product_map.subclasificacion` queda
   congelada: no se hereda, no se edita y no aparece en pantallas nuevas; sirve para contrastar lo que traiga el
@@ -1294,17 +1321,17 @@ Esta sección es el encargo, no la spec: la forma exacta depende del paso 0. **N
   PoS no se la puso · la subcategoría nunca cambia qué es venta neta ni la categoría grande · si el agente no
   manda catálogo, la ingesta de facturas sigue igual · el catálogo no trae precios de costo ni datos de personas.
 
-## Anexo A — batería propuesta `scripts/sql/196_pruebas.sql`
+## Anexo A — batería propuesta `scripts/sql/198_pruebas.sql`
 
-Va entre el cuerpo de la 196 y el de `196_rollback.sql`, todo dentro de un `begin` … `rollback`. `pg_temp.como`
+Va entre el cuerpo de la 198 y el de `198_rollback.sql`, todo dentro de un `begin` … `rollback`. `pg_temp.como`
 cambia de usuario (un perfil activo de cada rol); `pg_temp.p` guarda el resultado o el error de cada caso. Los
 casos «paridad» con `santa-teresa` necesitan los datos de staging; en un Postgres vacío dan 0 = 0. El local
 ficticio trae sus propias familias, un mismo código (`9002`) vendido en la familia 5 y regalado en la 17 —el
 caso que muestra que la categoría por código no toca lo que no es venta— y un paso de menú en ₡0 (`9008`). Para el PR 3.1a la batería pasa al
-formato de la 193 (cada caso dice OK o FALLA) con su `196_pruebas.py --mutar todas`.
+formato de la 193 (cada caso dice OK o FALLA) con su `198_pruebas.py --mutar todas`.
 
 ```sql
--- ── PRUEBAS 196 (dentro de la transacción descartada) ──
+-- ── PRUEBAS 198 (dentro de la transacción descartada) ──
 create temp table r (n serial, k text, v text) on commit drop;
 grant all on r to public;
 grant usage on sequence r_n_seq to public;
@@ -1343,28 +1370,28 @@ select pg_temp.p('ajustes_heredados', $$select count(*)::text || ' filas · rind
 select pg_temp.p('heredados_detalle_local', $$select coalesce(string_agg(codigo || '=' || rinde_personas || '/' || coalesce(categoria, '-'), ' | ' order by codigo), '-') from public.pos_producto_ajustes where codigo in ('8001', '8002', '8003', '8004', '124', '192', '238', '519', '698', '930')$$);
 select pg_temp.p('categoria_solo_en_11_15_25', $$select count(*)::text from public.pos_producto_ajustes a join public.pos_productos p using (local, codigo) where a.categoria is not null and p.familia is distinct from 11 and p.familia is distinct from 15 and p.familia is distinct from 25$$);
 select pg_temp.p('familias_con_nombre_por_confirmar', $$select coalesce(string_agg(familia::text, ',' order by familia), '-') from public.pos_familias where nombre like 'POR CONFIRMAR%'$$);
-select pg_temp.p('familia_17_no_puede_ser_comida', $$insert into public.pos_familias (local, familia, nombre, categoria) values ('prueba-196-x', 17, 'X', 'comida') returning 'entró'$$);
-select pg_temp.p('familia_3_no_puede_ser_cortesia', $$insert into public.pos_familias (local, familia, nombre, categoria) values ('prueba-196-x', 3, 'X', 'cortesia') returning 'entró'$$);
+select pg_temp.p('familia_17_no_puede_ser_comida', $$insert into public.pos_familias (local, familia, nombre, categoria) values ('prueba-198-x', 17, 'X', 'comida') returning 'entró'$$);
+select pg_temp.p('familia_3_no_puede_ser_cortesia', $$insert into public.pos_familias (local, familia, nombre, categoria) values ('prueba-198-x', 3, 'X', 'cortesia') returning 'entró'$$);
 select pg_temp.p('familias_sin_fila', $$select coalesce(string_agg(distinct p.familia::text, ',' order by p.familia::text), '-') from public.pos_productos p where not exists (select 1 from public.pos_familias f where f.local = p.local and f.familia = p.familia)$$);
 select pg_temp.p('no_venta_coincide', $$select (array_agg(familia order by familia))::text from public.pos_familias where categoria in ('personal', 'cortesia', 'ingredientes')$$);
-select set_config('p196.t0', clock_timestamp()::text, true);
+select set_config('p198.t0', clock_timestamp()::text, true);
 select pg_temp.p('refrescar_2da_vez_filas', $$select public.pos_catalogo_refrescar('santa-teresa')::text$$);
-select pg_temp.p('refrescar_ms', $$select round(extract(epoch from clock_timestamp() - current_setting('p196.t0')::timestamptz) * 1000)::text$$);
+select pg_temp.p('refrescar_ms', $$select round(extract(epoch from clock_timestamp() - current_setting('p198.t0')::timestamptz) * 1000)::text$$);
 
 -- Disparador, con un local ficticio (y sus familias)
 insert into public.pos_familias (local, familia, nombre, categoria, orden) values
-  ('prueba-196', 2, 'FICTICIA 2', 'comida', 10), ('prueba-196', 3, 'FICTICIA 3', 'comida', 20),
-  ('prueba-196', 5, 'FICTICIA 5', 'bebida', 10), ('prueba-196', 12, 'FICTICIA 12', 'giftcard', 10),
-  ('prueba-196', 17, 'FICTICIA 17', 'cortesia', 10), ('prueba-196', 6, 'FICTICIA 6', 'personal', 10),
-  ('prueba-196', 20, 'FICTICIA 20', 'ingredientes', 10);
+  ('prueba-198', 2, 'FICTICIA 2', 'comida', 10), ('prueba-198', 3, 'FICTICIA 3', 'comida', 20),
+  ('prueba-198', 5, 'FICTICIA 5', 'bebida', 10), ('prueba-198', 12, 'FICTICIA 12', 'giftcard', 10),
+  ('prueba-198', 17, 'FICTICIA 17', 'cortesia', 10), ('prueba-198', 6, 'FICTICIA 6', 'personal', 10),
+  ('prueba-198', 20, 'FICTICIA 20', 'ingredientes', 10);
 insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, valor_servido_crc)
-values ('prueba-196', 'A', '2026-11-20 12:00-06', 'C', 'salon', 'salonero', true, 'ok', 0),
-       ('prueba-196', 'B', '2026-11-22 12:00-06', 'C', 'delivery', 'cajero', false, 'ok', 0),
-       ('prueba-196', 'V', '2026-11-10 12:00-06', 'C', 'salon', 'salonero', true, 'ok', 0),
-       ('prueba-196', 'X', '2026-11-21 12:00-06', 'X', 'salon', 'salonero', true, 'ok', 0),
-       ('prueba-196', 'S', '2026-11-21 13:00-06', 'C', 'salon', 'salonero', true, 'ok', 1234.5),
-       ('prueba-196', 'N', '2026-11-23 23:30-06', 'C', 'salon', 'salonero', true, 'ok', 0),
-       ('prueba-196', 'M', '2026-11-24 00:10-06', 'C', 'salon', 'salonero', true, 'ok', 0);
+values ('prueba-198', 'A', '2026-11-20 12:00-06', 'C', 'salon', 'salonero', true, 'ok', 0),
+       ('prueba-198', 'B', '2026-11-22 12:00-06', 'C', 'delivery', 'cajero', false, 'ok', 0),
+       ('prueba-198', 'V', '2026-11-10 12:00-06', 'C', 'salon', 'salonero', true, 'ok', 0),
+       ('prueba-198', 'X', '2026-11-21 12:00-06', 'X', 'salon', 'salonero', true, 'ok', 0),
+       ('prueba-198', 'S', '2026-11-21 13:00-06', 'C', 'salon', 'salonero', true, 'ok', 1234.5),
+       ('prueba-198', 'N', '2026-11-23 23:30-06', 'C', 'salon', 'salonero', true, 'ok', 0),
+       ('prueba-198', 'M', '2026-11-24 00:10-06', 'C', 'salon', 'salonero', true, 'ok', 0);
 insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia)
 select t.id, x.cod, x.nom, x.cant, x.monto, x.fam
 from (values ('A', '9001', 'ROLL FICTICIO', 2, 7000, 3), ('A', '9002', 'TRAGO FICTICIO', 1, 3000, 5),
@@ -1374,99 +1401,99 @@ from (values ('A', '9001', 'ROLL FICTICIO', 2, 7000, 3), ('A', '9002', 'TRAGO FI
              ('A', '9008', 'PASO DE MENU FICTICIO', 3, 0, 5),
              -- el mismo trago, regalado en una factura más vieja: esa línea es cortesía (17) y no es venta
              ('V', '9002', 'TRAGO FICTICIO', 1, 800, 17)) x(fac, cod, nom, cant, monto, fam)
-join public.pos_ndf_tickets t on t.local = 'prueba-196' and t.numero_factura = x.fac;
-select pg_temp.p('trg_alta', $$select string_agg(codigo || '=' || nombre || '/' || coalesce(familia::text, 'null') || '/' || visto_desde || '..' || visto_hasta, ' | ' order by codigo) from public.pos_productos where local = 'prueba-196'$$);
+join public.pos_ndf_tickets t on t.local = 'prueba-198' and t.numero_factura = x.fac;
+select pg_temp.p('trg_alta', $$select string_agg(codigo || '=' || nombre || '/' || coalesce(familia::text, 'null') || '/' || visto_desde || '..' || visto_hasta, ' | ' order by codigo) from public.pos_productos where local = 'prueba-198'$$);
 insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia)
-select t.id, '9001', 'ROLL FICTICIO NUEVO', 1, 3500, 3 from public.pos_ndf_tickets t where t.local = 'prueba-196' and t.numero_factura = 'B';
-select pg_temp.p('trg_nombre_nuevo', $$select nombre || ' ' || visto_desde || '..' || visto_hasta from public.pos_productos where local = 'prueba-196' and codigo = '9001'$$);
+select t.id, '9001', 'ROLL FICTICIO NUEVO', 1, 3500, 3 from public.pos_ndf_tickets t where t.local = 'prueba-198' and t.numero_factura = 'B';
+select pg_temp.p('trg_nombre_nuevo', $$select nombre || ' ' || visto_desde || '..' || visto_hasta from public.pos_productos where local = 'prueba-198' and codigo = '9001'$$);
 insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia)
-select t.id, '9001', 'ROLL VIEJO', 1, 1000, 2 from public.pos_ndf_tickets t where t.local = 'prueba-196' and t.numero_factura = 'V';
-select pg_temp.p('trg_factura_vieja_no_pisa', $$select nombre || '/' || familia || ' ' || visto_desde || '..' || visto_hasta from public.pos_productos where local = 'prueba-196' and codigo = '9001'$$);
+select t.id, '9001', 'ROLL VIEJO', 1, 1000, 2 from public.pos_ndf_tickets t where t.local = 'prueba-198' and t.numero_factura = 'V';
+select pg_temp.p('trg_factura_vieja_no_pisa', $$select nombre || '/' || familia || ' ' || visto_desde || '..' || visto_hasta from public.pos_productos where local = 'prueba-198' and codigo = '9001'$$);
 insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia)
 select t.id, '9001', 'ROLL FICTICIO NUEVO', 1, case t.numero_factura when 'X' then 9999 when 'N' then 100 else 200 end, 3
-from public.pos_ndf_tickets t where t.local = 'prueba-196' and t.numero_factura in ('X', 'N', 'M');
+from public.pos_ndf_tickets t where t.local = 'prueba-198' and t.numero_factura in ('X', 'N', 'M');
 select pg_temp.p('otro_local_no_se_mezcla', $$select count(*)::text from public.pos_productos where local = 'santa-teresa' and codigo in ('9001', '9002', '9003', '9004', '9005', '9006', '9007', '9008') and nombre like '%FICTICI%'$$);
 
 -- Función, como owner
 select pg_temp.como('owner');
-select pg_temp.p('owner_ficticio', $$select jsonb_build_object('neta_cts', j->'neta_cts', 'sin_lineas', j->'sin_lineas', 'productos', j->'productos', 'meses', j->'meses', 'catalogo', j->'catalogo')::text from (select public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23') j) x$$);
-select pg_temp.p('paridad_190_ficticio', $$select (public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->>'neta_cts') || ' vs ' || (select sum((e->>1)::numeric) from jsonb_array_elements(public.pos_ventas_resumen('prueba-196', '2026-11-01', '2026-11-23')->'dias') e)$$);
-select pg_temp.p('mutacion_sumar_fam17', $$select (select sum((e->>5)::numeric) from jsonb_array_elements(public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->'productos') e where (e->>2) is null or (e->>2)::int not in (6, 20))::text$$);
+select pg_temp.p('owner_ficticio', $$select jsonb_build_object('neta_cts', j->'neta_cts', 'sin_lineas', j->'sin_lineas', 'productos', j->'productos', 'meses', j->'meses', 'catalogo', j->'catalogo')::text from (select public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23') j) x$$);
+select pg_temp.p('paridad_190_ficticio', $$select (public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->>'neta_cts') || ' vs ' || (select sum((e->>1)::numeric) from jsonb_array_elements(public.pos_ventas_resumen('prueba-198', '2026-11-01', '2026-11-23')->'dias') e)$$);
+select pg_temp.p('mutacion_sumar_fam17', $$select (select sum((e->>5)::numeric) from jsonb_array_elements(public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->'productos') e where (e->>2) is null or (e->>2)::int not in (6, 20))::text$$);
 select pg_temp.p('paridad_190_ayer', $$select (public.pos_ventas_productos('santa-teresa', '2026-11-23', '2026-11-23')->>'neta_cts') = (select coalesce(sum((e->>1)::numeric), 0) from jsonb_array_elements(public.pos_ventas_resumen('santa-teresa', '2026-11-23', '2026-11-23')->'dias') e)::text$$);
 select pg_temp.p('paridad_190_mes_a_la_fecha', $$select ((public.pos_ventas_productos('santa-teresa', '2026-11-01', '2026-11-23')->>'neta_cts') = (select coalesce(sum((e->>1)::numeric), 0) from jsonb_array_elements(public.pos_ventas_resumen('santa-teresa', '2026-11-01', '2026-11-23')->'dias') e)::text)::text$$);
 select pg_temp.p('paridad_190_octubre', $$select ((public.pos_ventas_productos('santa-teresa', '2026-10-01', '2026-10-31')->>'neta_cts') = (select coalesce(sum((e->>1)::numeric), 0) from jsonb_array_elements(public.pos_ventas_resumen('santa-teresa', '2026-10-01', '2026-10-31')->'dias') e)::text)::text$$);
-select set_config('p196.t1', clock_timestamp()::text, true);
+select set_config('p198.t1', clock_timestamp()::text, true);
 select pg_temp.p('paridad_190_anio', $$select ((j->>'neta_cts') = (select coalesce(sum((e->>1)::numeric), 0) from jsonb_array_elements(public.pos_ventas_resumen('santa-teresa', '2025-11-24', '2026-11-23')->'dias') e)::text)::text || ' productos=' || jsonb_array_length(j->'productos') || ' meses=' || jsonb_array_length(j->'meses') || ' catalogo=' || jsonb_array_length(j->'catalogo') || ' sin_lineas=' || (j->'sin_lineas'->>'facturas') || ' bytes=' || length(j::text) from (select public.pos_ventas_productos('santa-teresa', '2025-11-24', '2026-11-23') j) x$$);
-select pg_temp.p('anio_ms_las_dos', $$select round(extract(epoch from clock_timestamp() - current_setting('p196.t1')::timestamptz) * 1000)::text$$);
-select set_config('p196.t2', clock_timestamp()::text, true);
+select pg_temp.p('anio_ms_las_dos', $$select round(extract(epoch from clock_timestamp() - current_setting('p198.t1')::timestamptz) * 1000)::text$$);
+select set_config('p198.t2', clock_timestamp()::text, true);
 select pg_temp.p('solo_productos_731_dias', $$select length(public.pos_ventas_productos('santa-teresa', '2024-11-24', '2026-11-23')::text)::text$$);
-select pg_temp.p('solo_productos_731_ms', $$select round(extract(epoch from clock_timestamp() - current_setting('p196.t2')::timestamptz) * 1000)::text$$);
+select pg_temp.p('solo_productos_731_ms', $$select round(extract(epoch from clock_timestamp() - current_setting('p198.t2')::timestamptz) * 1000)::text$$);
 select pg_temp.p('cierre_meses_vs_productos', $$select ((select sum((e->>4)::numeric) from jsonb_array_elements(j->'meses') e) = (select sum((e->>5)::numeric) from jsonb_array_elements(j->'productos') e))::text from (select public.pos_ventas_productos('santa-teresa', '2026-10-01', '2026-11-23') j) x$$);
 select pg_temp.p('rango_732', $$select public.pos_ventas_productos('santa-teresa', '2024-11-22', '2026-11-23')::text$$);
 select pg_temp.p('rango_invertido', $$select public.pos_ventas_productos('santa-teresa', '2026-11-23', '2026-11-22')::text$$);
 select pg_temp.p('owner_lee_tabla', $$select count(*)::text from public.pos_productos$$);
-select pg_temp.p('owner_insert_directo', $$insert into public.pos_producto_ajustes (local, codigo, rinde_personas) values ('prueba-196', '9002', 3) returning 'entró'$$);
-select pg_temp.p('owner_update_catalogo', $$update public.pos_productos set nombre = 'HACK' where local = 'prueba-196' returning 'entró'$$);
+select pg_temp.p('owner_insert_directo', $$insert into public.pos_producto_ajustes (local, codigo, rinde_personas) values ('prueba-198', '9002', 3) returning 'entró'$$);
+select pg_temp.p('owner_update_catalogo', $$update public.pos_productos set nombre = 'HACK' where local = 'prueba-198' returning 'entró'$$);
 
 -- «Rinde» y categoría por código (D-2 = C). La categoría NUNCA mueve la venta neta.
-select pg_temp.p('neta_antes', $$select public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->>'neta_cts'$$);
-select pg_temp.p('categorias_antes', $$select string_agg((e->>0) || '/' || coalesce(e->>2, 'null') || '=' || (e->>7), ' | ' order by e->>0, e->>2) from jsonb_array_elements(public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->'productos') e$$);
-select public.pos_producto_ajuste_guardar('prueba-196', ' 9002 ', 6, 'comida');
-select pg_temp.p('owner_guarda_los_dos', $$select (select rinde_personas::text || '/' || categoria || ' por=' || (actualizado_por is not null)::text from public.pos_producto_ajustes where local = 'prueba-196' and codigo = '9002')$$);
-select pg_temp.p('categorias_despues', $$select string_agg((e->>0) || '/' || coalesce(e->>2, 'null') || '=' || (e->>7), ' | ' order by e->>0, e->>2) from jsonb_array_elements(public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->'productos') e$$);
-select pg_temp.p('neta_no_cambia_con_categoria', $$select (public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->>'neta_cts') || ' vs ' || (select sum((e->>1)::numeric) from jsonb_array_elements(public.pos_ventas_resumen('prueba-196', '2026-11-01', '2026-11-23')->'dias') e)$$);
-select pg_temp.p('venta_por_categoria_cierra_con_neta', $$select ((select sum((e->>5)::numeric) from jsonb_array_elements(j->'productos') e where (e->>7) not in ('cortesia', 'personal', 'ingredientes')) + (j->'sin_lineas'->>'cts')::numeric)::text || ' vs ' || (j->>'neta_cts') from (select public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23') j) x$$);
-select pg_temp.p('meses_por_categoria_cierra_con_neta', $$select ((select sum((e->>4)::numeric) from jsonb_array_elements(j->'meses') e where (e->>5) not in ('cortesia', 'personal', 'ingredientes')) + (j->'sin_lineas'->>'cts')::numeric)::text || ' vs ' || (j->>'neta_cts') from (select public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23') j) x$$);
-select pg_temp.p('comida_y_bebida_despues', $$select 'comida ' || coalesce(sum((e->>5)::numeric) filter (where e->>7 = 'comida'), 0) || ' · bebida ' || coalesce(sum((e->>5)::numeric) filter (where e->>7 = 'bebida'), 0) from jsonb_array_elements(public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->'productos') e$$);
-select pg_temp.p('catalogo_trae_los_dos', $$select (select (e->>3) || '/' || (e->>6) from jsonb_array_elements(public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->'catalogo') e where e->>0 = '9002')$$);
+select pg_temp.p('neta_antes', $$select public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->>'neta_cts'$$);
+select pg_temp.p('categorias_antes', $$select string_agg((e->>0) || '/' || coalesce(e->>2, 'null') || '=' || (e->>7), ' | ' order by e->>0, e->>2) from jsonb_array_elements(public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->'productos') e$$);
+select public.pos_producto_ajuste_guardar('prueba-198', ' 9002 ', 6, 'comida');
+select pg_temp.p('owner_guarda_los_dos', $$select (select rinde_personas::text || '/' || categoria || ' por=' || (actualizado_por is not null)::text from public.pos_producto_ajustes where local = 'prueba-198' and codigo = '9002')$$);
+select pg_temp.p('categorias_despues', $$select string_agg((e->>0) || '/' || coalesce(e->>2, 'null') || '=' || (e->>7), ' | ' order by e->>0, e->>2) from jsonb_array_elements(public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->'productos') e$$);
+select pg_temp.p('neta_no_cambia_con_categoria', $$select (public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->>'neta_cts') || ' vs ' || (select sum((e->>1)::numeric) from jsonb_array_elements(public.pos_ventas_resumen('prueba-198', '2026-11-01', '2026-11-23')->'dias') e)$$);
+select pg_temp.p('venta_por_categoria_cierra_con_neta', $$select ((select sum((e->>5)::numeric) from jsonb_array_elements(j->'productos') e where (e->>7) not in ('cortesia', 'personal', 'ingredientes')) + (j->'sin_lineas'->>'cts')::numeric)::text || ' vs ' || (j->>'neta_cts') from (select public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23') j) x$$);
+select pg_temp.p('meses_por_categoria_cierra_con_neta', $$select ((select sum((e->>4)::numeric) from jsonb_array_elements(j->'meses') e where (e->>5) not in ('cortesia', 'personal', 'ingredientes')) + (j->'sin_lineas'->>'cts')::numeric)::text || ' vs ' || (j->>'neta_cts') from (select public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23') j) x$$);
+select pg_temp.p('comida_y_bebida_despues', $$select 'comida ' || coalesce(sum((e->>5)::numeric) filter (where e->>7 = 'comida'), 0) || ' · bebida ' || coalesce(sum((e->>5)::numeric) filter (where e->>7 = 'bebida'), 0) from jsonb_array_elements(public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->'productos') e$$);
+select pg_temp.p('catalogo_trae_los_dos', $$select (select (e->>3) || '/' || (e->>6) from jsonb_array_elements(public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->'catalogo') e where e->>0 = '9002')$$);
 -- `menu_especial`: es venta. El ítem por comensal va ahí; los pasos del menú (en ₡0) siguen en comida o bebida.
-select public.pos_producto_ajuste_guardar('prueba-196', '9001', 1, 'menu_especial');
-select pg_temp.p('menu_especial_es_venta', $$select 'menu_especial ' || coalesce(sum((e->>5)::numeric) filter (where e->>7 = 'menu_especial'), 0) || ' · comida ' || coalesce(sum((e->>5)::numeric) filter (where e->>7 = 'comida'), 0) from jsonb_array_elements(public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->'productos') e$$);
-select pg_temp.p('neta_no_cambia_con_menu_especial', $$select (public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->>'neta_cts') || ' vs ' || (select sum((e->>1)::numeric) from jsonb_array_elements(public.pos_ventas_resumen('prueba-196', '2026-11-01', '2026-11-23')->'dias') e)$$);
-select pg_temp.p('venta_por_categoria_cierra_con_menu_especial', $$select ((select sum((e->>5)::numeric) from jsonb_array_elements(j->'productos') e where (e->>7) not in ('cortesia', 'personal', 'ingredientes')) + (j->'sin_lineas'->>'cts')::numeric)::text || ' vs ' || (j->>'neta_cts') from (select public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23') j) x$$);
-select pg_temp.p('unidades_en_cero', $$select string_agg((e->>0) || '/' || coalesce(e->>2, 'null') || '/' || (e->>3) || '=' || (e->>4) || ' u, ' || (e->>8) || ' en cero', ' | ' order by e->>0, e->>2, e->>3) from jsonb_array_elements(public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->'productos') e where e->>0 in ('9001', '9006', '9008')$$);
-select pg_temp.p('categoria_cortesia', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 6, 'cortesia')::text$$);
-select pg_temp.p('categoria_personal', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 6, 'personal')::text$$);
-select pg_temp.p('categoria_ingredientes', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 6, 'ingredientes')::text$$);
-select pg_temp.p('categoria_pax', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 6, 'pax')::text$$);
-select pg_temp.p('categoria_giftcard', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 6, 'giftcard')::text$$);
-select pg_temp.p('categoria_duenos', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 6, 'duenos')::text$$);
-select pg_temp.p('categoria_en_mayusculas', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 6, 'COMIDA')::text$$);
-select pg_temp.p('categoria_vacia', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 6, '')::text$$);
-select pg_temp.p('categoria_a_producto_de_cortesia', $$select public.pos_producto_ajuste_guardar('prueba-196', '9003', 1, 'comida')::text$$);
-select pg_temp.p('categoria_a_producto_de_personal', $$select public.pos_producto_ajuste_guardar('prueba-196', '9004', 1, 'comida')::text$$);
-select pg_temp.p('categoria_a_ingrediente', $$select public.pos_producto_ajuste_guardar('prueba-196', '9005', 1, 'bebida')::text$$);
-select pg_temp.p('categoria_a_gift_card', $$select public.pos_producto_ajuste_guardar('prueba-196', '9007', 1, 'comida')::text$$);
-select pg_temp.p('rinde_a_producto_de_cortesia_si', $$select coalesce(public.pos_producto_ajuste_guardar('prueba-196', '9003', 2, null)::text, 'ok')$$);
-select pg_temp.p('intentos_no_dejaron_nada', $$select (select string_agg(codigo || '=' || rinde_personas || '/' || coalesce(categoria, '-'), ' | ' order by codigo) from public.pos_producto_ajustes where local = 'prueba-196')$$);
-select public.pos_producto_ajuste_guardar('prueba-196', '9006', 1, 'bebida');
-select pg_temp.p('owner_rinde_21', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 21, null)::text$$);
-select pg_temp.p('owner_rinde_0', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 0, null)::text$$);
-select pg_temp.p('owner_rinde_null', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', null, null)::text$$);
-select pg_temp.p('owner_producto_desconocido', $$select public.pos_producto_ajuste_guardar('prueba-196', '9999', 2, null)::text$$);
-select pg_temp.p('catalogo_entero', $$select (j->'productos')::text || ' editables=' || (j->'categorias_editables')::text || ' fijas=' || (j->'categorias_fijas')::text from (select public.pos_catalogo_productos('prueba-196') j) x$$);
-select pg_temp.p('neta_despues_de_todo', $$select (public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23')->>'neta_cts') || ' vs ' || (select sum((e->>1)::numeric) from jsonb_array_elements(public.pos_ventas_resumen('prueba-196', '2026-11-01', '2026-11-23')->'dias') e)$$);
-select pg_temp.p('venta_por_categoria_cierra_despues_de_todo', $$select ((select sum((e->>5)::numeric) from jsonb_array_elements(j->'productos') e where (e->>7) not in ('cortesia', 'personal', 'ingredientes')) + (j->'sin_lineas'->>'cts')::numeric)::text || ' vs ' || (j->>'neta_cts') from (select public.pos_ventas_productos('prueba-196', '2026-11-01', '2026-11-23') j) x$$);
-select public.pos_producto_ajuste_guardar('prueba-196', '9002', 1, null);
-select public.pos_producto_ajuste_guardar('prueba-196', '9003', 1, null);
-select pg_temp.p('todo_por_defecto_borra', $$select (select string_agg(codigo || '=' || rinde_personas || '/' || coalesce(categoria, '-'), ' | ' order by codigo) from public.pos_producto_ajustes where local = 'prueba-196')$$);
+select public.pos_producto_ajuste_guardar('prueba-198', '9001', 1, 'menu_especial');
+select pg_temp.p('menu_especial_es_venta', $$select 'menu_especial ' || coalesce(sum((e->>5)::numeric) filter (where e->>7 = 'menu_especial'), 0) || ' · comida ' || coalesce(sum((e->>5)::numeric) filter (where e->>7 = 'comida'), 0) from jsonb_array_elements(public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->'productos') e$$);
+select pg_temp.p('neta_no_cambia_con_menu_especial', $$select (public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->>'neta_cts') || ' vs ' || (select sum((e->>1)::numeric) from jsonb_array_elements(public.pos_ventas_resumen('prueba-198', '2026-11-01', '2026-11-23')->'dias') e)$$);
+select pg_temp.p('venta_por_categoria_cierra_con_menu_especial', $$select ((select sum((e->>5)::numeric) from jsonb_array_elements(j->'productos') e where (e->>7) not in ('cortesia', 'personal', 'ingredientes')) + (j->'sin_lineas'->>'cts')::numeric)::text || ' vs ' || (j->>'neta_cts') from (select public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23') j) x$$);
+select pg_temp.p('unidades_en_cero', $$select string_agg((e->>0) || '/' || coalesce(e->>2, 'null') || '/' || (e->>3) || '=' || (e->>4) || ' u, ' || (e->>8) || ' en cero', ' | ' order by e->>0, e->>2, e->>3) from jsonb_array_elements(public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->'productos') e where e->>0 in ('9001', '9006', '9008')$$);
+select pg_temp.p('categoria_cortesia', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 6, 'cortesia')::text$$);
+select pg_temp.p('categoria_personal', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 6, 'personal')::text$$);
+select pg_temp.p('categoria_ingredientes', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 6, 'ingredientes')::text$$);
+select pg_temp.p('categoria_pax', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 6, 'pax')::text$$);
+select pg_temp.p('categoria_giftcard', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 6, 'giftcard')::text$$);
+select pg_temp.p('categoria_duenos', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 6, 'duenos')::text$$);
+select pg_temp.p('categoria_en_mayusculas', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 6, 'COMIDA')::text$$);
+select pg_temp.p('categoria_vacia', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 6, '')::text$$);
+select pg_temp.p('categoria_a_producto_de_cortesia', $$select public.pos_producto_ajuste_guardar('prueba-198', '9003', 1, 'comida')::text$$);
+select pg_temp.p('categoria_a_producto_de_personal', $$select public.pos_producto_ajuste_guardar('prueba-198', '9004', 1, 'comida')::text$$);
+select pg_temp.p('categoria_a_ingrediente', $$select public.pos_producto_ajuste_guardar('prueba-198', '9005', 1, 'bebida')::text$$);
+select pg_temp.p('categoria_a_gift_card', $$select public.pos_producto_ajuste_guardar('prueba-198', '9007', 1, 'comida')::text$$);
+select pg_temp.p('rinde_a_producto_de_cortesia_si', $$select coalesce(public.pos_producto_ajuste_guardar('prueba-198', '9003', 2, null)::text, 'ok')$$);
+select pg_temp.p('intentos_no_dejaron_nada', $$select (select string_agg(codigo || '=' || rinde_personas || '/' || coalesce(categoria, '-'), ' | ' order by codigo) from public.pos_producto_ajustes where local = 'prueba-198')$$);
+select public.pos_producto_ajuste_guardar('prueba-198', '9006', 1, 'bebida');
+select pg_temp.p('owner_rinde_21', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 21, null)::text$$);
+select pg_temp.p('owner_rinde_0', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 0, null)::text$$);
+select pg_temp.p('owner_rinde_null', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', null, null)::text$$);
+select pg_temp.p('owner_producto_desconocido', $$select public.pos_producto_ajuste_guardar('prueba-198', '9999', 2, null)::text$$);
+select pg_temp.p('catalogo_entero', $$select (j->'productos')::text || ' editables=' || (j->'categorias_editables')::text || ' fijas=' || (j->'categorias_fijas')::text from (select public.pos_catalogo_productos('prueba-198') j) x$$);
+select pg_temp.p('neta_despues_de_todo', $$select (public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23')->>'neta_cts') || ' vs ' || (select sum((e->>1)::numeric) from jsonb_array_elements(public.pos_ventas_resumen('prueba-198', '2026-11-01', '2026-11-23')->'dias') e)$$);
+select pg_temp.p('venta_por_categoria_cierra_despues_de_todo', $$select ((select sum((e->>5)::numeric) from jsonb_array_elements(j->'productos') e where (e->>7) not in ('cortesia', 'personal', 'ingredientes')) + (j->'sin_lineas'->>'cts')::numeric)::text || ' vs ' || (j->>'neta_cts') from (select public.pos_ventas_productos('prueba-198', '2026-11-01', '2026-11-23') j) x$$);
+select public.pos_producto_ajuste_guardar('prueba-198', '9002', 1, null);
+select public.pos_producto_ajuste_guardar('prueba-198', '9003', 1, null);
+select pg_temp.p('todo_por_defecto_borra', $$select (select string_agg(codigo || '=' || rinde_personas || '/' || coalesce(categoria, '-'), ' | ' order by codigo) from public.pos_producto_ajustes where local = 'prueba-198')$$);
 
 select pg_temp.como('contador');
 select pg_temp.p('contador_funcion', $$select (public.pos_ventas_productos('santa-teresa', '2026-11-23', '2026-11-23') ? 'productos')::text$$);
 select pg_temp.p('contador_lee_tabla', $$select count(*)::text from public.pos_productos$$);
-select pg_temp.p('contador_catalogo', $$select jsonb_array_length(public.pos_catalogo_productos('prueba-196')->'productos')::text$$);
-select pg_temp.p('contador_ajuste_rinde', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 2, null)::text$$);
+select pg_temp.p('contador_catalogo', $$select jsonb_array_length(public.pos_catalogo_productos('prueba-198')->'productos')::text$$);
+select pg_temp.p('contador_ajuste_rinde', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 2, null)::text$$);
 select pg_temp.p('contador_ajuste_categoria', $$select public.pos_producto_ajuste_guardar('santa-teresa', '8001', 1, 'comida')::text$$);
 select pg_temp.como('manager');
 select pg_temp.p('manager_locales', $$select public.mis_locales()::text$$);
-select pg_temp.p('manager_local_ajeno', $$select (public.pos_ventas_productos('prueba-196', '2026-11-23', '2026-11-23') ? 'productos')::text$$);
-select pg_temp.p('manager_ajuste_local_ajeno', $$select public.pos_producto_ajuste_guardar('prueba-196', '9002', 2, 'comida')::text$$);
-select pg_temp.p('manager_catalogo_local_ajeno', $$select public.pos_catalogo_productos('prueba-196')::text$$);
-select pg_temp.p('manager_local_ajeno_no_dejo_nada', $$select count(*)::text from public.pos_producto_ajustes where local = 'prueba-196' and codigo = '9002'$$);
+select pg_temp.p('manager_local_ajeno', $$select (public.pos_ventas_productos('prueba-198', '2026-11-23', '2026-11-23') ? 'productos')::text$$);
+select pg_temp.p('manager_ajuste_local_ajeno', $$select public.pos_producto_ajuste_guardar('prueba-198', '9002', 2, 'comida')::text$$);
+select pg_temp.p('manager_catalogo_local_ajeno', $$select public.pos_catalogo_productos('prueba-198')::text$$);
+select pg_temp.p('manager_local_ajeno_no_dejo_nada', $$select count(*)::text from public.pos_producto_ajustes where local = 'prueba-198' and codigo = '9002'$$);
 select public.pos_producto_ajuste_guardar('santa-teresa', '8004', 2, 'bebida');
 select pg_temp.p('manager_ajuste_en_su_local', $$select (select rinde_personas::text || '/' || categoria from public.pos_producto_ajustes where local = 'santa-teresa' and codigo = '8004')$$);
 select pg_temp.p('manager_catalogo_su_local', $$select (select (e->>3) || '/' || (e->>4) || '/' || (e->>5) from jsonb_array_elements(public.pos_catalogo_productos('santa-teresa')->'productos') e where e->>0 = '8004')$$);
-select pg_temp.p('manager_tabla_local_ajeno', $$select count(*)::text from public.pos_productos where local = 'prueba-196'$$);
+select pg_temp.p('manager_tabla_local_ajeno', $$select count(*)::text from public.pos_productos where local = 'prueba-198'$$);
 select pg_temp.p('manager_tabla_total', $$select count(*)::text from public.pos_productos$$);
 select pg_temp.como('salonero');
 select pg_temp.p('salonero_funcion', $$select public.pos_ventas_productos('santa-teresa', '2026-11-23', '2026-11-23')::text$$);
@@ -1481,13 +1508,13 @@ select pg_temp.p('anon_privilegios', $$select has_function_privilege('anon', 'pu
 select pg_temp.p('sin_sesion_funcion', $$select public.pos_ventas_productos('santa-teresa', '2026-11-23', '2026-11-23')::text$$);
 select pg_temp.p('sin_sesion_ajuste', $$select public.pos_producto_ajuste_guardar('santa-teresa', '8001', 2, null)::text$$);
 -- Ni por debajo de la función (dueño de la base): el `check` de la tabla tampoco deja guardar una categoría que no es venta
-select pg_temp.p('tabla_no_acepta_cortesia', $$insert into public.pos_producto_ajustes (local, codigo, categoria) values ('prueba-196', '9002', 'cortesia') returning 'entró'$$);
-select pg_temp.p('tabla_no_acepta_fila_vacia', $$insert into public.pos_producto_ajustes (local, codigo) values ('prueba-196', '9002') returning 'entró'$$);
+select pg_temp.p('tabla_no_acepta_cortesia', $$insert into public.pos_producto_ajustes (local, codigo, categoria) values ('prueba-198', '9002', 'cortesia') returning 'entró'$$);
+select pg_temp.p('tabla_no_acepta_fila_vacia', $$insert into public.pos_producto_ajustes (local, codigo) values ('prueba-198', '9002') returning 'entró'$$);
 
 -- Mutación: el catálogo roto NO frena la ingesta
 alter function public.pos_catalogo_absorber(uuid[]) rename to pos_catalogo_absorber_roto;
-select pg_temp.p('ingesta_con_catalogo_roto', $$with i as (insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia) select t.id, '9050', 'ENTRA IGUAL', 1, 1, 3 from public.pos_ndf_tickets t where t.local = 'prueba-196' and t.numero_factura = 'A' returning 1) select (select count(*) from i)::text || ' línea; en catálogo: ' || (select count(*) from public.pos_productos where codigo = '9050')$$);
+select pg_temp.p('ingesta_con_catalogo_roto', $$with i as (insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia) select t.id, '9050', 'ENTRA IGUAL', 1, 1, 3 from public.pos_ndf_tickets t where t.local = 'prueba-198' and t.numero_factura = 'A' returning 1) select (select count(*) from i)::text || ' línea; en catálogo: ' || (select count(*) from public.pos_productos where codigo = '9050')$$);
 alter function public.pos_catalogo_absorber_roto(uuid[]) rename to pos_catalogo_absorber;
-select public.pos_catalogo_refrescar('prueba-196');
+select public.pos_catalogo_refrescar('prueba-198');
 select pg_temp.p('refrescar_repara', $$select 'en catálogo: ' || (select count(*) from public.pos_productos where codigo = '9050')$$);
 ```

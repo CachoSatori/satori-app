@@ -4,9 +4,11 @@
 // MISMO período y los MISMOS datos, cada cifra que se mueve a «Equipo» da lo mismo que en la vista vieja. Tres
 // períodos: ayer, mes a la fecha y el último mes cerrado.
 //
-//   · «Lo de antes» se LEE de las vistas viejas PINTADAS (`VentasSaloneros` y `VentasEvaluacion`, que siguen en el
-//     repo hasta la 3.5.5), con el `DiasMap` recortado al período (su «Personalizado» sin fechas y su «Todo» toman
-//     todos los días que reciben: así miran exactamente el período).
+//   · «Lo de antes» se LEYÓ de las vistas viejas PINTADAS (`VentasSaloneros` y `VentasEvaluacion`), con el `DiasMap`
+//     recortado al período (su «Personalizado» sin fechas y su «Todo» toman todos los días que reciben: así miraban
+//     exactamente el período). La 3.5.5 borró esas vistas: lo que pintaban con ESTA fixture quedó FIJADO en
+//     `antes-equipo354.json` (capturado en `main` 764613b2, antes de borrarlas; los saloneros por su login del PoS,
+//     sin nombres). Si la fixture cambia, esta prueba cae: no se regenera, se revisa.
 //   · «Lo de ahora» se LEE de «Equipo» pintado, con la barra en la URL.
 //   · La venta por persona del equipo se compara con la del «Resumen» (`cifrasDelRango`, la misma lectura).
 //   · Los datos: la fixture ficticia del Resumen + UNA FACTURA ANULADA (`X`) que reciben los lectores de «Equipo»: si
@@ -17,10 +19,11 @@
 // contra 7) se muestra solo con 14 días trabajados o más en el período («Evaluación» la calculaba con menos).
 // Reloj fijo DE NOCHE en CR (23:30 del 18-nov = 05:30 UTC del 19).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, within } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { render, screen, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { TicketVentaRow } from '../../../shared/api/posNdf'
-import type { DiasMap, Meta } from '../../../shared/types/ventas'
+import type { Meta } from '../../../shared/types/ventas'
 
 let role = 'owner'
 vi.mock('../../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { role } }) }))
@@ -32,6 +35,7 @@ import { datos, t } from '../resumenV2.fixture'
 import { armarLectura, cifrasDelRango } from '../resumenV2'
 import { armarDiasMap } from '../ventasDiasDesdePos'
 import { fi } from '../ventasUtils'
+import { SALONEROS_CONOCIDOS } from '../../../shared/ndf/mapTicket'
 
 // ── Los datos ────────────────────────────────────────────────────────────────────────────────
 const base = datos('2026-09-01', 78)
@@ -39,10 +43,7 @@ const ANULADA: TicketVentaRow = t({ id: 'X-1', estado: 'X', fecha_registra: '202
 const LINEAS_ANULADA = [{ ticket_id: 'X-1', codigo_producto: 'P2', nombre: 'PRODUCTO 2', cantidad: 3, monto: 88_888, familia: 2, usuario_registra: null }]
 const TICKETS_LECTOR = [...base.tickets, ANULADA]
 const LINEAS_LECTOR = [...base.lineas, ...LINEAS_ANULADA]
-const RANGO_DATOS = { desde: '2026-09-01', hasta: '2026-11-17' }
 
-/** «Lo de antes»: el `DiasMap` del shell de Ventas en `main` (solo facturas cerradas, como la 067). */
-const antes = armarDiasMap(base.tickets, base.lineas, RANGO_DATOS, { uploadedAt: 'x', avisar: () => {} })
 const lectura = armarLectura(TICKETS_LECTOR, LINEAS_LECTOR, {})
 
 vi.mock('../resumenV2Datos', async orig => ({
@@ -61,8 +62,13 @@ vi.mock('../lineasPeriodo', async orig => {
 })
 
 import VentasEquipo from '../VentasEquipo'
-import VentasSaloneros from '../VentasSaloneros'
-import VentasEvaluacion from '../VentasEvaluacion'
+
+/** Lo que pintaban «Saloneros» y «Evaluación» (3.5.5: fijado; ver la cabecera). Clave: `desde_hasta`; salonero por login. */
+const ANTES = JSON.parse(readFileSync('src/modules/ventas/__paridad__/antes-equipo354.json', 'utf8')) as {
+  saloneros: Record<string, { filas: [string, string[]][]; general: string[] }>
+  evaluacion: Record<string, [string, { dias: string; consistencia: number; tendencia: string; racha: string }][]>
+}
+const nombre = (login: string) => SALONEROS_CONOCIDOS[login] ?? login
 
 const METAS = { restaurante: {}, margen: {}, global: { promPax: 9_000, bebPax: 0, ratioCB: 0, ticketItem: 0, ventas: 0 }, salMetas: {} } as unknown as Meta
 
@@ -72,9 +78,6 @@ const PERIODOS = [
   { nombre: 'último mes cerrado (octubre)', q: 'p=mes&d=2026-10-01', desde: '2026-10-01', hasta: '2026-10-31' },
 ] as const
 
-const recorte = (desde: string, hasta: string): DiasMap =>
-  Object.fromEntries(Object.entries(antes.dias).filter(([f]) => f >= desde && f <= hasta))
-
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-11-19T05:30:00Z'))
@@ -82,38 +85,18 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
-const celdas = (tr: Element) => [...tr.querySelectorAll('td')].map(td => td.textContent ?? '')
-
 /** «Saloneros» viejo, modo tabla: nombre → [Ventas, PAX, Prom/PAX, Ticket/ítem, Beb/PAX, Ratio C/B, Prom/plato]. */
 function leerSaloneros(desde: string, hasta: string) {
-  const r = render(<VentasSaloneros dias={recorte(desde, hasta)} pm={antes.pm} metas={METAS} />)
-  fireEvent.click(within(r.container).getByRole('button', { name: 'Personalizado' }))
-  fireEvent.click(within(r.container).getByRole('button', { name: /Tabla/ }))
-  const out = new Map<string, string[]>()
-  for (const tr of r.container.querySelectorAll('table tbody tr')) {
-    const c = celdas(tr)
-    const nombre = tr.querySelector('td:nth-child(2) div')!.textContent!
-    out.set(nombre, c.slice(2, 9))
-  }
-  const general = celdas(r.container.querySelector('tfoot tr.vt-tbl-footer')!)
-  r.unmount()
-  return { filas: out, general }
+  const g = ANTES.saloneros[`${desde}_${hasta}`]
+  expect(g, `sin lectura fijada para ${desde}_${hasta}`).toBeDefined()
+  return { filas: new Map(g.filas.map(([l, c]) => [nombre(l), c])), general: g.general }
 }
 
 /** «Evaluación» vieja, «Todo» + modo tabla: nombre → { dias, consistencia, tendencia, racha }. */
 function leerEvaluacion(desde: string, hasta: string) {
-  const r = render(<VentasEvaluacion dias={recorte(desde, hasta)} pm={antes.pm} metas={METAS} />)
-  const vacia = r.container.querySelector('.vt-empty')
-  if (vacia) { r.unmount(); return new Map<string, { dias: string; consistencia: number; tendencia: string; racha: string }>() }
-  fireEvent.click(within(r.container).getByRole('button', { name: 'Todo' }))
-  fireEvent.click(within(r.container).getByRole('button', { name: /Tabla/ }))
-  const out = new Map<string, { dias: string; consistencia: number; tendencia: string; racha: string }>()
-  for (const tr of r.container.querySelectorAll('#eval-print-table tbody tr')) {
-    const c = celdas(tr)
-    out.set(c[1], { dias: c[2], consistencia: Math.round(parseFloat(c[7])), tendencia: c[8], racha: c[9] })
-  }
-  r.unmount()
-  return out
+  const g = ANTES.evaluacion[`${desde}_${hasta}`]
+  expect(g, `sin lectura fijada para ${desde}_${hasta}`).toBeDefined()
+  return new Map(g.map(([l, v]) => [nombre(l), v]))
 }
 
 async function abrirEquipo(q: string) {

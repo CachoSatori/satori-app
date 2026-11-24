@@ -16,6 +16,7 @@ import { getJornadasConVentas } from '../../shared/api/jornadasConVentas'
 import { calcularAlertaCierres, desdeVentanaVentas } from './diasSinCierre'
 import AlertaDiasSinCierre from './AlertaDiasSinCierre'
 import { todayStr } from './cashUtils'
+import { useMovimientosSinReemplazados } from './useReemplazosAparato'
 
 const CashTurno       = lazy(() => import('./CashTurno'))
 const CashMovimientos = lazy(() => import('./CashMovimientos'))
@@ -71,7 +72,12 @@ export default function CashModule() {
   const [credits, setCredits]             = useState<SupplierCredit[]>([])
   const [creditApps, setCreditApps]       = useState<CreditApplication[]>([])
 
-  const pendCount = allMovements.filter(m => m.status === 'pendiente').length
+  // (hallazgo 252, ronda 2) Un cambio de pago sin terminar deja el viejo y el nuevo en la base un rato. TODAS las
+  // pestañas cuentan con `movsCuenta` (el viejo fuera, misma regla que la Caja Diaria: aplicarReemplazos). Solo la
+  // Caja Diaria recibe además los del turno SIN filtrar, para ofrecer «Terminar el cambio».
+  const { cuenta: movsCuenta } = useMovimientosSinReemplazados(allMovements, { alResolver: () => { void loadAll() } })
+
+  const pendCount = movsCuenta.filter(m => m.status === 'pendiente').length
 
   // ── Alerta de días sin cierre (06/11, solo owner/manager, solo lectura) ──
   const veAlerta = profile?.role === 'owner' || profile?.role === 'manager'
@@ -128,9 +134,9 @@ export default function CashModule() {
   }, [veAlerta])
 
   const alerta = useMemo(() => veAlerta
-    ? calcularAlertaCierres({ hoy: todayStr(), cierres, movements: allMovements, sessions, jornadasConVentas: jornadasVentas })
+    ? calcularAlertaCierres({ hoy: todayStr(), cierres, movements: movsCuenta, sessions, jornadasConVentas: jornadasVentas })
     : { dias: [], turnos: [] },
-  [veAlerta, cierres, allMovements, sessions, jornadasVentas])
+  [veAlerta, cierres, movsCuenta, sessions, jornadasVentas])
 
   // Tiempo real: otro dispositivo registra un pago / abre o cierra la caja →
   // este recarga solo, en silencio (sin spinner). Los borradores locales de
@@ -215,7 +221,7 @@ export default function CashModule() {
             sessionMovements={openSession
               ? allMovements.filter(m => m.session_id === openSession.id)
               : []}
-            allMovements={allMovements}
+            allMovements={movsCuenta}
             onSessionOpen={handleSessionOpen}
             onSessionClose={handleSessionClose}
             onMovAdded={handleMovAdded}
@@ -228,7 +234,7 @@ export default function CashModule() {
         )}
         {tab === 'movimientos' && (
           <CashMovimientos
-            movements={allMovements}
+            movements={movsCuenta}
             sessions={sessions}
             onRefresh={loadAll}
           />
@@ -236,7 +242,7 @@ export default function CashModule() {
         {tab === 'proveedores' && (
           <CashProveedores
             suppliers={suppliers}
-            movements={allMovements}
+            movements={movsCuenta}
             credits={credits}
             applications={creditApps}
             sessions={sessions}
@@ -245,7 +251,7 @@ export default function CashModule() {
         )}
         {tab === 'pendientes' && (
           <CashPendientes
-            movements={allMovements}
+            movements={movsCuenta}
             sessions={sessions}
             suppliers={suppliers}
             credits={credits}
@@ -256,7 +262,7 @@ export default function CashModule() {
         )}
         {tab === 'resumen' && (
           <CashResumen
-            movements={allMovements}
+            movements={movsCuenta}
             sessions={sessions}
           />
         )}

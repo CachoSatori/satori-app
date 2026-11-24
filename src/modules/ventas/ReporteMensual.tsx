@@ -1,6 +1,6 @@
 /**
  * ReporteMensual — Reporte ejecutivo mensual imprimible
- * Accesible desde VentasContabilidad vía botón "🖨 Reporte"
+ * Accesible desde «Resumen» (período «Mes») vía el botón "🖨 Reporte"
  * Usa window.print() — el browser lo convierte en PDF via "Guardar como PDF"
  */
 import { ventaPorPersonaDeTotales } from './indicadores'

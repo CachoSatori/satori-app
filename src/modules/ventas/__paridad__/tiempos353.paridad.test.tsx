@@ -4,8 +4,10 @@
 // «Calendario»: con los MISMOS datos, cada cifra que se mueve de lugar da lo mismo en la pantalla nueva que en la
 // vieja.
 //
-//   · «Lo de antes» se LEE de las pantallas viejas pintadas (`VentasAnalisis` y `VentasCalendario`, que quedan en el
-//     repo solo para esta prueba hasta la 3.5.5) con el `dias` y el `hist` que les pasaba el shell en `main`.
+//   · «Lo de antes» se LEYÓ de las pantallas viejas pintadas (`VentasAnalisis` y `VentasCalendario`) con el `dias` y
+//     el `hist` que les pasaba el shell en `main`. La 3.5.5 borró esas pantallas: lo que pintaban con ESTA fixture
+//     quedó FIJADO en `antes-tiempos353.json` (capturado en `main` 764613b2, antes de borrarlas). Si la fixture
+//     cambia, esta prueba cae: no se regenera, se revisa.
 //   · «Lo de ahora» se LEE de «Tiempos» pintada («Meses y temporadas», «Calendario» y «Día de semana»), con el lector
 //     de la base simulado.
 //   · Los datos: fixture ficticia (`resumenV2.fixture.ts`) en tres años del PoS (oct–dic 2024, oct–dic 2025 y
@@ -27,7 +29,8 @@
 //
 // Reloj fijo DE NOCHE en CR (23:30 del 18-nov = 05:30 UTC del 19): hoy = 18-nov, ayer = 17-nov.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { LineaNdfRow, TicketVentaRow } from '../../../shared/api/posNdf'
 import type { HistMap } from '../../../shared/types/ventas'
@@ -81,8 +84,16 @@ vi.mock('../tiemposV2Datos', () => ({
 }))
 
 import VentasTiempos from '../VentasTiempos'
-import VentasAnalisis from '../VentasAnalisis'
-import VentasCalendario from '../VentasCalendario'
+
+type MesViejo = { dias: Record<string, { venta: string; pax: string; vpp: string }>; mejor?: string; peor?: string; total: string[] }
+/** Lo que pintaban «Análisis» («Año vs Año») y «Calendario» (3.5.5: fijado; ver la cabecera). */
+const ANTES = JSON.parse(readFileSync('src/modules/ventas/__paridad__/antes-tiempos353.json', 'utf8')) as {
+  anios: { viejo: Record<string, string>; valViejo: Record<string, string>; paxViejo: Record<string, string> }
+  meses: { filasViejas: string[][]; pie: string[][] }
+  trimestres: { viejo: string[]; filasViejas: string[][][] }
+  calendario: Record<string, MesViejo>
+  dow: string[][]
+}
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -126,11 +137,7 @@ const igual0 = (viejo: string, nuevo: string) => {
 
 describe('paridad 3.5.3 · «Análisis» → «Año vs Año» = «Tiempos» → «Meses y temporadas»', () => {
   it('los años: venta neta y días, al colón; personas; el % contra el año anterior', async () => {
-    render(<VentasAnalisis dias={DIAS_ANTES} hist={HIST} />)
-    const viejo = Object.fromEntries([2026, 2025, 2024, 2023].map(y => [y, txt(screen.getByTestId(`an-anio-${y}`))]))
-    const valViejo = Object.fromEntries([2026, 2025, 2024, 2023].map(y => [y, txt(screen.getByTestId(`an-anio-${y}`).querySelector('.vt-kpi-val'))]))
-    const paxViejo = Object.fromEntries([2026, 2025, 2024, 2023].map(y => [y, txt(screen.getByTestId(`an-anio-${y}`).querySelector('.vt-kpi-sub'))]))
-    cleanup()
+    const { viejo, valViejo, paxViejo } = ANTES.anios
     const s = await abrirMeses()
     for (const y of [2026, 2025, 2024, 2023]) {
       const nuevo = s.querySelector(`.vt-kpi[data-anio="${y}"]`)!
@@ -153,11 +160,8 @@ describe('paridad 3.5.3 · «Análisis» → «Año vs Año» = «Tiempos» → 
   })
 
   it('mes por mes (con «mes a la fecha» = noviembre y «último mes cerrado» = octubre), «A LA FECHA» y «AÑO COMPLETO»', async () => {
-    render(<VentasAnalisis dias={DIAS_ANTES} hist={HIST} />)
-    const tabla = screen.getByTestId('an-tabla-meses')
-    const filasViejas = [...tabla.querySelectorAll('tbody tr')].map(tr => [...tr.querySelectorAll('td')].map(txt))
-    const pie = [...tabla.querySelectorAll('tfoot tr')].map(tr => [...tr.querySelectorAll('td')].map(txt))
-    cleanup()
+    const { filasViejas, pie } = ANTES.meses
+    expect(filasViejas.length).toBeGreaterThan(0)
     const s = await abrirMeses()
     const nueva = s.querySelector('table[aria-label="Mes por mes"]')!
     const filasNuevas = [...nueva.querySelectorAll('tbody tr')].map(tr => [...tr.querySelectorAll('td')].map(txt))
@@ -181,11 +185,7 @@ describe('paridad 3.5.3 · «Análisis» → «Año vs Año» = «Tiempos» → 
   })
 
   it('por trimestre: venta y % de cada año, iguales (el 4.º va a la fecha)', async () => {
-    render(<VentasAnalisis dias={DIAS_ANTES} hist={HIST} />)
-    const viejo = [1, 2, 3, 4].map(q => txt(screen.getByTestId(`an-q${q}`)))
-    const filasViejas = [1, 2, 3, 4].map(q => [...screen.getByTestId(`an-q${q}`).querySelectorAll(':scope > div:not(:first-child)')]
-      .map(d => [txt(d.querySelector('span')), txt(d.querySelector('div > div:first-child')), txt(d.querySelector('div > div:nth-child(2)'))]))
-    cleanup()
+    const { viejo, filasViejas } = ANTES.trimestres
     const s = await abrirMeses()
     for (const q of [1, 2, 3, 4]) {
       const card = s.querySelector(`[data-trimestre="${q}"]`)!
@@ -201,24 +201,9 @@ describe('paridad 3.5.3 · «Análisis» → «Año vs Año» = «Tiempos» → 
 
 describe('paridad 3.5.3 · «Calendario» → «Tiempos» («Calendario» y «Día de semana») y «Resumen» → «Detalle por día»', () => {
   /** El mes `ym` de la vieja «Calendario» desplegado: filas [dd/mm/aaaa, ventas, PAX, Prom/PAX], mejor, peor y TOTAL. */
-  function mesViejo(ym: string) {
-    render(<VentasCalendario dias={DIAS_ANTES} hist={HIST} />)
-    const [y, m] = ym.split('-')
-    const MN = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-    const cab = screen.getByText(`${MN[Number(m)]} ${y}`).closest('div[style*="cursor"]') as HTMLElement
-    if (!cab.nextElementSibling) fireEvent.click(cab)
-    const tabla = cab.parentElement!.querySelector('table')!
-    const filas = [...tabla.querySelectorAll('tbody tr')].map(tr => [...tr.querySelectorAll('td')].map(txt))
-    const out = {
-      dias: Object.fromEntries(filas.map(f => {
-        const [dd, mm, aa] = f[0].replace(/^[★▼] /, '').split('/')
-        return [`${aa}-${mm}-${dd}`, { venta: f[2], pax: f[3], vpp: f[4] }]
-      })),
-      mejor: filas.find(f => f[0].startsWith('★'))?.[0].slice(2),
-      peor: filas.find(f => f[0].startsWith('▼'))?.[0].slice(2),
-      total: [...tabla.querySelectorAll('tfoot td')].map(txt),
-    }
-    cleanup()
+  function mesViejo(ym: string): MesViejo {
+    const out = ANTES.calendario[ym]
+    expect(out, `sin lectura fijada para ${ym}`).toBeDefined()
     return out
   }
   const fechaCorta = (f: string) => `${f.slice(8)}/${f.slice(5, 7)}/${f.slice(0, 4)}`
@@ -266,11 +251,8 @@ describe('paridad 3.5.3 · «Calendario» → «Tiempos» («Calendario» y «D�
 
   it('«Promedios por día de semana» de toda la historia del PoS = «Día de semana» con «Rango» 5-ene-2024 → ayer', async () => {
     // Lo viejo, sin 2023 ni HOY (diferencias declaradas 3 y 4): el mismo conjunto de días que el rango nuevo.
-    const sinHoy = Object.fromEntries(Object.entries(DIAS_ANTES).filter(([f]) => f <= '2026-11-17'))
-    render(<VentasCalendario dias={sinHoy} hist={{}} />)
-    const tarjetas = document.querySelectorAll('.vt-section > div')[1].querySelectorAll(':scope > div')   // [0] es el título
-    const viejo = [...tarjetas].map(c => [...c.querySelectorAll('div')].map(txt))   // [día, N×, venta, Prom/PAX]
-    cleanup()
+    const viejo = ANTES.dow   // [día, N×, venta, Prom/PAX], lunes a domingo
+    expect(viejo).toHaveLength(7)
     await abrirTiempos('p=rango&desde=2024-01-05&hasta=2026-11-17')
     const filas = [...document.querySelectorAll('table[aria-label="Día de semana"] tbody tr[data-dow]')]
     expect(filas).toHaveLength(7)

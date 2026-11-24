@@ -245,9 +245,6 @@ export function alinearPromPax(
 
 // ── Proyección ────────────────────────────────────────────────────────────────────────────────
 
-/** Días de un año (365 o 366). */
-export const diasDelAnio = (anio: number): number => largoEnDias(rangoAnioNatural(anio))
-
 /** Días cerrados del año de `N`, del 1-ene a `N` (incluidos). */
 export const diasCerradosDelAnio = (c: Corte): number => largoEnDias({ desde: `${c.anio}-01-01`, hasta: c.N })
 

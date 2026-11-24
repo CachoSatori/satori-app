@@ -30,7 +30,7 @@ Verificado en el código y en los PRs, no en los handoffs. «Evidencia» es el a
 | 3.2 | «Productos» | — | **Falta** | Siguen «Mix», «Ing. Menú» y «Productos» (catálogo) como vistas viejas |
 | 3.3 | «Equipo» | 3.5.4 (PR en borrador, 23-nov) | **En revisión** | `VentasEquipo.tsx`, `equipoV2.ts`: «Saloneros» y «Evaluación» juntas en «Equipo» con la barra global; «Por línea», «ICP», «Cajas y canales» y «Competencias» como sub-vistas. La migración 194 es de Mi Rendimiento, no de esta pantalla |
 | 3.4 | `pos_ventas_regalias` + «Regalías» | — | **Falta** (firma) | No hay pantalla ni función. Lo que hay hoy: el bloque «Regalías, Personal & Desconocidos» de «Hoy» y tres secciones del Mix |
-| 3.5 | Unificación en las 5 pestañas | — | **Falta. Es la próxima tarea** (decisión del 23-nov) | `ventasTabs.ts`: 19 vistas en 10 entradas. Alcance y criterios en §12 |
+| 3.5 | Unificación en las 5 pestañas | 3.5.1–3.5.4 (23-nov), 3.5.5 (PR del 24-nov) | **3.5.1–3.5.4 hechas; 3.5.5 (limpieza) en revisión** | `ventasTabs.ts`: 14 vistas en 7 entradas. Alcance y criterios en §12 |
 | 4.x | Costos, margen, costo primo, RevPASH, fechas especiales | — | **Falta** | — |
 
 **Lo que también entró y no estaba en el plan del 17-nov:** correo quincenal «Ventas por día» para el contador
@@ -625,6 +625,16 @@ vista `equipo`). Sus `?tab=` viejos y sus direcciones de sub-vista (`?tab=equipo
 con el período con que abría la vista vieja: `&p=ayer` y `&p=rango` con los 30 días que terminan ayer. «Cajeros»
 se llama «Cajas y canales» (misma vista, `v=cajas`). El contador ve «Equipo» completo, con evaluación, ICP y ficha (D18), «Por línea» completa y «Competencias» solo para
 mirar (D18 ampliada, 23-nov ~23:50 CR).
+
+**Desde el 3.5.5 (limpieza, 24-nov):** se borraron los componentes de «Análisis», «Calendario», «Saloneros» y
+«Evaluación» (los de «Hoy» e «Histórico» se borraron en el 3.5.2), sus pruebas de pantalla y los estilos que solo
+usaban las vistas viejas. Las redirecciones de §12.2 quedan todas (`RETIRADAS` en `ventasTabs.ts`), con su prueba.
+Las paridades del 3.5.3 y del 3.5.4 comparan ahora contra lo que pintaban las vistas viejas con la misma fixture,
+fijado en `__paridad__/antes-*.json` antes de borrarlas. **Se conserva a propósito `VentasContabilidad.tsx`** (la
+vieja «Ventas», fuera del menú): la importa la prueba de contrato de la Edge `ventas-dia-contador`, y la limpieza no
+toca `supabase/functions/` (regla 2). Se borra en un PR de Edge con OK del dueño. El shell sigue bajando los 90 días
+y la historia solo para las vistas que los usan (`VISTAS_SIN_DIAS`, `VISTAS_CON_FONDO`); dejar de bajarlos del todo
+es la 3.6.
 
 ### 12.3 Qué entra sin la 3.1 ni la 3.4, y qué queda esperando
 

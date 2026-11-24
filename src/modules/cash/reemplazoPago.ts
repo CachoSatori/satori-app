@@ -124,6 +124,14 @@ export function aplicarReemplazos<M extends { id: string }>(movs: M[], reemplazo
   return ocultar.size ? movs.filter(m => !ocultar.has(m.id)) : movs
 }
 
+/**
+ * ¿Este movimiento es el viejo o el nuevo de un cambio abierto? Editarlo o borrarlo antes de terminar el cambio
+ * rompe el par (ronda 3, Importante del verificador): al reemplazar el nuevo, la anotación dejaba de ocultar al viejo
+ * y los dos contaban (₡40.000 en vez de ₡25.000). Se frena con MSG_PAGO_EN_CAMBIO.
+ */
+export const enCambioAbierto = (id: string | null | undefined, abiertos: ReemplazoPendiente[]): boolean =>
+  !!id && abiertos.some(r => r.viejo === id || r.nuevo === id)
+
 /** Cambios sin terminar que importan ahora: el viejo y el nuevo están los dos a la vista. */
 export function reemplazosAbiertos(movs: { id: string }[], reemplazos: ReemplazoPendiente[]): ReemplazoPendiente[] {
   const ids = new Set(movs.map(m => m.id))
@@ -161,6 +169,22 @@ export function leerReemplazos(sessionId: string, st: Almacen | null = almacen()
     return arr.filter((r): r is ReemplazoPendiente =>
       !!r && typeof r.viejo === 'string' && typeof r.nuevo === 'string' && typeof r.at === 'number')
   } catch { return [] }
+}
+
+/**
+ * Anota (o suelta) un cambio partiendo de lo ÚLTIMO guardado en el aparato, no de la lista del último render (ronda 3,
+ * Menor del verificador): dos anotaciones seguidas antes de un render ya no se pisan. Sin almacenamiento usa `memoria`.
+ * Devuelve la lista nueva (ya podada) y la guarda.
+ */
+export function anotarEnAparato(
+  sessionId: string, memoria: ReemplazoPendiente[], fn: (prev: ReemplazoPendiente[]) => ReemplazoPendiente[],
+  movs: { id: string }[], st: Almacen | null = almacen(), ahora = Date.now(),
+): ReemplazoPendiente[] {
+  let base = memoria
+  try { if (st) { st.getItem(claveReemplazos(sessionId)); base = leerReemplazos(sessionId, st) } } catch { base = memoria }
+  const lista = podarReemplazos(movs, fn(base), ahora)
+  guardarReemplazos(sessionId, lista, st)
+  return lista
 }
 
 export function guardarReemplazos(sessionId: string, lista: ReemplazoPendiente[], st: Almacen | null = almacen()): void {
@@ -255,6 +279,9 @@ export function reemplazosDelDia(
     return (dv == null && dn == null) || dv === fecha || dn === fecha
   })
 }
+
+export const MSG_PAGO_EN_CAMBIO =
+  'Este pago tiene un cambio sin terminar. Primero tocá «Terminar el cambio» en el aviso rojo; cuando el aviso desaparezca, ya lo podés editar o borrar.'
 
 export const MSG_FASE2_CON_REEMPLAZO =
   'Antes de cerrar la Noche, terminá el cambio de pago que quedó a medias (aviso rojo arriba, «Terminar el cambio»).'

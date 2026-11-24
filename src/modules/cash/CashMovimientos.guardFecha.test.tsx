@@ -35,9 +35,10 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import CashMovimientos from './CashMovimientos'
 import { todayCR } from '../../shared/utils'
+import { RELOJES_CR, conRelojCR } from '../../test/relojCR.testutil'
 const { createDayMovement, getCierresDia } = cashApi
 
-const hoy = todayCR()
+let hoy = ''   // R34: lo pone el beforeEach de la matriz, con el reloj ya fijo
 const PASADO = '2020-01-01'   // < hoy siempre
 const FUTURO = '2999-12-31'   // > hoy siempre
 
@@ -63,95 +64,100 @@ beforeEach(() => {
   window.confirm = vi.fn(() => true)
 })
 
-describe('CashMovimientos · Nuevo movimiento — el input por rol', () => {
-  it('cajero: input fijo en hoy (min = max = hoy) + mensaje de pedir encargado', async () => {
-    await abrirModal('cajero')
-    expect(dateInput().getAttribute('min')).toBe(hoy)
-    expect(dateInput().getAttribute('max')).toBe(hoy)
-    expect(screen.getByText(/Pedí a un encargado, dueño o contador/i)).toBeTruthy()
+describe.each(RELOJES_CR)('reloj fijo $hoy · $caso', reloj => {
+  conRelojCR(reloj)
+  beforeEach(() => { hoy = todayCR() })
+
+  describe('CashMovimientos · Nuevo movimiento — el input por rol', () => {
+    it('cajero: input fijo en hoy (min = max = hoy) + mensaje de pedir encargado', async () => {
+      await abrirModal('cajero')
+      expect(dateInput().getAttribute('min')).toBe(hoy)
+      expect(dateInput().getAttribute('max')).toBe(hoy)
+      expect(screen.getByText(/Pedí a un encargado, dueño o contador/i)).toBeTruthy()
+    })
+
+    it('owner: input permite pasado (sin min, max = hoy) y sin mensaje de bloqueo', async () => {
+      await abrirModal('owner')
+      expect(dateInput().getAttribute('min')).toBeNull()
+      expect(dateInput().getAttribute('max')).toBe(hoy)
+      expect(screen.queryByText(/Pedí a un encargado/i)).toBeNull()
+    })
   })
 
-  it('owner: input permite pasado (sin min, max = hoy) y sin mensaje de bloqueo', async () => {
-    await abrirModal('owner')
-    expect(dateInput().getAttribute('min')).toBeNull()
-    expect(dateInput().getAttribute('max')).toBe(hoy)
-    expect(screen.queryByText(/Pedí a un encargado/i)).toBeNull()
-  })
-})
+  describe('CashMovimientos · Nuevo movimiento — guard de fecha', () => {
+    it('HOY (default): crea sin confirmación, incluso cajero', async () => {
+      await abrirModal('cajero')
+      setMonto('5000')
+      await registrar()
+      expect(window.confirm).not.toHaveBeenCalled()
+      expect(createDayMovement).toHaveBeenCalledTimes(1)
+      expect(createDayMovement.mock.calls[0][0].fecha).toBe(hoy)
+    })
 
-describe('CashMovimientos · Nuevo movimiento — guard de fecha', () => {
-  it('HOY (default): crea sin confirmación, incluso cajero', async () => {
-    await abrirModal('cajero')
-    setMonto('5000')
-    await registrar()
-    expect(window.confirm).not.toHaveBeenCalled()
-    expect(createDayMovement).toHaveBeenCalledTimes(1)
-    expect(createDayMovement.mock.calls[0][0].fecha).toBe(hoy)
-  })
+    it('FUTURO: bloqueado para TODOS (incluye owner)', async () => {
+      await abrirModal('owner')
+      setMonto('5000'); setFecha(FUTURO)
+      await registrar()
+      expect(createDayMovement).not.toHaveBeenCalled()
+      expect(screen.getByText(/fecha futura/i)).toBeTruthy()
+    })
 
-  it('FUTURO: bloqueado para TODOS (incluye owner)', async () => {
-    await abrirModal('owner')
-    setMonto('5000'); setFecha(FUTURO)
-    await registrar()
-    expect(createDayMovement).not.toHaveBeenCalled()
-    expect(screen.getByText(/fecha futura/i)).toBeTruthy()
-  })
+    it('PASADO · cajero: bloqueado (no crea); ve el mensaje de pedir encargado/dueño/contador', async () => {
+      await abrirModal('cajero')
+      setMonto('5000'); setFecha(PASADO)
+      await registrar()
+      expect(createDayMovement).not.toHaveBeenCalled()
+      // El texto aparece en el hint fijo del input Y en el error del guard → getAllByText.
+      expect(screen.getAllByText(/Pedí a un encargado, dueño o contador/i).length).toBeGreaterThanOrEqual(1)
+    })
 
-  it('PASADO · cajero: bloqueado (no crea); ve el mensaje de pedir encargado/dueño/contador', async () => {
-    await abrirModal('cajero')
-    setMonto('5000'); setFecha(PASADO)
-    await registrar()
-    expect(createDayMovement).not.toHaveBeenCalled()
-    // El texto aparece en el hint fijo del input Y en el error del guard → getAllByText.
-    expect(screen.getAllByText(/Pedí a un encargado, dueño o contador/i).length).toBeGreaterThanOrEqual(1)
-  })
+    it('PASADO · salonero: también bloqueado', async () => {
+      await abrirModal('salonero')
+      setMonto('5000'); setFecha(PASADO)
+      await registrar()
+      expect(createDayMovement).not.toHaveBeenCalled()
+    })
 
-  it('PASADO · salonero: también bloqueado', async () => {
-    await abrirModal('salonero')
-    setMonto('5000'); setFecha(PASADO)
-    await registrar()
-    expect(createDayMovement).not.toHaveBeenCalled()
-  })
+    it('PASADO · manager: permitido con confirmación normal → crea con esa fecha', async () => {
+      await abrirModal('manager')
+      setMonto('5000'); setFecha(PASADO)
+      await registrar()
+      expect(window.confirm).toHaveBeenCalledTimes(1)
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/pasada/i))
+      expect(createDayMovement).toHaveBeenCalledTimes(1)
+      expect(createDayMovement.mock.calls[0][0].fecha).toBe(PASADO)
+    })
 
-  it('PASADO · manager: permitido con confirmación normal → crea con esa fecha', async () => {
-    await abrirModal('manager')
-    setMonto('5000'); setFecha(PASADO)
-    await registrar()
-    expect(window.confirm).toHaveBeenCalledTimes(1)
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/pasada/i))
-    expect(createDayMovement).toHaveBeenCalledTimes(1)
-    expect(createDayMovement.mock.calls[0][0].fecha).toBe(PASADO)
-  })
+    it('PASADO · contador: también habilitado (gate por rol)', async () => {
+      await abrirModal('contador')
+      setMonto('5000'); setFecha(PASADO)
+      await registrar()
+      expect(createDayMovement).toHaveBeenCalledTimes(1)
+    })
 
-  it('PASADO · contador: también habilitado (gate por rol)', async () => {
-    await abrirModal('contador')
-    setMonto('5000'); setFecha(PASADO)
-    await registrar()
-    expect(createDayMovement).toHaveBeenCalledTimes(1)
-  })
+    it('PASADO · owner cancela la confirmación → NO crea', async () => {
+      window.confirm = vi.fn(() => false)
+      await abrirModal('owner')
+      setMonto('5000'); setFecha(PASADO)
+      await registrar()
+      expect(window.confirm).toHaveBeenCalledTimes(1)
+      expect(createDayMovement).not.toHaveBeenCalled()
+    })
 
-  it('PASADO · owner cancela la confirmación → NO crea', async () => {
-    window.confirm = vi.fn(() => false)
-    await abrirModal('owner')
-    setMonto('5000'); setFecha(PASADO)
-    await registrar()
-    expect(window.confirm).toHaveBeenCalledTimes(1)
-    expect(createDayMovement).not.toHaveBeenCalled()
-  })
+    it('PASADO en día con cierre COMPLETO: confirmación REFORZADA (día cerrado)', async () => {
+      await abrirModal('owner', [{ session_date: PASADO, tipo: 'completo' }])
+      setMonto('5000'); setFecha(PASADO)
+      await registrar()
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/ya está cerrado/i))
+      expect(createDayMovement).toHaveBeenCalledTimes(1)
+    })
 
-  it('PASADO en día con cierre COMPLETO: confirmación REFORZADA (día cerrado)', async () => {
-    await abrirModal('owner', [{ session_date: PASADO, tipo: 'completo' }])
-    setMonto('5000'); setFecha(PASADO)
-    await registrar()
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/ya está cerrado/i))
-    expect(createDayMovement).toHaveBeenCalledTimes(1)
+    it('PASADO en día con cierre PARCIAL (no completo): confirmación normal, no reforzada', async () => {
+      await abrirModal('owner', [{ session_date: PASADO, tipo: 'parcial_mediodia' }])
+      setMonto('5000'); setFecha(PASADO)
+      await registrar()
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/pasada/i))
+      expect(createDayMovement).toHaveBeenCalledTimes(1)
+    })
   })
-
-  it('PASADO en día con cierre PARCIAL (no completo): confirmación normal, no reforzada', async () => {
-    await abrirModal('owner', [{ session_date: PASADO, tipo: 'parcial_mediodia' }])
-    setMonto('5000'); setFecha(PASADO)
-    await registrar()
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/pasada/i))
-    expect(createDayMovement).toHaveBeenCalledTimes(1)
-  })
-})
+})   // describe.each(RELOJES_CR)

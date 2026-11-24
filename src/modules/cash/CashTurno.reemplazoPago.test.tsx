@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import type { CashSession, Supplier, CashMovement } from '../../shared/types/database'
 import { fi } from './cashUtils'
-import { claveReemplazos, MSG_CIERRE_CON_REEMPLAZO, NOTA_REEMPLAZO } from './reemplazoPago'
+import { claveReemplazos, MSG_CIERRE_CON_REEMPLAZO, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO } from './reemplazoPago'
 
 // Hallazgo 252: editar un pago YA guardado borraba el viejo y DESPUÉS creaba el nuevo; si el alta fallaba, el pago
 // quedaba solo en memoria y al recargar desaparecía (Caja Proveedores corrida). Ahora: crear primero (id fijo,
@@ -228,6 +228,38 @@ describe('CashTurno · editar un pago guardado no lo pierde si falla la red (hal
     expect(tarjeta('Gastado efectivo')).toBe(fi(20000))                       // una vez, no 35.000
     expect(screen.getByText('Cambio de pago sin terminar.')).toBeTruthy()
     expect(localStorage.getItem(claveReemplazos('s-252'))).toContain('mov-viejo')
+  })
+
+  it('(ronda 3) con un cambio abierto, editar el pago NUEVO se frena: no cuenta ₡40.000 (15.000 + 25.000) ni se va el aviso', async () => {
+    // Reproducción del verificador sobre 4ec6e68: borrado caído → par {viejo 15.000, nuevo 20.000}. Editar el nuevo a
+    // 25.000 creaba otro y borraba el nuevo: la anotación dejaba de ocultar al viejo y contaban los dos.
+    h.deleteCashMovementSpy.mockRejectedValueOnce(new Error('Failed to fetch'))
+    const { onError } = montar()
+    await editarA('20000')
+    expect(tarjeta('Gastado efectivo')).toBe(fi(20000))
+    fireEvent.click(screen.getByTitle('Editar'))                 // el único visible: el nuevo
+    const cuadro = screen.queryByLabelText('Monto ₡ del pago') as HTMLInputElement | null
+    if (cuadro) { fireEvent.change(cuadro, { target: { value: '25000' } }); await guardar() }
+    expect(tarjeta('Gastado efectivo')).toBe(fi(20000))           // no 40.000
+    expect(h.createCashMovementSpy).toHaveBeenCalledTimes(1)     // ninguna alta más
+    expect(h.db.map(r => r.amount_crc).sort()).toEqual([15000, 20000])
+    expect(onError).toHaveBeenLastCalledWith(MSG_PAGO_EN_CAMBIO)
+    expect(screen.getByText('Cambio de pago sin terminar.')).toBeTruthy()
+  })
+
+  it('(ronda 3) con un cambio abierto, la × del pago nuevo también se frena (el viejo no vuelve a contar)', async () => {
+    h.deleteCashMovementSpy.mockRejectedValueOnce(new Error('Failed to fetch'))
+    const { onError } = montar()
+    await editarA('20000')
+    h.deleteCashMovementSpy.mockClear()
+    await act(async () => { fireEvent.click(screen.getByTitle('Eliminar')) })
+    expect(onError).toHaveBeenLastCalledWith(MSG_PAGO_EN_CAMBIO)
+    expect(h.deleteCashMovementSpy).not.toHaveBeenCalled()
+    expect(tarjeta('Gastado efectivo')).toBe(fi(20000))
+    // Terminado el cambio, el pago se puede editar de nuevo.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Terminar el cambio' })) })
+    fireEvent.click(screen.getByTitle('Editar'))
+    expect(screen.getByLabelText('Monto ₡ del pago')).toBeTruthy()
   })
 
   it('el nuevo quedó en la cola (sin señal): el viejo no se borra todavía y no se cuenta doble', async () => {

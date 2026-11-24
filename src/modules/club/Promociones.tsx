@@ -19,6 +19,7 @@ import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Retos from './Retos'
 import { ConfigCumple, UsosCumple } from './CumpleConfig'
+import { errorDeNumeros, numeroDe } from '../../shared/cuadrosNumericos'
 
 const PARA: Array<[ParaPromo, string]> = [['socio', 'Socios'], ['referente', 'Referentes'], ['turista_cupon', 'Turistas con cupón'], ['todos', 'Todos']]
 const DIAS: Array<[number, string]> = [[1, 'Lu'], [2, 'Ma'], [3, 'Mi'], [4, 'Ju'], [5, 'Vi'], [6, 'Sá'], [7, 'Do']]
@@ -96,7 +97,8 @@ function resumenVigencia(p: Promocion): string {
   return dias + fechas + hora
 }
 
-function FormPromocion({ inicial, onCancelar, onGuardada }: {
+// Exportado para su prueba de render (R35).
+export function FormPromocion({ inicial, onCancelar, onGuardada }: {
   inicial: Promocion | null; onCancelar: () => void; onGuardada: (texto: string) => void
 }) {
   const [d, setD] = useState<PromocionDatos>(() => ({
@@ -105,14 +107,20 @@ function FormPromocion({ inicial, onCancelar, onGuardada }: {
     dias: inicial?.dias ?? [1, 2, 3, 4, 5, 6, 7], hora_desde: inicial?.hora_desde?.slice(0, 5) ?? '', hora_hasta: inicial?.hora_hasta?.slice(0, 5) ?? '',
     porcentaje: inicial?.porcentaje ?? 0, cortesias: inicial?.cortesias ?? 0,
   }))
+  // El descuento se escribe como texto y se lee al guardar (R35). Antes cada tecla borraba lo que no era dígito o punto:
+  // «0-450» quedaba 450, «1.2.3» quedaba 0 y no se podía escribir «12.5» (el «12.» se volvía 12 y salía 125).
+  const [pctTxt, setPctTxt] = useState(() => String(inicial?.porcentaje ?? 0))
+  const avisoPct = errorDeNumeros([{ nombre: 'Descuento (%)', valor: pctTxt, max: 100, vacioVale: true, ejemplo: '15 o 12.5' }])
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const alterna = <T,>(lista: T[], v: T) => (lista.includes(v) ? lista.filter(x => x !== v) : [...lista, v])
   async function guardar() {
+    if (avisoPct) { setError(avisoPct); return }
+    const porcentaje = numeroDe(pctTxt) ?? 0   // vacío = 0, como antes
     if (d.estado === 'terminada' && !window.confirm('Una promoción terminada ya no se puede editar. ¿Terminarla?')) return
     setEnviando(true); setError(null)
     try {
-      await guardarPromocion(inicial?.id ?? null, { ...d, nombre: d.nombre.trim() })
+      await guardarPromocion(inicial?.id ?? null, { ...d, porcentaje, nombre: d.nombre.trim() })
       onGuardada(inicial ? `Promoción «${d.nombre.trim()}» guardada.` : `Promoción «${d.nombre.trim()}» creada.`)
     } catch (e) { setError(aClubError(e).message) }
     finally { setEnviando(false) }
@@ -135,7 +143,7 @@ function FormPromocion({ inicial, onCancelar, onGuardada }: {
         </fieldset>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
           <label><span style={labelStyle}>Descuento (%)</span>
-            <input value={String(d.porcentaje)} onChange={e => setD({ ...d, porcentaje: Number(e.target.value.replace(/[^\d.]/g, '')) || 0 })}
+            <input value={pctTxt} onChange={e => setPctTxt(e.target.value)} aria-label="Descuento (%)"
               inputMode="decimal" style={inputStyle} /></label>
           <label><span style={labelStyle}>Cortesías por visita (sorteo)</span>
             <select value={d.cortesias} onChange={e => setD({ ...d, cortesias: Number(e.target.value) })} style={inputStyle}>
@@ -164,9 +172,10 @@ function FormPromocion({ inicial, onCancelar, onGuardada }: {
             <option value="vigente">Vigente (aplica en su horario)</option>
             <option value="terminada">Terminada (no se puede volver a editar)</option>
           </select></label>
-        {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+        {avisoPct && <Aviso tono="error">{avisoPct}</Aviso>}
+        {error && error !== avisoPct && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn type="submit" disabled={enviando || d.nombre.trim().length < 2 || d.para.length === 0 || d.dias.length === 0}>
+          <Btn type="submit" disabled={enviando || !!avisoPct || d.nombre.trim().length < 2 || d.para.length === 0 || d.dias.length === 0}>
             {enviando ? 'Guardando…' : 'Guardar'}
           </Btn>
           <Btn variant="ghost" onClick={onCancelar}>Cancelar</Btn>

@@ -93,7 +93,7 @@ revisión del dueño → [docs/club-satori/](docs/club-satori/). Fechas propuest
 | Fase | Estado | Notas |
 |---|---|---|
 | F0–F3 del PoS: catálogo/salón, comandero, KDS, cobro + splits, ticket SIM (migs 022–037, `posFiscal.ts`) | 🧪 staging | El gran pase a prod va detrás del PILAR. |
-| Inventario activo + recetas + COGS | 🧪 staging | |
+| Inventario activo + recetas + COGS | 🧪 staging | Sin uso por falta de conteo confiable. Piloto en planillas desde nov-2026 (conteo por lugar); inicio de spec en [docs/inventario/SPEC-inventario-v0.md](docs/inventario/SPEC-inventario-v0.md). |
 | FE-CR (factura electrónica real) | 🔲 | Hoy solo estructura SIM en staging. |
 | **PILAR · sesión/auth escalable y multi-tenant** (~10 dispositivos concurrentes) | 🚧 🔲 | **Bloquea el gran pase del PoS.** |
 | **Requisito del pase: revocar EXECUTE de `anon` en las `SECURITY DEFINER` del PoS propio** (`pos_cobrar_*`, `pos_merge_orden`, `pos_unmerge_orden`, `pos_reopen_orden`, `sync_pos_tips_to_pool`, `my_turno_stats`) | 🟠 parcial | **Bloqueante:** medido en staging el 04/11. No pasa a prod sin revocarlo y verificarlo con `has_function_privilege`. Ver [HALLAZGOS.md](HALLAZGOS.md). **05/11:** las 6 revocadas en staging y versionadas en la 070; **falta `my_turno_stats`, que también es ejecutable por `anon` en staging** (revocar y verificar antes del pase). |

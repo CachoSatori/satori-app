@@ -118,24 +118,22 @@ describe('CashTurno · apertura — fondo ilegible no abre la caja (R31)', () =>
     expect(createCashSession.mock.calls[0][0]).toMatchObject({ initial_suppliers_crc: 0, initial_cash_usd: 0 })
   })
 
-  // Verificador del #337: el monto del cierre anterior llega DESPUÉS de que el cajero tecleó algo ilegible. El cuadro
-  // pasa a mostrar ese número; la marca vieja no puede quedar (avisaba «no es un número» con un número a la vista).
-  it('precarga del cierre anterior DESPUÉS de teclear algo ilegible: borra la marca y abre con lo precargado', async () => {
+  // Verificador del #337: el monto del cierre anterior llega DESPUÉS de que el cajero tecleó algo ilegible.
+  // (24-nov) La precarga ya no pisa un cuadro tocado: el ilegible sigue a la vista, su marca sigue y la caja NO abre
+  // (antes la precarga lo reemplazaba por el monto del cierre). El cuadro que NO se tocó sí se llena y queda legible.
+  it('precarga del cierre anterior DESPUÉS de teclear algo ilegible: respeta el cuadro tocado (sigue ilegible, no abre)', async () => {
     let entregar: (c: Record<string, unknown>) => void = () => {}
     prevApi.getPreviousCierre.mockImplementationOnce(() => new Promise(res => { entregar = res }))
     const { onError } = await renderApertura()
     teclearNumero(fondoCRC(), '')
     teclearNumero(fondoCRC(), '-')
-    teclearNumero(fondoUSD(), '0abc')
     await act(async () => { entregar({ session_date: '2026-06-30', sep_diaria_crc: 80000, sep_diaria_usd: 15 }) })
-    // Como en el navegador: al poner React un número en el cuadro, deja de estar badInput.
-    for (const c of [fondoCRC(), fondoUSD()]) Reflect.deleteProperty(c, 'validity')
-    expect(fondoCRC().value).toBe('80000')
+    expect(fondoCRC().value).toBe('')
     expect(fondoUSD().value).toBe('15')
     await abrir()
-    expect(onError).not.toHaveBeenCalledWith(expect.stringMatching(/no es un número/))
-    await waitFor(() => expect(createCashSession).toHaveBeenCalledTimes(1))
-    expect(createCashSession.mock.calls[0][0]).toMatchObject({ initial_suppliers_crc: 80000, initial_cash_usd: 15 })
+    expect(createCashSession).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/«Caja Diaria — Proveedores \(₡\)».*no es un número/))
+    expect(onError).not.toHaveBeenCalledWith(expect.stringMatching(/«\$ Dólares \(efectivo\)».*no es un número/))
   })
 
   it('paridad: montos válidos se guardan igual que en main', async () => {

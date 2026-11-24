@@ -93,13 +93,14 @@ describe('VentasResumen', () => {
   it('el contador abre con el detalle por día desplegado; el owner, plegado', async () => {
     role = 'contador'
     abrir('/ventas?tab=resumen&p=mesALaFecha')
-    await screen.findByRole('table', { name: 'Detalle por día' })
-    expect((document.querySelector('details.vt2-detalle') as HTMLDetailsElement).open).toBe(true)
+    // El `<details>` del «Detalle por día», no el primero con la clase: «Qué explica el cambio» pinta otro
+    // `details.vt2-detalle` ANTES cuando termina su lectura, y según quién llegue primero la prueba fallaba (R32).
+    const detalle = (await screen.findByRole('table', { name: 'Detalle por día' })).closest('details') as HTMLDetailsElement
+    expect(detalle.open).toBe(true)
     cleanup()
     role = 'owner'
     abrir('/ventas?tab=resumen&p=mesALaFecha')
-    await screen.findByRole('table', { name: 'Detalle por día' })
-    expect((document.querySelector('details.vt2-detalle') as HTMLDetailsElement).open).toBe(false)
+    expect(((await screen.findByRole('table', { name: 'Detalle por día' })).closest('details') as HTMLDetailsElement).open).toBe(false)
   })
 
   it('«Hoy» (repuesto) no lee nada y lleva a En vivo; el Período tiene todas las opciones', async () => {

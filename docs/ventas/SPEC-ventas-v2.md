@@ -333,7 +333,8 @@ como están hoy (§12.3).
 3. **Quincenas:** tabla de las últimas 12, cada una con venta, venta por día abierto, personas y su cambio.
    **Hecho.**
 4. **Meses y temporadas:** el comparativo año contra año, mes por mes y por trimestre, con el mes en curso
-   **a la fecha** y rotulado. **Falta → 3.5** (hoy vive en «Análisis» → «Año vs Año»).
+   **a la fecha** y rotulado. **Hecho en el 3.5.3** (reemplaza a «Análisis» → «Año vs Año», mismas cuentas). Por
+   temporada: el período «Temporada» de la barra (ver §12.4, nota del 3.5.3).
 5. **Calendario:** el detalle por fecha, con mejor y peor día. **Hecho.** Fechas especiales → 4.x.
 6. **Tiempo sentado, por tamaño de mesa** (1–2, 3–4, 5–6, 7 o más): cantidad de mesas, mediana y promedio, con
    lo que quedó afuera. **Hecho.** Ojo conocido: las cuentas divididas llegan sin pedido y quedan afuera, así
@@ -543,7 +544,7 @@ Menú final, en este orden:
 | | Margen % y margen ₡ (con el % de margen bruto que carga el contador) | «Resumen» con período «Mes»: al pie de «Detalle por día», junto al total | 3.5.2 | |
 | Análisis → Proyección | Real, proyectado, meta, vendido hasta ayer | «Resumen» → «Meta de {mes}». Se retira la proyección anual lineal (§4.3) | 3.5.2 | |
 | Análisis → Prom/PAX explicado | Por turno, día de semana, salonero y semana; rendimiento y mezcla; CSV | «Resumen» → «Qué explica el cambio», completo a un clic | 3.5.2 | |
-| Calendario (`calendario`) | Promedios por día de semana | «Tiempos» → «Día de semana» | 3.5.3 | `?tab=tiempos&p=mes` |
+| Calendario (`calendario`) | Promedios por día de semana | «Tiempos» → «Día de semana» | 3.5.3 | `?tab=tiempos&p=mesALaFecha` (3.5.3: abría con el mes en curso desplegado; `mes` sin día es el último cerrado) |
 | | Detalle por fecha (ventas, PAX, Prom/PAX) | «Tiempos» → «Calendario» y «Resumen» → «Detalle por día» | 3.5.3 | |
 | Saloneros (`saloneros`) | Ranking en tarjetas o tabla: ventas, PAX, Prom/PAX, Beb/PAX, Ratio C/B, Prom/plato, Prom/bebida, Ticket/ítem; fila GENERAL | «Equipo» → «Equipo» | 3.5.4 | `?tab=equipo` |
 | Evaluación (`evaluacion`) | Días, % meta, consistencia, tendencia, racha; tendencia de 12 semanas | «Equipo» → «Equipo» (columnas) y ficha del salonero | 3.5.4 | `?tab=equipo` |
@@ -579,6 +580,23 @@ con los 30 días que terminan ayer (revisión del verificador del #336).
 «Análisis», ya solo con «Año vs Año», pasa a ser sub-vista de «Tiempos» (`?tab=tiempos&v=analisis`; también abre ahí
 `?tab=resumen&v=analisis`) para que «Resumen» quede sin sub-pestañas, como dice §12.4; en la 3.5.3 pasa a
 `?tab=tiempos&p=anioALaFecha`. «Regalías» es `?tab=regalias`.
+
+**Desde el 3.5.3:** «Análisis» y «Calendario» se retiraron y «Tiempos» quedó sin sub-pestañas. `?tab=analisis`,
+`?tab=resumen&v=analisis` y `?tab=tiempos&v=analisis` abren `?tab=tiempos&p=anioALaFecha`; `?tab=calendario` y
+`?tab=tiempos&v=calendario` abren `?tab=tiempos&p=mesALaFecha` (el período con que abre «Tiempos»: el mes en curso,
+como abría «Calendario»). Una retirada solo se reconoce en la entrada donde vivió (`RETIRADAS[x].desde`).
+**Nota del 3.5.3 (dónde la SPEC no encajó):** §5.4 ítem 4 se llama «Meses y temporadas», pero su descripción y
+§12.4 piden solo año contra año por mes y por trimestre; por temporada no hay tabla, solo una línea que lleva al
+período «Temporada» de la barra.
+
+**DECISIÓN DEL DUEÑO, 23-nov-2026 21:19 CR (3.5.3):**
+- (a) El detalle día por día de 2023 (que mostraba «Calendario» desde `ventas_hist`) **queda sin destino**: se deja
+  ir, como «Histórico» en el 3.5.2. La barra arranca en el PoS (5-ene-2024); los totales de 2023 por mes, por
+  trimestre y por año siguen en «Meses y temporadas». Es una excepción firmada a la regla de diseño 5 de §1 («no se pierde
+  información»).
+- (b) 2023 se muestra **solo para Santa Teresa**, porque `ventas_hist` no tiene columna de local (es el resumen
+  diario viejo, de antes del PoS, cuando Santa Teresa era el único local). Con otro local elegido, 2023 no aparece.
+  Es correcto así.
 
 ### 12.3 Qué entra sin la 3.1 ni la 3.4, y qué queda esperando
 

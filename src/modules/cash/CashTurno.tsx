@@ -138,6 +138,9 @@ export default function CashTurno({
       if (c) {
         const x = c.sep_diaria_crc || 0
         setApProvCRC(x); setApUSD(c.sep_diaria_usd || 0)
+        // El cuadro ahora muestra un número: la marca de ilegible de lo que se tecleó antes ya no vale (si quedara,
+        // «Confirmar apertura» avisaría «no es un número» con el cuadro mostrando un monto).
+        setApProvCRCMalo(false); setApUSDMalo(false)
         setCarryFrom(c.session_date); setCarrySugerido(x)
       } else { setCarryFrom(null); setCarrySugerido(null) }
     }).catch(() => {})

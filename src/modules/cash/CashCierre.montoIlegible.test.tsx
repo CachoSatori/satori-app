@@ -7,6 +7,7 @@
 // Los inputs se buscan por posición (como las otras pruebas del cierre) para que la misma prueba corra contra main.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { teclearNumero } from './teclearNumero.testutil'
 import type { CashCierreDia, CashSession } from '../../shared/types/database'
 
 const api = vi.hoisted(() => ({
@@ -43,13 +44,6 @@ const parcial = {
 } as CashCierreDia
 const turnoCerrado = { id: 's1', session_date: HOY, status: 'closed', shift_type: 'Día', cajero_name: 'Caja Test' } as CashSession
 
-const FLOTANTE = /^-?(\d+(\.\d+)?|\.\d+)([eE][-+]?\d+)?$/
-/** Escribe como el navegador: ilegible → value '' + badInput; UN evento `input` (con '' → '' React no corre onChange). */
-function escribir(input: HTMLElement, texto: string) {
-  const legible = texto === '' || FLOTANTE.test(texto)
-  Object.defineProperty(input, 'validity', { configurable: true, get: () => ({ badInput: !legible, valid: legible }) })
-  fireEvent.input(input, { target: { value: legible ? texto : '' } })
-}
 // Fase 1: [0]=ventas ₡ · [1]=$. Fase 2: [0]=ventas noche ₡ · [1]=$ · [2]=retiro · [3..8]=separaciones
 // (Caja Diaria mañana 3/4 · Registradora 5/6 · Remanente CF 7/8).
 const montos = () => Array.from(document.querySelectorAll<HTMLInputElement>('.cierre-monto input'))
@@ -70,9 +64,9 @@ describe('Cierre del día · Fase 1 — ventas ilegibles no se sellan (R31)', ()
 
   it('₡ con valor + «-450» detrás y $ cargados: avisa nombrando el cuadro y NO sella ₡0', async () => {
     const btn = await preparar()
-    escribir(montos()[1], '40')
-    escribir(montos()[0], '120000')
-    escribir(montos()[0], '120000-450')
+    teclearNumero(montos()[1], '40')
+    teclearNumero(montos()[0], '120000')
+    teclearNumero(montos()[0], '120000-450')
     await act(async () => { fireEvent.click(btn) })
     expect(api.saveCierreParcial).not.toHaveBeenCalled()
     expect(error()).toMatch(/«Ventas mediodía ₡».*no es un número/)
@@ -80,8 +74,8 @@ describe('Cierre del día · Fase 1 — ventas ilegibles no se sellan (R31)', ()
 
   it('paridad: montos válidos se sellan igual que en main', async () => {
     const btn = await preparar()
-    escribir(montos()[0], '120000.5')
-    escribir(montos()[1], '40')
+    teclearNumero(montos()[0], '120000.5')
+    teclearNumero(montos()[1], '40')
     await act(async () => { fireEvent.click(btn) })
     await waitFor(() => expect(api.saveCierreParcial).toHaveBeenCalledTimes(1))
     expect(api.saveCierreParcial.mock.calls[0][0]).toMatchObject({ vm_crc: 120000.5, vm_usd: 40, ef_real_m_crc: Math.round(120000.5 - 40 * 600) })
@@ -107,9 +101,9 @@ describe('Cierre del día · Fase 2 — retiro y conteo ilegibles no cierran (R3
 
   it('retiro «1500000-» (cuadro vacío + texto ilegible): «Revisar resumen» avisa y no hay cierre con retiro ₡0', async () => {
     await preparar()
-    escribir(montos()[0], '100000')
-    escribir(montos()[2], '1500000-')
-    escribir(montos()[7], '100000')
+    teclearNumero(montos()[0], '100000')
+    teclearNumero(montos()[2], '1500000-')
+    teclearNumero(montos()[7], '100000')
     await revisarYConfirmar()
     expect(api.cerrarDiaCompleto).not.toHaveBeenCalled()
     expect(error()).toMatch(/«Retiro dueños → banco ₡».*no es un número/)
@@ -118,10 +112,10 @@ describe('Cierre del día · Fase 2 — retiro y conteo ilegibles no cierran (R3
 
   it('resumen abierto y DESPUÉS «-» en una separación vacía: «Confirmar» avisa y NO cierra', async () => {
     await preparar()
-    escribir(montos()[0], '100000')
-    escribir(montos()[7], '100000')
+    teclearNumero(montos()[0], '100000')
+    teclearNumero(montos()[7], '100000')
     revisar()
-    escribir(montos()[3], '-')            // Caja Diaria mañana ₡, vacío + «-»: solo onInput
+    teclearNumero(montos()[3], '-')            // Caja Diaria mañana ₡, vacío + «-»: solo onInput
     await confirmar()
     expect(api.cerrarDiaCompleto).not.toHaveBeenCalled()
     expect(error()).toMatch(/«Caja Diaria mañana ₡».*no es un número/)
@@ -129,10 +123,10 @@ describe('Cierre del día · Fase 2 — retiro y conteo ilegibles no cierran (R3
 
   it('ventas de noche con valor + «-450» detrás: avisa y NO cierra', async () => {
     await preparar()
-    escribir(montos()[0], '100000')
-    escribir(montos()[0], '100000-450')
-    escribir(montos()[1], '20')
-    escribir(montos()[7], '100000')
+    teclearNumero(montos()[0], '100000')
+    teclearNumero(montos()[0], '100000-450')
+    teclearNumero(montos()[1], '20')
+    teclearNumero(montos()[7], '100000')
     await revisarYConfirmar()
     expect(api.cerrarDiaCompleto).not.toHaveBeenCalled()
     expect(error()).toMatch(/«Ventas noche ₡».*no es un número/)
@@ -140,10 +134,10 @@ describe('Cierre del día · Fase 2 — retiro y conteo ilegibles no cierran (R3
 
   it('borrar el ilegible → vacío = 0: cierra con retiro ₡0', async () => {
     await preparar()
-    escribir(montos()[0], '100000')
-    escribir(montos()[2], '1500000-')
-    escribir(montos()[2], '')             // '' → '': la marca se va por onInput
-    escribir(montos()[7], '100000')
+    teclearNumero(montos()[0], '100000')
+    teclearNumero(montos()[2], '1500000-')
+    teclearNumero(montos()[2], '')             // '' → '': la marca se va por onInput
+    teclearNumero(montos()[7], '100000')
     expect(screen.queryByText(/No es un número/)).toBeNull()
     revisar()
     await confirmar()
@@ -151,13 +145,40 @@ describe('Cierre del día · Fase 2 — retiro y conteo ilegibles no cierran (R3
     expect(api.cerrarDiaCompleto.mock.calls[0][0]).toMatchObject({ retiro_crc: 0, cierre: { otros_n_crc: 0, remanente_crc: 100000 } })
   })
 
+  // Una sola fuente (verificador del #337): la lista que bloquea y la tabla salen de las mismas filas. Se recorren los
+  // 9 cuadros de la Fase 2 por lo que se ve en pantalla (aria-label = nombre del cuadro): si alguien renombra una fila
+  // o agrega un cuadro sin sumarlo a la lista, el suyo deja de frenar y esta prueba cae.
+  it('son 9 cuadros de monto en la Fase 2, cada uno con su nombre', async () => {
+    await preparar()
+    const nombres = montos().map(m => m.getAttribute('aria-label'))
+    expect(nombres).toEqual([
+      'Ventas noche ₡', 'Ventas noche $', 'Retiro dueños → banco ₡',
+      'Caja Diaria mañana ₡', 'Caja Diaria mañana $', 'Caja Registradora ₡', 'Caja Registradora $',
+      'Remanente CF ₡', 'Remanente CF $',
+    ])
+  })
+  it.each([0, 1, 2, 3, 4, 5, 6, 7, 8])('cuadro %i con «12abc»: «Revisar resumen» lo nombra y NO cierra', async i => {
+    await preparar()
+    const cuadro = montos()[i]
+    const nombre = cuadro.getAttribute('aria-label') ?? ''
+    expect(nombre).not.toBe('')
+    // Ventas y conteo cargados (sin ellos «Revisar resumen» no se habilita); si el cuadro a probar es uno de esos,
+    // se carga otro (ventas $ o Caja Diaria mañana ₡).
+    teclearNumero(montos()[i === 0 ? 1 : 0], '100000')
+    teclearNumero(montos()[i === 7 ? 3 : 7], '100000')   // total contado ₡ > 0
+    teclearNumero(cuadro, '12abc')
+    await revisarYConfirmar()
+    expect(api.cerrarDiaCompleto).not.toHaveBeenCalled()
+    expect(error()).toContain(`«${nombre}»: el monto no es un número`)
+  })
+
   it('paridad: montos válidos se cierran igual que en main', async () => {
     await preparar()
-    escribir(montos()[0], '2000000')
-    escribir(montos()[2], '1500000')
-    escribir(montos()[3], '60000')
-    escribir(montos()[7], '440000')
-    escribir(montos()[8], '0')
+    teclearNumero(montos()[0], '2000000')
+    teclearNumero(montos()[2], '1500000')
+    teclearNumero(montos()[3], '60000')
+    teclearNumero(montos()[7], '440000')
+    teclearNumero(montos()[8], '0')
     revisar()
     await confirmar()
     await waitFor(() => expect(api.cerrarDiaCompleto).toHaveBeenCalledTimes(1))

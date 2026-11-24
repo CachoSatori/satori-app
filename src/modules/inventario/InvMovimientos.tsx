@@ -7,6 +7,7 @@ import { MOVEMENT_LABELS } from '../../shared/types/inventario'
 import { addMovement, setStockLevel } from '../../shared/api/inventario'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import { todayCR } from '../../shared/utils'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
 
 interface Props {
   ingredients: Ingredient[]
@@ -27,7 +28,9 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
   const [ingId,    setIngId]    = useState('')
   const [movType,  setMovType]  = useState<InventoryMovement['movement_type']>('purchase')
   const [qty,      setQty]      = useState('')
-  const [unitCost, setUnitCost] = useState('')
+  // Costo unitario: '' = sin costo (opcional, como antes), NaN = ilegible («0-450», «5-»). Antes lo ilegible llegaba
+  // como '' y la compra entraba SIN costo y sin egreso en Caja, sin aviso. R35.
+  const [unitCost, setUnitCost] = useState<number | ''>('')
   const [notes,    setNotes]    = useState('')
   const [newStock, setNewStock] = useState('')   // for count_adjustment absolute mode
   const [linkCaja, setLinkCaja] = useState(true)  // purchase → registrar egreso en Caja
@@ -41,8 +44,13 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
   const isPurchase    = movType === 'purchase'
   const deltaSign     = MOV_TYPES.find(t => t.value === movType)?.delta ?? 1
 
+  const avisoCosto = isPurchase
+    ? errorDeNumeros([{ nombre: 'Costo unitario ₡', valor: unitCost, vacioVale: true, ejemplo: '1250 o 1250.50' }])
+    : null
+
   async function handleSubmit() {
     if (!ingId)   { setError('Elegí un ingrediente'); return }
+    if (avisoCosto) { setError(avisoCosto); return }
     if (isCountAdj) {
       if (!newStock) { setError('Ingresá el nuevo nivel de stock'); return }
       const ns = parseFloat(newStock)
@@ -67,7 +75,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
         movement_type: movType,
         qty_delta:     q * deltaSign,
         unit:          selectedIng?.unit ?? 'unidad',
-        unit_cost:     isPurchase && unitCost ? parseFloat(unitCost) : null,
+        unit_cost:     isPurchase && unitCost !== '' ? unitCost : null,
         reference_id:  todayCR(),
         notes,
         created_by:    profile?.full_name ?? '',
@@ -77,7 +85,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
       // Si es compra con costo y el usuario lo pidió, registrar el egreso_mercaderia
       // en el turno de caja abierto (mismo patrón que Propinas→Caja).
       let cajaMsg = ''
-      const purchaseValue = isPurchase && unitCost ? Math.round(q * parseFloat(unitCost)) : 0
+      const purchaseValue = isPurchase && unitCost !== '' ? Math.round(q * unitCost) : 0
       if (isPurchase && linkCaja && purchaseValue > 0) {
         try {
           const cashSession = await getOpenCashSession()
@@ -133,7 +141,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
           {/* Ingredient */}
           <div>
             <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>Ingrediente *</div>
-            <select className="cd-tbl-select" value={ingId} onChange={e => setIngId(e.target.value)}>
+            <select className="cd-tbl-select" aria-label="Ingrediente" value={ingId} onChange={e => setIngId(e.target.value)}>
               <option value="">— elegir —</option>
               {ingredients.map(i => (
                 <option key={i.id} value={i.id}>
@@ -146,8 +154,12 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
           {/* Movement type */}
           <div>
             <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>Tipo</div>
-            <select className="cd-tbl-select" value={movType}
-              onChange={e => setMovType(e.target.value as InventoryMovement['movement_type'])}>
+            <select className="cd-tbl-select" aria-label="Tipo de movimiento" value={movType}
+              onChange={e => {
+                setMovType(e.target.value as InventoryMovement['movement_type'])
+                // Al ocultarse el cuadro de costo, lo ilegible vuelve a vacío: si no, trabaría sin verse.
+                setUnitCost(c => (Number.isNaN(c) ? '' : c))
+              }}>
               {MOV_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
@@ -176,8 +188,8 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
           {isPurchase && (
             <div>
               <div style={{ fontSize:'0.65rem', color:'var(--c-gris)', marginBottom:3 }}>Costo unitario ₡</div>
-              <input className="cd-tbl-input" type="number" min="0" step="1"
-                placeholder="opcional" value={unitCost} onChange={e => setUnitCost(e.target.value)} />
+              <input className="cd-tbl-input" type="number" min="0" step="1" aria-label="Costo unitario ₡"
+                placeholder="opcional" value={valorInput(unitCost)} {...alEscribir(el => setUnitCost(leerCuadro(el)))} />
             </div>
           )}
 
@@ -194,9 +206,9 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
           <label style={{ display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.75rem', color:'var(--c-tinta)', marginBottom:'0.625rem', cursor:'pointer' }}>
             <input type="checkbox" checked={linkCaja} onChange={e => setLinkCaja(e.target.checked)} />
             Registrar egreso en Caja (egreso_mercaderia)
-            {unitCost && qty && (
+            {unitCost !== '' && !Number.isNaN(unitCost) && qty && (
               <span style={{ color:'var(--c-oro-texto)', fontWeight:600 }}>
-                · ₡{Math.round((parseFloat(qty)||0) * (parseFloat(unitCost)||0)).toLocaleString('es-CR')}
+                · ₡{Math.round((parseFloat(qty)||0) * unitCost).toLocaleString('es-CR')}
               </span>
             )}
             <span style={{ color:'var(--c-gris)', fontSize:'0.68rem' }}>(requiere turno de caja abierto)</span>
@@ -220,9 +232,10 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
           </div>
         )}
 
+        {avisoCosto && <div role="alert" style={{ color:'var(--c-laca)', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{avisoCosto}</div>}
         <button className="vt-range-btn"
           style={{ borderColor:'var(--c-musgo)', color:'var(--c-musgo)' }}
-          disabled={saving} onClick={handleSubmit}>
+          disabled={saving || !!avisoCosto} onClick={handleSubmit}>
           {saving ? '⟳ Guardando…' : '✓ Registrar movimiento'}
         </button>
       </div>

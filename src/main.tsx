@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './styles/estandar.css'   // tokens del estándar, acotados a .est (SPEC-caja-estandar §2)
 import App from './App.tsx'
 import { iniciarRecuperacion } from './shared/api/recuperarClave'
 

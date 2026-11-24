@@ -12,6 +12,7 @@ import {
 import { getProductMap, updateProductInfo } from '../../shared/api/ventas'
 import type { ProductMap } from '../../shared/types/ventas'
 import { fi } from '../../shared/utils'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
 
 interface Props {
   ingredients: Ingredient[]
@@ -32,9 +33,16 @@ export default function InvRecetas({ ingredients }: Props) {
 
   // New ingredient form state
   const [newIngId,    setNewIngId]   = useState('')
-  const [newQty,      setNewQty]     = useState('')
+  // '' vacío, NaN ilegible («0-450», «5-»). Antes la merma vacía o ilegible guardaba `waste_factor` NaN. R35.
+  const [newQty,      setNewQty]     = useState<number | ''>('')
   const [newUnit,     setNewUnit]    = useState('unidad')
-  const [newWaste,    setNewWaste]   = useState('0')
+  const [newWaste,    setNewWaste]   = useState<number | ''>(0)
+
+  // La cantidad vacía la frena el chequeo de «Agregar» (como antes); acá, lo escrito que no sirve.
+  const avisoIngrediente = errorDeNumeros([
+    { nombre: 'Cantidad', valor: newQty, mayorQue: 0, vacioVale: true },
+    { nombre: 'Merma %', valor: newWaste, max: 50, vacioVale: true },
+  ])
 
   // Search for products to add recipe for
   const [prodSearch, setProdSearch] = useState('')
@@ -71,19 +79,20 @@ export default function InvRecetas({ ingredients }: Props) {
   }
 
   async function addIngredientToRecipe(recipeId: string) {
-    if (!newIngId || !newQty) { setError('Elegí un ingrediente y cantidad'); return }
+    if (!newIngId || newQty === '') { setError('Elegí un ingrediente y cantidad'); return }
+    if (avisoIngrediente) { setError(avisoIngrediente); return }
     setSaving(true); setError(null)
     try {
       await upsertRecipeIngredient({
         recipe_id:     recipeId,
         ingredient_id: newIngId,
-        quantity:      parseFloat(newQty),
+        quantity:      newQty,
         unit:          newUnit,
-        waste_factor:  parseFloat(newWaste) / 100,
+        waste_factor:  (newWaste === '' ? 0 : newWaste) / 100,   // merma vacía = 0 % (antes daba NaN)
       })
       const ri = await getRecipeIngredients(recipeId)
       setRecIngredients(prev => ({ ...prev, [recipeId]: ri }))
-      setNewIngId(''); setNewQty(''); setNewWaste('0')
+      setNewIngId(''); setNewQty(''); setNewWaste(0)
     } catch(e) { setError(e instanceof Error ? e.message : 'Error') }
     finally { setSaving(false) }
   }
@@ -271,23 +280,24 @@ export default function InvRecetas({ ingredients }: Props) {
 
                       {/* Add ingredient row */}
                       <div style={{ display:'flex', gap:'0.4rem', flexWrap:'wrap', marginTop:'0.5rem', alignItems:'flex-end' }}>
-                        <select className="cd-tbl-select" value={newIngId} onChange={e => setNewIngId(e.target.value)} style={{ flex:'2 1 140px' }}>
+                        <select className="cd-tbl-select" aria-label="Ingrediente" value={newIngId} onChange={e => setNewIngId(e.target.value)} style={{ flex:'2 1 140px' }}>
                           <option value="">— ingrediente —</option>
                           {ingredients.map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
                         </select>
-                        <input className="cd-tbl-input" type="number" min="0.001" step="0.001" placeholder="Cantidad"
-                          value={newQty} onChange={e => setNewQty(e.target.value)} style={{ flex:'1 1 80px', width:80 }} />
+                        <input className="cd-tbl-input" type="number" min="0.001" step="0.001" placeholder="Cantidad" aria-label="Cantidad"
+                          value={valorInput(newQty)} {...alEscribir(el => setNewQty(leerCuadro(el)))} style={{ flex:'1 1 80px', width:80 }} />
                         <select className="cd-tbl-select" value={newUnit} onChange={e => setNewUnit(e.target.value)} style={{ flex:'1 1 70px' }}>
                           {INGREDIENT_UNITS.map(u => <option key={u}>{u}</option>)}
                         </select>
-                        <input className="cd-tbl-input" type="number" min="0" max="50" step="1" placeholder="Merma%"
-                          value={newWaste} onChange={e => setNewWaste(e.target.value)} style={{ flex:'0 1 70px', width:70 }} />
+                        <input className="cd-tbl-input" type="number" min="0" max="50" step="1" placeholder="Merma%" aria-label="Merma %"
+                          value={valorInput(newWaste)} {...alEscribir(el => setNewWaste(leerCuadro(el)))} style={{ flex:'0 1 70px', width:70 }} />
                         <button className="vt-range-btn"
                           style={{ borderColor:'var(--c-musgo)', color:'var(--c-musgo)', flex:'0 0 auto' }}
-                          disabled={saving} onClick={() => addIngredientToRecipe(recipe.id)}>
+                          disabled={saving || !!avisoIngrediente} onClick={() => addIngredientToRecipe(recipe.id)}>
                           + Agregar
                         </button>
                       </div>
+                      {avisoIngrediente && <div role="alert" style={{ color:'var(--c-laca)', fontSize:'0.78rem', marginTop:'0.4rem' }}>{avisoIngrediente}</div>}
                     </div>
                   )}
                 </div>

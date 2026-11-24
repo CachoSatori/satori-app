@@ -8,6 +8,7 @@ import { agruparSops, compararGrupos, grupoDe, nombreCorto } from './sopsOrden'
 import { renderContent, resumenTarjeta } from './sopsRender'
 import SopLector from './SopLector'
 import SopLibros from './SopLibros'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
 
 const CATEGORY_ICONS: Record<string, string> = {
   'Apertura':    '🌅',
@@ -53,8 +54,13 @@ export default function SOPsModule() {
 
   const categories = useMemo(() => [...new Set(sops.map(grupoDe))].sort(compararGrupos), [sops])
 
+  // «Orden»: entero de 0 en adelante (la columna es integer). Antes `Number('')` guardaba 0 con texto ilegible («0-450»,
+  // «5-») y «2.5» llegaba a la base y fallaba con el error crudo. Vacío = 0, como antes. R35.
+  const avisoOrden = editSOP ? errorDeNumeros([{ nombre: 'Orden', valor: editSOP.display_order, entero: true, vacioVale: true }]) : null
+
   const handleSave = async () => {
     if (!editSOP || !profile) return
+    if (avisoOrden) { setError(avisoOrden); return }
     if (!editSOP.title?.trim()) { setError('Título requerido'); return }
     if (!editSOP.content?.trim()) { setError('Contenido requerido'); return }
     setSaving(true); setError(null)
@@ -245,9 +251,10 @@ export default function SOPsModule() {
                 <div className="tips-field" style={{ width: 70 }}>
                   <div className="tips-field-label">Orden</div>
                   <input type="number" className="tips-input-dark"
-                    value={editSOP.display_order ?? 0} min={0}
+                    aria-label="Orden"
+                    value={valorInput(editSOP.display_order ?? 0)} min={0}
                     style={{ width: '100%' }}
-                    onChange={e => setEditSOP(p => ({ ...p, display_order: Number(e.target.value) }))} />
+                    {...alEscribir(el => { const v = leerCuadro(el); setEditSOP(p => ({ ...p, display_order: v === '' ? 0 : v })) })} />
                 </div>
               </div>
 
@@ -301,7 +308,8 @@ export default function SOPsModule() {
 
             <div className="sop-editor-footer">
               <button className="tips-btn-ghost" onClick={() => setShowEditor(false)}>Cancelar</button>
-              <button className="tips-btn-teal" onClick={handleSave} disabled={saving}>
+              {avisoOrden && <span className="field-error" role="alert" style={{ flex: 1 }}>{avisoOrden}</span>}
+              <button className="tips-btn-teal" onClick={handleSave} disabled={saving || !!avisoOrden}>
                 {saving ? 'Guardando…' : 'Guardar procedimiento'}
               </button>
             </div>

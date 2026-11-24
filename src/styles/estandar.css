@@ -1,0 +1,116 @@
+/* ── Estándar de los SOP (SPEC-caja-estandar §2–§3) ─────────────────────────
+   Todo va ACOTADO a la clase `.est` en la raíz de un módulo: los módulos que todavía no pasaron no
+   cambian. Cuando no quede módulo sin `.est`, los valores suben a :root y la clase se elimina (§7).
+   Colores: los del kit de src/index.css; lo nuevo es la crema y la línea/panel un punto más cálidos.
+
+   Ojo con los alias: `--t-border: var(--c-linea)` y compañía se resuelven en :root, así que cambiar
+   --c-linea acá NO los cambia. Por eso se redefinen también los alias que usan los módulos. */
+.est {
+  --c-crema:   #faf8f4;              /* nuevo: fondo del módulo (decisión del dueño 24-nov) */
+  --c-fondo:   var(--c-crema);       /* dentro de .est el fondo es crema; --c-papel (blanco) queda para campos */
+  --c-linea:   #e6e1d6;              /* un punto más cálida, para que se vea sobre crema */
+  --c-panel:   #f3efe7;
+  --t-border:  var(--c-linea);
+  --t-panel:   var(--c-panel);
+  --vt-border: var(--c-linea);
+  --vt-panel:  var(--c-panel);
+  --black:     var(--c-fondo);       /* alias viejo del fondo */
+  --gray-dark: var(--c-panel);
+
+  /* Espacios, toque y radio */
+  --e-1: 4px; --e-2: 8px; --e-3: 12px; --e-4: 16px; --e-5: 24px; --e-6: 32px; --e-7: 48px;
+  --toque: 48px;                     /* alto mínimo de botón principal y campo (secundarios 44) */
+  --radio: 4px;
+
+  background: var(--c-fondo);
+  color: var(--c-tinta);
+}
+
+/* Campos en blanco sobre la crema (el resto del módulo ya los pinta blancos con #fff). */
+.est :is(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea) {
+  background-color: var(--c-papel);
+}
+
+/* ── Tipografía (clases, no tamaños sueltos en style=) ── */
+.est .est-titulo        { font: 600 28px/1.15 var(--font-serif); color: var(--c-tinta); margin: 0; }
+.est .est-titulo-bloque { font: 600 21px/1.2 var(--font-serif); color: var(--c-tinta); margin: 0; }
+.est .est-etq           { display: block; font: 500 13px/1.3 var(--font-sans); color: var(--c-gris); }
+.est .est-nota          { display: block; font: 400 13px/1.4 var(--font-sans); color: var(--c-gris); }
+@media (min-width: 700px) { .est .est-titulo { font-size: 30px; } }
+
+/* ── Íconos de línea (Tabler) ── */
+.est .est-ico { flex: none; vertical-align: -0.2em; }
+
+/* ── Cifra (§3.1): etiqueta + valor + nota, sin caja; una principal ── */
+.est .est-cifras {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--e-4) var(--e-5);
+  padding: var(--e-4) 0; margin-bottom: var(--e-4);
+  border-top: 1px solid var(--c-oro); border-bottom: 1px solid var(--c-linea);
+}
+.est .est-cifra { min-width: 0; }
+.est .est-cifra.principal { grid-column: 1 / -1; }
+.est .est-cifra-val {
+  display: block; margin-top: var(--e-1);
+  font: 600 22px/1.2 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap;
+}
+.est .est-cifra.principal .est-cifra-val { font-size: 36px; line-height: 1.1; letter-spacing: -0.02em; }
+.est .est-cifra-nota { display: block; margin-top: var(--e-1); font-size: 13px; color: var(--c-gris); }
+.est [data-tono='musgo'] { color: var(--c-musgo); }
+.est [data-tono='laca']  { color: var(--c-laca); }
+.est [data-tono='oro']   { color: var(--c-oro-texto); }
+@media (min-width: 700px) {
+  .est .est-cifras { grid-template-columns: 1.4fr 1fr 1fr; align-items: start; }
+  .est .est-cifra.principal { grid-column: auto; }
+}
+
+/* ── Aviso (§3.3): filete a la izquierda, sin fondo ni ícono ── */
+.est .est-aviso {
+  border-left: 2px solid var(--c-gris-medio); padding: 2px 0 2px var(--e-3); margin: var(--e-4) 0;
+  font-size: 14px; color: var(--c-tinta);
+}
+.est .est-aviso strong { font-weight: 600; }
+.est .est-aviso.error    { border-color: var(--c-laca); }   .est .est-aviso.error strong    { color: var(--c-laca); }
+.est .est-aviso.atencion { border-color: var(--c-oro); }    .est .est-aviso.atencion strong { color: var(--c-oro-texto); }
+.est .est-aviso.hecho    { border-color: var(--c-musgo); }  .est .est-aviso.hecho strong    { color: var(--c-musgo); }
+
+/* ── Píldora de estado ── */
+.est .est-pildora { display: inline-block; font: 500 12px/1 var(--font-sans); padding: 5px 9px; border-radius: 999px; white-space: nowrap; }
+.est .est-pildora.pagado    { color: var(--c-musgo);     background: var(--c-musgo-fondo); }
+.est .est-pildora.pendiente { color: var(--c-oro-texto); background: var(--c-oro-fondo-texto); }   /* 4,6:1 (con --c-oro-fondo, 4,4) */
+.est .est-pildora.rechazado { color: var(--c-laca);      background: var(--c-laca-fondo); }
+.est .est-pildora.neutro    { color: var(--c-gris);      background: var(--c-panel); }
+
+/* ── Barra de fases (§3.2) ── */
+.est .est-fases { list-style: none; padding: 0; margin: 0 0 var(--e-4); display: flex; gap: var(--e-3); }
+.est .est-fases li { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.est .est-fases li:first-child::after { content: ''; flex: 1; height: 1px; background: var(--c-linea); margin-left: 4px; }
+.est .est-paso {
+  width: 28px; height: 28px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 600 13px var(--font-sans); border: 1px solid var(--c-gris-medio); color: var(--c-gris);
+}
+.est .est-fase-txt strong { display: block; font-weight: 600; line-height: 1.2; }
+.est .est-fase-txt em     { display: block; font-style: normal; font-size: 13px; color: var(--c-gris); }
+.est .est-fases .hecho .est-paso  { background: var(--c-musgo); border-color: var(--c-musgo); color: #fff; }
+.est .est-fases .hecho em         { color: var(--c-musgo); }
+.est .est-fases .actual .est-paso { border: 1.5px solid var(--c-tinta); color: var(--c-tinta); }
+.est .est-fases .actual em        { color: var(--c-oro-texto); font-weight: 500; }
+.est .est-fases .espera strong    { color: var(--c-gris); font-weight: 500; }
+
+/* ── Botones (§3.4) ── */
+.est .est-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--e-2);
+  min-height: var(--toque); padding: 0 18px; border: 0; border-radius: var(--radio);
+  font: 500 15px var(--font-sans); white-space: nowrap; cursor: pointer; background: none; color: var(--c-tinta);
+}
+.est .est-btn.ancho      { width: 100%; }
+.est .est-btn.primario   { background: var(--c-tinta); color: var(--c-crema); }
+.est .est-btn.secundario { border: 1px solid var(--c-tinta); min-height: 44px; }
+.est .est-btn.texto      { color: var(--c-oro-texto); text-decoration: underline; text-underline-offset: 3px; padding: 0; min-height: 44px; }
+.est .est-btn.peligro    { color: var(--c-laca); padding: 6px 0; min-height: 44px; justify-content: flex-start; white-space: normal; text-align: left;
+                           flex-wrap: wrap; column-gap: 10px; row-gap: 0; }
+.est .est-btn.peligro .est-btn-detalle { flex-basis: 100%; color: var(--c-gris); font-weight: 400; font-size: 13px; }
+.est .est-btn.peligro-lleno { background: var(--c-laca); color: #fff; }
+.est .est-btn:disabled   { opacity: 0.38; cursor: default; }
+/* Foco en tinta: el oro da 2,9:1 sobre crema (WCAG pide ≥ 3:1 para un contorno). */
+.est .est-btn:focus-visible { outline: 2px solid var(--c-tinta); outline-offset: 2px; }

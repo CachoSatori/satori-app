@@ -73,7 +73,7 @@ describe('Cierre del día — «Recontar» una vez', () => {
   it('la verificación se ve en vivo, sin confirmar nada', async () => {
     await preparar(); contar(100200)
     expect(screen.getByText(/Debería quedar en Caja Fuerte/)).toBeTruthy()
-    expect(screen.getByText(/Cuadra correctamente/)).toBeTruthy()
+    expect(screen.getByText(/Diferencia: Cuadra/)).toBeTruthy()
     expect(screen.queryByText(/Confirmar conteo/)).toBeNull()
   })
 

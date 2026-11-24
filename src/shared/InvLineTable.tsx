@@ -1,6 +1,6 @@
 import type { Ingredient } from './types/inventario'
 import { N, NONE, NEW, type EditLine } from './api/inventoryIngest'
-import { alEscribir, esIlegible, valorInput } from '../modules/tips/validarTurno'
+import { alEscribir, esIlegible, valorInput } from './cuadrosNumericos'
 import { errorDeLineas } from './invLineasIlegibles'
 
 // Cuadro `type="number"`: lo ilegible («0-450», «5-») queda NaN (no 0) y lo frena `errorDeLineas` (R29–R31).

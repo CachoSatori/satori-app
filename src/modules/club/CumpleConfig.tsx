@@ -15,6 +15,7 @@ import {
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, mesActualCR, fmtFechaHora } from './estilos'
 import { condicionesCumple, rangoMes, resumenCumpleTexto } from './cumple'
+import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
 
 const aDatos = (c: Cfg): CumpleConfigDatos => ({
   activo: c.activo, beneficio: c.beneficio, min_personas: c.min_personas, dias_antes: c.dias_antes, dias_despues: c.dias_despues,
@@ -36,7 +37,7 @@ export function ConfigCumple({ edita }: { edita: boolean }) {
     return () => { vivo = false }
   }, [])
   async function guardar(cambio: Partial<CumpleConfigDatos> = {}) {
-    if (!d) return
+    if (!d || aviso) return
     setEnviando(true); setError(null); setOk(null)
     try {
       const c = await guardarCumpleConfig({ ...d, ...cambio, beneficio: d.beneficio.trim() })   // 180: reserva_url va como vino (la base lo ignora)
@@ -46,7 +47,17 @@ export function ConfigCumple({ edita }: { edita: boolean }) {
     } catch (e) { setError(aClubError(e).message) }
     finally { setEnviando(false) }
   }
-  const num = (k: 'min_personas' | 'dias_antes' | 'dias_despues', v: string) => d && setD({ ...d, [k]: Math.max(0, Math.floor(Number(v) || 0)) })
+  // Ilegible («0-450», «5-») → NaN; vacío → 0, como antes. Antes `Math.max(0, Math.floor(Number(v) || 0))` guardaba 0 con
+  // texto ilegible, volvía 0 un negativo y truncaba «2.5» a 2 sin aviso. Ahora aviso con el nombre del cuadro. R35.
+  const num = (k: 'min_personas' | 'dias_antes' | 'dias_despues', el: HTMLInputElement) => {
+    const v = leerCuadro(el)
+    setD(p => (p ? { ...p, [k]: v === '' ? 0 : v } : p))
+  }
+  const aviso = d ? errorDeNumeros([
+    { nombre: 'Mínimo de personas', valor: d.min_personas, entero: true, min: 1, max: 50 },
+    { nombre: 'Días antes', valor: d.dias_antes, entero: true, max: 30 },
+    { nombre: 'Días después', valor: d.dias_despues, entero: true, max: 30 },
+  ]) : null
   const activas = cortesias.filter(c => c.activa)
   return (
     <Card>
@@ -75,11 +86,11 @@ export function ConfigCumple({ edita }: { edita: boolean }) {
                 <input value={d.beneficio} onChange={e => setD({ ...d, beneficio: e.target.value })} maxLength={120} style={inputStyle} aria-label="Beneficio" /></label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <label style={{ flex: 1, minWidth: 110 }}><span style={labelStyle}>Mínimo de personas</span>
-                  <input type="number" min={1} max={50} value={d.min_personas} onChange={e => num('min_personas', e.target.value)} style={inputStyle} aria-label="Mínimo de personas" /></label>
+                  <input type="number" min={1} max={50} value={valorInput(d.min_personas)} {...alEscribir(el => num('min_personas', el))} style={inputStyle} aria-label="Mínimo de personas" /></label>
                 <label style={{ flex: 1, minWidth: 110 }}><span style={labelStyle}>Días antes</span>
-                  <input type="number" min={0} max={30} value={d.dias_antes} onChange={e => num('dias_antes', e.target.value)} style={inputStyle} aria-label="Días antes" /></label>
+                  <input type="number" min={0} max={30} value={valorInput(d.dias_antes)} {...alEscribir(el => num('dias_antes', el))} style={inputStyle} aria-label="Días antes" /></label>
                 <label style={{ flex: 1, minWidth: 110 }}><span style={labelStyle}>Días después</span>
-                  <input type="number" min={0} max={30} value={d.dias_despues} onChange={e => num('dias_despues', e.target.value)} style={inputStyle} aria-label="Días después" /></label>
+                  <input type="number" min={0} max={30} value={valorInput(d.dias_despues)} {...alEscribir(el => num('dias_despues', el))} style={inputStyle} aria-label="Días después" /></label>
               </div>
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
                 <input type="checkbox" checked={d.uno_por_mesa} onChange={e => setD({ ...d, uno_por_mesa: e.target.checked })} />
@@ -102,11 +113,12 @@ export function ConfigCumple({ edita }: { edita: boolean }) {
                   {activas.map(c => <option key={c.id} value={c.id}>{c.nombre} · {c.codigo_producto}</option>)}
                 </select>
               </label>
+              {aviso && <Aviso tono="error">{aviso}</Aviso>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <Btn variant="secondary" onClick={() => guardar()} disabled={enviando}>Guardar</Btn>
+                <Btn variant="secondary" onClick={() => guardar()} disabled={enviando || !!aviso}>Guardar</Btn>
                 {cfg.activo
-                  ? <Btn variant="secondary" onClick={() => guardar({ activo: false })} disabled={enviando}>Apagar</Btn>
-                  : <Btn onClick={() => guardar({ activo: true })} disabled={enviando || !d.cortesia_id}>Encender</Btn>}
+                  ? <Btn variant="secondary" onClick={() => guardar({ activo: false })} disabled={enviando || !!aviso}>Apagar</Btn>
+                  : <Btn onClick={() => guardar({ activo: true })} disabled={enviando || !!aviso || !d.cortesia_id}>Encender</Btn>}
               </div>
             </>
           )}

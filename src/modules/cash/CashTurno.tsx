@@ -22,6 +22,7 @@ import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/factur
 import { listLinkedDocs } from '../../shared/api/documents'
 import FacturaThumbs from '../../shared/FacturaThumbs'
 import AgregarAsistente from './AgregarAsistente'
+import { Aviso } from '../../shared/ui/estandar'
 import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from './validarMovimiento'
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import type { Employee } from '../../shared/types/database'
@@ -130,17 +131,26 @@ export default function CashTurno({
   // Carryover: la Caja Proveedores arranca con lo que dejó el cierre del día
   // anterior (sep_diaria del último cierre completo). Se sugiere, se precarga, y se
   // valida al confirmar si el cajero ingresa un monto distinto.
+  //
+  // (24-nov) La precarga llega tarde (red lenta) y antes PISABA lo que el cajero ya había tecleado. Ahora solo llena
+  // los cuadros que el cajero NO tocó. Un cuadro tocado y vuelto a vaciar sigue contando como tocado: vaciarlo es una
+  // decisión del cajero (vacío = ₡0 al confirmar) y la precarga no la deshace; si el monto no coincide con lo que
+  // asignó el cierre, «Confirmar apertura» igual pide confirmación (carrySugerido se fija siempre). Los tocados se
+  // olvidan al abrir la caja, para que la próxima apertura vuelva a precargar.
+  const apProvCRCTocado = useRef(false)
+  const apUSDTocado     = useRef(false)
   useEffect(() => {
-    if (openSession) return
+    if (openSession) { apProvCRCTocado.current = false; apUSDTocado.current = false; return }
     let cancelled = false
     getPreviousCierre(apFecha).then(c => {
       if (cancelled) return
       if (c) {
         const x = c.sep_diaria_crc || 0
-        setApProvCRC(x); setApUSD(c.sep_diaria_usd || 0)
-        // El cuadro ahora muestra un número: la marca de ilegible de lo que se tecleó antes ya no vale (si quedara,
-        // «Confirmar apertura» avisaría «no es un número» con el cuadro mostrando un monto).
-        setApProvCRCMalo(false); setApUSDMalo(false)
+        // El cuadro llenado ahora muestra un número: la marca de ilegible de lo que se tecleó antes ya no vale (si
+        // quedara, «Confirmar apertura» avisaría «no es un número» con el cuadro mostrando un monto). En un cuadro
+        // tocado no se toca ni el valor ni la marca: sigue mostrando lo que tecleó el cajero.
+        if (!apProvCRCTocado.current) { setApProvCRC(x); setApProvCRCMalo(false) }
+        if (!apUSDTocado.current)     { setApUSD(c.sep_diaria_usd || 0); setApUSDMalo(false) }
         setCarryFrom(c.session_date); setCarrySugerido(x)
       } else { setCarryFrom(null); setCarrySugerido(null) }
     }).catch(() => {})
@@ -751,8 +761,8 @@ export default function CashTurno({
                   <div className="cd-monto-wrap">
                     <span className="cd-prefix">₡</span>
                     <input type="number" className="cd-monto-input" aria-label="Caja Diaria — Proveedores (₡)" value={apProvCRC} min={0} step={1000}
-                      placeholder="0" onInput={e => setApProvCRCMalo(marcaIlegible(e.currentTarget))}
-                      onChange={e => { setApProvCRCMalo(marcaIlegible(e.currentTarget)); setApProvCRC(e.target.value === '' ? '' : Number(e.target.value)) }} />
+                      placeholder="0" onInput={e => { apProvCRCTocado.current = true; setApProvCRCMalo(marcaIlegible(e.currentTarget)) }}
+                      onChange={e => { apProvCRCTocado.current = true; setApProvCRCMalo(marcaIlegible(e.currentTarget)); setApProvCRC(e.target.value === '' ? '' : Number(e.target.value)) }} />
                   </div>
                   {carryFrom && (
                     <div style={{ fontSize: '0.66rem', color: 'var(--c-teal)', marginTop: 2 }}>
@@ -765,8 +775,8 @@ export default function CashTurno({
                   <div className="cd-monto-wrap usd">
                     <span className="cd-prefix">$</span>
                     <input type="number" className="cd-monto-input" aria-label="$ Dólares (efectivo)" value={apUSD} min={0} step={1}
-                      placeholder="0" onInput={e => setApUSDMalo(marcaIlegible(e.currentTarget))}
-                      onChange={e => { setApUSDMalo(marcaIlegible(e.currentTarget)); setApUSD(e.target.value === '' ? '' : Number(e.target.value)) }} />
+                      placeholder="0" onInput={e => { apUSDTocado.current = true; setApUSDMalo(marcaIlegible(e.currentTarget)) }}
+                      onChange={e => { apUSDTocado.current = true; setApUSDMalo(marcaIlegible(e.currentTarget)); setApUSD(e.target.value === '' ? '' : Number(e.target.value)) }} />
                   </div>
                   {Number(apUSD) > 0 && (
                     <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginTop:2 }}>
@@ -836,6 +846,13 @@ export default function CashTurno({
           <div className="cd-tc-sub">{cajaDeberia < 0 ? '⚠ déficit en caja' : 'restante en caja'}</div>
         </div>
       </div>
+      {/* (24-nov) Pozo único: pasar plata de la Caja Fuerte a la Caja Diaria NO se registra (no es un movimiento).
+          Solo texto; el cálculo de `cajaDeberia` no cambia. Aviso del estándar (#349), tono atención. */}
+      {cajaDeberia < 0 && (
+        <Aviso tipo="atencion" titulo="Déficit en caja.">
+          Si lo completaste con plata de Caja Fuerte, no registres nada: cerrá con lo que hay en la caja.
+        </Aviso>
+      )}
 
       {/* F4.3a — "➕ Agregar" único: asistente manual (captura + clasificación advisory + matriz RN-3).
           Additivo: los botones por sección (pago/ingreso/egreso) siguen abajo hasta F4.3c. */}

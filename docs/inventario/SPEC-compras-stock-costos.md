@@ -602,7 +602,10 @@ Guías SOP: cada PR con pantallas actualiza `docs/sop-app/` (guía nueva «Inven
 - **5 y 6 · Costo:** **sin IVA**, con **promedio de 90 días** como costo de referencia (stock valorizado, consumo y recetas). El último precio se muestra aparte, con el aviso de suba.
 - **8 · Manager y costos:** **sí**, ve costos y stock valorizado **de su local** (permiso de base: firma al construir).
 - **9 · Empleados por local:** un empleado **puede estar en los dos locales** (lista de locales por empleado; columna o tabla nueva con firma).
-- Siguen abiertas: 1, 2, 3, 7, 10, 11 y 12.
+- **1 · Correo:** cuenta de **Gmail común** (no Workspace): se usan las cuotas de cuenta personal de Apps Script; F1.0 las confirma.
+- **2 · Carga inicial:** desde el **30-nov-2026**.
+- **3 · Nosara:** **otro correo y otra cédula de receptor.** Cada factura se asigna al local por la cédula del receptor (tabla local ↔ cédula, configurable por el owner); un script por cuenta, misma Edge.
+- Siguen abiertas: 7, 10, 11 y 12.
 
 ## 13. Riesgos
 

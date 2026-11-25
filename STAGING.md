@@ -30,11 +30,67 @@ riesgoso (cirugía de auth, tiempo real, offline) sin tocar plata real.
   `.staging-backups/`, trunca public, copia todo + `auth.users`/`auth.identities`, restaura el
   owner (`<correo-del-negocio>` = owner activo), re-sincroniza secuencias y **verifica**
   (conteos por tabla + 3 spot-checks financieros idénticos).
-- **Logins en staging = credenciales de PROD** (los usuarios se clonan con su hash de contraseña).
+- **Logins:** ~~credenciales de PROD~~ (desactualizado). El clonado ya sanea Auth (sin hash, correo `prod-…@staging-satori.test`,
+  baneados) y se entra con los usuarios de prueba (`scripts/staging-usuarios-prueba/`). La copia de hoy es anterior a ese
+  saneo: la deja al día la anonimización de abajo.
 - El banner "DATOS DE PRUEBA" **sigue siendo correcto**: es una copia desechable, no el original —
   nada de lo que se haga en staging toca producción.
 - **No se clona**: Storage (las fotos de la Bandeja no se ven en staging) ni la config de Auth
   (staging usa autoconfirm + site_url propio, a propósito).
+
+## 🕶️ Anonimizar staging (spec firmada el 20-nov · script listo, **SIN CORRER**)
+Spec: [docs/specs/SPEC-anonimizar-staging.md](docs/specs/SPEC-anonimizar-staging.md) · guía, cortes por tiempo y
+decisiones para confirmar: [scripts/staging-anonimizar/README.md](scripts/staging-anonimizar/README.md) (D1 montos quedan · D2 alias numerado ·
+D3 Storage borrado + imagen ficticia · D4 JSON con lista blanca y `ventas_dias` vacía · D5 sueldos ficticios por tipo · D6 SOP
+quedan · D7 cédula del emisor en la clave FE). Código: [`scripts/staging-anonimizar/`](scripts/staging-anonimizar/).
+**Escribe en staging para siempre:** lo corre el coordinador con el **OK del dueño por chat**. Nunca prod: ref fijo en
+`correr.py` y `lib.sh`, y la guarda SQL exige además `club_entorno = 'staging'` y los usuarios de prueba (en prod no existen).
+
+| Archivo | Qué hace |
+|---|---|
+| `clasificacion.sql` | Clase de **cada** columna de texto/JSON de `public` (470 al 20-nov). Una columna nueva sin clase **aborta** la corrida. |
+| `comun.sql` | Guarda, reglas puras (clave FE, descripción, formas de lo ficticio), política JSON, formas de mesas y productos, controles del §2. |
+| `anonimizar.sql` | Alias, correos, teléfonos, notas, llaves, seudónimos, claves FE, JSON (`ventas_hist`: solo los totales de `HistDay`), sueldos, Auth, `net`, `cron.job_run_details`, `realtime.messages`. Una transacción; **aborta** antes de tocar nada si hay texto libre en mesas o productos, y al final si cambia una suma de caja, propinas o ventas, una huella, los permisos o las claves FE. |
+| `verificar.sql` | Solo conteos: exige 0 correos/teléfonos/nombres reales, banco, llaves viejas, columnas sin clase, Storage de más. |
+| `storage.sh` | Borra todo Storage salvo `documents/sops/` y sube `anon/ficticia.png` (por la API; desde SQL no se puede). |
+| `correr.py` | Arma los fragmentos y los manda (Management API, ref de staging). `formas` (solo conteos), `--local` para el Postgres local, `--armar` para ver el SQL (sale sin la marca de ref). |
+| `cadena.sh` | La cadena entera de un re-clonado, en orden, parando en el primer error. |
+
+**Orden (ahora, y después de cada re-clonado).** Leer el ref en pantalla antes (regla 7). Cada paso para en el primer error:
+```bash
+export SUPABASE_ACCESS_TOKEN=…                                   # o el proxy de la sesión
+# 0 después de un re-clonado: scripts/sql/club_marcar_staging.sql (el clonado deja club_entorno vacía)
+bash scripts/staging-usuarios-prueba/crear.sh                     # 1 usuarios de prueba (idempotente)
+# 2 neutralizar-copias.sql (scripts/staging-usuarios-prueba/), como dice su encabezado
+python3 scripts/staging-anonimizar/correr.py formas               # 2b conteos de formas de mesas y productos
+python3 scripts/staging-anonimizar/correr.py ensayo               # 3 batería entera en BEGIN … ROLLBACK (no deja nada)
+python3 scripts/staging-anonimizar/correr.py ensayo --idempotencia  # 4 dos pasadas, ROLLBACK
+python3 scripts/staging-anonimizar/correr.py real --si            # 5 COMMIT (con el OK del dueño)
+bash scripts/staging-anonimizar/storage.sh                        # 6a ensayo: solo cuenta
+bash scripts/staging-anonimizar/storage.sh --si                   # 6b borra y sube la imagen ficticia
+python3 scripts/staging-anonimizar/correr.py verificar            # 7 todo lo exigido en 0
+# 8 inventario.sql (scripts/staging-usuarios-prueba/) · 9 prueba de barreras (SPEC-staging-agentes)
+```
+O todo junto: `bash scripts/staging-anonimizar/cadena.sh --si` (0–8). Si el ensayo da «ANON-FALLAN», «ANON-ABORTA» o
+«ANON-VERIFICAR-FALLA», **no** se corre el paso real: se trae al coordinador con el mensaje (solo conteos, sin datos).
+
+- **Qué queda igual:** montos, tipo de cambio, fechas, productos y precios, logins del PoS, roles, locales, configuración,
+  `bitacora_permisos`, SOP. Las descripciones de caja que arma el sistema (ventas del cierre, retiro, apertura del pozo,
+  propinas por turno, ajuste de cierre sin su motivo) quedan, porque el cierre las busca por texto; el resto es «Nota de
+  prueba» con su «· fact AAAA-MM-DD».
+- **Probarlo sin staging:** `PGHOST=/tmp PGPORT=5499 PGUSER=pgv bash scripts/sql/local_armar_base.sh anon_local` y
+  `PGDATABASE=anon_local python3 scripts/staging-anonimizar/correr.py ensayo --local [--idempotencia]` (31 casos con una
+  semilla inventada) · `python3 scripts/sql/anonimizar_staging_mutaciones.py` (17 arreglos deshechos: todos tienen que caer).
+- **Tiempo:** la Management API corta a los 30 s. Con un volumen como el de staging (41 mil tiquetes, 234 mil líneas, 24 mil
+  marcas) en local: real ≈ 7 s, ensayo ≈ 10 s, ensayo con idempotencia ≈ 13 s. **Si la API corta, correr `verificar` antes
+  de reintentar** (README: el corte no dice si el `COMMIT` llegó).
+- **Vuelta atrás:** si falla, no queda nada (una transacción). Si el resultado no sirve: re-clonar desde prod (solo lectura)
+  y correr la cadena de nuevo. El borrado de Storage no se deshace ni hace falta (prod no se toca).
+- **Lo que este script no limpia:** los logs de la plataforma de Supabase (API, Postgres, Auth, Edge, Storage), los
+  respaldos automáticos de staging anteriores a la corrida y la carpeta local `.staging-backups/` del clonado (perfiles y
+  correos de antes de sanear): borrarla a mano en la máquina que clonó.
+
+---
 
 ## 👤 Manager de prueba (16-nov-2026)
 Prod no tiene por qué tener un manager activo, y staging (copia de prod) tampoco: las baterías que buscan uno

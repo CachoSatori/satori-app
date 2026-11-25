@@ -30,8 +30,8 @@ export type Turno = 'mañana' | 'noche'
 
 /**
  * A quién se le acredita el ticket. Solo `salonero` entra al breakdown de mesero.
- * `salonero` también cuando el pedido era de cajero/sistema o no había pedido pero las líneas
- * son de UN solo mesero (ver `resolverSalonero` y `salonero_origen`).
+ * `salonero` también cuando, en salón, el pedido era de cajero/sistema o no había pedido pero las
+ * líneas son de UN solo mesero (ver `resolverSalonero` y `salonero_origen`).
  */
 export type RegistradoPor = 'salonero' | 'cajero' | 'sistema' | 'sin_pedido'
 
@@ -273,8 +273,8 @@ export function mapSalonero(usuarioRegistra: unknown): string | null {
 /**
  * De dónde salió el salonero del ticket.
  *   · `'pedido'` — `FAC_Pedidos.UsuarioRegistra` (el `MIN` si la factura juntó varios pedidos).
- *   · `'lineas'` — el pedido no traía salonero (cuenta dividida sin pedido, o lo registró un
- *                  cajero/sistema) y TODAS las líneas con mesero son de UNO solo.
+ *   · `'lineas'` — factura de SALÓN cuyo pedido no traía salonero (cuenta dividida sin pedido,
+ *                  o lo registró un cajero/sistema) y TODAS las líneas con mesero son de UNO solo.
  */
 export type SaloneroOrigen = 'pedido' | 'lineas'
 
@@ -294,13 +294,19 @@ export interface SaloneroResuelto {
  *
  * Si el pedido YA trae un salonero válido, manda el pedido aunque las líneas digan otro (el
  * caso del `MIN` con varios pedidos se mide aparte, no se toca acá).
+ *
+ * **Solo salón** (decisión del dueño, 25-nov): la regla de las líneas vale solo con
+ * `canal = 'salon'`. Delivery, llevar, barra y `otro` cobrados por cajero siguen en «Cajeros»
+ * aunque las líneas sean de un solo mesero, como antes del 17-nov.
  */
 export function resolverSalonero(
   registraPedido: unknown,
   lineas: readonly { usuario_registra?: unknown }[],
+  canal: Canal,
 ): SaloneroResuelto {
   const delPedido = mapSalonero(registraPedido)
   if (delPedido !== null) return { login: delPedido, origen: 'pedido' }
+  if (canal !== 'salon') return { login: null, origen: null }
 
   const enLineas = new Set<string>()
   for (const l of lineas) {
@@ -668,8 +674,8 @@ export interface TicketMapeado {
   /** El login que registró el pedido, tal cual (incluye 111/222 y sistema). */
   usuario_registra: string | null
   /**
-   * Solo si es un mesero de verdad. Sale del pedido o, si el pedido no lo trae (sin pedido o
-   * de cajero/sistema), de las líneas cuando todas son de UN mesero. Si no, `null`.
+   * Solo si es un mesero de verdad. Sale del pedido o, en salón, si el pedido no lo trae (sin
+   * pedido o de cajero/sistema), de las líneas cuando todas son de UN mesero. Si no, `null`.
    */
   salonero_login:  string | null
   /**
@@ -780,8 +786,10 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
 
   const registra = texto(t.usuario_registra)
   const cajero   = texto(t.login_cajero)
-  // El salonero: el del pedido o, si falta o es de cajero/sistema, el ÚNICO de las líneas.
-  const { login: salonero_login, origen: salonero_origen } = resolverSalonero(registra, items)
+  const canal = mapCanal(texto(t.tipo), texto(t.area))
+  // El salonero: el del pedido o, si falta o es de cajero/sistema, el ÚNICO de las líneas
+  // (esto último solo en salón).
+  const { login: salonero_login, origen: salonero_origen } = resolverSalonero(registra, items, canal)
   // El turno lo decide 111/222 mire donde mire; si ninguno lo es, manda el reloj.
   const loginTurno = [cajero, registra].find(esCajeroTurno) ?? cajero ?? registra
   const turno = mapTurno({ cajeroLogin: loginTurno, fechaRegistra: t.fecha_hora })
@@ -809,7 +817,7 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
     fecha,
     hora,
     estado:           mapEstado(t.estado),
-    canal:            mapCanal(texto(t.tipo), texto(t.area)),
+    canal,
     area:             texto(t.area),
     usuario_registra: registra,
     salonero_login,

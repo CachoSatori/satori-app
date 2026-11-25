@@ -10,8 +10,11 @@
 -- `claveSalonero` en ventasEnVivoDatos.ts). Además `ingested_at` y los `id` de las líneas (la 082 reescribe
 -- la fila y reemplaza las líneas). Nada más.
 --
--- Regla: después = antes en `facturas`, `lineas`, `h_facturas_sin_salonero` y `h_lineas`.
+-- Regla v1 (18-nov, hecho): después = antes en `facturas`, `lineas`, `h_facturas_sin_salonero` y `h_lineas`.
 --        `salonero_null` BAJA, y baja EXACTAMENTE el N que imprime B1 (días < corte, sin duplicar meses).
+-- Regla v2 (solo salón, 25-nov): huellas, `facturas` y `lineas` iguales; `salonero_null_salon` IGUAL;
+--        `salonero_null` y `salonero_null_no_salon` SUBEN exactamente M (lo que midió V4 con el código de hoy);
+--        en el bloque 4 ningún login SUBE (solo bajan: devuelven facturas de barra/delivery/llevar a «Cajeros»).
 -- Corte: CERRADO, dos días antes del pase a las 00:00 −06:00 (el agente en vivo relee 36 h: lo anterior no lo toca).
 --        Ningún login baja en el bloque 4 (un salonero que ya estaba no se pierde: solo se suman facturas).
 
@@ -86,6 +89,7 @@ select
                                                                                                as h_lineas,
   (select count(*) from base where salonero_login is null)                                     as salonero_null,
   (select count(*) from base where salonero_login is null and canal = 'salon')                 as salonero_null_salon,
+  (select count(*) from base where salonero_login is null and canal <> 'salon')                as salonero_null_no_salon,
   (select count(*) from base, params where canal = 'salon' and fecha_registra >= params.corte - interval '90 days')
                                                                                                as salon_90d,
   (select count(*) from base, params where canal = 'salon' and salonero_login is null
@@ -111,7 +115,8 @@ base as (
 fact as (
   select b.local, b.numero_factura, to_char(b.fecha_registra at time zone 'America/Costa_Rica', 'YYYY-MM') mes,
          md5((to_jsonb(b) - 'id' - 'ingested_at' - 'salonero_login' - 'registrado_por')::text) h,
-         b.salonero_login is null sin_salonero
+         b.salonero_login is null sin_salonero,
+         b.salonero_login is null and b.canal <> 'salon' sin_salonero_no_salon
     from base b
 ),
 lin as (
@@ -123,6 +128,7 @@ lin as (
    group by 1, 2, 3
 )
 select f.local, f.mes, count(*) facturas, count(*) filter (where f.sin_salonero) salonero_null,
+       count(*) filter (where f.sin_salonero_no_salon) salonero_null_no_salon,
        left(md5(string_agg(f.numero_factura || f.h, '|' order by f.numero_factura)), 12) h_facturas_sin_salonero,
        (select left(md5(string_agg(x.numero_factura || x.h, '|' order by x.numero_factura)), 12)
           from lin x where x.local = f.local and x.mes = f.mes)                               as h_lineas

@@ -732,32 +732,42 @@ describe('resolverSalonero', () => {
   const l = (...logins: (string | null)[]) => logins.map(u => ({ usuario_registra: u }))
 
   it('pedido con salonero → manda el pedido, aunque las líneas digan otro', () => {
-    expect(resolverSalonero('026', l('032', '032'))).toEqual({ login: '026', origen: 'pedido' })
+    expect(resolverSalonero('026', l('032', '032'), 'salon')).toEqual({ login: '026', origen: 'pedido' })
   })
 
   it('pedido null + un solo salonero en las líneas → ese, por líneas', () => {
-    expect(resolverSalonero(null, l('032', '032', null))).toEqual({ login: '032', origen: 'lineas' })
+    expect(resolverSalonero(null, l('032', '032', null), 'salon')).toEqual({ login: '032', origen: 'lineas' })
   })
 
   it('cajero (111/222/388) o sistema (002) + un salonero → ese, por líneas', () => {
     for (const caja of ['111', '222', '388', '002', '01', '02']) {
-      expect(resolverSalonero(caja, l(caja, '032', '111'))).toEqual({ login: '032', origen: 'lineas' })
+      expect(resolverSalonero(caja, l(caja, '032', '111'), 'salon')).toEqual({ login: '032', origen: 'lineas' })
     }
   })
 
   it('dos saloneros en las líneas → null (no se adivina)', () => {
-    expect(resolverSalonero('111', l('032', '026'))).toEqual({ login: null, origen: null })
-    expect(resolverSalonero(null, l('032', '026'))).toEqual({ login: null, origen: null })
+    expect(resolverSalonero('111', l('032', '026'), 'salon')).toEqual({ login: null, origen: null })
+    expect(resolverSalonero(null, l('032', '026'), 'salon')).toEqual({ login: null, origen: null })
   })
 
   it('solo cajero/sistema o líneas sin mesero → null', () => {
-    expect(resolverSalonero('111', l('111', '222', '002'))).toEqual({ login: null, origen: null })
-    expect(resolverSalonero(null, l(null, null))).toEqual({ login: null, origen: null })
-    expect(resolverSalonero(null, [])).toEqual({ login: null, origen: null })
+    expect(resolverSalonero('111', l('111', '222', '002'), 'salon')).toEqual({ login: null, origen: null })
+    expect(resolverSalonero(null, l(null, null), 'salon')).toEqual({ login: null, origen: null })
+    expect(resolverSalonero(null, [], 'salon')).toEqual({ login: null, origen: null })
   })
 
   it('espacios alrededor del login no cuentan como otro salonero', () => {
-    expect(resolverSalonero(null, l(' 032', '032 '))).toEqual({ login: '032', origen: 'lineas' })
+    expect(resolverSalonero(null, l(' 032', '032 '), 'salon')).toEqual({ login: '032', origen: 'lineas' })
+  })
+  it('solo SALÓN (25-nov): delivery, llevar, barra u otro con un solo mesero en las líneas → null', () => {
+    for (const canal of ['delivery', 'llevar', 'barra', 'otro'] as const) {
+      expect(resolverSalonero('111', l('111', '032'), canal)).toEqual({ login: null, origen: null })
+      expect(resolverSalonero(null, l('032', '032'), canal)).toEqual({ login: null, origen: null })
+    }
+  })
+
+  it('fuera de salón el pedido con salonero sigue mandando, como hoy', () => {
+    expect(resolverSalonero('026', l('032'), 'delivery')).toEqual({ login: '026', origen: 'pedido' })
   })
 })
 
@@ -822,6 +832,19 @@ describe('mapTicket — salonero por las líneas', () => {
     expect(t.salonero_login).toBeNull()
     expect(t.registrado_por).toBe('sin_pedido')
     expect(t.salonero).toBe(SIN_SALONERO)
+  })
+
+  it('solo SALÓN (25-nov): delivery/llevar/barra del cajero con un solo mesero en las líneas → Cajeros, como hoy', () => {
+    for (const [tipo, canal] of [['D', 'delivery'], ['L', 'llevar'], ['B', 'barra']] as const) {
+      const t = mapTicket(factura({
+        tipo, usuario_registra: '222', login_cajero: '222', salonero_nombre: null, items: lineas('032', '032'),
+      }))
+      expect(t.canal).toBe(canal)
+      expect(t.salonero_login).toBeNull()
+      expect(t.salonero_origen).toBeNull()
+      expect(t.registrado_por).toBe('cajero')
+      expect(t.salonero).toBe(CLAVE_CAJERO['noche'])
+    }
   })
 
   it('la plata NO cambia con el salonero por líneas', () => {

@@ -96,8 +96,9 @@ export interface OpcionesBackfill {
 /**
  * Los conteos del salonero de un día, para el dry-run (solo números, nunca logins ni montos):
  *   · `porLineas`           — facturas con `salonero_origen = 'lineas'`.
- *   · `porLineasFueraSalon` — de esas, las que no son de canal `salon` (delivery, llevar, barra…):
- *                             son las que salen del balde de cajeros, hay que verlas aparte.
+ *   · `porLineasFueraSalon` — de esas, las que no son de canal `salon`. Desde el 25-nov la regla
+ *                             vale solo en salón (`resolverSalonero`), así que tiene que dar 0:
+ *                             queda como centinela del pase (si no es 0, corre código viejo).
  *   · `sinSalonero`         — facturas que siguen con `salonero_login` null.
  */
 export function conteoSalonero(
@@ -150,7 +151,7 @@ export async function correrDia(
     puertos.log(
       `    ${fecha}  tickets=${tickets.length} guardados=${res.tickets_guardados} ` +
       `líneas=${res.lineas_guardadas}${res.invalid ? ` inválidos=${res.invalid}` : ''} ` +
-      `salonero_por_lineas=${porLineas}`,
+      `salonero_por_lineas=${porLineas} salonero_por_lineas_no_salon=${porLineasFueraSalon}`,
     )
     return {
       fecha,

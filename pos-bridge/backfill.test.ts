@@ -138,9 +138,9 @@ describe('correrDia', () => {
       t('3', '222', ['222', '032']),     // cajero + un mesero → líneas
       t('4', '222', ['032', '026']),     // dos meseros → null
       t('5', '111', ['111']),            // solo cajero → null
-      t('6', '111', ['032'], 'D'),       // delivery por líneas → se cuenta aparte
+      t('6', '111', ['032'], 'D'),       // delivery con un mesero en las líneas → sigue en Cajeros (solo salón, 25-nov)
     ]
-    expect(conteoSalonero(tickets)).toEqual({ porLineas: 3, porLineasFueraSalon: 1, sinSalonero: 2 })
+    expect(conteoSalonero(tickets)).toEqual({ porLineas: 2, porLineasFueraSalon: 0, sinSalonero: 3 })
 
     const log: string[] = []
     const p: PuertosBackfill = {
@@ -151,15 +151,16 @@ describe('correrDia', () => {
     }
     await correrDia(p, LOCAL, '2026-08-20', true)
     const linea = log.join(' ')
-    expect(linea).toContain('salonero_por_lineas=3')
-    expect(linea).toContain('salonero_por_lineas_no_salon=1')
-    expect(linea).toContain('salonero_null=2')
+    expect(linea).toContain('salonero_por_lineas=2')
+    expect(linea).toContain('salonero_por_lineas_no_salon=0')
+    expect(linea).toContain('salonero_null=3')
     expect(linea).not.toContain('032')     // nunca un login en el log
 
     // El envío real también lo cuenta (para cruzarlo con el humo después del re-backfill).
     const log2: string[] = []
     await correrDia({ ...p, async enviar(payload) { return respuesta(payload) }, log(l) { log2.push(l) } }, LOCAL, '2026-08-20', false)
-    expect(log2.join(' ')).toContain('salonero_por_lineas=3')
+    expect(log2.join(' ')).toContain('salonero_por_lineas=2')
+    expect(log2.join(' ')).toContain('salonero_por_lineas_no_salon=0')   // centinela del pase v2 (B1 para si no es 0)
   })
 
   it('un día que falla se anota y NO tira', async () => {

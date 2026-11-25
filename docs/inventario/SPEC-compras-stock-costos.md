@@ -597,6 +597,13 @@ Guías SOP: cada PR con pantallas actualiza `docs/sop-app/` (guía nueva «Inven
 12. Siguen abiertas las de la [v0](SPEC-inventario-v0.md) §8 (calendario de cocina, conteos parciales de lo caro,
     mermas y producción propia).
 
+### 12.1 Respondidas por el dueño (25-nov-2026)
+- **4 · Avisos de F2:** los resuelven manager y contador, pero **al arrancar el aviso al manager va apagado** (interruptor por local); solo el contador los recibe hasta que el dueño lo encienda.
+- **5 y 6 · Costo:** **sin IVA**, con **promedio de 90 días** como costo de referencia (stock valorizado, consumo y recetas). El último precio se muestra aparte, con el aviso de suba.
+- **8 · Manager y costos:** **sí**, ve costos y stock valorizado **de su local** (permiso de base: firma al construir).
+- **9 · Empleados por local:** un empleado **puede estar en los dos locales** (lista de locales por empleado; columna o tabla nueva con firma).
+- Siguen abiertas: 1, 2, 3, 7, 10, 11 y 12.
+
 ## 13. Riesgos
 
 | Riesgo | Mitigación |

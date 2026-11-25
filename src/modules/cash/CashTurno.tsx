@@ -613,8 +613,11 @@ export default function CashTurno({
 
   // Termina un cambio a medias: borra el pago viejo (el nuevo ya está en la base). Pide la misma autorización.
   const [terminando, setTerminando] = useState(false)
+  // (#361) Cambio que ya estaba terminado en la base: mismo aviso que el Cierre (mensajeNoTerminable('resuelto')).
+  const [avisoResuelto, setAvisoResuelto] = useState<string | null>(null)
   const terminarCambio = async (r: ReemplazoPendiente) => {
     if (terminando) return
+    setAvisoResuelto(null)
     const nuevo = sessionMovementsBase.find(m => m.id === r.nuevo)
     if (nuevo?._pending) { onError('El pago nuevo todavía no se sincronizó. Esperá a que se sincronice (o tocá «⟳ Sincronizar ahora») y volvé a tocar «Terminar el cambio».'); return }
     const auth = await requireManager()
@@ -624,7 +627,7 @@ export default function CashTurno({
       // Ronda 4 (Menor 3): se relee la base ya autorizado y se borra el viejo solo si el nuevo sigue confirmado.
       const e = await revisarCambioEnBase(r, sessionMovementsBase, id => getCashMovementById(id))
       if (e !== 'terminable') {
-        if (e === 'resuelto') anotarReemplazos(prev => prev.filter(x => x.viejo !== r.viejo))
+        if (e === 'resuelto') { anotarReemplazos(prev => prev.filter(x => x.viejo !== r.viejo)); setAvisoResuelto(mensajeNoTerminable(e)) }
         else onError(mensajeNoTerminable(e))
         onRefresh()
         return
@@ -1008,6 +1011,7 @@ export default function CashTurno({
           ))}
         </Aviso>
       )}
+      {avisoResuelto && <Aviso tipo="hecho" titulo={avisoResuelto} />}
 
       {/* F4.3a — "➕ Agregar" único: asistente manual (captura + clasificación advisory + matriz RN-3).
           Additivo: los botones por sección (pago/ingreso/egreso) siguen abajo hasta F4.3c. */}

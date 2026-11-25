@@ -639,6 +639,18 @@
       "bloque": "pase",
       "rama": "claude/ventas-31a-catalogo",
       "origen": "140"
+    },
+    "142": {
+      "nombre": "fe_ingesta",
+      "bloque": "club",
+      "rama": "feat/compras-f1-ingesta",
+      "renumerada_a": "199"
+    },
+    "199": {
+      "nombre": "fe_ingesta",
+      "bloque": "pase",
+      "rama": "feat/compras-f1-ingesta",
+      "origen": "142"
     }
   }
 }

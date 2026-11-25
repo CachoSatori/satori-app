@@ -22,6 +22,9 @@ const PROD: Record<string, boolean> = {
   'alta-empleado': true,
   'ingest-ndf': false,
   'club-pase': false,
+  // Mig 199 / compras F1 (PR en borrador, con firma): la llama el script de Apps Script sin JWT (x-fe-secret). Todavía NO
+  // está en prod: entra con el merge (Branching la despliega) y desde ahí este valor es el de prod.
+  'fe-ingesta': false,
 }
 
 describe('supabase/config.toml', () => {
@@ -39,6 +42,7 @@ describe('supabase/config.toml', () => {
     const mal = (t: string) => problemasConfig(leerConfig(t), carpetas) as string[]
     expect(mal(texto.replace(/(\[functions\.ingest-ndf\]\nverify_jwt = )false/, '$1true')).join()).toMatch(/ingest-ndf/)
     expect(mal(texto.replace(/(\[functions\.club-pase\]\nverify_jwt = )false/, '$1true')).join()).toMatch(/club-pase/)
+    expect(mal(texto.replace(/(\[functions\.fe-ingesta\]\nverify_jwt = )false/, '$1true')).join()).toMatch(/fe-ingesta/)
     expect(mal(texto.replace(/\[functions\.alta-empleado\]\nverify_jwt = true\n/, '')).join()).toMatch(/alta-empleado/)
     expect(mal(texto + '\n[remotes.x]\nproject_id = "ficticio"\n').join()).toMatch(/remotes/)
   })

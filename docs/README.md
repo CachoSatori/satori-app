@@ -76,6 +76,18 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
 - **[ventas/SPEC-ventas-v2.md](./ventas/SPEC-ventas-v2.md)** — ✅ **cerrada el 23-nov-2026.** Ventas ordenado en cinco
   pestañas (Resumen · Productos · Equipo · Tiempos · Regalías), con el estado real por fase, las decisiones y los
   criterios de aceptación de la unificación (fase 3.5). Cada PR necesita el OK del dueño; los de esquema, su firma.
+- **[ventas/SPEC-3.1-catalogo.md](./ventas/SPEC-3.1-catalogo.md)** — ⏳ **24-nov-2026, propuesta con las decisiones del dueño
+  del 24-nov; falta la firma de la 196.** Ventas 3.1 (D8 y D17): catálogo único por código que sale del PoS, por
+  local, ordenado por categoría y familia; función `pos_ventas_productos`; por código se ajustan «rinde» y categoría
+  (la categoría nunca cambia qué es venta neta); categoría nueva `menu_especial`. Trae la migración 196 propuesta
+  (no aplicada), su vuelta atrás, la batería con 20 mutaciones, el encargo de la 3.1c (subcategoría desde el
+  agente del PoS, firma aparte) y lo que sigue abierto.
+- **[inventario/SPEC-compras-stock-costos.md](./inventario/SPEC-compras-stock-costos.md)** — ⏳ **25-nov-2026, propuesta con las
+  decisiones del dueño del 25-nov.** Spec única «Compras → Stock → Costos» en cinco fases, cada una con su firma:
+  F1 ingesta de XML de factura electrónica desde el correo de proveedores (Apps Script → Edge con secreto), F2 cruce
+  con la Bandeja (solo lectura), F3 línea del proveedor ↔ producto con conversión de unidad y costo, F4 conteo por
+  lugar (dentro de la app y link instalable), gerencia y pedido sugerido, F5 recetas con costo (solo modelo). Parte de
+  [inventario/SPEC-inventario-v0.md](./inventario/SPEC-inventario-v0.md). Esquema en borrador: requiere firma.
 - **[SPEC-COMANDA-GAPS.md](./SPEC-COMANDA-GAPS.md)** — 3 gaps priorizados para decidir: **Comp vs
   Void** (P&L), **fire-by-prep-time** (el campo prep ya existe), **revenue centers**.
 

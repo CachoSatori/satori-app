@@ -31,7 +31,7 @@ export interface ComprobanteFe {
   tipo: TipoFe
   version: string | null            // '4.4', '4.3'… (del espacio de nombres); null si no se reconoce
   consecutivo: string | null
-  fecha_emision: string | null      // tal cual el XML (ISO con zona)
+  fecha_emision: string | null      // ISO con zona: la del XML o, si no traía, `-06:00` (hora de CR)
   emisor_cedula: string | null
   emisor_tipo_id: string | null
   emisor_nombre: string | null
@@ -90,8 +90,11 @@ export type ResultadoFe =
 
 const DECIMAL = /^-?\d{1,18}(\.\d{1,10})?$/
 const CLAVE = /^[0-9A-Za-z]{50}$/
-// ISO con zona (Hacienda siempre la manda): la base la guarda como timestamptz sin adivinar el huso.
-const FECHA = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,6})?)?(?:Z|[+-](\d{2}):(\d{2}))$/
+// ISO con o sin zona. Muchos emisores v4.4 mandan la hora local sin zona (prueba con XML reales, 25-nov): se toma como hora
+// de Costa Rica y se guarda con `-06:00` (CR no tiene horario de verano), así la base la lee como timestamptz sin adivinar.
+const FECHA = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,6})?)?(?:Z|[+-](\d{2}):(\d{2}))?$/
+const CON_ZONA = /(?:Z|[+-]\d{2}:\d{2})$/
+export const ZONA_CR = '-06:00'
 
 /** Formato válido pero calendario imposible (mes 13, 31-feb, hora 25…): la base la rechazaría (22008) y el XML quedaría
  *  como «error» para siempre; mejor «revisar» con la fecha en null. */
@@ -168,7 +171,10 @@ export function parsearFe(xml: string): ResultadoFe {
     const m = FECHA.exec(fecha)
     if (!m) { motivos.push('FechaEmision con formato desconocido'); fecha = null }   // null: la base no la puede leer
     else if (!fechaFeExiste(m)) { motivos.push('FechaEmision imposible (mes, día u hora fuera de rango)'); fecha = null }
-    else if (m[3] !== pc.dia || m[2] !== pc.mes || m[1].slice(2) !== pc.anio2) motivos.push('la fecha de la clave no coincide con FechaEmision')
+    else {
+      if (m[3] !== pc.dia || m[2] !== pc.mes || m[1].slice(2) !== pc.anio2) motivos.push('la fecha de la clave no coincide con FechaEmision')
+      if (!CON_ZONA.test(fecha)) fecha = fecha + ZONA_CR   // sin zona = hora de CR; no es motivo de «revisar»
+    }
   }
   // v4.4: ResumenFactura/MedioPago/TipoMedioPago · v4.3: MedioPago en la cabecera (puede venir más de uno: el primero)
   const medio = textoDe(resumen, 'MedioPago/TipoMedioPago') ?? textoDe(raiz, 'MedioPago')

@@ -268,10 +268,39 @@ describe('sobreFe — lo que manda el script', () => {
 })
 
 describe('parsearFe — fecha', () => {
-  it('FechaEmision sin zona horaria → revisar y sin fecha (la base no adivina el huso)', () => {
-    const r = comp(xmlFicticio({ fecha: '2026-11-30T09:15:00' }))
+  it.each([
+    ['2026-11-30T09:15:00', '2026-11-30T09:15:00-06:00', '2026-11-30T15:15:00.000Z'],
+    ['2026-11-30T09:15:00.123', '2026-11-30T09:15:00.123-06:00', '2026-11-30T15:15:00.123Z'],
+    ['2026-11-30T09:15', '2026-11-30T09:15-06:00', '2026-11-30T15:15:00.000Z'],
+  ])('FechaEmision sin zona (%s) → hora de CR con -06:00, ok (v4.4 real la manda así)', (f, esperado, utc) => {
+    const r = comp(xmlFicticio({ fecha: f }))
+    expect(r.comprobante.fecha_emision).toBe(esperado)
+    expect(r.estado).toBe('ok')
+    expect(r.motivos).toEqual([])
+    expect(new Date(r.comprobante.fecha_emision!).toISOString()).toBe(utc)   // 09:15 en CR = 15:15 UTC
+  })
+  it.each(['2026-11-30T09:15:00-06:00', '2026-11-30T15:15:00Z', '2026-11-30T09:15:00.5-06:00'])(
+    'FechaEmision con zona (%s) → se guarda tal cual, ok', f => {
+      const r = comp(xmlFicticio({ fecha: f }))
+      expect(r.comprobante.fecha_emision).toBe(f)
+      expect(r.estado).toBe('ok')
+    })
+  it.each(['30/11/2026 09:15', '2026-11-30 09:15:00', '2026-11-30', '2026-11-30T09:15:00-0600', '2026-11-30T09:15:00GMT'])(
+    'FechaEmision con formato raro (%s) → revisar y sin fecha', f => {
+      const r = comp(xmlFicticio({ fecha: f }))
+      expect(r.estado).toBe('revisar')
+      expect(r.comprobante.fecha_emision).toBeNull()
+      expect(r.motivos).toContain('FechaEmision con formato desconocido')
+    })
+  it('sin zona igual controla la fecha de la clave', () => {
+    const r = comp(xmlFicticio({ fecha: '2026-11-29T09:15:00' }))
+    expect(r.comprobante.fecha_emision).toBe('2026-11-29T09:15:00-06:00')
+    expect(r.motivos).toContain('la fecha de la clave no coincide con FechaEmision')
+  })
+  it('sin zona e imposible → revisar con fecha nula', () => {
+    const r = comp(xmlFicticio({ fecha: '2026-11-31T09:15:00' }))
     expect(r.comprobante.fecha_emision).toBeNull()
-    expect(r.motivos).toContain('FechaEmision con formato desconocido')
+    expect(r.motivos).toContain('FechaEmision imposible (mes, día u hora fuera de rango)')
   })
   it.each(['2026-13-30T09:15:00-06:00', '2026-11-32T09:15:00-06:00', '2026-02-29T09:15:00-06:00', '2026-11-00T09:15:00-06:00',
     '2026-11-30T25:15:00-06:00', '2026-11-30T09:61:00-06:00'])(

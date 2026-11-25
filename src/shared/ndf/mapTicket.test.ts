@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import {
   CLAVE_CAJERO,
   CLAVE_SISTEMA,
+  SALONEROS_CONOCIDOS,
   SIN_SALONERO,
   conServicio,
   construirDiaData,
@@ -21,6 +22,7 @@ import {
   mapTicket,
   mapTotalProvisorio,
   mapTurno,
+  resolverSalonero,
   type ItemCrudo,
   type TicketCrudo,
 } from './mapTicket'
@@ -718,5 +720,137 @@ describe('el desglose NO toca el total', () => {
       items: [item({ familia: 2, monto: 50000, impV: 0 })],
     }))
     expect(t.valor_servido + t.iva + t.imp_servicio).toBe(55000)
+  })
+})
+
+// ── Salonero por las LÍNEAS (decisión del dueño, 17-nov) ───────────────────────
+// Si el pedido no trae salonero (cuenta dividida sin pedido) o lo registró un cajero/sistema,
+// y TODAS las líneas con mesero son de UNO solo, ese es el salonero. Dos o más, o ninguno →
+// null. Si el pedido ya trae un salonero válido, manda el pedido.
+
+describe('resolverSalonero', () => {
+  const l = (...logins: (string | null)[]) => logins.map(u => ({ usuario_registra: u }))
+
+  it('pedido con salonero → manda el pedido, aunque las líneas digan otro', () => {
+    expect(resolverSalonero('026', l('032', '032'), 'salon')).toEqual({ login: '026', origen: 'pedido' })
+  })
+
+  it('pedido null + un solo salonero en las líneas → ese, por líneas', () => {
+    expect(resolverSalonero(null, l('032', '032', null), 'salon')).toEqual({ login: '032', origen: 'lineas' })
+  })
+
+  it('cajero (111/222/388) o sistema (002) + un salonero → ese, por líneas', () => {
+    for (const caja of ['111', '222', '388', '002', '01', '02']) {
+      expect(resolverSalonero(caja, l(caja, '032', '111'), 'salon')).toEqual({ login: '032', origen: 'lineas' })
+    }
+  })
+
+  it('dos saloneros en las líneas → null (no se adivina)', () => {
+    expect(resolverSalonero('111', l('032', '026'), 'salon')).toEqual({ login: null, origen: null })
+    expect(resolverSalonero(null, l('032', '026'), 'salon')).toEqual({ login: null, origen: null })
+  })
+
+  it('solo cajero/sistema o líneas sin mesero → null', () => {
+    expect(resolverSalonero('111', l('111', '222', '002'), 'salon')).toEqual({ login: null, origen: null })
+    expect(resolverSalonero(null, l(null, null), 'salon')).toEqual({ login: null, origen: null })
+    expect(resolverSalonero(null, [], 'salon')).toEqual({ login: null, origen: null })
+  })
+
+  it('espacios alrededor del login no cuentan como otro salonero', () => {
+    expect(resolverSalonero(null, l(' 032', '032 '), 'salon')).toEqual({ login: '032', origen: 'lineas' })
+  })
+  it('solo SALÓN (25-nov): delivery, llevar, barra u otro con un solo mesero en las líneas → null', () => {
+    for (const canal of ['delivery', 'llevar', 'barra', 'otro'] as const) {
+      expect(resolverSalonero('111', l('111', '032'), canal)).toEqual({ login: null, origen: null })
+      expect(resolverSalonero(null, l('032', '032'), canal)).toEqual({ login: null, origen: null })
+    }
+  })
+
+  it('fuera de salón el pedido con salonero sigue mandando, como hoy', () => {
+    expect(resolverSalonero('026', l('032'), 'delivery')).toEqual({ login: '026', origen: 'pedido' })
+  })
+})
+
+describe('mapTicket — salonero por las líneas', () => {
+  const lineas = (...logins: (string | null)[]) =>
+    logins.map((u, i) => item({ codigo: `10${i}`, usuario_registra: u }))
+
+  it('pedido ok → origen pedido, nada cambia', () => {
+    const t = mapTicket(factura({ items: lineas('032') }))
+    expect(t.salonero_login).toBe('026')
+    expect(t.salonero_origen).toBe('pedido')
+    expect(t.salonero).toBe('MAXO')
+    expect(t.registrado_por).toBe('salonero')
+  })
+
+  it('cuenta dividida (sin pedido) + un salonero en las líneas → se le acredita', () => {
+    const t = mapTicket(factura({ usuario_registra: null, salonero_nombre: null, items: lineas('032', '032') }))
+    expect(t.salonero_login).toBe('032')
+    expect(t.salonero_origen).toBe('lineas')
+    expect(t.registrado_por).toBe('salonero')
+    expect(t.salonero).toBe(SALONEROS_CONOCIDOS['032'])
+    expect(t.usuario_registra).toBeNull()        // el crudo del pedido NO se pisa
+    expect(t.total).toBe(10000)
+  })
+
+  it('registrada por el cajero + un salonero → se le acredita, sin el nombre del cajero', () => {
+    const t = mapTicket(factura({
+      usuario_registra: '222', login_cajero: '222', salonero_nombre: 'CAJERO NOCHE',
+      items: lineas('222', '032'),
+    }))
+    expect(t.salonero_login).toBe('032')
+    expect(t.salonero_origen).toBe('lineas')
+    expect(t.salonero_nombre).toBe(SALONEROS_CONOCIDOS['032'])  // NO el nombre del JOIN por el login del pedido
+    expect(t.salonero).toBe(SALONEROS_CONOCIDOS['032'])
+    expect(t.usuario_registra).toBe('222')
+    expect(t.turno).toBe('noche')                // el turno lo sigue dando la caja
+  })
+
+  it('un salonero fuera del roster sale por su número', () => {
+    const t = mapTicket(factura({ usuario_registra: '111', salonero_nombre: 'X', items: lineas('999') }))
+    expect(t.salonero_nombre).toBeNull()
+    expect(t.salonero).toBe('999')
+  })
+
+  it('dos saloneros en las líneas → sigue sin salonero (cajero)', () => {
+    const t = mapTicket(factura({ usuario_registra: '111', login_cajero: '111', salonero_nombre: null, items: lineas('032', '026') }))
+    expect(t.salonero_login).toBeNull()
+    expect(t.salonero_origen).toBeNull()
+    expect(t.registrado_por).toBe('cajero')
+    expect(t.salonero).toBe(CLAVE_CAJERO['mañana'])
+  })
+
+  it('solo cajero en las líneas → sigue sin salonero', () => {
+    const t = mapTicket(factura({ usuario_registra: '222', salonero_nombre: null, items: lineas('222', '222') }))
+    expect(t.salonero_login).toBeNull()
+    expect(t.salonero_origen).toBeNull()
+    expect(t.registrado_por).toBe('cajero')
+  })
+
+  it('cuenta dividida con dos saloneros → sin_pedido, como antes', () => {
+    const t = mapTicket(factura({ usuario_registra: null, salonero_nombre: null, items: lineas('032', '026') }))
+    expect(t.salonero_login).toBeNull()
+    expect(t.registrado_por).toBe('sin_pedido')
+    expect(t.salonero).toBe(SIN_SALONERO)
+  })
+
+  it('solo SALÓN (25-nov): delivery/llevar/barra del cajero con un solo mesero en las líneas → Cajeros, como hoy', () => {
+    for (const [tipo, canal] of [['D', 'delivery'], ['L', 'llevar'], ['B', 'barra']] as const) {
+      const t = mapTicket(factura({
+        tipo, usuario_registra: '222', login_cajero: '222', salonero_nombre: null, items: lineas('032', '032'),
+      }))
+      expect(t.canal).toBe(canal)
+      expect(t.salonero_login).toBeNull()
+      expect(t.salonero_origen).toBeNull()
+      expect(t.registrado_por).toBe('cajero')
+      expect(t.salonero).toBe(CLAVE_CAJERO['noche'])
+    }
+  })
+
+  it('la plata NO cambia con el salonero por líneas', () => {
+    const con = mapTicket(factura({ usuario_registra: '111', items: lineas('032') }))
+    const sin = mapTicket(factura({ usuario_registra: '111', items: lineas(null) }))
+    const plata = (t: typeof con) => [t.total, t.valor_servido, t.iva, t.regalia, t.imp_servicio, t.comida, t.bebida, t.turno]
+    expect(plata(con)).toEqual(plata(sin))
   })
 })

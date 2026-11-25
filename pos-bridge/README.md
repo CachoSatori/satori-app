@@ -86,12 +86,13 @@ quien corre el comando).
 | Servicio 10% | `con_servicio` = `SUM(ImpS del detalle) > 0`. Con 10% = consumo en salón · sin 10% = delivery/llevar. Es lo que parte el día como en el Excel. |
 | Salonero | `FAC_Pedidos.UsuarioRegistra` (login: `023` Esteban, `024` Juancho, `025` Dolores, `026` MAXO, `027` GUILLE, `028` FRANCISCO). El join es por `NumeroFactura` — **nunca** por `Facturas.NumeroPedido`, que viene vacío en mesa. `Facturas.Login` (el cajero que cobró) es informativo y **no pisa** al salonero. |
 | Cajeros `111` / `222` | No son saloneros. Sus facturas **cuentan en el total** pero van a su línea aparte: `111` = turno mañana, `222` = turno noche. Con `ImpS > 0` es "favor a salón"; con `ImpS = 0`, delivery/cajero. **No se adivina el mesero por la mesa.** |
+| Salonero por las líneas (17-nov; **solo salón** desde el 25-nov) | Solo con canal `salon`. Si el pedido **no trae salonero** (cuenta dividida: la factura no tiene pedido) o lo registró un **cajero/sistema** (`111`, `222`, `388`, `002`, `01`, `02`), se mira `FAC_FacturasDet.UsuarioRegistra` de las líneas: si entre las líneas con mesero hay **exactamente uno**, ese es el salonero (`registrado_por = salonero`). Dos o más, o ninguno → sigue sin salonero (**no se adivina**). Delivery, llevar, barra y `otro` registrados por cajero siguen en «Cajeros» aunque las líneas sean de un solo mesero (decisión del dueño, 25-nov). Si el pedido ya trae un salonero válido, **manda el pedido** aunque las líneas digan otro. El nombre sale del maestro de saloneros, nunca del JOIN de empleados por el login del pedido (sería el del cajero). Una sola función (`resolverSalonero` en `src/shared/ndf/mapTicket.ts`) para el agente en vivo y el backfill. El ticket lleva `salonero_origen` (`pedido` / `lineas` / `null`): viaja en el lote, pero el Edge **no lo guarda** todavía (pide una columna nueva, migración aparte). |
 | `022` | Figura como "cajero turno tarde" en el maestro, pero puede ser un usuario viejo: hasta confirmarlo se trata como salonero y sale **marcado** en el reporte. |
 | Sistema | `002` (cocina express), `01` y `02` (bajas): fuera del breakdown de mesero, **nunca** fuera del total. |
 | Turno | Lo deciden `111`/`222`. Si registró un salonero, se deriva de la hora (corte a las 16:00, provisorio). Sirve para saber quién tenía la caja, **no** para inventar el mesero. |
 | Pax | `pax_nativo` = `Pedidos.Personas` (hoy 0 en toda la base) · `pax_articulo` = `qty(677)×1 + qty(678)×2`. **Nunca se suman**: manda el nativo cuando está. El reporte muestra siempre los tres (nativo, artículo, alerta). |
 | Mix | Comida `2,3,4,6,13,16` · bebida `5`. Fuera del ingreso: `19 A PAX`, `20 Ingredientes`, `22 EXTRAS`, `12 Gift Cards` y merch `21,23,24,26,27`. Aparte (no son venta): `17 Cortesías` y `28 Dueños`. Las líneas marcadas `EsExtra`/`Compuesto` no inflan las unidades. |
-| Factura sin pedido | Histórico 2024: `salonero = null`, `pax = 0`. Se tolera y se reporta. |
+| Factura sin pedido | Cuenta dividida o histórico 2024: `pax = 0`; el salonero sale de las líneas si son de uno solo (ver arriba), si no `null`. Se tolera y se reporta. |
 | Zona horaria | Los `datetime` del PoS son **naive = hora de Costa Rica**. Vienen del `SELECT` ya convertidos a **texto** (`CONVERT(..., 120)`) y no se pasan por ninguna zona: es la misma lección del desfase de 1 hora de BioTime. |
 | `NumeroFactura` | **Siempre string.** Es un decimal y `Number` pierde precisión arriba de 2^53. |
 
@@ -291,7 +292,7 @@ npm run pos:backfill -- --todo                                     # desde la ve
 |---|---|
 | `--desde` / `--hasta` | El rango, inclusive. Es el modo principal: permite ir mes a mes y **retomar tras un corte**. |
 | `--todo` | Descubre `min(FechaRegistra)` de las cerradas y barre hasta **ayer** (hoy lo cubre el agente). |
-| `--dry-run` | Lee y cuenta, **no envía**. Para sondear un tramo viejo antes de cargarlo. |
+| `--dry-run` | Lee y cuenta, **no envía**. Para sondear un tramo viejo antes de cargarlo. Por día imprime `con_descuento`, `salonero_por_lineas` (facturas con el salonero tomado de las líneas), `salonero_por_lineas_no_salon` (de esas, las que no son de salón: desde el 25-nov **tiene que dar 0**; si no, corre código viejo) y `salonero_null` (las que siguen sin salonero). Solo conteos, nunca logins ni montos. |
 | `--orden asc` | Del más viejo al más reciente. Por defecto va **al revés**. |
 | `--pausa-ms N` | Pausa entre días (default 500; 300–800 es lo sano para no machacar el SQL Server). |
 
@@ -328,7 +329,7 @@ forma de retomar después de un corte.
 […]  2026-09 · días=2 (vacíos 0) · tickets=79 guardados=79 · líneas=363 · errores=0 · 2026-09-01…2026-09-02
 […]  ── 2026-08 · 4 día(s) ──
 […]    2026-08-31  tickets=29 guardados=29 líneas=131
-[…]    ⚠ 2026-08-30 · 2 factura(s) sin pedido (histórico): salonero null y pax 0.
+[…]    ⚠ 2026-08-30 · 2 factura(s) sin pedido (cuenta dividida o histórico): pax 0; el salonero sale de las líneas si son de uno solo.
 […]    2026-08-30  tickets=44 guardados=44 líneas=201
 […]    2026-08-29  sin ventas
 […]    2026-08-28  ✖ ECONNREFUSED DESKTOP-25PRDR1\SQLNUBE:1433

@@ -277,6 +277,24 @@ describe('CashCierre · cambio a medias con el turno ya cerrado (ronda 3, I1)', 
     expect(screen.getByTestId('resumen-pozo').textContent).toBe(fi(85000))
   })
 
+  // Ronda 5b (Menor 1 del verificador): igual que la Caja Diaria (#361). Si otro aparato ya terminó el cambio (el viejo
+  // no está), el Cierre da el aviso VERDE, no rojo, y suelta la anotación del aparato.
+  it('el viejo ya no estaba en la base al Terminar → aviso verde «ya estaba terminado» y se suelta la anotación', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    const terminar = await screen.findByRole('button', { name: 'Terminar el cambio' })
+    auth.requireManager.mockImplementation(async () => {
+      enBase(fondo, nuevo); api.getAllCashMovements.mockResolvedValue([fondo, nuevo])   // otro aparato borró el viejo
+      return AUTH_OK
+    })
+    fireEvent.click(terminar)
+    const aviso = await screen.findByText(mensajeNoTerminable('resuelto'))
+    expect(aviso.classList.contains('green')).toBe(true)
+    expect(api.deleteCashMovement).not.toHaveBeenCalled()
+    expect(leerTodosLosReemplazos()).toEqual([])
+    await waitFor(() => expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull())
+  })
+
   it('sin respuesta de la base al revisar (sesión vencida) → no se borra nada y la anotación queda', async () => {
     anotar(); enBase(fondo, viejo, nuevo)
     render(<CashCierre onRefresh={vi.fn()} openSession={null} />)

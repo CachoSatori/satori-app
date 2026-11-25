@@ -1,9 +1,259 @@
-# ⛔ firma — PASE salonero por líneas · el puente acredita al mesero de las líneas cuando el pedido no lo trae
+# ⛔ firma — PASE salonero por líneas · v2 «solo salón» (25-nov) · v1 hecho el 18-nov
 
 > Repo público: sin montos, nombres, rutas reales de datos, hosts ni secretos. Las verificaciones son conteos y huellas
-> (md5). Mismo formato y mismos bloques que el [PASE D9](PASE-D9-descuento-linea-pos.md) y sus bloques de PowerShell
-> (`docs/puente/PASE-D9-AGENTE-bloques.md`, rama `claude/puente-d9-agente-descuento`); acá van **adaptados**: si algo
-> no coincide con lo que dice este archivo, **se para y se avisa**.
+> (md5). **Lo activo es la parte v2 (§V0–§V9 y sus bloques).** Lo que sigue después de la línea «PASE v1» es el pase del
+> 18-nov tal cual quedó (ya hecho, bitácora en §10): **no se vuelve a correr**; v2 reusa su método y sus funciones.
+
+---
+
+# PASE v2 · la regla de las líneas vale SOLO en salón
+
+## V0. Qué pasa y qué no
+- **Decisión del dueño (25-nov ~14:10 CR):** la regla de las líneas vale **solo con canal `salon`**. Delivery, llevar,
+  barra y `otro` registrados por un cajero siguen en «Cajeros» aunque las líneas sean de un solo mesero, como antes del
+  17-nov. En salón no cambia nada respecto del v1.
+- **Pasa:** (A) el agente de prod pasa de `89c5aa4` (`C:\satori\agente-sal`, el del v1) a la cabeza firmada de este PR en
+  una carpeta nueva `C:\satori\agente-sal2`. (B) Re-backfill **solo de los meses** en que el v1 le dio salonero a una
+  factura que no es de salón; esas facturas vuelven a `salonero_login = null` y a su `registrado_por` de antes.
+- **No pasa:** sin migraciones, sin Edge, sin `main`, sin sagrados, ninguna plata. En salón, nada se mueve.
+- **Cuánto se espera mover (staging, copia previa al v1, solo lectura, 25-nov):** 90 facturas, todas de **barra**, en
+  2024-01…04, 2024-12 y 2025-01…03; **0 en 2026** (90 días y ayer: 0). El número exacto de prod (**M**) lo mide V4 con el
+  código de hoy, sin enviar nada (P1).
+
+## V1. Medición (staging, solo lectura; mismos datos que prod antes del v1: 41.018 facturas al corte 16-nov)
+| Salón, facturas cerradas | Sin salonero antes (regla vieja) | Con la regla (v1 = v2 en salón) |
+|---|---|---|
+| Últimos 90 días (al 24-nov) | 385 de 1.737 (22,2 %) | **160 (9,2 %)** |
+| Ayer (24-nov) | 6 de 20 (30 %) | **1 (5 %)** |
+
+Fuera de salón: 408 facturas en 90 días, **0** ganarían salonero con la regla sin límite (la v2 no cambia lo reciente).
+Meta ≤ ~13 %: **cumple**. Prod después del v1 (humo del 18-nov): `salon_90d_null` 370 → 172.
+
+## V2. SHA y huellas
+- La firma va sobre el **SHA de la cabeza del PR** (se anota en §V9). Ese SHA va en `$SHA` del preámbulo v2.
+- Árboles: `pos-bridge` `93e4f8e99a67ae2b30b4e2f9c6d4a1a364123bc2` · `src/shared/ndf` `1b4b773ec3929a3abbf1c60f3192a10a89ab8208`.
+- Contra `89c5aa4` cambian solo 5 archivos de código: `pos-bridge/{README.md, backfill.test.ts, backfill.ts}` y
+  `src/shared/ndf/{mapTicket.test.ts, mapTicket.ts}`. Pruebas del puente: **499**.
+
+## V3. Responsables, prerrequisitos y horario
+- **Ejecución:** el dueño en la PC del PoS. **Control:** Claude (prod, solo lectura) con
+  [`scripts/sql/salonero_lineas_humo.sql`](../../scripts/sql/salonero_lineas_humo.sql). No la misma persona.
+- [ ] PR revisado y gate verde; firma del dueño con el SHA. [ ] La tarea corre `C:\satori\agente-sal` en `89c5aa4`.
+- [ ] Latido al día y sin error (bloque 1 del SQL).
+- **Ventana:** 00:00–13:50 CR (corte 05:50 si arrancó de madrugada). Nunca de 14:00 a 24:00. Los bloques lo controlan solos.
+- **Orden:** preámbulo v2 → P1 (medir M, con la tarea andando) → P2 (agente nuevo, en seco) → P3 (cambio de tarea) →
+  humo antes → B2 → humo después. Si M = 0: solo P2 y P3, sin parte B.
+
+## V4. Criterios de parada y vuelta atrás
+- **Parar** si: `salonero_por_lineas_no_salon` ≠ 0 con el código nuevo (P2 o B2); cambian `facturas`, `lineas`,
+  `h_facturas_sin_salonero` o `h_lineas`; `salonero_null_salon` cambia; `salonero_null` no sube **exactamente M**; algún
+  login **sube** en el bloque 4; `incoherentes` > 0; el agente deja de latir.
+- **Vuelta atrás del agente:** P4 (la tarea vuelve a `C:\satori\agente-sal`, `89c5aa4`).
+- **Vuelta atrás de los datos:** re-backfill de los mismos meses desde `C:\satori\agente-sal` (`89c5aa4`). Sin SQL a mano.
+
+---
+
+# Bloques v2 (PowerShell)
+
+**Método (igual que el v1):** pegar el bloque (sin las tres comillas invertidas) en el **Bloc de notas** → guardar como
+`C:\satori\paso.ps1` (*Tipo* «Todos los archivos», *Codificación* **UTF-8 con BOM**) → una vez por consola
+`Set-ExecutionPolicy -Scope Process Bypass -Force` → cargar con **punto y espacio**: `. C:\satori\paso.ps1`. Windows
+PowerShell 5.1 (o 7) **como administrador**. **Un bloque por vez**; si termina en rojo, **no se sigue** y se avisa.
+**Ctrl+C no anda por AnyDesk:** para cortar, cerrar la ventana de PowerShell con la X (reenviar un mes no duplica).
+
+## Preámbulo v2 (en cada consola nueva)
+Carga el preámbulo del v1 (más abajo, «Preámbulo») y le pisa los valores; suma una función. **Una sola vez:** guardar
+el preámbulo del v1 como `C:\satori\pre1.ps1` (mismo método: Bloc de notas, UTF-8 con BOM). **En cada consola:** este
+bloque como `C:\satori\paso.ps1` y `. C:\satori\paso.ps1`. **Antes de guardarlo, pegar el SHA firmado.**
+```powershell
+. C:\satori\pre1.ps1
+$SHA = 'PEGAR-ACA-EL-SHA-FIRMADO'; $SHA_PROD = '89c5aa42ba7692d3bca421cdc352333946b9e017'
+if ($SHA -notmatch '^[0-9a-f]{40}$') { throw 'falta pegar el SHA firmado (40 caracteres) en $SHA' }
+$ARBOL = '93e4f8e99a67ae2b30b4e2f9c6d4a1a364123bc2'; $ARBOL_NDF = '1b4b773ec3929a3abbf1c60f3192a10a89ab8208'; $PRUEBAS = 499
+$NUEVA = 'C:\satori\agente-sal2'; $CMD_NUEVO = 'C:\satori\pos-agente-prod-sal2.cmd'; $VUELTA = 'C:\satori\sal2-vuelta'
+$MEDIR = 'C:\satori\sal2-medicion'
+$ESPERADOS = 'pos-bridge/README.md,pos-bridge/backfill.test.ts,pos-bridge/backfill.ts,src/shared/ndf/mapTicket.test.ts,src/shared/ndf/mapTicket.ts'
+# Conteos por día de una salida del backfill (dry-run o real): día → @{ PorLineas; NoSalon }. Sin logins ni montos.
+function NoSalon-PorDia([string[]]$lineas) {
+  $r = @{}
+  foreach ($l in $lineas) {
+    $m = [regex]::Match((Sin-Ansi $l), '(\d{4}-\d{2}-\d{2})\s+tickets=\d+\s.*?salonero_por_lineas=(\d+)\s+salonero_por_lineas_no_salon=(\d+)')
+    if ($m.Success) { $r[$m.Groups[1].Value] = New-Object PSObject -Property ([ordered]@{ PorLineas = [int]$m.Groups[2].Value; NoSalon = [int]$m.Groups[3].Value }) }
+  }
+  $r
+}
+"preámbulo v2 ok · PowerShell $($PSVersionTable.PSVersion) · SHA $($SHA.Substring(0, 8))… · agente de hoy 89c5aa4…"
+```
+> **Ojo:** el preámbulo del v1 trae `$SHA = 'PEGAR-ACA-EL-SHA-FIRMADO'` y tira error si queda así: al guardar
+> `pre1.ps1`, pegar en su `$SHA` **el mismo SHA firmado del v2**.
+
+**Ve:** `preámbulo ok · … SHA xxxxxxxx…` (del v1) y `preámbulo v2 ok · … SHA xxxxxxxx… · agente de hoy 89c5aa4…`.
+
+## P1 · Medir M con el código de HOY (dry-run, no envía · con la tarea andando · se corta solo y retoma)
+Corre el backfill **en seco** con la carpeta de hoy (`agente-sal`, `89c5aa4`, regla sin límite), mes por mes de ayer a
+`2024-01-01`, y guarda por mes **M** = Σ `salonero_por_lineas_no_salon` de los días anteriores a `CORTE_HUMO`
+(= hoy − 2 días, 00:00 −06:00, fijo desde la primera corrida). Son las facturas que la v2 devuelve a «Cajeros».
+```powershell
+& {
+if (-not (Es-Admin)) { throw 'la consola no es de administrador' }
+$T = Leer-Tarea; $CORTE = Corte-Ventana; $ahora = Hoy-CR
+if ($T.Estado -ne 'Running') { throw "la tarea no está corriendo ($($T.Estado)): se para y se avisa" }
+if ($T.Carpeta -ieq $NUEVA) { throw 'la tarea YA corre la carpeta nueva' }
+$hh = git -C $T.Carpeta rev-parse HEAD; Ok 'rev-parse agente de hoy'
+if ($hh -cne $SHA_PROD) { throw "la tarea corre $hh y no 89c5aa4…: se para y se avisa" }
+if (Backfill-Corriendo) { throw 'hay un backfill corriendo' }
+if (-not (Test-Path -LiteralPath $MEDIR)) { New-Item -ItemType Directory -Path $MEDIR | Out-Null }
+$D = Carpeta $MEDIR; $PROG = Join-Path $D 'medicion-m.json'; $DESDE_MIN = '2024-01-01'
+$hasta = $ahora.Date.AddDays(-1).ToString('yyyy-MM-dd', $INV); $CORTE_HUMO = $ahora.Date.AddDays(-2).ToString('yyyy-MM-dd', $INV); $MM = @{}
+if (Test-Path -LiteralPath $PROG) {
+  $pg = [IO.File]::ReadAllText($PROG) | ConvertFrom-Json; $hasta = [string]$pg.siguiente_hasta; $CORTE_HUMO = [string]$pg.corte_humo
+  foreach ($pr in @($pg.m_por_mes.PSObject.Properties)) { $MM[$pr.Name] = [int]$pr.Value }
+  "retoma: falta $DESDE_MIN … $hasta · CORTE_HUMO $CORTE_HUMO"
+}
+$dur = [TimeSpan]::FromMinutes(3)
+foreach ($m in @(Meses-Backfill $DESDE_MIN $hasta)) {
+  if ($hasta -lt $DESDE_MIN) { break }
+  if ((Hoy-CR) + $dur + [TimeSpan]::FromMinutes(1) -gt $CORTE) { "CORTE: no se empieza $($m.Mes). Se retoma en la próxima ventana con este mismo bloque."; break }
+  $t0 = Hoy-CR; $nc = $env:NO_COLOR; $fc = $env:FORCE_COLOR; $env:NO_COLOR = '1'; $env:FORCE_COLOR = '0'
+  Push-Location $T.Carpeta; try {
+    $SALM = @(node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts --desde $m.Desde --hasta $m.Hasta --dry-run --pausa-ms 800 | ForEach-Object { Sin-Ansi ([string]$_) }); $cod = $LASTEXITCODE
+  } finally { Pop-Location; $env:NO_COLOR = $nc; $env:FORCE_COLOR = $fc }
+  if ($cod -ne 0) { throw "PARADA en $($m.Mes) (código $cod): re-correr este bloque" }
+  if (-not @($SALM | Where-Object { $_ -cmatch 'DRY-RUN: ' }).Count) { throw 'PARADA: la salida no dice DRY-RUN' }
+  $pd = NoSalon-PorDia $SALM; $mm = 0
+  foreach ($k in @($pd.Keys)) { if ($k -lt $CORTE_HUMO) { $mm += $pd[$k].NoSalon } }
+  $MM[$m.Mes] = $mm; $dur = (Hoy-CR) - $t0
+  $sig = ([datetime]::ParseExact($m.Desde, 'yyyy-MM-dd', $INV)).AddDays(-1).ToString('yyyy-MM-dd', $INV); $hasta = $sig
+  $js = (New-Object PSObject -Property ([ordered]@{ siguiente_hasta = $sig; corte_humo = $CORTE_HUMO; m_por_mes = $MM; hora_cr = (Hoy-CR).ToString('yyyy-MM-dd HH:mm', $INV) })) | ConvertTo-Json
+  [IO.File]::WriteAllText("$PROG.tmp", $js, (New-Object Text.UTF8Encoding($false))); Move-Item -LiteralPath "$PROG.tmp" -Destination $PROG -Force
+  "── $($m.Mes) · no_salon $mm · $([math]::Round($dur.TotalMinutes, 1)) min"
+}
+$pg = [IO.File]::ReadAllText((Archivo $PROG)) | ConvertFrom-Json; $tot = 0; $con = @()
+foreach ($pr in @($pg.m_por_mes.PSObject.Properties)) { $tot += [int]$pr.Value; if ([int]$pr.Value -gt 0) { $con += "$($pr.Name)=$($pr.Value)" } }
+$fin = if ([string]$pg.siguiente_hasta -lt $DESDE_MIN) { 'MEDICIÓN COMPLETA' } else { "falta $DESDE_MIN … $($pg.siguiente_hasta)" }
+"P1 · $fin · CORTE_HUMO $($pg.corte_humo) · M = $tot · meses con M>0: $(if ($con.Count) { ($con | Sort-Object) -join ', ' } else { 'ninguno' })"
+}
+```
+**Ve:** una línea por mes y `P1 · MEDICIÓN COMPLETA · CORTE_HUMO … · M = … · meses con M>0: …`. **Se le pasa a Claude.**
+Esperado: M cerca de 90, solo en meses de 2024 y 2025. Si dice `falta …`, en la ventana siguiente se repite el bloque.
+
+## P2 · Agente nuevo: clon, `.env`, pruebas y prueba en seco (con la tarea andando · 15–20 min)
+**P2a · clon en el SHA exacto:**
+```powershell
+& {
+if (Test-Path -LiteralPath $NUEVA) { throw "$NUEVA ya existe: revisarlo antes (no se pisa nada)" }
+git clone --no-checkout https://github.com/CachoSatori/satori-app.git $NUEVA; Ok 'clone'
+$N = Carpeta $NUEVA
+git -C $N fetch origin $RAMA claude/puente-item11-prod-v2; Ok 'fetch'
+git -C $N checkout --detach $SHA; Ok 'checkout'
+$h = git -C $N rev-parse HEAD; Ok 'rev-parse'; if ($h -cne $SHA) { throw 'la carpeta nueva no está en el SHA firmado' }
+$a = git -C $N rev-parse 'HEAD:pos-bridge'; Ok 'árbol pos-bridge'; if ($a -cne $ARBOL) { throw 'pos-bridge no es el revisado' }
+$b = git -C $N rev-parse 'HEAD:src/shared/ndf'; Ok 'árbol ndf'; if ($b -cne $ARBOL_NDF) { throw 'src/shared/ndf no es el revisado' }
+$d = git -C $N diff --name-only $SHA_PROD $SHA -- pos-bridge src supabase package.json package-lock.json; Ok 'diff contra el agente de hoy'
+if ((@($d) -join ',') -cne $ESPERADOS) { throw "contra 89c5aa4 cambió otra cosa: $(@($d) -join ', ')" }
+$s = git -C $N status --porcelain; Ok 'status'; if ($s) { throw 'el clon no está limpio' }
+"P2a ok · $N en $($SHA.Substring(0, 8))… · árboles = los revisados · contra 89c5aa4 solo cambian los 5 archivos"
+}
+```
+**P2b y P2c:** bloques **A2** (`.env`) y **A3** (dependencias y pruebas) del v1, **tal cual**, uno por vez: con el
+preámbulo v2 cargado copian el `.env` de `agente-sal` a `agente-sal2` y esperan **499** pruebas.
+**Ve:** `A2 ok · …` y `A3 ok · … 499 pruebas en verde`.
+
+**P2d · en seco, 7 días, no envía:**
+```powershell
+& {
+$N = Carpeta $NUEVA
+$ay = (Hoy-CR).Date.AddDays(-1); $HASTA = $ay.ToString('yyyy-MM-dd', $INV); $DESDE = $ay.AddDays(-6).ToString('yyyy-MM-dd', $INV)
+$nc = $env:NO_COLOR; $fc = $env:FORCE_COLOR; $env:NO_COLOR = '1'; $env:FORCE_COLOR = '0'
+Push-Location $N; try { node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts --desde $DESDE --hasta $HASTA --dry-run --pausa-ms 800 | Tee-Object -Variable SAL; Ok 'backfill en seco' } finally { Pop-Location; $env:NO_COLOR = $nc; $env:FORCE_COLOR = $fc }
+$R = Resumen-DryRun @($SAL | ForEach-Object { Sin-Ansi ([string]$_) })
+if (-not $R.EsDry -or $R.Guardados -ne 0) { throw 'PARADA: no fue en seco' }
+if (-not $R.Prod) { throw 'PARADA: el .env no apunta al ingest de prod (yiczgdti…)' }
+if ($R.Errores -ne 0) { throw "PARADA: $($R.Errores) día(s) con error" }
+if (@($R.Dias).Count -eq 0) { throw 'PARADA: ningún día trae salonero_por_lineas' }
+if ($R.NoSalon -ne 0) { throw "PARADA: no_salon = $($R.NoSalon) con el código nuevo (tiene que ser 0)" }
+if ($R.PorLineas -eq 0) { throw 'PARADA: salonero_por_lineas = 0 en los 7 días (salón dejó de acreditar)' }
+"P2d ok · $DESDE … $HASTA · tickets $($R.Tickets) · por_lineas $($R.PorLineas) ($($R.Pct) %) · no_salon 0 · nada enviado"
+}
+```
+**Ve:** `P2d ok · … no_salon 0 · nada enviado`. El 18-nov, con 7 días, dio 13,1 % por líneas: tiene que dar parecido.
+
+## P3 · Cambiar la tarea a la carpeta nueva y verificar (2 min · detenida ~30 s)
+Bloque **A5 del v1** tal cual (con el preámbulo v2 cambia `agente-sal` → `agente-sal2` y guarda la config en
+`sal2-vuelta`). Después, bloque **A6 del v1**. **Ve:** `A5 ok · … HORA_CAMBIO …` (pasársela a Claude) y `A6 ok · Running …`.
+**Control (Claude):** bloque 1 del SQL dos veces (late, sin error) y bloques 2/2b con `HORA_CAMBIO`.
+
+## P4 · Vuelta atrás del agente
+Bloque **A7 del v1** tal cual: con el preámbulo v2 lee `sal2-vuelta` y deja la tarea en `C:\satori\agente-sal`
+(`89c5aa4`). El mensaje final dice `578f38c…` por el texto del v1: lo que manda es la carpeta que imprime.
+
+## Parte B v2 · solo si M > 0
+Orden: **(1) humo antes** (Claude, prod, bloques 3, 4 y 5 con `CORTE_HUMO` de P1) → **(2) B2** → **(3) humo después**.
+
+### B2 · Re-backfill SOLO de los meses con M > 0 (código nuevo · se corta solo y retoma)
+```powershell
+& {
+$N = Carpeta $NUEVA; $T = Leer-Tarea; $CORTE = Corte-Ventana
+if ($T.Carpeta -ine $N -or $T.Estado -ne 'Running') { throw 'el agente en vivo no es el nuevo o no está corriendo (P3)' }
+$h = git -C $N rev-parse HEAD; Ok 'rev-parse'; if ($h -cne $SHA) { throw 'la carpeta nueva no está en el SHA firmado' }
+if (Backfill-Corriendo) { throw 'ya hay un backfill corriendo' }
+$pm = [IO.File]::ReadAllText((Archivo (Join-Path $MEDIR 'medicion-m.json'))) | ConvertFrom-Json
+if ([string]$pm.siguiente_hasta -ge '2024-01-01') { throw 'P1 no terminó: primero completar la medición' }
+$PROG = Join-Path (Carpeta $VUELTA) 'b2-hechos.json'; $HECHOS = @{}
+if (Test-Path -LiteralPath $PROG) { foreach ($pr in @(([IO.File]::ReadAllText($PROG) | ConvertFrom-Json).PSObject.Properties)) { $HECHOS[$pr.Name] = [string]$pr.Value } }
+$LOG = Join-Path (Carpeta $VUELTA) ('b2-' + (Hoy-CR).ToString('yyyy-MM-dd_HHmm', $INV) + '.log')
+$meses = @(@($pm.m_por_mes.PSObject.Properties) | Where-Object { [int]$_.Value -gt 0 } | ForEach-Object { $_.Name } | Sort-Object -Descending)
+$dur = [TimeSpan]::FromMinutes(5)
+foreach ($mes in $meses) {
+  if ($HECHOS.ContainsKey($mes)) { continue }
+  if ((Hoy-CR) + $dur + [TimeSpan]::FromMinutes(1) -gt $CORTE) { "CORTE: no se empieza $mes. Se retoma en la próxima ventana (humo antes y este bloque)."; break }
+  $ini = [datetime]::ParseExact("$mes-01", 'yyyy-MM-dd', $INV); $fin = $ini.AddMonths(1).AddDays(-1)
+  $t0 = Hoy-CR; $nc = $env:NO_COLOR; $fc = $env:FORCE_COLOR; $env:NO_COLOR = '1'; $env:FORCE_COLOR = '0'
+  Push-Location $N; try {
+    node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts --desde $ini.ToString('yyyy-MM-dd', $INV) --hasta $fin.ToString('yyyy-MM-dd', $INV) --pausa-ms 800 | Tee-Object -Variable SALM
+    $cod = $LASTEXITCODE
+    [IO.File]::AppendAllLines($LOG, [string[]]@($SALM | ForEach-Object { Sin-Ansi ([string]$_) }), (New-Object Text.UTF8Encoding($false)))
+  } finally { Pop-Location; $env:NO_COLOR = $nc; $env:FORCE_COLOR = $fc }
+  if ($cod -ne 0) { throw "PARADA en $mes (código $cod): re-correr este bloque (reenviar no duplica)" }
+  $pd = NoSalon-PorDia @($SALM | ForEach-Object { [string]$_ }); $ns = 0; foreach ($k in @($pd.Keys)) { $ns += $pd[$k].NoSalon }
+  if (-not $pd.Count) { throw "PARADA en $mes`: la salida no trae salonero_por_lineas_no_salon (¿código viejo?)" }
+  if ($ns -ne 0) { throw "PARADA en $mes`: no_salon = $ns con el código nuevo (tiene que ser 0)" }
+  $HECHOS[$mes] = (Hoy-CR).ToString('yyyy-MM-dd HH:mm', $INV); $dur = (Hoy-CR) - $t0
+  [IO.File]::WriteAllText("$PROG.tmp", ($HECHOS | ConvertTo-Json), (New-Object Text.UTF8Encoding($false))); Move-Item -LiteralPath "$PROG.tmp" -Destination $PROG -Force
+  "── $mes ok · no_salon 0 · $([math]::Round($dur.TotalMinutes, 1)) min"
+}
+$faltan = @($meses | Where-Object { -not $HECHOS.ContainsKey($_) })
+$M = 0; foreach ($pr in @($pm.m_por_mes.PSObject.Properties)) { $M += [int]$pr.Value }
+"B2 · hechos $(@($meses).Count - $faltan.Count) de $(@($meses).Count) · $(if ($faltan.Count) { 'faltan ' + ($faltan -join ', ') } else { 'COMPLETO' }) · M = $M · CORTE_HUMO $($pm.corte_humo) · log $LOG"
+}
+```
+**Ve:** `── AAAA-MM ok · no_salon 0` por mes y `B2 · … COMPLETO · M = …`. **A ojo:** `inválidos=` o `guardados` menor
+que `tickets` → cerrar la ventana con la X y avisar.
+
+**(3) Humo después (Claude, mismo `CORTE_HUMO`):** `facturas`, `lineas`, `h_facturas_sin_salonero`, `h_lineas` y
+`salonero_null_salon` **iguales**; `salonero_null` y `salonero_null_no_salon` **suben exactamente M**; `incoherentes = 0`;
+bloque 4: ningún login sube y los que bajan suman M (solo en el chat). Si algo no coincide, bloque 5 antes y después, y
+se para.
+
+## V9. Firma y bitácora v2
+- **Firma del dueño:** _(fecha, hora −06:00 y SHA)_. **Control:** _(quién)_.
+
+| Paso | Esperado | Obtenido |
+|---|---|---|
+| P1 · M | medición completa · M ≈ 90 (2024/2025) | |
+| P2 · clon · A2–A3 · en seco | 5 archivos · 499 en verde · no_salon 0 · por_lineas ≈ 13 % | |
+| P3 · `HORA_CAMBIO` · latido | `-06:00` · ~30 s · late sin error | |
+| B · humo antes → después | huellas = · `salonero_null_salon` = · `salonero_null` +M · `incoherentes` 0 | |
+| B2 | todos los meses con M>0 · no_salon 0 en cada uno | |
+
+---
+
+# PASE v1 (hecho el 18-nov · referencia; no se vuelve a correr)
+
+## Título original
+> PASE salonero por líneas · el puente acredita al mesero de las líneas cuando el pedido no lo trae. Mismo formato y
+> mismos bloques que el [PASE D9](PASE-D9-descuento-linea-pos.md) (`docs/puente/PASE-D9-AGENTE-bloques.md`, rama
+> `claude/puente-d9-agente-descuento`), adaptados: si algo no coincide con lo que dice este archivo, **se para y se avisa**.
 
 ## 0. Qué pasa y qué no
 - **Pasa:** el agente del PoS (`pos-bridge/`) pasa de `578f38c` (el del pase D9) a la cabeza firmada de este PR. Cuando
@@ -111,6 +361,7 @@ mismo día** (18-nov de mañana). Si B1 se corta por la hora, retoma solo en la 
   de delivery/llevar/barra registrada por un cajero pero con líneas de un solo mesero pasa a ese mesero y sale del balde.
   A4 y B1 lo cuentan (`salonero_por_lineas_no_salon`). Si no es 0, el dueño decide si se acepta o si la regla se limita
   a salón (cambio de una línea, con PR aparte).
+  **Decidido el 25-nov: solo salón → PASE v2 (arriba).**
 - **Riesgo · `MIN` del pedido:** con varios pedidos, el pedido acredita al login menor. **No se toca** en este pase (se
   mide aparte, decisión del dueño).
 - **Vuelta atrás del agente:** A7 (la tarea vuelve a `C:\satori\agente-d9`, `578f38c`).

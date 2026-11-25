@@ -28,7 +28,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-import { procesarSobre, type DepsIngesta } from '../../../src/shared/fe/ingestaFe.ts'
+import { procesarSobre, subirIdempotente, type DepsIngesta } from '../../../src/shared/fe/ingestaFe.ts'
 import { TOPE_CUERPO_BYTES, validarSobre } from '../../../src/shared/fe/sobreFe.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
@@ -80,16 +80,11 @@ Deno.serve(async (req) => {
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
     const deps: DepsIngesta = {
       sha256,
-      subirXml: async (ruta, xml) => {
-        const { error } = await sb.storage.from(BUCKET).upload(ruta, new Blob([xml], { type: 'application/xml' }), {
+      // Ya existe = el mismo comprobante llegó antes (reenvío): éxito idempotente, la base decide «duplicado».
+      subirXml: (ruta, xml) => subirIdempotente(() =>
+        sb.storage.from(BUCKET).upload(ruta, new Blob([xml], { type: 'application/xml' }), {
           contentType: 'application/xml', upsert: false,
-        })
-        if (!error) return 'ok'
-        // Ya existe = el mismo comprobante llegó antes (reenvío): se sigue, la base decide «duplicado».
-        const e = error as { statusCode?: string | number; message?: string }
-        if (String(e.statusCode) === '409' || /exists|duplicate/i.test(e.message ?? '')) return 'ya_existe'
-        throw new Error(`storage: ${e.message ?? 'error'}`)
-      },
+        })),
       rpc: async (fn, args) => {
         const { data, error } = await sb.rpc(fn, args)
         return { data, error: error ? { code: error.code, message: error.message } : null }

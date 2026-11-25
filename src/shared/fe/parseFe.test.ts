@@ -273,4 +273,34 @@ describe('parsearFe — fecha', () => {
     expect(r.comprobante.fecha_emision).toBeNull()
     expect(r.motivos).toContain('FechaEmision con formato desconocido')
   })
+  it.each(['2026-13-30T09:15:00-06:00', '2026-11-32T09:15:00-06:00', '2026-02-29T09:15:00-06:00', '2026-11-00T09:15:00-06:00',
+    '2026-11-30T25:15:00-06:00', '2026-11-30T09:61:00-06:00'])(
+    'formato válido pero fecha imposible (%s) → revisar con fecha nula, no error', f => {
+      const r = parsearFe(xmlFicticio({ fecha: f }))
+      expect(r.clase).toBe('comprobante')
+      if (r.clase !== 'comprobante') return
+      expect(r.estado).toBe('revisar')
+      expect(r.comprobante.fecha_emision).toBeNull()
+      expect(r.motivos).toContain('FechaEmision imposible (mes, día u hora fuera de rango)')
+    })
+  it('29 de febrero bisiesto y 31 de diciembre siguen siendo válidos', () => {
+    for (const f of ['2028-02-29T09:15:00-06:00', '2026-12-31T23:59:59Z']) {
+      const r = parsearFe(xmlFicticio({ fecha: f }))
+      if (r.clase !== 'comprobante') throw new Error('no es comprobante')
+      expect(r.comprobante.fecha_emision).toBe(f)
+      expect(r.motivos).not.toContain('FechaEmision imposible (mes, día u hora fuera de rango)')
+    }
+  })
+})
+
+describe('fixturas: la cédula del emisor no puede ser real (repo público)', () => {
+  it('12 dígitos que empiezan con 9: ni física, ni jurídica (3-xxx), ni DIMEX (1…), ni NITE', () => {
+    expect(CEDULA_EMISOR).toMatch(/^9\d{11}$/)
+    const sinCeros = CEDULA_EMISOR.replace(/^0+/, '')
+    expect(sinCeros).not.toMatch(/^3\d{9}$/)          // jurídica
+    expect(sinCeros).not.toMatch(/^[1-9]\d{8}$/)      // física
+    expect(sinCeros).not.toMatch(/^1\d{10,11}$/)      // DIMEX
+    expect(sinCeros).not.toMatch(/^\d{10}$/)          // NITE
+    expect(partesClave(claveFicticia()).emisor).toBe(CEDULA_EMISOR)
+  })
 })

@@ -63,7 +63,7 @@
 ---
 
 ## ☁️ Edge, Cloudflare y agentes
-`verify_jwt`: **off** solo en `ingest-ndf` (el agente manda `x-ingest-secret`) y `club-pase` (portón `x-club-web`); el resto **on** (`ingest-punches` no existe en prod). Secretos: por su lista (nombre + huella); código: por `ezbr_sha256`, no por versión.
+`verify_jwt`: **off** solo en `ingest-ndf` (el agente manda `x-ingest-secret`), `club-pase` (portón `x-club-web`) y `fe-ingesta` (portón `x-fe-secret`; **al mergear #365**); el resto **on** (`ingest-punches` no existe en prod). Secretos: por su lista (nombre + huella); código: por `ezbr_sha256`, no por versión.
 
 | Función en prod (20-nov, tras el ítem 11) | Versión |
 |---|---|

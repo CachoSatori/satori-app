@@ -1,9 +1,12 @@
 // Comprobantes FICTICIOS para las pruebas del parser (F1). Nada real: emisor «Proveedor de prueba N», cédulas con
-// patrón obvio (3101000000N para el emisor, 3101999999N para el receptor), montos inventados. Las muestras reales se
+// patrón obvio (receptor 3101999999NN; emisor 9990000000NN, que no puede ser ninguna identificación real), montos inventados. Las muestras reales se
 // prueban en staging y NO se suben (repo público, spec §4.4).
 
 export const CEDULA_RECEPTOR = '310199999901'
-export const CEDULA_EMISOR = '310100000001'
+// Emisor IMPOSIBLE de verdad: en los 12 dígitos de la clave toda identificación de Hacienda va rellenada con ceros a la
+// izquierda (física 9 → «000…», jurídica 10 y empieza con 3 → «003…», NITE 10 → «00…») salvo el DIMEX (11–12, empieza
+// con 1). Doce dígitos que empiezan con 9 no son física, ni jurídica, ni DIMEX, ni NITE.
+export const CEDULA_EMISOR = '999000000001'
 
 /** Clave de 50: 506 · DDMMAA · emisor (12) · consecutivo (20) · situación (1) · seguridad (8). */
 export function claveFicticia(o: { ddmmaa?: string; emisor?: string; numero?: number; tipo?: string } = {}): string {

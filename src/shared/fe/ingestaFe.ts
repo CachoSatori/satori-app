@@ -26,6 +26,29 @@ export interface DepsIngesta {
 export interface ResultadoXml { i: number; resultado: ResultadoIngesta; clave_fin?: string; motivo?: string }
 export interface RespuestaIngesta { status: 200 | 422 | 500; cuerpo: { ok: boolean; latido?: true; resultados: ResultadoXml[] } }
 
+/**
+ * ¿El error de Storage al subir dice «ese objeto ya existe»? Es el reintento normal (el mismo XML llegó antes, o el
+ * script reintentó tras un 500): se trata como ÉXITO idempotente y la base decide «duplicado». Si no se detecta, cada
+ * reintento daría 500 para siempre y el correo nunca se etiquetaría.
+ * Formas que manda storage-js según versión: `statusCode: '409'` (código del cuerpo), `status: 409` o `400` con
+ * `error: 'Duplicate'`, y el mensaje «The resource already exists».
+ */
+export function esYaExisteStorage(e: unknown): boolean {
+  if (e == null || typeof e !== 'object') return false
+  const x = e as { statusCode?: unknown; status?: unknown; error?: unknown; message?: unknown }
+  if (String(x.statusCode ?? '') === '409' || String(x.status ?? '') === '409') return true
+  if (typeof x.error === 'string' && /^duplicate$/i.test(x.error.trim())) return true
+  return typeof x.message === 'string' && /already exists|\bduplicate\b/i.test(x.message)
+}
+
+/** Lo que hace la Edge con la respuesta del `upload` de Storage (pura: la Edge le pasa la llamada real). */
+export async function subirIdempotente(subir: () => Promise<{ error: unknown }>): Promise<'ok' | 'ya_existe'> {
+  const { error } = await subir()
+  if (!error) return 'ok'
+  if (esYaExisteStorage(error)) return 'ya_existe'
+  throw new Error(`storage: ${(error as { message?: string }).message ?? 'error'}`)
+}
+
 /** SQLSTATE de dato inválido o de restricción: el XML no entra nunca, reintentarlo no sirve. */
 export const esErrorDeDato = (e: ErrorRpc | null) => !!e?.code && /^(22|23)/.test(e.code)
 

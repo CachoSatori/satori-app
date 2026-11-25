@@ -91,7 +91,15 @@ export type ResultadoFe =
 const DECIMAL = /^-?\d{1,18}(\.\d{1,10})?$/
 const CLAVE = /^[0-9A-Za-z]{50}$/
 // ISO con zona (Hacienda siempre la manda): la base la guarda como timestamptz sin adivinar el huso.
-const FECHA = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})$/
+const FECHA = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,6})?)?(?:Z|[+-](\d{2}):(\d{2}))$/
+
+/** Formato válido pero calendario imposible (mes 13, 31-feb, hora 25…): la base la rechazaría (22008) y el XML quedaría
+ *  como «error» para siempre; mejor «revisar» con la fecha en null. */
+export function fechaFeExiste(m: RegExpExecArray): boolean {
+  const [a, me, d, h, mi, se, zh, zm] = [1, 2, 3, 4, 5, 6, 7, 8].map(i => Number(m[i] ?? 0))
+  if (me < 1 || me > 12 || d < 1 || h > 23 || mi > 59 || se > 59 || zh > 14 || zm > 59) return false
+  return d <= new Date(Date.UTC(a, me, 0)).getUTCDate()   // día 0 del mes siguiente = último día de este
+}
 const TOPE_TEXTO = 500
 
 const corto = (s: string | null, n = TOPE_TEXTO) => (s == null ? null : s.replace(/\s+/g, ' ').slice(0, n))
@@ -159,6 +167,7 @@ export function parsearFe(xml: string): ResultadoFe {
   if (fecha) {
     const m = FECHA.exec(fecha)
     if (!m) { motivos.push('FechaEmision con formato desconocido'); fecha = null }   // null: la base no la puede leer
+    else if (!fechaFeExiste(m)) { motivos.push('FechaEmision imposible (mes, día u hora fuera de rango)'); fecha = null }
     else if (m[3] !== pc.dia || m[2] !== pc.mes || m[1].slice(2) !== pc.anio2) motivos.push('la fecha de la clave no coincide con FechaEmision')
   }
   // v4.4: ResumenFactura/MedioPago/TipoMedioPago · v4.3: MedioPago en la cabecera (puede venir más de uno: el primero)

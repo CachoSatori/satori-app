@@ -1,7 +1,7 @@
 // F1 · orquestación de la Edge fe-ingesta con una base y un Storage FALSOS en memoria (la base real se prueba en
 // scripts/sql/199_pruebas.sql). Muestras ficticias.
 import { describe, it, expect } from 'vitest'
-import { procesarSobre, type DepsIngesta, type ErrorRpc } from './ingestaFe'
+import { esYaExisteStorage, procesarSobre, subirIdempotente, type DepsIngesta, type ErrorRpc } from './ingestaFe'
 import type { SobreFe } from './sobreFe'
 import { claveFicticia, mensajeHaciendaFicticio, xmlFicticio } from './fixturasFe.testutil'
 
@@ -160,5 +160,46 @@ describe('procesarSobre — latido y sin XML', () => {
     const b = baseFalsa()
     await procesarSobre(sobre([xmlFicticio()]), b.deps)
     expect(b.latidos).toEqual(['prueba'])
+  })
+})
+
+describe('Storage «ya existe» = éxito idempotente (la Edge no da 500 en cada reintento)', () => {
+  // Formas reales de storage-js según versión (StorageApiError): código del cuerpo, HTTP 409, o 400 + «Duplicate».
+  const yaExiste = [
+    { statusCode: '409', message: 'The resource already exists' },
+    { status: 409, message: 'x' },
+    { status: 400, error: 'Duplicate', message: 'otra cosa' },
+    { message: 'The resource already exists' },
+  ]
+  it.each(yaExiste)('ya existe: %o', e => {
+    expect(esYaExisteStorage(e)).toBe(true)
+  })
+  it.each([null, undefined, 'texto', { status: 500, message: 'Internal' }, { statusCode: '403', message: 'denied' }, { message: 'Bucket not found' }])(
+    'otro error no es «ya existe»: %o', e => {
+      expect(esYaExisteStorage(e)).toBe(false)
+    })
+
+  it('subirIdempotente: sin error → ok · ya existe → ya_existe · otro → tira', async () => {
+    await expect(subirIdempotente(async () => ({ error: null }))).resolves.toBe('ok')
+    await expect(subirIdempotente(async () => ({ error: { statusCode: '409', message: 'The resource already exists' } }))).resolves.toBe('ya_existe')
+    await expect(subirIdempotente(async () => ({ error: { status: 500, message: 'Internal' } }))).rejects.toThrow('storage: Internal')
+  })
+
+  it('reintento del mismo sobre con un Storage que contesta 409 al segundo upload: 200 y «duplicado», no 500', async () => {
+    const b = baseFalsa()
+    const subidos = new Set<string>()
+    const deps: DepsIngesta = {
+      ...b.deps,
+      subirXml: (ruta) => subirIdempotente(async () => {
+        if (subidos.has(ruta)) return { error: { statusCode: '409', error: 'Duplicate', message: 'The resource already exists' } }
+        subidos.add(ruta)
+        return { error: null }
+      }),
+    }
+    const s = sobre([xmlFicticio()])
+    expect((await procesarSobre(s, deps)).status).toBe(200)
+    const r2 = await procesarSobre(s, deps)
+    expect(r2.status).toBe(200)
+    expect(r2.cuerpo.resultados[0].resultado).toBe('duplicado')
   })
 })

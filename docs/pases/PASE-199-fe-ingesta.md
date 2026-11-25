@@ -60,6 +60,7 @@ parser **en local, sin subirlos** (repo público). Lo que no calce va a «revisa
 | Advisor de seguridad | solo `fe_ingesta_resumen` ejecutable por `authenticated` (esperado: `security definer` con guarda de rol adentro, mismo patrón que la 198) |
 | Humo parser → base (`begin … rollback`) | XML ficticios pasados por el parser real (v4.4, nota de crédito v4.3, uno «revisar»): nuevo · nuevo · revisar · duplicado; líneas, NC con su referencia, moneda `XXX` y fecha nula en el dudoso |
 | Edge `fe-ingesta` v1 (~06:48) | desplegada desde la rama, `verify_jwt = false`, `ezbr_sha256` `7fe37e10…`. Por `pg_net` desde la base: secreto equivocado → **401**, GET → **405** |
+| Ojo con el `ezbr_sha256` de staging | La Edge de staging es una **copia sin comentarios** (el conector despliega el cuerpo a mano), así que su `ezbr_sha256` **no** sirve de referencia para prod. La referencia para prod es el `ezbr_sha256` que dé **Branching tras el merge** de #365 (se anota en el humo, `satori-merge-y-deploy` §4) |
 | Batería `199_pruebas.sql` | **Postgres 16 local: 37/37 y 13/13 mutaciones muerden.** En staging el conector canceló la confirmación (lleva `drop`/`delete`, regla 14): **la corre la sesión de CC del dueño**: `python3 scripts/sql/199_pruebas.py --armar --compacto` → pegar |
 | Prueba de punta a punta con secreto | **NO PROBADO:** el proxy de la sesión bloquea `*.supabase.co` y ningún secreto se pega en un chat. La hace el dueño con su sesión (paso 6 del orden, en staging primero) |
 

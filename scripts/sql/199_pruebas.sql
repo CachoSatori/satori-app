@@ -1,6 +1,6 @@
 -- 199_pruebas · compras F1 (tablas fe_*, bucket fe-xml, funciones de la Edge y la pantalla de control). Transacción que
 -- termina en ROLLBACK: no deja nada. Usa LOCALES FICTICIOS ('prueba-199', 'prueba-199b'), cédulas con patrón obvio
--- (3101999999NN receptor, 310100000001 emisor), usuarios y montos inventados.
+-- (3101999999NN receptor, 999000000001 emisor, imposible de verdad), usuarios y montos inventados.
 -- Corre en STAGING (antes de aplicar, R15) o en un Postgres vacío con scripts/sql/193_base_local.sql (y
 -- scripts/sql/199_preludio_local.sql, que pone `--local`). Se arma y se corre con scripts/sql/199_pruebas.py
 -- (--armar [--local] [--compacto] | --psql "<conexión>" [--local] [--mutar todas | X]). Nunca contra PROD.

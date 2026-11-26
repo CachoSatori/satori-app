@@ -1,6 +1,6 @@
--- 203_preludio_local · SOLO con `203_pruebas.py --local` (Postgres 16 vacío armado con scripts/sql/local_armar_base.sh).
+-- 204_preludio_local · SOLO con `204_pruebas.py --local` (Postgres 16 vacío armado con scripts/sql/local_armar_base.sh).
 -- Corre DENTRO de la transacción descartada de la batería, antes de todo. En staging NO va: ahí esto ya existe.
 -- Privilegios por defecto como Supabase: toda función nueva de public nace ejecutable por anon y authenticated. Sin
--- esto, la prueba de que la 203 se la saca a anon (caso 11) no muerde.
+-- esto, la prueba de que la 204 se la saca a anon (caso 11) no muerde.
 grant usage on schema public, auth to anon, authenticated;
 alter default privileges in schema public grant execute on functions to anon, authenticated;

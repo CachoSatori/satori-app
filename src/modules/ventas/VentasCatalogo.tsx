@@ -4,7 +4,7 @@
 // Ninguna de las dos cambia la venta neta (la decide la familia de cada línea). El costo ya no se carga acá (D-6 = A).
 //
 // Quién: owner y manager (este, solo de sus locales: lo cuidan `getLocalesVentas` y la base). El contador no ve la vista
-// (D-7). El NOMBRE de una familia lo cambia solo el owner (mig 203).
+// (D-7). El NOMBRE de una familia lo cambia solo el owner (mig 204).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { todayCR } from '../../shared/utils'

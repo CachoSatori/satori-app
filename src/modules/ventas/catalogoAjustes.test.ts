@@ -114,7 +114,7 @@ describe('rótulos', () => {
   })
 })
 
-describe('nombre de familia (mismas reglas que la 203)', () => {
+describe('nombre de familia (mismas reglas que la 204)', () => {
   it('normaliza como la base: sin espacios a los costados ni repetidos; salto de línea y tab = un espacio', () => {
     expect(normalizarNombreFamilia('  Escuela   Ficticia\n\t(surf) ')).toBe('Escuela Ficticia (surf)')
   })
@@ -124,8 +124,8 @@ describe('nombre de familia (mismas reglas que la 203)', () => {
   it.each(['', '   ', 'x'.repeat(41), 'alguien@ejemplo.test', '<b>', 'a;b', 'emoji 🍣', 'guion_bajo', 'dólar $5'])('«%s» no', s => {
     expect(errorNombreFamilia(s)).not.toBeNull()
   })
-  it('la lista de caracteres y el largo son los mismos que los de la 203 (una sola regla)', () => {
-    const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/203_pos_familia_nombre.sql'), 'utf8')
+  it('la lista de caracteres y el largo son los mismos que los de la 204 (una sola regla)', () => {
+    const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/204_pos_familia_nombre.sql'), 'utf8')
     const ts = readFileSync(resolve(process.cwd(), 'src/modules/ventas/catalogoAjustes.ts'), 'utf8')
     const enSql = sql.match(/v_nom !~ '(\^\[[^']*(?:''[^']*)*\]\+\$)'/)![1].replace(/''/g, "'")
     const enTs = ts.match(/const NOMBRE_FAMILIA_OK = \/(.+)\/\n/)![1]

@@ -8,6 +8,11 @@ import { todayCR } from '../../shared/utils'
 
 const H = vi.hoisted(() => ({ resultado: null as unknown }))
 vi.mock('../../shared/api/feIngesta', () => ({ getResumenIngesta: vi.fn(async () => H.resultado) }))
+// mig 203: la sección «Emisores por confirmar» tiene su propia prueba (InvFeEmisores.render.test.tsx)
+vi.mock('../../shared/api/feEmisores', () => ({
+  getEmisoresPendientes: vi.fn(async () => ({ ok: true, data: [] })), getEmisoresConocidos: vi.fn(async () => ({ ok: true, data: [] })),
+  recordarEmisor: vi.fn(), desactivarEmisor: vi.fn(),
+}))
 
 import InvFacturasFe from './InvFacturasFe'
 

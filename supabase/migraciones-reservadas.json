@@ -667,6 +667,11 @@
       "nombre": "fe_versiones_revisar",
       "bloque": "operacion2",
       "rama": "feat/compras-f1-257-revisar"
+    },
+    "203": {
+      "nombre": "fe_emisor_recordar",
+      "bloque": "operacion2",
+      "rama": "feat/fe-recordar-emisor"
     }
   }
 }

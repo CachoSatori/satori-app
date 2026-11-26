@@ -9,7 +9,7 @@
 //   · «cortesia» se muestra «Regalías» (la clave de la base no cambia).
 //   · Orden: categoría (orden de `CATEGORIAS`) → orden de la familia → nombre.
 //   · «Nuevo» = visto por primera vez en los últimos 30 días (S9). «Los que cambié» = tiene categoría propia o rinde > 1.
-//   · Nombre de familia: mismas reglas que la 202 (1 a 40 caracteres, lista cerrada). La base es la que manda; esto es
+//   · Nombre de familia: mismas reglas que la 203 (1 a 40 caracteres, lista cerrada). La base es la que manda; esto es
 //     para avisar antes de mandar.
 
 import type { CatalogoAjusteRpc, CatalogoProductosRpc, FamiliaPosRpc } from '../../shared/api/posNdf'
@@ -36,7 +36,7 @@ export const rotuloCategoria = (c: string): string => ROTULO_CATEGORIA[c] ?? c
 
 /** Productos por página («Mostrar N más»). */
 export const POR_PAGINA = 100
-/** Quién edita «rinde» y categoría (D-7). El nombre de una familia, solo el owner (mig 202). */
+/** Quién edita «rinde» y categoría (D-7). El nombre de una familia, solo el owner (mig 203). */
 export const ROLES_EDITAN_CATALOGO: readonly string[] = ['owner', 'manager']
 
 /** El error de la base, en palabras para la persona. */
@@ -147,11 +147,11 @@ export function fichaConRinde(p: Pick<FilaCatalogo, 'rinde' | 'categoriaPropia'>
   return { rinde, categoria: p.categoriaPropia }
 }
 
-// ── Nombre de una familia (mig 202) ─────────────────────────────────────────────────────────────────────────────
+// ── Nombre de una familia (mig 203) ─────────────────────────────────────────────────────────────────────────────
 export const NOMBRE_FAMILIA_MAX = 40
 const NOMBRE_FAMILIA_OK = /^[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ ().,/&'+#-]+$/
 
-/** Como lo guarda la 202: sin espacios a los costados ni repetidos (un salto de línea o un tab cuentan como espacio). */
+/** Como lo guarda la 203: sin espacios a los costados ni repetidos (un salto de línea o un tab cuentan como espacio). */
 export function normalizarNombreFamilia(s: string): string {
   return s.trim().replace(/\s+/g, ' ')
 }

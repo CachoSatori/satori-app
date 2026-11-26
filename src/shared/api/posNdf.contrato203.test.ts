@@ -1,16 +1,16 @@
-// Contrato de la 202 (`pos_familia_nombre_guardar`) contra su lector en la app. Lee el .sql (como contrato198): si alguien
+// Contrato de la 203 (`pos_familia_nombre_guardar`) contra su lector en la app. Lee el .sql (como contrato198): si alguien
 // le abre la puerta a otro rol, le deja tocar la categoría o el orden, o cambia los nombres de los parámetros, cae acá
-// antes que en staging. La batería SQL (scripts/sql/202_pruebas.sql) prueba lo mismo contra una base de verdad.
+// antes que en staging. La batería SQL (scripts/sql/203_pruebas.sql) prueba lo mismo contra una base de verdad.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const leer = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8')
-const SQL = leer('supabase/migrations/202_pos_familia_nombre.sql')
+const SQL = leer('supabase/migrations/203_pos_familia_nombre.sql')
 const API = leer('src/shared/api/posNdf.ts')
 const cuerpo = SQL.slice(SQL.indexOf('create function public.pos_familia_nombre_guardar'), SQL.indexOf('$function$;') + 11)
 
-describe('202 · pos_familia_nombre_guardar', () => {
+describe('203 · pos_familia_nombre_guardar', () => {
   it('firma: (p_local text, p_familia integer, p_nombre text) returns text, y la app manda esos tres nombres', () => {
     expect(cuerpo).toMatch(/pos_familia_nombre_guardar\(p_local text, p_familia integer, p_nombre text\)\nreturns text/)
     expect(API).toContain("sb.rpc('pos_familia_nombre_guardar', { p_local: local, p_familia: familia, p_nombre: nombre })")
@@ -33,9 +33,9 @@ describe('202 · pos_familia_nombre_guardar', () => {
     const codigo = SQL.split('\n').filter(l => !l.trim().startsWith('--')).join('\n')
     expect(codigo).not.toMatch(/pos_ndf_|product_map|pos_producto_ajustes/)
   })
-  it('registrada como 202 en el bloque operacion2', () => {
+  it('registrada como 203 en el bloque operacion2', () => {
     const reg = JSON.parse(leer('supabase/migraciones-reservadas.json')) as { migraciones?: Record<string, { bloque: string; nombre: string }> } & Record<string, unknown>
     const todas = JSON.stringify(reg)
-    expect(todas).toMatch(/"202":\{"nombre":"pos_familia_nombre","bloque":"operacion2"/)
+    expect(todas).toMatch(/"203":\{"nombre":"pos_familia_nombre","bloque":"operacion2"/)
   })
 })

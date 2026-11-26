@@ -32,6 +32,22 @@ describe('InvFacturasFe', () => {
     expect(screen.getByText('XML ilegible: prueba')).toBeTruthy()
     expect(screen.getByText('…0000000001')).toBeTruthy()
   })
+  it('mig 201: muestra el conflicto de misma clave, el emisor no conocido y la respuesta en conflicto con su motivo', async () => {
+    H.resultado = { ok: true, resumen: {
+      latidos: [{ fuente: 'santa-teresa', ultimo_en: hace(8) }], dias: [], errores: [], ultima: hace(8),
+      revisar: [
+        { estado: 'revisar', motivo: 'misma clave con otro XML: revisar cuál es el real (quedan todas las versiones)', n: 1 },
+        { estado: 'revisar', motivo: 'emisor no conocido (cédula sin cargar en emisores conocidos)', n: 3 },
+        { estado: 'respuesta_revisar', motivo: 'respuesta de Hacienda repetida con otro contenido: revisar', n: 1 },
+      ],
+    } }
+    render(<InvFacturasFe />)
+    expect(await screen.findByText('misma clave con otro XML: revisar cuál es el real (quedan todas las versiones)')).toBeTruthy()
+    expect(screen.getByText('emisor no conocido (cédula sin cargar en emisores conocidos)')).toBeTruthy()
+    expect(screen.getByText('Respuesta de Hacienda')).toBeTruthy()
+    expect(screen.getAllByText('Para revisar')).toHaveLength(3) // título de la sección + 2 filas
+    expect(screen.getByText('5')).toBeTruthy() // total para revisar
+  })
   it('sin ingesta hace más de 6 h: en rojo, con el aviso', async () => {
     H.resultado = { ok: true, resumen: { latidos: [{ fuente: 'santa-teresa', ultimo_en: hace(7 * 60) }], dias: [], revisar: [], errores: [], ultima: hace(7 * 60) } }
     render(<InvFacturasFe />)

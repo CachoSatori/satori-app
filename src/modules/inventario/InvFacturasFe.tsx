@@ -12,6 +12,7 @@ import { dateCR, horaCR, todayCR } from '../../shared/utils'
 const MOTIVO_ESTADO: Record<string, string> = {
   receptor_distinto: 'Receptor distinto',
   revisar: 'Para revisar',
+  respuesta_revisar: 'Respuesta de Hacienda', // mig 201: respuesta en conflicto que todavía no tiene su factura
 }
 
 export default function InvFacturasFe() {

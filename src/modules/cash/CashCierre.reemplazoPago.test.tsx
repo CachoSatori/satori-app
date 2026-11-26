@@ -289,10 +289,32 @@ describe('CashCierre · cambio a medias con el turno ya cerrado (ronda 3, I1)', 
     })
     fireEvent.click(terminar)
     const aviso = await screen.findByText(mensajeNoTerminable('resuelto'))
-    expect(aviso.classList.contains('green')).toBe(true)
+    // La MISMA pieza que la Caja Diaria: Aviso tipo="hecho" del estándar (no el cartel suelto de antes).
+    expect(aviso.closest('.est-aviso')?.classList.contains('hecho')).toBe(true)
     expect(api.deleteCashMovement).not.toHaveBeenCalled()
     expect(leerTodosLosReemplazos()).toEqual([])
     await waitFor(() => expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull())
+  })
+
+  it('el aviso «ya estaba terminado» desaparece al cambiar de día y al salir de la pantalla', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    const { unmount, container } = render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    const terminar = await screen.findByRole('button', { name: 'Terminar el cambio' })
+    auth.requireManager.mockImplementation(async () => {
+      enBase(fondo, nuevo); api.getAllCashMovements.mockResolvedValue([fondo, nuevo])
+      return AUTH_OK
+    })
+    fireEvent.click(terminar)
+    await screen.findByText(mensajeNoTerminable('resuelto'))
+    const dia = container.querySelector('input[type="date"]') as HTMLInputElement
+    const otro = dia.value.slice(0, 8) + (dia.value.endsWith('01') ? '02' : '01')
+    fireEvent.change(dia, { target: { value: otro } })
+    // Ya cargado el otro día (el «Cargando…» tapa todo un instante): el aviso no vuelve.
+    await waitFor(() => expect((container.querySelector('input[type="date"]') as HTMLInputElement | null)?.value).toBe(otro))
+    expect(screen.queryByText(mensajeNoTerminable('resuelto'))).toBeNull()
+    unmount()
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    expect(screen.queryByText(mensajeNoTerminable('resuelto'))).toBeNull()
   })
 
   it('sin respuesta de la base al revisar (sesión vencida) → no se borra nada y la anotación queda', async () => {

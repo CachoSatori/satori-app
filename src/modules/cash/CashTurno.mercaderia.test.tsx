@@ -16,6 +16,8 @@ const { createCashMovementSpy } = vi.hoisted(() => ({
 }))
 
 vi.mock('../../shared/api/cash', () => ({
+  // Mig 200 todavía no está en la base (prod antes del pase): el aparato sigue por el camino de siempre (#361).
+  reemplazarPagoEnBase: vi.fn(async () => { throw Object.assign(new Error('Could not find the function public.reemplazar_pago_caja'), { code: 'PGRST202', caer: true }) }),
   createCashMovement: createCashMovementSpy,
   createCashSession: vi.fn(),
   closeCashSession: vi.fn(),

@@ -6,7 +6,7 @@
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega)
 **Al día: 2026-11-26 (~14:20 CR).** `main` = `789e58d0` (#370, 12:38 CR). **Ledger prod = 200 · staging = 200** (199 y 200 entraron por merge → Branching el 26-nov). **Próximo libre: 202** (la 201 está reservada por #369; la 189 se OMITE a propósito). **Punto de entrada:**
 [docs/handoffs/HANDOFF-2026-11-20.md](docs/handoffs/HANDOFF-2026-11-20.md) (los handoffs del 21-nov en adelante viven en los documentos del proyecto de Claude, no en el repo).
-- **Entró el 26-nov (hora CR; firma/OK del dueño por chat con SHA fijado):** **#365** Compras F1: ingesta de XML de factura electrónica, mig 199 + Edge `fe-ingesta` (`21778210`, 06:07; firma sobre `2955ec49`) · **#367** Caja 3/4: signos, «Dólares» una vez, 390 px, «$ 60,00» con espacio (`dbf48026`, 06:23) · **#368** Caja: cambiar un pago en UNA transacción, mig 200 `reemplazar_pago_caja` (`ff38275e`, 07:00; batería staging 23/23, verificador listo; **validado en prod 10:30–10:33** con un pago de prueba que se borró) · **#370** Movimientos: filtro Método, filtro Factura, atajo «Efectivo sin factura», CSV filtrado, facturas sin tope de 500 (`789e58d0`, 12:38; pedido del contador; **validado en prod**). Lo anterior: [ESTADO-HISTORICO](docs/historico/ESTADO-HISTORICO.md) y handoffs.
+- **Entró el 26-nov (hora CR; firma/OK del dueño por chat con SHA fijado):** **#365** Compras F1: ingesta de XML de factura electrónica, mig 199 + Edge `fe-ingesta` (`2177821028322b`, 06:07; firma sobre `2955ec49`) · **#367** Caja 3/4: signos, «Dólares» una vez, 390 px, «$ 60,00» con espacio (`dbf48026`, 06:23) · **#368** Caja: cambiar un pago en UNA transacción, mig 200 `reemplazar_pago_caja` (`ff38275e`, 07:00; batería staging 23/23, verificador listo; **validado en prod 10:30–10:33** con un pago de prueba que se borró) · **#370** Movimientos: filtro Método, filtro Factura, atajo «Efectivo sin factura», CSV filtrado, facturas sin tope de 500 (`789e58d0`, 12:38; pedido del contador; **validado en prod**). Lo anterior: [ESTADO-HISTORICO](docs/historico/ESTADO-HISTORICO.md) y handoffs.
 - **Pase F1 (PASE-199) en curso:** fila de `fe_receptores` de Santa Teresa cargada por el owner (10:40) · `FE_INGESTA_SECRET` en prod (10:41, por la sesión de CC del dueño; huella en la lista de secretos) · **falta:** que el dueño tenga el valor para el Apps Script (sin pasar por un chat), el script en la cuenta de facturas con disparador cada 15 min y carga desde el 30-nov, y el humo.
 - **Abierto:** **#369** Compras F1: hallazgos 257/258, mig 201 (cabeza `bdb3330b`, Gate verde; verificador: CAMBIOS → arreglados; falta la batería 201 en staging por la sesión de CC del dueño y la firma; **tiene que entrar antes del 30-nov**; con `fe_emisores_conocidos` vacía todo entra «revisar») · **#262** v2 salonero solo salón (cabeza `3679488e`, firmable; entra con el próximo pase del agente del PoS) · viejos: #324, #287, #252.
 - **Validación física pendiente del dueño:** #367 en prod («$ 2,00») · «Cierre OK» · cuadros numéricos (Metas, Productos, Recetas, Cumpleaños, Puntos por rol) · Metas con meta individual vacía.
@@ -72,7 +72,7 @@
 | `extract-document` | `cf860027` |
 | `cierre-email` | `dbbcc05a` |
 | `pago-notificar` | `8572b4f9` |
-| `ventas-dia-contador` | `83406755` |
+| `ventas-dia-contador` | `83406755b0` |
 | `ingest-ndf` | `4d2eb62b` (verify_jwt false) |
 | `alta-empleado` | `071d418e` |
 | `club-pase` | `84969b6f` (verify_jwt false) |

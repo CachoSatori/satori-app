@@ -255,3 +255,46 @@ describe('revisarCambioEnBase / reemplazosDelDia / soltarReemplazo (ronda 3)', (
     expect(m.get('otra-cosa')).toBe('igual')
   })
 })
+
+// Mig 200: con `atomico` (la RPC reemplazar_pago_caja) el cambio entero es una transacción de la base.
+describe('reemplazarPago — atómico en la base (mig 200)', () => {
+  const nunca = () => vi.fn(async () => { throw new Error('no se tenía que llamar') })
+  const err = (code: string | null, caer: boolean, msg = 'x') => Object.assign(new Error(msg), { code, caer })
+
+  it('listo: no llama crear ni borrar; devuelve el nuevo', async () => {
+    const crear = nunca(), borrarViejo = nunca()
+    const r = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async id => ({ estado: 'listo', nuevo: mov(id) }) })
+    expect(r).toEqual({ estado: 'listo', nuevo: mov('n') })
+    expect(crear).not.toHaveBeenCalled(); expect(borrarViejo).not.toHaveBeenCalled()
+  })
+
+  it('listo repetido (reintento): nuevo null para que se recargue', async () => {
+    const r = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear: nunca(), borrarViejo: nunca(), atomico: async id => ({ estado: 'listo', repetido: true, nuevo: mov(id) }) })
+    expect(r).toEqual({ estado: 'listo', nuevo: null })
+  })
+
+  it('distinto: no borra y anota el par con lo guardado', async () => {
+    const r = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear: nunca(), borrarViejo: nunca(), ahora: () => 7,
+      atomico: async id => ({ estado: 'distinto', guardado: mov(id, { amount_crc: 1 }) }) })
+    expect(r).toEqual({ estado: 'distinto', guardado: mov('n', { amount_crc: 1 }), reemplazo: { viejo: 'viejo', nuevo: 'n', at: 7 } })
+  })
+
+  it('error que cae (sin función, red, timeout): sigue por crear + borrar con el MISMO id', async () => {
+    const crear = vi.fn(async (id: string) => mov(id)), borrarViejo = vi.fn(async () => {})
+    const r = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async () => { throw err('PGRST202', true) } })
+    expect(crear).toHaveBeenCalledWith('n'); expect(borrarViejo).toHaveBeenCalledTimes(1)
+    expect(r.estado).toBe('listo')
+  })
+
+  it('«no» de la base: sin_cambios y NO cae al camino viejo; P0002 marca sinViejo', async () => {
+    const crear = nunca(), borrarViejo = nunca()
+    const r1 = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async () => { throw err('42501', false, 'No autorizado') } })
+    expect(r1).toEqual({ estado: 'sin_cambios', error: 'No autorizado' })
+    const r2 = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async () => { throw err('P0002', false, 'ya no existe') } })
+    expect(r2).toEqual({ estado: 'sin_cambios', error: 'ya no existe', sinViejo: true })
+    // Un error cualquiera (sin `caer`) tampoco cae: nada se da por hecho.
+    const r3 = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async () => { throw new Error('raro') } })
+    expect(r3.estado).toBe('sin_cambios')
+    expect(crear).not.toHaveBeenCalled()
+  })
+})

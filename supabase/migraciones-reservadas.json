@@ -19,6 +19,12 @@
       "desde": 150,
       "hasta": 199,
       "que": "PASE A PROD: solo renumeraciones de migraciones que quedaron ≤ al último del ledger de prod (con su número de origen)"
+    },
+    "operacion2": {
+      "tipo": "creacion",
+      "desde": 200,
+      "hasta": 249,
+      "que": "Caja / operación, segundo bloque (el 087–99 está lleno). Abierto el 25-nov para la 200; ratificado por el dueño el 25-nov 23:50 CR"
     }
   },
   "usadas_antes_de_los_bloques": {
@@ -651,6 +657,11 @@
       "bloque": "pase",
       "rama": "feat/compras-f1-ingesta",
       "origen": "142"
+    },
+    "200": {
+      "nombre": "caja_reemplazo_pago_atomico",
+      "bloque": "operacion2",
+      "rama": "feat/caja-reemplazo-atomico"
     }
   }
 }

@@ -40,6 +40,7 @@ import {
 import { useMovimientosSinReemplazados } from './useReemplazosAparato'
 import { MSG_FASE2_CON_REEMPLAZO, NOTA_REEMPLAZO, mensajeNoTerminable, reemplazosDelDia, revisarCambioEnBase, soltarReemplazo, type ReemplazoPendiente } from './reemplazoPago'
 import { Aviso } from '../../shared/ui/estandar'
+import AvisoCambioTerminado from './AvisoCambioTerminado'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -388,7 +389,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
         `(${fi2(propinasPagadasDia)}). Acá va la venta BRUTA, sin restarle las propinas — ellas ya ` +
         'restan solas. Corregí el monto, o marcá la casilla si de verdad fue así.'); return
     }
-    setSaving(true); setError(null)
+    setSaving(true); setError(null); setAvisoResuelto(null)
     try {
       await saveCierreParcial({
         session_date:    fecha,
@@ -454,7 +455,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     // Orden de fases: la noche NO se puede cerrar sin el Mediodía confirmado (Fase 1).
     // Sin `parcial`, las ventas de mediodía se perderían y el cierre quedaría a medias.
     if (!parcial) { setError('Cerrá primero el Mediodía (Fase 1) antes de cerrar la noche.'); return }
-    setSaving(true); setError(null)
+    setSaving(true); setError(null); setAvisoResuelto(null)
     try {
       // ATÓMICO (mig 071): fila del cierre + ventas + retiro + ajuste en UNA transacción de la base
       // (RPC cerrar_dia_completo), o nada. Los MONTOS son exactamente los de siempre — calculados
@@ -523,17 +524,20 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // nota que la Caja Diaria. «Descartar el cambio»: el nuevo no existe en la base ni en la cola, así que el viejo es
   // el pago que de verdad quedó; se suelta la anotación y vuelve a contar. Ninguno de los dos crea movimientos.
   const [cambioEnCurso, setCambioEnCurso] = useState(false)
+  // (#361) «Ya estaba terminado»: la MISMA pieza que la Caja Diaria (AvisoCambioTerminado), atada a la fecha en que
+  // pasó: al cambiar de día o al cerrar/deshacer/borrar (ver `setSaving(true)` de cada acción) deja de mostrarse.
+  const [avisoResuelto, setAvisoResuelto] = useState<string | null>(null)
   const terminarCambio = async (r: ReemplazoPendiente) => {
     if (cambioEnCurso) return
     const auth = await requireManager()
     if (!auth.ok) return
-    setCambioEnCurso(true); setError(null)
+    setCambioEnCurso(true); setError(null); setAvisoResuelto(null)
     try {
       // Ronda 4 (Menor 3): el estado del aviso es del montaje; se relee la base ya autorizado y se borra el viejo
       // solo si el nuevo sigue confirmado. Si no, se avisa y no se borra nada.
       const e = await revisarCambioEnBase(r, movsBase, id => getCashMovementById(id))
       if (e !== 'terminable') {
-        if (e === 'resuelto') { soltarReemplazo(r.viejo); setMsg(mensajeNoTerminable(e)) } else setError(mensajeNoTerminable(e))
+        if (e === 'resuelto') { soltarReemplazo(r.viejo); setAvisoResuelto(fecha) } else setError(mensajeNoTerminable(e))
         await loadCierres(); onRefresh()
         return
       }
@@ -548,6 +552,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   const descartarCambio = (r: ReemplazoPendiente) => {
     if (!window.confirm('El pago nuevo no está guardado en la base. ¿Descartar el cambio?\n\nQueda el pago anterior, como está en la base. Si hace falta, editalo de nuevo en Caja Diaria.')) return
     soltarReemplazo(r.viejo)
+    setAvisoResuelto(null)
     setMsg('✓ Cambio descartado: cuenta el pago anterior.')
     void loadCierres()
   }
@@ -562,7 +567,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
       `Si querés recargar el día desde cero (sin duplicar), usá el botón "Borrar TODO el día".`)) return
     const auth = await requireManager()
     if (!auth.ok) return
-    setSaving(true); setError(null)
+    setSaving(true); setError(null); setAvisoResuelto(null)
     try {
       // ATÓMICO (mig 071): ventas + retiro + ajuste + fila del cierre en una transacción. La
       // contraseña de gerencia (cajero) se verifica EN EL SERVIDOR (verify_manager).
@@ -588,7 +593,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     if (!window.confirm(textoConfirmacionBorrado(plan, fi2))) return
     const auth = await requireManager()
     if (!auth.ok) return
-    setSaving(true); setError(null)
+    setSaving(true); setError(null); setAvisoResuelto(null)
     try {
       await discardDiaCompleto(fecha, auth.managerEmail, auth.managerPassword, plan.borrar.map(f => f.id))
       setMsg(`✓ Día borrado completo (${plan.borrar.length} movimiento(s))${plan.ajenas.length ? ` · ${plan.ajenas.length} de otro día operativo quedaron intactos` : ''} — podés recargar desde cero.`)
@@ -747,6 +752,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
       {msg && (
         <div className="cierre-hint green" style={{ fontSize:'0.82rem' }}>{msg}</div>
       )}
+      {avisoResuelto != null && avisoResuelto === fecha && <AvisoCambioTerminado />}
 
       {/* Barra de fases */}
       {/* Estado derivado de parcial Y completo (SPEC-caja-estandar §3.2): con el día cerrado las dos

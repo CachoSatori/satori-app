@@ -22,6 +22,13 @@
 //      el par se anota (se cuenta una vez) y se avisa con el monto que quedó (estado `distinto`). Un id nuevo nunca
 //      se usa: si el primer intento llegara tarde a la base, habría tres pagos.
 //
+//   6. Mig 200 (de raíz): si la base tiene `reemplazar_pago_caja`, el cambio entero (alta + borrado) es UNA
+//      transacción de la base (`atomico`): o quedan las dos cosas o ninguna, y ya no queda nada a medias que anotar.
+//      Mismo id del cliente: un reintento devuelve lo mismo. Si la función no está (prod antes del pase), sin red,
+//      con la cola pendiente, o la respuesta se pierde (timeout), se sigue por el camino de 1–5, que con el mismo id
+//      tampoco duplica. Los errores de la base que dicen «no» (permiso, local, monto, el viejo ya no está) no caen al
+//      camino viejo: se devuelven como `sin_cambios` (nada cambió).
+//
 // Sin React ni Supabase: se prueba con dependencias falsas (reemplazoPago.test.ts).
 
 import type { CashMovement } from '../../shared/types/database'
@@ -39,7 +46,7 @@ export type ResultadoReemplazo =
   /** Nuevo en la base y viejo borrado. `nuevo` es null si el alta rebotó por duplicado (ya estaba): recargar. */
   | { estado: 'listo'; nuevo: CashMovement | null }
   /** El alta falló: no se tocó nada. El viejo sigue y cuenta. Reintentar con el MISMO id. */
-  | { estado: 'sin_cambios'; error: string }
+  | { estado: 'sin_cambios'; error: string; sinViejo?: boolean }
   /** El nuevo existe (en la base o en la cola) y el viejo todavía no se borró. `error` null = en cola sin señal. */
   | { estado: 'falta_borrar'; nuevo: CashMovement | null; reemplazo: ReemplazoPendiente; error: string | null }
   /**
@@ -48,7 +55,20 @@ export type ResultadoReemplazo =
    */
   | { estado: 'distinto'; guardado: CashMovement | null; reemplazo: ReemplazoPendiente }
 
+/** Lo que contesta la RPC de la mig 200 (`reemplazar_pago_caja`). */
+export interface RespuestaAtomica {
+  estado:    'listo' | 'distinto'
+  repetido?: boolean
+  nuevo?:    CashMovement
+  guardado?: CashMovement
+}
+
 export interface DepsReemplazo {
+  /**
+   * Mig 200: el cambio entero en UNA transacción de la base. Si tira un error con `caer: true` (no está la función,
+   * sin red, cola pendiente, timeout), se sigue por el camino de siempre con el MISMO id. Sin esta dependencia, igual.
+   */
+  atomico?:    (id: string) => Promise<RespuestaAtomica>
   /** Crea el movimiento nuevo con ESE id (createCashMovement con opts.id). */
   crear:       (id: string) => Promise<CashMovement>
   /** Borra el viejo por la cascada (deleteCashMovement con nota y credenciales). */
@@ -65,9 +85,24 @@ const mensaje = (e: unknown) => (e instanceof Error ? e.message : String(e)) || 
 /** El alta rebotó porque ese id/client_op_id ya está en la base (un intento anterior sí entró). */
 export const esDuplicado = (e: unknown): boolean => /duplicate key|23505|already exists/i.test(mensaje(e))
 
+/** El error de la RPC deja seguir por el camino de siempre (ErrorRpcReemplazo.caer). */
+const caeAlCaminoViejo = (e: unknown): boolean => !!e && typeof e === 'object' && (e as { caer?: unknown }).caer === true
+/** La base dijo que el pago viejo ya no está (P0002 de la 200: otro aparato lo cambió o lo borró). */
+const esSinViejo = (e: unknown): boolean => !!e && typeof e === 'object' && (e as { code?: unknown }).code === 'P0002'
+
 export async function reemplazarPago(viejoId: string, nuevoId: string, deps: DepsReemplazo): Promise<ResultadoReemplazo> {
   let nuevo: CashMovement | null
   const reemplazo = (): ReemplazoPendiente => ({ viejo: viejoId, nuevo: nuevoId, at: (deps.ahora ?? Date.now)() })
+  if (deps.atomico) {
+    try {
+      const r = await deps.atomico(nuevoId)
+      if (r.estado === 'distinto') return { estado: 'distinto', guardado: r.guardado ?? null, reemplazo: reemplazo() }
+      return { estado: 'listo', nuevo: r.repetido ? null : (r.nuevo ?? null) }
+    } catch (e) {
+      if (!caeAlCaminoViejo(e)) return { estado: 'sin_cambios', error: mensaje(e), ...(esSinViejo(e) ? { sinViejo: true } : {}) }
+      // sigue abajo, por el camino de siempre, con el MISMO id
+    }
+  }
   try {
     nuevo = await deps.crear(nuevoId)
   } catch (e) {

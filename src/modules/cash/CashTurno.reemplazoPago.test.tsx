@@ -16,6 +16,8 @@ const h = vi.hoisted(() => ({
   db: [] as Record<string, unknown>[],
   createCashMovementSpy: vi.fn(),
   deleteCashMovementSpy: vi.fn(),
+  // Mig 200: por defecto la función NO está en la base (prod antes del pase) y el aparato sigue por el camino de #361.
+  rpcSpy: vi.fn(),
   closeCashSessionSpy: vi.fn(async () => undefined),
   requireManagerSpy: vi.fn(async () => ({ ok: true as boolean, managerEmail: 'gerencia@ejemplo.test' as string | undefined, managerPassword: 'clave-ficticia' as string | undefined })),
 }))
@@ -25,6 +27,7 @@ vi.mock('../../shared/api/cash', () => ({
   createCashSession: vi.fn(),
   closeCashSession: h.closeCashSessionSpy,
   deleteCashMovement: h.deleteCashMovementSpy,
+  reemplazarPagoEnBase: h.rpcSpy,
   getCashMovementById: vi.fn(async (id: string) => h.db.find(r => r.id === id) ?? null),
   getPreviousCierre: vi.fn(async () => null),
   discardCashSession: vi.fn(),
@@ -63,10 +66,10 @@ const pagoViejo = {
 }
 
 // Padre mínimo: igual que CashModule, onMovAdded agrega a la lista y onRefresh relee la «base».
-function Harness({ onError }: { onError: (m: string) => void }) {
+function Harness({ onError, ses = session }: { onError: (m: string) => void; ses?: CashSession }) {
   const [movs, setMovs] = useState<CashMovement[]>(() => h.db.slice() as unknown as CashMovement[])
   return (
-    <CashTurno openSession={session} suppliers={[supplier]} sessions={[]} sessionMovements={movs} allMovements={movs}
+    <CashTurno openSession={ses} suppliers={[supplier]} sessions={[]} sessionMovements={movs} allMovements={movs}
       onSessionOpen={vi.fn()} onSessionClose={vi.fn()}
       onMovAdded={m => setMovs(prev => [m, ...prev])}
       onError={onError}
@@ -93,6 +96,19 @@ const altaOk = async (m: Record<string, unknown>, opts?: { id?: string }) => {
   return row
 }
 const borradoOk = async (id: string) => { h.db = h.db.filter(r => r.id !== id) }
+const errRpc = (message: string, code: string | null, caer: boolean) => Object.assign(new Error(message), { code, caer })
+const sinFuncion = async () => { throw errRpc('Could not find the function public.reemplazar_pago_caja', 'PGRST202', true) }
+// La RPC de la 200 contra la base de prueba: en UN paso crea el nuevo (id del cliente) y borra el viejo; reintento = lo mismo.
+const rpcOk = async (viejo: string, nuevo: Record<string, unknown> & { id: string }) => {
+  const ya = h.db.find(r => r.id === nuevo.id)
+  if (!h.db.some(r => r.id === viejo)) {
+    if (ya) return { estado: 'listo', repetido: true, nuevo: ya }
+    throw errRpc('El pago anterior ya no existe (otro aparato lo cambió o lo borró). Recargá la lista.', 'P0002', false)
+  }
+  const row = ya ?? { ...nuevo, created_at: '2026-07-01T11:00:00Z' }
+  h.db = [...h.db.filter(r => r.id !== viejo && r.id !== nuevo.id), row]
+  return { estado: 'listo', repetido: false, nuevo: row }
+}
 
 beforeEach(() => {
   vi.stubEnv('VITE_SUPABASE_URL', 'http://localhost:54321')
@@ -100,6 +116,7 @@ beforeEach(() => {
   h.db = [{ ...pagoViejo }]
   h.createCashMovementSpy.mockReset(); h.createCashMovementSpy.mockImplementation(altaOk)
   h.deleteCashMovementSpy.mockReset(); h.deleteCashMovementSpy.mockImplementation(borradoOk)
+  h.rpcSpy.mockReset(); h.rpcSpy.mockImplementation(sinFuncion)
   h.closeCashSessionSpy.mockClear()
   h.requireManagerSpy.mockClear()
   localStorage.clear()
@@ -298,8 +315,23 @@ describe('CashTurno · editar un pago guardado no lo pierde si falla la red (hal
     expect(h.deleteCashMovementSpy).not.toHaveBeenCalled()
     expect(onError).not.toHaveBeenCalled()
     expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull()
-    expect(screen.getByText(mensajeNoTerminable('resuelto'))).toBeTruthy()
+    const aviso = screen.getByText(mensajeNoTerminable('resuelto'))
+    expect(aviso.closest('.est-aviso')?.classList.contains('hecho')).toBe(true)   // la MISMA pieza que el Cierre
     expect(tarjeta('Gastado efectivo')).toBe(fi(20000))
+  })
+
+  it('(#361) el aviso «ya estaba terminado» desaparece al cerrar el turno (cambia el turno abierto)', async () => {
+    h.deleteCashMovementSpy.mockRejectedValueOnce(new Error('Failed to fetch'))
+    const { rerender } = render(<Harness onError={vi.fn()} />)
+    await editarA('20000')
+    h.requireManagerSpy.mockImplementationOnce(async () => {
+      h.db = h.db.filter(r => r.id !== 'mov-viejo')
+      return { ok: true, managerEmail: 'gerencia@ejemplo.test', managerPassword: 'clave-ficticia' }
+    })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Terminar el cambio' })) })
+    expect(screen.getByText(mensajeNoTerminable('resuelto'))).toBeTruthy()
+    rerender(<Harness onError={vi.fn()} ses={{ ...session, id: 's-otro' } as CashSession} />)
+    expect(screen.queryByText(mensajeNoTerminable('resuelto'))).toBeNull()
   })
 
   it('el nuevo quedó en la cola (sin señal): el viejo no se borra todavía y no se cuenta doble', async () => {
@@ -323,3 +355,85 @@ describe('CashTurno · editar un pago guardado no lo pierde si falla la red (hal
     } finally { onLine.mockRestore() }
   })
 })
+
+// Mig 200: con la función en la base, el cambio entero es UNA llamada (alta + borrado en la misma transacción).
+describe('CashTurno · cambio de pago atómico en la base (mig 200)', () => {
+  beforeEach(() => { h.rpcSpy.mockImplementation(rpcOk) })
+
+  it('una sola llamada a la RPC (viejo, datos con el id del cliente, credenciales); sin alta ni borrado sueltos ni aviso rojo', async () => {
+    montar()
+    await editarA('20000')
+    expect(h.rpcSpy).toHaveBeenCalledTimes(1)
+    const [viejo, nuevo, mail, clave] = h.rpcSpy.mock.calls[0]
+    expect(viejo).toBe('mov-viejo')
+    expect(nuevo).toMatchObject({ amount_crc: 20000, supplier_id: 'sup-1', method: 'Efectivo', caja_origen: 'Caja Proveedores', session_id: 's-252' })
+    expect(typeof nuevo.id).toBe('string')
+    expect([mail, clave]).toEqual(['gerencia@ejemplo.test', 'clave-ficticia'])
+    expect(h.createCashMovementSpy).not.toHaveBeenCalled()
+    expect(h.deleteCashMovementSpy).not.toHaveBeenCalled()
+    expect(h.db.map(r => r.amount_crc)).toEqual([20000])
+    expect(tarjeta('Gastado efectivo')).toBe(fi(20000))
+    expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull()
+    expect(localStorage.getItem(claveReemplazos('s-252'))).toBeNull()
+  })
+
+  it('la base dice que no (permiso, local, monto): no cae al camino viejo, no cambia nada y el modal queda abierto', async () => {
+    h.rpcSpy.mockImplementationOnce(async () => { throw errRpc('No autorizado para cambiar pagos de ese local', '42501', false) })
+    const { onError } = montar()
+    await editarA('20000')
+    expect(h.createCashMovementSpy).not.toHaveBeenCalled()
+    expect(h.deleteCashMovementSpy).not.toHaveBeenCalled()
+    expect(h.db.map(r => r.id)).toEqual(['mov-viejo'])
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('No autorizado para cambiar pagos de ese local'))
+    expect(screen.getByRole('button', { name: '✓ Guardar cambios' })).toBeTruthy()
+  })
+
+  it('el viejo ya no existe (otro aparato): aviso claro, se recarga la lista y se cierra el modal', async () => {
+    const { onError } = montar()
+    // Lo que ve esta pantalla todavía tiene el viejo; en la base, otro aparato ya lo cambió.
+    h.rpcSpy.mockImplementationOnce(async () => { h.db = []; throw errRpc('El pago anterior ya no existe (otro aparato lo cambió o lo borró). Recargá la lista.', 'P0002', false) })
+    await editarA('20000')
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('No se guardó el cambio: El pago anterior ya no existe'))
+    expect(h.createCashMovementSpy).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: '✓ Guardar cambios' })).toBeNull()
+  })
+
+  it('la respuesta se pierde (timeout) después de entrar: sigue por el camino viejo con el MISMO id y no duplica', async () => {
+    h.rpcSpy.mockImplementationOnce(async (viejo: string, nuevo: Record<string, unknown> & { id: string }) => {
+      await rpcOk(viejo, nuevo); throw errRpc('timeout de red', null, true)
+    })
+    montar()
+    await editarA('20000')
+    const idRpc = h.rpcSpy.mock.calls[0][1].id
+    expect(h.createCashMovementSpy).toHaveBeenCalledTimes(1)
+    expect(h.createCashMovementSpy.mock.calls[0][1]?.id).toBe(idRpc)      // el mismo id → 23505 → relee y compara
+    expect(h.db.filter(r => r.amount_crc === 20000)).toHaveLength(1)
+    expect(h.db.map(r => r.id)).not.toContain('mov-viejo')
+    expect(tarjeta('Gastado efectivo')).toBe(fi(20000))
+  })
+
+  it('reintento tras un «no» de la base: el MISMO id en la segunda llamada', async () => {
+    h.rpcSpy.mockImplementationOnce(async () => { throw errRpc('Error 503 del servidor', null, false) })
+    montar()
+    await editarA('20000')
+    await guardar()
+    expect(h.rpcSpy).toHaveBeenCalledTimes(2)
+    expect(h.rpcSpy.mock.calls[1][1].id).toBe(h.rpcSpy.mock.calls[0][1].id)
+    expect(h.db.map(r => r.amount_crc)).toEqual([20000])
+  })
+
+  it('«distinto» (un intento anterior quedó con otro monto): no se borra el viejo, se cuenta una vez y avisa el monto', async () => {
+    h.rpcSpy.mockImplementationOnce(async (_v: string, nuevo: Record<string, unknown> & { id: string }) => {
+      const guardado = { ...pagoViejo, id: nuevo.id, amount_crc: 18000, created_at: '2026-07-01T11:00:00Z' }
+      h.db.push(guardado)
+      return { estado: 'distinto', guardado }
+    })
+    const { onError } = montar()
+    await editarA('20000')
+    expect(h.db).toHaveLength(2)
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining(fi(18000)))
+    expect(tarjeta('Gastado efectivo')).toBe(fi(18000))
+    expect(screen.getByText('Cambio de pago sin terminar.')).toBeTruthy()
+  })
+})
+

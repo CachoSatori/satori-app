@@ -72,7 +72,7 @@
 | `extract-document` | `cf860027` |
 | `cierre-email` | `dbbcc05a` |
 | `pago-notificar` | `8572b4f9` |
-| `ventas-dia-contador` | `83406755b0` |
+| `ventas-dia-contador` | `834067…` (empieza así) |
 | `ingest-ndf` | `4d2eb62b` (verify_jwt false) |
 | `alta-empleado` | `071d418e` |
 | `club-pase` | `84969b6f` (verify_jwt false) |

@@ -20,8 +20,9 @@ const InvMovimientos  = lazy(() => import('./InvMovimientos'))
 const InvConsumo      = lazy(() => import('./InvConsumo'))
 const InvFoodCost     = lazy(() => import('./InvFoodCost'))
 const InvRevision     = lazy(() => import('./InvRevision'))
+const InvFacturasFe   = lazy(() => import('./InvFacturasFe'))
 
-type Tab = 'dashboard' | 'revision' | 'ingredientes' | 'recetas' | 'consumo' | 'foodcost' | 'movimientos'
+type Tab = 'dashboard' | 'revision' | 'ingredientes' | 'recetas' | 'consumo' | 'foodcost' | 'movimientos' | 'fe'
 
 const TABS: { id: Tab; label: string; roles: string[] }[] = [
   { id: 'dashboard',    label: '📊 Stock',       roles: ['owner','manager','contador'] },
@@ -31,6 +32,8 @@ const TABS: { id: Tab; label: string; roles: string[] }[] = [
   { id: 'consumo',      label: '🍽 Consumo',      roles: ['owner','manager'] },
   { id: 'foodcost',     label: '💰 Food Cost',    roles: ['owner','manager','contador'] },
   { id: 'movimientos',  label: '📦 Movimientos',  roles: ['owner','manager','contador'] },
+  // Compras F1 (mig 199): control de la ingesta de facturas electrónicas del correo. Solo owner y contador (spec §7.8).
+  { id: 'fe',           label: '📨 Facturas electrónicas', roles: ['owner','contador'] },
 ]
 
 export default function InventarioModule() {
@@ -112,6 +115,7 @@ export default function InventarioModule() {
             {tab === 'consumo'      && <InvConsumo      ingredients={ingredients} onRefresh={reload} profile={profile} />}
             {tab === 'foodcost'     && <InvFoodCost     ingredients={ingredients} />}
             {tab === 'movimientos'  && <InvMovimientos  ingredients={ingredients} movements={movements} onRefresh={reload} profile={profile} />}
+            {tab === 'fe'           && <InvFacturasFe />}
           </div>
         </Suspense>
       )}

@@ -4,14 +4,16 @@
 # Solo pruebas locales: nunca staging ni prod. Las migraciones que no corren en Postgres local (pg_cron, MAINTAIN de
 # PG17) se listan con «!!» y no frenan.
 #
-#   PGHOST=/tmp PGPORT=5499 PGUSER=pgv bash scripts/sql/local_armar_base.sh <base> [raiz-del-repo]
+#   PGHOST=/tmp PGPORT=5499 PGUSER=pgv [HASTA=NNN] bash scripts/sql/local_armar_base.sh <base> [raiz-del-repo]
+# HASTA (opcional): aplica solo las migraciones con número <= HASTA (p. ej. HASTA=200 arma «prod antes de la 203»).
 set -u
-DB=${1:?nombre de la base}; RAIZ=${2:-$(cd "$(dirname "$0")/../.." && pwd)}
+DB=${1:?nombre de la base}; RAIZ=${2:-$(cd "$(dirname "$0")/../.." && pwd)}; HASTA=${HASTA:-}
 P="psql -X -d $DB -q -v ON_ERROR_STOP=1"
 psql -X -d postgres -qc "drop database if exists $DB" -c "create database $DB" >/dev/null
 $P -f "$RAIZ/scripts/sql/local_shim_supabase.sql" >/dev/null 2>&1
 for f in "$RAIZ"/supabase/migrations/*.sql; do
   b=$(basename "$f")
+  if [ -n "$HASTA" ] && [ $((10#${b%%_*})) -gt $((10#$HASTA)) ]; then continue; fi
   case "$b" in
     038_*) $P -c "alter table public.cash_movements add column if not exists method text, add column if not exists caja_origen text" ;;
     069_*) $P -c "create policy cierre_write on public.cash_cierres_dia for all using (true); create policy inv_write_ri on public.recipe_ingredients for all using (true); create policy inv_write_recipes on public.recipes for all using (true);" 2>/dev/null ;;

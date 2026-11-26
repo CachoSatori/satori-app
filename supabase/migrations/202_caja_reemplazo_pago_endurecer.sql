@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 203 · Caja: endurecer `reemplazar_pago_caja` (los 4 Menores del verificador de la 200) ║
+-- ║ 202 · Caja: endurecer `reemplazar_pago_caja` (los 4 Menores del verificador de la 200) ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
 -- La 200 (#368) está en el ledger de prod y su .sql NO se toca (regla 10): esta migración reescribe las dos funciones
@@ -11,17 +11,17 @@
 --     cae al camino viejo): no cambia nada en la app.
 --   · M3: `id = v_id or client_op_id = v_id limit 1` sin orden → con orden: manda la fila con ESE id (las dos ramas).
 --   · M4: el alta guarda `btrim(method)`; la comparación (`_reemplazo_pago_coincide`) ahora hace btrim de los dos lados.
---   · M2: pruebas nuevas que muerden (scripts/sql/203_pruebas.sql); no cambia código.
+--   · M2: pruebas nuevas que muerden (scripts/sql/202_pruebas.sql); no cambia código.
 --
 -- Contrato para la app sin cambios: {estado: 'listo', repetido, nuevo} · {estado: 'distinto', guardado} · errores
 -- 42501 / 22023 / P0002 / P0001 como en la 200, más el 42501 de M1.
 -- GUARDA: corre SOLO si los dos cuerpos en la base son exactamente los de la 200 (md5 de prosrc sin espacios). Si ya
--- son los de la 203, o cualquier otra cosa, se para sin tocar nada.
+-- son los de la 202, o cualquier otra cosa, se para sin tocar nada.
 -- NO toca ninguna tabla, política, disparador ni otra función (delete_movement_cascade se llama igual). Ningún dato.
--- Vuelta atrás: scripts/sql/203_rollback.sql (vuelve exactamente a la 200). Pruebas: scripts/sql/203_pruebas.sql.
+-- Vuelta atrás: scripts/sql/202_rollback.sql (vuelve exactamente a la 200). Pruebas: scripts/sql/202_pruebas.sql.
 
 -- ── 0. Guarda por huella ──────────────────────────────────────────────────────────────────────
-do $guarda203$
+do $guarda202$
 declare
   v_r text;
   v_c text;
@@ -29,25 +29,25 @@ begin
   if to_regprocedure('public.delete_movement_cascade(uuid,text,text,text)') is null
      or to_regprocedure('public.puede_ver_local(text)') is null
      or to_regprocedure('public.get_my_role()') is null then
-    raise exception '203: falta delete_movement_cascade, puede_ver_local o get_my_role';
+    raise exception '202: falta delete_movement_cascade, puede_ver_local o get_my_role';
   end if;
   if to_regprocedure('public.reemplazar_pago_caja(uuid,jsonb,text,text)') is null
      or to_regprocedure('public._reemplazo_pago_coincide(public.cash_movements,jsonb)') is null then
-    raise exception '203: falta la 200 (reemplazar_pago_caja / _reemplazo_pago_coincide): se para sin tocar nada';
+    raise exception '202: falta la 200 (reemplazar_pago_caja / _reemplazo_pago_coincide): se para sin tocar nada';
   end if;
   select md5(regexp_replace(prosrc, '\s', '', 'g')) into v_r
     from pg_proc where oid = 'public.reemplazar_pago_caja(uuid,jsonb,text,text)'::regprocedure;
   select md5(regexp_replace(prosrc, '\s', '', 'g')) into v_c
     from pg_proc where oid = 'public._reemplazo_pago_coincide(public.cash_movements,jsonb)'::regprocedure;
-  if v_r = 'f010a305df2234dbb9f8a6745f4a466f' and v_c = 'af19ee44359cc6b7622ca2f60069d095' then
-    raise exception '203: ya aplicada (los cuerpos ya son los de la 203): se para sin tocar nada';
+  if v_r = '3ca9211052b3b977f2e5a4f3432b99f1' and v_c = 'ec56e5b77dad0552543a037e0ccf34c3' then
+    raise exception '202: ya aplicada (los cuerpos ya son los de la 202): se para sin tocar nada';
   end if;
   if v_r <> '636d3776826384ff46ed87a1cfe0db25' or v_c <> '98dae10d63e704afd7ff02930e655bbd' then
-    raise exception '203: los cuerpos en la base no son los de la 200 (reemplazar_pago_caja %, _reemplazo_pago_coincide %): se para sin tocar nada',
+    raise exception '202: los cuerpos en la base no son los de la 200 (reemplazar_pago_caja %, _reemplazo_pago_coincide %): se para sin tocar nada',
       left(v_r, 8), left(v_c, 8);
   end if;
 end
-$guarda203$;
+$guarda202$;
 
 -- ── 1. ¿La fila guardada tiene ESTOS datos? (espejo de coincidePago del aparato) ─────────────
 create or replace function public._reemplazo_pago_coincide(m public.cash_movements, d jsonb)
@@ -59,7 +59,7 @@ as $$
   select m.amount_crc = (d->>'amount_crc')::numeric
      and coalesce(m.amount_usd, 0) = coalesce((d->>'amount_usd')::numeric, 0)
      and m.supplier_id is not distinct from nullif(d->>'supplier_id', '')::uuid
-     and btrim(coalesce(m.method, '')) = btrim(coalesce(d->>'method', ''))   -- 203 · M4: = el btrim del alta
+     and btrim(coalesce(m.method, '')) = btrim(coalesce(d->>'method', ''))   -- 202 · M4: = el btrim del alta
      and coalesce(m.caja_origen, '') = coalesce(d->>'caja_origen', '')
      and coalesce(m.description, '') = coalesce(d->>'description', '')
      and (select coalesce(array_agg(x order by x), '{}') from jsonb_array_elements_text(coalesce(m.attachments, '[]')) x)
@@ -151,7 +151,7 @@ begin
     -- otro monto). «Es el reemplazo»: id = client_op_id = el del cliente, pago a proveedor, y el viejo se borró con la
     -- nota de reemplazo, en el mismo local, DESPUÉS de que se creara este (hasta 1 h de reloj del aparato) y este es
     -- más nuevo que el viejo. Un pago anterior al viejo, o creado después del borrado, no es su reemplazo.
-    -- 203 · M3: determinista; si hay una fila con ESE id y otra con ese client_op_id, manda la del id.
+    -- 202 · M3: determinista; si hay una fila con ESE id y otra con ese client_op_id, manda la del id.
     select * into v_ya from public.cash_movements where id = v_id or client_op_id = v_id order by (id = v_id) desc limit 1;
     if found and public.puede_ver_local(v_ya.location_id) then
       if v_ya.id = v_id and v_ya.client_op_id = v_id and v_ya.movement_type = 'egreso_mercaderia'
@@ -190,10 +190,10 @@ begin
   end if;
 
   -- ── E. ¿El nuevo ya está? (un intento anterior entró sin llegar a borrar el viejo) ──
-  -- 203 · M3: determinista (manda la fila con ESE id).
+  -- 202 · M3: determinista (manda la fila con ESE id).
   select * into v_ya from public.cash_movements where id = v_id or client_op_id = v_id order by (id = v_id) desc limit 1 for update;
   if found then
-    -- 203 · M1: un id que choca con un movimiento de OTRO local (o de uno que quien llama no ve) no se devuelve:
+    -- 202 · M1: un id que choca con un movimiento de OTRO local (o de uno que quien llama no ve) no se devuelve:
     -- error sin datos. Antes salía entero en «guardado».
     if v_ya.location_id is distinct from v_viejo.location_id or not public.puede_ver_local(v_ya.location_id) then
       raise exception 'Ese id ya lo usa un movimiento de otro local. Recargá la lista.' using errcode = '42501';
@@ -238,4 +238,4 @@ $$;
 revoke all on function public.reemplazar_pago_caja(uuid, jsonb, text, text) from public, anon;
 grant execute on function public.reemplazar_pago_caja(uuid, jsonb, text, text) to authenticated;
 comment on function public.reemplazar_pago_caja(uuid, jsonb, text, text) is
-  '200 + 203 · Cambiar un pago a proveedor en UNA transacción: alta del nuevo (id del cliente, idempotente) + borrado del viejo por delete_movement_cascade. Hallazgo 252 / R36. 203: id de otro local = 42501 sin datos, búsqueda determinista, método con btrim.';
+  '200 + 202 · Cambiar un pago a proveedor en UNA transacción: alta del nuevo (id del cliente, idempotente) + borrado del viejo por delete_movement_cascade. Hallazgo 252 / R36. 202: id de otro local = 42501 sin datos, búsqueda determinista, método con btrim.';

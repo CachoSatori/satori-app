@@ -1,9 +1,9 @@
--- 203 · vuelta atrás: deja las dos funciones EXACTAMENTE como la 200 (mismo cuerpo, byte a byte, que
+-- 202 · vuelta atrás: deja las dos funciones EXACTAMENTE como la 200 (mismo cuerpo, byte a byte, que
 -- supabase/migrations/200_caja_reemplazo_pago_atomico.sql; mismos atributos, grants y comentario). No toca datos.
--- Se corre en UNA transacción. Si la 203 ya está en el ledger de prod, su .sql NO se borra de main (regla 10): esta
+-- Se corre en UNA transacción. Si la 202 ya está en el ledger de prod, su .sql NO se borra de main (regla 10): esta
 -- vuelta atrás se aplica como migración nueva con este mismo cuerpo (con su número del bloque operacion2).
--- GUARDA: solo corre si los cuerpos en la base son los de la 203; si no, se para sin tocar nada.
-do $vuelta203$
+-- GUARDA: solo corre si los cuerpos en la base son los de la 202; si no, se para sin tocar nada.
+do $vuelta202$
 declare
   v_r text;
   v_c text;
@@ -12,12 +12,12 @@ begin
     from pg_proc where oid = to_regprocedure('public.reemplazar_pago_caja(uuid,jsonb,text,text)');
   select md5(regexp_replace(prosrc, '\s', '', 'g')) into v_c
     from pg_proc where oid = to_regprocedure('public._reemplazo_pago_coincide(public.cash_movements,jsonb)');
-  if v_r is distinct from 'f010a305df2234dbb9f8a6745f4a466f' or v_c is distinct from 'af19ee44359cc6b7622ca2f60069d095' then
-    raise exception '203_rollback: los cuerpos en la base no son los de la 203 (% / %): se para sin tocar nada',
+  if v_r is distinct from '3ca9211052b3b977f2e5a4f3432b99f1' or v_c is distinct from 'ec56e5b77dad0552543a037e0ccf34c3' then
+    raise exception '202_rollback: los cuerpos en la base no son los de la 202 (% / %): se para sin tocar nada',
       coalesce(left(v_r, 8), 'no está'), coalesce(left(v_c, 8), 'no está');
   end if;
 end
-$vuelta203$;
+$vuelta202$;
 
 -- ── 1. ¿La fila guardada tiene ESTOS datos? (espejo de coincidePago del aparato) ─────────────
 create or replace function public._reemplazo_pago_coincide(m public.cash_movements, d jsonb)

@@ -663,7 +663,7 @@
       "bloque": "operacion2",
       "rama": "feat/caja-reemplazo-atomico"
     },
-    "203": {
+    "202": {
       "nombre": "caja_reemplazo_pago_endurecer",
       "bloque": "operacion2",
       "rama": "feat/caja-200-endurecer"

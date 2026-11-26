@@ -5,7 +5,7 @@
 # PG17) se listan con «!!» y no frenan.
 #
 #   PGHOST=/tmp PGPORT=5499 PGUSER=pgv [HASTA=NNN] bash scripts/sql/local_armar_base.sh <base> [raiz-del-repo]
-# HASTA (opcional): aplica solo las migraciones con número <= HASTA (p. ej. HASTA=200 arma «prod antes de la 203»).
+# HASTA (opcional): aplica solo las migraciones con número <= HASTA (p. ej. HASTA=200 arma «prod antes de la 202»).
 set -u
 DB=${1:?nombre de la base}; RAIZ=${2:-$(cd "$(dirname "$0")/../.." && pwd)}; HASTA=${HASTA:-}
 P="psql -X -d $DB -q -v ON_ERROR_STOP=1"

@@ -170,6 +170,15 @@ PR 3–7. Las clases nuevas llevan prefijo `est-` para no chocar con las de `ind
 de botones en tinta (15:1 sobre crema; el oro daba 2,9:1), píldora «pendiente» sobre `--c-oro-fondo-texto` (4,6:1) y guardas
 de prueba: contraste mínimo de los tokens, regla de foco, íconos solo por nombre y versión fija de Tabler.
 
+
+**PR 3/4 (25-nov, signos):** el modal «El conteo no cuadra» y el resumen antes de confirmar usan `resumenDiferencia`
+(palabras y color del hecho, `CLASE_TONO`), como el cartel en curso. El resumen suma «Ajuste de cierre en Caja Fuerte»
+con signo por moneda (`lineasAjuste` / `montoConSigno`: `−₡1.951` laca · `+₡2.300` oro), con los mismos montos del
+`ajuste` que se manda a la RPC, y el motivo. «Propinas pagadas en el cierre» pasa a `−₡…`. La caja aparte de dólares
+del cierre en curso se quita: repetía «Dólares: …» (menor del verificador del #348). A 390 px: la apertura deja de
+pisar la regla de `.cd-grid2` (fecha debajo), `Row2` usa `minmax(0, 1fr)` y la tabla del conteo `table-layout: fixed`.
+La caja del motivo («Diferencia detectada») queda en palabras, sin montos con signo (regla del verificador del #348).
+Sin cambios de cálculo ni de lo que se guarda.
 Texto original de las opciones:
 
 1. **Fondo crema** en vez del blanco actual (el blanco fue una decisión anterior del rediseño). Recomendado: crema, como los SOP.

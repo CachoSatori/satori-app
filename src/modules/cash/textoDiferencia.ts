@@ -2,6 +2,7 @@
 // diferencia ni decide si el cierre pide ajuste (eso vive en CashCierre: `cuadra`, `cuadraUSD`,
 // `cierreNecesitaAjuste`). Recibe la diferencia ya calculada (contado − debería) y arma el texto.
 import { OVER_SHORT_TOL, OVER_SHORT_TOL_USD } from './cierreStats'
+import { fd } from '../../shared/utils'
 
 // ── Barra de fases (§3.2) ────────────────────────────────────────────────────
 // Un cierre `completo` cierra el día entero: las dos fases van cerradas aunque no haya fila
@@ -38,11 +39,14 @@ const TOL_TXT: Record<Moneda, string> = { crc: `₡${OVER_SHORT_TOL}`, usd: `US$
 
 const miles = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 
-/** Monto sin signo, al estándar de los reportes: «₡1.951» · «$2,00». */
+/**
+ * Monto sin signo: «₡1.951» · «$ 2,00». Los dólares van con `fd` (src/shared/utils), el formateador compartido que
+ * ya usa el resto de Caja (Movimientos, Pendientes, Turno, comprobante): coma decimal y «$ » adelante. Así el
+ * cartel, el modal y el resumen dicen los dólares igual que la tabla del conteo (Caja PR 3/4, verificador).
+ */
 export function montoSinSigno(abs: number, moneda: Moneda): string {
   if (moneda === 'crc') return '₡' + miles(Math.round(abs))
-  const [ent, dec] = abs.toFixed(2).split('.')
-  return '$' + miles(Number(ent)) + ',' + dec
+  return fd(abs)
 }
 
 // Dentro de la tolerancia, el redondeo no puede mostrar la tolerancia misma (₡499,6 → «₡500: dentro
@@ -174,4 +178,15 @@ export function lineasAjuste(crc: number, usd: number): LineaAjuste[] {
   if (crc !== 0) out.push({ moneda: 'crc', etiqueta: 'Colones', monto: montoConSigno(crc, 'crc'), tono: crc < 0 ? 'laca' : 'oro' })
   if (usd !== 0) out.push({ moneda: 'usd', etiqueta: 'Dólares', monto: montoConSigno(usd, 'usd'), tono: usd < 0 ? 'laca' : 'oro' })
   return out
+}
+
+/**
+ * Título del bloque del ajuste en el resumen. Con una moneda, o las dos en el mismo sentido: «Ajuste de cierre en
+ * Caja Fuerte (faltante)». Si van en sentidos opuestos (faltan ₡ y sobran $, o al revés) el tipo que se guarda
+ * (`ajusteTipoPorSigno`: manda ₡) contradiría una de las líneas, así que el título va sin tipo y cada línea dice
+ * lo suyo con su signo. SOLO el texto: el `ajuste_tipo` que se guarda no cambia.
+ */
+export function tituloAjuste(lineas: LineaAjuste[], tipo: 'Faltante' | 'Sobrante'): string {
+  const opuestas = new Set(lineas.map(l => l.tono)).size > 1
+  return opuestas ? 'Ajuste de cierre en Caja Fuerte' : `Ajuste de cierre en Caja Fuerte (${tipo.toLowerCase()})`
 }

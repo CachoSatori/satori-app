@@ -20,9 +20,9 @@ import type { CashCierreDia, CashSession, CashMovement } from '../../shared/type
 import { getCierresDia, getAllCashMovements, getCashSessions, getCashMovementById, deleteCashMovement, saveCierreParcial, cerrarDiaCompleto, deshacerCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
-import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
+import { fi, fd, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
 import { ajusteTipoPorSigno } from './ajusteTipo'
-import { estadoFases, ETIQUETA_MEDIODIA, ETIQUETA_NOCHE, textoDiferencia, resumenDiferencia, COLOR_TONO, CLASE_TONO, lineasAjuste, montoConSigno } from './textoDiferencia'
+import { estadoFases, ETIQUETA_MEDIODIA, ETIQUETA_NOCHE, textoDiferencia, resumenDiferencia, COLOR_TONO, CLASE_TONO, lineasAjuste, montoConSigno, tituloAjuste } from './textoDiferencia'
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import { textoConfirmacionBorrado, type PlanBorradoDia } from './borrarDia'
 import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
@@ -827,7 +827,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               {(N(vmCRC) > 0 || N(vmUSD) > 0) && (
                 <div className="cierre-hint gold">
                   Efectivo real ₡ (ventas − dólares): <strong>{fi2(efRealM)}</strong>
-                  {N(vmUSD) > 0 && <span style={{ color:'var(--c-gris)' }}> · dólares físicos: <strong>${N(vmUSD).toFixed(2)}</strong></span>}
+                  {N(vmUSD) > 0 && <span style={{ color:'var(--c-gris)' }}> · dólares físicos: <strong>{fd(N(vmUSD))}</strong></span>}
                 </div>
               )}
               {/* Propinas: ya NO se tipean — se pagan por la vía real (sección "Propinas del día")
@@ -879,7 +879,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               </div>
               {[
                 { l:'Ventas PoS ₡', v: fi2(parcial.vm_crc) },
-                { l:'Dólares $',    v: '$' + parcial.vm_usd.toFixed(2) },
+                { l:'Dólares $',    v: fd(parcial.vm_usd) },
                 { l:'Efectivo real ₡', v: fi2(parcial.ef_real_m_crc) },
                 { l:'Propinas ₡',   v: fi2(parcial.propinas_m_crc) },
                 parcial.otros_m_crc > 0 ? { l:'Otros egresos ₡', v: fi2(parcial.otros_m_crc) } : null,
@@ -916,7 +916,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                 {(N(vnCRC) > 0 || N(vnUSD) > 0) && (
                   <div className="cierre-hint blue">
                     Efectivo real ₡ (ventas − dólares): <strong>{fi2(efRealN)}</strong>
-                    {N(vnUSD) > 0 && <span style={{ color:'var(--c-gris)' }}> · dólares físicos: <strong>${N(vnUSD).toFixed(2)}</strong></span>}
+                    {N(vnUSD) > 0 && <span style={{ color:'var(--c-gris)' }}> · dólares físicos: <strong>{fd(N(vnUSD))}</strong></span>}
                   </div>
                 )}
                 {ventasNCeroReal && (
@@ -1017,7 +1017,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                         {totalContadoCRC > 0 ? fi2(totalContadoCRC) : '—'}
                       </td>
                       <td style={{ padding:'0.625rem 0.5rem', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', fontSize:'0.95rem', fontWeight:800, color:'var(--c-musgo)', textAlign:'center' }}>
-                        {totalContadoUSD > 0 ? `$${totalContadoUSD.toFixed(2)}` : '—'}
+                        {totalContadoUSD > 0 ? fd(totalContadoUSD) : '—'}
                       </td>
                     </tr>
                   </tbody>
@@ -1025,7 +1025,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
 
                 {primerConteo && (
                   <div style={{ fontSize:'0.72rem', color:'var(--c-gris)', margin:'0.5rem 0' }}>
-                    ↺ Reconteo — el primer conteo ({fi2(primerConteo.crc)}{primerConteo.usd ? ` · $${primerConteo.usd.toFixed(2)}` : ''}) quedó guardado.
+                    ↺ Reconteo — el primer conteo ({fi2(primerConteo.crc)}{primerConteo.usd ? ` · ${fd(primerConteo.usd)}` : ''}) quedó guardado.
                   </div>
                 )}
 
@@ -1047,17 +1047,17 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                           <div className="cierre-resumen-row">
                             <span className="lbl">Pozo de efectivo (todas las cajas físicas)</span>
                             <span className="val" data-testid="resumen-pozo">{fi2(dPozo.crc - efRealMFromParcial - efRealN + N(retiroN))}</span>
-                            <span className="val">${(dPozo.usd - vmUSDFromParcial - N(vnUSD)).toFixed(2)}</span>
+                            <span className="val">{fd(dPozo.usd - vmUSDFromParcial - N(vnUSD))}</span>
                           </div>
                           <div className="cierre-resumen-row">
                             <span className="lbl">+ Ventas efectivo BRUTAS mediodía</span>
                             <span className="val">{fi2(efRealMFromParcial)}</span>
-                            <span className="val">${vmUSDFromParcial.toFixed(2)}</span>
+                            <span className="val">{fd(vmUSDFromParcial)}</span>
                           </div>
                           <div className="cierre-resumen-row">
                             <span className="lbl">+ Ventas efectivo BRUTAS noche</span>
                             <span className="val">{fi2(efRealN)}</span>
-                            <span className="val">${N(vnUSD).toFixed(2)}</span>
+                            <span className="val">{fd(N(vnUSD))}</span>
                           </div>
                           {N(retiroN) > 0 && (
                             <div className="cierre-resumen-row">
@@ -1081,29 +1081,29 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                           <div className="cierre-resumen-row">
                             <span className="lbl">Saldo Caja Fuerte (según sistema)</span>
                             <span className="val">{fi2(saldoBase.crc)}</span>
-                            <span className="val">${saldoBase.usd.toFixed(2)}</span>
+                            <span className="val">{fd(saldoBase.usd)}</span>
                           </div>
                           <div className="cierre-resumen-row">
                             <span className="lbl">+ Mediodía neto</span>
                             <span className="val">{fi2(netoM)}</span>
-                            <span className="val">${vmUSDFromParcial.toFixed(2)}</span>
+                            <span className="val">{fd(vmUSDFromParcial)}</span>
                           </div>
                           <div className="cierre-resumen-row">
                             <span className="lbl">+ Noche neto</span>
                             <span className="val">{fi2(netoN)}</span>
-                            <span className="val">${N(vnUSD).toFixed(2)}</span>
+                            <span className="val">{fd(N(vnUSD))}</span>
                           </div>
                         </>
                       )}
                       <div className="cierre-resumen-row destacada">
                         <span className="lbl">= Debería quedar en Caja Fuerte</span>
                         <span className="val">{fi2(deberia)}</span>
-                        <span className="val">${deberiaUSD.toFixed(2)}</span>
+                        <span className="val">{fd(deberiaUSD)}</span>
                       </div>
                       <div className="cierre-resumen-row">
                         <span className="lbl">Total contado (conteo físico)</span>
                         <span className="val">{fi2(totalContadoCRC)}</span>
-                        <span className="val">${totalContadoUSD.toFixed(2)}</span>
+                        <span className="val">{fd(totalContadoUSD)}</span>
                       </div>
                     </div>
                     {/* SPEC-caja-estandar §4: en curso «Faltan / Sobran / Cuadra» con la tolerancia en
@@ -1262,16 +1262,16 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
             <div className="cd-resumen-block">
               <div className="cd-resumen-row">
                 <span>Ventas Mediodía</span>
-                <strong>{fi2(parcial.vm_crc)}{parcial.vm_usd > 0 ? ` · $${parcial.vm_usd.toFixed(2)}` : ''}</strong>
+                <strong>{fi2(parcial.vm_crc)}{parcial.vm_usd > 0 ? ` · ${fd(parcial.vm_usd)}` : ''}</strong>
               </div>
               <div className="cd-resumen-row">
                 <span>Ventas Noche</span>
-                <strong>{fi2(N(vnCRC))}{N(vnUSD) > 0 ? ` · $${N(vnUSD).toFixed(2)}` : ''}</strong>
+                <strong>{fi2(N(vnCRC))}{N(vnUSD) > 0 ? ` · ${fd(N(vnUSD))}` : ''}</strong>
               </div>
               {propinasPagadasDia > 0 && (
                 <div className="cd-resumen-row">
                   <span>Propinas pagadas en el cierre</span>
-                  <strong style={{ color:'#8a5aa8' }}>{montoConSigno(-propinasPagadasDia, 'crc')}</strong>
+                  <strong data-salida style={{ color:'var(--c-tinta)' }}>{montoConSigno(-propinasPagadasDia, 'crc')}</strong>
                 </div>
               )}
             </div>
@@ -1280,24 +1280,24 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
             <div className="cd-resumen-block">
               <div className="cd-resumen-row">
                 <span>Caja Diaria mañana</span>
-                <strong style={{ color:'var(--c-musgo)' }}>{fi2(N(sepDiariaCRC))}{N(sepDiariaUSD) > 0 ? ` · $${N(sepDiariaUSD).toFixed(2)}` : ''}</strong>
+                <strong style={{ color:'var(--c-musgo)' }}>{fi2(N(sepDiariaCRC))}{N(sepDiariaUSD) > 0 ? ` · ${fd(N(sepDiariaUSD))}` : ''}</strong>
               </div>
               <div className="cd-resumen-row">
                 <span>Caja Registradora</span>
-                <strong>{fi2(N(sepRegCRC))}{N(sepRegUSD) > 0 ? ` · $${N(sepRegUSD).toFixed(2)}` : ''}</strong>
+                <strong>{fi2(N(sepRegCRC))}{N(sepRegUSD) > 0 ? ` · ${fd(N(sepRegUSD))}` : ''}</strong>
               </div>
               <div className="cd-resumen-row">
                 <span>Remanente CF</span>
-                <strong style={{ color:'var(--c-oro-texto)' }}>{fi2(N(remCRC))}{N(remUSD) > 0 ? ` · $${N(remUSD).toFixed(2)}` : ''}</strong>
+                <strong style={{ color:'var(--c-oro-texto)' }}>{fi2(N(remCRC))}{N(remUSD) > 0 ? ` · ${fd(N(remUSD))}` : ''}</strong>
               </div>
               <div className="cd-resumen-row total">
                 <span>Total contado</span>
-                <strong>{fi2(totalContadoCRC)}{totalContadoUSD > 0 ? ` · $${totalContadoUSD.toFixed(2)}` : ''}</strong>
+                <strong>{fi2(totalContadoCRC)}{totalContadoUSD > 0 ? ` · ${fd(totalContadoUSD)}` : ''}</strong>
               </div>
               {primerConteo && (
                 <div className="cd-resumen-row">
                   <span>Primer conteo (antes del reconteo)</span>
-                  <strong>{fi2(primerConteo.crc)}{primerConteo.usd > 0 ? ` · $${primerConteo.usd.toFixed(2)}` : ''}</strong>
+                  <strong>{fi2(primerConteo.crc)}{primerConteo.usd > 0 ? ` · ${fd(primerConteo.usd)}` : ''}</strong>
                 </div>
               )}
             </div>
@@ -1319,7 +1319,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                   {r.detalle.map(l => <span key={l.texto} data-linea style={{ fontWeight:400, fontSize:'0.76rem' }}>{l.texto}</span>)}
                   {lineas.length > 0 && (
                     <div data-bloque="ajuste-signo" style={{ marginTop:'0.4rem', paddingTop:'0.4rem', borderTop:'1px solid currentColor' }}>
-                      <div style={{ fontSize:'0.72rem', fontWeight:600, color:'var(--c-tinta)' }}>Ajuste de cierre en Caja Fuerte ({ajusteTipoDerivado.toLowerCase()})</div>
+                      <div data-titulo-ajuste style={{ fontSize:'0.72rem', fontWeight:600, color:'var(--c-tinta)' }}>{tituloAjuste(lineas, ajusteTipoDerivado)}</div>
                       {lineas.map(l => (
                         <div key={l.moneda} data-moneda={l.moneda} data-tono={l.tono}
                           style={{ display:'flex', justifyContent:'space-between', gap:'0.75rem', fontSize:'0.8rem', color:'var(--c-tinta)', fontWeight:400 }}>

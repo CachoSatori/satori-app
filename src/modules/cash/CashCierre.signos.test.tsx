@@ -36,7 +36,7 @@ vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 
 vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn(async () => ({ ok: true })) }))
 
 import CashCierre from './CashCierre'
-import { todayStr } from './cashUtils'
+import { todayStr, fd } from './cashUtils'
 
 const HOY = todayStr()
 // Fase 1 sellada con US$10 → debería US$10; en colones el debería es la venta de noche (pozo vacío).
@@ -93,9 +93,9 @@ describe('Modal «El conteo no cuadra»', () => {
     await contar(98049, 8)
     fireEvent.click(botonCierre())
     const m = bloque('modal-diferencia')!
-    expect(m.querySelector('[data-titular]')!.textContent).toBe('Diferencia: Faltan ₡1.951 y $2,00')
+    expect(m.querySelector('[data-titular]')!.textContent).toBe('Diferencia: Faltan ₡1.951 y $ 2,00')
     expect(m.textContent).toContain('Colones: faltan ₡1.951, fuera de tolerancia (₡500)')
-    expect(m.textContent).toContain('Dólares: faltan $2,00, fuera de tolerancia (US$1)')
+    expect(m.textContent).toContain('Dólares: faltan $ 2,00, fuera de tolerancia (US$1)')
     expect(m.getAttribute('data-tono')).toBe('laca')
     expect(m.className).toContain('fail')
     expect(m.textContent).not.toMatch(/[+−-]\s?₡|US\$ [+−-]/)
@@ -112,16 +112,16 @@ describe('Modal «El conteo no cuadra»', () => {
 })
 
 describe('Resumen antes de confirmar', () => {
-  it('faltante: palabras + ajuste con signo «−₡1.951» y «−$2,00» en laca, el MISMO monto que se guarda', async () => {
+  it('faltante: palabras + ajuste con signo «−₡1.951» y «−$ 2,00» en laca, el MISMO monto que se guarda', async () => {
     await contar(98049, 8)
     const r = abrirResumen()
-    expect(r.querySelector('[data-titular]')!.textContent).toBe('Diferencia: Faltan ₡1.951 y $2,00')
+    expect(r.querySelector('[data-titular]')!.textContent).toBe('Diferencia: Faltan ₡1.951 y $ 2,00')
     const a = bloque('ajuste-signo')!
     expect(a.textContent).toContain('Ajuste de cierre en Caja Fuerte (faltante)')
     const crc = a.querySelector('[data-moneda="crc"]')!
     const usd = a.querySelector('[data-moneda="usd"]')!
     expect(crc.textContent).toBe('Colones−₡1.951')
-    expect(usd.textContent).toBe('Dólares−$2,00')
+    expect(usd.textContent).toBe('Dólares−$ 2,00')
     expect(crc.getAttribute('data-tono')).toBe('laca')
     expect(usd.getAttribute('data-tono')).toBe('laca')
     expect(a.querySelector('[data-motivo]')!.textContent).toBe('Motivo: vuelto mal dado')
@@ -157,6 +157,56 @@ describe('Resumen antes de confirmar', () => {
     abrirResumen()
     const fila = screen.getByText('Propinas pagadas en el cierre').parentElement!
     expect(fila.querySelector('strong')!.textContent).toBe('−₡12.000')
+    // Una salida va en tinta, como los egresos de la línea de diseño (maqueta: «−₡62.500» sin color); el violeta
+    // viejo (#8a5aa8) no es un token de .est.
+    expect(fila.querySelector('strong')!.getAttribute('style')).toContain('color: var(--c-tinta)')
+    expect(fila.querySelector('strong')!.getAttribute('style')).not.toMatch(/8a5aa8/i)
+  })
+  it('colones fuera de tolerancia y dólares DENTRO pero ≠ 0: solo la línea de colones; el ajuste en $ va en 0 (M5)', async () => {
+    await contar(98049, 9.5)
+    const r = abrirResumen()
+    expect(r.querySelector('[data-titular]')!.textContent).toBe('Diferencia: Faltan ₡1.951')
+    expect(r.textContent).toContain('Dólares: cuadra, faltan $ 0,50: dentro de la tolerancia (menos de US$1)')
+    const a = bloque('ajuste-signo')!
+    expect(a.querySelector('[data-moneda="crc"]')!.textContent).toBe('Colones−₡1.951')
+    expect(a.querySelector('[data-moneda="usd"]')).toBeNull()
+    expect(a.querySelector('[data-titulo-ajuste]')!.textContent).toBe('Ajuste de cierre en Caja Fuerte (faltante)')
+    expect(await confirmar()).toMatchObject({ crc: -1951, usd: 0 })
+  })
+  it('mezclado (faltan ₡, sobran $): el título va SIN tipo para no decir «(faltante)» sobre «+$ 3,50»', async () => {
+    await contar(98049, 13.5)
+    const r = abrirResumen()
+    const a = bloque('ajuste-signo')!
+    expect(a.querySelector('[data-titulo-ajuste]')!.textContent).toBe('Ajuste de cierre en Caja Fuerte')
+    expect(a.querySelector('[data-moneda="crc"]')!.textContent).toBe('Colones−₡1.951')
+    expect(a.querySelector('[data-moneda="usd"]')!.textContent).toBe('Dólares+$ 3,50')
+    expect(a.querySelector('[data-moneda="crc"]')!.getAttribute('data-tono')).toBe('laca')
+    expect(a.querySelector('[data-moneda="usd"]')!.getAttribute('data-tono')).toBe('oro')
+    expect(r.textContent).not.toMatch(/\((faltante|sobrante)\)/)
+    // Lo que se guarda no cambia: el tipo sigue saliendo de ajusteTipoPorSigno (manda ₡) y el ajuste con su signo.
+    expect(await confirmar()).toMatchObject({ crc: -1951, usd: 3.5 })
+    const cierre = (api.cerrarDiaCompleto.mock.calls[0][0] as unknown as { cierre: { ajuste_tipo: string } }).cierre
+    expect(cierre.ajuste_tipo).toBe('Faltante')
+  })
+})
+
+describe('Dólares con el formato de toda Caja (fd: «$ 2,00», coma decimal)', () => {
+  it('el cartel, el resumen y la tabla dicen los dólares igual; ningún «$2.00» con punto decimal', async () => {
+    await contar(98049, 8)
+    const montoUsd = document.querySelector('.cierre-table tr.total td:last-child')!.textContent
+    expect(montoUsd).toBe(fd(8))
+    abrirResumen()
+    const todo = document.body.textContent ?? ''
+    expect(todo).toContain(`Ventas mediodía`)
+    expect(todo).toContain(`₡0 · ${fd(10)}`)                 // ventas mediodía en el resumen (antes «$10.00»)
+    expect(todo).toContain(`Faltan ₡1.951 y ${fd(2)}`)        // titular (antes «$2,00» sin espacio)
+    expect(todo).not.toMatch(/\$\s?\d+\.\d{2}(?!\d)/)
+  })
+  it('en el código de Caja no queda «$» + toFixed(2) (cada uno formateaba distinto)', () => {
+    for (const f of ['CashCierre.tsx', 'textoDiferencia.ts', 'borrarDia.ts']) {
+      const src = readFileSync(resolve(process.cwd(), 'src/modules/cash', f), 'utf8')
+      expect(src, f).not.toMatch(/\$\{?[^\n]{0,60}toFixed\(2\)/)
+    }
   })
 })
 
@@ -165,7 +215,7 @@ describe('«Dólares» una sola vez en el cierre en curso', () => {
     await contar(98049, 8)
     const lineas = Array.from(document.querySelectorAll('body *'))
       .filter(el => el.children.length === 0 && /^Dólares: /.test(el.textContent ?? ''))
-    expect(lineas.map(l => l.textContent)).toEqual(['Dólares: faltan $2,00, fuera de tolerancia (US$1)'])
+    expect(lineas.map(l => l.textContent)).toEqual(['Dólares: faltan $ 2,00, fuera de tolerancia (US$1)'])
     expect(bloque('diferencia-usd')).toBeNull()
   })
 })
@@ -186,8 +236,14 @@ describe('390 px: nada se sale de su tarjeta', () => {
     const media = css.match(/@media \(max-width: 600px\) \{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g) ?? []
     expect(media.some(b => b.includes('.cd-grid2 { grid-template-columns: 1fr; }'))).toBe(true)
   })
-  it('Conteo: en celular la tabla usa anchos fijos y no empuja la columna «$ Dólares» afuera', () => {
+  it('Conteo: en celular la etiqueta va arriba a lo ancho y ₡ y $ a media fila (lugar para ₡9.999.999)', () => {
+    // happy-dom no mide: se fija la regla. La medida real a 390 px (Chrome) va en el PR: cuadro ₡ ~95 px de texto
+    // (antes ~43 px, «98049» se veía «980·»); ₡9.999.999 ≈ 71 px en la mono de 0,82 rem.
     const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
-    expect(css).toMatch(/@media \(max-width: 600px\) \{\s*\.cierre-table \{ table-layout: fixed; \}\s*\.cierre-table th:first-child \{ width: 34%; \}/)
+    const media = (css.match(/@media \(max-width: 600px\) \{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g) ?? []).find(b => b.includes('.cierre-table'))!
+    expect(media).toContain('.cierre-table tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }')
+    expect(media).toContain('.cierre-table td:first-child { grid-column: 1 / -1;')
+    expect(media).toContain('.cierre-table th:first-child { display: none; }')
+    expect(media).not.toMatch(/table-layout: fixed|width: 34%/)
   })
 })

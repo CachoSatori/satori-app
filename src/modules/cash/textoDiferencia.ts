@@ -2,6 +2,7 @@
 // diferencia ni decide si el cierre pide ajuste (eso vive en CashCierre: `cuadra`, `cuadraUSD`,
 // `cierreNecesitaAjuste`). Recibe la diferencia ya calculada (contado − debería) y arma el texto.
 import { OVER_SHORT_TOL, OVER_SHORT_TOL_USD } from './cierreStats'
+import { fd } from '../../shared/utils'
 
 // ── Barra de fases (§3.2) ────────────────────────────────────────────────────
 // Un cierre `completo` cierra el día entero: las dos fases van cerradas aunque no haya fila
@@ -38,11 +39,14 @@ const TOL_TXT: Record<Moneda, string> = { crc: `₡${OVER_SHORT_TOL}`, usd: `US$
 
 const miles = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 
-/** Monto sin signo, al estándar de los reportes: «₡1.951» · «$2,00». */
+/**
+ * Monto sin signo: «₡1.951» · «$ 2,00». Los dólares van con `fd` (src/shared/utils), el formateador compartido que
+ * ya usa el resto de Caja (Movimientos, Pendientes, Turno, comprobante): coma decimal y «$ » adelante. Así el
+ * cartel, el modal y el resumen dicen los dólares igual que la tabla del conteo (Caja PR 3/4, verificador).
+ */
 export function montoSinSigno(abs: number, moneda: Moneda): string {
   if (moneda === 'crc') return '₡' + miles(Math.round(abs))
-  const [ent, dec] = abs.toFixed(2).split('.')
-  return '$' + miles(Number(ent)) + ',' + dec
+  return fd(abs)
 }
 
 // Dentro de la tolerancia, el redondeo no puede mostrar la tolerancia misma (₡499,6 → «₡500: dentro
@@ -138,4 +142,51 @@ export const COLOR_TONO: Record<TonoDiferencia, string> = {
   musgo: 'var(--c-musgo)',
   laca:  'var(--c-laca)',
   oro:   'var(--c-oro-texto)',
+}
+
+/** Clase del cartel `.cd-cierre-resultado` según el tono: musgo → ok · oro → sobra · laca → fail. */
+export const CLASE_TONO: Record<TonoDiferencia, 'ok' | 'sobra' | 'fail'> = { musgo: 'ok', oro: 'sobra', laca: 'fail' }
+
+// ── Montos con signo (§4 «Montos») ────────────────────────────────────────────
+// SOLO presentación: el personal sigue cargando montos positivos (principio firmado del 22-jul). El signo dice
+// si la plata entra (+) o sale (−) de la caja que se nombra al lado; menos tipográfico (U+2212) antes del símbolo.
+
+/** «−₡1.951» · «+₡2.300» · «−$2,00». Lo que redondea a cero va sin signo («₡0», «$0,00»). */
+export function montoConSigno(n: number, moneda: Moneda): string {
+  const u = UNIDAD[moneda]
+  const abs = Math.round(Math.abs(n) / u) * u
+  const m = montoSinSigno(abs, moneda)
+  if (Math.round(abs / u) === 0) return m
+  return (n < 0 ? '−' : '+') + m
+}
+
+export interface LineaAjuste {
+  moneda:   Moneda
+  etiqueta: 'Colones' | 'Dólares'
+  /** «−₡1.951» (faltante: sale de Caja Fuerte) · «+$3,50» (sobrante: entra). */
+  monto:    string
+  tono:     TonoDiferencia
+}
+
+/**
+ * Ajuste de cierre que se va a registrar en Caja Fuerte, una línea por moneda. Recibe los montos que YA
+ * decidió CashCierre para el ajuste (los mismos del `ajuste` que manda a la RPC; 0 = esa moneda no lleva
+ * ajuste). No calcula ni compara contra la tolerancia: solo los escribe con signo y color (faltó laca · sobró oro).
+ */
+export function lineasAjuste(crc: number, usd: number): LineaAjuste[] {
+  const out: LineaAjuste[] = []
+  if (crc !== 0) out.push({ moneda: 'crc', etiqueta: 'Colones', monto: montoConSigno(crc, 'crc'), tono: crc < 0 ? 'laca' : 'oro' })
+  if (usd !== 0) out.push({ moneda: 'usd', etiqueta: 'Dólares', monto: montoConSigno(usd, 'usd'), tono: usd < 0 ? 'laca' : 'oro' })
+  return out
+}
+
+/**
+ * Título del bloque del ajuste en el resumen. Con una moneda, o las dos en el mismo sentido: «Ajuste de cierre en
+ * Caja Fuerte (faltante)». Si van en sentidos opuestos (faltan ₡ y sobran $, o al revés) el tipo que se guarda
+ * (`ajusteTipoPorSigno`: manda ₡) contradiría una de las líneas, así que el título va sin tipo y cada línea dice
+ * lo suyo con su signo. SOLO el texto: el `ajuste_tipo` que se guarda no cambia.
+ */
+export function tituloAjuste(lineas: LineaAjuste[], tipo: 'Faltante' | 'Sobrante'): string {
+  const opuestas = new Set(lineas.map(l => l.tono)).size > 1
+  return opuestas ? 'Ajuste de cierre en Caja Fuerte' : `Ajuste de cierre en Caja Fuerte (${tipo.toLowerCase()})`
 }

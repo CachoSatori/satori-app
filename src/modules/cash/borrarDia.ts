@@ -19,7 +19,7 @@
  * Funciones puras (sin red): las usa `cash.ts` y las fijan los tests con los casos reales.
  */
 import type { CashMovement } from '../../shared/types/database'
-import { dateCR } from '../../shared/utils'
+import { dateCR, fd } from '../../shared/utils'
 import { fechaOperativa, SUBCAT_VENTAS_CIERRE, SUBCAT_AJUSTE_CIERRE, SUBCAT_APERTURA_POZO, DESC_RETIRO_CIERRE } from './cierrePozo'
 
 /** Columnas que necesita la clasificación y la vista previa. */
@@ -127,16 +127,16 @@ export function textoConfirmacionBorrado(plan: PlanBorradoDia, fmtCrc: (n: numbe
   L.push(`¿BORRAR TODO el día ${plan.fecha}?`, '')
   L.push(`Se van a borrar ${plan.borrar.length} movimiento(s) del día operativo ${plan.fecha} (${turno} de turnos de caja, ${dia} sin turno):`)
   if (tot.length === 0) L.push('  (ninguno)')
-  for (const r of tot) L.push(`  · ${r.dia}: ${r.filas} mov. · ${fmtCrc(r.crc)} · US$ ${r.usd.toFixed(2)}`)
+  for (const r of tot) L.push(`  · ${r.dia}: ${r.filas} mov. · ${fmtCrc(r.crc)} · ${fd(r.usd)}`)
   const manuales = plan.borrar.filter(f => f.manual)
   if (manuales.length) {
     L.push('', 'Movimientos manuales sin turno (fecha = hora de carga):')
-    for (const f of manuales.slice(0, 8)) L.push(`  · ${horaCR(f.created_at)} · ${fmtCrc(Number(f.amount_crc) || 0)}${Number(f.amount_usd) ? ` + US$ ${Number(f.amount_usd)}` : ''} · ${(f.description || '').slice(0, 40)}`)
+    for (const f of manuales.slice(0, 8)) L.push(`  · ${horaCR(f.created_at)} · ${fmtCrc(Number(f.amount_crc) || 0)}${Number(f.amount_usd) ? ` + ${fd(Number(f.amount_usd))}` : ''} · ${(f.description || '').slice(0, 40)}`)
     if (manuales.length > 8) L.push(`  … y ${manuales.length - 8} más`)
   }
   if (plan.ajenas.length) {
     L.push('', `⚠ ${plan.ajenas.length} movimiento(s) se cargaron el ${plan.fecha} pero son de OTRO día operativo. NO se borran:`)
-    for (const f of plan.ajenas.slice(0, 8)) L.push(`  · día ${f.diaOperativo} · ${fmtCrc(Number(f.amount_crc) || 0)}${Number(f.amount_usd) ? ` + US$ ${Number(f.amount_usd)}` : ''} · ${(f.description || '').slice(0, 40)}`)
+    for (const f of plan.ajenas.slice(0, 8)) L.push(`  · día ${f.diaOperativo} · ${fmtCrc(Number(f.amount_crc) || 0)}${Number(f.amount_usd) ? ` + ${fd(Number(f.amount_usd))}` : ''} · ${(f.description || '').slice(0, 40)}`)
     if (plan.ajenas.length > 8) L.push(`  … y ${plan.ajenas.length - 8} más`)
   }
   L.push('', `También se borran el cierre y los turnos de caja del ${plan.fecha}.`)

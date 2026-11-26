@@ -712,7 +712,7 @@ export async function guardarAjusteProducto(local: string, codigo: string, rinde
 }
 
 /**
- * `pos_familia_nombre_guardar` (mig 203): cambia SOLO el nombre de una familia del PoS que ya existe en el local (un
+ * `pos_familia_nombre_guardar` (mig 204): cambia SOLO el nombre de una familia del PoS que ya existe en el local (un
  * rótulo: no mueve ningún número). Solo el owner; el resto 42501. Nombre de 1 a 40 caracteres, letras (con tildes y ñ),
  * números, espacio y ( ) . , - / & ' + #; si no, 22023. Devuelve el nombre como quedó guardado.
  */

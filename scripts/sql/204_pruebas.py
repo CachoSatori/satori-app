@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Arma scripts/sql/203_pruebas.sql (pos_familia_nombre_guardar): llena los marcadores con el cuerpo de la 203 y el de su
+Arma scripts/sql/204_pruebas.sql (pos_familia_nombre_guardar): llena los marcadores con el cuerpo de la 204 y el de su
 vuelta atrás, todo en una transacción que termina en ROLLBACK.
 
-  python3 scripts/sql/203_pruebas.py --armar [--local] [--mutar NOMBRE] [--compacto]   # imprime el SQL armado (MCP / editor)
-  python3 scripts/sql/203_pruebas.py --psql "<conexión>" [--local] [--mutar todas | NOMBRE]   # corre con psql y dice si muerde
-  python3 scripts/sql/203_pruebas.py --lista                                   # mutaciones y los casos que tienen que caer
+  python3 scripts/sql/204_pruebas.py --armar [--local] [--mutar NOMBRE] [--compacto]   # imprime el SQL armado (MCP / editor)
+  python3 scripts/sql/204_pruebas.py --psql "<conexión>" [--local] [--mutar todas | NOMBRE]   # corre con psql y dice si muerde
+  python3 scripts/sql/204_pruebas.py --lista                                   # mutaciones y los casos que tienen que caer
 
---local: suma scripts/sql/203_preludio_local.sql (Postgres 16 vacío armado con scripts/sql/local_armar_base.sh).
+--local: suma scripts/sql/204_preludio_local.sql (Postgres 16 vacío armado con scripts/sql/local_armar_base.sh).
 --mutar todas: corre primero SIN mutar (tiene que dar 0 fallas) y después cada mutación; sale 1 si alguna no muerde.
 
 Corre en STAGING (ref hwiatgic…) o en un Postgres local descartable. Nunca contra PROD (ref yiczgdti…): la batería crea
@@ -18,15 +18,15 @@ import json, re, subprocess, sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
-MIG = RAIZ / 'supabase/migrations/203_pos_familia_nombre.sql'
-ROLLBACK = RAIZ / 'scripts/sql/203_rollback.sql'
-BATERIA = RAIZ / 'scripts/sql/203_pruebas.sql'
-PRELUDIO = RAIZ / 'scripts/sql/203_preludio_local.sql'
+MIG = RAIZ / 'supabase/migrations/204_pos_familia_nombre.sql'
+ROLLBACK = RAIZ / 'scripts/sql/204_rollback.sql'
+BATERIA = RAIZ / 'scripts/sql/204_pruebas.sql'
+PRELUDIO = RAIZ / 'scripts/sql/204_preludio_local.sql'
 
 CHARS = "  if v_nom !~ '^[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ ().,/&''+#-]+$' then"
 ROL = "  if v_rol is distinct from 'owner' then"
 
-# nombre → ([(texto de la 203, reemplazo)], casos que tienen que caer)
+# nombre → ([(texto de la 204, reemplazo)], casos que tienen que caer)
 MUTACIONES: dict[str, tuple[list[tuple[str, str]], set[str]]] = {
     'sin_rol': ([(ROL, "  if false then")], {'07', '08', '09', '10'}),
     'manager_pasa': ([(ROL, "  if v_rol is null or v_rol not in ('owner', 'manager') then")], {'07'}),
@@ -65,14 +65,14 @@ def cuerpo(mutar: str | None) -> str:
 
 def armar(mutar: str | None = None, compacto: bool = False, local: bool = False) -> str:
     b = BATERIA.read_text()
-    for m in ('-- @@203@@', '-- @@203_texto@@', '-- @@203_rollback@@', '-- @@preludio@@'):
+    for m in ('-- @@204@@', '-- @@204_texto@@', '-- @@204_rollback@@', '-- @@preludio@@'):
         if b.count(m) != 1:
             sys.exit(f'marcador {m}: aparece {b.count(m)} veces')
     original = cuerpo(mutar) if mutar == 'sin_guarda' else MIG.read_text()
-    if '$m203$' in original:
-        sys.exit('la 203 no puede contener $m203$ (se usa para meterla como texto)')
+    if '$m204$' in original:
+        sys.exit('la 204 no puede contener $m204$ (se usa para meterla como texto)')
     b = b.replace('-- @@preludio@@', PRELUDIO.read_text() if local else '')
-    b = b.replace('-- @@203@@', cuerpo(mutar)).replace('-- @@203_texto@@', original).replace('-- @@203_rollback@@', ROLLBACK.read_text())
+    b = b.replace('-- @@204@@', cuerpo(mutar)).replace('-- @@204_texto@@', original).replace('-- @@204_rollback@@', ROLLBACK.read_text())
     if compacto:
         b = '\n'.join(l.strip() for l in b.splitlines() if l.strip() and not l.strip().startswith('--'))
     return b

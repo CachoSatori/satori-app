@@ -139,3 +139,39 @@ export const COLOR_TONO: Record<TonoDiferencia, string> = {
   laca:  'var(--c-laca)',
   oro:   'var(--c-oro-texto)',
 }
+
+/** Clase del cartel `.cd-cierre-resultado` según el tono: musgo → ok · oro → sobra · laca → fail. */
+export const CLASE_TONO: Record<TonoDiferencia, 'ok' | 'sobra' | 'fail'> = { musgo: 'ok', oro: 'sobra', laca: 'fail' }
+
+// ── Montos con signo (§4 «Montos») ────────────────────────────────────────────
+// SOLO presentación: el personal sigue cargando montos positivos (principio firmado del 22-jul). El signo dice
+// si la plata entra (+) o sale (−) de la caja que se nombra al lado; menos tipográfico (U+2212) antes del símbolo.
+
+/** «−₡1.951» · «+₡2.300» · «−$2,00». Lo que redondea a cero va sin signo («₡0», «$0,00»). */
+export function montoConSigno(n: number, moneda: Moneda): string {
+  const u = UNIDAD[moneda]
+  const abs = Math.round(Math.abs(n) / u) * u
+  const m = montoSinSigno(abs, moneda)
+  if (Math.round(abs / u) === 0) return m
+  return (n < 0 ? '−' : '+') + m
+}
+
+export interface LineaAjuste {
+  moneda:   Moneda
+  etiqueta: 'Colones' | 'Dólares'
+  /** «−₡1.951» (faltante: sale de Caja Fuerte) · «+$3,50» (sobrante: entra). */
+  monto:    string
+  tono:     TonoDiferencia
+}
+
+/**
+ * Ajuste de cierre que se va a registrar en Caja Fuerte, una línea por moneda. Recibe los montos que YA
+ * decidió CashCierre para el ajuste (los mismos del `ajuste` que manda a la RPC; 0 = esa moneda no lleva
+ * ajuste). No calcula ni compara contra la tolerancia: solo los escribe con signo y color (faltó laca · sobró oro).
+ */
+export function lineasAjuste(crc: number, usd: number): LineaAjuste[] {
+  const out: LineaAjuste[] = []
+  if (crc !== 0) out.push({ moneda: 'crc', etiqueta: 'Colones', monto: montoConSigno(crc, 'crc'), tono: crc < 0 ? 'laca' : 'oro' })
+  if (usd !== 0) out.push({ moneda: 'usd', etiqueta: 'Dólares', monto: montoConSigno(usd, 'usd'), tono: usd < 0 ? 'laca' : 'oro' })
+  return out
+}

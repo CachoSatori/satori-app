@@ -2917,6 +2917,12 @@ html, body, #root {
 .cierre-table td { border-bottom: 1px solid #eee8dc; border-right: 1px solid #eee8dc; }
 .cierre-table td:last-child { border-right: none; }
 .cierre-table tr.total td { background: var(--t-panel, var(--c-panel)); border-top: 2px solid var(--t-border, var(--c-linea)); border-bottom: none; }
+/* Caja PR 3/4: a 390 px la columna «$ Dólares» del conteo quedaba fuera de la tarjeta (el cuadro numérico no
+   baja de su ancho propio y la etiqueta fija 180 px). En celular: anchos fijos por columna y etiqueta al 34 %. */
+@media (max-width: 600px) {
+  .cierre-table { table-layout: fixed; }
+  .cierre-table th:first-child { width: 34%; }
+}
 
 /* botones de confirmación */
 .cierre-btn {

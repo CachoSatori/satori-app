@@ -22,7 +22,7 @@ import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
 import { ajusteTipoPorSigno } from './ajusteTipo'
-import { estadoFases, ETIQUETA_MEDIODIA, ETIQUETA_NOCHE, textoDiferencia, lineaDolares, resumenDiferencia, COLOR_TONO } from './textoDiferencia'
+import { estadoFases, ETIQUETA_MEDIODIA, ETIQUETA_NOCHE, textoDiferencia, resumenDiferencia, COLOR_TONO, CLASE_TONO, lineasAjuste, montoConSigno } from './textoDiferencia'
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import { textoConfirmacionBorrado, type PlanBorradoDia } from './borrarDia'
 import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
@@ -1112,21 +1112,15 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
                     {(() => {
                       const r = resumenDiferencia(diferencia ?? 0, difUSD, false)
                       return (
-                        <div className={`cd-cierre-resultado ${r.tono === 'musgo' ? 'ok' : r.tono === 'oro' ? 'sobra' : 'fail'}`} data-bloque="diferencia" data-tono={r.tono} style={{ flexDirection:'column', alignItems:'flex-start', gap:2 }}>
+                        <div className={`cd-cierre-resultado ${CLASE_TONO[r.tono]}`} data-bloque="diferencia" data-tono={r.tono} style={{ flexDirection:'column', alignItems:'flex-start', gap:2 }}>
                           <span data-titular>Diferencia: {r.titular}</span>
                           {r.detalle.map(l => <span key={l.texto} data-linea style={{ fontWeight:400, fontSize:'0.76rem' }}>{l.texto}</span>)}
                         </div>
                       )
                     })()}
-                    {deberiaUSD > 0 && (() => {
-                      const l = lineaDolares(difUSD ?? 0, false)
-                      return (
-                        <div className={`cierre-resumen-usd ${cuadraUSD ? 'ok' : l.tono === 'oro' ? 'sobra' : 'fail'}`} data-bloque="diferencia-usd">
-                          <div>Dólares: debería ${deberiaUSD.toFixed(2)} · contado ${totalContadoUSD.toFixed(2)}</div>
-                          <div>{l.texto}</div>
-                        </div>
-                      )
-                    })()}
+                    {/* Caja PR 3/4: la línea «Dólares: …» va UNA sola vez, en el cartel de arriba (menor del verificador
+                        del #348). La caja aparte de dólares repetía esa línea, y su «debería · contado» ya está en
+                        las filas «Debería quedar» y «Total contado» de la tabla (columna $). */}
                   </>
                 )}
 
@@ -1232,12 +1226,18 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
           <div className="cd-modal" onClick={e => e.stopPropagation()}>
             <div className="cd-modal-title">El conteo no cuadra</div>
             <div className="cd-modal-meta">Tolerancia ₡500 / US$1 · podés recontar UNA vez</div>
-            <div className="cd-cierre-resultado fail" style={{ marginBottom:'1rem', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
-              <span>
-                Diferencia: {diferencia !== null && !cuadra ? `${diferencia >= 0 ? '+' : ''}${fi2(diferencia)}` : ''}
-                {difUSD !== null && !cuadraUSD ? `${diferencia !== null && !cuadra ? ' · ' : ''}US$ ${difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}` : ''}
-              </span>
-            </div>
+            {/* Caja PR 3/4 (SPEC §4): en palabras y con el color del hecho, igual que el cartel de la pantalla;
+                antes «Diferencia: +₡1.500» siempre en rojo, aunque sobrara. Solo presentación. */}
+            {(() => {
+              const r = resumenDiferencia(diferencia ?? 0, difUSD, false)
+              return (
+                <div className={`cd-cierre-resultado ${CLASE_TONO[r.tono]}`} data-bloque="modal-diferencia" data-tono={r.tono}
+                  style={{ marginBottom:'1rem', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
+                  <span data-titular>Diferencia: {r.titular}</span>
+                  {r.detalle.map(l => <span key={l.texto} data-linea style={{ fontWeight:400, fontSize:'0.76rem' }}>{l.texto}</span>)}
+                </div>
+              )
+            })()}
             <div style={{ fontSize:'0.75rem', color:'var(--c-gris)', marginBottom:'1rem' }}>
               Si recontás, este primer conteo queda guardado y las separaciones quedan en blanco para contar de nuevo. Si después sigue fuera, se pide el motivo.
             </div>
@@ -1271,7 +1271,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               {propinasPagadasDia > 0 && (
                 <div className="cd-resumen-row">
                   <span>Propinas pagadas en el cierre</span>
-                  <strong style={{ color:'#8a5aa8' }}>− {fi2(propinasPagadasDia)}</strong>
+                  <strong style={{ color:'#8a5aa8' }}>{montoConSigno(-propinasPagadasDia, 'crc')}</strong>
                 </div>
               )}
             </div>
@@ -1302,20 +1302,41 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
               )}
             </div>
 
-            {/* Diferencia / ajuste (ya calculado) */}
-            {requiresAjuste ? (
-              <div className="cd-cierre-resultado fail" style={{ marginBottom:'1rem', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
-                <span>⚠ Ajuste: {ajusteTipoDerivado}{ajusteMotivo.trim() ? ` — ${ajusteMotivo.trim()}` : ''}</span>
-                <span>
-                  {diferencia !== null && !cuadra ? `${diferencia >= 0 ? '+' : ''}${fi2(diferencia)}` : ''}
-                  {difUSD !== null && !cuadraUSD ? `${diferencia !== null && !cuadra ? ' · ' : ''}US$ ${difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}` : ''}
-                </span>
-              </div>
-            ) : (
-              <div className="cd-cierre-resultado ok" style={{ marginBottom:'1rem' }}>
-                <span>✅ Cuadra — sin diferencia</span>
-              </div>
-            )}
+            {/* Diferencia / ajuste (ya calculado). Caja PR 3/4 (SPEC §4): la diferencia en palabras con su color
+                (cuadra musgo · faltó laca · sobró oro) y el ajuste que se registra en Caja Fuerte CON SIGNO por moneda
+                (− sale · + entra). Los montos son los MISMOS del `ajuste` que se manda al confirmar (mismas condiciones
+                `!cuadra` / `!cuadraUSD`); antes «⚠ Ajuste: Faltante — … +₡1.500» siempre en rojo y «Cuadra — sin
+                diferencia» aunque faltaran ₡300 dentro de la tolerancia. */}
+            {(() => {
+              const r = resumenDiferencia(diferencia ?? 0, difUSD, false)
+              const lineas = requiresAjuste
+                ? lineasAjuste(diferencia !== null && !cuadra ? diferencia : 0, difUSD !== null && !cuadraUSD ? difUSD : 0)
+                : []
+              return (
+                <div className={`cd-cierre-resultado ${CLASE_TONO[r.tono]}`} data-bloque="resumen-diferencia" data-tono={r.tono}
+                  style={{ marginBottom:'1rem', flexDirection:'column', alignItems:'stretch', gap:'0.25rem' }}>
+                  <span data-titular>Diferencia: {r.titular}</span>
+                  {r.detalle.map(l => <span key={l.texto} data-linea style={{ fontWeight:400, fontSize:'0.76rem' }}>{l.texto}</span>)}
+                  {lineas.length > 0 && (
+                    <div data-bloque="ajuste-signo" style={{ marginTop:'0.4rem', paddingTop:'0.4rem', borderTop:'1px solid currentColor' }}>
+                      <div style={{ fontSize:'0.72rem', fontWeight:600, color:'var(--c-tinta)' }}>Ajuste de cierre en Caja Fuerte ({ajusteTipoDerivado.toLowerCase()})</div>
+                      {lineas.map(l => (
+                        <div key={l.moneda} data-moneda={l.moneda} data-tono={l.tono}
+                          style={{ display:'flex', justifyContent:'space-between', gap:'0.75rem', fontSize:'0.8rem', color:'var(--c-tinta)', fontWeight:400 }}>
+                          <span>{l.etiqueta}</span>
+                          <strong style={{ fontFamily:'var(--font-sans)', fontVariantNumeric:'tabular-nums', color: COLOR_TONO[l.tono] }}>{l.monto}</strong>
+                        </div>
+                      ))}
+                      {ajusteMotivo.trim() && (
+                        <div data-motivo style={{ fontSize:'0.76rem', fontWeight:400, color:'var(--c-tinta)', marginTop:'0.25rem', overflowWrap:'anywhere' }}>
+                          Motivo: {ajusteMotivo.trim()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {notas.trim() && <div className="cd-modal-note" style={{ whiteSpace:'pre-wrap' }}>📝 Resumen del día: {notas.trim()}</div>}
 
@@ -1367,7 +1388,9 @@ function CollapsibleSection({ title, icon, color, open, onToggle, children }: {
 }
 
 function Row2({ children }: { children: React.ReactNode }) {
-  return <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.625rem', marginBottom:'0.75rem' }}>{children}</div>
+  // minmax(0, 1fr): con «1fr» la columna no baja del ancho propio del cuadro numérico y a 390 px el de dólares se
+  // salía de la tarjeta (Caja PR 3/4).
+  return <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:'0.625rem', marginBottom:'0.75rem' }}>{children}</div>
 }
 
 function Field({ label, children }: { label:string; children: React.ReactNode }) {

@@ -5,7 +5,7 @@ vi.mock('../../shared/api/exchangeRate', () => ({ getCurrentRate: vi.fn(async ()
 vi.mock('../../shared/api/tips', () => ({ getTipPayoutsSince: vi.fn(async () => []) }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: null }) }))
 vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn() }))
-import { estadoFases, textoDiferencia, lineaDolares, montoSinSigno, resumenDiferencia } from './textoDiferencia'
+import { estadoFases, textoDiferencia, lineaDolares, montoSinSigno, resumenDiferencia, montoConSigno, lineasAjuste, CLASE_TONO } from './textoDiferencia'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { cierreNecesitaAjuste } from './CashCierre'
@@ -132,5 +132,32 @@ describe('contraste del oro con texto chico (verificador #348)', () => {
   it('los carteles «sobra» usan ese fondo, no --c-oro-fondo (4,4:1)', () => {
     expect(css).toMatch(/\.cd-cierre-resultado\.sobra \{ background: var\(--c-oro-fondo-texto\)/)
     expect(css).toMatch(/\.cierre-resumen-usd\.sobra \{ background: var\(--c-oro-fondo-texto\)/)
+  })
+})
+
+describe('Montos con signo (Caja PR 3/4, SPEC §4 «Montos»)', () => {
+  it('menos tipográfico (U+2212) antes del símbolo; + para lo que entra', () => {
+    expect(montoConSigno(-1951, 'crc')).toBe('−₡1.951')
+    expect(montoConSigno(2300, 'crc')).toBe('+₡2.300')
+    expect(montoConSigno(-2, 'usd')).toBe('−$2,00')
+    expect(montoConSigno(3.5, 'usd')).toBe('+$3,50')
+    expect(montoConSigno(-1234567.4, 'crc')).toBe('−₡1.234.567')
+  })
+  it('lo que redondea a cero va sin signo', () => {
+    expect(montoConSigno(0, 'crc')).toBe('₡0')
+    expect(montoConSigno(-0.4, 'crc')).toBe('₡0')
+    expect(montoConSigno(-0.004, 'usd')).toBe('$0,00')
+  })
+  it('lineasAjuste: una línea por moneda con ajuste; faltó laca · sobró oro; 0 = sin línea', () => {
+    expect(lineasAjuste(-1951, -2)).toEqual([
+      { moneda: 'crc', etiqueta: 'Colones', monto: '−₡1.951', tono: 'laca' },
+      { moneda: 'usd', etiqueta: 'Dólares', monto: '−$2,00', tono: 'laca' },
+    ])
+    expect(lineasAjuste(2300, 0)).toEqual([{ moneda: 'crc', etiqueta: 'Colones', monto: '+₡2.300', tono: 'oro' }])
+    expect(lineasAjuste(0, 3.5)).toEqual([{ moneda: 'usd', etiqueta: 'Dólares', monto: '+$3,50', tono: 'oro' }])
+    expect(lineasAjuste(0, 0)).toEqual([])
+  })
+  it('CLASE_TONO: musgo ok · oro sobra · laca fail', () => {
+    expect(CLASE_TONO).toEqual({ musgo: 'ok', oro: 'sobra', laca: 'fail' })
   })
 })

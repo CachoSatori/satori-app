@@ -13,7 +13,7 @@ vi.mock('../../shared/api/cash', () => ({
   updateCashMovement: vi.fn(), deleteCashMovement: vi.fn(), getCierresDia: vi.fn(async () => []), createDayMovement: vi.fn(),
 }))
 vi.mock('../../shared/api/finance', () => ({ getFinanceAccounts: vi.fn(async () => []) }))
-vi.mock('../../shared/api/documents', () => ({ listLinkedDocs: vi.fn(async () => []) }))
+vi.mock('../../shared/api/documents', () => ({ listDocsForMovements: vi.fn(async () => []) }))
 vi.mock('../../shared/api/facturas', () => ({ movementAttachments: vi.fn(() => []) }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u1', role: 'owner', full_name: 'Dueño' } }) }))
 vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn(async () => ({ ok: true })) }))

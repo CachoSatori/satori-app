@@ -29,7 +29,12 @@ import { useDeletionNote } from './deletionNote'
 import { movementAttachments } from '../../shared/api/facturas'
 import FacturaThumbs from '../../shared/FacturaThumbs'
 import FacturaVerify from '../../shared/FacturaVerify'
-import { listLinkedDocs, type DocumentRow } from '../../shared/api/documents'
+import { listDocsForMovements, type DocumentRow } from '../../shared/api/documents'
+
+// Valor del filtro Tipo que agrupa TODOS los tipos de egreso (isEgreso). No es un movement_type real.
+const TIPO_EGRESOS = '__egresos'
+const textoFacturaEnEspera = (error: boolean) =>
+  error ? 'No se pudieron cargar las facturas: el filtro Factura no se puede aplicar.' : 'Cargando facturas…'
 
 interface Props {
   movements: CashMovement[]
@@ -119,6 +124,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const [tipo,    setTipo]    = useState('')
   const [busq,    setBusq]    = useState('')
   const [estado,  setEstado]  = useState('')
+  // Filtros del contador (26-nov): método de pago y si el movimiento tiene factura enlazada.
+  // '' = Todos. Un movimiento viejo con method null/vacío solo aparece en «Todos».
+  const [metodo,  setMetodo]  = useState('')
+  const [factura, setFactura] = useState<'' | 'con' | 'sin'>('')
   const [saving,  setSaving]  = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())  // selección múltiple para borrado masivo
   // Cuentas contables (hojas) para asignar la cuenta del P&L por movimiento (FIX 4)
@@ -129,17 +138,32 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   useEffect(() => { getCierresDia().then(setCierres).catch(() => {}) }, [])
   // Facturas enlazadas (verificado) — map movimiento→documento, una sola consulta.
   const [docMap, setDocMap] = useState<Record<string, DocumentRow>>({})
-  const [docsLoaded, setDocsLoaded] = useState(false)
+  // (26-nov, #370) Las facturas se piden para los movimientos CARGADOS (listDocsForMovements, en tandas), no las 500
+  // más nuevas: con más de 500 enlazadas, un movimiento viejo con factura salía «Sin factura».
+  // `docsKey` = los ids para los que el mapa está completo. Si la consulta falla, el map no sirve: «Sin factura»
+  // mostraría todo como sin factura. Por eso el filtro Factura no se aplica (ni se ofrece) sin una carga exitosa
+  // para ESTOS movimientos.
+  const idsKey = useMemo(() => movements.map(m => m.id).sort().join(','), [movements])
+  const [docsKey, setDocsKey] = useState<string | null>(null)
+  const [docsError, setDocsError] = useState(false)
   useEffect(() => {
-    listLinkedDocs().then(ds => {
+    let vigente = true
+    const ids = idsKey ? idsKey.split(',') : []
+    listDocsForMovements(ids).then(ds => {
+      if (!vigente) return
       const m: Record<string, DocumentRow> = {}
       for (const d of ds) if (d.linked_movement_id) m[d.linked_movement_id] = d
-      setDocMap(m)
-    }).catch(() => {}).finally(() => setDocsLoaded(true))
-  }, [])
+      setDocMap(m); setDocsError(false); setDocsKey(idsKey)
+    }).catch(() => { if (vigente) { setDocsError(true); setDocsKey(idsKey) } })
+    return () => { vigente = false }
+  }, [idsKey])
+  const docsLoaded = docsKey === idsKey
+  const docsListos = docsLoaded && !docsError
+  // Filtro Factura pedido pero sin datos confiables → la lista no muestra un resultado engañoso.
+  const facturaEnEspera = factura !== '' && !docsListos
 
   const toggleSel = (id: string) => setSelected(prev => {
-    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n
   })
 
   // ── Filter ───────────────────────────────────────────────
@@ -147,7 +171,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     const fecha = movFecha(m)
     if (from   && fecha < from)  return false
     if (to     && fecha > to)    return false
-    if (tipo   && m.movement_type !== tipo) return false
+    if (tipo === TIPO_EGRESOS) { if (!isEgreso(m.movement_type as MovementType)) return false }
+    else if (tipo && m.movement_type !== tipo) return false
+    if (metodo && (m.method ?? '') !== metodo) return false
+    if (factura) {
+      if (!docsListos) return false
+      const tiene = !!docMap[m.id]
+      if (factura === 'con' ? !tiene : tiene) return false
+    }
     if (estado) {
       const s = m.status === 'pendiente' ? 'Pendiente' : 'Pagado'
       if (s !== estado) return false
@@ -165,6 +196,13 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   }).sort((a, b) => {
     return movFecha(b).localeCompare(movFecha(a)) || b.created_at.localeCompare(a.created_at)
   })
+
+  // Atajo del contador: egresos en efectivo sin factura enlazada (músicos, encomiendas…).
+  const atajoActivo = tipo === TIPO_EGRESOS && metodo === 'Efectivo' && factura === 'sin'
+  const toggleAtajo = () => {
+    if (atajoActivo) { setTipo(''); setMetodo(''); setFactura('') }
+    else { setTipo(TIPO_EGRESOS); setMetodo('Efectivo'); setFactura('sin') }
+  }
 
   // ── Saldos ───────────────────────────────────────────────
   // POST-CORTE la tarjeta muestra el POZO: todo el efectivo físico, contado desde el asiento
@@ -316,9 +354,13 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
 
   const exportCSV = () => {
     const BOM = '﻿'
-    const hdrs = ['Fecha','Turno','Tipo','Descripción','Proveedor/Empleado','₡','$','Método','Caja','Estado']
+    const hdrs = ['Fecha','Turno','Tipo','Descripción','Proveedor/Empleado','₡','$','Método','Caja','Estado','Subcategoría','Factura','N° factura']
     const rows = filtered.map(m => {
       const ses = sesionMap.get(m.session_id ?? '')
+      const doc = docMap[m.id]
+      // Sin una carga exitosa de facturas no se afirma «No»: queda vacío.
+      const tieneFactura = !docsListos ? '' : doc ? 'Sí' : 'No'
+      const nroFactura = docsListos && doc ? (doc.raw_json?.numero_documento || doc.clave_fe || '') : ''
       return [
         movFecha(m),
         ses?.shift_type ?? '',
@@ -330,7 +372,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         m.method,
         m.caja_origen,
         m.status === 'pendiente' ? 'Pendiente' : 'Pagado',
-      ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')
+        m.subcategory,
+        tieneFactura,
+        nroFactura,
+      ].map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(',')
     })
     const csv = BOM + [hdrs.join(','), ...rows].join('\n')
     const a = document.createElement('a')
@@ -400,24 +445,48 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
 
       {/* Filters + actions */}
       <div className="cd-filters-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', flex: 1 }}>
-          <label>Desde</label>
-          <input className="cd-filter-input" type="date" value={from} onChange={e => setFrom(e.target.value)} />
-          <label>Hasta</label>
-          <input className="cd-filter-input" type="date" value={to} onChange={e => setTo(e.target.value)} />
-          <label>Tipo</label>
-          <select className="cd-filter-select" value={tipo} onChange={e => setTipo(e.target.value)}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+          <label htmlFor="mov-f-desde">Desde</label>
+          <input id="mov-f-desde" className="cd-filter-input" type="date" value={from} onChange={e => setFrom(e.target.value)} />
+          <label htmlFor="mov-f-hasta">Hasta</label>
+          <input id="mov-f-hasta" className="cd-filter-input" type="date" value={to} onChange={e => setTo(e.target.value)} />
+          <label htmlFor="mov-f-tipo">Tipo</label>
+          <select id="mov-f-tipo" className="cd-filter-select" value={tipo} onChange={e => setTipo(e.target.value)}>
             <option value="">Todos</option>
+            <option value={TIPO_EGRESOS}>Todos los egresos</option>
             {MOVEMENT_TYPES.map(t => <option key={t} value={t}>{MOVEMENT_LABELS[t]}</option>)}
           </select>
-          <label>Estado</label>
-          <select className="cd-filter-select" value={estado} onChange={e => setEstado(e.target.value)}>
+          <label htmlFor="mov-f-metodo">Método</label>
+          <select id="mov-f-metodo" className="cd-filter-select" value={metodo} onChange={e => setMetodo(e.target.value)}>
+            <option value="">Todos</option>
+            {METODOS_PAGO.map(mt => <option key={mt} value={mt}>{mt}</option>)}
+          </select>
+          <label htmlFor="mov-f-factura">Factura</label>
+          <select id="mov-f-factura" className="cd-filter-select" value={docsListos ? factura : ''}
+            disabled={!docsListos} title={docsError ? 'No se pudieron cargar las facturas' : undefined}
+            onChange={e => setFactura(e.target.value as '' | 'con' | 'sin')}>
+            <option value="">{!docsLoaded ? 'Cargando…' : docsError ? 'No disponible' : 'Todas'}</option>
+            <option value="con">Con factura</option>
+            <option value="sin">Sin factura</option>
+          </select>
+          <label htmlFor="mov-f-estado">Estado</label>
+          <select id="mov-f-estado" className="cd-filter-select" value={estado} onChange={e => setEstado(e.target.value)}>
             <option value="">Todos</option>
             <option>Pagado</option>
             <option>Pendiente</option>
           </select>
           <input className="cd-filter-input" style={{ minWidth: 140 }} value={busq} placeholder="Buscar..."
             onChange={e => setBusq(e.target.value)} />
+          <button type="button" aria-pressed={atajoActivo} onClick={toggleAtajo}
+            title={atajoActivo ? 'Quitar el atajo (vuelve Tipo, Método y Factura a Todos)' : 'Egresos pagados en efectivo que no tienen factura enlazada'}
+            style={{
+              fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 0.7rem', borderRadius: 99, cursor: 'pointer',
+              border: `1px solid ${atajoActivo ? 'var(--c-laca)' : 'var(--c-linea)'}`,
+              background: atajoActivo ? 'var(--c-laca-fondo)' : 'transparent',
+              color: atajoActivo ? 'var(--c-laca)' : 'var(--c-tinta)',
+            }}>
+            {atajoActivo ? '✕ Efectivo sin factura' : 'Efectivo sin factura'}
+          </button>
         </div>
         <button className="cd-btn-green" style={{ fontSize: '0.8rem' }} onClick={() => { setNmFecha(todayStr()); setNmOpen(true) }}>+ Nuevo movimiento</button>
         <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={exportCSV}>⬇ CSV</button>
@@ -518,7 +587,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           <tbody>
             {filtered.length === 0 && (
               <tr><td colSpan={13} style={{ textAlign: 'center', padding: '2rem', color: 'var(--c-gris)', fontSize: '0.85rem' }}>
-                Sin movimientos en el período
+                {facturaEnEspera ? textoFacturaEnEspera(docsError) : 'Sin movimientos en el período'}
               </td></tr>
             )}
             {filtered.map(m => {
@@ -690,7 +759,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         })}
         {filtered.length === 0 && (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--c-gris)', fontSize: '0.85rem' }}>
-            Sin movimientos en el período
+            {facturaEnEspera ? textoFacturaEnEspera(docsError) : 'Sin movimientos en el período'}
           </div>
         )}
       </div>

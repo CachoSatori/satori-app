@@ -136,3 +136,10 @@ Notas para la spec:
 
 **G-014 · conteo físico por lugar, unidades y multi-local** (en «Satori · Grok / Pedidos», 24-nov): complementa
 la G-012. La entrega se contrasta contra este documento y el repo antes de usarse, y lo útil se suma acá.
+
+**Entrega G-014 (26-nov-2026), incorporada:** las propuestas están en
+[SPEC-compras-stock-costos §7.9 «Bordes del conteo (G-014)»](SPEC-compras-stock-costos.md#79-bordes-del-conteo-g-014)
+(hora de corte, traspasos, producto movido con conteo abierto, cajas + sueltos, botellas, control de magnitud,
+producción propia, variación en ₡, vencimiento del parcial, frecuencia y multi-local). Son propuestas con opciones y
+recomendación; **no cambian D-INV-1 a D-INV-5** ni las reglas del piloto de §2 hasta que el dueño decida. Tocan las
+preguntas 2 y 6 de §8 (B10 y B7) y la lectura de D-INV-5 (B11).

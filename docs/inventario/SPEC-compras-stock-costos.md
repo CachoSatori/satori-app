@@ -279,6 +279,7 @@ inventario». Asocian: `owner`, `manager` de su local, `contador`.
 
 - **Compra registrada** por cada línea asociada: producto, fecha de emisión, cantidad en la unidad del producto,
   costo unitario, origen. Las notas de crédito entran en negativo.
+  Propuesta G-014: sumar la **hora de recepción** para el corte del conteo (§7.9 B1).
 - **Costo último:** el de la compra más reciente. **Costo promedio:** ponderado por cantidad en una ventana (propuesta:
   últimos 90 días; pregunta 6). Los dos se muestran; cuál usa cada reporte lo decide el contador.
 - **Con o sin IVA:** propuesta: costo **sin** IVA, con el impuesto guardado aparte (pregunta 5, contador).
@@ -490,6 +491,147 @@ aparato, su local y sus áreas; `anon` no tiene permisos sobre ninguna tabla `in
 | Habilitar y revocar aparatos | sí | no | sí | no |
 | Pantalla de control de la ingesta (F1) | sí | sí | no | no |
 
+### 7.9 Bordes del conteo (G-014)
+
+Entrega **G-014** del Auditor (26-nov-2026), contrastada contra esta spec y la [v0](SPEC-inventario-v0.md). Son
+**propuestas**: nada de acá está decidido ni autoriza esquema. No cambia ninguna decisión tomada (D-INV-1 a 5,
+D-CSC-1 a 4, §12.1); donde una propuesta roza una regla del piloto, lo dice.
+
+**Lo nuestro que el mercado no tiene y se conserva tal cual:** total solo con **todos** los lugares · vacío ≠ 0 ·
+reenvío reemplazado con historial · doble conteo con diferencias · aparato habilitado sin clave + nombre · envíos de
+prueba · cola sin señal · histórico migrado con dudosos.
+
+| # | Borde | Recomendación | Esquema | Hay que decidirlo antes de |
+|---|---|---|---|---|
+| B1 | Hora de corte | Corte fijo por área + hora de recepción | 🖊️ | F3 (compras) |
+| B2 | Traspasos | Salida + entrada con estado enviado / recibido | 🖊️ (y costo) | F4a |
+| B3 | Producto movido con conteo abierto | Regla en pantalla + marca «conteo estirado» | no | F4b |
+| B4 | Teclear en unidad de compra | Una unidad guardada + «cajas + sueltos» | 🖊️ | F4a |
+| B5 | Botellas abiertas | Escala fija, método anotado | 🖊️ | F4a |
+| B6 | Control de magnitud | Pregunta contra el conteo anterior y el par | 🖊️ (acceso del aparato) | F4a |
+| B7 | Producción propia | Elaboración = producto contable; costo en F5 | 🖊️ | F4a |
+| B8 | Variación en ₡ y por rubro | Vista en colones agrupada por categoría | 🖊️ solo decimales del costo | F3 |
+| B9 | Parcial que nunca se completa | Vence al cierre del día siguiente | no (cambia regla 2 del piloto) | F4b |
+| B10 | Frecuencia | Lista corta semanal + completo el día 1 | 🖊️ | F4a |
+| B11 | Multi-local | Identidad compartida + configuración por local | 🖊️ | **migración del catálogo (antes de F3)** |
+
+**B1 · Hora de corte del conteo.** Hoy la v0 y §7.3 fijan **fecha**, no hora, y §6.3 asienta la compra por fecha de
+emisión. Una entrega del mismo día contada antes de que llegue (o después) duplica o resta consumo.
+- Opciones: **(a)** seguir solo con fecha · **(b)** corte fijo por área («antes de recibir» o «al cierre») + hora de
+  recepción en la compra · **(c)** congelar recepciones mientras hay un conteo abierto.
+- **Recomendación: (b).** (c) frena la operación; (a) deja el error adentro.
+- Regla: compras y traspasos con hora **≤ corte** entran **antes** del conteo; el resto, al intervalo siguiente.
+- La FE no trae hora de recepción: se toma la de la **recepción de la Bandeja** (cruce de F2). Sin recepción, vale la
+  fecha de emisión con la marca «hora supuesta», y el producto se señala si el consumo da negativo.
+- Conteo atrasado (el martes lo del lunes): el corte efectivo es la hora real en que se contó cada lugar; gerencia lo
+  ve «fuera de corte». Una entrega entre el conteo de dos lugares del mismo producto va «a revisar», no se adivina.
+- 🖊️ Esquema: `corte` en `inv_areas` · `recibido_en` en `inv_compras` (la `fecha` de emisión no cambia: el costo
+  sigue saliendo de ahí) · hora de conteo del aparato en `inv_conteo_envios` (distinta de `recibido_en` si hubo cola).
+
+**B2 · Traspasos (local ↔ local y área ↔ área).** Ninguna spec los tiene. Sin registro, un préstamo de barra a
+cocina se ve como consumo en una y como consumo negativo en la otra.
+- Opciones: **(a)** no registrar · **(b)** un solo paso (sale y entra a la vez) · **(c)** dos pasos: salida en origen
+  + entrada en destino, con estado **enviado / recibido**.
+- **Recomendación: (c)**, cargado en gerencia de Satori App (no en el aparato de conteo, en la primera versión).
+  Dentro del mismo local quien recibe confirma con un toque; un «enviado» sin recibir a los N días (propuesta 3) da
+  aviso. Se registra **antes** del conteo y le aplica el corte de B1.
+- Consumo = conteo anterior + compras + traspasos recibidos − traspasos enviados − conteo actual.
+- Valor: al costo de referencia del origen (promedio de 90 días, §12.1). Mueve costo entre áreas y locales → plata.
+- Necesita que el producto sea **el mismo** en origen y destino (B11).
+- 🖊️ Esquema: `inv_traspasos` y sus líneas (origen, destino, producto, cantidad, costo, estado, quién y cuándo en
+  cada paso). Registro, no edición (principio 4).
+
+**B3 · Producto movido entre lugares con una fecha de conteo abierta.** Si se cuenta la cámara, alguien sube producto
+a la barra y después se cuenta la barra, sale doble; al revés, ninguno.
+- Opciones: **(a)** nada · **(b)** regla operativa: con un lugar ◐ o sin contar no se mueve producto de esa área; la
+  pantalla lo recuerda y va a la guía SOP · **(c)** marca «conteo estirado» cuando los lugares de un producto se
+  contaron con más de N horas de diferencia (propuesta 4) · **(d)** registrar cada movimiento entre lugares.
+- **Recomendación: (b) + (c).** (d) es fricción diaria para un dato que no se usa. El total sigue apareciendo solo
+  con todos los lugares; «estirado» lo marca para revisar, no lo esconde.
+- Esquema: no (sale de las horas de envío). El umbral, configurable.
+
+**B4 · Teclear en unidad de compra.** Contar 2 cajas y 5 sueltos obliga hoy a multiplicar de cabeza.
+- Opciones: **(a)** como hoy · **(b)** una unidad guardada + teclado «cajas + sueltos»: la pantalla muestra el
+  factor («caja = 24 Ud») y el resultado («53 Ud») antes de aceptar; se guarda 53 y se anota cómo se tecleó ·
+  **(c)** varias unidades guardadas por producto.
+- **Recomendación: (b).** D-INV-3 queda intacta; (c) la rompe y se descarta.
+- El botón «cajas» aparece solo en productos con factor **confirmado** por encargado o contador. El factor de conteo
+  es del producto (`factor_compra`, §7.7); el de cada línea de proveedor (§6.1) es otro y puede diferir.
+- 🖊️ Esquema: en `inv_conteos`, cajas y sueltos tecleados y factor usado · en `inv_productos`, quién confirmó el
+  factor y cuándo.
+
+**B5 · Botellas abiertas.** Hoy entra cualquier decimal («2,5»), cada uno estima distinto.
+- Opciones: **(a)** decimal libre · **(b)** escala fija: botones «llena / ¾ / ½ / ¼» y pasos de 0,1, con el método
+  anotado («a ojo») · **(c)** balanza para todo.
+- **Recomendación: (b).** Balanza solo en F5 y solo para destilados caros.
+- 🖊️ Esquema: modo de conteo por producto (entero / decimal / botella) y `metodo` en la línea del conteo.
+
+**B6 · Control de magnitud general.** «¿Son gramos?» atrapa un solo error.
+- Opciones: **(a)** solo «¿Son gramos?» · **(b)** además, pregunta si el valor es ×10 o ÷10 del conteo anterior de
+  ese lugar, o más de 3× el par · **(c)** bloquear.
+- **Recomendación: (b)**, como pregunta («Sí, es 240» queda registrado), nunca bloqueo. La pantalla **no muestra** el
+  número anterior, para no sesgar a quien cuenta.
+- 🖊️ El aparato tendría que leer par y último conteo (hoy §7.2 le da solo nombre, unidad y orden): amplía el acceso
+  sin sesión → firma. `gramos_confirmado` pasa a ser una confirmación con motivo.
+
+**B7 · Producción propia contable.** Caldos, salsas y preparaciones ya hechas son stock: si no se cuentan, el
+consumo del mes carga ingredientes que siguen en la cámara. Es la pregunta 6 de la v0.
+- Opciones: **(a)** no contarlas · **(b)** elaboración = producto del catálogo, se cuenta como cualquier otro y se
+  valoriza con el costo de su receta (F5) · **(c)** derivarlas de recetas (el conteo se convierte a ingredientes).
+- **Recomendación: (b)**; en F4 se cuentan cantidades y el costo llega con F5. (c) necesita recetas y rendimientos
+  que todavía no existen.
+- 🖊️ Esquema: tipo de producto (comprado / elaboración); una elaboración no tiene proveedor ni compras.
+
+**B8 · Variación en ₡ y por rubro.** Una lista de cantidades por producto no dice dónde está la plata.
+- Opciones: **(a)** cantidades por producto · **(b)** además en colones (cantidad × costo de referencia), agrupada
+  por categoría y ordenada por monto · **(c)** además como % de la venta del rubro.
+- **Recomendación: (b)**; (c) con F5. Quién ve colones no cambia (§7.8 y §12.1).
+- Esquema: la vista no toca nada. 🖊️ Sí toca el tipo de `costo_unitario` (§6.6): el costo por gramo necesita
+  decimales de sobra (propuesta: 6) y se redondea solo el total.
+
+**B9 · Lugar «parcial» que nunca se completa.** Un ◐ eterno deja la fecha sin total y nadie lo cierra.
+- Opciones: **(a)** retomable hasta la próxima fecha del calendario (implícito hoy) · **(b)** vence al cierre del
+  **día siguiente** a la fecha del calendario (hora CR) y la fecha queda «Incompleto» · **(c)** vence a las 24 h del
+  primer envío.
+- **Recomendación: (b).** Contar el martes lo del lunes sigue andando; el miércoles ya no. Acota la regla 2 del
+  piloto: lo decide el dueño. El consumo ya salta a los conteos completos (§7.4).
+- Esquema: no (estado calculado).
+
+**B10 · Frecuencia.** Responde la pregunta 2 de la v0.
+- Opciones: **(a)** todo, cada lunes y día 1 (regla 2 del piloto) · **(b)** lista corta semanal de lo caro (15 a 20
+  productos como máximo, los lunes) + conteo completo el día 1 · **(c)** conteo diario de unos pocos.
+- **Recomendación: (b).** Cambia la regla 2 solo si el dueño lo decide; F0 sigue como está mientras tanto.
+- En una fecha de lista corta, un lugar está hecho cuando se contaron sus productos de la lista.
+- 🖊️ Esquema: marca de lista corta por producto y tipo «corta» en `inv_conteo_fechas`.
+
+**B11 · Multi-local.**
+- Opciones: **(a)** un catálogo separado por local · **(b)** un catálogo único e igual para los dos · **(c)**
+  **identidad de producto compartida** (nombre, unidad, categoría, tipo) + **configuración por local** (lugares,
+  orden, par, mínimo, proveedor, unidad de compra, activo).
+- **Recomendación: (c).** Sin identidad compartida no hay traspasos (B2) ni comparación entre locales. Es compatible
+  con D-INV-5 **si** «propio catálogo» se lee como «propia configuración»: esa lectura la confirman el dueño y el
+  contador; D-INV-5 no se toca acá.
+- 🖊️ Esquema: parte `inv_productos` en identidad + configuración por local. **Hay que decidirlo antes de la
+  migración del catálogo**, que se adelanta a F3 (§11).
+
+**Riesgos que suma G-014** (van también a §13): factor de compra mal confirmado · sesgo al estimar botellas ·
+decimales del costo unitario · parcial que nunca se completa.
+
+**Preguntas para el dueño (G-014):**
+1. ¿Barra y cocina cuentan **antes de recibir** o **al cierre**? ¿El mismo corte en los dos locales?
+2. ¿Hay préstamos barra ↔ cocina o entre locales que hoy no se anotan?
+3. ¿Qué productos van en la lista corta semanal (15 a 20 como máximo)?
+4. ¿El contador acepta «identidad compartida + configuración por local» (B11)?
+5. Elaboraciones: ¿se cuentan como producto o se derivan de recetas?
+6. ¿Un parcial vence al cierre del día siguiente (B9)?
+
+**Fuentes** (consultadas por el Auditor el 26-nov-2026; describen cómo funciona cada producto según su propio
+fabricante, no son evidencia independiente). Documentación de producto: docs.restaurant365.com (storage locations,
+item location records, item transfers) · support.apicbase.com (counting, parallel counting, transfer stock) ·
+support.toasttab.com (xtraCHEF inventory counts) · help.wisk.ai. Sitio del producto: marketman.com. **Material
+comercial:** supy.io. De ahí salen dos datos puntuales usados arriba: Apicbase registra los traspasos antes del
+conteo y Restaurant365 los maneja con estado enviado / recibido.
+
 ---
 
 ## 8. F5 — Recetas con costo (modelo y ganchos; no se construye acá)
@@ -596,6 +738,8 @@ Guías SOP: cada PR con pantallas actualiza `docs/sop-app/` (guía nueva «Inven
 11. **Días de pedido y demora por proveedor:** ¿quién los carga, el manager o el contador?
 12. Siguen abiertas las de la [v0](SPEC-inventario-v0.md) §8 (calendario de cocina, conteos parciales de lo caro,
     mermas y producción propia).
+13. **Bordes del conteo (G-014):** seis preguntas en §7.9 (corte, préstamos, lista corta, multi-local,
+    elaboraciones, vencimiento del parcial).
 
 ### 12.1 Respondidas por el dueño (25-nov-2026)
 - **4 · Avisos de F2:** los resuelven manager y contador, pero **al arrancar el aviso al manager va apagado** (interruptor por local); solo el contador los recibe hasta que el dueño lo encienda.
@@ -616,6 +760,10 @@ Guías SOP: cada PR con pantallas actualiza `docs/sop-app/` (guía nueva «Inven
 | Aparato habilitado en manos de cualquiera | Solo inserta conteos; sin costos; revocable; queda aparato, hora y nombre |
 | Cambio de versión del XML de Hacienda | Parser por nombre de elemento, tolerante; lo desconocido va a «revisar», no se pierde (queda el XML original) |
 | El cruce por cédula + total confunde dos compras iguales | Más de un candidato nunca se resuelve solo |
+| Factor de compra mal confirmado al teclear «cajas + sueltos» (G-014) | El botón aparece solo con factor confirmado; la pantalla muestra factor y resultado antes de aceptar; queda el factor usado en cada línea (§7.9 B4) |
+| Sesgo al estimar botellas abiertas (G-014) | Escala fija y método anotado; doble conteo para comparar; balanza en F5 para lo caro (§7.9 B5) |
+| Decimales del costo unitario (costo por gramo) (G-014) | Costo con decimales de sobra; se redondea solo el total (§7.9 B8) |
+| Lugar «parcial» que nunca se completa (G-014) | Vencimiento definido y fecha «Incompleto» (§7.9 B9) |
 | Datos reales en el repo público | Pruebas con XML ficticios; muestras reales solo en staging; revisión del diff antes de cada commit |
 
 ## 14. Qué queda afuera

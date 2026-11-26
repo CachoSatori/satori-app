@@ -65,14 +65,19 @@ describe('mig 199 — permisos', () => {
 })
 
 describe('mig 199 — la vuelta atrás borra todo lo que crea', () => {
-  it('cada tabla y función creada tiene su drop, y el bucket su delete', () => {
+  it('cada tabla y función creada tiene su drop', () => {
     const tablas = [...codigo.matchAll(/create table (public\.\w+)/g)].map(m => m[1])
     const funciones = [...codigo.matchAll(/create function (public\.\w+)\(/g)].map(m => m[1])
     expect(tablas).toHaveLength(6)
     expect(funciones).toHaveLength(6)
     for (const t of tablas) expect(rollback).toContain(`drop table if exists ${t};`)
     for (const f of funciones) expect(rollback).toContain(`drop function if exists ${f}(`)
-    expect(rollback).toContain("delete from storage.buckets where id = 'fe-xml';")
+  })
+  // Batería en staging del 25-nov: un `delete from storage.buckets` en el .sql lo frena storage.protect_delete (42501) y
+  // para la vuelta atrás entera. El bucket se vacía y se borra por la API de Storage, como paso aparte (PASE-199 §6).
+  it('no toca storage.buckets ni storage.objects por SQL (el bucket va por la API de Storage)', () => {
+    const sentencias = rollback.split('\n').filter(l => !l.trim().startsWith('--')).join('\n')
+    expect(sentencias).not.toMatch(/storage\.(buckets|objects)/i)
   })
 })
 

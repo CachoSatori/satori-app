@@ -102,10 +102,27 @@ latir · `fe-ingesta` responde algo que no sea 401 sin secreto.
 
 - **Apagar sin tocar esquema:** borrar el disparador del script (o quitar `FE_INGESTA_SECRET`: la Edge vuelve a 401).
   Es lo primero y alcanza en la mayoría de los casos.
-- **Esquema, solo si no hay facturas reales:** vaciar el bucket `fe-xml` por la API de Storage → `scripts/sql/199_rollback.sql`
-  (una transacción) y, en el mismo momento, un PR que saca el `.sql`, la carpeta de la Edge y su bloque de
-  `config.toml` de `main`. Si la 199 ya está en el ledger de prod, el `.sql` **no se borra** (regla 10): la vuelta
-  atrás es una migración nueva con ese cuerpo.
+- **Esquema, solo si no hay facturas reales:** `scripts/sql/199_rollback.sql` (una transacción; solo tablas y funciones
+  `fe_*`) y, en el mismo momento, un PR que saca el `.sql`, la carpeta de la Edge y su bloque de `config.toml` de
+  `main`. Si la 199 ya está en el ledger de prod, el `.sql` **no se borra** (regla 10): la vuelta atrás es una migración
+  nueva con ese cuerpo.
+- **Bucket `fe-xml`, paso aparte por la API de Storage** (después del `.sql`). El `.sql` no lo toca: Supabase frena todo
+  `delete` directo sobre `storage.buckets`/`storage.objects` (trigger `storage.protect_delete`, 42501 «Use the Storage
+  API») y pararía la transacción entera. Con la llave `service_role` del proyecto en una variable de la terminal (nunca
+  pegada en un chat ni en el repo) y `REF` = ref del proyecto:
+
+  ```bash
+  # 1) vaciar (borra todos los objetos del bucket)
+  curl -sS -X POST "https://$REF.supabase.co/storage/v1/bucket/fe-xml/empty" \
+    -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY"
+  # 2) borrar el bucket (falla si quedó algún objeto: repetir el 1)
+  curl -sS -X DELETE "https://$REF.supabase.co/storage/v1/bucket/fe-xml" \
+    -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY"
+  ```
+
+  Las dos responden `{"message":"Successfully …"}`. Verificación por SQL (solo lectura):
+  `select count(*) from storage.buckets where id = 'fe-xml';` → 0. En la batería (`199_pruebas`) el caso 90 mira que
+  el `.sql` dejó el bucket intacto; el borrado por API no se prueba ahí (corre en `begin … rollback`).
 - Con facturas reales: no se borra; se apaga (punto 1) y se corrige con una migración nueva.
 
 ## 7. Guía para el dueño: instalar el script (una vez por cuenta de correo)

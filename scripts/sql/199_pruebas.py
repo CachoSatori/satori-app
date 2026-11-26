@@ -51,7 +51,8 @@ MUTACIONES: dict[str, tuple] = {
                                        "grant execute on function public.fe_ingestar(jsonb) to service_role, authenticated;")], {'03'}, set()),
     'contador_carga_receptores': ([('mig', "  with check ((select public.get_my_role()) = 'owner');\ncreate policy fe_receptores_cambio",
                                     "  with check ((select public.get_my_role()) in ('owner', 'contador'));\ncreate policy fe_receptores_cambio")], {'62'}, set()),
-    'rollback_deja_bucket': ([('rb', "delete from storage.buckets where id = 'fe-xml';\n", "")], {'90'}, set()),
+    'rollback_deja_tabla': ([('rb', "drop table if exists public.fe_ingesta_latido;\n", "")], {'90'}, set()),
+    'rollback_deja_funcion': ([('rb', "drop function if exists public.fe_latido(text);\n", "")], {'90'}, set()),
 }
 
 
@@ -61,8 +62,17 @@ def reemplazar(cuerpo: str, viejo: str, nuevo: str, nombre: str) -> str:
     return cuerpo.replace(viejo, nuevo)
 
 
+def sin_storage(rb: str) -> str:
+    """La vuelta atrás no puede tocar storage.buckets/objects por SQL: Supabase lo frena (storage.protect_delete, 42501)
+    y para la batería y la vuelta atrás real. El bucket va por la API de Storage (PASE-199 §6)."""
+    sentencias = '\n'.join(l for l in rb.splitlines() if not l.strip().startswith('--'))
+    if re.search(r'storage\.(buckets|objects)', sentencias, re.I):
+        raise SystemExit('199_rollback.sql toca storage.buckets/objects por SQL: eso va por la API de Storage (PASE-199 §6)')
+    return rb
+
+
 def armar(mutar: str | None = None, local: bool = False) -> str:
-    cuerpo, rb = MIG.read_text(), ROLLBACK.read_text()
+    cuerpo, rb = MIG.read_text(), sin_storage(ROLLBACK.read_text())
     if mutar:
         for donde, viejo, nuevo in MUTACIONES[mutar][0]:
             if donde == 'mig':

@@ -156,8 +156,16 @@ describe('numeración de migraciones', () => {
   it.skipIf(!base)('R16: toda migración NUEVA respecto de la base tiene un número mayor que «ultimo_ledger_prod»', () => {
     const enBase = new Set(execFileSync('git', ['ls-tree', '--name-only', base, 'supabase/migrations/'], { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter(Boolean))
     const nuevas = migs.map(m => m.archivo).filter(f => !enBase.has(`supabase/migrations/${f}`))
+    // (25-nov, #365) Con una base vieja (origin/main local sin actualizar, o un GATE_BASE viejo) las migraciones que ya
+    // entraron a main después de esa base cuentan como «nuevas» y R16 cae por un PR que no las trae. El mensaje dice la
+    // base usada y, si el .sql ya lo trae otro PR registrado, que lo primero es actualizar la base.
+    const corta = base.slice(0, 8)
     const malas = nuevas.filter(f => Number(f.split('_')[0]) <= REG.ultimo_ledger_prod)
-      .map(f => `${f}: número ≤ ${REG.ultimo_ledger_prod} (último del ledger de prod). Renumerala al siguiente libre mayor que ${REG.ultimo_ledger_prod} (bloque de pase 150–199 si cabe), en el mismo PR y registrada en migraciones-reservadas.json y ESTADO (R16)`)
+      .map(f => {
+        const reg = REG.asignadas[f.split('_')[0]]
+        const pista = reg?.rama ? ` · está registrada para la rama «${reg.rama}»: si ya está en main, tu base ${corta} está vieja → \`git fetch origin main\` y volvé a correr` : ''
+        return `${f}: número ≤ ${REG.ultimo_ledger_prod} (último del ledger de prod), nueva respecto de la base ${corta}. Renumerala al siguiente libre mayor que ${REG.ultimo_ledger_prod} (bloque de pase 150–199 si cabe), en el mismo PR y registrada en migraciones-reservadas.json y ESTADO (R16)${pista}`
+      })
     expect(malas).toEqual([])
   })
 })

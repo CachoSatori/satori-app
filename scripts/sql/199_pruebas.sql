@@ -280,11 +280,13 @@ select '63 nadie borra un receptor (se desactiva)', pg_temp.v('rec_del') = 'ERR 
 -- ═══ F. Vuelta atrás ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- @@199_rollback@@
 insert into _r199 (caso, ok, detalle)
-select '90 después de 199_rollback.sql no queda ninguna tabla, función ni el bucket',
+-- El bucket `fe-xml` NO lo borra el .sql (Storage frena el delete directo, 42501): es el paso aparte por la API de
+-- Storage (PASE-199 §6). Acá se mira que el .sql no lo tocó: el bucket sigue y su fila no cambió.
+select '90 después de 199_rollback.sql no queda ninguna tabla ni función fe_*, y el bucket queda para la API de Storage',
        to_regclass('public.fe_comprobantes') is null and to_regclass('public.fe_lineas') is null and to_regclass('public.fe_receptores') is null
        and to_regclass('public.fe_respuestas') is null and to_regclass('public.fe_ingesta_bitacora') is null and to_regclass('public.fe_ingesta_latido') is null
        and not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'fe\_%')
-       and not exists (select 1 from storage.buckets where id = 'fe-xml'), null;
+       and exists (select 1 from storage.buckets where id = 'fe-xml' and public is false), null;
 
 select n, caso, case when ok then 'OK' else 'FALLA' end as resultado, left(coalesce(detalle, ''), 300) as detalle from _r199 order by n;
 select json_build_object(

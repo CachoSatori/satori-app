@@ -6,8 +6,9 @@
 //   roto            → bitácora «error» con el motivo                                  (el correo queda «fe-error»: 422)
 //   no_comprobante  → bitácora «no_comprobante»                                       (200)
 //   respuesta       → fe_respuesta_registrar (nuevo / duplicado)                      (200)
-//   comprobante     → sube el XML a fe-xml (AAAA/MM/clave.xml; si ya está, sigue) y fe_ingestar, UNA transacción por
-//                     comprobante en la base (nuevo / duplicado / revisar)             (200)
+//   comprobante     → sube el XML a fe-xml (AAAA/MM/<clave>/<sha256>.xml; si ya está, es ESE mismo XML: sigue) y
+//                     fe_ingestar, UNA transacción por comprobante en la base (nuevo / duplicado / revisar). Misma
+//                     clave con otro sha: la base guarda la versión y lo deja a «revisar» (mig 201)  (200)
 //   dato que la base rechaza (SQLSTATE 22xxx / 23xxx) → bitácora «error»              (422: reintentar no lo arregla)
 //   falla de red, de Storage o de la base           → 500: el script NO etiqueta y reintenta (todo es idempotente)
 // Siempre anota el latido de la fuente (la pantalla de control sabe que el script corre).
@@ -27,8 +28,9 @@ export interface ResultadoXml { i: number; resultado: ResultadoIngesta; clave_fi
 export interface RespuestaIngesta { status: 200 | 422 | 500; cuerpo: { ok: boolean; latido?: true; resultados: ResultadoXml[] } }
 
 /**
- * ¿El error de Storage al subir dice «ese objeto ya existe»? Es el reintento normal (el mismo XML llegó antes, o el
- * script reintentó tras un 500): se trata como ÉXITO idempotente y la base decide «duplicado». Si no se detecta, cada
+ * ¿El error de Storage al subir dice «ese objeto ya existe»? Como la ruta lleva el sha del XML (rutaXml, mig 201), ya
+ * existe = ese MISMO XML ya está guardado (llegó antes, o el script reintentó tras un 500): se trata como ÉXITO
+ * idempotente y la base decide «duplicado». Nunca tapa un XML distinto: ese va a otra ruta. Si no se detecta, cada
  * reintento daría 500 para siempre y el correo nunca se etiquetaría.
  * Formas que manda storage-js según versión: `statusCode: '409'` (código del cuerpo), `status: 409` o `400` con
  * `error: 'Duplicate'`, y el mensaje «The resource already exists».
@@ -97,8 +99,13 @@ export async function procesarSobre(s: SobreFe, deps: DepsIngesta): Promise<Resp
     }
 
     const clave = r.comprobante.clave
-    const ruta = rutaXml(clave)
+    // 258: el sha se calcula UNA vez, del mismo texto que se sube, y va en la ruta y en la base: la fila siempre apunta
+    // al archivo de SU sha.
+    let sha: string
+    let ruta: string
     try {
+      sha = await deps.sha256(xml)
+      ruta = rutaXml(clave, sha)
       await deps.subirXml(ruta, xml)
     } catch {
       fallaBase = true
@@ -107,7 +114,7 @@ export async function procesarSobre(s: SobreFe, deps: DepsIngesta): Promise<Resp
     const { data, error } = await deps.rpc('fe_ingestar', {
       p: {
         fuente: s.fuente, lote: s.lote, estado: r.estado, motivos: r.motivos, xml_path: ruta,
-        xml_sha256: await deps.sha256(xml), comprobante: r.comprobante, lineas: r.lineas,
+        xml_sha256: sha, comprobante: r.comprobante, lineas: r.lineas,
       },
     })
     if (error) {

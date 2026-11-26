@@ -51,6 +51,28 @@ describe('reemplazarPagoEnBase (mig 200)', () => {
     }
   })
 
+  it('la base no contesta y vence el tiempo (15 s) → cae al camino viejo (no se sabe si entró; mismo id)', async () => {
+    vi.useFakeTimers()
+    try {
+      let senal: AbortSignal | null = null
+      const colgado = { abortSignal: (s: AbortSignal) => { senal = s; return colgado }, then: () => new Promise(() => {}) }
+      h.rpcSpy.mockReturnValue(colgado)
+      const p = falla()
+      await vi.advanceTimersByTimeAsync(15_001)
+      const e = await p
+      expect(e).toBeInstanceOf(ErrorRpcReemplazo)
+      expect(e?.caer).toBe(true)
+      expect(e?.code).toBeNull()
+      expect((senal as AbortSignal | null)?.aborted).toBe(true)   // el pedido colgado se corta, no queda vivo
+    } finally { vi.useRealTimers() }
+  })
+
+  it('un error que se tira al llamar (red caída a mitad) también cae', async () => {
+    h.rpcSpy.mockImplementation(() => { throw new Error('Failed to fetch') })
+    const e = await falla()
+    expect(e?.caer).toBe(true)
+  })
+
   it('respuesta sin forma conocida → error que NO cae (nada se da por hecho)', async () => {
     h.rpcSpy.mockReturnValue(builder({ data: { estado: 'raro' }, error: null }))
     expect((await falla())?.caer).toBe(false)

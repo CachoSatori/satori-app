@@ -1,11 +1,13 @@
 -- 200_pruebas · reemplazar_pago_caja (cambio de pago en UNA transacción). Transacción que termina en ROLLBACK: no deja
 -- nada. Usa un LOCAL FICTICIO ('prueba-200'), usuarios, proveedor y pagos inventados (correos `.test`, clave ficticia).
--- Corre en STAGING (ref hwiatgic…), antes o después de aplicar la 200: el armador mete el cuerpo de la 200 adentro
+-- 23 casos (01–23). Corre en STAGING (ref hwiatgic…), antes o después de aplicar la 200: el armador mete el cuerpo de la 200 adentro
 -- (si ya está aplicada, se borra primero dentro de la transacción para probar el archivo, no lo que haya en la base).
 -- Se arma y se corre con scripts/sql/200_pruebas.py (--armar [--mutar X] [--compacto]). Nunca contra PROD.
 -- MARCADORES: «@@200@@» → cuerpo de supabase/migrations/200_caja_reemplazo_pago_atomico.sql (con --mutar, roto a
--- propósito) · «@@200_texto@@» → el mismo cuerpo como texto (guarda de «ya existe») · «@@200_rollback@@».
+-- propósito) · «@@200_texto@@» → el mismo cuerpo como texto (guarda de «ya existe») · «@@200_rollback@@» ·
+-- «@@preludio@@» → vacío en staging; con --local, scripts/sql/200_preludio_local.sql.
 begin;
+-- @@preludio@@
 create temp table _r200 (n serial, caso text, ok boolean, detalle text) on commit drop;
 create temp table _a200 (k text primary key, v text) on commit drop;
 
@@ -19,7 +21,8 @@ select '00000000-0000-4000-8200-0000000000b1'::uuid as owner_id,
        '00000000-0000-4000-8200-0000000000a1'::uuid as manager,       -- manager de prueba-200
        '00000000-0000-4000-8200-0000000000a2'::uuid as manager_otro,  -- manager de santa-teresa (local ajeno)
        '00000000-0000-4000-8200-0000000000c1'::uuid as cajero,
-       '00000000-0000-4000-8200-0000000000e1'::uuid as salonero,
+       '00000000-0000-4000-8200-0000000000e1'::uuid as salonero,      -- asignado a prueba-200 (ve el local)
+       '00000000-0000-4000-8200-0000000000d1'::uuid as contador,      -- ve todos los locales (mis_locales)
        '00000000-0000-4000-8200-0000000000f1'::uuid as proveedor_id,
        '00000000-0000-4000-8200-000000000051'::uuid as ses,           -- turno de prueba-200, 20-nov
        '00000000-0000-4000-8200-000000000052'::uuid as ses_otro_dia,  -- turno de prueba-200, 21-nov
@@ -30,13 +33,14 @@ insert into auth.users (id, email, encrypted_password, raw_user_meta_data)
 select x.id, x.mail, extensions.crypt('clave-ficticia-200', extensions.gen_salt('bf')), '{"full_name":"Ficticio 200"}'::jsonb
   from _c200 c, lateral (values (c.owner_id, 'owner200@ejemplo.test'), (c.manager, 'manager200@ejemplo.test'),
                                 (c.manager_otro, 'otro200@ejemplo.test'), (c.cajero, 'cajero200@ejemplo.test'),
-                                (c.salonero, 'salonero200@ejemplo.test')) x(id, mail);
+                                (c.salonero, 'salonero200@ejemplo.test'), (c.contador, 'contador200@ejemplo.test')) x(id, mail);
 update public.profiles p set role = r.rol::public.user_role, is_active = true
-  from _c200 c, (values (1, 'owner'), (2, 'manager'), (3, 'manager'), (4, 'cajero'), (5, 'salonero')) r(i, rol)
- where p.id = (array[c.owner_id, c.manager, c.manager_otro, c.cajero, c.salonero])[r.i];
+  from _c200 c, (values (1, 'owner'), (2, 'manager'), (3, 'manager'), (4, 'cajero'), (5, 'salonero'), (6, 'contador')) r(i, rol)
+ where p.id = (array[c.owner_id, c.manager, c.manager_otro, c.cajero, c.salonero, c.contador])[r.i];
 insert into public.profile_locations (profile_id, location_id) select manager, loc from _c200;
 insert into public.profile_locations (profile_id, location_id) select manager_otro, 'santa-teresa' from _c200;
 insert into public.profile_locations (profile_id, location_id) select cajero, loc from _c200;
+insert into public.profile_locations (profile_id, location_id) select salonero, loc from _c200;
 insert into public.suppliers (id, name) select proveedor_id, 'Proveedor ficticio 200' from _c200;
 insert into public.cash_sessions (id, session_date, opened_by, status, initial_service_crc, initial_suppliers_crc, location_id)
 select x.id, x.d, c.owner_id, 'open', 0, 0, x.l from _c200 c,
@@ -78,7 +82,9 @@ exception when others then
   return 'ERR:' || sqlstate;
 end $f$;
 create function pg_temp.existe(p uuid) returns boolean language sql as $f$ select exists (select 1 from public.cash_movements where id = p) $f$;
-create function pg_temp.est(k text) returns text language sql as $f$ select (select v from _a200 where _a200.k = est.k)::jsonb->>'estado' $f$;
+-- Estado de la respuesta guardada; si fue un error, el «ERR:<sqlstate>» tal cual (no castea: no aborta la transacción).
+create function pg_temp.est(k text) returns text language sql as $f$
+  select case when v like '{%' then v::jsonb->>'estado' else v end from _a200 where _a200.k = est.k $f$;
 
 -- ═══ A. Reemplazo bien hecho ═════════════════════════════════════════════════════════════════════════════════════
 insert into _a200 select 'r01', pg_temp.rpc(owner_id, pg_temp.v(1), pg_temp.datos(pg_temp.n(1))) from _c200;
@@ -101,6 +107,30 @@ select '03 reintento con el mismo id: mismo resultado (listo, repetido), sin seg
        and (select count(*) from public.cash_movements where id = pg_temp.n(1) or client_op_id = pg_temp.n(1)) = 1
        and (select count(*) from public.movement_deletions d where d.movement_snapshot->>'id' = pg_temp.v(1)::text) = 1,
        (select v from _a200 where k = 'r03');
+
+-- R36: reintento con el MISMO id pero OTRO monto (₡99.999) cuando el viejo ya no está: NO es «listo»; lo guardado manda.
+insert into _a200 select 'r21', pg_temp.rpc(owner_id, pg_temp.v(1), pg_temp.datos(pg_temp.n(1), 99999)) from _c200;
+insert into _r200 (caso, ok, detalle)
+select '21 viejo ya no está + mismo id con OTROS datos: estado distinto con lo guardado (₡25.000), nada cambia',
+       pg_temp.est('r21') = 'distinto'
+       and ((select v from _a200 where k = 'r21')::jsonb->'guardado'->>'amount_crc')::numeric = 25000
+       and (select count(*) from public.cash_movements where id = pg_temp.n(1) and amount_crc = 25000) = 1
+       and (select count(*) from public.movement_deletions d where d.movement_snapshot->>'id' = pg_temp.v(1)::text) = 1,
+       (select v from _a200 where k = 'r21');
+-- Viejo ya no está y el id coincide con OTRO movimiento visible (V02, un pago cualquiera; y uno por client_op_id):
+-- no se devuelve como si fuera el reemplazo.
+insert into public.cash_movements (id, client_op_id, session_id, created_by, movement_type, amount_crc, amount_usd, currency, description,
+                                   supplier_id, supplier_name, method, caja_origen, attachments, status, location_id)
+select gen_random_uuid(), pg_temp.n(22), ses, owner_id, 'egreso_mercaderia', 25000, 0, 'CRC', 'pago ficticio nuevo', proveedor_id,
+       'Proveedor ficticio 200', 'Efectivo', 'Caja Proveedores', '[]', 'aprobado', loc from _c200;
+insert into _a200 select 'r22', concat_ws('|',
+  pg_temp.rpc(owner_id, pg_temp.v(1), pg_temp.datos(pg_temp.v(2), 10000) || '{"description":"pago ficticio viejo"}'),
+  pg_temp.rpc(owner_id, pg_temp.v(1), pg_temp.datos(pg_temp.n(22)))) from _c200;
+insert into _r200 (caso, ok, detalle)
+select '22 viejo ya no está + el id es de OTRO movimiento (por id o por client_op_id): P0002, no «listo» ni lo devuelve',
+       (select v from _a200 where k = 'r22') = 'ERR:P0002|ERR:P0002' and pg_temp.existe(pg_temp.v(2))
+       and (select count(*) from public.cash_movements where client_op_id = pg_temp.n(22)) = 1,
+       (select v from _a200 where k = 'r22');
 
 -- El alta ya había entrado por el camino viejo (#361) y faltaba borrar: con los mismos datos, termina el cambio.
 insert into public.cash_movements (id, client_op_id, session_id, created_by, movement_type, amount_crc, amount_usd, currency, description,
@@ -150,6 +180,15 @@ select '09 rol sin permiso (salonero) y sin sesión (anon): 42501, nada cambia',
        (select v from _a200 where k = 'r09') = 'ERR:42501' and (select v from _a200 where k = 'r09b') = 'ERR:42501'
        and pg_temp.existe(pg_temp.v(9)) and not pg_temp.existe(pg_temp.n(9)),
        (select v from _a200 where k = 'r09') || ' / ' || (select v from _a200 where k = 'r09b');
+-- Rol sin permiso CON la clave de un manager del local (salonero asignado al local; contador, que ve todos): igual 42501.
+insert into _a200 select 'r23', concat_ws('|',
+  pg_temp.rpc(salonero, pg_temp.v(9), pg_temp.datos(pg_temp.n(9)), 'manager200@ejemplo.test', 'clave-ficticia-200'),
+  pg_temp.rpc(contador, pg_temp.v(9), pg_temp.datos(pg_temp.n(9)), 'manager200@ejemplo.test', 'clave-ficticia-200'),
+  pg_temp.rpc(contador, pg_temp.v(9), pg_temp.datos(pg_temp.n(9)))) from _c200;
+insert into _r200 (caso, ok, detalle)
+select '23 salonero y contador con la clave de un manager del local (y contador sin clave): 42501, nada cambia',
+       (select v from _a200 where k = 'r23') = 'ERR:42501|ERR:42501|ERR:42501' and pg_temp.existe(pg_temp.v(9)) and not pg_temp.existe(pg_temp.n(9)),
+       (select v from _a200 where k = 'r23');
 insert into _a200 select 'r10', pg_temp.rpc(manager_otro, pg_temp.v(9), pg_temp.datos(pg_temp.n(9))) from _c200;
 insert into _r200 (caso, ok, detalle)
 select '10 manager de OTRO local: 42501, nada cambia',

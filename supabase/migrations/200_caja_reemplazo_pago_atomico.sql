@@ -20,7 +20,8 @@
 --     ve que el viejo ya no está y recibe un error claro (P0002) en vez de crear un segundo pago.
 --   · Devuelve {estado: 'listo', repetido, nuevo} o, si con ese id ya hay un pago con OTROS datos (un intento anterior
 --     entró distinto), {estado: 'distinto', guardado} SIN borrar el viejo (lo mismo que hacía `coincidePago` en el
---     aparato).
+--     aparato). Si el viejo ya no está, «listo, repetido» SOLO si el de ese id es su reemplazo (borrado con la nota de
+--     reemplazo, mismo local) y tiene ESTOS datos; con otros datos, «distinto»; si el id es de otro movimiento, P0002.
 --   · El borrado del viejo es el de siempre (`delete_movement_cascade`, con la nota de reemplazo): auditoría en
 --     movement_deletions, reversa de asientos, tarea de inventario y créditos, sin cambios.
 --
@@ -139,10 +140,26 @@ begin
   -- ── C. Bloqueo del viejo: dos aparatos no lo reemplazan a la vez ──
   select * into v_viejo from public.cash_movements where id = p_viejo for update;
   if not found then
-    -- ¿Ya lo reemplazó ESTE mismo cambio (reintento)? Entonces el resultado es el mismo.
-    select * into v_ya from public.cash_movements where id = v_id;
+    -- ¿Ya lo reemplazó ESTE mismo cambio (reintento)? Solo si el que está con ese id ES el reemplazo de este viejo se
+    -- mira si tiene ESTOS datos: iguales → el mismo resultado; otros → «distinto» (lo guardado manda: nunca «listo» con
+    -- otro monto). «Es el reemplazo»: id = client_op_id = el del cliente, pago a proveedor, y el viejo se borró con la
+    -- nota de reemplazo, en el mismo local, DESPUÉS de que se creara este (hasta 1 h de reloj del aparato) y este es
+    -- más nuevo que el viejo. Un pago anterior al viejo, o creado después del borrado, no es su reemplazo.
+    select * into v_ya from public.cash_movements where id = v_id or client_op_id = v_id limit 1;
     if found and public.puede_ver_local(v_ya.location_id) then
-      return jsonb_build_object('estado', 'listo', 'repetido', true, 'nuevo', to_jsonb(v_ya));
+      if v_ya.id = v_id and v_ya.client_op_id = v_id and v_ya.movement_type = 'egreso_mercaderia'
+         and exists (select 1 from public.movement_deletions d
+                      where d.movement_snapshot->>'id' = p_viejo::text and d.note = c_nota
+                        and d.movement_snapshot->>'location_id' = v_ya.location_id
+                        and v_ya.created_at > (d.movement_snapshot->>'created_at')::timestamptz
+                        and v_ya.created_at <= d.deleted_at + interval '1 hour') then
+        if public._reemplazo_pago_coincide(v_ya, p_nuevo) then
+          return jsonb_build_object('estado', 'listo', 'repetido', true, 'nuevo', to_jsonb(v_ya));
+        end if;
+        return jsonb_build_object('estado', 'distinto', 'guardado', to_jsonb(v_ya));
+      end if;
+      -- Ese id es de OTRO movimiento: no se devuelve como si fuera el reemplazo.
+      raise exception 'El pago anterior ya no existe y ese id es de otro movimiento. Recargá la lista.' using errcode = 'P0002';
     end if;
     raise exception 'El pago anterior ya no existe (otro aparato lo cambió o lo borró). Recargá la lista.' using errcode = 'P0002';
   end if;

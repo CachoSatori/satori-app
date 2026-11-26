@@ -98,10 +98,10 @@ export default function InvFeEmisores({ rol, onCambio }: { rol: string; onCambio
             </div>
             <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', fontSize: '0.85rem', ...ENVUELVE }}>
               {e.comprobantes.map(c => (
-                <li key={c.fin_clave} style={ENVUELVE}>
+                <li key={c.clave} style={ENVUELVE}>
                   {c.fecha ? dateCR(c.fecha) : 'sin fecha'} · {monto(c.total, c.moneda)} · clave …{c.fin_clave}
                   {c.otros_motivos.length > 0 && (
-                    <span style={{ display: 'block', opacity: 0.75 }}>Sigue para revisar aunque lo recuerde: {c.otros_motivos.join(' · ')}</span>
+                    <span style={{ display: 'block', opacity: 0.75 }}>Sigue para revisar aunque lo recordés: {c.otros_motivos.join(' · ')}</span>
                   )}
                 </li>
               ))}

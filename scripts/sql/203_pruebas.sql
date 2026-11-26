@@ -91,6 +91,7 @@ select public.fe_ingestar(pg_temp.pl(7, '310100000339'));                       
 select public.fe_ingestar(pg_temp.pl(8, '310100000301'));
 select public.fe_ingestar(pg_temp.pl(8, '310100000301', pg_temp.sha('c')));                       -- K: SOLO otro XML misma clave
 select public.fe_ingestar(pg_temp.pl(9, '310100000333'));                                         -- E: se carga a mano después
+select public.fe_ingestar(pg_temp.pl(12, '310100000335', receptor => '310202039999'));            -- F: SOLO una factura que no era para Satori
 
 -- ── @@ la 203 ───────────────────────────────────────────────────────────────────────────────────────────────────
 create temp table _ing203 on commit drop as select count(*) as n, max(ts) as ultima from public.fe_ingesta_bitacora;
@@ -185,6 +186,13 @@ select '15 emisor ya conocido con «revisar» SOLO por otro XML: «ya_estaba», 
 select pg_temp.como('f16a', owner_id, $$select public.fe_emisor_recordar('310100000398')::text$$) from _c203;
 select pg_temp.como('f16b', owner_id, $$select public.fe_emisor_recordar('31-01')::text$$) from _c203;
 select pg_temp.como('f16c', owner_id, $$select public.fe_emisor_recordar(null)::text$$) from _c203;
+select pg_temp.como('f16d', owner_id, $$select public.fe_emisor_recordar('310100000335')::text$$) from _c203;
+insert into _r203 (caso, ok, detalle)
+select '22 una cédula que solo llegó en una factura «receptor_distinto» (no era para Satori): 22023, no se carga, la factura sigue igual',
+       pg_temp.a('f16d') = 'ERR 22023'
+       and not exists (select 1 from public.fe_emisores_conocidos where cedula = '310100000335')
+       and pg_temp.est(12) like 'receptor_distinto|%emisor no conocido%' and pg_temp.nbit('310100000335') = 0,
+       pg_temp.a('f16d') || ' ' || pg_temp.est(12);
 insert into _r203 (caso, ok, detalle)
 select '16 una cédula sin comprobantes, inválida o nula: 22023 y no se carga nada',
        pg_temp.a('f16a') = 'ERR 22023' and pg_temp.a('f16b') = 'ERR 22023' and pg_temp.a('f16c') = 'ERR 22023'

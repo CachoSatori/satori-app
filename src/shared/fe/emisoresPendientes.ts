@@ -21,7 +21,7 @@ export interface ComprobantePendiente {
 export interface EmisorPendiente {
   cedula: string
   nombre: string
-  comprobantes: { fin_clave: string; fecha: string | null; total: number | null; moneda: string; otros_motivos: string[] }[]
+  comprobantes: { clave: string; fin_clave: string; fecha: string | null; total: number | null; moneda: string; otros_motivos: string[] }[]
 }
 
 /** Motivos del comprobante, en orden, partidos como los arma `fe_motivo_sumar`. */
@@ -29,11 +29,12 @@ export function motivos(m: string | null): string[] {
   return (m ?? '').split(SEP).map(x => x.trim()).filter(Boolean)
 }
 
-/** Agrupa por cédula los comprobantes «revisar»/«receptor distinto» cuyo motivo incluye EXACTAMENTE el del emisor. */
+/** Agrupa por cédula los comprobantes «revisar» cuyo motivo incluye EXACTAMENTE el del emisor. «Receptor distinto» no
+ *  entra: una factura que no era para Satori no habilita un emisor (la 203 tampoco lo deja). */
 export function agruparPendientes(filas: ComprobantePendiente[]): EmisorPendiente[] {
   const por = new Map<string, EmisorPendiente>()
   for (const f of filas) {
-    if (!f.emisor_cedula || (f.estado_parseo !== 'revisar' && f.estado_parseo !== 'receptor_distinto')) continue
+    if (!f.emisor_cedula || f.estado_parseo !== 'revisar') continue
     const ms = motivos(f.motivo)
     if (!ms.includes(MOTIVO_EMISOR)) continue
     let e = por.get(f.emisor_cedula)
@@ -43,9 +44,9 @@ export function agruparPendientes(filas: ComprobantePendiente[]): EmisorPendient
     }
     const total = f.total_comprobante == null ? null : Number(f.total_comprobante)
     e.comprobantes.push({
-      fin_clave: f.clave.slice(-10), fecha: f.fecha_emision, total: Number.isFinite(total) ? total : null,
+      clave: f.clave, fin_clave: f.clave.slice(-10), fecha: f.fecha_emision, total: Number.isFinite(total) ? total : null,
       moneda: f.moneda, otros_motivos: ms.filter(x => x !== MOTIVO_EMISOR),
     })
   }
-  return [...por.values()].sort((a, b) => b.comprobantes.length - a.comprobantes.length || a.nombre.localeCompare(b.nombre))
+  return [...por.values()].sort((a, b) => b.comprobantes.length - a.comprobantes.length || a.nombre.localeCompare(b.nombre) || a.cedula.localeCompare(b.cedula))
 }

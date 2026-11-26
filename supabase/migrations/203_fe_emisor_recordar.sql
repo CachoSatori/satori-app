@@ -17,7 +17,8 @@
 --          si era su único motivo y estaba «revisar», pasa a «ok»; si tiene otro (otro XML con la misma clave,
 --          respuesta de Hacienda distinta, receptor, lo que marcó la Edge) se queda como está con el resto del motivo.
 --        · idempotente: tocar dos veces no duplica (PK por cédula) ni deja otra fila de bitácora si no cambió nada.
---      Solo se recuerda una cédula que llegó en algún comprobante (no se cargan cédulas inventadas desde la API).
+--      Solo se recuerda una cédula que llegó en algún comprobante CON local (no «receptor_distinto»: una factura que no
+--      era para Satori no habilita un emisor; tampoco cédulas inventadas desde la API).
 --   4. `fe_emisor_desactivar(cedula)` (solo owner): activo = false con su fila de bitácora. No toca comprobantes.
 -- Las dos son SECURITY DEFINER con search_path fijo; las ejecuta `authenticated` y el rol se mira adentro (42501).
 -- Entra a prod por merge → Branching, con la firma del dueño (docs/pases/PASE-203-fe-emisor-recordar.md).
@@ -123,10 +124,11 @@ begin
     into v_nombre
     from public.fe_comprobantes c
    where c.emisor_cedula = p_cedula
-   order by c.recibido_en desc
+     and c.estado_parseo <> 'receptor_distinto'   -- una factura que no era para Satori no habilita un emisor
+   order by c.recibido_en desc, c.id
    limit 1;
   if not found then
-    raise exception 'fe_emisor_recordar: no llegó ningún comprobante de esa cédula' using errcode = '22023';
+    raise exception 'fe_emisor_recordar: no llegó ningún comprobante de esa cédula para un local' using errcode = '22023';
   end if;
 
   select e.* into v_prev from public.fe_emisores_conocidos e where e.cedula = p_cedula for update;

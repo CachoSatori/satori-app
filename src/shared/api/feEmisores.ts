@@ -22,8 +22,8 @@ export interface ResultadoRecordar { resultado: 'recordar' | 'reactivar' | 'reso
 type R<T> = { ok: true; data: T } | { ok: false; error: string }
 
 const MSJ: Record<string, string> = {
-  '42501': 'No tiene permiso para esto.',
-  '22023': 'Esa cédula no llegó en ninguna factura.',
+  '42501': 'No tenés permiso para esto.',
+  '22023': 'Esa cédula no llegó en ninguna factura para un local.',
 }
 function textoError(e: { code?: string; message?: string }): string {
   // los 42501 de la 203 traen su propio texto claro («solo el owner lo vuelve a activar»)
@@ -35,9 +35,10 @@ export async function getEmisoresPendientes(): Promise<R<EmisorPendiente[]>> {
   const { data, error } = await sb
     .from('fe_comprobantes')
     .select('clave, fecha_emision, emisor_cedula, emisor_nombre, emisor_nombre_comercial, total_comprobante, moneda, estado_parseo, motivo')
-    .in('estado_parseo', ['revisar', 'receptor_distinto'])
+    .eq('estado_parseo', 'revisar')
     .ilike('motivo', '%emisor no conocido%')
     .order('fecha_emision', { ascending: false })
+    .order('clave', { ascending: true })
     .limit(500)
   if (error) return { ok: false, error: 'No se pudieron leer los emisores por revisar.' }
   // el filtro exacto (el motivo entero, no un pedazo) lo hace agruparPendientes
@@ -50,6 +51,7 @@ export async function getEmisoresConocidos(): Promise<R<EmisorConocido[]>> {
     .select('cedula, nombre, activo, origen, aprobado_en')
     .order('activo', { ascending: false })
     .order('nombre', { ascending: true })
+    .order('cedula', { ascending: true })
   if (error) return { ok: false, error: 'No se pudo leer la lista de emisores conocidos.' }
   return { ok: true, data: (data ?? []) as EmisorConocido[] }
 }

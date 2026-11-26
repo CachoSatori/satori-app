@@ -33,7 +33,7 @@ rollback;
 ## 3. Orden
 
 1. Batería 203 en staging por la sesión de CC del dueño (regla 14): `python3 scripts/sql/203_pruebas.py --psql "<staging>"
-   --mutar todas` (16 casos, 15 mutaciones; termina en ROLLBACK). Local ya corrió (PR).
+   --mutar todas` (17 casos, 16 mutaciones; termina en ROLLBACK). Local ya corrió (PR).
 2. Firma por chat sobre el SHA de cabeza (Gate verde) + lecturas del §2.
 3. Merge en ventana D1 (código → con OK). Branching aplica la 203.
 4. Después (solo lectura): ledger con **una** fila `203` / `fe_emisor_recordar` · `fe_emisores_bitacora` con RLS ·

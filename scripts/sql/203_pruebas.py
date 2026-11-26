@@ -33,6 +33,7 @@ MUTACIONES: dict[str, tuple] = {
                        "    null;\n")], {'11', '14', '19'}, {'10'}),
     'bitacora_siempre': ([('mig', "  if v_accion is not null then\n    insert into public.fe_emisores_bitacora", "  if true then\n    insert into public.fe_emisores_bitacora")], {'12'}, {'11'}),
     'cedula_inventada': ([('mig', "  if not found then\n    raise exception 'fe_emisor_recordar: no llegó", "  if false then\n    raise exception 'fe_emisor_recordar: no llegó")], {'16'}, {'11'}),
+    'receptor_distinto_habilita': ([('mig', "     and c.estado_parseo <> 'receptor_distinto'   -- una factura que no era para Satori no habilita un emisor\n", "")], {'22'}, {'11'}),
     'contador_desactiva': ([('mig', "  if v_uid is null or v_rol is distinct from 'owner' then", "  if v_uid is null or v_rol not in ('owner', 'contador') then")], {'17'}, set()),
     'anon_ejecuta': ([('mig', "grant execute on function public.fe_emisor_recordar(text) to authenticated;", "grant execute on function public.fe_emisor_recordar(text) to authenticated, anon;")], {'02'}, set()),
     'sin_revoke_bitacora': ([('mig', "revoke all on table public.fe_emisores_bitacora from public, anon, authenticated;\n", "")], {'01'}, set()),

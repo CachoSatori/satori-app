@@ -44,7 +44,7 @@ describe('InvFeEmisores por rol', () => {
     expect(await screen.findByText('Proveedor ficticio')).toBeTruthy()
     expect(screen.getByText(/Cédula 310100000331 · 2 facturas/)).toBeTruthy()
     expect(screen.getByText(/clave …0000000002/)).toBeTruthy()
-    expect(screen.getByText(/Sigue para revisar aunque lo recuerde: misma clave con otro XML/)).toBeTruthy()
+    expect(screen.getByText(/Sigue para revisar aunque lo recordés: misma clave con otro XML/)).toBeTruthy()
     expect(screen.getByRole('button', { name: BOTON })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Desactivar' })).toBeTruthy()
   })

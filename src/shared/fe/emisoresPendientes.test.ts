@@ -26,9 +26,13 @@ describe('agruparPendientes', () => {
       f(3, { motivo: OTRO_XML }), f(4, { motivo: `${MOTIVO_EMISOR} extra` }),
     ])).toEqual([])
   })
-  it('receptor distinto también entra (el motivo de emisor se puede quitar igual)', () => {
-    const g = agruparPendientes([f(1, { estado_parseo: 'receptor_distinto', motivo: `${MOTIVO_EMISOR} · cédula del receptor no configurada` })])
-    expect(g[0].comprobantes[0].otros_motivos).toEqual(['cédula del receptor no configurada'])
+  it('receptor distinto NO entra: una factura que no era para Satori no habilita un emisor (la 203 tampoco)', () => {
+    expect(agruparPendientes([f(1, { estado_parseo: 'receptor_distinto', motivo: `${MOTIVO_EMISOR} · cédula del receptor no configurada` })])).toEqual([])
+  })
+  it('orden estable: mismo nombre y misma cantidad → por cédula', () => {
+    const g = agruparPendientes([f(1, { emisor_cedula: '310100000339' }), f(2, { emisor_cedula: '310100000331' })])
+    expect(g.map(e => e.cedula)).toEqual(['310100000331', '310100000339'])
+    expect(g[0].comprobantes[0].clave).toBe(f(2).clave)
   })
   it('motivos parte como fe_motivo_sumar', () => {
     expect(motivos(null)).toEqual([])

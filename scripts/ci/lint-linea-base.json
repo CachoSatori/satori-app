@@ -1,6 +1,6 @@
 {
-  "problemas": 73,
-  "medido_en": "claude/caja-editar-pago-atomico (#355 ronda 3, con main juntado, 24-nov-2026): `eslint .` da 73 (−2 contra main)",
+  "problemas": 72,
+  "medido_en": "feat/movimientos-filtro-metodo-factura (26-nov-2026): `eslint .` da 72 (−1: no-unused-expressions en toggleSel de CashMovimientos)",
   "para_que": "Deuda de lint vieja (PROMPT-CONTINUACION §9). El CI (.github/workflows/ci.yml, job «Gate») falla si `eslint .` da MÁS problemas que este número; si da los mismos o menos, pasa.",
   "como_se_actualiza": "Cuando un PR baja la cuenta, el CI lo avisa: bajá este número en el mismo PR al valor nuevo. Subirlo solo con OK explícito del dueño y el motivo en el PR."
 }

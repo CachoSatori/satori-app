@@ -1,6 +1,6 @@
 {
   "_que_es": "«ultimo_ledger_prod» (R16): último número aplicado en prod; todo .sql NUEVO respecto de la base tiene que ser mayor (lo exige migraciones.test.ts; se sube en el PR del pase que lo aplica). Registro de numeración de migraciones (decisión del dueño, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
-  "ultimo_ledger_prod": 197,
+  "ultimo_ledger_prod": 199,
   "bloques": {
     "caja": {
       "tipo": "creacion",
@@ -19,6 +19,12 @@
       "desde": 150,
       "hasta": 199,
       "que": "PASE A PROD: solo renumeraciones de migraciones que quedaron ≤ al último del ledger de prod (con su número de origen)"
+    },
+    "operacion2": {
+      "tipo": "creacion",
+      "desde": 200,
+      "hasta": 249,
+      "que": "Caja / operación, segundo bloque (el 087–99 está lleno). Abierto el 25-nov para la 200; ratificado por el dueño el 25-nov 23:50 CR"
     }
   },
   "usadas_antes_de_los_bloques": {
@@ -651,6 +657,16 @@
       "bloque": "pase",
       "rama": "feat/compras-f1-ingesta",
       "origen": "142"
+    },
+    "200": {
+      "nombre": "caja_reemplazo_pago_atomico",
+      "bloque": "operacion2",
+      "rama": "feat/caja-reemplazo-atomico"
+    },
+    "201": {
+      "nombre": "fe_versiones_revisar",
+      "bloque": "operacion2",
+      "rama": "feat/compras-f1-257-revisar"
     }
   }
 }

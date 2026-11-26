@@ -262,8 +262,14 @@ describe('sobreFe — lo que manda el script', () => {
     expect(codigoHttp(['nuevo', 'error'], false)).toBe(422)
     expect(codigoHttp(['nuevo'], true)).toBe(500)
   })
-  it('ruta del XML por año y mes de la clave', () => {
-    expect(rutaXml(claveFicticia())).toBe(`2026/11/${claveFicticia()}.xml`)
+  it('ruta del XML por año y mes de la clave, con el sha del XML (mig 201)', () => {
+    const sha = 'ab'.repeat(32)
+    expect(rutaXml(claveFicticia(), sha)).toBe(`2026/11/${claveFicticia()}/${sha}.xml`)
+    expect(rutaXml(claveFicticia(), sha)).toMatch(new RegExp(`/${sha}\\.xml$`))
+  })
+  it('ruta sin un sha válido: tira (nunca una ruta compartida por dos XML)', () => {
+    expect(() => rutaXml(claveFicticia(), '')).toThrow()
+    expect(() => rutaXml(claveFicticia(), 'AB'.repeat(32))).toThrow()
   })
 })
 

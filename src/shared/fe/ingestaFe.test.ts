@@ -1,18 +1,20 @@
 // F1 · orquestación de la Edge fe-ingesta con una base y un Storage FALSOS en memoria (la base real se prueba en
-// scripts/sql/199_pruebas.sql). Muestras ficticias.
+// scripts/sql/199_pruebas.sql y 201_pruebas.sql). Muestras ficticias.
 import { describe, it, expect } from 'vitest'
+import { createHash } from 'node:crypto'
 import { esYaExisteStorage, procesarSobre, subirIdempotente, type DepsIngesta, type ErrorRpc } from './ingestaFe'
 import type { SobreFe } from './sobreFe'
 import { claveFicticia, mensajeHaciendaFicticio, xmlFicticio } from './fixturasFe.testutil'
 
 function baseFalsa(o: { fallaRpc?: string; errorDato?: string; fallaStorage?: boolean } = {}) {
   const comprobantes = new Map<string, Record<string, unknown>>()
+  const versiones = new Map<string, Map<string, string>>()
   const respuestas = new Map<string, unknown>()
   const objetos = new Map<string, string>()
   const bitacora: { resultado: string; clave: string | null; motivo: string | null }[] = []
   const latidos: string[] = []
   const deps: DepsIngesta = {
-    sha256: async t => t.length.toString(16).padStart(64, '0'),
+    sha256: async t => createHash('sha256').update(t, 'utf8').digest('hex'),
     subirXml: async (ruta, xml) => {
       if (o.fallaStorage) throw new Error('storage caído')
       if (objetos.has(ruta)) return 'ya_existe'
@@ -35,16 +37,26 @@ function baseFalsa(o: { fallaRpc?: string; errorDato?: string; fallaStorage?: bo
         return { data: { resultado: nuevo ? 'nuevo' : 'duplicado' }, error: null }
       }
       if (fn === 'fe_ingestar') {
+        // como la 201: la ruta tiene que terminar en el sha; mismo sha = duplicado; otro sha = versión nueva y «revisar»
+        if (!String(p.xml_path).endsWith(`/${String(p.xml_sha256)}.xml`)) return { data: null, error: { code: 'P0001', message: 'ruta sin sha' } }
         const c = p.comprobante as { clave: string }
-        if (comprobantes.has(c.clave)) return { data: { resultado: 'duplicado' }, error: null }
+        const vs = versiones.get(c.clave)
+        if (vs) {
+          if (vs.has(String(p.xml_sha256))) return { data: { resultado: 'duplicado' }, error: null }
+          vs.set(String(p.xml_sha256), String(p.xml_path))
+          return { data: { resultado: 'revisar', versiones: vs.size }, error: null }
+        }
+        versiones.set(c.clave, new Map([[String(p.xml_sha256), String(p.xml_path)]]))
         comprobantes.set(c.clave, p)
         return { data: { resultado: p.estado === 'ok' ? 'nuevo' : 'revisar' }, error: null }
       }
       throw new Error(`rpc inesperada ${fn}`)
     },
   }
-  return { deps, comprobantes, respuestas, objetos, bitacora, latidos }
+  return { deps, comprobantes, versiones, respuestas, objetos, bitacora, latidos }
 }
+
+const shaDe = (t: string) => createHash('sha256').update(t, 'utf8').digest('hex')
 
 const sobre = (xmls: string[], extra: Partial<SobreFe> = {}): SobreFe =>
   ({ fuente: 'prueba', lote: 'lote-prueba-0001', latido: false, sin_xml: false, xmls, ...extra })
@@ -60,7 +72,7 @@ describe('procesarSobre — idempotencia', () => {
     expect(r2.cuerpo.resultados[0].resultado).toBe('duplicado')
     expect(b.comprobantes.size).toBe(1)
     expect(b.objetos.size).toBe(1)
-    expect([...b.objetos.keys()][0]).toBe(`2026/11/${claveFicticia()}.xml`)
+    expect([...b.objetos.keys()][0]).toBe(`2026/11/${claveFicticia()}/${shaDe(xmlFicticio())}.xml`)
   })
   it('manda a la base las líneas, el estado, el hash y la ruta', async () => {
     const b = baseFalsa()
@@ -68,8 +80,8 @@ describe('procesarSobre — idempotencia', () => {
     const p = b.comprobantes.get(claveFicticia())!
     expect(p.estado).toBe('ok')
     expect((p.lineas as unknown[]).length).toBe(2)
-    expect(p.xml_path).toBe(`2026/11/${claveFicticia()}.xml`)
-    expect(String(p.xml_sha256)).toMatch(/^[0-9a-f]{64}$/)
+    expect(p.xml_sha256).toBe(shaDe(xmlFicticio()))
+    expect(p.xml_path).toBe(`2026/11/${claveFicticia()}/${shaDe(xmlFicticio())}.xml`)
   })
 })
 
@@ -201,5 +213,58 @@ describe('Storage «ya existe» = éxito idempotente (la Edge no da 500 en cada 
     const r2 = await procesarSobre(s, deps)
     expect(r2.status).toBe(200)
     expect(r2.cuerpo.resultados[0].resultado).toBe('duplicado')
+  })
+})
+
+describe('257/258 — misma clave con otro XML (mig 201)', () => {
+  it('dos XML distintos con la misma clave: dos archivos (cada uno en la ruta de SU sha), el segundo «revisar», 200', async () => {
+    const b = baseFalsa()
+    const real = xmlFicticio()
+    const falso = xmlFicticio({ total: '1.00000' })
+    expect(shaDe(real)).not.toBe(shaDe(falso))
+    const r1 = await procesarSobre(sobre([falso]), b.deps)
+    const r2 = await procesarSobre(sobre([real]), b.deps)
+    expect(r1.cuerpo.resultados[0].resultado).toBe('revisar') // la suma no calza: el parser ya lo manda a revisar
+    expect(r2.status).toBe(200)
+    expect(r2.cuerpo.resultados[0].resultado).toBe('revisar')
+    expect([...b.objetos.keys()].sort()).toEqual([
+      `2026/11/${claveFicticia()}/${shaDe(falso)}.xml`, `2026/11/${claveFicticia()}/${shaDe(real)}.xml`].sort())
+    expect(b.objetos.get(`2026/11/${claveFicticia()}/${shaDe(real)}.xml`)).toBe(real)
+    expect(b.objetos.get(`2026/11/${claveFicticia()}/${shaDe(falso)}.xml`)).toBe(falso)
+    expect(b.versiones.get(claveFicticia())!.size).toBe(2)
+  })
+  it('cada archivo guardado tiene el sha con el que quedó en la base (258)', async () => {
+    const b = baseFalsa()
+    await procesarSobre(sobre([xmlFicticio(), xmlFicticio({ total: '2.00000' })]), b.deps)
+    for (const [sha, ruta] of b.versiones.get(claveFicticia())!) {
+      expect(ruta.endsWith(`/${sha}.xml`)).toBe(true)
+      expect(shaDe(b.objetos.get(ruta)!)).toBe(sha)
+    }
+  })
+  it('«ya existe» en Storage solo pasa con el MISMO XML: otro XML nunca cae sobre un archivo existente', async () => {
+    const b = baseFalsa()
+    const intentos: string[] = []
+    const deps: DepsIngesta = {
+      ...b.deps,
+      subirXml: async (ruta, xml) => { intentos.push(ruta); return b.deps.subirXml(ruta, xml) },
+    }
+    await procesarSobre(sobre([xmlFicticio()]), deps)
+    await procesarSobre(sobre([xmlFicticio({ total: '3.00000' })]), deps)
+    expect(new Set(intentos).size).toBe(2)
+  })
+  it('sha ilegible: no se sube nada ni se llama a la base; 500 (el script reintenta)', async () => {
+    const b = baseFalsa()
+    const roto: DepsIngesta = { ...b.deps, sha256: async () => 'no-es-hex' }
+    expect((await procesarSobre(sobre([xmlFicticio()]), roto)).status).toBe(500)
+    expect(b.objetos.size).toBe(0)
+    expect(b.comprobantes.size).toBe(0)
+  })
+  it('la base rechaza la ruta (P0001): 500, no 422 (el correo no queda «fe-error»)', async () => {
+    const b = baseFalsa()
+    const deps: DepsIngesta = {
+      ...b.deps,
+      rpc: async (fn, args) => fn === 'fe_ingestar' ? { data: null, error: { code: 'P0001', message: 'ruta' } } : b.deps.rpc(fn, args),
+    }
+    expect((await procesarSobre(sobre([xmlFicticio()]), deps)).status).toBe(500)
   })
 })

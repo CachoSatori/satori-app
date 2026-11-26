@@ -17,7 +17,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, getCashSessions, deleteCashMovement, saveCierreParcial, cerrarDiaCompleto, deshacerCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, getCashMovementById, deleteCashMovement, saveCierreParcial, cerrarDiaCompleto, deshacerCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
@@ -38,7 +38,7 @@ import {
   ETIQUETA_MOTIVO, PLACEHOLDER_MOTIVO, MOTIVO_MAX, PLACEHOLDER_RESUMEN, AVISO_RESUMEN_IGUAL_MOTIVO, resumenIgualMotivo,
 } from './resumenDia'
 import { useMovimientosSinReemplazados } from './useReemplazosAparato'
-import { MSG_FASE2_CON_REEMPLAZO, NOTA_REEMPLAZO, reemplazosDelDia, soltarReemplazo, type ReemplazoPendiente } from './reemplazoPago'
+import { MSG_FASE2_CON_REEMPLAZO, NOTA_REEMPLAZO, mensajeNoTerminable, reemplazosDelDia, revisarCambioEnBase, soltarReemplazo, type ReemplazoPendiente } from './reemplazoPago'
 import { Aviso } from '../../shared/ui/estandar'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
@@ -129,7 +129,8 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   const { cuenta: movs, abiertos: cambiosAbiertos, estados: estadosCambio } =
     useMovimientosSinReemplazados(movsBase, { alResolver: () => { void loadCierres() } })
   const [sessions, setSessions] = useState<CashSession[]>([])    // para gatear: caja de proveedores cerrada
-  // Solo frenan la Noche los cambios de ESTE día (una anotación de otro día no traba un cierre que no la incluye).
+  // Frenan la Noche los cambios de este día o de uno ANTERIOR (el pozo es acumulado; ronda 4, Menor 1). Solo uno de
+  // un día posterior no la frena.
   const cambiosDelDia = reemplazosDelDia(cambiosAbiertos, movsBase, sessions, fecha)
 
   const loadCierres = async () => {
@@ -528,6 +529,14 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
     if (!auth.ok) return
     setCambioEnCurso(true); setError(null)
     try {
+      // Ronda 4 (Menor 3): el estado del aviso es del montaje; se relee la base ya autorizado y se borra el viejo
+      // solo si el nuevo sigue confirmado. Si no, se avisa y no se borra nada.
+      const e = await revisarCambioEnBase(r, movsBase, id => getCashMovementById(id))
+      if (e !== 'terminable') {
+        if (e === 'resuelto') { soltarReemplazo(r.viejo); setMsg(mensajeNoTerminable(e)) } else setError(mensajeNoTerminable(e))
+        await loadCierres(); onRefresh()
+        return
+      }
       await deleteCashMovement(r.viejo, NOTA_REEMPLAZO, auth.managerEmail, auth.managerPassword)
       soltarReemplazo(r.viejo)
       setMsg('✓ Cambio de pago terminado: quedó solo el pago nuevo.')
@@ -703,7 +712,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
       {cambiosAbiertos.length > 0 && (
         <Aviso tipo="error" titulo="Cambio de pago sin terminar.">
           Un pago a proveedor quedó guardado dos veces un rato (el nuevo y el anterior). En esta pantalla se cuenta una
-          sola vez.{cambiosDelDia.length > 0 ? ' Para cerrar la Noche (Fase 2), primero terminá el cambio.' : ' Es de otro día: no frena este cierre.'}
+          sola vez.{cambiosDelDia.length > 0 ? ' Para cerrar la Noche (Fase 2), primero terminá el cambio.' : ' Es de un día posterior: no frena este cierre.'}
           {cambiosAbiertos.map(r => {
             const e = estadosCambio[r.viejo]
             const p = movsBase.find(m => m.id === r.nuevo)

@@ -32,7 +32,11 @@ vi.mock('../../shared/api/tips', () => ({ getTipPayoutsSince: vi.fn(async () => 
 vi.mock('../../shared/hooks/useAuth', () => ({
   useAuth: () => ({ profile: { id: 'u1', role: 'manager', full_name: 'Encargada de prueba' } }),
 }))
-vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn(async () => ({ ok: true })) }))
+// Ronda 4 (Menor 4): espía con credenciales ficticias, para probar que Terminar pide autorización y la pasa.
+type Auth = { ok: boolean; managerEmail?: string; managerPassword?: string }
+const auth = vi.hoisted(() => ({ requireManager: vi.fn<() => Promise<Auth>>() }))
+const AUTH_OK: Auth = { ok: true, managerEmail: 'gerencia@ejemplo.test', managerPassword: 'clave-ficticia' }
+vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => auth.requireManager }))
 // Todo post-corte (el pozo cuenta Caja Proveedores); el resto de cierrePozo es el real.
 vi.mock('./cierrePozo', async (orig) => {
   const actual = await orig<typeof import('./cierrePozo')>()
@@ -41,7 +45,7 @@ vi.mock('./cierrePozo', async (orig) => {
 
 import CashCierre from './CashCierre'
 import { fi, todayStr } from './cashUtils'
-import { claveReemplazos, guardarReemplazos, leerTodosLosReemplazos, MSG_FASE2_CON_REEMPLAZO, NOTA_REEMPLAZO } from './reemplazoPago'
+import { claveReemplazos, guardarReemplazos, leerTodosLosReemplazos, mensajeNoTerminable, MSG_FASE2_CON_REEMPLAZO, NOTA_REEMPLAZO } from './reemplazoPago'
 
 const HOY = todayStr()
 const mov = (id: string, p: Partial<CashMovement>): CashMovement => ({
@@ -87,6 +91,8 @@ beforeEach(() => {
   api.getCashSessions.mockResolvedValue([sesionHoy])
   // La base de la prueba tiene los tres (el cambio a medias es real): ninguna anotación se suelta sola.
   api.getCashMovementById.mockImplementation(async (id: string) => [fondo, viejo, nuevo].find(m => m.id === id) ?? null)
+  api.deleteCashMovement.mockImplementation(async () => {})
+  auth.requireManager.mockImplementation(async () => AUTH_OK)
 })
 
 describe('CashCierre · cambio de pago sin terminar (hallazgo 252, ronda 2)', () => {
@@ -165,7 +171,7 @@ describe('CashCierre · cambio de pago sin terminar (hallazgo 252, ronda 2)', ()
 
 // Ronda 3 (I1 del verificador): el turno del cambio lo cerró OTRO aparato. Antes la Noche quedaba frenada y
 // «Terminar el cambio» no estaba en ninguna pantalla. Ahora se termina (o se descarta) desde el Cierre del día, la
-// anotación se suelta sola si el viejo ya no está en la base y una de otro día no frena este cierre.
+// anotación se suelta sola si el viejo ya no está en la base y una de un día posterior no frena este cierre.
 describe('CashCierre · cambio a medias con el turno ya cerrado (ronda 3, I1)', () => {
   const enBase = (...ms: CashMovement[]) => api.getCashMovementById.mockImplementation(async (id: string) => ms.find(m => m.id === id) ?? null)
 
@@ -219,7 +225,8 @@ describe('CashCierre · cambio a medias con el turno ya cerrado (ronda 3, I1)', 
     expect(screen.getByTestId('resumen-pozo').textContent).toBe(fi(65000))
   })
 
-  it('un cambio de OTRO día no frena la Noche de hoy (se cuenta una vez y se puede terminar)', async () => {
+  // Ronda 4 (Menor 1): el pozo es acumulado, así que un par abierto de un día ANTERIOR sí entra en el «debería» de hoy.
+  it('un cambio a medias de un día ANTERIOR frena la Noche de hoy, y se puede terminar ahí mismo', async () => {
     const AYER = '2000-01-01'
     const sesionAyer = { ...sesionHoy, id: 'sAyer', session_date: AYER } as CashSession
     const vA = { ...viejo, session_id: 'sAyer' }, nA = { ...nuevo, session_id: 'sAyer' }
@@ -229,11 +236,94 @@ describe('CashCierre · cambio a medias con el turno ya cerrado (ronda 3, I1)', 
     enBase(fondo, vA, nA)
     render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
     const btn = await screen.findByText(/Revisar resumen y cerrar el día/)
-    expect(await screen.findByText(/Es de otro día: no frena este cierre/)).toBeTruthy()
+    expect(await screen.findByText(/Para cerrar la Noche \(Fase 2\), primero terminá el cambio/)).toBeTruthy()
+    expect(screen.queryByText(/no frena este cierre/)).toBeNull()
     expect(await screen.findByRole('button', { name: 'Terminar el cambio' })).toBeTruthy()
     llenarNoche(81000)
     fireEvent.click(btn)
+    expect(await screen.findByText(MSG_FASE2_CON_REEMPLAZO)).toBeTruthy()
+    expect(screen.queryByText('Resumen del cierre del día')).toBeNull()
+    expect(api.cerrarDiaCompleto).not.toHaveBeenCalled()
+  })
+
+  it('un cambio de un día POSTERIOR no frena la Noche del día que se cierra', async () => {
+    const ANTES = '2000-01-01'
+    anotar(); enBase(fondo, viejo, nuevo)   // el par es de hoy; se cierra un día anterior
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} fechaInicial={ANTES} />)
+    const btn = await screen.findByText(/Revisar resumen y cerrar el día/)
+    expect(await screen.findByText(/Es de un día posterior: no frena este cierre/)).toBeTruthy()
+    llenarNoche(1000)   // ese día los movimientos de hoy todavía no existían: el pozo es solo la venta de la noche
+    fireEvent.click(btn)
     expect(await screen.findByText('Resumen del cierre del día')).toBeTruthy()
     expect(screen.queryByText(MSG_FASE2_CON_REEMPLAZO)).toBeNull()
+  })
+
+  // Ronda 4 (Menor 3): el estado del aviso es del montaje. Si otro aparato borró el nuevo antes de tocar Terminar,
+  // borrar el viejo dejaba el pago sin ningún registro. Ahora se relee la base después de la autorización.
+  it('el nuevo desapareció de la base antes de Terminar → NO se borra el viejo y se avisa', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    const terminar = await screen.findByRole('button', { name: 'Terminar el cambio' })
+    auth.requireManager.mockImplementation(async () => {
+      enBase(fondo, viejo); api.getAllCashMovements.mockResolvedValue([fondo, viejo])   // otro aparato borró el nuevo
+      return AUTH_OK
+    })
+    fireEvent.click(terminar)
+    expect(await screen.findByText(mensajeNoTerminable('sin_nuevo'))).toBeTruthy()
+    expect(api.deleteCashMovement).not.toHaveBeenCalled()
+    // Recargado: el par ya no está abierto y el viejo cuenta una vez (100.000 − 15.000).
+    await waitFor(() => expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull())
+    llenarNoche()
+    expect(screen.getByTestId('resumen-pozo').textContent).toBe(fi(85000))
+  })
+
+  // Ronda 5b (Menor 1 del verificador): igual que la Caja Diaria (#361). Si otro aparato ya terminó el cambio (el viejo
+  // no está), el Cierre da el aviso VERDE, no rojo, y suelta la anotación del aparato.
+  it('el viejo ya no estaba en la base al Terminar → aviso verde «ya estaba terminado» y se suelta la anotación', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    const terminar = await screen.findByRole('button', { name: 'Terminar el cambio' })
+    auth.requireManager.mockImplementation(async () => {
+      enBase(fondo, nuevo); api.getAllCashMovements.mockResolvedValue([fondo, nuevo])   // otro aparato borró el viejo
+      return AUTH_OK
+    })
+    fireEvent.click(terminar)
+    const aviso = await screen.findByText(mensajeNoTerminable('resuelto'))
+    expect(aviso.classList.contains('green')).toBe(true)
+    expect(api.deleteCashMovement).not.toHaveBeenCalled()
+    expect(leerTodosLosReemplazos()).toEqual([])
+    await waitFor(() => expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull())
+  })
+
+  it('sin respuesta de la base al revisar (sesión vencida) → no se borra nada y la anotación queda', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    const terminar = await screen.findByRole('button', { name: 'Terminar el cambio' })
+    auth.requireManager.mockImplementation(async () => { enBase(); return AUTH_OK })
+    fireEvent.click(terminar)
+    expect(await screen.findByText(mensajeNoTerminable('desconocido'))).toBeTruthy()
+    expect(api.deleteCashMovement).not.toHaveBeenCalled()
+    expect(leerTodosLosReemplazos()).toHaveLength(1)
+  })
+
+  // Ronda 4 (Menor 4): Terminar desde el Cierre pide autorización y pasa el autorizante a la RPC (movement_deletions).
+  it('Terminar sin autorización (ok:false) no borra ni suelta la anotación', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    auth.requireManager.mockImplementation(async () => ({ ok: false }))
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Terminar el cambio' }))
+    await waitFor(() => expect(auth.requireManager).toHaveBeenCalledTimes(1))
+    await act(async () => { await Promise.resolve() })
+    expect(api.deleteCashMovement).not.toHaveBeenCalled()
+    expect(leerTodosLosReemplazos()).toHaveLength(1)
+  })
+
+  it('Terminar pasa las credenciales del autorizante a deleteCashMovement', async () => {
+    anotar(); enBase(fondo, viejo, nuevo)
+    render(<CashCierre onRefresh={vi.fn()} openSession={null} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Terminar el cambio' }))
+    await waitFor(() => expect(api.deleteCashMovement).toHaveBeenCalledTimes(1))
+    expect(auth.requireManager).toHaveBeenCalledTimes(1)
+    expect(api.deleteCashMovement).toHaveBeenCalledWith('mov-viejo', NOTA_REEMPLAZO, 'gerencia@ejemplo.test', 'clave-ficticia')
   })
 })

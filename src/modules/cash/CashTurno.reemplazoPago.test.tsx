@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import type { CashSession, Supplier, CashMovement } from '../../shared/types/database'
 import { fi } from './cashUtils'
-import { claveReemplazos, MSG_CIERRE_CON_REEMPLAZO, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO } from './reemplazoPago'
+import { claveReemplazos, mensajeNoTerminable, MSG_CIERRE_CON_REEMPLAZO, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO } from './reemplazoPago'
 
 // Hallazgo 252: editar un pago YA guardado borraba el viejo y DESPUÉS creaba el nuevo; si el alta fallaba, el pago
 // quedaba solo en memoria y al recargar desaparecía (Caja Proveedores corrida). Ahora: crear primero (id fijo,
@@ -260,6 +260,46 @@ describe('CashTurno · editar un pago guardado no lo pierde si falla la red (hal
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Terminar el cambio' })) })
     fireEvent.click(screen.getByTitle('Editar'))
     expect(screen.getByLabelText('Monto ₡ del pago')).toBeTruthy()
+  })
+
+  // Ronda 4 (Menor 3 del verificador): Terminar relee la base DESPUÉS de la autorización. Si otro aparato borró el
+  // nuevo mientras tanto, borrar el viejo dejaba el pago sin ningún registro (el hueco original del 252).
+  it('(ronda 4) el nuevo desapareció de la base antes de Terminar → NO se borra el viejo y se avisa', async () => {
+    h.deleteCashMovementSpy.mockRejectedValueOnce(new Error('Failed to fetch'))
+    const { onError } = montar()
+    await editarA('20000')
+    expect(h.db).toHaveLength(2)
+    h.deleteCashMovementSpy.mockClear()
+    h.requireManagerSpy.mockImplementationOnce(async () => {
+      h.db = h.db.filter(r => r.id === 'mov-viejo')      // otro aparato borró el pago nuevo
+      return { ok: true, managerEmail: 'gerencia@ejemplo.test', managerPassword: 'clave-ficticia' }
+    })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Terminar el cambio' })) })
+    expect(h.deleteCashMovementSpy).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenLastCalledWith(mensajeNoTerminable('sin_nuevo'))
+    expect(h.db.map(r => r.id)).toEqual(['mov-viejo'])
+    // Recargado: el par ya no está a la vista y el pago que de verdad hay en la base cuenta una vez.
+    expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull()
+    expect(tarjeta('Gastado efectivo')).toBe(fi(15000))
+  })
+
+  // #361: si otro aparato ya terminó el cambio (el viejo ya no está), la Caja Diaria da el MISMO aviso que el Cierre.
+  it('(#361) el viejo ya no estaba en la base al Terminar → no se borra nada, se va el aviso rojo y sale el aviso del Cierre', async () => {
+    h.deleteCashMovementSpy.mockRejectedValueOnce(new Error('Failed to fetch'))
+    const { onError } = montar()
+    await editarA('20000')
+    h.deleteCashMovementSpy.mockClear()
+    onError.mockClear()
+    h.requireManagerSpy.mockImplementationOnce(async () => {
+      h.db = h.db.filter(r => r.id !== 'mov-viejo')      // otro aparato ya borró el viejo
+      return { ok: true, managerEmail: 'gerencia@ejemplo.test', managerPassword: 'clave-ficticia' }
+    })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Terminar el cambio' })) })
+    expect(h.deleteCashMovementSpy).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+    expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull()
+    expect(screen.getByText(mensajeNoTerminable('resuelto'))).toBeTruthy()
+    expect(tarjeta('Gastado efectivo')).toBe(fi(20000))
   })
 
   it('el nuevo quedó en la cola (sin señal): el viejo no se borra todavía y no se cuenta doble', async () => {

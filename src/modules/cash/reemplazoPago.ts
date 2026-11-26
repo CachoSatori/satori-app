@@ -240,12 +240,14 @@ export function soltarReemplazo(viejo: string, st: (Almacen & AlmacenListable) |
 
 /**
  * Cómo está un cambio abierto en la base:
- *  - `resuelto`: el viejo ya no existe (otro aparato lo terminó o se borró) → la anotación se suelta sola.
+ *  - `resuelto`: el viejo ya no existe Y el nuevo sí (otro aparato lo terminó) → la anotación se suelta sola.
  *  - `terminable`: están los dos y el nuevo está confirmado → «Terminar el cambio» (borra el viejo).
  *  - `en_cola`: el nuevo todavía está en la cola de este aparato → esperar a que se sincronice.
  *  - `sin_nuevo`: el viejo está y el nuevo NO existe en la base ni en la cola → «Descartar el cambio» (el viejo
  *    vuelve a contar, que es lo que de verdad hay en la base).
- *  - `desconocido`: no se pudo consultar (sin señal): se deja como está.
+ *  - `desconocido`: no se pudo consultar (sin señal), o la base no devolvió NINGUNO de los dos. Ronda 4 (Menor 2 del
+ *    verificador): con la sesión vencida, PostgREST responde 200 vacío por RLS, sin error; leerlo como «el viejo ya
+ *    no existe» soltaba la anotación y, al volver la sesión, el pago contaba doble. Se deja como está.
  */
 export type EstadoCambio = 'resuelto' | 'terminable' | 'en_cola' | 'sin_nuevo' | 'desconocido'
 
@@ -255,15 +257,18 @@ export async function revisarCambioEnBase(
   releer: (id: string) => Promise<{ id: string } | null>,
 ): Promise<EstadoCambio> {
   try {
-    if (!(await releer(r.viejo))) return 'resuelto'
+    if (!(await releer(r.viejo))) return (await releer(r.nuevo)) ? 'resuelto' : 'desconocido'
     if (movs.some(m => m.id === r.nuevo && m._pending)) return 'en_cola'
     return (await releer(r.nuevo)) ? 'terminable' : 'sin_nuevo'
   } catch { return 'desconocido' }
 }
 
 /**
- * Los cambios abiertos que tocan el día `fecha` (por el turno del pago viejo o del nuevo). Una anotación de otro día
- * no frena el cierre de este. Si no se sabe el día de ninguno de los dos (turno no cargado), cuenta: mejor frenar.
+ * Los cambios abiertos que frenan la Noche del día `fecha`: los de ese día o de un día ANTERIOR (por el turno del pago
+ * viejo o del nuevo). Ronda 4 (Menor 1 del verificador): el pozo es acumulado (`basePozoParaCierre` suma hasta
+ * `fecha`), así que un par abierto de ayer también entra en el «debería» de hoy; sellarlo con el par a medias deja el
+ * ancla atada a una anotación del aparato. La salida está en la misma pantalla («Terminar el cambio» / «Descartar»).
+ * Solo un cambio de un día POSTERIOR no frena. Si no se sabe el día de ninguno de los dos (turno no cargado), cuenta.
  */
 export function reemplazosDelDia(
   abiertos: ReemplazoPendiente[],
@@ -276,8 +281,22 @@ export function reemplazosDelDia(
   const dia = (id: string) => { const s = sesionDe.get(id); return s ? diaDeSesion.get(s) ?? null : null }
   return abiertos.filter(r => {
     const dv = dia(r.viejo), dn = dia(r.nuevo)
-    return (dv == null && dn == null) || dv === fecha || dn === fecha
+    return (dv == null && dn == null) || (dv != null && dv <= fecha) || (dn != null && dn <= fecha)
   })
+}
+
+/**
+ * Ronda 4 (Menor 3 del verificador): «Terminar el cambio» vuelve a revisar la base DESPUÉS de la autorización y borra
+ * el viejo solo si da `terminable`. Si otro aparato borró el nuevo mientras tanto, borrar el viejo dejaba el pago sin
+ * ningún registro (el hueco original del 252). Este es el aviso de cada caso que no deja terminar.
+ */
+export function mensajeNoTerminable(e: Exclude<EstadoCambio, 'terminable'>): string {
+  switch (e) {
+    case 'resuelto':  return '✓ El pago anterior ya no estaba en la base: el cambio ya estaba terminado.'
+    case 'en_cola':   return 'El pago nuevo todavía no se sincronizó. No se borró nada: esperá la señal y volvé a tocar «Terminar el cambio».'
+    case 'sin_nuevo': return 'El pago nuevo ya no está en la base. No se borró el anterior (si no, el pago desaparecía): vuelve a contar. Revisá el pago en la lista.'
+    default:          return 'No se pudo revisar el cambio en la base (sin señal o con la sesión vencida). No se borró nada: reintentá con internet.'
+  }
 }
 
 export const MSG_PAGO_EN_CAMBIO =

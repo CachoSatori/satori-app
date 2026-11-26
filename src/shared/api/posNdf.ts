@@ -710,3 +710,14 @@ export async function guardarAjusteProducto(local: string, codigo: string, rinde
   const { error } = await sb.rpc('pos_producto_ajuste_guardar', { p_local: local, p_codigo: codigo, p_rinde: rinde, p_categoria: categoria })
   if (error) throw new Error(error.message)
 }
+
+/**
+ * `pos_familia_nombre_guardar` (mig 202): cambia SOLO el nombre de una familia del PoS que ya existe en el local (un
+ * rótulo: no mueve ningún número). Solo el owner; el resto 42501. Nombre de 1 a 40 caracteres, letras (con tildes y ñ),
+ * números, espacio y ( ) . , - / & ' + #; si no, 22023. Devuelve el nombre como quedó guardado.
+ */
+export async function guardarNombreFamilia(local: string, familia: number, nombre: string): Promise<string> {
+  const { data, error } = await sb.rpc('pos_familia_nombre_guardar', { p_local: local, p_familia: familia, p_nombre: nombre })
+  if (error) throw new Error(error.message)
+  return String(data ?? nombre)
+}

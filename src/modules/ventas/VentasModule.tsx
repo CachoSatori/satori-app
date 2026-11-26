@@ -21,7 +21,8 @@ const VentasSaloneroLineas = lazy(() => import('./VentasSaloneroLineas'))
 const VentasMix          = lazy(() => import('./VentasMix'))
 const VentasMetas        = lazy(() => import('./VentasMetas'))
 const VentasCompetencias = lazy(() => import('./VentasCompetencias'))
-const VentasConfig       = lazy(() => import('./VentasConfig'))
+// Ventas v2 · 3.1b: «Ajustes → Catálogo» (reemplaza a VentasConfig); lee el catálogo por código por su cuenta.
+const VentasCatalogo     = lazy(() => import('./VentasCatalogo'))
 const VentasCajeros      = lazy(() => import('./VentasCajeros'))
 const VentasICP          = lazy(() => import('./VentasICP'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
@@ -207,7 +208,7 @@ export default function VentasModule() {
     return fondoP.current
   }, [pedirBase, pedirEager])
 
-  /** «Recargar» (Competencias, Productos): vuelve a pedir todo, como antes. */
+  /** «Recargar» (Competencias): vuelve a pedir todo, como antes. */
   const loadAll = () => {
     gen.current += 1
     baseP.current = null
@@ -340,7 +341,7 @@ export default function VentasModule() {
               {tab === 'menueng'    && <VentasMenuEng      dias={allDias} pm={pm} />}
               {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
               {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} role={role} />}
-              {tab === 'config'      && <VentasConfig       dias={allDias} pm={pm} onRefresh={loadAll} />}
+              {tab === 'config'      && <VentasCatalogo />}
             </div>
             )}
           </Suspense>

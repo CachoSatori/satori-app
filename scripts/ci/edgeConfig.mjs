@@ -5,14 +5,14 @@
 // Regla (ítem 11, ESTADO regla 2): con config.toml presente, entra código bajo supabase/functions/ hacia main si
 //   · cada carpeta de función (las que no empiezan con `_` ni `.`) tiene su [functions.<slug>] con verify_jwt explícito,
 //   · no hay [functions.<slug>] sin carpeta (Branching fallaría al buscarla),
-//   · ingest-ndf y club-pase van con verify_jwt = false (llaman sin JWT de usuario: con true, 401 en cada llamada),
+//   · ingest-ndf, club-pase y fe-ingesta van con verify_jwt = false (llaman sin JWT de usuario: con true, 401 en cada llamada),
 //   · no hay nada más (lista blanca): ni [remotes.*] (con él, Branching aplicaría [auth]/[api]/[db] a ese proyecto), ni
 //     `entrypoint`, `enabled`, `import_map` ni claves con puntos. Agregar una clave es cambiar esta lista, con firma.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** Funciones que se llaman SIN JWT de usuario: verify_jwt tiene que ser false. */
-export const SIN_JWT = ['ingest-ndf', 'club-pase']
+export const SIN_JWT = ['ingest-ndf', 'club-pase', 'fe-ingesta']
 
 /**
  * Lee el texto de config.toml con LISTA BLANCA → { verify: {slug: true|false|undefined}, secciones: string[], ajenas: string[] }.

@@ -880,7 +880,9 @@ export default function CashTurno({
         <div className="cd-apertura-body">
 
           {/* Cajero · Fecha (la Caja Diaria es única por día — sin turno) */}
-          <div className="cd-grid2" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          {/* Caja PR 3/4: sin el «1fr 1fr» en línea, que pisaba la regla de .cd-grid2 (una columna hasta 600 px): a
+              390 px el cuadro de fecha se salía de la tarjeta. En escritorio siguen las dos columnas de la clase. */}
+          <div className="cd-grid2">
             <div className="tips-field">
               <div className="tips-field-label">Cajero / encargado</div>
               <select className="tips-input-dark" value={apCajero}

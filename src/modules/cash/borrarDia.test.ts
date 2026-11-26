@@ -75,7 +75,7 @@ describe('borrarDia — el «Borrar TODO» elige por día operativo, no por crea
     const plan = planBorradoDia('2026-10-20', [], [ventas1910, ajuste1910, propinas2007, mov({ id: 'm', description: 'DUEÑO PEPE', amount_crc: 5000, created_at: '2026-10-20T15:00:00Z' })], sinTurnos)
     expect(resumenPorDia(plan.borrar)).toEqual([{ dia: '2026-10-20', filas: 1, crc: 5000, usd: 0 }])
     const txt = textoConfirmacionBorrado(plan, n => `₡${n}`)
-    expect(txt).toContain('2026-10-20: 1 mov. · ₡5000 · US$ 0.00')
+    expect(txt).toContain('2026-10-20: 1 mov. · ₡5000 · $ 0,00')
     expect(txt).toContain('09:00 · ₡5000')                         // manual con hora de carga (CR)
     expect(txt).toContain('2 movimiento(s) se cargaron el 2026-10-20 pero son de OTRO día operativo. NO se borran')
     expect(txt).toContain('día 2026-10-19 · ₡54106.7')

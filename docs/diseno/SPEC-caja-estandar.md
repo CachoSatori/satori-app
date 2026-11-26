@@ -98,7 +98,7 @@ Por lo mismo, los títulos evitan llevar números.
 | Sobrante de ₡500 o más | Sobran ₡2.300 | Fuera de tolerancia (₡500). + qué sigue | oro-texto |
 
 - En curso: «Faltan / Sobran». Día cerrado: «Faltaron / Sobraron», y fuera de tolerancia agrega «quedó registrada como ajuste de cierre».
-- Dólares en línea aparte, misma regla con US$1: «Dólares: cuadra, sin diferencia» / «Dólares: faltan $2,00, fuera de tolerancia (US$1)».
+- Dólares en línea aparte, misma regla con US$1: «Dólares: cuadra, sin diferencia» / «Dólares: faltan $ 2,00, fuera de tolerancia (US$1)» (dólares con `fd`, como el resto de Caja).
 - La tolerancia sale de las constantes que ya existen (`OVER_SHORT_TOL`, ₡500 / US$1); el texto no la recalcula.
 - El cierre de la Caja Diaria usa las mismas palabras (hoy dice «de más» / «faltante»).
 
@@ -170,6 +170,20 @@ PR 3–7. Las clases nuevas llevan prefijo `est-` para no chocar con las de `ind
 de botones en tinta (15:1 sobre crema; el oro daba 2,9:1), píldora «pendiente» sobre `--c-oro-fondo-texto` (4,6:1) y guardas
 de prueba: contraste mínimo de los tokens, regla de foco, íconos solo por nombre y versión fija de Tabler.
 
+
+**PR 3/4 (25-nov, signos):** el modal «El conteo no cuadra» y el resumen antes de confirmar usan `resumenDiferencia`
+(palabras y color del hecho, `CLASE_TONO`), como el cartel en curso. El resumen suma «Ajuste de cierre en Caja Fuerte»
+con signo por moneda (`lineasAjuste` / `montoConSigno`: `−₡1.951` laca · `+₡2.300` oro), con los mismos montos del
+`ajuste` que se manda a la RPC, y el motivo. «Propinas pagadas en el cierre» pasa a `−₡…`. La caja aparte de dólares
+del cierre en curso se quita: repetía «Dólares: …» (menor del verificador del #348). A 390 px: la apertura deja de
+pisar la regla de `.cd-grid2` (fecha debajo) y `Row2` usa `minmax(0, 1fr)`. Ronda del verificador: en celular cada fila
+del conteo es una grilla (etiqueta arriba a lo ancho, ₡ y $ a media fila; entra ₡9.999.999; `table-layout: fixed`
+dejaba ~4 cifras); los dólares de Caja van con `fd` (`$ 2,00`, coma decimal) en el cartel, el modal, el resumen, la
+tabla y la confirmación de «Borrar TODO el día»; con monedas en sentidos opuestos el título del ajuste va sin tipo
+(`tituloAjuste`; el `ajuste_tipo` que se guarda no cambia); «Propinas pagadas en el cierre» en tinta (salida).
+`CashCierre.payload.test.tsx` fija que el payload a `cerrarDiaCompleto` es idéntico al de main en seis casos.
+La caja del motivo («Diferencia detectada») queda en palabras, sin montos con signo (regla del verificador del #348).
+Sin cambios de cálculo ni de lo que se guarda.
 Texto original de las opciones:
 
 1. **Fondo crema** en vez del blanco actual (el blanco fue una decisión anterior del rediseño). Recomendado: crema, como los SOP.

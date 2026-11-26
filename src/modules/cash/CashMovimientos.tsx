@@ -29,7 +29,7 @@ import { useDeletionNote } from './deletionNote'
 import { movementAttachments } from '../../shared/api/facturas'
 import FacturaThumbs from '../../shared/FacturaThumbs'
 import FacturaVerify from '../../shared/FacturaVerify'
-import { listLinkedDocs, type DocumentRow } from '../../shared/api/documents'
+import { listDocsForMovements, type DocumentRow } from '../../shared/api/documents'
 
 // Valor del filtro Tipo que agrupa TODOS los tipos de egreso (isEgreso). No es un movement_type real.
 const TIPO_EGRESOS = '__egresos'
@@ -138,17 +138,26 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   useEffect(() => { getCierresDia().then(setCierres).catch(() => {}) }, [])
   // Facturas enlazadas (verificado) — map movimiento→documento, una sola consulta.
   const [docMap, setDocMap] = useState<Record<string, DocumentRow>>({})
-  const [docsLoaded, setDocsLoaded] = useState(false)
-  // Si la consulta falla, el map queda vacío: «Sin factura» mostraría TODO como sin factura. Por eso
-  // el filtro Factura no se aplica (ni se ofrece) sin una carga exitosa.
+  // (26-nov, #370) Las facturas se piden para los movimientos CARGADOS (listDocsForMovements, en tandas), no las 500
+  // más nuevas: con más de 500 enlazadas, un movimiento viejo con factura salía «Sin factura».
+  // `docsKey` = los ids para los que el mapa está completo. Si la consulta falla, el map no sirve: «Sin factura»
+  // mostraría todo como sin factura. Por eso el filtro Factura no se aplica (ni se ofrece) sin una carga exitosa
+  // para ESTOS movimientos.
+  const idsKey = useMemo(() => movements.map(m => m.id).sort().join(','), [movements])
+  const [docsKey, setDocsKey] = useState<string | null>(null)
   const [docsError, setDocsError] = useState(false)
   useEffect(() => {
-    listLinkedDocs().then(ds => {
+    let vigente = true
+    const ids = idsKey ? idsKey.split(',') : []
+    listDocsForMovements(ids).then(ds => {
+      if (!vigente) return
       const m: Record<string, DocumentRow> = {}
       for (const d of ds) if (d.linked_movement_id) m[d.linked_movement_id] = d
-      setDocMap(m)
-    }).catch(() => setDocsError(true)).finally(() => setDocsLoaded(true))
-  }, [])
+      setDocMap(m); setDocsError(false); setDocsKey(idsKey)
+    }).catch(() => { if (vigente) { setDocsError(true); setDocsKey(idsKey) } })
+    return () => { vigente = false }
+  }, [idsKey])
+  const docsLoaded = docsKey === idsKey
   const docsListos = docsLoaded && !docsError
   // Filtro Factura pedido pero sin datos confiables → la lista no muestra un resultado engañoso.
   const facturaEnEspera = factura !== '' && !docsListos

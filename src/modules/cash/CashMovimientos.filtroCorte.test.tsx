@@ -21,7 +21,7 @@ vi.mock('../../shared/api/cash', () => ({
   createDayMovement: vi.fn(),
 }))
 vi.mock('../../shared/api/finance', () => ({ getFinanceAccounts: vi.fn(async () => []) }))
-vi.mock('../../shared/api/documents', () => ({ listLinkedDocs: vi.fn(async () => []) }))
+vi.mock('../../shared/api/documents', () => ({ listDocsForMovements: vi.fn(async () => []) }))
 vi.mock('../../shared/api/facturas', () => ({ movementAttachments: vi.fn(() => []) }))
 vi.mock('../../shared/hooks/useAuth', () => ({
   useAuth: () => ({ profile: { id: 'u1', role: 'owner', full_name: 'Dueño' } }),

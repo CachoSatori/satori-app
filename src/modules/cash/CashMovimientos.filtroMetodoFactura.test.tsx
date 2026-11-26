@@ -17,7 +17,8 @@ vi.mock('../../shared/api/cash', () => ({
   createDayMovement: vi.fn(),
 }))
 vi.mock('../../shared/api/finance', () => ({ getFinanceAccounts: vi.fn(async () => []) }))
-vi.mock('../../shared/api/documents', () => ({ listLinkedDocs: vi.fn(() => docsMock.impl()) }))
+const listDocsSpy = vi.hoisted(() => ({ fn: vi.fn((...args: [string[]]) => { void args; return docsMock.impl() }) }))
+vi.mock('../../shared/api/documents', () => ({ listDocsForMovements: listDocsSpy.fn }))
 vi.mock('../../shared/api/facturas', () => ({ movementAttachments: vi.fn((): string[] => []) }))
 vi.mock('../../shared/hooks/useAuth', () => ({
   useAuth: () => ({ profile: { id: 'u1', role: 'contador', full_name: 'Contador Test' } }),
@@ -126,6 +127,15 @@ describe.each(RELOJES_CR)('reloj fijo $hoy · $caso', reloj => {
       fireEvent.click(screen.getByRole('button', { name: 'Efectivo sin factura' }))
       ocultos('Pago musico ficticio', 'Compra con factura')
       expect(screen.getAllByText('Cargando facturas…').length).toBeGreaterThan(0)
+    })
+
+    it('pide las facturas de TODOS los movimientos cargados (no las 500 más nuevas)', async () => {
+      const muchos = Array.from({ length: 600 }, (_, i) => mov({ id: `m-${i}`, description: `mov ${i}` }))
+      listDocsSpy.fn.mockClear()
+      renderMovs(muchos)
+      await esperarDocs()
+      const ids = listDocsSpy.fn.mock.calls.at(-1)![0] as string[]
+      expect(new Set(ids)).toEqual(new Set(muchos.map(m => m.id)))
     })
 
     it('si la consulta de facturas falla, «Sin factura» no muestra todo como sin factura', async () => {

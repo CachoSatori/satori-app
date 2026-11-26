@@ -22,8 +22,8 @@ sin Edge). Responsables: ejecución = sesión coordinadora del día · control =
 begin read only;
 select (select max(version) from supabase_migrations.schema_migrations)                    as ledger,     -- 201 (o 202 si entró la de Caja)
        to_regclass('public.fe_emisores_bitacora')                                           as ya_203,     -- null
-       (select md5(regexp_replace(prosrc, '\s', '', 'g')) from pg_proc where proname = 'fe_ingestar')     as md5_ing, -- 927be5f6…
-       (select md5(regexp_replace(prosrc, '\s', '', 'g')) from pg_proc where proname = 'fe_motivo_sumar') as md5_mot, -- 28958827…
+       (select md5(regexp_replace(prosrc, '\s', '', 'g')) from pg_proc where proname = 'fe_ingestar')     as md5_ing, -- = el de la guarda de la 203
+       (select md5(regexp_replace(prosrc, '\s', '', 'g')) from pg_proc where proname = 'fe_motivo_sumar') as md5_mot, -- = el de la guarda de la 203
        (select count(*) from public.fe_emisores_conocidos)                                  as emisores,
        (select count(*) from public.fe_comprobantes where motivo like '%emisor no conocido%') as pendientes;
 rollback;

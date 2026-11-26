@@ -48,6 +48,8 @@ MUTACIONES: dict[str, tuple] = {
     'sin_revoke_tablas': ([('mig', "revoke all on table public.fe_comprobante_versiones, public.fe_respuesta_versiones, public.fe_emisores_conocidos\n  from public, anon, authenticated;", "")],
                           {'02'}, set()),
     'resumen_sin_respuestas': ([('mig', "                               where x.estado = 'revisar'\n", "                               where false\n")], {'56'}, set()),
+    'sin_guarda_md5': ([('mig', "         where n.nspname = 'public' and p.proname = o) is distinct from h then",
+                         "         where n.nspname = 'public' and p.proname = o) is distinct from h and false then")], {'92'}, {'90'}),
     'sin_relleno': ([('mig', "select c.id, c.xml_sha256, c.xml_path, c.fuente, null, c.recibido_en from public.fe_comprobantes c;",
                       "select c.id, c.xml_sha256, c.xml_path, c.fuente, null, c.recibido_en from public.fe_comprobantes c where false;")], {'05'}, set()),
     'rollback_deja_tabla': ([('rb', "drop table if exists public.fe_emisores_conocidos;\n", "")], {'90'}, set()),
@@ -73,7 +75,10 @@ def armar(mutar: str | None = None, local: bool = False) -> str:
             else:
                 rb = reemplazar(rb, viejo, nuevo, mutar)
     sql = BATERIA.read_text()
+    if '$mig201$' in cuerpo:
+        raise SystemExit('la 201 no puede contener $mig201$ (se usa para pasarla como texto al caso 92)')
     for marcador, texto in (('-- @@201@@\n', cuerpo + '\n'), ('-- @@201_rollback@@\n', rb + '\n'),
+                            ('-- @@201_texto@@\n', '$mig201$' + cuerpo + '$mig201$\n'),
                             ('-- @@preludio@@\n', (PRELUDIO.read_text() + '\n') if local else '')):
         if sql.count(marcador) != 1:
             raise SystemExit(f'falta el marcador {marcador.strip()}')

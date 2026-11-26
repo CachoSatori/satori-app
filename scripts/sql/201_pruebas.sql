@@ -327,6 +327,21 @@ insert into _r201 (caso, ok, detalle)
 select '91 con la 199 de vuelta, la Edge nueva sigue andando (la misma clave da «duplicado» como antes)',
        (select v::jsonb ->> 'resultado' from _a201 where k = 'g91') = 'duplicado', (select v from _a201 where k = 'g91');
 
+-- R13: si una de las funciones que la 201 reemplaza no es la de la 199, la guarda frena y no queda nada de la 201
+create function pg_temp.error_de(q text) returns text language plpgsql as $$
+begin execute q; return 'ok'; exception when others then return sqlstate || ' ' || sqlerrm; end $$;
+create or replace function public.fe_respuesta_registrar(p jsonb) returns jsonb language sql security definer
+  set search_path = public, pg_temp as $f$ select '{"resultado": "cambiada a mano"}'::jsonb $f$;
+insert into _a201 select 'g92', pg_temp.error_de(
+-- @@201_texto@@
+);
+insert into _r201 (caso, ok, detalle)
+select '92 guarda R13: fe_respuesta_registrar cambiada a mano → la 201 se para (P0001) y no crea nada',
+       (select v from _a201 where k = 'g92') like 'P0001 201: public.fe_respuesta_registrar no es la de la 199%'
+       and to_regclass('public.fe_comprobante_versiones') is null and to_regclass('public.fe_emisores_conocidos') is null
+       and to_regprocedure('public.fe_motivo_sumar(text,text)') is null,
+       (select v from _a201 where k = 'g92');
+
 select n, caso, case when ok then 'OK' else 'FALLA' end as resultado, left(coalesce(detalle, ''), 300) as detalle from _r201 order by n;
 select json_build_object(
   'ok', (select count(*) from _r201 where ok), 'fallas', (select count(*) from _r201 where ok is not true),

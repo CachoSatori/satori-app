@@ -8,6 +8,7 @@ import {
   createCashMovement,
   deleteCashMovement,
   getCashMovementById,
+  reemplazarPagoEnBase,
   getPreviousCierre,
   discardCashSession,
   upsertSupplier,
@@ -24,6 +25,7 @@ import { listLinkedDocs } from '../../shared/api/documents'
 import FacturaThumbs from '../../shared/FacturaThumbs'
 import AgregarAsistente from './AgregarAsistente'
 import { Aviso } from '../../shared/ui/estandar'
+import AvisoCambioTerminado from './AvisoCambioTerminado'
 import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from './validarMovimiento'
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import {
@@ -566,23 +568,34 @@ export default function CashTurno({
       description: d.reference || d.supplier_name || 'Proveedor',
       attachments: d.attachments,
     }
+    const alta = {
+      ...datos,
+      session_id:    openSession.id,
+      created_by:    profile.id,
+      movement_type: 'egreso_mercaderia' as const,
+      currency:      'CRC' as const,
+      exchange_rate: tc,
+      subcategory:   'Proveedor mercadería',
+      supplier_name: d.supplier_name,
+      shift:         tipShiftToCaja(openSession.shift_type),
+      ...MERCADERIA_CLASS,
+    }
     const r = await reemplazarPago(viejoId, nuevoId, {
-      crear: id => createCashMovement({
-        ...datos,
-        session_id:    openSession.id,
-        created_by:    profile.id,
-        movement_type: 'egreso_mercaderia',
-        currency:      'CRC',
-        exchange_rate: tc,
-        subcategory:   'Proveedor mercadería',
-        supplier_name: d.supplier_name,
-        shift:         tipShiftToCaja(openSession.shift_type),
-        ...MERCADERIA_CLASS,
-      }, { id }),
+      // Mig 200: todo en UNA transacción de la base. Si la función no está o no hay red, sigue por `crear` + `borrarViejo`.
+      atomico: id => reemplazarPagoEnBase(viejoId, { ...alta, id }, auth.managerEmail, auth.managerPassword),
+      crear: id => createCashMovement(alta, { id }),
       borrarViejo: () => deleteCashMovement(viejoId, NOTA_REEMPLAZO, auth.managerEmail, auth.managerPassword),
       releer:      id => getCashMovementById(id),
       coincide:    m => coincidePago(m, datos),
     })
+    if (r.estado === 'sin_cambios' && r.sinViejo) {
+      // (mig 200) Otro aparato ya cambió o borró ese pago: no se creó nada. Se recarga la lista y se cierra el modal.
+      altaCambioRef.current = null
+      onError(`No se guardó el cambio: ${r.error}`)
+      onRefresh()
+      setPagoModal(false)
+      return
+    }
     if (r.estado === 'sin_cambios') {
       // Nada cambió: el pago anterior sigue guardado y contando. El modal queda abierto con lo tecleado.
       onError(`No se pudo guardar el cambio (${r.error}). El pago anterior sigue igual. Reintentá con «Guardar cambios».`)
@@ -613,7 +626,9 @@ export default function CashTurno({
 
   // Termina un cambio a medias: borra el pago viejo (el nuevo ya está en la base). Pide la misma autorización.
   const [terminando, setTerminando] = useState(false)
-  // (#361) Cambio que ya estaba terminado en la base: mismo aviso que el Cierre (mensajeNoTerminable('resuelto')).
+  // (#361) Cambio que ya estaba terminado en la base: la MISMA pieza que el Cierre (AvisoCambioTerminado). Se guarda el
+  // turno en que pasó: al cerrar ese turno (cambia openSession) el aviso deja de mostrarse; al salir de la pestaña, se
+  // desmonta con ella.
   const [avisoResuelto, setAvisoResuelto] = useState<string | null>(null)
   const terminarCambio = async (r: ReemplazoPendiente) => {
     if (terminando) return
@@ -627,7 +642,7 @@ export default function CashTurno({
       // Ronda 4 (Menor 3): se relee la base ya autorizado y se borra el viejo solo si el nuevo sigue confirmado.
       const e = await revisarCambioEnBase(r, sessionMovementsBase, id => getCashMovementById(id))
       if (e !== 'terminable') {
-        if (e === 'resuelto') { anotarReemplazos(prev => prev.filter(x => x.viejo !== r.viejo)); setAvisoResuelto(mensajeNoTerminable(e)) }
+        if (e === 'resuelto') { anotarReemplazos(prev => prev.filter(x => x.viejo !== r.viejo)); setAvisoResuelto(sessionId) }
         else onError(mensajeNoTerminable(e))
         onRefresh()
         return
@@ -1013,7 +1028,7 @@ export default function CashTurno({
           ))}
         </Aviso>
       )}
-      {avisoResuelto && <Aviso tipo="hecho" titulo={avisoResuelto} />}
+      {avisoResuelto != null && avisoResuelto === sessionId && <AvisoCambioTerminado />}
 
       {/* F4.3a — "➕ Agregar" único: asistente manual (captura + clasificación advisory + matriz RN-3).
           Additivo: los botones por sección (pago/ingreso/egreso) siguen abajo hasta F4.3c. */}

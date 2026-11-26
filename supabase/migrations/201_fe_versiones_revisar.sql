@@ -35,6 +35,7 @@
 do $guarda201$
 declare
   o text;
+  h text;
 begin
   foreach o in array array['public.fe_comprobantes', 'public.fe_respuestas', 'public.fe_receptores', 'public.fe_ingesta_bitacora'] loop
     if to_regclass(o) is null then
@@ -45,6 +46,19 @@ begin
      or to_regprocedure('public.fe_ingesta_resumen(integer)') is null or to_regprocedure('public.fe_receptores_sello()') is null then
     raise exception '201: faltan funciones de la 199';
   end if;
+  -- R13: la 201 REEMPLAZA estas tres funciones; si su cuerpo no es el de la 199 (alguien las cambió a mano o entró otra
+  -- migración), se para sin tocar nada. md5 del prosrc sin espacios, calculado del archivo de la 199 y medido igual en
+  -- prod y staging (26-nov, solo lectura).
+  for o, h in select x.f, x.h from (values
+      ('fe_ingesta_resumen',     '28fe34e168e30ac508bf0700261419be'),
+      ('fe_ingestar',            '2c3fe2b9b6913d8e3a73dcc2bb1a8167'),
+      ('fe_respuesta_registrar', '5a8ad8234da9c7f60e2fda3e335d7eb9')) x(f, h) loop
+    if (select md5(regexp_replace(p.prosrc, '\s', '', 'g'))
+          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.proname = o) is distinct from h then
+      raise exception '201: public.% no es la de la 199 (md5 distinto): se para sin tocar nada', o;
+    end if;
+  end loop;
   foreach o in array array['public.fe_comprobante_versiones', 'public.fe_respuesta_versiones', 'public.fe_emisores_conocidos'] loop
     if to_regclass(o) is not null then
       raise exception '201: % ya existe: se para sin tocar nada', o;

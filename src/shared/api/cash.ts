@@ -630,6 +630,56 @@ export async function deleteCashMovement(id: string, note: string, managerEmail?
   }
 }
 
+// ── Cambio de pago en UNA transacción (mig 200, `reemplazar_pago_caja`; hallazgo 252, R36) ──
+// La base crea el nuevo (id fijado por el cliente) y borra el viejo por la cascada en la misma transacción.
+// Sin red, con la cola pendiente (A01: lo nuevo no se adelanta), o si la función no está (prod antes del pase),
+// tira `ErrorRpcReemplazo` con `caer = true` y quien llama sigue por el camino de siempre (#361): alta + borrado.
+export interface RespuestaRpcReemplazo {
+  estado:    'listo' | 'distinto'
+  repetido?: boolean
+  nuevo?:    CashMovement
+  guardado?: CashMovement
+}
+export class ErrorRpcReemplazo extends Error {
+  readonly code: string | null
+  readonly caer: boolean
+  constructor(message: string, code: string | null, caer: boolean, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause }); this.code = code; this.caer = caer
+  }
+}
+/** ¿Este error de la RPC deja seguir por el camino viejo sin riesgo? (no está la función, red, timeout o duplicado) */
+export function rpcReemplazoCae(code: string | null, message: string): boolean {
+  return code === 'PGRST202' || code === '42883' || code === '23505'
+    || /could not find the function|schema cache|does not exist.*reemplazar_pago_caja/i.test(message)
+    || NETWORK_ERR.test(message)
+}
+export async function reemplazarPagoEnBase(
+  viejoId: string, nuevo: Record<string, unknown> & { id: string }, managerEmail?: string, managerPassword?: string,
+): Promise<RespuestaRpcReemplazo> {
+  if (isOffline()) throw new ErrorRpcReemplazo('sin conexión', null, true)
+  if (await debeEncolarAhora()) throw new ErrorRpcReemplazo('cola pendiente', null, true)
+  const args: Record<string, unknown> = { p_viejo: viejoId, p_nuevo: nuevo }
+  if (managerEmail && managerPassword) { args.p_manager_email = managerEmail; args.p_manager_password = managerPassword }
+  const run = (signal: AbortSignal) => (supabase.rpc as unknown as (
+    fn: string, args: Record<string, unknown>,
+  ) => { abortSignal: (s: AbortSignal) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> })(
+    'reemplazar_pago_caja', args,
+  ).abortSignal(signal)
+  let res: { data: unknown; error: { message: string; code?: string } | null }
+  try { res = await withWriteTimeout(run) }
+  catch (e) {
+    // Timeout o red: no se sabe si entró. El camino viejo reusa el MISMO id (23505 → relee y compara): nunca duplica.
+    throw new ErrorRpcReemplazo(e instanceof Error ? e.message : String(e), null, true, e)
+  }
+  if (res.error) {
+    const code = res.error.code ?? null
+    throw new ErrorRpcReemplazo(res.error.message, code, rpcReemplazoCae(code, res.error.message))
+  }
+  const r = res.data as RespuestaRpcReemplazo | null
+  if (!r || (r.estado !== 'listo' && r.estado !== 'distinto')) throw new ErrorRpcReemplazo('respuesta inesperada de la base', null, false)
+  return r
+}
+
 // Descartar un turno (apertura por error, fecha equivocada): borra sus movimientos y la
 // sesión. Empezás de cero. Los movimientos van UNO POR UNO por la cascada (RPC
 // delete_movement_cascade) — igual que el borrado por movimiento y que discardDiaCompleto —

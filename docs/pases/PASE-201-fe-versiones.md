@@ -22,7 +22,7 @@ el dueño (firma por chat sobre el SHA de cabeza).
 
 ```sql
 begin read only;
-select (select max(version) from supabase_migrations.schema_migrations)                    as ledger,       -- 199 (si 200/201 en otro orden: parar y releer)
+select (select max(version) from supabase_migrations.schema_migrations)                    as ledger,       -- 200 (la 200 entró con el #368)
        (select count(*) from public.fe_comprobantes)                                        as comprobantes,
        (select count(*) from public.fe_respuestas)                                          as respuestas,
        (select count(*) from public.fe_ingesta_bitacora where motivo like 'misma clave con otro XML%') as perdidos_199, -- esperado 0
@@ -46,14 +46,14 @@ Más: `list_edge_functions` (versión, `verify_jwt`, `ezbr_sha256` de las 9) y l
    where emisor_cedula is not null and <los que reconoce> on conflict do nothing;`
 5. Humo: correr `correr` del script una vez; la pestaña «📨 Facturas electrónicas» muestra la ingesta.
 
-**Parada:** ledger ≠ 199 antes del merge · otra Edge cambia de hash · el PoS deja de latir · `fe-ingesta` responde
+**Parada:** ledger ≠ 200 antes del merge · la guarda de la 201 para (md5 de `fe_ingestar`, `fe_respuesta_registrar` o `fe_ingesta_resumen` distinto del de la 199; medido igual en prod y staging el 26-nov) · otra Edge cambia de hash · el PoS deja de latir · `fe-ingesta` responde
 algo que no sea 401 sin secreto.
 
 ## 4. Pruebas
 
 | Dónde | Resultado |
 |---|---|
-| Postgres 16 local (`HASTA=200 bash scripts/sql/local_armar_base.sh`, `201_pruebas.py --local`) | 30/30 · 18/18 mutaciones muerden |
+| Postgres 16 local (`HASTA=200 bash scripts/sql/local_armar_base.sh`, `201_pruebas.py --local`) | 31/31 · 19/19 mutaciones muerden |
 | Staging | **NO PROBADO** (la corre la coordinadora con el dueño: `python3 scripts/sql/201_pruebas.py --armar --compacto`; lleva `drop`, regla 14) |
 | Dos llegadas simultáneas de la misma clave (candado `pg_advisory_xact_lock`) | **NO PROBADO** (una sola sesión en la batería) |
 | Edge real contra Storage | **NO PROBADO** (proxy; la prueba de punta a punta es la del PASE-199 §5.6) |
@@ -70,6 +70,6 @@ algo que no sea 401 sin secreto.
 
 | Fecha (CR) | Quién | Qué |
 |---|---|---|
-| 2026-11-26 | agente (Opus 5.5) | PR en borrador; batería local 30/30, mutaciones 18/18 |
+| 2026-11-26 | agente (Opus 5.5) | PR en borrador; batería local 30/30, mutaciones 18/18 · verificador: CAMBIOS → merge de main (#368) y guarda R13 de md5; 31/31, 19/19 |
 | | coordinadora + dueño | batería en staging |
 | | dueño | firma sobre el SHA · lecturas en prod · merge · emisores conocidos |

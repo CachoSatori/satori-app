@@ -4,21 +4,21 @@
 > (incluye el ESTADO íntegro previo a la poda del 20-nov).
 
 ## ⚡ ARRANQUE — foto real (se REEMPLAZA en cada entrega)
-**Al día: 2026-11-25 (tarde, ~16:00 CR).** `main` = `7db63e07` (merge de #361, 15:50 CR, OK del dueño por chat ~15:42 CR en la franja 15:00–19:00). **Ledger prod = 198 · staging = 199** (la 198 se aplicó a mano en staging el 25-nov ~06:35 CR con su fila, funciones iguales a prod por md5; la 199 la aplicó el PR #365 en staging). **Próximo libre: 200** (la 199 está reservada por #365; la 189 se OMITE a propósito: agenda un cron con la URL de prod). **Punto de entrada:**
+**Al día: 2026-11-26 (~14:20 CR).** `main` = `789e58d0` (#370, 12:38 CR). **Ledger prod = 200 · staging = 200** (199 y 200 entraron por merge → Branching el 26-nov). **Próximo libre: 202** (la 201 está reservada por #369; la 189 se OMITE a propósito). **Punto de entrada:**
 [docs/handoffs/HANDOFF-2026-11-20.md](docs/handoffs/HANDOFF-2026-11-20.md) (los handoffs del 21-nov en adelante viven en los documentos del proyecto de Claude, no en el repo).
-- **Entró el 25-nov (hora CR):** #363 spec Compras → Stock → Costos y #364 respuestas del dueño (`63b0bb3a`) · **#361** Caja, ronda 4–5 del #355 (`7db63e07`): un cambio de pago a medias, de ese día o de uno anterior, frena el Cierre; aviso verde «ya estaba terminado» en Cierre y Caja Diaria. Verificador independiente listo; recorrido en staging **NO PROBADO** (proxy). Lo del 24-nov y antes: [ESTADO-HISTORICO](docs/historico/ESTADO-HISTORICO.md) y handoffs.
-- **Staging (25-nov, ~22:55 CR):** migración **200** (`reemplazar_pago_caja`, #368, cambio de pago en una transacción) aplicada a mano con su fila; ledger staging = 200. Bloque `operacion2` **200–249** ratificado por el dueño (25-nov 23:50 CR). En prod NO: PASE-200 en borrador, con firma, y va DESPUÉS de la 199 (#365).
-- **Abierto:** **#365** F1 ingesta de facturas electrónicas (borrador, cabeza `b6558afc`; verificador listo; faltan la batería 199 y la prueba punta a punta en staging desde una sesión de CC del dueño —`FE_INGESTA_SECRET` no está cargado en staging—, 3–5 XML reales por el parser en local y la firma: migración + Edge + secreto en prod) · **#262** v2 salonero solo salón (cabeza `3679488e`, firmable; el v1 corre en prod desde el 18-nov; entra con el próximo pase del agente del PoS) · viejos: #324, #287, #252.
-- **Validación física pendiente del dueño:** #361 en prod (cambio de pago a medias y aviso verde) · Caja (carteles, crema, precarga, editar pago) · cuadros numéricos (Metas, Productos, Recetas, Cumpleaños, Puntos por rol) · Metas con meta individual vacía.
-- **Decisiones del dueño (25-nov):** #262 solo salón · #361 merge y validación en prod · la batería 199 la corre su sesión de CC si el conector cancela · `fe_documentos` de staging (rama `staging` congelada) cerrada a anon. **Brief de la mañana:** corregida la medición «salón sin salonero» (misma definición que la app; referencia ~5 %, alerta > 10 %).
+- **Entró el 26-nov (hora CR; firma/OK del dueño por chat con SHA fijado):** **#365** Compras F1: ingesta de XML de factura electrónica, mig 199 + Edge `fe-ingesta` (`2177821028322b`, 06:07; firma sobre `2955ec49`) · **#367** Caja 3/4: signos, «Dólares» una vez, 390 px, «$ 60,00» con espacio (`dbf48026`, 06:23) · **#368** Caja: cambiar un pago en UNA transacción, mig 200 `reemplazar_pago_caja` (`ff38275e`, 07:00; batería staging 23/23, verificador listo; **validado en prod 10:30–10:33** con un pago de prueba que se borró) · **#370** Movimientos: filtro Método, filtro Factura, atajo «Efectivo sin factura», CSV filtrado, facturas sin tope de 500 (`789e58d0`, 12:38; pedido del contador; **validado en prod**). Lo anterior: [ESTADO-HISTORICO](docs/historico/ESTADO-HISTORICO.md) y handoffs.
+- **Pase F1 (PASE-199) en curso:** fila de `fe_receptores` de Santa Teresa cargada por el owner (10:40) · `FE_INGESTA_SECRET` en prod (10:41, por la sesión de CC del dueño; huella en la lista de secretos) · **falta:** que el dueño tenga el valor para el Apps Script (sin pasar por un chat), el script en la cuenta de facturas con disparador cada 15 min y carga desde el 30-nov, y el humo.
+- **Abierto:** **#369** Compras F1: hallazgos 257/258, mig 201 (cabeza `bdb3330b`, Gate verde; verificador: CAMBIOS → arreglados; falta la batería 201 en staging por la sesión de CC del dueño y la firma; **tiene que entrar antes del 30-nov**; con `fe_emisores_conocidos` vacía todo entra «revisar») · **#262** v2 salonero solo salón (cabeza `3679488e`, firmable; entra con el próximo pase del agente del PoS) · viejos: #324, #287, #252.
+- **Validación física pendiente del dueño:** #367 en prod («$ 2,00») · «Cierre OK» · cuadros numéricos (Metas, Productos, Recetas, Cumpleaños, Puntos por rol) · Metas con meta individual vacía.
+- **Staging:** la clave del owner en staging no es la de prod (26-nov: 4 intentos fallidos desde la vista previa); para validar en staging hay que cambiarla en el SQL Editor de staging.
 - **Regla operativa (24-nov):** solo la sesión coordinadora del día actualiza ramas y mergea; las sesiones de tareas programadas dejan PRs y no tocan ramas ajenas después de entregar.
 - **Archivos sagrados, sin cambios:** `tipCalculations.ts` `7603ba5a` · `cashUtils.ts` `b597c697` · `cierrePozo.ts` `bf22ee44` (tabla de abajo).
-- **Edge prod:** `monthly-report` v25 · `extract-document` v21 · `cierre-email` v19 · `pago-notificar` v17 · `ventas-dia-contador` v6 · `ingest-ndf` v14 (verify_jwt false) · `alta-empleado` v13 · `club-pase` v8 (verify_jwt false). Cada merge que toca `supabase/functions/` despliega por Branching (#313). **Pendiente al mergear #365:** sumar `fe-ingesta` con `verify_jwt` false. Agente PoS prod (`agente-fe`): latido OK.
+- **Edge prod (26-nov, 10:4x):** 9 funciones; `fe-ingesta` nueva con `verify_jwt` false. Las versiones suben solas con cada push a `main` y con cada secreto: **verificar por `ezbr_sha256`**, no por versión. Agente PoS prod (`agente-fe`): latido OK.
 - **Protección de `main`:** «Gate» requerido · rama al día (`strict`) · sin excepción para admins. Las sesiones en la nube no pueden cambiarla (403). Arnés a prueba hasta el 3-dic.
 - **Decisiones vigentes:** Club en PAUSA hasta que Apple apruebe la Wallet · sin alerta de latido · **D1 (20-nov): 23:30–15:00 libre · 15:00–19:00 con OK del dueño · 19:00–23:30 solo urgente con OK** · PRs solo de `.md` se mergean sin OK únicamente de 23:30 a 15:00 · NO auto-merge de código · plugin «satori» con `/arranque` a prueba hasta el 3-dic.
-- **Firma (#317):** en una sesión que clona el repo a mitad de conversación los hooks no cargan; se firma por chat con el SHA fijado (#323, #338, #339, #341, #355, #361). Sigue sin confirmarse en una sesión que arranque ya con el repo clonado.
-- **Pendiente del dueño:** correo de pago agrupado, paso 2 · próximo crédito real (#310) · #229 al lanzar el Club · validar en su Chrome lo de Caja (el navegador en la nube oculta lo que tipea una persona).
-- **Cola (en orden):** #365 firma · RPC atómica de pagos (firma; cierra la ventana relectura→borrado del #361 y el conteo doble de Resumen/Finanzas) · aviso verde con el mismo estilo en Cierre y Caja Diaria · hallazgo 256 (el catálogo falla en silencio) · 3.1b pantalla Catálogo · 3.1c (firma) · Caja 3/4 · línea «Dólares» · pase de diseño · G-013 (salarios; 3 decisiones del dueño) · G-014, G-015 v2 · rama `staging` congelada (decidir) · deuda multi-local 067/080/190 · nombres de inactivos B · 3.4 Regalías.
+- **Firma (#317):** en una sesión que clona el repo a mitad de conversación los hooks no cargan; se firma por chat con el SHA fijado (#323, #338, #339, #341, #355, #361, #365, #367, #368, #370). Sigue sin confirmarse en una sesión que arranque ya con el repo clonado.
+- **Pendiente del dueño:** correo de pago agrupado, paso 2 · próximo crédito real (#310) · #229 al lanzar el Club · cargar `fe_emisores_conocidos` (F2: falta pantalla).
+- **Cola (en orden):** #369 batería + firma (antes del 30-nov) · terminar el pase F1 · 4 Menores del #368 (verificador) · hallazgo 256 (el catálogo falla en silencio) · 3.1b pantalla Catálogo · 3.1c (firma) · G-014 (conteo por lugar, hora de corte, traspasos) a la spec de inventario · pase de diseño · G-013 (salarios; 3 decisiones del dueño) · G-015 v2 · rama `staging` congelada (decidir) · deuda multi-local 067/080/190 · nombres de inactivos B · 3.4 Regalías.
 - **Cron:** job 4 (quincena) **NO volver a aplicar**. Job 8 (Club): repetir la verificación. Job 10 (`ventas-dia-contador`): primer envío 1-dic.
 - **Deploy:** `version.json` y `/api/salud` dan 403 por el proxy de la sesión: verificar por los runs «Deploy to GitHub Pages», «Cloudflare Pages: satori-club» y «Supabase Preview».
 
@@ -26,8 +26,8 @@
 
 | Puntero | Valor |
 |---|---|
-| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `7db63e07` |
-| `staging` | sin cambios desde el 13/11 (`5158698`, #167); su base: prod 198 · staging 199 |
+| `main` (PROD, Pages `/satori-app/`; «Gate» requerido) | `789e58d0` |
+| `staging` | sin cambios desde el 13/11 (`5158698`, #167); su base: prod 200 · staging 200 |
 | `feat/pos-desglose` | `14bd278`: rama del **agente** del PoS (`pos-bridge/`), no se mergea a `main` |
 | Refs Supabase | **PROD `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING `hwiatgicyyqyezqwldia`** (`satori-staging`) |
 | Gate | `bash scripts/ci/gate.sh` (único; mismo en CI y local) |
@@ -64,18 +64,19 @@
 ---
 
 ## ☁️ Edge, Cloudflare y agentes
-`verify_jwt`: **off** solo en `ingest-ndf` (el agente manda `x-ingest-secret`), `club-pase` (portón `x-club-web`) y `fe-ingesta` (portón `x-fe-secret`; **al mergear #365**); el resto **on** (`ingest-punches` no existe en prod). Secretos: por su lista (nombre + huella); código: por `ezbr_sha256`, no por versión.
+`verify_jwt`: **off** solo en `ingest-ndf` (el agente manda `x-ingest-secret`), `club-pase` (portón `x-club-web`) y `fe-ingesta` (portón `x-fe-secret`; desde #365, 26-nov); el resto **on** (`ingest-punches` no existe en prod). Secretos: por su lista (nombre + huella); código: por `ezbr_sha256`, no por versión.
 
-| Función en prod (20-nov, tras el ítem 11) | Versión |
+| Función en prod (26-nov) | `ezbr_sha256` (primeros 8) |
 |---|---|
-| `monthly-report` | v25 |
-| `extract-document` | v21 |
-| `cierre-email` | v19 |
-| `pago-notificar` | v17 |
-| `ventas-dia-contador` | v6 |
-| `ingest-ndf` | v14 (verify_jwt false) |
-| `alta-empleado` | v13 |
-| `club-pase` | v8 (verify_jwt false) |
+| `monthly-report` | `183a162d` |
+| `extract-document` | `cf860027` |
+| `cierre-email` | `dbbcc05a` |
+| `pago-notificar` | `8572b4f9` |
+| `ventas-dia-contador` | `834067…` (empieza así) |
+| `ingest-ndf` | `4d2eb62b` (verify_jwt false) |
+| `alta-empleado` | `071d418e` |
+| `club-pase` | `84969b6f` (verify_jwt false) |
+| `fe-ingesta` | `291bf0ae` (verify_jwt false) |
 
 El código de `main` es el desplegado (Branching); las fuentes por rama de antes del ítem 11 están en el [histórico](docs/historico/ESTADO-HISTORICO.md).
 

@@ -203,7 +203,7 @@ describe.each(RELOJES_CR)('reloj fijo $hoy · $caso', reloj => {
       const txt = await blobs[blobs.length - 1].text()
       return txt
     }
-    const filas = (txt: string) => txt.replace(/^﻿/, '').split('\n')
+    const filas = (txt: string) => txt.replace(/^\uFEFF/, '').split('\n')
 
     it('suma Subcategoría, Factura y N° factura sin quitar columnas, con BOM y comillas', async () => {
       renderMovs()

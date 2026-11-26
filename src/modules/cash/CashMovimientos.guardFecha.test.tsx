@@ -22,7 +22,7 @@ vi.mock('../../shared/api/cash', () => ({
   getCierresDia: cashApi.getCierresDia,
 }))
 vi.mock('../../shared/api/finance', () => ({ getFinanceAccounts: vi.fn(async () => []) }))
-vi.mock('../../shared/api/documents', () => ({ listLinkedDocs: vi.fn(async () => []) }))
+vi.mock('../../shared/api/documents', () => ({ listDocsForMovements: vi.fn(async () => []) }))
 vi.mock('../../shared/api/facturas', () => ({ movementAttachments: vi.fn((): string[] => []) }))
 vi.mock('../../shared/hooks/useAuth', () => ({
   useAuth: () => ({ profile: { id: 'u1', role: auth.role, full_name: 'Test' } }),

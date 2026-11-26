@@ -265,6 +265,29 @@ export async function listLinkedDocs(): Promise<DocumentRow[]> {
   return (data ?? []) as DocumentRow[]
 }
 
+// (26-nov, #370) Facturas enlazadas a UNOS movimientos dados, completas. `listLinkedDocs` corta en 500 y en prod ya hay
+// más documentos enlazados: un movimiento cuya factura quedaba afuera del tope figuraba «sin factura». Acá se consulta
+// por `linked_movement_id in (…)` en tandas de ≤200 ids (la URL de PostgREST no aguanta miles). Si una tanda falla, o
+// vuelve llena hasta el tope de filas (podría estar cortada), se LANZA: el llamador muestra «no disponible», nunca una
+// lista parcial que haría pasar una factura por «sin factura».
+export const TANDA_IDS_DOCS = 200
+export const TOPE_FILAS_TANDA = 1000
+export async function listDocsForMovements(movementIds: string[]): Promise<DocumentRow[]> {
+  const ids = [...new Set(movementIds.filter(Boolean))]
+  const tandas: string[][] = []
+  for (let i = 0; i < ids.length; i += TANDA_IDS_DOCS) tandas.push(ids.slice(i, i + TANDA_IDS_DOCS))
+  const resultados = await Promise.all(tandas.map(async tanda => {
+    const { data, error } = await supabase.from('documents').select('*')
+      .eq('estado', 'procesado').in('linked_movement_id', tanda)
+      .order('created_at', { ascending: false }).limit(TOPE_FILAS_TANDA)
+    if (error) throw new Error(error.message)
+    const filas = (data ?? []) as DocumentRow[]
+    if (filas.length >= TOPE_FILAS_TANDA) throw new Error('Demasiadas facturas en una tanda: la lista podría estar incompleta.')
+    return filas
+  }))
+  return resultados.flat()
+}
+
 export async function setDocEstado(id: string, estado: 'procesado' | 'descartado', linkedMovementId?: string): Promise<void> {
   const { error } = await supabase.from('documents')
     .update({ estado, ...(linkedMovementId ? { linked_movement_id: linkedMovementId } : {}) })

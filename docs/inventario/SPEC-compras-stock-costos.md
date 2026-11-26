@@ -617,6 +617,14 @@ consumo del mes carga ingredientes que siguen en la cámara. Es la pregunta 6 de
 **Riesgos que suma G-014** (van también a §13): factor de compra mal confirmado · sesgo al estimar botellas ·
 decimales del costo unitario · parcial que nunca se completa.
 
+**Respuestas del dueño (26-nov-2026), cierran las preguntas de abajo:**
+- **B1 (corte):** se cuenta los **lunes y el día 1 de cada mes, antes de recibir mercadería**. Toda compra o traspaso del día del conteo entra **después** del conteo.
+- **B2 (traspasos):** pasa poco, pero puede pasar → el traspaso existe como movimiento propio (recomendación (c) de B2), sin apuro de pantalla.
+- **B10 (frecuencia):** **se cuenta todo** en cada conteo (lunes y día 1); no hay lista corta semanal. Lo de la regla 2 del piloto sigue igual.
+- **B11 (multi-local):** **configuración propia para cada local** (lugares, orden, par, mínimo, proveedor, unidad de compra). La identidad compartida del producto (recomendación (c)) queda como propuesta: se confirma con el dueño junto con la migración del catálogo.
+- **B7 (elaboraciones):** **se cuentan** como producto.
+- **B9 (parcial):** el dueño toma la recomendación: un parcial **vence al cierre del día siguiente** y la fecha queda «Incompleto».
+
 **Preguntas para el dueño (G-014):**
 1. ¿Barra y cocina cuentan **antes de recibir** o **al cierre**? ¿El mismo corte en los dos locales?
 2. ¿Hay préstamos barra ↔ cocina o entre locales que hoy no se anotan?

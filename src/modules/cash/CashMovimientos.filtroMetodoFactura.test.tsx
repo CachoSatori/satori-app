@@ -129,15 +129,6 @@ describe.each(RELOJES_CR)('reloj fijo $hoy · $caso', reloj => {
       expect(screen.getAllByText('Cargando facturas…').length).toBeGreaterThan(0)
     })
 
-    it('pide las facturas de TODOS los movimientos cargados (no las 500 más nuevas)', async () => {
-      const muchos = Array.from({ length: 600 }, (_, i) => mov({ id: `m-${i}`, description: `mov ${i}` }))
-      listDocsSpy.fn.mockClear()
-      renderMovs(muchos)
-      await esperarDocs()
-      const ids = listDocsSpy.fn.mock.calls.at(-1)![0] as string[]
-      expect(new Set(ids)).toEqual(new Set(muchos.map(m => m.id)))
-    })
-
     it('si la consulta de facturas falla, «Sin factura» no muestra todo como sin factura', async () => {
       docsMock.impl = () => Promise.reject(new Error('sin red'))
       renderMovs()
@@ -246,5 +237,21 @@ describe.each(RELOJES_CR)('reloj fijo $hoy · $caso', reloj => {
       const rows = filas(await csv()).slice(1)
       expect(rows.some(r => r.endsWith('"No",""'))).toBe(false)
     })
+  })
+})
+
+// Fuera de la matriz de relojes: el punto es QUÉ ids se piden, no la fecha. Pocos movimientos a propósito: renderizar
+// cientos de filas tarda ~5 s por caso y rozaba el timeout del gate (falló 1 de 6 corridas). El tope de 500 se prueba
+// donde vive, en documents.porMovimientos.test.ts (752 documentos).
+describe('facturas de los movimientos cargados', () => {
+  it('pide las facturas de TODOS los movimientos cargados, una sola vez cada id', async () => {
+    docsMock.impl = () => Promise.resolve([])
+    const muchos = Array.from({ length: 40 }, (_, i) => mov({ id: `m-${i}`, description: `mov ${i}` }))
+    listDocsSpy.fn.mockClear()
+    renderMovs(muchos)
+    await esperarDocs()
+    const ids = listDocsSpy.fn.mock.calls.at(-1)![0] as string[]
+    expect(ids.length).toBe(40)
+    expect(new Set(ids)).toEqual(new Set(muchos.map(m => m.id)))
   })
 })

@@ -20,6 +20,9 @@ from __future__ import annotations
 import hashlib, json, re, subprocess, sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sql_compacto import compactar  # noqa: E402  (respeta los cuerpos $$…$$: la huella md5 no cambia)
+
 RAIZ = Path(__file__).resolve().parents[2]
 M200 = RAIZ / 'supabase/migrations/200_caja_reemplazo_pago_atomico.sql'
 M202 = RAIZ / 'supabase/migrations/202_caja_reemplazo_pago_endurecer.sql'
@@ -137,7 +140,7 @@ def armar(mutar: str | None = None, compacto: bool = False, local: bool = False)
     b = b.replace('-- @@200@@', M200.read_text()).replace('-- @@202@@', m)
     b = b.replace('-- @@202_texto@@', texto).replace('-- @@202_rollback@@', rb)
     if compacto:
-        b = '\n'.join(l.strip() for l in b.splitlines() if l.strip() and not l.strip().startswith('--'))
+        b = compactar(b)
     return b
 
 

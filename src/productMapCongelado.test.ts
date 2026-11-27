@@ -9,14 +9,13 @@ import path from 'node:path'
 const RAIZ = path.resolve(__dirname, '..')
 const USA_PRODUCT_MAP = /\bgetProductMap\b|\bsaveProductMapItems\b|\bupdateProductInfo\b|from\(\s*['"]product_map['"]/
 
-/** Los que hoy lo usan (24-nov). La 3.1b saca `VentasConfig.tsx`; la 3.6, el resto de Ventas. */
+/** Los que hoy lo usan. La 3.1b sacó `VentasConfig.tsx` (26-nov); la 3.6 saca el resto de Ventas. */
 const PERMITIDOS = [
   'src/modules/inventario/InvRecetas.tsx',          // sincroniza el costo desde Recetas (D-6 = A)
   'src/modules/ventas/MiRendimientoWrap.tsx',
-  'src/modules/ventas/VentasConfig.tsx',            // «Ajustes → Productos»: se retira en la 3.1b
   'src/modules/ventas/VentasModule.tsx',
   'src/modules/ventas/lineasPeriodo.ts',
-  'src/shared/api/ventas.ts',                       // el lector y los dos escritores
+  'src/shared/api/ventas.ts',                       // el lector y el escritor del costo (Recetas)
   'supabase/functions/monthly-report/index.ts',
 ]
 

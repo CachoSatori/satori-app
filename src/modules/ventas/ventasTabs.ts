@@ -30,7 +30,7 @@ export { puedeEditarCompetencias, ROLES_EDITAN_COMPETENCIAS } from '../../shared
 export type Tab =
   | 'envivo' | 'equipo' | 'salolineas' | 'icp'
   | 'cajeros' | 'mix' | 'menueng' | 'metas'
-  | 'competencias' | 'config' | 'resumen' | 'tiempos' | 'internas' | 'regalias'
+  | 'competencias' | 'config' | 'resumen' | 'tiempos' | 'internas' | 'regalias' | 'productos'
 
 export interface TabDef { id: Tab; label: string; roles: string[] }
 
@@ -48,11 +48,17 @@ export const TABS: TabDef[] = [
   { id: 'salolineas',   label: 'Por línea',         roles: ['owner','manager','contador'] },
   { id: 'icp',          label: 'ICP',               roles: ['owner','manager','contador'] },
   { id: 'cajeros',      label: 'Cajas y canales',   roles: ['owner','manager','contador'] },
+  // Ventas v2 · 3.2 (SPEC-ventas-v2 §5.2): «Productos» definitiva, sobre el catálogo por código (mig 198). Los tres
+  // roles ven el mix (§6); la ingeniería de menú adentro, solo owner y manager (`ROLES_INGENIERIA`). «Mix» e «Ing. Menú»
+  // viejos quedan como sub-vistas hasta la 3.6, que los retira.
+  { id: 'productos',    label: 'Productos',         roles: ['owner','manager','contador'] },
   { id: 'mix',          label: 'Mix',               roles: ['owner','manager','contador'] },
   { id: 'menueng',      label: 'Ing. Menú',         roles: ['owner','manager'] },
   { id: 'metas',        label: 'Metas',             roles: ['owner','manager','contador'] },
   { id: 'competencias', label: 'Competencias',      roles: ['owner','manager','contador'] },
-  { id: 'config',       label: 'Productos',         roles: ['owner','manager'] },
+  // Ventas v2 · 3.1b (SPEC-3.1-catalogo §1.3, D-5 = B): «Ajustes → Productos» pasa a ser «Catálogo», mismos roles. El
+  // contador no la ve (D-7). Su `?tab=config` y su `v=productos` de antes siguen abriéndola (`ALIAS_V`).
+  { id: 'config',       label: 'Catálogo',          roles: ['owner','manager'] },
   // Ventas v2 · fase 2.1 (SPEC-ventas-v2 §5.1).
   { id: 'resumen',      label: 'Resumen',           roles: ['owner','manager','contador'] },
   // Ventas v2 · fase 2.3 (SPEC-ventas-v2 §5.4).
@@ -76,7 +82,7 @@ export interface Entrada { id: EntradaId; label: string; vistas: Tab[] }
  */
 export const ENTRADAS: Entrada[] = [
   { id: 'resumen',   label: 'Resumen',   vistas: ['resumen'] },
-  { id: 'productos', label: 'Productos', vistas: ['mix', 'menueng'] },
+  { id: 'productos', label: 'Productos', vistas: ['productos', 'mix', 'menueng'] },
   { id: 'equipo',    label: 'Equipo',    vistas: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'] },
   { id: 'tiempos',   label: 'Tiempos',   vistas: ['tiempos'] },
   { id: 'regalias',  label: 'Regalías',  vistas: ['regalias'] },
@@ -91,13 +97,21 @@ export const ENTRADAS: Entrada[] = [
  */
 export const CLAVE_V: Record<Tab, string> = {
   resumen: 'resumen',
-  mix: 'mix', menueng: 'menu',
+  productos: 'productos', mix: 'mix', menueng: 'menu',
   equipo: 'equipo', salolineas: 'lineas', icp: 'icp', cajeros: 'cajas',
   competencias: 'competencias',
   tiempos: 'tiempos',
   regalias: 'regalias',
   envivo: 'envivo',
-  metas: 'metas', config: 'productos', internas: 'internas',
+  metas: 'metas', config: 'catalogo', internas: 'internas',
+}
+
+/**
+ * `v` viejos que siguen abriendo su vista (3.1b): «Ajustes → Productos» (`v=productos`) es hoy «Catálogo». La dirección
+ * se reemplaza por la nueva, respetando el rol.
+ */
+export const ALIAS_V: Readonly<Partial<Record<EntradaId, Readonly<Record<string, Tab>>>>> = {
+  ajustes: { productos: 'config' },
 }
 
 /** Las vistas retiradas en la 3.5 (su `?tab=` de antes y su `v` mientras convivieron). */
@@ -202,6 +216,8 @@ export function resolverDireccion(
     }
     const vista = entrada.vistas.find(x => CLAVE_V[x] === v)
     if (vista) return puedeVer(role, vista) ? { vista, corregir: null } : limpiar
+    const alias = ALIAS_V[entrada.id]?.[v]
+    if (alias) return puedeVer(role, alias) ? { vista: alias, corregir: direccionDe(alias) } : limpiar
     if (esRetirada(v) && RETIRADAS[v].desde.includes(entrada.id)) return retirada(v)
     return limpiar
   }
@@ -240,15 +256,17 @@ export function labelDe(tab: Tab): string {
  * 90 días del PoS. «Regalías» y «Equipo» (3.5.4) leen las líneas del período elegido en la barra
  * (`lineasPeriodo.ts`) y la 190; «Equipo» recibe solo `metas` (lo liviano que el shell baja siempre).
  * «Tiempos» (3.5.3) lee sus años por la 190 y recibe solo `hist` (2023, lo liviano que el shell baja siempre).
+ * «Catálogo» (3.1b) lee `pos_catalogo_productos` (mig 198) por su cuenta. «Productos» (3.2) lee `pos_ventas_productos`
+ * (mig 198) para el período y sus bases: no baja líneas.
  */
-export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas', 'resumen', 'tiempos', 'internas', 'regalias', 'equipo'])
+export const VISTAS_SIN_DIAS: ReadonlySet<Tab> = new Set<Tab>(['envivo', 'salolineas', 'resumen', 'tiempos', 'internas', 'regalias', 'equipo', 'config', 'productos'])
 
 /**
  * Vistas que pueden mirar más atrás de los 90 días (Mix → Comparar, rangos «Todo», competencias
- * viejas, catálogo completo): al abrirse piden la historia completa del PoS (`cargarDeFondo`).
+ * viejas): al abrirse piden la historia completa del PoS (`cargarDeFondo`).
  * Mientras llega, muestran lo mismo que antes: los 90 días + el Excel.
  */
 export const VISTAS_CON_FONDO: ReadonlySet<Tab> = new Set<Tab>([
   'mix', 'metas', 'menueng', 'icp',
-  'cajeros', 'competencias', 'config',
+  'cajeros', 'competencias',
 ])

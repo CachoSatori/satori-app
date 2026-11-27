@@ -49,26 +49,8 @@ export async function getProductMap(): Promise<Record<string, ProductInfo>> {
   return result
 }
 
-export async function saveProductMapItems(
-  items: Array<{ nombre: string } & ProductInfo>,
-): Promise<void> {
-  for (let i = 0; i < items.length; i += 100) {
-    const { error } = await supabase
-      .from('product_map')
-      .upsert(items.slice(i, i + 100).map(it => ({
-          nombre:           it.nombre,
-          tipo:             it.tipo,
-          clasificacion:    it.clasificacion,
-          subclasificacion: it.subclasificacion,
-          multiplicador:    it.multiplicador,
-          costo_unitario:   it.costo_unitario ?? 0,
-          updated_at:       new Date().toISOString(),
-        })),
-        { onConflict: 'nombre' },
-      )
-    if (error) throw new Error(error.message)
-  }
-}
+// `saveProductMapItems` (la escritura masiva de «Ajustes → Productos») se retiró con la 3.1b (SPEC-3.1-catalogo §7.3):
+// `product_map` queda congelado; lo único que todavía lo escribe es el costo desde Recetas (`updateProductInfo`, D-6 = A).
 
 export async function updateProductInfo(nombre: string, info: Partial<ProductInfo>): Promise<void> {
   // `tipoDeFamilia` es una marca de RUNTIME (quién puso el tipo: la familia del PoS o una

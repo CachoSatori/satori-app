@@ -48,10 +48,11 @@ const vista = (n: string) => ({
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
 vi.mock('./VentasEquipo',         () => vista('equipo'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
+vi.mock('./VentasProductos',      () => vista('productos'))
 vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
-vi.mock('./VentasConfig',         () => vista('config'))
+vi.mock('./VentasCatalogo',       () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
 vi.mock('./VentasICP',            () => vista('icp'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
@@ -141,7 +142,7 @@ describe('VentasModule · carga a pedido (A5)', () => {
     expect(fuente.cargarDeFondo).not.toHaveBeenCalled()
   })
 
-  it('de «Resumen» a «Tiempos» y a «Productos»: los 90 días y la historia se piden recién al entrar a «Mix», y una sola vez', async () => {
+  it('de «Resumen» a «Tiempos» y a «Productos»: los 90 días y la historia se piden recién al entrar a «Mix», y una sola vez (3.2: «Productos» definitiva no los pide)', async () => {
     abrir('/ventas?tab=resumen')
     expect(await texto()).toContain('resumen|')
     expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
@@ -149,6 +150,9 @@ describe('VentasModule · carga a pedido (A5)', () => {
     expect(await texto()).toContain('tiempos|')
     expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('tab', { name: 'Productos' }))
+    await waitFor(() => expect(screen.getByTestId('vista').textContent).toContain('productos|'))
+    expect(fuente.cargarDiasEager).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('tab', { name: 'Mix' }))
     await waitFor(() => expect(fuente.cargarDiasEager).toHaveBeenCalledTimes(1))
     resolverEager()
     await waitFor(() => expect(fuente.cargarDeFondo).toHaveBeenCalledTimes(1))

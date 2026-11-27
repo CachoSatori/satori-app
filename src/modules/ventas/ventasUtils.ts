@@ -123,8 +123,8 @@ export function allCajeros(dias: DiasMap, dates?: string[]): string[] {
 // ── El ProductMap: vocabulario y fusión curado × familia ───────────────────────────────────
 
 /**
- * Los `tipo` que la app entiende. Es el vocabulario del selector de Config
- * (`VentasConfig.tsx`), y el mismo que leen `VentasMix` (sus secciones), `aggGeneral`
+ * Los `tipo` que la app entiende. Era el vocabulario del selector de Config
+ * (`VentasConfig.tsx`, retirada en la 3.1b: ya nadie lo carga a mano), y el mismo que leen `VentasMix` (sus secciones), `aggGeneral`
  * (`cortesia`/`personal`) y `topProds`.
  *
  * `desconocido` está en la lista porque es el valor que la pantalla ofrece, pero significa

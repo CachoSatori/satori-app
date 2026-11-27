@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// R35 · Ventas → Metas, Clasificación (VentasConfig) y Competencias: un cuadro `type="number"` con texto ilegible («5-»,
+// R35 · Ventas → Metas y Competencias: un cuadro `type="number"` con texto ilegible («5-»,
 // «0-450», «--») da `value === ''` + `validity.badInput`; antes `Number('')` guardaba 0 (o 1 punto) sin aviso. Ahora aviso
 // que nombra el cuadro, botón apagado y la API de guardado no se llama. Los cuadros se escriben con `teclearNumero` (un
 // solo evento input, como el navegador; con el cuadro VACÍO + «-» React 19 no dispara onChange) o con userEvent sobre
@@ -13,15 +13,13 @@ import { imitarInputNumeroDeChrome, textoVisible } from '../tips/inputNumeroComo
 
 const H = vi.hoisted(() => ({
   saveMetas: vi.fn(async () => {}),
-  saveProductMapItems: vi.fn(async () => {}),
   saveComp: vi.fn(async () => {}),
 }))
 vi.mock('../../shared/api/ventas', () => ({
-  saveMetas: H.saveMetas, saveProductMapItems: H.saveProductMapItems, saveComp: H.saveComp, deleteComp: vi.fn(),
+  saveMetas: H.saveMetas, saveComp: H.saveComp, deleteComp: vi.fn(),
 }))
 
 import VentasMetas from './VentasMetas'
-import VentasConfig from './VentasConfig'
 import VentasCompetencias from './VentasCompetencias'
 import { getMeta } from './ventasUtils'
 
@@ -79,48 +77,8 @@ const DIAS = {
   '2026-11-10': { fileName: 'f', uploadedAt: 'x', saloneros: { 'Persona A': { prods: [['ROLLO FICTICIO', 1, 1000]] } } },
 } as unknown as DiasMap
 
-describe('Clasificación de productos · multiplicador y costo', () => {
-  const abrir = () => render(<VentasConfig dias={DIAS} pm={{}} onRefresh={() => {}} />)
-  const guardarFila = () => screen.getAllByRole('button', { name: /Guardar 1 cambio/ }) as HTMLButtonElement[]
-
-  it('multiplicador vacío + «5-» → aviso con el producto, guardar apagado, no guarda', async () => {
-    abrir()
-    teclearNumero(cuadro('Mult. × · ROLLO FICTICIO'), '')
-    teclearNumero(cuadro('Mult. × · ROLLO FICTICIO'), '5-')
-    expect(aviso()).toContain('«Mult. × · ROLLO FICTICIO»')
-    for (const b of guardarFila()) { expect(b.disabled).toBe(true); fireEvent.click(b) }
-    expect(H.saveProductMapItems).not.toHaveBeenCalled()
-  })
-
-  it.each([['1e3', 'va un número entero de 1 a 20'], ['2.5', 'va un número entero de 1 a 20'], ['0', 'de 1 a 20']])(
-    'multiplicador «%s» → aviso (tope y enteros)', async (texto, dice) => {
-      abrir()
-      teclearNumero(cuadro('Mult. × · ROLLO FICTICIO'), texto)
-      expect(aviso()).toContain(dice)
-      expect(guardarFila()[0].disabled).toBe(true)
-    })
-
-  it('costo ilegible o negativo → aviso; costo válido se guarda', async () => {
-    abrir()
-    teclearNumero(cuadro('Costo ₡ · ROLLO FICTICIO'), '0-450')
-    expect(aviso()).toContain('«Costo ₡ · ROLLO FICTICIO»: lo escrito no es un número')
-    teclearNumero(cuadro('Costo ₡ · ROLLO FICTICIO'), '-5')
-    expect(aviso()).toContain('«Costo ₡ · ROLLO FICTICIO»: va un número de 0 en adelante')
-    teclearNumero(cuadro('Costo ₡ · ROLLO FICTICIO'), '1250.5')
-    expect(aviso()).toBeNull()
-    fireEvent.click(guardarFila()[0])
-    await waitFor(() => expect(H.saveProductMapItems).toHaveBeenCalled())
-    expect((H.saveProductMapItems.mock.calls[0] as unknown as [Array<{ costo_unitario: number }>])[0][0].costo_unitario).toBe(1250.5)
-  })
-
-  it('edición masiva: multiplicador ilegible → aviso y «Aplicar» apagado', async () => {
-    abrir()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Elegir ROLLO FICTICIO' }))
-    teclearNumero(cuadro('Mult. × (edición masiva)'), '--')
-    expect(aviso()).toContain('«Mult. × (edición masiva)»')
-    expect(boton(/Aplicar a 1/).disabled).toBe(true)
-  })
-})
+// «Clasificación de productos» (VentasConfig) se retiró con la 3.1b: su «rinde» vive en «Catálogo»
+// (VentasCatalogo.render.test.tsx cubre el cuadro ilegible y el tope 1–20).
 
 describe('Competencias · puntos por producto', () => {
   const abrir = async () => {

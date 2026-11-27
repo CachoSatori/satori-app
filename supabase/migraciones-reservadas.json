@@ -677,6 +677,11 @@
       "nombre": "fe_emisor_recordar",
       "bloque": "operacion2",
       "rama": "feat/fe-recordar-emisor"
+    },
+    "204": {
+      "nombre": "pos_familia_nombre",
+      "bloque": "operacion2",
+      "rama": "feat/ventas-3.1b-catalogo"
     }
   }
 }

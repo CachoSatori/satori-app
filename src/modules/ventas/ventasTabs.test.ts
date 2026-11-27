@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import {
   puedeEditarCompetencias,
   TABS, ENTRADAS, CLAVE_V, tabPorDefecto, resolverDireccion, resolverVista, direccionDe, entradasVisibles,
-  entradaDe, veDetalleEquipo, type Tab,
+  entradaDe, veDetalleEquipo, labelDe, puedeVer, VISTAS_SIN_DIAS, VISTAS_CON_FONDO, type Tab,
 } from './ventasTabs'
 
 const ROLES = ['owner', 'manager', 'contador'] as const
@@ -73,7 +73,7 @@ const DIRECCION_NUEVA: Record<Tab, string> = {
   tiempos:      'tab=tiempos',
   envivo:       'tab=envivo',
   metas:        'tab=ajustes',
-  config:       'tab=ajustes&v=productos',
+  config:       'tab=ajustes&v=catalogo',   // 3.1b: «Productos» → «Catálogo»; `v=productos` sigue (ALIAS_V)
   internas:     'tab=ajustes&v=internas',
 }
 
@@ -115,7 +115,7 @@ describe('ventasTabs · menú de siete entradas (3.5.2; «Tiempos» sin sub-pest
       tiempos:   ['Tiempos'],
       regalias:  ['Regalías'],
       envivo:    ['En vivo'],
-      ajustes:   ['Metas', 'Productos', 'Mesas internas'],
+      ajustes:   ['Metas', 'Catálogo', 'Mesas internas'],
     })
   })
 })
@@ -276,5 +276,30 @@ describe('ventasTabs · redirecciones de los ?tab= viejos (criterio 3)', () => {
     expect(resolverVista('owner', new URLSearchParams('tab=analisis'))).toBe('tiempos')
     expect(resolverVista('owner', new URLSearchParams('tab=calendario'))).toBe('tiempos')
     expect(entradaDe(resolverVista('owner', new URLSearchParams('tab=calendario'))).id).toBe('tiempos')
+  })
+})
+
+describe('ventasTabs · 3.1b «Ajustes → Catálogo» (SPEC-3.1-catalogo §8.2)', () => {
+  it('se llama «Catálogo», la ven owner y manager y el contador no (D-7)', () => {
+    expect(labelDe('config')).toBe('Catálogo')
+    expect(puedeVer('owner', 'config')).toBe(true)
+    expect(puedeVer('manager', 'config')).toBe(true)
+    for (const r of ['contador', 'cajero', 'salonero', 'barra', 'cocina', '']) expect(puedeVer(r, 'config')).toBe(false)
+  })
+  it.each(['owner', 'manager'])('%s: el enlace guardado ?tab=ajustes&v=productos abre «Catálogo» y pasa a v=catalogo', r => {
+    expect(resolverDireccion(r, 'ajustes', 'productos')).toEqual({ vista: 'config', corregir: { tab: 'ajustes', v: 'catalogo' } })
+  })
+  it.each(['owner', 'manager'])('%s: ?tab=config abre «Catálogo» y pasa a la dirección nueva', r => {
+    expect(resolverDireccion(r, 'config', null)).toEqual({ vista: 'config', corregir: { tab: 'ajustes', v: 'catalogo' } })
+  })
+  it.each(['contador', 'salonero', 'cajero'])('%s: ninguna de las tres direcciones abre «Catálogo» (va a «Resumen» limpio)', r => {
+    for (const [t, v] of [['ajustes', 'productos'], ['ajustes', 'catalogo'], ['config', null]] as const) {
+      expect(resolverDireccion(r, t, v).vista).not.toBe('config')
+    }
+    expect(resolverDireccion(r, 'ajustes', 'productos')).toEqual({ vista: tabPorDefecto(r), corregir: { tab: null, v: null } })
+  })
+  it('«Catálogo» no espera los 90 días ni la historia del PoS: lee su propia función', () => {
+    expect(VISTAS_SIN_DIAS.has('config')).toBe(true)
+    expect(VISTAS_CON_FONDO.has('config')).toBe(false)
   })
 })

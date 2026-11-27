@@ -31,7 +31,7 @@ vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
 vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
-vi.mock('./VentasConfig',         () => vista('config'))
+vi.mock('./VentasCatalogo',       () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
 vi.mock('./VentasICP',            () => vista('icp'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
@@ -75,7 +75,7 @@ const REDIRECCION: Record<string, string> = {
   mix: '/ventas?tab=productos', menueng: '/ventas?tab=productos&v=menu',
   salolineas: '/ventas?tab=equipo&v=lineas', icp: '/ventas?tab=equipo&v=icp',
   cajeros: '/ventas?tab=equipo&v=cajas', competencias: '/ventas?tab=equipo&v=competencias',
-  metas: '/ventas?tab=ajustes', config: '/ventas?tab=ajustes&v=productos', internas: '/ventas?tab=ajustes&v=internas',
+  metas: '/ventas?tab=ajustes', config: '/ventas?tab=ajustes&v=catalogo', internas: '/ventas?tab=ajustes&v=internas',
 }
 
 beforeEach(() => { cleanup(); role = 'owner'; ultima.url = ''; ultima.tipo = '' })
@@ -313,7 +313,7 @@ describe('VentasModule · navegación', () => {
   })
 
   it('la vista que abre cada dirección nueva es la misma para el owner', async () => {
-    const casos: [string, Tab][] = [['tab=tiempos', 'tiempos'], ['tab=ajustes&v=productos', 'config'], ['tab=equipo&v=cajas', 'cajeros'], ['tab=regalias', 'regalias']]
+    const casos: [string, Tab][] = [['tab=tiempos', 'tiempos'], ['tab=ajustes&v=catalogo', 'config'], ['tab=equipo&v=cajas', 'cajeros'], ['tab=regalias', 'regalias']]
     for (const [q, vista] of casos) {
       cleanup()
       abrir(`/ventas?${q}`)

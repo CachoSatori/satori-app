@@ -27,6 +27,9 @@ vi.mock('../../../shared/api/posNdf', async orig => ({
   ...(await orig<typeof import('../../../shared/api/posNdf')>()),
   getPromPaxAgregado: vi.fn(async () => []),
   getSaloneroNombres: vi.fn(async () => ({})),
+  // 3.2b: el catálogo por código (bebidas por persona). Vacío acá: esta paridad mira lo de «Hoy»; la cifra nueva la
+  // prueban `SalonEnDetalle.bebidas.render.test.tsx` y `VentasResumen.352.render.test.tsx`.
+  getVentasProductos: vi.fn(async () => ({ productos: [], meses: [], catalogo: [], familias: [], sinLineas: { facturas: 0, cts: 0 }, netaCts: 0 })),
 }))
 
 import { datos, l, t } from '../resumenV2.fixture'
@@ -206,7 +209,10 @@ describe.each(PERIODOS)('paridad 3.5.2 · $nombre', ({ q, desde, hasta }) => {
     expect(copiado).toContain(`💰 Ventas: *${fi(tot.ventaNeta)}*`)
     expect(copiado).toContain(`👥 PAX: ${gen.pax}  •  Prom/PAX: *${fi(gen.promPax)}*`)
     if (tot.delivery > 0) expect(copiado).toContain(`🛵 Delivery: ${fi(tot.delivery)}`)
-    expect(copiado).toContain(`🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${(beb > 0 ? com / beb : 0).toFixed(1)}`)
+    // 3.2b y 3.2c: Beb/PAX y el ratio salen del catálogo (vacío en esta prueba: 0,00 y, sin bebida, «—»); los de «Hoy»
+    // quedan al lado de cada tarjeta como «antes» (arriba).
+    void com; void beb
+    expect(copiado).toContain('🍺 Beb/PAX: 0.00  •  Ratio C/B: —')
     for (const s of sal) expect(copiado).toContain(`${s.nombre}: ${fi(s.total)} · ${fi(s.promPax)}/PAX`)
     expect(copiado).toContain('_Satori · Local A, CR_')
   })

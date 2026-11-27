@@ -8,7 +8,7 @@
 **No cambia nada de hoy:** la Bandeja (`/inbox`), la Caja y sus reglas siguen igual; ningún archivo sagrado se toca.
 **Actualización del 27-nov-2026:** suma la entrega privada **G-012 v3** del Auditor (spec ideal compras → stock →
 costos → P&L), contrastada contra `main` = `995e462` (§1.1), y las decisiones del dueño del 27-nov (D-CSC-5 a 7, §2).
-Lo que el dueño no decidió está en §12.2 como **pendiente de decidir**. El piloto vive en Drive; sus rutas están en la
+Las decisiones P1–P5 del dueño (27-nov) están en §12.2. El piloto vive en Drive; sus rutas están en la
 entrega privada G-012 v3 y no en este repo (§16).
 
 Ejemplos: todos ficticios («Proveedor de prueba 1», «Producto A», montos inventados). El correo de proveedores, los
@@ -62,7 +62,7 @@ corregidas en la tabla (ajuste de conteo y P&L existente).
 | Recetas actuales | `InvRecetas.tsx`, `recipes` / `recipe_ingredients` | El costo del plato sale de `ingredients.cost_per_unit`, cargado a mano. |
 | Catálogo actual | `upsertIngredient` (`onConflict: 'name'`), `deleteIngredient`, `InvIngredientes.tsx`, `INGREDIENT_UNITS` | Alta por nombre, proveedor en texto libre, lista de unidades con `kg` y `g` a la vez, y un ingrediente **se puede borrar**. |
 | Movimientos actuales | `inventory_movements` (`src/shared/types/inventario.ts`) | Tipos `purchase`, `waste`, `count_adjustment`, `sale_deduction`, `transfer`. Sin local, lugar, origen ni destino. |
-| **P&L existente** | `src/modules/finanzas/FinanzasModule.tsx` (ruta `/finanzas`; owner, manager y contador) · `finance_accounts`, `finance_budget`, `finance_actuals` (mig 006) · `getLiveActuals` en `src/shared/api/finance.ts` | **Ya hay un Estado de Resultados** con plan de cuentas y presupuesto vs. real. El real en vivo sale de las ventas del PoS y de `cash_movements` por **fecha de registro** (base caja), con la mercadería en una sola cuenta. La entrega decía que no había P&L en el repo: no es así. Cómo convive con §15 está pendiente de decidir (§12.2). |
+| **P&L existente** | `src/modules/finanzas/FinanzasModule.tsx` (ruta `/finanzas`; owner, manager y contador) · `finance_accounts`, `finance_budget`, `finance_actuals` (mig 006) · `getLiveActuals` en `src/shared/api/finance.ts` | **Ya hay un Estado de Resultados** con plan de cuentas y presupuesto vs. real. El real en vivo sale de las ventas del PoS y de `cash_movements` por **fecha de registro** (base caja), con la mercadería en una sola cuenta. La entrega decía que no había P&L en el repo: no es así. Convive con §15 por mapeo: un solo plan de cuentas (decisión P1, §12.2). |
 
 ## 2. Decisiones que mandan (dueño, 25-nov-2026)
 
@@ -343,7 +343,7 @@ Procesar N veces la misma línea deja **un** movimiento. Cuando llega la FE de u
 movimiento de foto pasa a `reemplazado` y queda vigente el de la FE: nunca suman los dos. Una nota de crédito es un
 movimiento `nc` negativo, enlazado al de la factura. El stock sube cuando la línea queda **asociada a un producto**
 (§6.1), no antes. Mientras F3 no exista, la entrada a stock de `InvRevision` (§1.1) sigue como está; qué se hace con
-ella es la fase 0, pendiente de decidir (§12.2).
+ella es la fase 0: etiquetar «provisorio» (decisión P4, §12.2).
 
 ### 6.5 Relación con `supplier_item_map` e `ingredient_prices`
 
@@ -365,7 +365,7 @@ sugerencia inicial en la cola, no se aplica solo (apunta a `ingredients`, no al 
 |---|---|
 | **`inv_movimientos`** (ledger único) | `location_id` · `tipo` (compra / nc / consumo_teorico / merma / traspaso_salida / traspaso_entrada / produccion) · `producto_id` · `lugar_id` (opcional) · `cantidad` (±, unidad del producto) · `costo_unitario` · `impuesto_unitario` · `moneda` · `tipo_cambio` · `fecha` · `recibido_en` (B1) · `idem_key` **única** · `origen_ref` (línea de FE / documento / turno / traspaso) · `estado` (vigente / reemplazado / a_confirmar) · quién y cuándo. Sin `update` ni `delete` de cantidades. |
 | `inv_compras` | Deja de ser tabla: es la lectura de los movimientos `compra` y `nc` (vista, si hace falta el nombre). |
-| `pl_cuentas` | Plan de cuentas chico del P&L gerencial: nombre · tipo (costo de ventas / gasto operativo). **La lista exacta está pendiente de decidir** (§12.2). |
+| `pl_cuentas` | Plan de cuentas chico del P&L gerencial: nombre · tipo (costo de ventas / gasto operativo). Cada cuenta se mapea a una de `finance_accounts` (decisión P1, §12.2; el contador valida la lista). |
 | `inv_productos.cuenta_pl` | Cuenta del producto; obligatoria al crear un producto (§6.7). |
 | `fe_linea_cuenta` | Línea de FE **sin producto** (servicio o gasto) → cuenta; aprendida por la misma llave de §6.1. |
 | `inv_stock`, `food_cost_periodo`, `pl_mensual` (vistas) | Calculadas desde el ledger, los conteos y las FE; nada se guarda a mano (§15). |
@@ -722,7 +722,7 @@ conteo y Restaurant365 los maneja con estado enviado / recibido.
 **Dos conteos, dos usos.** El de los lunes es **operativo** (pedido, «se acaba antes»). El del día 1 es **contable**:
 cierra el período del P&L (§15) y su final es el inicial del mes siguiente.
 
-**Sello del día 1 — propuesta, pendiente de decidir (§12.2).**
+**Sello del día 1 — decidido (P3, §12.2): sella el contador; reenvío sin ajuste hasta el día 5.**
 - Revisado por el contador, el conteo del día 1 queda **sellado**. Un reenvío posterior de ese lugar y fecha no
   cambia el período: genera un **ajuste fechado y visible**, con quién y por qué.
 - Roza la regla 3 del piloto («vale el último»), que seguiría igual para los lunes y para el día 1 **antes** del sello.
@@ -840,7 +840,7 @@ alcanza con las FE asociadas y dos conteos del día 1. Es lo que ya hace a mano 
 
 | Orden | Fase | PRs previstos | Qué toca | Firma |
 |---|---|---|---|---|
-| 0 | **Fase 0** — *pendiente de decidir (§12.2)* | Etiquetar o congelar lo que hoy muestra un stock sin ancla: Stock, Consumo, el pedido del Dashboard y la suma de stock de la Revisión | Textos y visibilidad de pantallas de gerencia | no (si se decide: OK y guía SOP) |
+| 0 | **Fase 0** — *decidida (P4, §12.2): etiquetar «provisorio»* | Etiquetar o congelar lo que hoy muestra un stock sin ancla: Stock, Consumo, el pedido del Dashboard y la suma de stock de la Revisión | Textos y visibilidad de pantallas de gerencia | no (si se decide: OK y guía SOP) |
 | 1 | **F1.0** | Verificar condiciones de Google y contar el volumen real del buzón (solo lectura, a mano con el dueño) | Nada | no |
 | 2 | **F1** — en `main` (§1.1) | Parser puro + pruebas · migración (`fe_*`, bucket) · Edge `fe-ingesta` · script de Apps Script · pantalla de control. *Propuesto y sin construir:* la respuesta de Hacienda como estado visible y la marca del tiquete (§12.2) | Esquema, Edge y secreto en prod, Storage | 🖊️ **sí** |
 | 3 | **F2** | Función de cruce + pruebas · migración (`fe_cruces`, config, vista) · señal en pendientes y avisos | Esquema; **solo lectura** sobre `documents` y `cash_movements` | 🖊️ **sí** |
@@ -881,7 +881,7 @@ Guías SOP: cada PR con pantallas actualiza `docs/sop-app/` (guía nueva «Inven
     mermas y producción propia).
 13. **Bordes del conteo (G-014):** seis preguntas en §7.9 (corte, préstamos, lista corta, multi-local,
     elaboraciones, vencimiento del parcial).
-14. **G-012 v3:** lo pendiente de decidir está en §12.2.
+14. **G-012 v3:** las decisiones P1–P5 están en §12.2.
 
 ### 12.1 Respondidas por el dueño (25-nov-2026)
 - **4 · Avisos de F2:** los resuelven manager y contador, pero **al arrancar el aviso al manager va apagado** (interruptor por local); solo el contador los recibe hasta que el dueño lo encienda.
@@ -893,17 +893,17 @@ Guías SOP: cada PR con pantallas actualiza `docs/sop-app/` (guía nueva «Inven
 - **3 · Nosara:** **otro correo y otra cédula de receptor.** Cada factura se asigna al local por la cédula del receptor (tabla local ↔ cédula, configurable por el owner); un script por cuenta, misma Edge.
 - Siguen abiertas: 7, 10, 11 y 12.
 
-### 12.2 Pendiente de decidir (G-012 v3, 27-nov-2026)
+### 12.2 Decisiones P1–P5 (dueño, 27-nov-2026 ~13:40 CR)
 
-El dueño aceptó D-CSC-5, 6 y 7 (§2). Esto **no** está decidido y no se construye hasta que lo esté:
+El dueño aceptó D-CSC-5, 6 y 7 (§2) y decidió P1–P5:
 
-| # | Tema | Qué falta decidir | Quién | Antes de |
-|---|---|---|---|---|
-| P1 | **Lista exacta de `pl_cuentas`** | Qué cuentas y de qué tipo. Propuesta de la entrega: Alimentos y Bebidas (costo de ventas); Descartables, Limpieza, Mantenimiento y Servicios (gasto operativo). Y cómo convive con el plan de cuentas que **ya existe** (`finance_accounts`, `/finanzas`, §1.1): reusarlo, mapear uno al otro o dejar dos vistas separadas | Dueño + contador | F3-mín |
-| P2 | **Tiquete electrónico «no respalda gasto»** | La entrega lo toma de una fuente secundaria. Si el contador lo confirma, un comprobante `tiquete` queda marcado, se ve en el P&L y no bloquea nada. Sin confirmación no se marca | Contador | P&L-mín |
-| P3 | **Sello del conteo del día 1** | Si existe, quién sella, hasta cuándo se reenvía sin ajuste y qué pasa con un mes sin sello (§7.10) | Dueño + contador | F4b |
-| P4 | **Fase 0: etiquetar o congelar pantallas** | Si las pantallas actuales de Stock, Consumo, pedido del Dashboard y la suma de stock de la Revisión se etiquetan «provisorio», se ocultan o quedan como están hasta F3-mín y F4 | Dueño | cuando quiera; no frena nada |
-| P5 | Hoja «Compras» del piloto | Lo que se carga a mano ahí no tiene formato de importación en §7.6. ¿Se importa para el primer período o el P&L arranca solo con FE? | Dueño + contador | P&L-mín |
+| # | Tema | Decisión | Falta |
+|---|---|---|---|
+| P1 | Cuentas del P&L gerencial | **Un solo plan de cuentas:** cada cuenta del P&L nuevo se **mapea** a una de `finance_accounts` (`/finanzas`, §1.1); no hay dos planes paralelos. Base: Alimentos y Bebidas (costo de ventas); Descartables, Limpieza, Mantenimiento y Servicios (gasto operativo) | Que el contador valide la lista; el esquema lleva firma |
+| P2 | Tiquete electrónico «no respalda gasto» | **No se marca** hasta que el contador lo confirme por escrito | Respuesta del contador |
+| P3 | Sello del conteo del día 1 | **Sí:** sella el **contador** al revisar. Hasta el día 5 del mes se puede reenviar sin ajuste; después de sellado, solo con un ajuste fechado y visible. Un mes sin sello se muestra como P&L «provisorio» | — |
+| P4 | Pantallas viejas (Stock, Consumo, pedido del Dashboard, suma de stock de la Revisión) | **Etiquetar «provisorio, no usar para decidir»**, sin ocultarlas, hasta F3-mín y F4 (lo ve el personal: lleva validación física) | PR chico de texto |
+| P5 | Datos de arranque | **Empezar de cero:** nada de lo viejo de la app sobre stock, inventario o P&L se migra (`ingredients.current_stock`, `inventory_movements`, recetas con costo a mano): no se usó de forma consistente y la Bandeja de fotos sirvió para pagar proveedores, no para seguir productos. La hoja «Compras» del piloto no se importa. El P&L arranca con FE desde el primer mes completo. **Histórico 2026:** si es posible, se importa del sistema contable del contador (QuickBooks) como referencia de comparación, en una tabla aparte y de solo lectura, nunca mezclada con el P&L calculado | Formato de exportación del contador (P&L mensual 2026 por cuenta, CSV o Excel) y el mapeo de sus cuentas a `finance_accounts` |
 
 ## 13. Riesgos
 
@@ -923,7 +923,7 @@ El dueño aceptó D-CSC-5, 6 y 7 (§2). Esto **no** está decidido y no se const
 | Doble descuento: por pedido + manual + por turno (G-012 v3) | Un solo motor al cierre de turno; los otros dos se apagan cuando entre (D-CSC-7, §8) |
 | El P&L gerencial se lee como contabilidad oficial (G-012 v3) | Etiqueta «gerencial» en pantalla y en el CSV; nunca escribe asientos; la contabilidad oficial la lleva el contador (§15) |
 | Dos P&L con números distintos: `/finanzas` (base caja) y §15 (devengado) (27-nov) | Decidir cómo conviven antes de F3-mín (§12.2, P1); cada pantalla dice su base |
-| Sello del mes roto por un reenvío (G-012 v3) | Un día 1 sellado solo se corrige con un ajuste fechado y visible (§7.10; pendiente de decidir) |
+| Sello del mes roto por un reenvío (G-012 v3) | Un día 1 sellado solo se corrige con un ajuste fechado y visible (§7.10; decidido, P3) |
 
 ## 14. Qué queda afuera
 
@@ -979,8 +979,9 @@ costo de ventas del mes (cuenta) = inventario inicial + compras del mes − inve
 **Aceptación:** con dos conteos completos del día 1 y las compras del medio, el food cost real coincide con el cálculo
 a mano de la hoja «Contador» del piloto sobre el mismo set ficticio (prueba de paridad en staging).
 
-**Pendiente de decidir (§12.2):** la lista exacta de cuentas y su relación con `/finanzas` (P1) · la regla del tiquete
-(P2) · el sello del día 1 (P3) · la hoja «Compras» del piloto (P5).
+**Decidido (§12.2, 27-nov):** cuentas mapeadas a `/finanzas` (P1) · tiquete sin marcar hasta que confirme el contador
+(P2) · sello del día 1 por el contador (P3) · arranque de cero con FE; histórico 2026 desde el sistema del contador
+como referencia aparte, si se puede exportar (P5).
 
 ## 16. Anexo — Mapa del piloto (G-012 v3)
 

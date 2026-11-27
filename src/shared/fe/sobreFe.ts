@@ -78,9 +78,14 @@ export function codigoHttp(resultados: ResultadoIngesta[], fallaBase: boolean): 
   return resultados.includes('error') ? 422 : 200
 }
 
-/** Ruta del XML en el bucket privado `fe-xml`: AAAA/MM/<clave>.xml con año y mes DE LA CLAVE (no depende del local). */
-export function rutaXml(clave: string): string {
+/**
+ * Ruta del XML en el bucket privado `fe-xml`: AAAA/MM/<clave>/<sha256>.xml, con año y mes DE LA CLAVE (no depende del
+ * local). El sha va en la ruta (mig 201, hallazgo 258): dos XML distintos con la misma clave nunca comparten archivo, y
+ * «ese objeto ya existe» quiere decir «ese MISMO XML ya está guardado». La 201 rechaza una ruta que no termina así.
+ */
+export function rutaXml(clave: string, sha256: string): string {
+  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error('rutaXml: sha256 inválido')
   const mm = clave.slice(5, 7)
   const aa = clave.slice(7, 9)
-  return `20${aa}/${mm}/${clave}.xml`
+  return `20${aa}/${mm}/${clave}/${sha256}.xml`
 }

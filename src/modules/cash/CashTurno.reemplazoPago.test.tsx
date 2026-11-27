@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import type { CashSession, Supplier, CashMovement } from '../../shared/types/database'
 import { fi } from './cashUtils'
-import { claveReemplazos, mensajeNoTerminable, MSG_CIERRE_CON_REEMPLAZO, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO } from './reemplazoPago'
+import { claveReemplazos, mensajeNoTerminable, MSG_CIERRE_CON_REEMPLAZO, MSG_ID_DE_OTRO_LOCAL, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO } from './reemplazoPago'
 
 // Hallazgo 252: editar un pago YA guardado borraba el viejo y DESPUÉS creaba el nuevo; si el alta fallaba, el pago
 // quedaba solo en memoria y al recargar desaparecía (Caja Proveedores corrida). Ahora: crear primero (id fijo,
@@ -420,6 +420,40 @@ describe('CashTurno · cambio de pago atómico en la base (mig 200)', () => {
     expect(h.rpcSpy).toHaveBeenCalledTimes(2)
     expect(h.rpcSpy.mock.calls[1][1].id).toBe(h.rpcSpy.mock.calls[0][1].id)
     expect(h.db.map(r => r.amount_crc)).toEqual([20000])
+  })
+
+  it('Mn2 #373: el id choca con un pago de otro local (42501) → aviso claro, nada cambia y el reintento va con OTRO id y entra una sola vez', async () => {
+    const ocupado = 'Ese id ya lo usa un movimiento de otro local. Recargá la lista.'
+    let idAjeno = ''
+    // La base de la 202: con un id de otro local frena sin tocar nada; con cualquier otro, cambia el pago en UN paso.
+    h.rpcSpy.mockImplementation(async (viejo: string, nuevo: Record<string, unknown> & { id: string }) => {
+      if (!idAjeno) idAjeno = nuevo.id
+      if (nuevo.id === idAjeno) throw errRpc(ocupado, '42501', false)
+      return rpcOk(viejo, nuevo)
+    })
+    const { onError } = montar()
+    await editarA('20000')
+    expect(onError).toHaveBeenCalledWith(MSG_ID_DE_OTRO_LOCAL)
+    expect(h.db.map(r => r.id)).toEqual(['mov-viejo'])                 // el viejo sigue, nada nuevo
+    expect(tarjeta('Gastado efectivo')).toBe(fi(15000))
+    expect(screen.getByRole('button', { name: '✓ Guardar cambios' })).toBeTruthy()   // modal abierto con lo tecleado
+    expect(h.createCashMovementSpy).not.toHaveBeenCalled()
+    await guardar()
+    expect(h.rpcSpy).toHaveBeenCalledTimes(2)
+    expect(h.rpcSpy.mock.calls[1][1].id).not.toBe(idAjeno)
+    expect(h.db.map(r => r.amount_crc)).toEqual([20000])               // entró una vez y el viejo se fue
+    expect(tarjeta('Gastado efectivo')).toBe(fi(20000))
+    expect(screen.queryByText('Cambio de pago sin terminar.')).toBeNull()
+    expect(h.createCashMovementSpy).not.toHaveBeenCalled()
+    expect(h.deleteCashMovementSpy).not.toHaveBeenCalled()
+  })
+
+  it('otro 42501 (permiso) NO cambia el id: el reintento va con el MISMO', async () => {
+    h.rpcSpy.mockImplementationOnce(async () => { throw errRpc('No autorizado para cambiar pagos de ese local', '42501', false) })
+    montar()
+    await editarA('20000')
+    await guardar()
+    expect(h.rpcSpy.mock.calls[1][1].id).toBe(h.rpcSpy.mock.calls[0][1].id)
   })
 
   it('«distinto» (un intento anterior quedó con otro monto): no se borra el viejo, se cuenta una vez y avisa el monto', async () => {

@@ -677,6 +677,11 @@
       "nombre": "fe_emisor_recordar",
       "bloque": "operacion2",
       "rama": "feat/fe-recordar-emisor"
+    },
+    "205": {
+      "nombre": "pos_catalogo_fallas",
+      "bloque": "operacion2",
+      "rama": "fix/catalogo-256-alerta"
     }
   }
 }

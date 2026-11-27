@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // Fase 0 (decisión P4 del dueño, 27-nov; spec compras/stock/costos §11 y §12.2): las pantallas que muestran un stock
 // sin base real llevan la etiqueta «Provisorio · no usar para decidir» y la línea de debajo, sin ocultar nada.
-// Render real de cada pantalla (Stock con su pedido sugerido, Consumo y el detalle de la Revisión). Datos ficticios.
+// Render real de cada pantalla (Stock con su pedido sugerido, Consumo, el detalle de la Revisión, Ingredientes y el paso
+// «Inventario» de la Bandeja; el Inicio, en HomePage.render.test.tsx). Datos ficticios.
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -37,18 +38,25 @@ vi.mock('../../shared/api/cash', () => ({ getSuppliers: vi.fn(async () => []), u
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u-1', full_name: 'Usuario Ficticio', role: 'manager' } }) }))
 vi.mock('../../shared/api/inventoryIngest', async orig => {
   const real = await orig<typeof import('../../shared/api/inventoryIngest')>()
-  return { ...real, getSupplierItemMap: vi.fn(async () => []), learnSupplierMappings: vi.fn(async () => {}) }
+  return { ...real, getSupplierItemMap: vi.fn(async () => []), learnSupplierMappings: vi.fn(async () => {}),
+    getIngredientPrices: vi.fn(async () => []), findOrCreateSupplier: vi.fn(async () => 'sup-1'),
+    commitInventoryForDocument: vi.fn(async () => ({})) }
 })
 vi.mock('../../shared/api/inventario', () => ({
   getRecipes: vi.fn(async () => []), getAllRecipeIngredients: vi.fn(async () => []),
   countDeductionsForRef: vi.fn(async () => 0), addMovement: vi.fn(async () => {}),
+  upsertIngredient: vi.fn(async () => {}), deleteIngredient: vi.fn(async () => {}),
 }))
 vi.mock('../ventas/ventasFuente', () => ({ ventasDelRango: vi.fn(async () => []) }))
 
 import InvDashboard from './InvDashboard'
 import InvConsumo from './InvConsumo'
 import InvRevision from './InvRevision'
-import { PROVISORIO_TITULO, PROVISORIO_DETALLE } from './AvisoProvisorio'
+import InvIngredientes from './InvIngredientes'
+import InventoryStep from '../inbox/InventoryStep'
+import type { DocumentRow } from '../../shared/api/documents'
+import type { Supplier } from '../../shared/types/database'
+import { PROVISORIO_TITULO, PROVISORIO_DETALLE } from '../../shared/AvisoProvisorio'
 
 const ING = [{
   id: 'i1', name: 'Producto A', unit: 'kg', current_stock: 1, min_stock: 2, cost_per_unit: 100, supplier: 'Proveedor de prueba 1',
@@ -100,5 +108,27 @@ describe('Fase 0 · etiqueta «provisorio» en las pantallas de stock sin base (
     const notas = etiquetas()
     expect(notas).toHaveLength(1)
     expect(texto.nextElementSibling).toBe(notas[0])
+  })
+
+  it('🧂 Ingredientes: etiqueta antes de la tabla con «Stock actual»; la tabla sigue igual', () => {
+    render(<InvIngredientes ingredients={ING} onRefresh={vi.fn()} profile={{ id: 'u-1', role: 'manager' } as unknown as Profile} />)
+    const notas = etiquetas()
+    expect(notas).toHaveLength(1)
+    const tabla = screen.getByRole('table')
+    expect(notas[0].nextElementSibling?.contains(tabla)).toBe(true)
+    expect(within(tabla).getByText('Stock actual')).toBeTruthy()
+  })
+
+  it('📥 Bandeja → paso «Inventario»: etiqueta debajo de «El stock entra al confirmar…»; botón intacto', async () => {
+    const doc = { id: 'doc-1', linked_movement_id: 'mov-1',
+      raw_json: { tipo: 'factura', proveedor: 'Proveedor de prueba 1', clave_fe: null, fecha: '2026-11-20',
+        items: [{ descripcion: 'Producto A', cantidad: 1, unidad: 'K', precio_unitario: 100, total: 100 }] } } as unknown as DocumentRow
+    const sup = [{ id: 'sup-1', name: 'Proveedor de prueba 1', aliases: [] }] as unknown as Supplier[]
+    render(<InventoryStep doc={doc} ingredients={ING} suppliers={sup} createdBy="u-1" onClose={vi.fn()} onDone={vi.fn()} />)
+    const texto = await screen.findByText(/El stock entra al confirmar/)
+    const notas = etiquetas()
+    expect(notas).toHaveLength(1)
+    expect(texto.nextElementSibling).toBe(notas[0])
+    expect(await screen.findByRole('button', { name: /Ingresar a inventario/ })).toBeTruthy()
   })
 })

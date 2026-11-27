@@ -13,7 +13,7 @@ import {
 } from '../../shared/api/inventario'
 import { ventasDelRango } from '../ventas/ventasFuente'
 import { todayCR } from '../../shared/utils'
-import AvisoProvisorio from './AvisoProvisorio'
+import AvisoProvisorio from '../../shared/AvisoProvisorio'
 import { computeDepletion, unitsFromDiaData, type DepletionResult } from './depletion'
 
 interface Props {

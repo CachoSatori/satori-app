@@ -30,7 +30,7 @@ import { errorDeLineas } from '../../shared/invLineasIlegibles'
 import type { Ingredient } from '../../shared/types/inventario'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import type { Database } from '../../shared/types/supabase.gen'
-import AvisoProvisorio from './AvisoProvisorio'
+import AvisoProvisorio from '../../shared/AvisoProvisorio'
 
 type InvReviewTask = Database['public']['Tables']['inventory_review_task']['Row']
 

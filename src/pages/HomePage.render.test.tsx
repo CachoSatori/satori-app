@@ -168,6 +168,35 @@ describe('Inicio (B4)', () => {
 })
 
 // B5: cada falla de lectura se ve en pantalla; nunca «Todo en orden» ni el Daruma.
+describe('Inicio · etiqueta «provisorio» en los pendientes de stock (P4, 27-nov)', () => {
+  const nota = () => screen.queryByRole('note', { name: 'Provisorio · no usar para decidir' })
+
+  it('con «sin stock» y «stock bajo» en «Para hacer hoy»: una etiqueta debajo de la lista, los pendientes siguen', async () => {
+    tablas.ingredients = { data: [{ current_stock: 0, min_stock: 1 }, { current_stock: 1, min_stock: 2 }] }
+    montar()
+    await waitFor(() => expect(screen.getByText('1 sin stock')).toBeTruthy())
+    expect(screen.getByText('1 stock bajo')).toBeTruthy()
+    const n = nota()
+    expect(n).toBeTruthy()
+    expect(within(n!).getByText('Los números de stock se rehacen desde cero con las facturas electrónicas y los conteos.')).toBeTruthy()
+    expect(screen.getByRole('list').nextElementSibling).toBe(n)
+  })
+
+  it('solo «stock bajo» también la lleva', async () => {
+    tablas.ingredients = { data: [{ current_stock: 1, min_stock: 2 }] }
+    montar()
+    await waitFor(() => expect(screen.getByText('1 stock bajo')).toBeTruthy())
+    expect(nota()).toBeTruthy()
+  })
+
+  it('sin pendientes de stock (otros sí): no hay etiqueta', async () => {
+    tablas.cash_movements = { data: [], count: 3 }
+    montar()
+    await waitFor(() => expect(screen.getByText('3 por revisar')).toBeTruthy())
+    expect(nota()).toBeNull()
+  })
+})
+
 describe('Inicio (B5) · si una lectura falla', () => {
   const FRASE = 'No se pudo comprobar todo — revisá Caja.'
   const sinOrden = () => {

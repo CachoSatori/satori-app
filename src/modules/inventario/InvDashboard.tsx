@@ -4,7 +4,7 @@
 import { useState, useMemo } from 'react'
 import type { Ingredient, InventoryMovement } from '../../shared/types/inventario'
 import { fi } from '../../shared/utils'
-import AvisoProvisorio from './AvisoProvisorio'
+import AvisoProvisorio from '../../shared/AvisoProvisorio'
 
 interface Props {
   ingredients: Ingredient[]

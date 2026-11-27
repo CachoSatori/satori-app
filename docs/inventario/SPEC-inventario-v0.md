@@ -143,3 +143,16 @@ la G-012. La entrega se contrasta contra este documento y el repo antes de usars
 producción propia, variación en ₡, vencimiento del parcial, frecuencia y multi-local). Son propuestas con opciones y
 recomendación; **no cambian D-INV-1 a D-INV-5** ni las reglas del piloto de §2 hasta que el dueño decida. Tocan las
 preguntas 2 y 6 de §8 (B10 y B7) y la lectura de D-INV-5 (B11).
+
+**Entrega G-012 v3 (27-nov-2026), incorporada** en [SPEC-compras-stock-costos](SPEC-compras-stock-costos.md), con las
+decisiones del dueño de ese día (D-CSC-5 a 7):
+- **Dónde está el piloto:** en Drive; las rutas están en la entrega privada G-012 v3, no en este repo. El cruce
+  «pestaña de la planilla → pantalla o tabla de la app», los lugares por área y lo que no se porta del script están
+  en el anexo §16 de esa spec.
+- **Modelo de §4:** la fila «compras» pasa a ser movimientos de un **ledger único** (`inv_movimientos`, solo inserta);
+  el stock y el consumo son vistas (§6.6 de esa spec). Cierra la alternativa (b) de §6 de este documento.
+- **Regla 7 (consumo del mes)** es la base del **P&L gerencial de mercadería** (§15 de esa spec), que va antes que
+  las recetas. Las fases de §7 de este documento quedan reemplazadas por la tabla de §11 de esa spec.
+- **Pregunta 6 de §8 (mermas):** «Merma» pasa a ser un botón del empleado (§7.10 de esa spec).
+- Sin decidir todavía: lista de cuentas del P&L, regla del tiquete electrónico, sello del conteo del día 1 y qué
+  hacer con las pantallas actuales de stock (§12.2 de esa spec).

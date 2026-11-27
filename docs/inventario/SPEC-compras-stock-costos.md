@@ -905,6 +905,15 @@ El dueño aceptó D-CSC-5, 6 y 7 (§2) y decidió P1–P5:
 | P4 | Pantallas viejas (Stock, Consumo, pedido del Dashboard, suma de stock de la Revisión) | **Etiquetar «provisorio, no usar para decidir»**, sin ocultarlas, hasta F3-mín y F4 (lo ve el personal: lleva validación física) | PR chico de texto |
 | P5 | Datos de arranque | **Empezar de cero:** nada de lo viejo de la app sobre stock, inventario o P&L se migra (`ingredients.current_stock`, `inventory_movements`, recetas con costo a mano): no se usó de forma consistente y la Bandeja de fotos sirvió para pagar proveedores, no para seguir productos. La hoja «Compras» del piloto no se importa. El P&L arranca con FE desde el primer mes completo. **Histórico 2026:** si es posible, se importa del sistema contable del contador (QuickBooks) como referencia de comparación, en una tabla aparte y de solo lectura, nunca mezclada con el P&L calculado | Formato de exportación del contador (P&L mensual 2026 por cuenta, CSV o Excel) y el mapeo de sus cuentas a `finance_accounts` |
 
+### 12.3 Respuestas del contador (27-nov-2026 ~14:00 CR)
+
+| # | Respuesta | Qué cambia |
+|---|---|---|
+| P1 | De acuerdo con un solo plan; manda su **catálogo de cuentas** (el de su sistema contable) | Ese catálogo se carga en `/finanzas` como plan único; presupuesto, P&L gerencial y la importación del histórico usan las mismas cuentas. Hasta que llegue, no se construye `pl_cuentas` |
+| P2 | Lo que respalda el gasto a efectos fiscales es la **factura**; no ve diferencia práctica entre tiquete y factura electrónica salvo el tiquete físico | **No se marca nada** por tipo de comprobante. La pantalla muestra el tipo (FE / TE / NC / ND) solo como dato. Si más adelante el contador pide otra regla, se agrega |
+| P5 | Sí exporta el 2026, pero **antes hay que explicarle cómo impactan** regalías, consumos de dueños, inventarios, etc., o no va a conciliar. Ofrece preparar ese texto | La importación del histórico espera ese texto; la conciliación app ↔ sistema contable lista esas partidas como «diferencias explicadas», nunca las esconde |
+| Nuevo | **Facturas que no son de este local/empresa:** de un local registradas en el otro (Santa Teresa ↔ Nosara), de otras sociedades y personales | Hay que **purgarlas antes** (también en el histórico). Requisito para F2/F3: en la cola de facturas, cada comprobante se puede reclasificar como «otro local» (lo mueve de local), «otra empresa» o «personal» (sale del P&L, nunca se borra; queda con quién y cuándo). Regla automática candidata: emisor recordado como «personal/otra empresa» → entra así directo, con aviso |
+
 ## 13. Riesgos
 
 | Riesgo | Mitigación |

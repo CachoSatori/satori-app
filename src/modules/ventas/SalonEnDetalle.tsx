@@ -51,6 +51,10 @@ export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, me
   const clave = `${local}|${periodo.desde}|${periodo.hasta}`
   const [lineas, setLineas] = useState<{ clave: string; l: LineasPeriodo } | null>(null)
   const [fallo, setFallo] = useState<{ clave: string; msg: string } | null>(null)
+  // «Reintentar» (verificador #381): cerrar y abrir el desplegable no vuelve a leer (`abrio` queda en true); cada intento
+  // nuevo vuelve a pedir las líneas y el catálogo.
+  const [intento, setIntento] = useState(0)
+  const reintentar = () => { setFallo(null); setBeb(null); setIntento(i => i + 1) }
   useEffect(() => {
     if (!abrio) return
     let vivo = true
@@ -58,7 +62,7 @@ export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, me
       .then(l => { if (vivo) setLineas({ clave, l }) })
       .catch(e => { if (vivo) setFallo({ clave, msg: e instanceof Error ? e.message : 'No se pudo leer el PoS' }) })
     return () => { vivo = false }
-  }, [abrio, clave, local, periodo])
+  }, [abrio, clave, local, periodo, intento])
 
   const [beb, setBeb] = useState<{ clave: string; e: EstadoBebidas } | null>(null)
   const totalPersonas = personas?.total ?? null
@@ -70,7 +74,7 @@ export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, me
       .then(rpc => { if (vivo) setBeb({ clave, e: { estado: 'listo', b: bebidasPorPersona(rpc, totalPersonas), pctEstimado } }) })
       .catch(() => { if (vivo) setBeb({ clave, e: { estado: 'error' } }) })
     return () => { vivo = false }
-  }, [abrio, clave, local, periodo, totalPersonas, pctEstimado])
+  }, [abrio, clave, local, periodo, totalPersonas, pctEstimado, intento])
 
   const l = lineas && lineas.clave === clave ? lineas.l : null
   const error = fallo && fallo.clave === clave ? fallo.msg : null
@@ -79,15 +83,21 @@ export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, me
     <details className="vt2-detalle" data-bloque="salon-detalle" open={abrio}
       onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open) setAbrio(true) }}>
       <summary>Salón en detalle (platos, bebidas y lo más vendido)</summary>
-      {abrio && error && <div className="tips-error" role="alert"><span>No se pudo leer el PoS: {error}</span></div>}
+      {abrio && error && (
+        <div className="tips-error" role="alert">
+          <span>No se pudo leer el PoS: {error}</span>
+          <button type="button" className="vt-period-btn" style={{ minHeight: 44 }} onClick={reintentar}>Reintentar</button>
+        </div>
+      )}
       {abrio && !l && !error && <div className="vt2-cargando" role="status">Leyendo las líneas del PoS…</div>}
-      {l && <Contenido l={l} periodo={periodo} rotulo={rotulo} nombreLocal={nombreLocal} metas={metas} bebidas={bebidas} />}
+      {l && <Contenido l={l} periodo={periodo} rotulo={rotulo} nombreLocal={nombreLocal} metas={metas} bebidas={bebidas} onReintentar={reintentar} />}
     </details>
   )
 }
 
-function Contenido({ l, periodo, rotulo, nombreLocal, metas, bebidas }: {
+function Contenido({ l, periodo, rotulo, nombreLocal, metas, bebidas, onReintentar }: {
   l: LineasPeriodo; periodo: Rango; rotulo: string; nombreLocal: string; metas?: Meta; bebidas: EstadoBebidas | null
+  onReintentar: () => void
 }) {
   const { dias, pm } = l
   const d = useMemo(() => salonEnDetalle(dias, pm, fechasDe(dias, periodo)), [dias, pm, periodo])
@@ -103,7 +113,10 @@ function Contenido({ l, periodo, rotulo, nombreLocal, metas, bebidas }: {
     <div data-bloque="salon-detalle-contenido">
       <div className="vt-table-actions">
         {d.totales.ventaNeta > 0 && (
+          // Mientras lee el catálogo o si falló, el 📤 espera: no manda la cifra de antes con el rótulo nuevo.
           <button type="button" className="vt-period-btn" aria-label="Compartir el resumen"
+            disabled={bebidas !== null && bebidas.estado !== 'listo'}
+            title={bebidas !== null && bebidas.estado !== 'listo' ? 'Se puede compartir cuando termine de leer el catálogo del PoS' : undefined}
             onClick={() => compartir(textoCompartir(d, rotulo, nombreLocal, bebidas?.estado === 'listo' ? bebidas.b.valor : null), setCopiado)}>
             {copiado ? '✓ Copiado' : '📤 Compartir'}
           </button>
@@ -131,7 +144,8 @@ function Contenido({ l, periodo, rotulo, nombreLocal, metas, bebidas }: {
             <div className="vt-kpi-sub" data-testid="beb-pax-sub">
               {bebidas.estado === 'listo'
                 ? <>{bebidas.b.vendidas.toLocaleString('es-CR')} vendidas en salón{bebidas.pctEstimado > 0 ? ` · personas: incluye ${bebidas.pctEstimado.toFixed(1).replace('.', ',')} % estimado` : ''}{bebidas.b.incluidas > 0 ? ` · + ${bebidas.b.incluidas.toLocaleString('es-CR')} incluidas en menú` : ''}</>
-                : bebidas.estado === 'leyendo' ? 'leyendo el catálogo del PoS…' : 'no se pudo leer el catálogo del PoS'}
+                : bebidas.estado === 'leyendo' ? 'leyendo el catálogo del PoS…' : <>no se pudo leer el catálogo del PoS{' '}
+                  <button type="button" className="vt-period-btn" style={{ minHeight: 44 }} onClick={onReintentar}>Reintentar</button></>}
               <span className="vt2-sub" data-testid="beb-pax-antes">antes: {d.gen.bebPax.toFixed(2).replace('.', ',')} (familia 5 de los meseros ÷ su PAX)</span>
             </div>
           </div>

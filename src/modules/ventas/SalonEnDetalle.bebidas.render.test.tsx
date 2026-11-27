@@ -22,6 +22,7 @@ vi.mock('./lineasPeriodo', async orig => ({
 }))
 
 import SalonEnDetalle from './SalonEnDetalle'
+import { cargarLineasPeriodo } from './lineasPeriodo'
 
 const RPC = parsearVentasProductos({
   productos: [
@@ -82,9 +83,31 @@ describe('«Salón en detalle» · bebidas por persona (3.2b)', () => {
     expect(document.querySelector('[data-salon="promPlato"]')).toBeTruthy()
   })
 
-  it('mientras lee dice «…»', async () => {
+  it('mientras lee dice «…» y el 📤 espera (no manda la cifra de antes con el rótulo nuevo)', async () => {
     api.getVentasProductos.mockImplementation(() => new Promise(() => {}))
     abrir({ total: 40, pctEstimado: 0 })
     await waitFor(() => expect(screen.getByTestId('beb-pax-valor').textContent).toBe('…'))
+    expect((screen.getByRole('button', { name: 'Compartir el resumen' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('error del catálogo: el 📤 queda deshabilitado y «Reintentar» vuelve a leer', async () => {
+    api.getVentasProductos.mockRejectedValueOnce(new Error('caída'))
+    abrir({ total: 40, pctEstimado: 0 })
+    await waitFor(() => expect(screen.getByTestId('beb-pax-sub').textContent).toContain('no se pudo leer el catálogo del PoS'))
+    expect((screen.getByRole('button', { name: 'Compartir el resumen' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    await waitFor(() => expect(screen.getByTestId('beb-pax-valor').textContent).toBe('1,50'))
+    expect(api.getVentasProductos).toHaveBeenCalledTimes(2)
+    expect((screen.getByRole('button', { name: 'Compartir el resumen' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('error de las líneas: «Reintentar» vuelve a leerlas', async () => {
+    vi.mocked(cargarLineasPeriodo).mockRejectedValueOnce(new Error('sin red'))
+    abrir({ total: 40, pctEstimado: 0 })
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain('sin red')
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    await waitFor(() => expect(screen.getByTestId('beb-pax-valor').textContent).toBe('1,50'))
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

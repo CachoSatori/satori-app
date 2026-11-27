@@ -17,6 +17,9 @@ from __future__ import annotations
 import re, subprocess, sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sql_compacto import compactar  # noqa: E402  (respeta los cuerpos $$…$$: la huella md5 no cambia)
+
 RAIZ = Path(__file__).resolve().parents[2]
 MIG = RAIZ / 'supabase/migrations/198_pos_catalogo_productos.sql'
 ROLLBACK = RAIZ / 'scripts/sql/198_rollback.sql'
@@ -146,7 +149,7 @@ def main() -> None:
     if '--armar' in args:
         sql = armar(mutar if mutar != 'todas' else None, medir, local)
         if '--compacto' in args:
-            sql = '\n'.join(l.strip() for l in sql.splitlines() if l.strip() and not l.strip().startswith('--'))
+            sql = compactar(sql)
             # los rótulos de los casos quedan en su número (el texto está en el .sql): entra en el tope del conector
             sql = re.sub(r"^select '(\d\d) [^']*',", r"select '\1',", sql, flags=re.M)
             sql = re.sub(r"format\('%s [^']*'", "format('%s'", sql)

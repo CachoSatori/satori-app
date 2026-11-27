@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { CashMovement } from '../../shared/types/database'
 import {
+  esIdDeOtroLocal,
   reemplazarPago, aplicarReemplazos, reemplazosAbiertos, podarReemplazos, leerReemplazos, guardarReemplazos,
   esDuplicado, claveReemplazos, coincidePago, leerTodosLosReemplazos, anotarEnAparato, enCambioAbierto,
   revisarCambioEnBase, reemplazosDelDia, soltarReemplazo, type ReemplazoPendiente, type DatosPago,
@@ -296,5 +297,20 @@ describe('reemplazarPago — atómico en la base (mig 200)', () => {
     const r3 = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async () => { throw new Error('raro') } })
     expect(r3.estado).toBe('sin_cambios')
     expect(crear).not.toHaveBeenCalled()
+  })
+
+  it('Mn2 #373: 42501 «id de otro local» marca idOcupado; otro 42501 (permiso) no', async () => {
+    const crear = nunca(), borrarViejo = nunca()
+    const msg = 'Ese id ya lo usa un movimiento de otro local. Recargá la lista.'
+    const r1 = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async () => { throw err('42501', false, msg) } })
+    expect(r1).toEqual({ estado: 'sin_cambios', error: msg, idOcupado: true })
+    const r2 = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async () => { throw err('42501', false, 'No autorizado para cambiar pagos de ese local') } })
+    expect(r2).toEqual({ estado: 'sin_cambios', error: 'No autorizado para cambiar pagos de ese local' })
+    // El mismo texto con otro código no cuenta (solo el 42501 de la 202).
+    const r3 = await reemplazarPago('viejo', 'n', { ...sinRelectura, crear, borrarViejo, atomico: async () => { throw err('P0001', false, msg) } })
+    expect(r3).toEqual({ estado: 'sin_cambios', error: msg })
+    expect(esIdDeOtroLocal(err('42501', false, msg))).toBe(true)
+    expect(esIdDeOtroLocal(new Error(msg))).toBe(false)
+    expect(crear).not.toHaveBeenCalled(); expect(borrarViejo).not.toHaveBeenCalled()
   })
 })

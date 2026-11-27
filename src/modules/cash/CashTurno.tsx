@@ -30,7 +30,7 @@ import { leerMonto, validarMovimiento, valorDelCuadro, MSG_MONTO_NEGATIVO } from
 import { errorDeCuadros, marcaIlegible } from './cuadrosMonto'
 import {
   reemplazarPago, aplicarReemplazos, reemplazosAbiertos, anotarEnAparato, leerReemplazos, guardarReemplazos,
-  coincidePago, enCambioAbierto, revisarCambioEnBase, mensajeNoTerminable, MSG_PAGO_EN_CAMBIO, NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente, type DatosPago,
+  coincidePago, enCambioAbierto, revisarCambioEnBase, mensajeNoTerminable, MSG_PAGO_EN_CAMBIO, MSG_ID_DE_OTRO_LOCAL, NOTA_REEMPLAZO, MSG_CIERRE_CON_REEMPLAZO, type ReemplazoPendiente, type DatosPago,
 } from './reemplazoPago'
 import type { Employee } from '../../shared/types/database'
 
@@ -594,6 +594,13 @@ export default function CashTurno({
       onError(`No se guardó el cambio: ${r.error}`)
       onRefresh()
       setPagoModal(false)
+      return
+    }
+    if (r.estado === 'sin_cambios' && r.idOcupado) {
+      // (mig 202 · Mn2 #373) El id chocó con un pago de OTRO local: con el mismo id fallaría siempre. Nada cambió (el
+      // viejo sigue); el próximo intento va con un id nuevo, que no duplica porque ninguno nuestro entró con el viejo.
+      altaCambioRef.current = { viejo: viejoId, id: crypto.randomUUID() }
+      onError(MSG_ID_DE_OTRO_LOCAL)
       return
     }
     if (r.estado === 'sin_cambios') {

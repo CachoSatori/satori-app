@@ -332,3 +332,25 @@ export function bebidasPorPersona(rpc: Pick<VentasProductosRpc, 'productos' | 'c
   }
   return { vendidas, incluidas, valor: personas > 0 ? vendidas / personas : null }
 }
+
+export interface RatioComidaBebida {
+  comidaCts: number
+  bebidaCts: number
+  /** comida ÷ bebida; null si no hay bebida (nunca infinito). */
+  valor:     number | null
+}
+
+/**
+ * Ventas v2 · 3.2c — «Relación comida/bebida» (SPEC-ventas-v2 §4.1, desde la 3.2): neta de categoría comida ÷ neta de
+ * categoría bebida, de las líneas de venta del canal (por defecto salón, como «Salón en detalle»). La categoría la da la
+ * base (`pos_categoria_efectiva`, mig 198), la misma de «Productos»; `menu_especial` no entra en ninguna de las dos.
+ */
+export function ratioComidaBebida(rpc: Pick<VentasProductosRpc, 'productos'>, canal: CanalProductos = 'salon'): RatioComidaBebida {
+  let comidaCts = 0, bebidaCts = 0
+  for (const f of filasDelCanal(rpc, canal)) {
+    if (!esLineaDeVenta(f.familia)) continue
+    if (f.categoria === 'comida') comidaCts += f.montoCts
+    else if (f.categoria === 'bebida') bebidaCts += f.montoCts
+  }
+  return { comidaCts, bebidaCts, valor: bebidaCts > 0 ? comidaCts / bebidaCts : null }
+}

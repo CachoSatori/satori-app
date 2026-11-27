@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { parsearVentasProductos, type VentasProductosRpc } from '../../shared/api/posNdf'
 import {
   cambioEnPuntos, categoriaQueMasMovio, masVendidos, mesesPorCategoria, mixDelPeriodo, popularidad, productosDelPeriodo,
-  rangoDoceMeses, sinVentas, subenYBajan, bebidasPorPersona,
+  rangoDoceMeses, sinVentas, subenYBajan, bebidasPorPersona, ratioComidaBebida,
 } from './productosV2'
 
 type Fila = [string | null, string, number | null, string, number, number, number, string, number]
@@ -168,5 +168,25 @@ describe('3.2b · bebidas por persona (SPEC-ventas-v2 §4.1; B-1, D-1)', () => {
   })
   it('sin personas no hay cifra (nunca 0 ni infinito)', () => {
     expect(bebidasPorPersona(r, 0).valor).toBeNull()
+  })
+})
+
+describe('3.2c · relación comida/bebida por categoría (SPEC-ventas-v2 §4.1)', () => {
+  const r = rpc([
+    ['10', 'GYOZA', 2, 'salon', 10, 60_000_00, 8, 'comida', 0],
+    ['304', 'PLATO EVENTO', 15, 'salon', 1, 6_000_00, 1, 'comida', 0],        // D-3: familia 15 → comida
+    ['519', 'PROMO TRAGO', 25, 'salon', 3, 9_000_00, 3, 'bebida', 0],         // D-3: familia 25 → bebida
+    ['30', 'CERVEZA', 5, 'salon', 30, 21_000_00, 20, 'bebida', 0],
+    ['192', 'MENU 31', 11, 'salon', 4, 100_000_00, 2, 'menu_especial', 0],    // ni comida ni bebida
+    ['20', 'ROLL', 3, 'delivery', 5, 40_000_00, 5, 'comida', 0],              // delivery: no
+    ['99', 'REGALO', 17, 'salon', 1, 9_000_00, 1, 'cortesia', 0],             // no es venta
+  ])
+  it('comida ÷ bebida de salón por la categoría que trae la base; menú especial, delivery y regalías afuera', () => {
+    const x = ratioComidaBebida(r)
+    expect([x.comidaCts, x.bebidaCts]).toEqual([66_000_00, 30_000_00])
+    expect(x.valor).toBeCloseTo(2.2, 10)
+  })
+  it('sin bebida no hay cifra', () => {
+    expect(ratioComidaBebida(rpc([['10', 'GYOZA', 2, 'salon', 1, 1_000_00, 1, 'comida', 0]])).valor).toBeNull()
   })
 })

@@ -29,9 +29,11 @@ const RPC = parsearVentasProductos({
     ['31', 'BOTELLA', 5, 'salon', 5, 50_000_00, 5, 'bebida', 0],
     ['700', 'COPA MENU', 11, 'salon', 6, 0, 3, 'bebida', 6],
     ['32', 'SODA', 5, 'delivery', 20, 20_000_00, 20, 'bebida', 0],
+    ['10', 'GYOZA', 2, 'salon', 60, 375_000_00, 40, 'comida', 0],
+    ['20', 'ROLL', 3, 'delivery', 10, 90_000_00, 10, 'comida', 0],
   ],
   meses: [], catalogo: [['31', 'BOTELLA', 5, 2, '2026-01-01', '2026-10-31', 'bebida']], familias: [],
-  sin_lineas: { facturas: 0, cts: 0 }, neta_cts: 170_000_00,
+  sin_lineas: { facturas: 0, cts: 0 }, neta_cts: 635_000_00,
 })
 const PERIODO = { desde: '2026-10-01', hasta: '2026-10-31' }
 const abrir = (personas: { total: number; pctEstimado: number } | null) =>
@@ -61,11 +63,17 @@ describe('«Salón en detalle» · bebidas por persona (3.2b)', () => {
     expect(api.getVentasProductos).toHaveBeenCalledWith('santa-teresa', '2026-10-01', '2026-10-31')
   })
 
+  it('3.2c · Ratio C/B: comida ÷ bebida de salón por categoría; el de antes al lado', async () => {
+    abrir({ total: 40, pctEstimado: 0 })
+    await waitFor(() => expect(screen.getByTestId('ratio-cb-valor').textContent).toBe('2,50:1'))   // 375.000 ÷ 150.000
+    expect(screen.getByTestId('ratio-cb-antes').textContent).toMatch(/^antes: \d+,\d\d:1/)
+  })
+
   it('el 📤 manda la cifra nueva', async () => {
     abrir({ total: 40, pctEstimado: 0 })
     await waitFor(() => expect(screen.getByTestId('beb-pax-valor').textContent).toBe('1,50'))
     fireEvent.click(screen.getByRole('button', { name: 'Compartir el resumen' }))
-    await waitFor(() => expect(copiado).toContain('🍺 Beb/PAX: 1.50'))
+    await waitFor(() => expect(copiado).toContain('🍺 Beb/PAX: 1.50  •  Ratio C/B: 2.5'))
   })
 
   it('sin personas: «—», nunca 0', async () => {
@@ -79,6 +87,8 @@ describe('«Salón en detalle» · bebidas por persona (3.2b)', () => {
     abrir({ total: 40, pctEstimado: 0 })
     await waitFor(() => expect(screen.getByTestId('beb-pax-sub').textContent).toContain('no se pudo leer el catálogo del PoS'))
     expect(screen.getByTestId('beb-pax-valor').textContent).toBe('—')
+    expect(screen.getByTestId('ratio-cb-valor').textContent).toBe('—')
+    expect(screen.getByTestId('ratio-cb-sub').textContent).toContain('no se pudo leer el catálogo del PoS')
     expect(document.querySelector('[data-salon="promPlato"]')).toBeTruthy()
   })
 

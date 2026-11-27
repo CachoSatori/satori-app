@@ -28,10 +28,11 @@ const vista = (n: string) => ({ default: () => <div data-testid="vista">{n}</div
 vi.mock('./VentasEnVivo',         () => vista('envivo'))
 vi.mock('./VentasEquipo',         () => vista('equipo'))
 vi.mock('./VentasSaloneroLineas', () => vista('salolineas'))
+vi.mock('./VentasProductos',      () => vista('productos'))
 vi.mock('./VentasMix',            () => vista('mix'))
 vi.mock('./VentasMetas',          () => vista('metas'))
 vi.mock('./VentasCompetencias',   () => vista('competencias'))
-vi.mock('./VentasConfig',         () => vista('config'))
+vi.mock('./VentasCatalogo',       () => vista('config'))
 vi.mock('./VentasCajeros',        () => vista('cajeros'))
 vi.mock('./VentasICP',            () => vista('icp'))
 vi.mock('./VentasMenuEng',        () => vista('menueng'))
@@ -72,10 +73,10 @@ const subMenu = (entrada: string) => screen.getByRole('tablist', { name: `Vistas
 
 /** SPEC §12.2: `?tab=` viejo → dirección nueva (escrita a mano: si cambia el mapa, cae). */
 const REDIRECCION: Record<string, string> = {
-  mix: '/ventas?tab=productos', menueng: '/ventas?tab=productos&v=menu',
+  mix: '/ventas?tab=productos&v=mix', menueng: '/ventas?tab=productos&v=menu',
   salolineas: '/ventas?tab=equipo&v=lineas', icp: '/ventas?tab=equipo&v=icp',
   cajeros: '/ventas?tab=equipo&v=cajas', competencias: '/ventas?tab=equipo&v=competencias',
-  metas: '/ventas?tab=ajustes', config: '/ventas?tab=ajustes&v=productos', internas: '/ventas?tab=ajustes&v=internas',
+  metas: '/ventas?tab=ajustes', config: '/ventas?tab=ajustes&v=catalogo', internas: '/ventas?tab=ajustes&v=internas',
 }
 
 beforeEach(() => { cleanup(); role = 'owner'; ultima.url = ''; ultima.tipo = '' })
@@ -241,12 +242,15 @@ describe('VentasModule · navegación', () => {
     abrir('/ventas')
     await screen.findByTestId('vista')
     fireEvent.click(within(menu()).getByRole('tab', { name: 'Productos' }))
-    expect((await screen.findByTestId('vista')).textContent).toBe('mix')
+    // 3.2: la entrada abre «Productos» definitiva; «Mix» e «Ing. Menú» viejos quedan como sub-vistas hasta la 3.6.
+    expect((await screen.findByTestId('vista')).textContent).toBe('productos')
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
     fireEvent.click(within(subMenu('Productos')).getByRole('tab', { name: 'Ing. Menú' }))
     expect((await screen.findByTestId('vista')).textContent).toBe('menueng')
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos&v=menu'))
     fireEvent.click(within(subMenu('Productos')).getByRole('tab', { name: 'Mix' }))
+    await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos&v=mix'))
+    fireEvent.click(within(subMenu('Productos')).getByRole('tab', { name: 'Productos' }))
     await vi.waitFor(() => expect(ultima.url).toBe('/ventas?tab=productos'))
   })
 
@@ -313,7 +317,7 @@ describe('VentasModule · navegación', () => {
   })
 
   it('la vista que abre cada dirección nueva es la misma para el owner', async () => {
-    const casos: [string, Tab][] = [['tab=tiempos', 'tiempos'], ['tab=ajustes&v=productos', 'config'], ['tab=equipo&v=cajas', 'cajeros'], ['tab=regalias', 'regalias']]
+    const casos: [string, Tab][] = [['tab=tiempos', 'tiempos'], ['tab=ajustes&v=catalogo', 'config'], ['tab=equipo&v=cajas', 'cajeros'], ['tab=regalias', 'regalias']]
     for (const [q, vista] of casos) {
       cleanup()
       abrir(`/ventas?${q}`)

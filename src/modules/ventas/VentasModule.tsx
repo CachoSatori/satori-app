@@ -19,9 +19,12 @@ import {
 const VentasEnVivo       = lazy(() => import('./VentasEnVivo'))
 const VentasSaloneroLineas = lazy(() => import('./VentasSaloneroLineas'))
 const VentasMix          = lazy(() => import('./VentasMix'))
+// Ventas v2 · 3.2: «Productos» definitiva; lee `pos_ventas_productos` (mig 198) por su cuenta, con la barra global.
+const VentasProductos    = lazy(() => import('./VentasProductos'))
 const VentasMetas        = lazy(() => import('./VentasMetas'))
 const VentasCompetencias = lazy(() => import('./VentasCompetencias'))
-const VentasConfig       = lazy(() => import('./VentasConfig'))
+// Ventas v2 · 3.1b: «Ajustes → Catálogo» (reemplaza a VentasConfig); lee el catálogo por código por su cuenta.
+const VentasCatalogo     = lazy(() => import('./VentasCatalogo'))
 const VentasCajeros      = lazy(() => import('./VentasCajeros'))
 const VentasICP          = lazy(() => import('./VentasICP'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
@@ -207,7 +210,7 @@ export default function VentasModule() {
     return fondoP.current
   }, [pedirBase, pedirEager])
 
-  /** «Recargar» (Competencias, Productos): vuelve a pedir todo, como antes. */
+  /** «Recargar» (Competencias): vuelve a pedir todo, como antes. */
   const loadAll = () => {
     gen.current += 1
     baseP.current = null
@@ -336,11 +339,12 @@ export default function VentasModule() {
               {tab === 'salolineas'  && <VentasSaloneroLineas />}
               {tab === 'icp'         && <VentasICP          dias={allDias} pm={pm} />}
               {tab === 'cajeros'     && <VentasCajeros      dias={allDias} />}
+              {tab === 'productos'   && <VentasProductos />}
               {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} hist={hist} />}
               {tab === 'menueng'    && <VentasMenuEng      dias={allDias} pm={pm} />}
               {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
               {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} role={role} />}
-              {tab === 'config'      && <VentasConfig       dias={allDias} pm={pm} onRefresh={loadAll} />}
+              {tab === 'config'      && <VentasCatalogo />}
             </div>
             )}
           </Suspense>

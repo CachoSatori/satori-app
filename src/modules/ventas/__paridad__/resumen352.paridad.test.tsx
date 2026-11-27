@@ -13,7 +13,7 @@
 //     cuenta nueva la sumara, esta prueba cae (criterio 15).
 //
 // Excepciones declaradas (§12.5): venta por persona estimada (1), meta y proyección (2), «Contexto {día}» (3). No se
-// prueban acá. Reloj fijo DE NOCHE en CR (23:30 del 18-nov = 05:30 UTC del 19).
+// prueban acá. Desde la 3.2b, «Bebidas por persona» (catálogo por código): la de «Hoy» se compara contra el «antes». Reloj fijo DE NOCHE en CR (23:30 del 18-nov = 05:30 UTC del 19).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -27,6 +27,9 @@ vi.mock('../../../shared/api/posNdf', async orig => ({
   ...(await orig<typeof import('../../../shared/api/posNdf')>()),
   getPromPaxAgregado: vi.fn(async () => []),
   getSaloneroNombres: vi.fn(async () => ({})),
+  // 3.2b: el catálogo por código (bebidas por persona). Vacío acá: esta paridad mira lo de «Hoy»; la cifra nueva la
+  // prueban `SalonEnDetalle.bebidas.render.test.tsx` y `VentasResumen.352.render.test.tsx`.
+  getVentasProductos: vi.fn(async () => ({ productos: [], meses: [], catalogo: [], familias: [], sinLineas: { facturas: 0, cts: 0 }, netaCts: 0 })),
 }))
 
 import { datos, l, t } from '../resumenV2.fixture'
@@ -174,8 +177,12 @@ describe.each(PERIODOS)('paridad 3.5.2 · $nombre', ({ q, desde, hasta }) => {
     expect(val('[data-salon="ventaSaloneros"]')).toBe(fi(gen.total))           // «Ventas Salón» de «Hoy» = «Salón» de «Histórico»
     expect(val('[data-salon="promPlato"]')).toBe(fi(gen.iCom > 0 ? com / gen.iCom : 0))
     expect(val('[data-salon="promBebida"]')).toBe(fi(gen.iBeb > 0 ? beb / gen.iBeb : 0))
-    expect(val('[data-salon="bebPax"]')).toBe(gen.bebPax.toFixed(2))
-    expect(val('[data-salon="ratioCB"]')).toBe(`${(beb > 0 ? com / beb : 0).toFixed(2)}:1`)
+    // 3.2b (excepción firmada, SPEC-ventas-v2 §4.1): la cifra principal pasa a «Bebidas por persona» del catálogo por
+    // código (su prueba: `SalonEnDetalle.bebidas.render.test.tsx`); la de «Hoy» queda al lado como «antes».
+    expect(document.querySelector('[data-testid="beb-pax-antes"]')!.textContent).toContain(gen.bebPax.toFixed(2).replace('.', ','))
+    // 3.2c (excepción, decisión del dueño 26-nov): el Ratio C/B principal sale del catálogo por categoría; el de «Hoy»
+    // queda al lado como «antes».
+    expect(document.querySelector('[data-testid="ratio-cb-antes"]')!.textContent).toContain(`${(beb > 0 ? com / beb : 0).toFixed(2).replace('.', ',')}:1`)
     expect(val('[data-salon="comidas"]')).toBe(fi(com))
     expect(val('[data-salon="bebidas"]')).toBe(fi(beb))
     expect(document.querySelector('[data-salon="comidas"] .vt-kpi-sub')!.textContent).toContain(`${gen.iCom} platos`)
@@ -202,7 +209,10 @@ describe.each(PERIODOS)('paridad 3.5.2 · $nombre', ({ q, desde, hasta }) => {
     expect(copiado).toContain(`💰 Ventas: *${fi(tot.ventaNeta)}*`)
     expect(copiado).toContain(`👥 PAX: ${gen.pax}  •  Prom/PAX: *${fi(gen.promPax)}*`)
     if (tot.delivery > 0) expect(copiado).toContain(`🛵 Delivery: ${fi(tot.delivery)}`)
-    expect(copiado).toContain(`🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${(beb > 0 ? com / beb : 0).toFixed(1)}`)
+    // 3.2b y 3.2c: Beb/PAX y el ratio salen del catálogo (vacío en esta prueba: 0,00 y, sin bebida, «—»); los de «Hoy»
+    // quedan al lado de cada tarjeta como «antes» (arriba).
+    void com; void beb
+    expect(copiado).toContain('🍺 Beb/PAX: 0.00  •  Ratio C/B: —')
     for (const s of sal) expect(copiado).toContain(`${s.nombre}: ${fi(s.total)} · ${fi(s.promPax)}/PAX`)
     expect(copiado).toContain('_Satori · Local A, CR_')
   })

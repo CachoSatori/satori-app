@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import {
   puedeEditarCompetencias,
   TABS, ENTRADAS, CLAVE_V, tabPorDefecto, resolverDireccion, resolverVista, direccionDe, entradasVisibles,
-  entradaDe, veDetalleEquipo, type Tab,
+  entradaDe, veDetalleEquipo, labelDe, puedeVer, VISTAS_SIN_DIAS, VISTAS_CON_FONDO, type Tab,
 } from './ventasTabs'
 
 const ROLES = ['owner', 'manager', 'contador'] as const
@@ -26,7 +26,8 @@ const ROLES_DE_SIEMPRE: Record<Tab, string[]> = {
   // 3.5.4: «Equipo» junta «Saloneros» y «Evaluación» (que eran OM). D18 (DUEÑO 23-nov 22:35 CR, corrige la de las 21:40):
   // el contador ve «Equipo» completo —ranking y detalle (evaluación, ICP por fila y ficha)—, igual que OM: `veDetalleEquipo`.
   equipo: OMC,
-  mix: OMC, menueng: OM, metas: OMC,
+  // 3.2: «Productos» definitiva, los tres (SPEC §6: «Productos — mix»: owner, manager y contador).
+  productos: OMC, mix: OMC, menueng: OM, metas: OMC,
   competencias: OMC, config: OM, resumen: OMC, tiempos: OMC, internas: OM,
   regalias: OMC,   // 3.5.2: la ven los tres; el contador, completa (D7)
 }
@@ -63,7 +64,9 @@ const RETIRADA_EQUIPO: Record<string, string> = {
 const DIRECCION_NUEVA: Record<Tab, string> = {
   resumen:      'tab=resumen',
   regalias:     'tab=regalias',
-  mix:          'tab=productos',
+  // 3.2: «Productos» definitiva es la primera sub-vista; «Mix» viejo queda como `v=mix` hasta la 3.6.
+  productos:    'tab=productos',
+  mix:          'tab=productos&v=mix',
   menueng:      'tab=productos&v=menu',
   equipo:       'tab=equipo',
   salolineas:   'tab=equipo&v=lineas',
@@ -73,7 +76,7 @@ const DIRECCION_NUEVA: Record<Tab, string> = {
   tiempos:      'tab=tiempos',
   envivo:       'tab=envivo',
   metas:        'tab=ajustes',
-  config:       'tab=ajustes&v=productos',
+  config:       'tab=ajustes&v=catalogo',   // 3.1b: «Productos» → «Catálogo»; `v=productos` sigue (ALIAS_V)
   internas:     'tab=ajustes&v=internas',
 }
 
@@ -85,10 +88,10 @@ describe('ventasTabs · menú de siete entradas (3.5.2; «Tiempos» sin sub-pest
     expect(entradasVisibles(role).map(e => e.label)).toEqual(['Resumen', 'Productos', 'Equipo', 'Tiempos', 'Regalías', 'En vivo', 'Ajustes'])
   })
 
-  it('14 vistas (19 − «Hoy», «Ventas», «Histórico», «Análisis», «Calendario», «Saloneros», «Evaluación» + «Regalías», «Equipo») y cada una en exactamente una entrada', () => {
-    expect(TABS).toHaveLength(14)
+  it('15 vistas (19 − «Hoy», «Ventas», «Histórico», «Análisis», «Calendario», «Saloneros», «Evaluación» + «Regalías», «Equipo», «Productos» de la 3.2) y cada una en exactamente una entrada', () => {
+    expect(TABS).toHaveLength(15)
     const enEntradas = ENTRADAS.flatMap(e => e.vistas)
-    expect(enEntradas).toHaveLength(14)
+    expect(enEntradas).toHaveLength(15)
     expect(new Set(enEntradas)).toEqual(new Set(TABS.map(t => t.id)))
     for (const v of ['hoy', 'ventas', 'historico', 'analisis', 'calendario', 'saloneros', 'evaluacion']) expect(TABS.map(t => t.id as string)).not.toContain(v)
   })
@@ -110,12 +113,12 @@ describe('ventasTabs · menú de siete entradas (3.5.2; «Tiempos» sin sub-pest
     const conNombres = Object.fromEntries(ENTRADAS.map(e => [e.id, e.vistas.map(v => TABS.find(t => t.id === v)!.label)]))
     expect(conNombres).toEqual({
       resumen:   ['Resumen'],
-      productos: ['Mix', 'Ing. Menú'],
+      productos: ['Productos', 'Mix', 'Ing. Menú'],
       equipo:    ['Equipo', 'Por línea', 'ICP', 'Cajas y canales', 'Competencias'],
       tiempos:   ['Tiempos'],
       regalias:  ['Regalías'],
       envivo:    ['En vivo'],
-      ajustes:   ['Metas', 'Productos', 'Mesas internas'],
+      ajustes:   ['Metas', 'Catálogo', 'Mesas internas'],
     })
   })
 })
@@ -130,17 +133,17 @@ describe('ventasTabs · permisos iguales que antes (criterio 8)', () => {
   // SPEC §6, rol × sub-vista: lo que se ve en cada entrada.
   it.each([
     ['owner', {
-      resumen: ['resumen'], productos: ['mix', 'menueng'],
+      resumen: ['resumen'], productos: ['productos', 'mix', 'menueng'],
       equipo: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'],
       tiempos: ['tiempos'], regalias: ['regalias'], envivo: ['envivo'], ajustes: ['metas', 'config', 'internas'],
     }],
     ['manager', {
-      resumen: ['resumen'], productos: ['mix', 'menueng'],
+      resumen: ['resumen'], productos: ['productos', 'mix', 'menueng'],
       equipo: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'],
       tiempos: ['tiempos'], regalias: ['regalias'], envivo: ['envivo'], ajustes: ['metas', 'config', 'internas'],
     }],
     ['contador', {
-      resumen: ['resumen'], productos: ['mix'],
+      resumen: ['resumen'], productos: ['productos', 'mix'],
       equipo: ['equipo', 'salolineas', 'icp', 'cajeros', 'competencias'],
       tiempos: ['tiempos'], regalias: ['regalias'], envivo: ['envivo'], ajustes: ['metas'],
     }],
@@ -276,5 +279,30 @@ describe('ventasTabs · redirecciones de los ?tab= viejos (criterio 3)', () => {
     expect(resolverVista('owner', new URLSearchParams('tab=analisis'))).toBe('tiempos')
     expect(resolverVista('owner', new URLSearchParams('tab=calendario'))).toBe('tiempos')
     expect(entradaDe(resolverVista('owner', new URLSearchParams('tab=calendario'))).id).toBe('tiempos')
+  })
+})
+
+describe('ventasTabs · 3.1b «Ajustes → Catálogo» (SPEC-3.1-catalogo §8.2)', () => {
+  it('se llama «Catálogo», la ven owner y manager y el contador no (D-7)', () => {
+    expect(labelDe('config')).toBe('Catálogo')
+    expect(puedeVer('owner', 'config')).toBe(true)
+    expect(puedeVer('manager', 'config')).toBe(true)
+    for (const r of ['contador', 'cajero', 'salonero', 'barra', 'cocina', '']) expect(puedeVer(r, 'config')).toBe(false)
+  })
+  it.each(['owner', 'manager'])('%s: el enlace guardado ?tab=ajustes&v=productos abre «Catálogo» y pasa a v=catalogo', r => {
+    expect(resolverDireccion(r, 'ajustes', 'productos')).toEqual({ vista: 'config', corregir: { tab: 'ajustes', v: 'catalogo' } })
+  })
+  it.each(['owner', 'manager'])('%s: ?tab=config abre «Catálogo» y pasa a la dirección nueva', r => {
+    expect(resolverDireccion(r, 'config', null)).toEqual({ vista: 'config', corregir: { tab: 'ajustes', v: 'catalogo' } })
+  })
+  it.each(['contador', 'salonero', 'cajero'])('%s: ninguna de las tres direcciones abre «Catálogo» (va a «Resumen» limpio)', r => {
+    for (const [t, v] of [['ajustes', 'productos'], ['ajustes', 'catalogo'], ['config', null]] as const) {
+      expect(resolverDireccion(r, t, v).vista).not.toBe('config')
+    }
+    expect(resolverDireccion(r, 'ajustes', 'productos')).toEqual({ vista: tabPorDefecto(r), corregir: { tab: null, v: null } })
+  })
+  it('«Catálogo» no espera los 90 días ni la historia del PoS: lee su propia función', () => {
+    expect(VISTAS_SIN_DIAS.has('config')).toBe(true)
+    expect(VISTAS_CON_FONDO.has('config')).toBe(false)
   })
 })

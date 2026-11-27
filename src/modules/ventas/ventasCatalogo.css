@@ -1,0 +1,23 @@
+/* Ventas v2 · 3.1b — «Ajustes → Catálogo». Solo clases vc-* nuevas. A 390 px cada producto es una tarjeta: el nombre
+   arriba y los dos controles debajo, que se acomodan (flex-wrap) sin salirse; nada tiene ancho fijo mayor que la
+   pantalla. Controles de al menos 44 px de alto (vt2-campo). */
+.vc-catalogo { max-width: 100%; }
+.vc-filtros { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; margin: 0.5rem 0; }
+.vc-buscar { flex: 1 1 12rem; min-width: 0; }
+.vc-buscar input { width: 100%; box-sizing: border-box; }
+.vc-check { display: flex; align-items: center; gap: 0.35rem; min-height: 44px; font-size: 0.78rem; color: var(--c-gris); }
+.vc-lista { list-style: none; margin: 0.5rem 0; padding: 0; }
+.vc-fila { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.5rem;
+  padding: 0.6rem 0; border-bottom: 1px solid var(--c-linea); min-width: 0; }
+.vc-producto { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem; flex: 1 1 14rem; min-width: 0; }
+.vc-nombre { font-size: 0.85rem; font-weight: 600; overflow-wrap: anywhere; }
+.vc-sub { flex-basis: 100%; font-size: 0.7rem; color: var(--c-gris); overflow-wrap: anywhere; }
+.vc-marca { font-size: 0.65rem; padding: 0 0.35rem; border: 1px solid var(--c-oro); color: var(--c-oro-texto); border-radius: 2px; }
+.vc-marca-cambio { border-color: var(--c-linea); color: var(--c-gris); }
+.vc-controles { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; min-width: 0; max-width: 100%; }
+.vc-controles select { max-width: 100%; }
+.vc-rinde input { width: 4.5rem; }
+.vc-fija { display: inline-flex; align-items: center; min-height: 44px; font-size: 0.8rem; }
+.vc-estado { font-size: 0.72rem; color: var(--c-gris); min-height: 44px; display: inline-flex; align-items: center; }
+.vc-familias { margin-top: 1.5rem; }
+.vc-familias summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; min-height: 44px; display: flex; align-items: center; }

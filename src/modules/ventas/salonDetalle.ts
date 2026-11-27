@@ -59,7 +59,17 @@ export function masVendidos(
  * El texto del 📤 (el mismo formato que el de «Hoy»), para el período. `rotulo` es el período en
  * palabras de la barra; `local`, el nombre del local.
  */
-export function textoCompartir(d: SalonEnDetalle, rotulo: string, local: string): string {
+/**
+ * `bebPax`: la «Bebidas por persona» de la 3.2b (catálogo por código, unidades vendidas, salón). Si no llegó, va la de
+ * antes (`gen.bebPax`, bebidas de familia 5 de los meseros ÷ su PAX). `ratioCB`: la de la 3.2c (categoría comida ÷
+ * bebida del catálogo por código, salón); si no llegó, la de antes (familias de los meseros).
+ */
+// `undefined` = no llegó la cifra nueva (va la de antes); `null` = llegó y no hay cifra (sin personas o sin bebida): «—».
+export function textoCompartir(
+  d: SalonEnDetalle, rotulo: string, local: string, bebPax?: number | null, ratioCB?: number | null,
+): string {
+  const n = (nueva: number | null | undefined, antes: number, dec: number) =>
+    nueva === undefined ? antes.toFixed(dec) : nueva === null ? '—' : nueva.toFixed(dec)
   const top = [...d.saloneros].sort((a, b) => b.promPax - a.promPax).slice(0, 3)
     .map((s, i) => `${['🥇', '🥈', '🥉'][i]} ${s.nombre}: ${fi(s.total)} · ${fi(s.promPax)}/PAX`).join('\n')
   return [
@@ -68,7 +78,7 @@ export function textoCompartir(d: SalonEnDetalle, rotulo: string, local: string)
     `💰 Ventas: *${fi(d.totales.ventaNeta)}*`,
     d.gen.pax > 0 ? `👥 PAX: ${d.gen.pax}  •  Prom/PAX: *${fi(d.gen.promPax)}*` : '',
     d.totales.delivery > 0 ? `🛵 Delivery: ${fi(d.totales.delivery)}` : '',
-    `🍺 Beb/PAX: ${d.gen.bebPax.toFixed(2)}  •  Ratio C/B: ${d.ratioCB.toFixed(1)}`,
+    `🍺 Beb/PAX: ${n(bebPax, d.gen.bebPax, 2)}  •  Ratio C/B: ${n(ratioCB, d.ratioCB, 1)}`,
     top ? '━━━━━━━━━━━━━━━━━━━━\n' + top : '',
     '━━━━━━━━━━━━━━━━━━━━',
     `_Satori · ${local}, CR_`,

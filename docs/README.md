@@ -88,6 +88,8 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
   con la Bandeja (solo lectura), F3 línea del proveedor ↔ producto con conversión de unidad y costo, F4 conteo por
   lugar (dentro de la app y link instalable), gerencia y pedido sugerido, F5 recetas con costo (solo modelo). Parte de
   [inventario/SPEC-inventario-v0.md](./inventario/SPEC-inventario-v0.md). Esquema en borrador: requiere firma.
+  **27-nov:** suma la entrega G-012 v3 y las decisiones D-CSC-5 a 7 (ledger único `inv_movimientos`, P&L gerencial de
+  mercadería antes de F5, un solo motor de consumo teórico al cierre de turno); lo pendiente de decidir, en su §12.2.
 - **[SPEC-COMANDA-GAPS.md](./SPEC-COMANDA-GAPS.md)** — 3 gaps priorizados para decidir: **Comp vs
   Void** (P&L), **fire-by-prep-time** (el campo prep ya existe), **revenue centers**.
 

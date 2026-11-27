@@ -9,6 +9,7 @@ import { restarDias, ventasDelRango } from '../modules/ventas/ventasFuente'
 import { totalesDelDia, totalesDelRango } from '../modules/ventas/totalesVentas'
 import { ROLE_LABELS } from '../shared/constants'
 import { modulosPara } from '../shared/layout/modulos'
+import AvisoProvisorio from '../shared/AvisoProvisorio'
 import { calcularPendientes, fraseEstado, TODAS_LAS_SENALES, type Pendiente, type Senal } from '../shared/layout/pendientes'
 import type { AlertaCierres } from '../modules/cash/diasSinCierre'
 import { alertaGuardada, leerAlertaInicio } from './alertaInicio'
@@ -496,6 +497,8 @@ function ResumenDelDia({ status, statusFallo, alertaCargando, pendientes, onIr }
             ))}
           </ul>
         )}
+        {/* Fase 0 (P4, 27-nov): los pendientes de stock salen de un stock sin base real; se etiquetan, no se ocultan. */}
+        {!cargando && pendientes.some(p => p.id === 'sin-stock' || p.id === 'stock-bajo') && <AvisoProvisorio compacto />}
         {!cargando && alertaCargando && pendientes.length > 0 && (
           <p className="inicio-vacio">Revisando los días sin cierre…</p>
         )}

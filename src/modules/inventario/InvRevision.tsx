@@ -30,6 +30,7 @@ import { errorDeLineas } from '../../shared/invLineasIlegibles'
 import type { Ingredient } from '../../shared/types/inventario'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import type { Database } from '../../shared/types/supabase.gen'
+import AvisoProvisorio from '../../shared/AvisoProvisorio'
 
 type InvReviewTask = Database['public']['Tables']['inventory_review_task']['Row']
 
@@ -486,6 +487,8 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
         <p style={{ fontSize: '0.74rem', color: 'var(--c-gris)', margin: '0.2rem 0 0.75rem' }}>
           Emparejá cada ítem con un ingrediente. Al completar entra al stock y queda auditado (el gasto ya está en Caja). Si no corresponde, descartá con motivo.
         </p>
+        {/* Fase 0 (P4, 27-nov): la entrada a stock de la Revisión no tiene base real; se etiqueta, no se cambia. */}
+        <AvisoProvisorio compacto />
         {err && <div className="tips-error" style={{ marginBottom: '0.6rem' }}><span>{err}</span><button onClick={() => setErr(null)}>✕</button></div>}
         {savedMsg && <div style={{ marginBottom: '0.6rem', padding: '0.4rem 0.7rem', borderRadius: 4, background: 'var(--c-musgo-fondo)', border: '1px solid var(--c-musgo)', color: 'var(--c-musgo)', fontSize: '0.78rem' }}>{savedMsg}</div>}
         {/* Trazabilidad: quién registró el pago de mercadería (pedido del dueño). */}

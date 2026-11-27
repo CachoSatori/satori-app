@@ -8,6 +8,7 @@ import {
 } from '../../shared/api/inventoryIngest'
 import InvLineTable from '../../shared/InvLineTable'
 import { errorDeLineas } from '../../shared/invLineasIlegibles'
+import AvisoProvisorio from '../../shared/AvisoProvisorio'
 
 export default function InventoryStep({ doc, ingredients, suppliers, createdBy, onClose, onDone }: {
   doc: DocumentRow
@@ -76,6 +77,8 @@ export default function InventoryStep({ doc, ingredients, suppliers, createdBy, 
         <p style={{ fontSize: '0.74rem', color: 'var(--t-muted)', margin: '0.2rem 0 0.75rem' }}>
           Emparejá cada ítem con un ingrediente. El stock entra al confirmar (idempotente: una vez por factura). El gasto ya está registrado.
         </p>
+        {/* Fase 0 (P4, 27-nov): solo el aviso; el paso, sus botones y lo que se guarda no cambian. */}
+        <AvisoProvisorio compacto />
         {!supplierId && <div className="tips-error" style={{ marginBottom: '0.6rem' }}><span>No encontré el proveedor "{ex?.proveedor}" en el directorio — se creará al confirmar para aprender el mapeo.</span></div>}
         {err && <div className="tips-error" style={{ marginBottom: '0.6rem' }}><span>{err}</span><button onClick={() => setErr(null)}>✕</button></div>}
 

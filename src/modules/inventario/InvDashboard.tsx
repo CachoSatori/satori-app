@@ -4,6 +4,7 @@
 import { useState, useMemo } from 'react'
 import type { Ingredient, InventoryMovement } from '../../shared/types/inventario'
 import { fi } from '../../shared/utils'
+import AvisoProvisorio from '../../shared/AvisoProvisorio'
 
 interface Props {
   ingredients: Ingredient[]
@@ -83,6 +84,9 @@ export default function InvDashboard({ ingredients, movements }: Props) {
   return (
     <div className="vt-section">
 
+      {/* Fase 0 (P4, 27-nov): el stock de hoy no tiene base real; se etiqueta, no se oculta. */}
+      <AvisoProvisorio />
+
       {/* KPI row */}
       <div className="vt-kpi-grid" style={{ marginBottom:'1.5rem' }}>
         <div className="vt-kpi red">
@@ -139,6 +143,7 @@ export default function InvDashboard({ ingredients, movements }: Props) {
       {reorderBySupplier.length > 0 && (
         <>
           <div className="vt-sl">🛒 Orden de compra sugerida</div>
+          <AvisoProvisorio compacto />
           <div style={{ fontSize:'0.68rem', color:'var(--c-gris)', marginBottom:'0.75rem' }}>
             Ingredientes en o bajo el mínimo, agrupados por proveedor. Cantidad sugerida = llevar a 2× el mínimo.
           </div>

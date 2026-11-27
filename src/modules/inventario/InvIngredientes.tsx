@@ -8,6 +8,7 @@ import { upsertIngredient, deleteIngredient } from '../../shared/api/inventario'
 import { getIngredientPrices, type IngredientPrice } from '../../shared/api/inventoryIngest'
 import { fi, todayCR } from '../../shared/utils'
 import { alEscribir, errorDeNumeros, leerCuadro, valorInput } from '../../shared/cuadrosNumericos'
+import AvisoProvisorio from '../../shared/AvisoProvisorio'
 
 const NUMERICOS = [['current_stock', 'Stock actual'], ['min_stock', 'Stock mínimo'], ['cost_per_unit', 'Costo/unidad ₡']] as const
 
@@ -260,6 +261,9 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
           </div>
         </div>
       )}
+
+      {/* Fase 0 (P4, 27-nov): «Stock actual» y «Valor» no tienen base real; se etiqueta, no se oculta. */}
+      <AvisoProvisorio compacto />
 
       {/* Table */}
       <div className="vt-tbl-wrap">

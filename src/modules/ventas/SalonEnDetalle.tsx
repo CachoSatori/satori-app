@@ -8,6 +8,8 @@
 // 3.2b (SPEC-ventas-v2 §4.1): «Bebidas por persona» sale del catálogo por código (`pos_ventas_productos`, mig 198):
 // bebidas VENDIDAS de salón × «rinde» ÷ las personas de salón de la venta por persona de «Resumen» (cargadas +
 // estimadas). Se lee al abrir el desplegable, en paralelo con las líneas; si falla, se ve «—» y el resto sigue igual.
+// 3.2c: de la misma lectura sale el «Ratio C/B»: neta de categoría comida ÷ de categoría bebida, en salón (la
+// clasificación de «Productos»). La de antes (familias de los meseros) queda al lado.
 import { useEffect, useMemo, useState } from 'react'
 import type { Meta } from '../../shared/types/ventas'
 import type { Rango } from './periodos'
@@ -15,7 +17,7 @@ import { cargarLineasPeriodo, fechasDe, type LineasPeriodo } from './lineasPerio
 import { masVendidos, salonEnDetalle, textoCompartir, type OrdenProductos, type VistaProductos } from './salonDetalle'
 import { fi, getMeta, metaColor, ratioCBClass } from './ventasUtils'
 import { getVentasProductos } from '../../shared/api/posNdf'
-import { bebidasPorPersona, type BebidasPorPersona } from './productosV2'
+import { bebidasPorPersona, ratioComidaBebida, type BebidasPorPersona, type RatioComidaBebida } from './productosV2'
 
 async function compartir(text: string, setCopiado: (v: boolean) => void) {
   if (navigator.share) {
@@ -44,7 +46,7 @@ interface Props {
 }
 
 /** Lo que muestra la tarjeta «Bebidas por persona» (3.2b). */
-type EstadoBebidas = { estado: 'leyendo' } | { estado: 'error' } | { estado: 'listo'; b: BebidasPorPersona; pctEstimado: number }
+type EstadoBebidas = { estado: 'leyendo' } | { estado: 'error' } | { estado: 'listo'; b: BebidasPorPersona; r: RatioComidaBebida; pctEstimado: number }
 
 export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, metas, abierto = false, personas = null }: Props) {
   const [abrio, setAbrio] = useState(abierto)
@@ -71,7 +73,7 @@ export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, me
     if (!abrio || totalPersonas === null) return
     let vivo = true
     getVentasProductos(local, periodo.desde, periodo.hasta)
-      .then(rpc => { if (vivo) setBeb({ clave, e: { estado: 'listo', b: bebidasPorPersona(rpc, totalPersonas), pctEstimado } }) })
+      .then(rpc => { if (vivo) setBeb({ clave, e: { estado: 'listo', b: bebidasPorPersona(rpc, totalPersonas), r: ratioComidaBebida(rpc), pctEstimado } }) })
       .catch(() => { if (vivo) setBeb({ clave, e: { estado: 'error' } }) })
     return () => { vivo = false }
   }, [abrio, clave, local, periodo, totalPersonas, pctEstimado, intento])
@@ -117,7 +119,7 @@ function Contenido({ l, periodo, rotulo, nombreLocal, metas, bebidas, onReintent
           <button type="button" className="vt-period-btn" aria-label="Compartir el resumen"
             disabled={bebidas !== null && bebidas.estado !== 'listo'}
             title={bebidas !== null && bebidas.estado !== 'listo' ? 'Se puede compartir cuando termine de leer el catálogo del PoS' : undefined}
-            onClick={() => compartir(textoCompartir(d, rotulo, nombreLocal, bebidas?.estado === 'listo' ? bebidas.b.valor : null), setCopiado)}>
+            onClick={() => compartir(textoCompartir(d, rotulo, nombreLocal, bebidas?.estado === 'listo' ? bebidas.b.valor : undefined, bebidas?.estado === 'listo' ? bebidas.r.valor : undefined), setCopiado)}>
             {copiado ? '✓ Copiado' : '📤 Compartir'}
           </button>
         )}
@@ -150,9 +152,23 @@ function Contenido({ l, periodo, rotulo, nombreLocal, metas, bebidas, onReintent
             </div>
           </div>
         )}
-        <div className="vt-kpi" data-salon="ratioCB"><div className="vt-kpi-label">Ratio C/B (₡)</div>
-          <div className={`vt-kpi-val ${ratioCBClass(d.ratioCB)}`}>{d.ratioCB.toFixed(2)}:1</div>
-        </div>
+        {bebidas === null ? (
+          <div className="vt-kpi" data-salon="ratioCB"><div className="vt-kpi-label">Ratio C/B (₡)</div>
+            <div className={`vt-kpi-val ${ratioCBClass(d.ratioCB)}`}>{d.ratioCB.toFixed(2)}:1</div>
+          </div>
+        ) : (
+          <div className="vt-kpi" data-salon="ratioCB" title="Venta de comida ÷ venta de bebida en salón, por la categoría del catálogo (la de «Productos»).">
+            <div className="vt-kpi-label">Ratio C/B (₡)</div>
+            <div data-testid="ratio-cb-valor"
+              className={`vt-kpi-val ${bebidas.estado === 'listo' && bebidas.r.valor !== null ? ratioCBClass(bebidas.r.valor) : ''}`}>
+              {bebidas.estado === 'listo' ? (bebidas.r.valor === null ? '—' : `${bebidas.r.valor.toFixed(2).replace('.', ',')}:1`) : bebidas.estado === 'leyendo' ? '…' : '—'}
+            </div>
+            <div className="vt-kpi-sub" data-testid="ratio-cb-sub">
+              {bebidas.estado === 'error' ? 'no se pudo leer el catálogo del PoS' : 'comida ÷ bebida en salón, por categoría'}
+              <span className="vt2-sub" data-testid="ratio-cb-antes">antes: {d.ratioCB.toFixed(2).replace('.', ',')}:1 (familias de los meseros)</span>
+            </div>
+          </div>
+        )}
         <div className="vt-kpi" data-salon="comidas" title="₡ por familia del PoS (comida = 2·3·4·13·16·29). No es la neta: la caja no trae desglose comida/bebida.">
           <div className="vt-kpi-label">Comidas</div><div className="vt-kpi-val" style={{ fontSize: '0.85rem' }}>{fi(d.com)}</div>
           <div className="vt-kpi-sub">{d.gen.iCom} platos · no neta</div>

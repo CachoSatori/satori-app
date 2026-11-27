@@ -180,7 +180,9 @@ describe.each(PERIODOS)('paridad 3.5.2 · $nombre', ({ q, desde, hasta }) => {
     // 3.2b (excepción firmada, SPEC-ventas-v2 §4.1): la cifra principal pasa a «Bebidas por persona» del catálogo por
     // código (su prueba: `SalonEnDetalle.bebidas.render.test.tsx`); la de «Hoy» queda al lado como «antes».
     expect(document.querySelector('[data-testid="beb-pax-antes"]')!.textContent).toContain(gen.bebPax.toFixed(2).replace('.', ','))
-    expect(val('[data-salon="ratioCB"]')).toBe(`${(beb > 0 ? com / beb : 0).toFixed(2)}:1`)
+    // 3.2c (excepción, decisión del dueño 26-nov): el Ratio C/B principal sale del catálogo por categoría; el de «Hoy»
+    // queda al lado como «antes».
+    expect(document.querySelector('[data-testid="ratio-cb-antes"]')!.textContent).toContain(`${(beb > 0 ? com / beb : 0).toFixed(2).replace('.', ',')}:1`)
     expect(val('[data-salon="comidas"]')).toBe(fi(com))
     expect(val('[data-salon="bebidas"]')).toBe(fi(beb))
     expect(document.querySelector('[data-salon="comidas"] .vt-kpi-sub')!.textContent).toContain(`${gen.iCom} platos`)
@@ -207,8 +209,10 @@ describe.each(PERIODOS)('paridad 3.5.2 · $nombre', ({ q, desde, hasta }) => {
     expect(copiado).toContain(`💰 Ventas: *${fi(tot.ventaNeta)}*`)
     expect(copiado).toContain(`👥 PAX: ${gen.pax}  •  Prom/PAX: *${fi(gen.promPax)}*`)
     if (tot.delivery > 0) expect(copiado).toContain(`🛵 Delivery: ${fi(tot.delivery)}`)
-    // 3.2b: Beb/PAX es la del catálogo (vacío en esta prueba → 0,00); el ratio sigue siendo el de «Hoy».
-    expect(copiado).toContain(`🍺 Beb/PAX: 0.00  •  Ratio C/B: ${(beb > 0 ? com / beb : 0).toFixed(1)}`)
+    // 3.2b y 3.2c: Beb/PAX y el ratio salen del catálogo (vacío en esta prueba: 0,00 y, sin bebida, «—»); los de «Hoy»
+    // quedan al lado de cada tarjeta como «antes» (arriba).
+    void com; void beb
+    expect(copiado).toContain('🍺 Beb/PAX: 0.00  •  Ratio C/B: —')
     for (const s of sal) expect(copiado).toContain(`${s.nombre}: ${fi(s.total)} · ${fi(s.promPax)}/PAX`)
     expect(copiado).toContain('_Satori · Local A, CR_')
   })

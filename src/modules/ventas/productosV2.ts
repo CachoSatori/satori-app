@@ -306,3 +306,29 @@ export function mesesPorCategoria(rpc: Pick<VentasProductosRpc, 'meses'>, canal:
   }
   return [...out.values()].sort((a, b) => a.mes.localeCompare(b.mes))
 }
+
+export interface BebidasPorPersona {
+  /** Unidades vendidas (sin las de ₡0) × «rinde» de las líneas de venta de categoría bebida, en salón. */
+  vendidas:  number
+  /** Las de ₡0 (incluidas en un menú cerrado o invitaciones) × «rinde»: se muestran aparte, no suman. */
+  incluidas: number
+  /** vendidas ÷ personas de salón; null si no hay personas. */
+  valor:     number | null
+}
+
+/**
+ * Ventas v2 · 3.2b — «Bebidas por persona» (SPEC-ventas-v2 §4.1, desde la 3.2; SPEC-3.1 §2.5.1 B-1 y D-1): bebidas
+ * VENDIDAS de salón (canal de la factura) × «rinde» ÷ personas de salón. `personas` es el denominador de la venta por
+ * persona de «Resumen» (cargadas + estimadas, sin mesas de dueños ni regalías totales; D4, una sola en toda la app).
+ */
+export function bebidasPorPersona(rpc: Pick<VentasProductosRpc, 'productos' | 'catalogo'>, personas: number): BebidasPorPersona {
+  const rinde = new Map(rpc.catalogo.map(c => [c.codigo, c.rinde]))
+  let vendidas = 0, incluidas = 0
+  for (const f of rpc.productos) {
+    if (f.canal !== 'salon' || f.categoria !== 'bebida' || !esLineaDeVenta(f.familia)) continue
+    const r = f.codigo !== null ? rinde.get(f.codigo) ?? 1 : 1
+    vendidas += Math.max(0, f.unidades - f.unidadesCero) * r
+    incluidas += f.unidadesCero * r
+  }
+  return { vendidas, incluidas, valor: personas > 0 ? vendidas / personas : null }
+}

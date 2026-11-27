@@ -268,7 +268,8 @@ function Contenido({ periodo, datos, bases: visibles, nombres, abrirDetalle, met
       </details>
 
       <SalonEnDetalle local={local} nombreLocal={nombreLocal} periodo={{ desde: periodo.desde, hasta: periodo.hasta }}
-        rotulo={periodo.rotulo} metas={metas} />
+        rotulo={periodo.rotulo} metas={metas}
+        personas={{ total: p.vpp.personasCargadas + p.vpp.personasEstimadas, pctEstimado: p.vpp.pctEstimado }} />
     </>
   )
 }

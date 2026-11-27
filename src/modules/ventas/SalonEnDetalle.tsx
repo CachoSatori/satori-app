@@ -5,12 +5,17 @@
 // los productos más vendidos (hasta que exista «Productos», 3.2) y el 📤 para compartir. Las cuentas son
 // las de «Hoy» (`salonDetalle.ts`). Necesita las LÍNEAS del PoS: se leen recién al abrir el desplegable
 // (`lineasPeriodo.ts`), así abrir «Resumen» no las baja.
+// 3.2b (SPEC-ventas-v2 §4.1): «Bebidas por persona» sale del catálogo por código (`pos_ventas_productos`, mig 198):
+// bebidas VENDIDAS de salón × «rinde» ÷ las personas de salón de la venta por persona de «Resumen» (cargadas +
+// estimadas). Se lee al abrir el desplegable, en paralelo con las líneas; si falla, se ve «—» y el resto sigue igual.
 import { useEffect, useMemo, useState } from 'react'
 import type { Meta } from '../../shared/types/ventas'
 import type { Rango } from './periodos'
 import { cargarLineasPeriodo, fechasDe, type LineasPeriodo } from './lineasPeriodo'
 import { masVendidos, salonEnDetalle, textoCompartir, type OrdenProductos, type VistaProductos } from './salonDetalle'
 import { fi, getMeta, metaColor, ratioCBClass } from './ventasUtils'
+import { getVentasProductos } from '../../shared/api/posNdf'
+import { bebidasPorPersona, type BebidasPorPersona } from './productosV2'
 
 async function compartir(text: string, setCopiado: (v: boolean) => void) {
   if (navigator.share) {
@@ -31,13 +36,25 @@ interface Props {
   metas?:     Meta
   /** Abierto al entrar (pruebas). */
   abierto?:   boolean
+  /**
+   * Personas de salón del período (las de la venta por persona de «Resumen»: cargadas + estimadas, sin mesas de dueños
+   * ni regalías totales) y su % estimado. Sin esto, «Bebidas por persona» muestra la cifra de antes.
+   */
+  personas?:  { total: number; pctEstimado: number } | null
 }
 
-export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, metas, abierto = false }: Props) {
+/** Lo que muestra la tarjeta «Bebidas por persona» (3.2b). */
+type EstadoBebidas = { estado: 'leyendo' } | { estado: 'error' } | { estado: 'listo'; b: BebidasPorPersona; pctEstimado: number }
+
+export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, metas, abierto = false, personas = null }: Props) {
   const [abrio, setAbrio] = useState(abierto)
   const clave = `${local}|${periodo.desde}|${periodo.hasta}`
   const [lineas, setLineas] = useState<{ clave: string; l: LineasPeriodo } | null>(null)
   const [fallo, setFallo] = useState<{ clave: string; msg: string } | null>(null)
+  // «Reintentar» (verificador #381): cerrar y abrir el desplegable no vuelve a leer (`abrio` queda en true); cada intento
+  // nuevo vuelve a pedir las líneas y el catálogo.
+  const [intento, setIntento] = useState(0)
+  const reintentar = () => { setFallo(null); setBeb(null); setIntento(i => i + 1) }
   useEffect(() => {
     if (!abrio) return
     let vivo = true
@@ -45,22 +62,43 @@ export default function SalonEnDetalle({ local, nombreLocal, periodo, rotulo, me
       .then(l => { if (vivo) setLineas({ clave, l }) })
       .catch(e => { if (vivo) setFallo({ clave, msg: e instanceof Error ? e.message : 'No se pudo leer el PoS' }) })
     return () => { vivo = false }
-  }, [abrio, clave, local, periodo])
+  }, [abrio, clave, local, periodo, intento])
+
+  const [beb, setBeb] = useState<{ clave: string; e: EstadoBebidas } | null>(null)
+  const totalPersonas = personas?.total ?? null
+  const pctEstimado = personas?.pctEstimado ?? 0
+  useEffect(() => {
+    if (!abrio || totalPersonas === null) return
+    let vivo = true
+    getVentasProductos(local, periodo.desde, periodo.hasta)
+      .then(rpc => { if (vivo) setBeb({ clave, e: { estado: 'listo', b: bebidasPorPersona(rpc, totalPersonas), pctEstimado } }) })
+      .catch(() => { if (vivo) setBeb({ clave, e: { estado: 'error' } }) })
+    return () => { vivo = false }
+  }, [abrio, clave, local, periodo, totalPersonas, pctEstimado, intento])
 
   const l = lineas && lineas.clave === clave ? lineas.l : null
   const error = fallo && fallo.clave === clave ? fallo.msg : null
+  const bebidas: EstadoBebidas | null = totalPersonas === null ? null : beb && beb.clave === clave ? beb.e : { estado: 'leyendo' }
   return (
     <details className="vt2-detalle" data-bloque="salon-detalle" open={abrio}
       onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open) setAbrio(true) }}>
       <summary>Salón en detalle (platos, bebidas y lo más vendido)</summary>
-      {abrio && error && <div className="tips-error" role="alert"><span>No se pudo leer el PoS: {error}</span></div>}
+      {abrio && error && (
+        <div className="tips-error" role="alert">
+          <span>No se pudo leer el PoS: {error}</span>
+          <button type="button" className="vt-period-btn" style={{ minHeight: 44 }} onClick={reintentar}>Reintentar</button>
+        </div>
+      )}
       {abrio && !l && !error && <div className="vt2-cargando" role="status">Leyendo las líneas del PoS…</div>}
-      {l && <Contenido l={l} periodo={periodo} rotulo={rotulo} nombreLocal={nombreLocal} metas={metas} />}
+      {l && <Contenido l={l} periodo={periodo} rotulo={rotulo} nombreLocal={nombreLocal} metas={metas} bebidas={bebidas} onReintentar={reintentar} />}
     </details>
   )
 }
 
-function Contenido({ l, periodo, rotulo, nombreLocal, metas }: { l: LineasPeriodo; periodo: Rango; rotulo: string; nombreLocal: string; metas?: Meta }) {
+function Contenido({ l, periodo, rotulo, nombreLocal, metas, bebidas, onReintentar }: {
+  l: LineasPeriodo; periodo: Rango; rotulo: string; nombreLocal: string; metas?: Meta; bebidas: EstadoBebidas | null
+  onReintentar: () => void
+}) {
   const { dias, pm } = l
   const d = useMemo(() => salonEnDetalle(dias, pm, fechasDe(dias, periodo)), [dias, pm, periodo])
   const [vista, setVista] = useState<VistaProductos>('general')
@@ -75,8 +113,11 @@ function Contenido({ l, periodo, rotulo, nombreLocal, metas }: { l: LineasPeriod
     <div data-bloque="salon-detalle-contenido">
       <div className="vt-table-actions">
         {d.totales.ventaNeta > 0 && (
+          // Mientras lee el catálogo o si falló, el 📤 espera: no manda la cifra de antes con el rótulo nuevo.
           <button type="button" className="vt-period-btn" aria-label="Compartir el resumen"
-            onClick={() => compartir(textoCompartir(d, rotulo, nombreLocal), setCopiado)}>
+            disabled={bebidas !== null && bebidas.estado !== 'listo'}
+            title={bebidas !== null && bebidas.estado !== 'listo' ? 'Se puede compartir cuando termine de leer el catálogo del PoS' : undefined}
+            onClick={() => compartir(textoCompartir(d, rotulo, nombreLocal, bebidas?.estado === 'listo' ? bebidas.b.valor : null), setCopiado)}>
             {copiado ? '✓ Copiado' : '📤 Compartir'}
           </button>
         )}
@@ -88,10 +129,27 @@ function Contenido({ l, periodo, rotulo, nombreLocal, metas }: { l: LineasPeriod
         </div>
         <div className="vt-kpi" data-salon="promPlato"><div className="vt-kpi-label">Prom/Plato</div><div className="vt-kpi-val">{fi(d.promPlato)}</div></div>
         <div className="vt-kpi" data-salon="promBebida"><div className="vt-kpi-label">Prom/Bebida</div><div className="vt-kpi-val">{fi(d.promBebida)}</div></div>
-        <div className="vt-kpi" data-salon="bebPax"><div className="vt-kpi-label">Bebidas/PAX</div>
-          <div className="vt-kpi-val" style={{ color: metaColor(d.gen.bebPax, metaBebPax) }}>{d.gen.bebPax.toFixed(2)}</div>
-          <div className="vt-kpi-sub">bebidas ÷ PAX de los saloneros</div>
-        </div>
+        {bebidas === null ? (
+          <div className="vt-kpi" data-salon="bebPax"><div className="vt-kpi-label">Bebidas/PAX</div>
+            <div className="vt-kpi-val" style={{ color: metaColor(d.gen.bebPax, metaBebPax) }}>{d.gen.bebPax.toFixed(2)}</div>
+            <div className="vt-kpi-sub">bebidas ÷ PAX de los saloneros</div>
+          </div>
+        ) : (
+          <div className="vt-kpi" data-salon="bebPax" title="Bebidas vendidas en salón (sin las incluidas en ₡0, con «rinde») ÷ personas de salón (las de la venta por persona).">
+            <div className="vt-kpi-label">Bebidas por persona</div>
+            <div className="vt-kpi-val" data-testid="beb-pax-valor"
+              style={bebidas.estado === 'listo' && bebidas.b.valor !== null ? { color: metaColor(bebidas.b.valor, metaBebPax) } : undefined}>
+              {bebidas.estado === 'listo' ? (bebidas.b.valor === null ? '—' : bebidas.b.valor.toFixed(2).replace('.', ',')) : bebidas.estado === 'leyendo' ? '…' : '—'}
+            </div>
+            <div className="vt-kpi-sub" data-testid="beb-pax-sub">
+              {bebidas.estado === 'listo'
+                ? <>{bebidas.b.vendidas.toLocaleString('es-CR')} vendidas en salón{bebidas.pctEstimado > 0 ? ` · personas: incluye ${bebidas.pctEstimado.toFixed(1).replace('.', ',')} % estimado` : ''}{bebidas.b.incluidas > 0 ? ` · + ${bebidas.b.incluidas.toLocaleString('es-CR')} incluidas en menú` : ''}</>
+                : bebidas.estado === 'leyendo' ? 'leyendo el catálogo del PoS…' : <>no se pudo leer el catálogo del PoS{' '}
+                  <button type="button" className="vt-period-btn" style={{ minHeight: 44 }} onClick={onReintentar}>Reintentar</button></>}
+              <span className="vt2-sub" data-testid="beb-pax-antes">antes: {d.gen.bebPax.toFixed(2).replace('.', ',')} (familia 5 de los meseros ÷ su PAX)</span>
+            </div>
+          </div>
+        )}
         <div className="vt-kpi" data-salon="ratioCB"><div className="vt-kpi-label">Ratio C/B (₡)</div>
           <div className={`vt-kpi-val ${ratioCBClass(d.ratioCB)}`}>{d.ratioCB.toFixed(2)}:1</div>
         </div>

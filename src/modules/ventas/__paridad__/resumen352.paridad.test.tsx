@@ -13,7 +13,7 @@
 //     cuenta nueva la sumara, esta prueba cae (criterio 15).
 //
 // Excepciones declaradas (§12.5): venta por persona estimada (1), meta y proyección (2), «Contexto {día}» (3). No se
-// prueban acá. Reloj fijo DE NOCHE en CR (23:30 del 18-nov = 05:30 UTC del 19).
+// prueban acá. Desde la 3.2b, «Bebidas por persona» (catálogo por código): la de «Hoy» se compara contra el «antes». Reloj fijo DE NOCHE en CR (23:30 del 18-nov = 05:30 UTC del 19).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -174,7 +174,9 @@ describe.each(PERIODOS)('paridad 3.5.2 · $nombre', ({ q, desde, hasta }) => {
     expect(val('[data-salon="ventaSaloneros"]')).toBe(fi(gen.total))           // «Ventas Salón» de «Hoy» = «Salón» de «Histórico»
     expect(val('[data-salon="promPlato"]')).toBe(fi(gen.iCom > 0 ? com / gen.iCom : 0))
     expect(val('[data-salon="promBebida"]')).toBe(fi(gen.iBeb > 0 ? beb / gen.iBeb : 0))
-    expect(val('[data-salon="bebPax"]')).toBe(gen.bebPax.toFixed(2))
+    // 3.2b (excepción firmada, SPEC-ventas-v2 §4.1): la cifra principal pasa a «Bebidas por persona» del catálogo por
+    // código (su prueba: `SalonEnDetalle.bebidas.render.test.tsx`); la de «Hoy» queda al lado como «antes».
+    expect(document.querySelector('[data-testid="beb-pax-antes"]')!.textContent).toContain(gen.bebPax.toFixed(2).replace('.', ','))
     expect(val('[data-salon="ratioCB"]')).toBe(`${(beb > 0 ? com / beb : 0).toFixed(2)}:1`)
     expect(val('[data-salon="comidas"]')).toBe(fi(com))
     expect(val('[data-salon="bebidas"]')).toBe(fi(beb))

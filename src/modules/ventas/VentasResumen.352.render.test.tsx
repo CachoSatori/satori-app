@@ -20,7 +20,7 @@ for (let d = 1; d <= 30; d++) {
   const sep = `2026-09-${String(d).padStart(2, '0')}`, oct = `2026-10-${String(d).padStart(2, '0')}`
   FILAS.push(fila(sep, 'mañana', 4, 40_000), fila(sep, 'noche', 6, 60_000), fila(oct, 'mañana', 4, 44_000), fila(oct, 'noche', 6, 72_000))
 }
-const posNdf = vi.hoisted(() => ({ getPromPaxAgregado: vi.fn(), getSaloneroNombres: vi.fn(async () => ({})) }))
+const posNdf = vi.hoisted(() => ({ getPromPaxAgregado: vi.fn(), getSaloneroNombres: vi.fn(async () => ({})), getVentasProductos: vi.fn() }))
 vi.mock('../../shared/api/posNdf', async orig => ({ ...(await orig<typeof import('../../shared/api/posNdf')>()), ...posNdf }))
 
 import { datos } from './resumenV2.fixture'
@@ -48,6 +48,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-11-19T05:30:00Z'))
   role = 'owner'
   posNdf.getPromPaxAgregado.mockReset().mockResolvedValue(FILAS)
+  posNdf.getVentasProductos.mockReset().mockRejectedValue(new Error('sin catálogo en esta prueba'))
   lineas.cargarLineasPeriodo.mockReset().mockResolvedValue({ dias: {}, pm: {} })
   lineas.cargarLineasDeRangos.mockReset().mockResolvedValue({ dias: {}, pm: {} })
 })
@@ -96,6 +97,30 @@ describe('«Salón en detalle» (ítem 10)', () => {
     fireEvent(det, new Event('toggle'))
     await waitFor(() => expect(lineas.cargarLineasPeriodo).toHaveBeenCalledWith('santa-teresa', { desde: '2026-11-17', hasta: '2026-11-17' }))
     expect(await screen.findByText('No hay ventas del PoS en este período.')).toBeTruthy()
+  })
+})
+
+describe('3.2b · «Bebidas por persona» en «Salón en detalle»', () => {
+  it('bebidas vendidas de salón ÷ las MISMAS personas de la venta por persona (cargadas + estimadas)', async () => {
+    const { armarDiasMap } = await import('./ventasDiasDesdePos')
+    const { cifrasDelRango } = await import('./resumenV2')
+    const { parsearVentasProductos } = await import('../../shared/api/posNdf')
+    lineas.cargarLineasPeriodo.mockImplementation(async (_l: string, r: { desde: string; hasta: string }) =>
+      ({ dias: armarDiasMap(fx.tickets, fx.lineas, r, { uploadedAt: 'x', avisar: () => {} }).dias, pm: {} }))
+    posNdf.getVentasProductos.mockResolvedValue(parsearVentasProductos({
+      productos: [['30', 'CERVEZA', 5, 'salon', 500, 1_000_000_00, 300, 'bebida', 0]], meses: [], catalogo: [], familias: [],
+      sin_lineas: { facturas: 0, cts: 0 }, neta_cts: 1_000_000_00,
+    }))
+    abrir('p=mes&d=2026-10-01')
+    await screen.findByRole('table', { name: 'Detalle por día' })
+    const det = document.querySelector('details[data-bloque="salon-detalle"]') as HTMLDetailsElement
+    det.open = true
+    fireEvent(det, new Event('toggle'))
+    const v = cifrasDelRango(armarLectura(fx.tickets, fx.lineas, {}), { desde: '2026-10-01', hasta: '2026-10-31' }).vpp
+    const personas = v.personasCargadas + v.personasEstimadas
+    expect(v.personasEstimadas).toBeGreaterThan(0)   // la fixture trae mesas sin pax: si se usaran solo las cargadas, cae
+    await waitFor(() => expect(screen.getByTestId('beb-pax-valor').textContent).toBe((500 / personas).toFixed(2).replace('.', ',')))
+    expect(posNdf.getVentasProductos).toHaveBeenCalledWith('santa-teresa', '2026-10-01', '2026-10-31')
   })
 })
 

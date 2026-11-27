@@ -13,6 +13,9 @@ from __future__ import annotations
 import json, subprocess, sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sql_compacto import compactar  # noqa: E402  (respeta los cuerpos $$…$$: la huella md5 no cambia)
+
 RAIZ = Path(__file__).resolve().parents[2]
 MIG = RAIZ / 'supabase/migrations/192_propinas_cada_uno_lo_suyo.sql'
 ROLLBACK = RAIZ / 'scripts/sql/192_rollback.sql'
@@ -85,7 +88,7 @@ def main() -> int:
             sys.exit('--armar va con una sola mutación')
         sql = armar(mutar)
         if '--compacto' in args:  # sin líneas de comentario ni vacías (para pegarlo en una consulta de staging)
-            sql = '\n'.join(l for l in sql.splitlines() if l.strip() and not l.lstrip().startswith('--'))
+            sql = compactar(sql)
         print(sql)
         return 0
     if '--local' not in args:

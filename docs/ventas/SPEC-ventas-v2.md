@@ -215,6 +215,8 @@ Fuente: `pos_ndf_tickets` (`t`) y `pos_ndf_ticket_lines` (`l`), solo facturas `e
 | Participación en el mix | Neta de la categoría ÷ **venta neta** del período (con «Facturas sin detalle», cierra en 100 %) | 3.2, «Productos». Lectura del agente 3.2 (pregunta abierta del PR): la fórmula de antes decía «÷ neta de comida y bebida» con una línea «otros» que cierra contra la neta |
 | Precio por ítem | Neta del producto o la categoría ÷ unidades vendidas × «rinde» | 3.2 (B-1, D-1): un producto con todas sus unidades en ₡0 no tiene precio («incluido») |
 
+**Excepción para el dueño (3.2, Menor c del verificador del #377):** «en salón» pasa del criterio de **balde** (el «Solo Salón» del Mix viejo = toda factura que no es de una caja de turno: también «Sistema y otros», p. ej. una factura de barra sin pedido) al **canal de la factura** (`canal = 'salon'`, el de la 198 y de «Resumen»). Efecto medido en prod, solo lectura (26-nov): **0 unidades de bebida** de diferencia en el último mes cerrado, en el mes a la fecha y en 12 meses; en 13 meses, 2 unidades de facturas de barra quedan afuera. (Ojo para la 3.2b: «Salón en detalle» cuenta hoy solo los baldes de meseros, `aggGeneral`; es otra base y va como pregunta en ese PR.)
+
 La variante «limpia» (solo mesas con pax) de la versión del 16-nov **no se construye**: el dueño pidió un
 solo número en todos lados (17-nov).
 

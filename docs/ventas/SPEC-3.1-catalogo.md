@@ -260,6 +260,7 @@ en la 3.2, que es donde se ven estos números (`catalogoPos.ts` ya la trae: `uni
 | El día 31-dic | Sí: aparece la línea `menu_especial`; con la regla de ₡0, comida, bebida y bebidas por persona de esa noche no se distorsionan | Se mide en el PASE |
 
 - **Cuándo se mueven:** con la **3.2**, que es la que lee el catálogo nuevo. La 3.1 no cambia ninguna pantalla.
+- **Excepción para el dueño (3.2, Menor c del verificador del #377):** «en salón» pasa del criterio de **balde** (el «Solo Salón» del Mix viejo = toda factura que no es de una caja de turno: también «Sistema y otros», p. ej. una factura de barra sin pedido) al **canal de la factura** (`canal = 'salon'`, el de la 198 y de «Resumen»). Efecto medido en prod, solo lectura (26-nov): **0 unidades de bebida** de diferencia en el último mes cerrado, en el mes a la fecha y en 12 meses; en 13 meses, 2 unidades de facturas de barra quedan afuera. (Ojo para la 3.2b: «Salón en detalle» cuenta hoy solo los baldes de meseros, `aggGeneral`; es otra base y va como pregunta en ese PR.)
 - **Se mide antes de la firma:** el `PASE-198` del PR 3.1a trae el antes y el después, en **prod** y en solo
   lectura, de comida, bebida, `menu_especial`, «otros» y bebidas por persona para el último mes cerrado, los
   últimos 12 meses y el último 31-dic. Si prod tiene códigos de esas familias que no están en la lista, salen en

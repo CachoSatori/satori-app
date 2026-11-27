@@ -43,6 +43,20 @@ describe('mixDelPeriodo', () => {
     expect(b.precioItemCts).toBe(2_000_00)
   })
 
+  it('con un canal: regalías, personal e ingredientes (6/17/20) de ese canal no suman a su neta (Menor a del verificador)', () => {
+    const r = rpc([
+      ['10', 'GYOZA', 2, 'salon', 1, 10_000_00, 1, 'comida', 0],
+      ['99', 'REGALO', 17, 'salon', 1, 5_000_00, 1, 'cortesia', 0],
+      ['98', 'PERSONAL', 6, 'salon', 1, 3_000_00, 1, 'personal', 0],
+      ['97', 'INSUMO', 20, 'salon', 1, 1_000_00, 1, 'ingredientes', 0],
+      ['30', 'CERVEZA', 5, 'delivery', 1, 2_000_00, 1, 'bebida', 0],
+    ])
+    const m = mixDelPeriodo(r, 'salon')
+    expect(m.netaCts).toBe(10_000_00)
+    expect(m.cierra).toBe(true)
+    expect(m.fueraDeVenta.map(f => f.categoria)).toEqual(['cortesia', 'personal', 'ingredientes'])
+  })
+
   it('con un canal: la neta es la de ese canal y sin las facturas sin detalle', () => {
     const d = mixDelPeriodo(rpc(BASE, { sin: 1_000_00 }), 'delivery')
     expect(d.netaCts).toBe(40_000_00)
@@ -112,6 +126,9 @@ describe('popularidad (Kasavana–Smith, eje de popularidad)', () => {
     const p = popularidad(r)
     expect(p.umbral).toBeCloseTo(0.7 / 3, 10)
     expect(p.productos.map(x => [x.codigo, x.popular, x.incluido])).toEqual([['1', true, false], ['2', true, false], ['3', false, true]])
+    // B-1: la popularidad cuenta TODAS las servidas, también las de ₡0 (Menor b del verificador)
+    expect(p.productos.map(x => [x.codigo, x.servidas])).toEqual([['1', 60], ['2', 30], ['3', 10]])
+    expect(p.productos[0].participacionUnidades).toBeCloseTo(0.6, 10)
   })
 })
 

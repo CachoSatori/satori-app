@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Arma scripts/sql/206_pruebas.sql (mig 206, freno de 0,5 s en la clave de gerencia de reemplazar_pago_caja, hallazgo
-259): llena los marcadores con la 200 y la 202 tal cual (= prod hoy), la 206 (rota a propósito con --mutar) y su
-vuelta atrás, todo en una transacción que termina en ROLLBACK.
+Arma scripts/sql/206_pruebas.sql (mig 206, freno de 0,5 s en la clave de gerencia de reemplazar_pago_caja y
+delete_movement_cascade, hallazgo 259): llena los marcadores con la 200 y la 202 tal cual (= prod hoy; la 053 ya está
+en la base), la 206 (rota a propósito con --mutar) y su vuelta atrás, todo en una transacción que termina en ROLLBACK.
 
-  python3 scripts/sql/206_pruebas.py --armar [--local | --staging] [--mutar NOMBRE]       # imprime el SQL armado
+  python3 scripts/sql/206_pruebas.py --armar [--local | --staging] [--mutar NOMBRE] [--compacto]  # imprime el SQL armado
   python3 scripts/sql/206_pruebas.py --psql "<conexión>" [--local] [--mutar todas | NOMBRE] # corre con psql y dice si muerde
   python3 scripts/sql/206_pruebas.py --lista                                                # mutaciones y casos que caen
   python3 scripts/sql/206_pruebas.py --huellas                                              # md5 de los cuerpos (202 / 206 / rollback)
@@ -13,7 +13,8 @@ vuelta atrás, todo en una transacción que termina en ROLLBACK.
   PGHOST=/tmp PGPORT=5499 PGUSER=pgv HASTA=199 bash scripts/sql/local_armar_base.sh b206
 --staging (solo con --armar, sin --mutar): versión corta para pegar en el SQL de staging (conector, sin psql). Supone
   que staging tiene la 200 tal cual (hoy, 27-nov; la guarda de la 202 lo exige): no la saca ni la recarga, y la 206 entra
-  desde el texto cargado una sola vez. Mismos casos y mismos asserts.
+  desde el texto cargado una sola vez. Mismos casos y mismos asserts. Sale compactado con sql_compacto (R37).
+--compacto: el SQL armado completo, compactado con scripts/sql/sql_compacto.py (respeta los cuerpos: R37).
 --mutar todas: corre primero SIN mutar (tiene que dar 0 fallas) y después cada mutación; sale 1 si alguna no muerde.
 
 Antes de armar, verifica que las huellas escritas en la guarda de la 206 y en 206_rollback.sql sean las de los cuerpos
@@ -24,21 +25,29 @@ from __future__ import annotations
 import hashlib, json, re, subprocess, sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sql_compacto import compactar  # noqa: E402  (R37: respeta los cuerpos dollar-quoted; la huella md5 no cambia)
+
 RAIZ = Path(__file__).resolve().parents[2]
 M200 = RAIZ / 'supabase/migrations/200_caja_reemplazo_pago_atomico.sql'
 M202 = RAIZ / 'supabase/migrations/202_caja_reemplazo_pago_endurecer.sql'
+M053 = RAIZ / 'supabase/migrations/053_supplier_credits.sql'
 M206 = RAIZ / 'supabase/migrations/206_caja_reemplazo_freno_clave.sql'
 ROLLBACK = RAIZ / 'scripts/sql/206_rollback.sql'
 BATERIA = RAIZ / 'scripts/sql/206_pruebas.sql'
 PRELUDIO = RAIZ / 'scripts/sql/200_preludio_local.sql'
 
 H202 = {'reemplazar': '3ca9211052b3b977f2e5a4f3432b99f1', 'coincide': 'ec56e5b77dad0552543a037e0ccf34c3'}   # = prod (27-nov)
-H206 = '8545' '6458e90e0f14c1fe3025a5ea8d1b'   # partida: los 8 primeros dígitos parecen un teléfono (privacidadRepo.test.ts)
+H053 = 'acc79624ae36c7fee57cd4ca9609d283'   # delete_movement_cascade = prod (27-nov, leído en solo lectura)
+H206 = {'reemplazar': '8545' '6458e90e0f14c1fe3025a5ea8d1b',   # partida: los 8 primeros dígitos parecen un teléfono (privacidadRepo.test.ts)
+        'cascada': 'bf0b1edac1b16784df9a30ccb752384d'}
 
 FRENO = "      perform pg_sleep(0.5);   -- 206 · hallazgo 259: el mismo freno que verify_manager_password (045) en el fallo\n"
-GUARDA_202 = f"  if v_r <> '{H202['reemplazar']}' or v_c <> '{H202['coincide']}' then"
-GUARDA_YA = f"  if v_r = '{H206}' then"
-GUARDA_RB = f"  if v_r is distinct from '{H206}' then"
+GUARDA_202 = f"  if v_r <> '{H202['reemplazar']}' or v_c <> '{H202['coincide']}' or v_d <> '{H053}' then"
+GUARDA_YA = f"  if v_r = '{H206['reemplazar']}' and v_d = '{H206['cascada']}' then"
+GUARDA_RB = f"  if v_r is distinct from '{H206['reemplazar']}' or v_d is distinct from '{H206['cascada']}' then"
+FRENO_D = ("    if v_authorized_by is null then\n"
+           "      perform pg_sleep(0.5);   -- 206 · hallazgo 259: el mismo freno que verify_manager_password (045) en el fallo\n")
 BORRADO = ("  perform public.delete_movement_cascade(p_viejo, c_nota, p_manager_email, p_manager_password);\n"
            "  if exists (select 1 from public.cash_movements where id = p_viejo) then\n"
            "    raise exception 'No se pudo borrar el pago anterior' using errcode = 'P0001';\n  end if;\n")
@@ -47,13 +56,25 @@ BORRADO = ("  perform public.delete_movement_cascade(p_viejo, c_nota, p_manager_
 # caen 04, 12 y 14 (la huella ya no es la de la 206): es lo esperado; «muerde» exige que caigan los casos propios.
 MUTACIONES: dict[str, tuple[list[tuple[str, str, str]], set[str]]] = {
     # ── el arreglo ──
-    'sin_freno': ([('mig', FRENO, '')], {'07'}),
-    'freno_corto': ([('mig', 'perform pg_sleep(0.5);', 'perform pg_sleep(0.1);')], {'07'}),
+    'sin_freno': ([('mig', "    if v_aut is null then\n" + FRENO, "    if v_aut is null then\n")], {'07'}),
+    'freno_corto': ([('mig', "    if v_aut is null then\n      perform pg_sleep(0.5);", "    if v_aut is null then\n      perform pg_sleep(0.1);")], {'07'}),
     'freno_siempre': ([('mig', "  -- ── A. Quién llama y quién autoriza", "  perform pg_sleep(0.5);\n  -- ── A. Quién llama y quién autoriza")], {'10'}),
     # ── regresión: lo que no tiene que cambiar ──
-    'sin_clave': ([('mig', "       and u.encrypted_password = extensions.crypt(p_manager_password, u.encrypted_password)\n", "")], {'07'}),
-    'sin_rol_manager': ([('mig', "       and p.role in ('owner', 'manager') and p.is_active;\n", "       and p.is_active;\n")], {'07'}),
-    'correo_sin_lower': ([('mig', "     where lower(u.email) = lower(btrim(p_manager_email))", "     where u.email = p_manager_email")], {'06'}),
+    'sin_clave': ([('mig', "       and u.encrypted_password = extensions.crypt(p_manager_password, u.encrypted_password)\n       and p.role in ('owner', 'manager')",
+                    "       and p.role in ('owner', 'manager')")], {'07'}),
+    'cascada_sin_clave': ([('mig', "       and u.encrypted_password = extensions.crypt(p_manager_password, u.encrypted_password)\n       and p.role in ('owner','manager')",
+                            "       and p.role in ('owner','manager')")], {'15'}),
+    'sin_activo': ([('mig', "       and p.role in ('owner', 'manager') and p.is_active;\n    if v_aut is null",
+                         "       and p.role in ('owner', 'manager');\n    if v_aut is null")], {'07'}),
+    'cascada_sin_freno': ([('mig', FRENO_D, "    if v_authorized_by is null then\n")], {'15'}),
+    'cascada_freno_corto': ([('mig', FRENO_D, FRENO_D.replace('pg_sleep(0.5)', 'pg_sleep(0.1)'))], {'15'}),
+    'cascada_freno_siempre': ([('mig', "  -- ── FASE 1 · AUTORIZACIÓN (CAMBIO 1 vs 043)", "  perform pg_sleep(0.5);\n  -- ── FASE 1 · AUTORIZACIÓN (CAMBIO 1 vs 043)")], {'17'}),
+    'cascada_sin_activo': ([('mig', "       and p.role in ('owner','manager') and p.is_active;", "       and p.role in ('owner','manager');")], {'15'}),
+    'cascada_anon_ejecuta': ([('mig', "revoke all on function public.delete_movement_cascade(uuid, text, text, text) from public, anon;",
+                               "grant execute on function public.delete_movement_cascade(uuid, text, text, text) to anon;")], {'03'}),
+    'sin_rol_manager': ([('mig', "       and p.role in ('owner', 'manager') and p.is_active;\n    if v_aut is null", "       and p.is_active;\n    if v_aut is null")], {'07'}),
+    'correo_sin_lower': ([('mig', "     where lower(u.email) = lower(btrim(p_manager_email))\n       and u.encrypted_password = extensions.crypt(p_manager_password, u.encrypted_password)\n       and p.role in ('owner', 'manager')",
+                           "     where u.email = p_manager_email\n       and u.encrypted_password = extensions.crypt(p_manager_password, u.encrypted_password)\n       and p.role in ('owner', 'manager')")], {'06'}),
     'borrado_tragado': ([('mig', BORRADO, "  begin\n    perform public.delete_movement_cascade(p_viejo, c_nota, p_manager_email, p_manager_password);\n"
                                           "  exception when others then null;\n  end;\n")], {'11'}),
     'anon_ejecuta': ([('mig', "revoke all on function public.reemplazar_pago_caja(uuid, jsonb, text, text) from public, anon;",
@@ -63,6 +84,7 @@ MUTACIONES: dict[str, tuple[list[tuple[str, str, str]], set[str]]] = {
     'guarda_sin_ya_aplicada': ([('mig', GUARDA_YA, "  if false then")], {'12'}),
     'rollback_sin_guarda': ([('rb', GUARDA_RB, "  if false then")], {'13'}),
     'rollback_cuerpo_distinto': ([('rb', "-- = NOTA_REEMPLAZO del aparato", "-- = la nota del aparato")], {'13'}),
+    'rollback_cascada_distinta': ([('rb', "  -- ── FASE 1 · AUTORIZACIÓN (CAMBIO 1 vs 043)", "  -- ── FASE 1 · AUTORIZACIÓN")], {'13'}),
     'rollback_comentario_distinto': ([('rb', "método con btrim.';", "método con btrim. 206.';")], {'13'}),
 }
 
@@ -75,12 +97,16 @@ def huellas(texto: str) -> list[str]:
 def verificar_huellas() -> None:
     if huellas(M202.read_text()) != [H202['coincide'], H202['reemplazar']]:
         sys.exit('la 202 del árbol no tiene las huellas de prod (3ca92110 / ec56e5b7)')
-    if huellas(M206.read_text()) != [H206]:
-        sys.exit(f'el cuerpo de la 206 cambió: huellas {huellas(M206.read_text())}; actualizá la guarda, el rollback, la batería y H206')
-    if huellas(ROLLBACK.read_text()) != [H202['reemplazar']]:
-        sys.exit('206_rollback.sql no tiene el cuerpo EXACTO de la 202')
+    if H053 not in huellas(M053.read_text()):
+        sys.exit('la 053 del árbol no tiene el cuerpo de delete_movement_cascade de prod (acc79624)')
+    if huellas(M206.read_text()) != [H206['reemplazar'], H206['cascada']]:
+        sys.exit(f'los cuerpos de la 206 cambiaron: huellas {huellas(M206.read_text())}; actualizá la guarda, el rollback, la batería y H206')
+    if huellas(ROLLBACK.read_text()) != [H202['reemplazar'], H053]:
+        sys.exit('206_rollback.sql no tiene los cuerpos EXACTOS de la 202 y la 053')
     m, rb = M206.read_text(), ROLLBACK.read_text()
-    for t, donde in ((GUARDA_202, m), (GUARDA_YA, m), (GUARDA_RB, rb), (FRENO, m)):
+    if m.count(FRENO) != 2:
+        sys.exit('la 206 tiene que tener el freno exactamente 2 veces (una por función)')
+    for t, donde in ((GUARDA_202, m), (GUARDA_YA, m), (GUARDA_RB, rb), (FRENO_D, m)):
         if donde.count(t) != 1:
             sys.exit(f'guarda: no está (o está repetida) la línea {t.strip()[:60]}…')
 
@@ -104,18 +130,7 @@ DROPS = ("drop function if exists public.reemplazar_pago_caja(uuid, jsonb, text,
          "drop function if exists public._reemplazo_pago_coincide(public.cash_movements, jsonb);\n")
 
 
-def compactar(b: str) -> str:
-    """Saca líneas vacías y de comentario FUERA de los cuerpos $$ … $$ (adentro son parte de la huella)."""
-    dentro, out = False, []
-    for l in b.splitlines():
-        if dentro or (l.strip() and not l.strip().startswith('--')):
-            out.append(l)
-        if len(re.findall(r'(?<![\w$])\$\$(?![\w$])', l)) % 2:
-            dentro = not dentro
-    return '\n'.join(out) + '\n'
-
-
-def armar(mutar: str | None = None, local: bool = False, staging: bool = False) -> str:
+def armar(mutar: str | None = None, local: bool = False, staging: bool = False, compacto: bool = False) -> str:
     verificar_huellas()
     b = BATERIA.read_text()
     for mk, n in (('-- @@200@@', 1), ('-- @@202@@', 1), ('-- @@206@@', 1), ('-- @@206_texto@@', 1), ('-- @@206_rollback@@', 1), ('-- @@preludio@@', 1)):
@@ -134,7 +149,7 @@ def armar(mutar: str | None = None, local: bool = False, staging: bool = False) 
     b = b.replace('-- @@preludio@@', PRELUDIO.read_text() if local else '')
     b = b.replace('-- @@200@@', M200.read_text()).replace('-- @@202@@', M202.read_text()).replace('-- @@206@@', m)
     b = b.replace('-- @@206_texto@@', texto).replace('-- @@206_rollback@@', rb)
-    return compactar(b) if staging else b
+    return compactar(b) if (staging or compacto) else b
 
 
 def resultado(salida: str) -> dict | None:
@@ -150,10 +165,10 @@ def main(argv: list[str]) -> int:
         return 0
     if '--huellas' in argv:
         verificar_huellas()
-        print('202 =', H202, '\n206 =', H206, '\nrollback = 202: ok')
+        print('202 =', H202, '\n053 =', H053, '\n206 =', H206, '\nrollback = 202 + 053: ok')
         return 0
     if '--armar' in argv:
-        print(armar(mutar, '--local' in argv, '--staging' in argv))
+        print(armar(mutar, '--local' in argv, '--staging' in argv, '--compacto' in argv))
         return 0
     if '--psql' in argv:
         con = argv[argv.index('--psql') + 1]

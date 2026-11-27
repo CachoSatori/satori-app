@@ -1,43 +1,50 @@
 -- ╔════════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 206 · Caja: freno de 0,5 s cuando la clave de gerencia de `reemplazar_pago_caja` no sirve (hallazgo 259) ║
+-- ║ 206 · Caja: freno de 0,5 s cuando la clave de gerencia no sirve (hallazgo 259)           ║
+-- ║       reemplazar_pago_caja (202) y delete_movement_cascade (053)                          ║
 -- ╚════════════════════════════════════════════════════════════════════════════════════════╝
 --
--- La 202 está en el ledger de prod y su .sql NO se toca (regla 10): esta migración reescribe SOLO reemplazar_pago_caja
--- con `create or replace`: misma firma, mismo SECURITY DEFINER, mismo search_path, mismos grants/revokes.
--- Único cambio de comportamiento: cuando quien llama no es owner/manager y la clave de gerencia que manda no
--- autoriza a nadie, la función espera 0,5 s antes del mismo error 42501 (= el freno de verify_manager_password, 045).
--- El éxito no espera. El resto del cuerpo es byte a byte el de la 202 (lo prueba la batería, caso 08).
+-- La 202 y la 053 están en el ledger de prod y sus .sql NO se tocan (regla 10): esta migración reescribe las DOS
+-- funciones que comparan la clave de gerencia con `create or replace`: misma firma, mismo SECURITY DEFINER, mismo
+-- search_path (public, pg_temp en la 202; public en la 053), mismos grants/revokes.
+-- Único cambio de comportamiento en cada una: cuando quien llama no es owner/manager y la clave de gerencia que manda
+-- no autoriza a nadie, la función espera 0,5 s antes del mismo error (= el freno de verify_manager_password, 045). El
+-- éxito no espera. El resto de cada cuerpo es byte a byte el de la 202 / la 053 (lo prueba la batería, caso 04).
+-- Las dos van juntas: con el freno en una sola, la otra quedaba como camino sin freno para probar claves.
 -- `_reemplazo_pago_coincide` no se toca (la guarda solo comprueba que siga siendo la de la 202).
--- GUARDA: corre SOLO si el cuerpo en la base es exactamente el de la 202 (md5 de prosrc sin espacios). Si ya es el de
--- la 206, o cualquier otra cosa, se para sin tocar nada.
+-- GUARDA: corre SOLO si los cuerpos en la base son exactamente los de la 202 y la 053 (md5 de prosrc sin espacios;
+-- = prod al 27-nov). Si ya son los de la 206, o cualquier otra cosa, se para sin tocar nada.
 -- NO toca ninguna tabla, política, disparador ni otra función. Ningún dato.
--- Vuelta atrás: scripts/sql/206_rollback.sql (vuelve exactamente a la 202). Pruebas: scripts/sql/206_pruebas.py.
+-- Vuelta atrás: scripts/sql/206_rollback.sql (vuelve exactamente a la 202 y la 053). Pruebas: scripts/sql/206_pruebas.py.
 
 -- ── 0. Guarda por huella ──────────────────────────────────────────────────────────────────────
 do $guarda206$
 declare
   v_r text;
   v_c text;
+  v_d text;
 begin
   if to_regprocedure('public.reemplazar_pago_caja(uuid,jsonb,text,text)') is null
-     or to_regprocedure('public._reemplazo_pago_coincide(public.cash_movements,jsonb)') is null then
-    raise exception '206: falta la 202 (reemplazar_pago_caja / _reemplazo_pago_coincide): se para sin tocar nada';
+     or to_regprocedure('public._reemplazo_pago_coincide(public.cash_movements,jsonb)') is null
+     or to_regprocedure('public.delete_movement_cascade(uuid,text,text,text)') is null then
+    raise exception '206: falta la 202 o la 053 (reemplazar_pago_caja / _reemplazo_pago_coincide / delete_movement_cascade): se para sin tocar nada';
   end if;
   select md5(regexp_replace(prosrc, '\s', '', 'g')) into v_r
     from pg_proc where oid = 'public.reemplazar_pago_caja(uuid,jsonb,text,text)'::regprocedure;
   select md5(regexp_replace(prosrc, '\s', '', 'g')) into v_c
     from pg_proc where oid = 'public._reemplazo_pago_coincide(public.cash_movements,jsonb)'::regprocedure;
-  if v_r = '85456458e90e0f14c1fe3025a5ea8d1b' then
-    raise exception '206: ya aplicada (el cuerpo ya es el de la 206): se para sin tocar nada';
+  select md5(regexp_replace(prosrc, '\s', '', 'g')) into v_d
+    from pg_proc where oid = 'public.delete_movement_cascade(uuid,text,text,text)'::regprocedure;
+  if v_r = '85456458e90e0f14c1fe3025a5ea8d1b' and v_d = 'bf0b1edac1b16784df9a30ccb752384d' then
+    raise exception '206: ya aplicada (los cuerpos ya son los de la 206): se para sin tocar nada';
   end if;
-  if v_r <> '3ca9211052b3b977f2e5a4f3432b99f1' or v_c <> 'ec56e5b77dad0552543a037e0ccf34c3' then
-    raise exception '206: los cuerpos en la base no son los de la 202 (reemplazar_pago_caja %, _reemplazo_pago_coincide %): se para sin tocar nada',
-      left(v_r, 8), left(v_c, 8);
+  if v_r <> '3ca9211052b3b977f2e5a4f3432b99f1' or v_c <> 'ec56e5b77dad0552543a037e0ccf34c3' or v_d <> 'acc79624ae36c7fee57cd4ca9609d283' then
+    raise exception '206: los cuerpos en la base no son los de la 202 y la 053 (reemplazar_pago_caja %, _reemplazo_pago_coincide %, delete_movement_cascade %): se para sin tocar nada',
+      left(v_r, 8), left(v_c, 8), left(v_d, 8);
   end if;
 end
 $guarda206$;
 
--- ── 2. La función ───────────────────────────────────────────────────────────────────────────
+-- ── 1. reemplazar_pago_caja (202 + el freno) ───────────────────────────────────────────────────────────────────────────
 create or replace function public.reemplazar_pago_caja(
   p_viejo            uuid,
   p_nuevo            jsonb,
@@ -210,3 +217,122 @@ revoke all on function public.reemplazar_pago_caja(uuid, jsonb, text, text) from
 grant execute on function public.reemplazar_pago_caja(uuid, jsonb, text, text) to authenticated;
 comment on function public.reemplazar_pago_caja(uuid, jsonb, text, text) is
   '200 + 202 · Cambiar un pago a proveedor en UNA transacción: alta del nuevo (id del cliente, idempotente) + borrado del viejo por delete_movement_cascade. Hallazgo 252 / R36. 202: id de otro local = 42501 sin datos, búsqueda determinista, método con btrim. 206: clave de gerencia mala = 0,5 s de freno (hallazgo 259).';
+
+-- ── 2. delete_movement_cascade (053 + el freno) ──────────────────────────────────────────────
+create or replace function public.delete_movement_cascade(
+  p_movement_id uuid, p_note text,
+  p_manager_email text default null, p_manager_password text default null
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_movement public.cash_movements%rowtype;
+  v_inv      jsonb;
+  v_doc_ids  uuid[];
+  v_entry    public.accounting_entries%rowtype;
+  v_doc      uuid;
+  v_authorized_by uuid;
+  v_credit_apps jsonb;   -- (053) snapshot de las aplicaciones de crédito repuestas
+begin
+  -- ── FASE 1 · AUTORIZACIÓN (CAMBIO 1 vs 043) ──────────────────────────────────────────
+  if get_my_role() in ('owner','manager') then
+    v_authorized_by := auth.uid();
+  elsif p_manager_email is not null and p_manager_password is not null then
+    select u.id into v_authorized_by
+      from auth.users u join public.profiles p on p.id = u.id
+     where lower(u.email) = lower(btrim(p_manager_email))
+       and u.encrypted_password = extensions.crypt(p_manager_password, u.encrypted_password)
+       and p.role in ('owner','manager') and p.is_active;
+    if v_authorized_by is null then
+      perform pg_sleep(0.5);   -- 206 · hallazgo 259: el mismo freno que verify_manager_password (045) en el fallo
+      raise exception 'No autorizado para borrar movimientos';
+    end if;
+  else
+    raise exception 'No autorizado para borrar movimientos';
+  end if;
+  if coalesce(btrim(p_note), '') = '' then
+    raise exception 'La nota de motivo es obligatoria';
+  end if;
+
+  -- ── FASE 2 · LOCK + GUARD DE IDEMPOTENCIA ────────────────────────────────────────────
+  select * into v_movement from public.cash_movements where id = p_movement_id for update;
+  if not found then
+    return;
+  end if;
+
+  -- ── FASE 3 · SNAPSHOTS (antes de borrar nada) ────────────────────────────────────────
+  select coalesce(jsonb_agg(to_jsonb(im.*)), '[]'::jsonb)
+    into v_inv
+    from public.inventory_movements im
+   where im.cash_movement_id = p_movement_id;
+
+  select coalesce(array_agg(distinct im.document_id) filter (where im.document_id is not null), '{}'::uuid[])
+    into v_doc_ids
+    from public.inventory_movements im
+   where im.cash_movement_id = p_movement_id;
+
+  -- (053) snapshot de las aplicaciones de crédito ACTIVAS de esta factura (las que se van a reponer).
+  select coalesce(jsonb_agg(to_jsonb(ca.*)), '[]'::jsonb)
+    into v_credit_apps
+    from public.credit_applications ca
+   where ca.applied_to_movement_id = p_movement_id and not ca.reversed;
+
+  -- ── FASE 4 · AUDITORÍA (CAMBIO 2 vs 043; + credit_applications_snapshot de 053) ───────
+  insert into public.movement_deletions (deleted_by, authorized_by, note, movement_snapshot, inventory_snapshot, credit_applications_snapshot)
+    values (auth.uid(), v_authorized_by, btrim(p_note), to_jsonb(v_movement), v_inv, v_credit_apps);
+
+  -- ── FASE 5 · REVERSA DE ASIENTOS (§11.3) ─────────────────────────────────────────────
+  for v_entry in
+    select * from public.accounting_entries ae
+     where ae.status = 'posted'
+       and (
+         (ae.source_type = 'cash_movement'      and ae.source_id = p_movement_id)
+         or (ae.source_type = 'inventory_movement' and ae.source_id in (
+               select t.id from public.inventory_review_task t where t.cash_movement_id = p_movement_id))
+       )
+  loop
+    insert into public.accounting_entries (
+      entry_date, year, month, account_id, amount_crc, currency, fx_rate,
+      source_type, source_id, kind, status, reverses_entry_id, note, created_by
+    ) values (
+      v_entry.entry_date, v_entry.year, v_entry.month, v_entry.account_id, -v_entry.amount_crc,
+      v_entry.currency, v_entry.fx_rate, 'reversal', v_entry.source_id, v_entry.kind, 'posted',
+      v_entry.id, 'reversión por borrado en cascada (unificación Bandeja↔Caja)', auth.uid()
+    );
+    update public.accounting_entries set status = 'reversed' where id = v_entry.id;
+  end loop;
+
+  -- ── FASE 6 · DESCARTE DE TAREA DE INVENTARIO (§7.2) ──────────────────────────────────
+  update public.inventory_review_task
+     set status = 'DESCARTADA', discarded_by = auth.uid(), discarded_at = now(), discard_reason = 'cascade'
+   where cash_movement_id = p_movement_id
+     and status in ('PENDIENTE','EN_REVISION','COMPLETADA');
+
+  -- ── FASE 6b · REPOSICIÓN DE CRÉDITOS (053) ───────────────────────────────────────────
+  -- Marcar reversed=true las aplicaciones de crédito de esta factura → REPONE el saldo del crédito
+  -- (queda disponible para reaplicar). Idempotente (re-run: 0 filas; y FASE 2 corta antes si ya no existe).
+  update public.credit_applications
+     set reversed = true
+   where applied_to_movement_id = p_movement_id and not reversed;
+
+  -- ── FASE 7 · BORRADO (inventario ligado + el movimiento) ─────────────────────────────
+  delete from public.inventory_movements where cash_movement_id = p_movement_id;
+  delete from public.cash_movements      where id               = p_movement_id;
+
+  -- ── FASE 8 · LIMPIEZA DE DOCUMENTOS HUÉRFANOS (D5) ───────────────────────────────────
+  for v_doc in
+    select d.id from public.documents d
+     where d.linked_movement_id = p_movement_id
+        or d.id = any (v_doc_ids)
+  loop
+    if not exists (select 1 from public.inventory_movements im where im.document_id = v_doc)
+       and not exists (select 1 from public.ingredient_prices ip where ip.document_id = v_doc) then
+      delete from public.documents where id = v_doc;
+    end if;
+  end loop;
+end $$;
+
+revoke all on function public.delete_movement_cascade(uuid, text, text, text) from public, anon;
+grant  execute on function public.delete_movement_cascade(uuid, text, text, text) to authenticated;

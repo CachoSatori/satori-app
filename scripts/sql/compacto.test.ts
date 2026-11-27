@@ -93,7 +93,7 @@ describe('--compacto no cambia la huella de ningún cuerpo', () => {
     for (const h of ['636d3776826384ff46ed87a1cfe0db25', '98dae10d63e704afd7ff02930e655bbd']) expect(comp, h).toContain(h)
   })
 
-  it.each(['191', '192', '198', '199', '201', '203'])('%s: mismas huellas en completo y compacto', (n) => {
+  it.each(['191', '192', '198', '199', '201', '203', '206'])('%s: mismas huellas en completo y compacto', (n) => {
     mismasHuellas(n)
   })
 })

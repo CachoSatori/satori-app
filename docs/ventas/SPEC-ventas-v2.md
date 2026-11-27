@@ -27,7 +27,7 @@ Verificado en el código y en los PRs, no en los handoffs. «Evidencia» es el a
 | 2.3 | «Tiempos» | #294 (18-nov) y #297 (18-nov, sin «índice») | **Hecha**, con un resto | `VentasTiempos.tsx`, `tiemposV2.ts`; migración 193 (`pos_ventas_tiempos`, `pos_mesas_internas`, en prod). Resto: «Meses y temporadas» (§5.4 ítem 4) → 3.5; fechas especiales → 4.x |
 | 2.4 | Alerta de mesas sin pax en el correo diario y en Mi Rendimiento | — | **Parcial** | En pantalla sí: «Ayer: mesas sin pax» por salonero en Resumen (`alertaDeAyer`). El correo de cierre solo dice el % de personas estimadas (`supabase/functions/cierre-email/plantilla.ts`), sin la lista por salonero. Mi Rendimiento no avisa nada |
 | 3.1 | `pos_ventas_productos` + catálogo único por código | — | **Falta** (firma). Spec con las decisiones del 24-nov: [SPEC-3.1-catalogo.md](./SPEC-3.1-catalogo.md) | No hay migración ni función. El Mix sigue con `product_map` por nombre + familia del PoS (`fusionarProductMap`) |
-| 3.2 | «Productos» | — | **Falta** | Siguen «Mix», «Ing. Menú» y «Productos» (catálogo) como vistas viejas |
+| 3.2 | «Productos» | PR sobre la 3.1b (#374), 26-nov | **En revisión** | `VentasProductos.tsx`, `productosV2.ts` sobre `pos_ventas_productos` (mig 198); paridad contra el Mix viejo en `__paridad__/productos32.paridad.test.ts`. «Mix» e «Ing. Menú» siguen como sub-vistas hasta la 3.6 |
 | 3.3 | «Equipo» | 3.5.4 (PR en borrador, 23-nov) | **En revisión** | `VentasEquipo.tsx`, `equipoV2.ts`: «Saloneros» y «Evaluación» juntas en «Equipo» con la barra global; «Por línea», «ICP», «Cajas y canales» y «Competencias» como sub-vistas. La migración 194 es de Mi Rendimiento, no de esta pantalla |
 | 3.4 | `pos_ventas_regalias` + «Regalías» | — | **Falta** (firma) | No hay pantalla ni función. Lo que hay hoy: el bloque «Regalías, Personal & Desconocidos» de «Hoy» y tres secciones del Mix |
 | 3.5 | Unificación en las 5 pestañas | 3.5.1–3.5.4 (23-nov), 3.5.5 (PR del 24-nov) | **3.5.1–3.5.4 hechas; 3.5.5 (limpieza) en revisión** | `ventasTabs.ts`: 14 vistas en 7 entradas. Alcance y criterios en §12 |
@@ -210,9 +210,12 @@ Fuente: `pos_ndf_tickets` (`t`) y `pos_ndf_ticket_lines` (`l`), solo facturas `e
 | Cuenta promedio | Neta ÷ facturas | Por canal: en delivery es el indicador principal |
 | Venta por día abierto | Neta ÷ días abiertos | Para períodos de distinto largo |
 | **Salón / Delivery / Llevar / Barra** | Neta por `t.canal` | Canal de la factura, nunca «lo que cobró la caja» |
-| Bebidas por persona | Unidades de familia 5 en salón ÷ personas de salón | |
-| Relación comida/bebida | Neta de comida ÷ neta de bebida (familias 2, 3, 4, 13, 16, 29 contra 5) | |
-| Participación en el mix | Neta del grupo ÷ neta de comida y bebida | Con la línea «otros» (merch, gift cards, promociones) que cierra contra la neta |
+| Bebidas por persona | Unidades **vendidas** (sin las de ₡0) × «rinde» de las líneas de venta de categoría **bebida**, en salón ÷ personas de salón | **Desde la 3.2** (D-3 y B-1, SPEC-3.1 §2.5): antes, unidades de familia 5. Las incluidas en ₡0 se muestran aparte. En pantalla sigue en «Resumen → Salón en detalle» y en «Equipo» con el lector viejo hasta que se pasen (pregunta abierta del PR 3.2) |
+| Relación comida/bebida | Neta de **categoría** comida ÷ neta de **categoría** bebida (líneas de venta; la categoría la da `pos_categoria_efectiva`, mig 198) | **Desde la 3.2** (D-3): antes, familias 2, 3, 4, 13, 16, 29 contra 5. `menu_especial` no entra en ninguna de las dos |
+| Participación en el mix | Neta de la categoría ÷ **venta neta** del período (con «Facturas sin detalle», cierra en 100 %) | 3.2, «Productos». Lectura del agente 3.2 (pregunta abierta del PR): la fórmula de antes decía «÷ neta de comida y bebida» con una línea «otros» que cierra contra la neta |
+| Precio por ítem | Neta del producto o la categoría ÷ unidades vendidas × «rinde» | 3.2 (B-1, D-1): un producto con todas sus unidades en ₡0 no tiene precio («incluido») |
+
+**Excepción para el dueño (3.2, Menor c del verificador del #377):** «en salón» pasa del criterio de **balde** (el «Solo Salón» del Mix viejo = toda factura que no es de una caja de turno: también «Sistema y otros», p. ej. una factura de barra sin pedido) al **canal de la factura** (`canal = 'salon'`, el de la 198 y de «Resumen»). Efecto medido en prod, solo lectura (26-nov): **0 unidades de bebida** de diferencia en el último mes cerrado, en el mes a la fecha y en 12 meses; en 13 meses, 2 unidades de facturas de barra quedan afuera. (Ojo para la 3.2b: «Salón en detalle» cuenta hoy solo los baldes de meseros, `aggGeneral`; es otra base y va como pregunta en ese PR.)
 
 La variante «limpia» (solo mesas con pax) de la versión del 16-nov **no se construye**: el dueño pidió un
 solo número en todos lados (17-nov).

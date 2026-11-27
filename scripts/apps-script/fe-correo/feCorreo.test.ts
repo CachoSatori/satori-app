@@ -16,7 +16,7 @@ function blob(a: Adjunto) {
   }
 }
 
-function entorno(o: { mensajes: Record<string, Adjunto[]>; respuestas?: (cuerpo: Record<string, unknown>) => number; ahora?: () => number; latido?: number }) {
+function entorno(o: { mensajes: Record<string, Adjunto[]>; de?: Record<string, string>; respuestas?: (cuerpo: Record<string, unknown>) => number; ahora?: () => number; latido?: number }) {
   const pedidos: Record<string, unknown>[] = []
   const etiquetas: Record<string, string[]> = {}
   const labels: { id: string; name: string }[] = []
@@ -55,7 +55,7 @@ function entorno(o: { mensajes: Record<string, Adjunto[]>; respuestas?: (cuerpo:
         },
       },
     },
-    GmailApp: { getMessageById: (id: string) => ({ getAttachments: () => o.mensajes[id].map(blob) }) },
+    GmailApp: { getMessageById: (id: string) => ({ getAttachments: () => o.mensajes[id].map(blob), getFrom: () => o.de?.[id] ?? 'Ficticio <alguien@ejemplo.test>' }) },
     ScriptApp: { getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create: () => {} }) }) }) },
   }
   vm.createContext(ctx)
@@ -146,6 +146,31 @@ describe('fe-correo — tandas', () => {
     const e = entorno({ mensajes: { a: Array.from({ length: 25 }, (_, i) => ({ nombre: `f${i}.xml` })) }, respuestas: () => (k++ === 0 ? 200 : 0) })
     e.correr()
     expect(e.etiquetas).toEqual({})
+  })
+})
+
+describe('fe-correo — FE_REMITENTES (opcional, mig 201)', () => {
+  it('vacío: se mandan todos', () => {
+    const e = entorno({ mensajes: { a: [XML], b: [XML] }, de: { a: 'x@uno.test', b: 'Otro <y@dos.test>' } })
+    e.correr()
+    expect(e.etiquetas).toEqual({ a: ['L-fe-procesada'], b: ['L-fe-procesada'] })
+  })
+  it('con lista: dirección exacta o @dominio pasan; lo demás queda «fe-otro-remitente» y NO se manda', () => {
+    const e = entorno({
+      mensajes: { a: [XML], b: [XML], c: [XML], d: [XML] },
+      de: { a: 'Proveedor <Facturas@Uno.Test>', b: 'z@dos.test', c: 'z@dos.test.malo.test', d: 'ventas@sub.tres.test' },
+    })
+    e.props.FE_REMITENTES = ' facturas@uno.test , @dos.test,@sub.tres.test'
+    e.correr()
+    expect(e.etiquetas).toEqual({ a: ['L-fe-procesada'], b: ['L-fe-procesada'], c: ['L-fe-otro-remitente'], d: ['L-fe-procesada'] })
+    expect(e.pedidos.filter(p => p.xmls)).toHaveLength(3)
+    expect(JSON.stringify(e.pedidos)).not.toMatch(/@/)
+  })
+  it('un dominio no deja pasar a otro que termina igual sin la arroba', () => {
+    const e = entorno({ mensajes: { a: [XML] }, de: { a: 'z@xdos.test' } })
+    e.props.FE_REMITENTES = '@dos.test'
+    e.correr()
+    expect(e.etiquetas).toEqual({ a: ['L-fe-otro-remitente'] })
   })
 })
 

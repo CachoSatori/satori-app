@@ -18,7 +18,7 @@
 //   supabase secrets set FE_INGESTA_SECRET=<valor largo y aleatorio, ≥ 32> --project-ref <ref>
 // El mismo valor va a las propiedades del script (nunca al código ni al repo). Sin el secreto cargado (o con menos de
 // 32 caracteres) la función responde 401 a TODO (fail-closed). SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY los pone
-// Supabase. Necesita la migración 199 aplicada ANTES.
+// Supabase. Necesita las migraciones 199 y 201 aplicadas ANTES (con la 199 sola funciona, pero «el primero gana»).
 //
 // CONTRATO: POST /fe-ingesta · headers x-fe-secret, content-type: application/json
 //   body: { fuente, lote, xmls: [{ b64 }] } | { fuente, lote, sin_xml: true } | { fuente, latido: true }
@@ -80,7 +80,8 @@ Deno.serve(async (req) => {
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
     const deps: DepsIngesta = {
       sha256,
-      // Ya existe = el mismo comprobante llegó antes (reenvío): éxito idempotente, la base decide «duplicado».
+      // La ruta lleva el sha (mig 201): ya existe = ese MISMO XML llegó antes (reenvío): éxito idempotente, la base
+      // decide «duplicado». Otro XML con la misma clave va a otra ruta y la base lo deja a «revisar».
       subirXml: (ruta, xml) => subirIdempotente(() =>
         sb.storage.from(BUCKET).upload(ruta, new Blob([xml], { type: 'application/xml' }), {
           contentType: 'application/xml', upsert: false,

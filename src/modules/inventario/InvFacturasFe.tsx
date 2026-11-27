@@ -2,19 +2,22 @@
  * InvFacturasFe — Compras F1: pantalla de control de la ingesta de facturas electrónicas (owner y contador).
  * Solo lectura (mig 199, `fe_ingesta_resumen`). Responde tres preguntas: ¿el script del correo está corriendo?,
  * ¿cuántas facturas entraron por día?, ¿qué quedó para revisar o con error?
+ * Mig 203: «Emisores por confirmar» (InvFeEmisores) con «Es un proveedor real · recordar» (owner y contador).
  * No toca la Bandeja ni la Caja. Spec: docs/inventario/SPEC-compras-stock-costos.md §4.5 y §9.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { getResumenIngesta } from '../../shared/api/feIngesta'
 import { haceCuanto, type ResumenIngesta } from '../../shared/fe/resumenIngesta'
 import { dateCR, horaCR, todayCR } from '../../shared/utils'
+import InvFeEmisores from './InvFeEmisores'
 
 const MOTIVO_ESTADO: Record<string, string> = {
   receptor_distinto: 'Receptor distinto',
   revisar: 'Para revisar',
+  respuesta_revisar: 'Respuesta de Hacienda', // mig 201: respuesta en conflicto que todavía no tiene su factura
 }
 
-export default function InvFacturasFe() {
+export default function InvFacturasFe({ rol = '' }: { rol?: string }) {
   const [resumen, setResumen] = useState<ResumenIngesta | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
@@ -106,6 +109,8 @@ export default function InvFacturasFe() {
           </div>
         </>
       )}
+
+      <InvFeEmisores rol={rol} onCambio={cargar} />
 
       <div className="vt-sl">Por día</div>
       {resumen.dias.length === 0

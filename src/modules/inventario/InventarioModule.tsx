@@ -115,7 +115,7 @@ export default function InventarioModule() {
             {tab === 'consumo'      && <InvConsumo      ingredients={ingredients} onRefresh={reload} profile={profile} />}
             {tab === 'foodcost'     && <InvFoodCost     ingredients={ingredients} />}
             {tab === 'movimientos'  && <InvMovimientos  ingredients={ingredients} movements={movements} onRefresh={reload} profile={profile} />}
-            {tab === 'fe'           && <InvFacturasFe />}
+            {tab === 'fe'           && <InvFacturasFe rol={role} />}
           </div>
         </Suspense>
       )}

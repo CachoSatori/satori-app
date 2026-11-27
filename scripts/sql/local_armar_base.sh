@@ -5,6 +5,7 @@
 # PG17) se listan con «!!» y no frenan.
 #
 #   PGHOST=/tmp PGPORT=5499 PGUSER=pgv bash scripts/sql/local_armar_base.sh <base> [raiz-del-repo]
+# HASTA=NNN: solo las migraciones con número ≤ NNN (p. ej. HASTA=200 para probar la 201 con su batería, que la aplica ella).
 set -u
 DB=${1:?nombre de la base}; RAIZ=${2:-$(cd "$(dirname "$0")/../.." && pwd)}
 P="psql -X -d $DB -q -v ON_ERROR_STOP=1"
@@ -12,6 +13,8 @@ psql -X -d postgres -qc "drop database if exists $DB" -c "create database $DB" >
 $P -f "$RAIZ/scripts/sql/local_shim_supabase.sql" >/dev/null 2>&1
 for f in "$RAIZ"/supabase/migrations/*.sql; do
   b=$(basename "$f")
+  n=${b%%_*}
+  if [ -n "${HASTA:-}" ] && [ "$((10#$n))" -gt "$((10#$HASTA))" ]; then continue; fi
   case "$b" in
     038_*) $P -c "alter table public.cash_movements add column if not exists method text, add column if not exists caja_origen text" ;;
     069_*) $P -c "create policy cierre_write on public.cash_cierres_dia for all using (true); create policy inv_write_ri on public.recipe_ingredients for all using (true); create policy inv_write_recipes on public.recipes for all using (true);" 2>/dev/null ;;

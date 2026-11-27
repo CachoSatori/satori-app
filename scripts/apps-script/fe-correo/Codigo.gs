@@ -9,6 +9,7 @@
  *   fe-procesada  · la Edge respondió 200 (guardado, duplicado o no era comprobante)
  *   fe-sin-xml    · tenía adjunto pero ningún XML (solo PDF o imagen): se avisa el conteo
  *   fe-error      · XML ilegible, rechazado (4xx), zip dentro de zip o XML de más de 1 MB → lo mira el contador
+ *   fe-otro-remitente · con FE_REMITENTES cargado, el remitente no está en la lista: NO se manda nada (lo mira el contador)
  *   (sin etiqueta)· error de red o 5xx: se reintenta en la próxima corrida (la ingesta es idempotente por clave)
  *
  * CONFIGURACIÓN (una vez, el dueño, guiado paso a paso en docs/pases/PASE-199-fe-ingesta.md):
@@ -17,6 +18,10 @@
  *     FE_INGESTA_SECRET  el mismo valor que el secreto FE_INGESTA_SECRET de la Edge (NUNCA en este archivo)
  *     FE_FUENTE          rótulo de esta cuenta, en minúsculas: p. ej. santa-teresa
  *     FE_DESDE           (opcional) primera fecha a cargar, AAAA/MM/DD. Por defecto 2026/11/30 (decisión del dueño)
+ *     FE_REMITENTES      (opcional, mig 201) lista separada por comas de direcciones completas o de dominios con «@»
+ *                        adelante. Vacía = se mandan todos. El filtro es solo una primera barrera: la base igual deja
+ *                        a «revisar» un emisor que no está en emisores conocidos y guarda aparte otro XML con la misma
+ *                        clave (hallazgo 257). Las direcciones van SOLO en la propiedad, nunca en este archivo.
  *   Servicios → agregar «Gmail API» (servicio avanzado; ya declarado en appsscript.json).
  *   Ejecutar `instalar` una vez y autorizar: crea las etiquetas y el disparador cada 15 min.
  *
@@ -26,7 +31,7 @@
  * mensajes (lo que sobra queda para la siguiente). Una corrida sin correos nuevos dura 1–3 s.
  */
 
-var ETIQUETAS = { ok: 'fe-procesada', sinXml: 'fe-sin-xml', error: 'fe-error' };
+var ETIQUETAS = { ok: 'fe-procesada', sinXml: 'fe-sin-xml', error: 'fe-error', otroRemitente: 'fe-otro-remitente' };
 var TOPE_MS = 45 * 1000;
 var TOPE_MENSAJES = 20;
 var TOPE_XML_BYTES = 1024 * 1024;          // igual que la Edge
@@ -41,12 +46,29 @@ function config_() {
     secreto: p.getProperty('FE_INGESTA_SECRET'),
     fuente: p.getProperty('FE_FUENTE'),
     desde: p.getProperty('FE_DESDE') || DESDE_POR_DEFECTO,
+    remitentes: listaRemitentes_(p.getProperty('FE_REMITENTES')),
   };
   if (!c.url || !/^https:\/\//.test(c.url)) throw new Error('Falta FE_INGESTA_URL (https) en las propiedades del script');
   if (!c.secreto || c.secreto.length < 32) throw new Error('Falta FE_INGESTA_SECRET (32 o más caracteres) en las propiedades del script');
   if (!c.fuente || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(c.fuente)) throw new Error('FE_FUENTE tiene que ser minúsculas, números y guiones');
   if (!/^\d{4}\/\d{2}\/\d{2}$/.test(c.desde)) throw new Error('FE_DESDE tiene que ser AAAA/MM/DD');
   return c;
+}
+
+/** FE_REMITENTES → lista en minúsculas (vacía = todos). Cada ítem es una dirección completa o «@dominio». */
+function listaRemitentes_(texto) {
+  return String(texto || '').split(',').map(function (x) { return x.trim().toLowerCase(); }).filter(function (x) { return x; });
+}
+
+/** ¿El remitente («Nombre <dirección>» o la dirección sola) está permitido? Lista vacía = todos. */
+function remitentePermitido_(lista, de) {
+  if (!lista.length) return true;
+  var m = /<([^>]+)>/.exec(String(de || ''));
+  var dir = (m ? m[1] : String(de || '')).trim().toLowerCase();
+  if (!dir) return false;
+  return lista.some(function (x) {
+    return x.charAt(0) === '@' ? dir.slice(-x.length) === x : dir === x;
+  });
 }
 
 /** Una vez: etiquetas + disparador cada 15 min (borra disparadores viejos de `correr` para no duplicarlos). */
@@ -160,12 +182,18 @@ function correr() {
       return;
     }
     var ids = idsEtiquetas_();
-    var q = 'has:attachment after:' + c.desde + ' -label:' + ETIQUETAS.ok + ' -label:' + ETIQUETAS.sinXml + ' -label:' + ETIQUETAS.error;
+    var q = 'has:attachment after:' + c.desde + ' -label:' + ETIQUETAS.ok + ' -label:' + ETIQUETAS.sinXml + ' -label:' + ETIQUETAS.error +
+            ' -label:' + ETIQUETAS.otroRemitente;
     var lista = Gmail.Users.Messages.list('me', { q: q, maxResults: TOPE_MENSAJES }).messages || [];
     for (var i = 0; i < lista.length; i++) {
       if (Date.now() - inicio > TOPE_MS) break; // lo que sobra queda para la próxima
       var id = lista[i].id;
-      var x = xmlsDe_(GmailApp.getMessageById(id));
+      var mensaje = GmailApp.getMessageById(id);
+      if (!remitentePermitido_(c.remitentes, mensaje.getFrom())) {
+        etiquetar_(id, ids.otroRemitente); // no se manda nada: ni el remitente ni los XML salen de la cuenta
+        continue;
+      }
+      var x = xmlsDe_(mensaje);
       var res;
       if (!x.xmls.length && !x.problema) {
         res = clasificar_(enviar_(c, { fuente: c.fuente, lote: Utilities.getUuid(), sin_xml: true }));

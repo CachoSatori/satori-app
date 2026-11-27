@@ -12,6 +12,8 @@ que termina en ROLLBACK.
 --local: suma scripts/sql/205_preludio_local.sql. Base: Postgres 16 local armado SIN la 205:
   PGHOST=/tmp PGPORT=5499 PGUSER=pgv HASTA=203 bash scripts/sql/local_armar_base.sh b205
 --mutar todas: corre primero SIN mutar (tiene que dar 0 fallas) y después cada mutación; sale 1 si alguna no muerde.
+Con --local corre además C1/C2 en DOS sesiones (anotar no espera · reparar espera el candado de la ingesta) sobre una
+COPIA descartable de la base local (create database … template; se borra al final). En staging C1/C2 no corren.
 Sin modo compacto a propósito: borrar comentarios cambiaría los cuerpos y la guarda por md5 (que ignora espacios, no
 comentarios) ya no reconocería la 205.
 
@@ -31,25 +33,33 @@ BATERIA = RAIZ / 'scripts/sql/205_pruebas.sql'
 PRELUDIO = RAIZ / 'scripts/sql/205_preludio_local.sql'
 
 H198 = {'registrar': '85609c26a1736ff174aec2832d101dc6', 'absorber': '75d332953001efe0734e99759106be19'}  # = prod (26-nov)
-H205 = {'registrar': '9d79f68209caac275c98d2b8ce42ed71'}
+H205 = {'registrar': '7cc9af6883242326a8aab0d20b004cb7'}
 
 GUARDA_198 = (f"  if v_reg <> '{H198['registrar']}' or v_abs <> '{H198['absorber']}' then")
-GUARDA_YA = "  if to_regclass('public.pos_catalogo_fallas') is not null or to_regprocedure('public.pos_catalogo_reparar(text)') is not null then"
-GUARDA_RB = f"  if v_reg is distinct from '{H205['registrar']}' or to_regclass('public.pos_catalogo_fallas') is null then"
+GUARDA_YA = "  if to_regclass('public.pos_catalogo_fallas') is not null or to_regclass('public.pos_catalogo_reparaciones') is not null\n"
+GUARDA_RB = f"  if v_reg is distinct from '{H205['registrar']}' or to_regclass('public.pos_catalogo_fallas') is null\n"
 PROTEGE = ("    exception when others then\n"
            "      raise warning '205 pos_catalogo_registrar: no se pudo anotar la falla: % (%)', sqlerrm, sqlstate;\n")
-SUMA = "        ultima_en = now(), veces = f.veces + 1, facturas = f.facturas + excluded.facturas;\n      get diagnostics"
+TRY_LOCAL = "        if pg_try_advisory_xact_lock(hashtextextended('pos_catalogo_fallas:' || coalesce(r.local, ''), 0)) then"
+SUMA = ("            ultima_en = now(), veces = f.veces + 1, facturas = f.facturas + excluded.facturas, mensaje = excluded.mensaje;\n"
+        "        else\n          raise warning '205 pos_catalogo_registrar: fallas de %")
+PATRON = "    v_patron := regexp_replace(regexp_replace(v_msg, "
+CANDADO_INGESTA = "    perform pg_advisory_xact_lock(hashtextextended('pos_ndf_ingest:' || v_loc, 0));\n"
 
-# nombre → ([(archivo 'mig' | 'rb', texto, reemplazo)], casos que tienen que caer).
+# nombre → ([(archivo 'mig' | 'rb', texto, reemplazo)], casos que tienen que caer). Casos 'C1'/'C2' = prueba de
+# concurrencia en DOS sesiones (--concurrencia, solo local): C1 anotar no espera · C2 reparar espera a la ingesta.
 MUTACIONES: dict[str, tuple[list[tuple[str, str, str]], set[str]]] = {
     # ── disparador ──
-    'no_anota': ([('mig', "       where t.id in (select distinct ticket_id from nuevas)\n       group by t.local\n",
-                       "       where false\n       group by t.local\n"),
-                  ('mig', "count(distinct ticket_id)::integer from nuevas\n", "count(distinct ticket_id)::integer from nuevas where false\n")], {'06'}),
-    'sin_local': ([('mig', "      select t.local, v_estado, v_msg, count(*)::integer\n", "      select null::text, v_estado, v_msg, count(*)::integer\n")], {'06', '09'}),
-    'no_suma': ([('mig', SUMA, "        ultima_en = now();\n      get diagnostics")], {'07'}),
+    'no_anota': ([('mig', TRY_LOCAL, "        if false then")], {'06'}),
+    'sin_local': ([('mig', "          values (r.local, v_estado, v_patron, v_msg, r.n)", "          values (null, v_estado, v_patron, v_msg, r.n)")], {'06', '09'}),
+    'no_suma': ([('mig', SUMA, SUMA.replace("veces = f.veces + 1, facturas = f.facturas + excluded.facturas, ", ""))], {'07'}),
     'anotar_sin_proteccion': ([('mig', PROTEGE, "")], {'08'}),
     'disparador_frena_ingesta': ([('mig', "  exception when others then\n    v_estado := sqlstate;", "  exception when no_data_found then\n    v_estado := sqlstate;")], {'06'}),
+    # ── 3: la clave no lleva el mensaje crudo ──
+    'clave_cruda': ([('mig', PATRON, "    v_patron := v_msg || regexp_replace(regexp_replace(v_msg, ")], {'21'}),
+    # ── 1: anotar nunca espera (dos sesiones) ──
+    'anotar_espera_candado': ([('mig', TRY_LOCAL, "        if (select true from (select pg_advisory_xact_lock(hashtextextended('pos_catalogo_fallas:' || coalesce(r.local, ''), 0))) x) then")], {'C1'}),
+    'anotar_sin_candado': ([('mig', TRY_LOCAL, "        if true then")], {'C1'}),
     # ── lectura ──
     'manager_ve_todo': ([('mig', "(select public.get_my_role()) = 'manager' and local is not null and public.puede_ver_local(local)",
                           "(select public.get_my_role()) = 'manager'")], {'09'}),
@@ -58,26 +68,32 @@ MUTACIONES: dict[str, tuple[list[tuple[str, str, str]], set[str]]] = {
     'api_escribe': ([('mig', "grant select on table public.pos_catalogo_fallas to authenticated;",
                       "grant select, insert, update, delete on table public.pos_catalogo_fallas to authenticated;\n"
                       "create policy _abierta on public.pos_catalogo_fallas for all to authenticated using (true) with check (true);")], {'03', '10'}),
+    'reparaciones_legible': ([('mig', "revoke all on table public.pos_catalogo_reparaciones from public, anon, authenticated;",
+                               "grant select on table public.pos_catalogo_reparaciones to authenticated;")], {'03'}),
     # ── reparar ──
     'sin_rol': ([('mig', "  if v_rol is null or v_rol not in ('owner', 'manager') then", "  if false then")], {'12'}),
     'manager_cualquier_local': ([('mig', "  if v_rol = 'manager' and not public.puede_ver_local(p_local) then", "  if false then")], {'12'}),
     'manager_null': ([('mig', "  if p_local is null and v_rol <> 'owner' then", "  if false then"),
                       ('mig', "  if v_rol = 'manager' and not public.puede_ver_local(p_local) then",
                               "  if v_rol = 'manager' and p_local is not null and not public.puede_ver_local(p_local) then")], {'12'}),
-    'sin_absorber': ([('mig', "  v_escritos := public.pos_catalogo_absorber(array(", "  v_escritos := 0 * cardinality(array(")], {'11', '13'}),
-    'cierra_todo': ([('mig', "   where f.resuelta_en is null and (p_local is null or f.local = p_local);",
-                      "   where f.resuelta_en is null;")], {'13', '15'}),
-    'sin_quien': ([('mig', "set resuelta_en = now(), resuelta_por = auth.uid()", "set resuelta_en = now(), resuelta_por = null")], {'13'}),
+    'sin_absorber': ([('mig', "    v_escritos := v_escritos + public.pos_catalogo_absorber(array(", "    v_escritos := v_escritos + 0 * cardinality(array(")], {'11', '13'}),
+    'cierra_todo': ([('mig', "     where f.resuelta_en is null and f.local = v_loc;", "     where f.resuelta_en is null;")], {'13', '15'}),
+    'sin_quien': ([('mig', "set resuelta_en = now(), resuelta_por = auth.uid()\n     where f.resuelta_en is null and f.local = v_loc;",
+                    "set resuelta_en = now(), resuelta_por = null\n     where f.resuelta_en is null and f.local = v_loc;")], {'13'}),
     'anon_ejecuta': ([('mig', "revoke all on function public.pos_catalogo_reparar(text) from public, anon;",
                        "grant execute on function public.pos_catalogo_reparar(text) to anon;")], {'03'}),
     'reparar_sin_definer': ([('mig', "returns jsonb\nlanguage plpgsql\nvolatile\nsecurity definer", "returns jsonb\nlanguage plpgsql\nvolatile\nsecurity invoker")], {'03', '13'}),
+    # ── 2: candado de la ingesta y enfriamiento ──
+    'reparar_sin_candado_ingesta': ([('mig', CANDADO_INGESTA, "")], {'C2'}),
+    'sin_enfriamiento': ([('mig', "r.local = v_loc and r.ultima_en > now() - interval '60 seconds';", "r.local = v_loc and false;")], {'14'}),
     # ── guarda y vuelta atrás ──
     'guarda_sin_huella_198': ([('mig', GUARDA_198, "  if false then")], {'02'}),
-    'guarda_sin_ya_aplicada': ([('mig', GUARDA_YA, "  if false then")], {'18'}),
-    'rollback_sin_guarda': ([('rb', GUARDA_RB, "  if false then")], {'19'}),
+    'guarda_sin_ya_aplicada': ([('mig', GUARDA_YA + "     or to_regprocedure('public.pos_catalogo_reparar(text)') is not null then", "  if false then")], {'18'}),
+    'rollback_sin_guarda': ([('rb', GUARDA_RB + "     or to_regclass('public.pos_catalogo_reparaciones') is null then", "  if false then")], {'19'}),
     'rollback_cuerpo_distinto': ([('rb', "    raise warning '198 pos_catalogo_registrar: % (%)', sqlerrm, sqlstate;",
                                    "    raise warning '198 pos_catalogo_registrar: %', sqlerrm;")], {'19'}),
     'rollback_deja_reparar': ([('rb', "drop function public.pos_catalogo_reparar(text);\n", "")], {'19'}),
+    'rollback_deja_reparaciones': ([('rb', "drop table public.pos_catalogo_reparaciones;\n", "")], {'19'}),
 }
 # Nota: con una mutación del CUERPO del disparador también cae el 19/20 (la huella ya no es la de la 205): es lo
 # esperado; «muerde» exige que caigan los casos propios de cada mutación.
@@ -136,6 +152,65 @@ def armar(mutar: str | None = None, local: bool = False) -> str:
     return b
 
 
+OWNER_C = '00000000-0000-4000-8205-0000000000c9'
+LINEA_C = ("insert into public.pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia) "
+           "select id, '{cod}', 'FICTICIO 205C', 1, 1000, 3 from public.pos_ndf_tickets where local = 'prueba-205c' and numero_factura = '{fac}';")
+
+
+def _psql(con: str, sql: str) -> subprocess.CompletedProcess:
+    return subprocess.run(['psql', con, '-X', '-At', '-v', 'ON_ERROR_STOP=1'], input=sql, text=True, capture_output=True)
+
+
+def concurrencia(con: str, mutar: str | None) -> set[str] | None:
+    """C1 y C2 en DOS sesiones, sobre una copia descartable de la base local (se borra al final). Devuelve los casos
+    que caen, o None si no se pudo armar. Solo Postgres local (host=/tmp): hace COMMIT en la copia."""
+    import time
+    m = re.search(r'dbname=(\w+)', con)
+    if 'host=/tmp' not in con or not m:
+        return None
+    base, copia = m.group(1), m.group(1) + '_c205'
+    adm, cc = con.replace(f'dbname={base}', 'dbname=postgres'), con.replace(f'dbname={base}', f'dbname={copia}')
+    _psql(adm, f'drop database if exists {copia};')
+    if _psql(adm, f'create database {copia} template {base};').returncode != 0:
+        return None
+    try:
+        mig, _ = textos(mutar)
+        arme = _psql(cc, mig + f"""
+insert into public.locations (id, name, is_active) values ('prueba-205c', 'Local de prueba 205c', false) on conflict (id) do nothing;
+insert into auth.users (id, raw_user_meta_data) values ('{OWNER_C}', '{{"full_name":"Ficticio 205c"}}');
+update public.profiles set role = 'owner', is_active = true where id = '{OWNER_C}';
+insert into public.pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, valor_servido_crc)
+values ('prueba-205c', 'C1', '2026-11-20 12:00-06', 'C', 'salon', 'salonero', true, 'ok', 0),
+       ('prueba-205c', 'C2', '2026-11-21 12:00-06', 'C', 'salon', 'salonero', true, 'ok', 0);
+alter table public.pos_productos add constraint _roto_205c check (false) not valid;""")
+        if arme.returncode != 0:
+            return None
+        caen: set[str] = set()
+        # C1: A anota su falla y NO confirma (3 s); B (mismo local, sin el candado de la ingesta, statement_timeout 1,5 s)
+        # falla igual: su línea tiene que entrar sin esperar la fila de A.
+        a = subprocess.Popen(['psql', cc, '-X', '-At'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        a.stdin.write('begin;\n' + LINEA_C.format(cod='9101', fac='C1') + '\nselect pg_sleep(3);\ncommit;\n'); a.stdin.flush()
+        time.sleep(1)
+        b = _psql(cc, "set statement_timeout = '1500ms';\n" + LINEA_C.format(cod='9102', fac='C2'))
+        a.communicate()
+        if b.returncode != 0 or 'ERROR' in b.stderr:
+            caen.add('C1')
+        _psql(cc, 'alter table public.pos_productos drop constraint _roto_205c;')
+        # C2: A tiene el candado de la ingesta de prueba-205c (3 s); B (owner, lock_timeout 1 s) repara: tiene que esperarlo.
+        a = subprocess.Popen(['psql', cc, '-X', '-At'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        a.stdin.write("begin;\nselect pg_advisory_xact_lock(hashtextextended('pos_ndf_ingest:prueba-205c', 0));\nselect pg_sleep(3);\ncommit;\n"); a.stdin.flush()
+        time.sleep(1)
+        b = _psql(cc, "set lock_timeout = '1s';\n"
+                      f"""select set_config('request.jwt.claims', '{{"sub":"{OWNER_C}","role":"authenticated"}}', false);\n"""
+                      "select public.pos_catalogo_reparar('prueba-205c');")
+        a.communicate()
+        if 'lock timeout' not in b.stderr:
+            caen.add('C2')
+        return caen
+    finally:
+        _psql(adm, f'drop database if exists {copia};')
+
+
 def resultado(salida: str) -> dict | None:
     m = re.search(r'\{"ok".*\}', salida)
     return json.loads(m.group(0)) if m else None
@@ -161,6 +236,9 @@ def main(argv: list[str]) -> int:
         nombres = [None, *MUTACIONES] if mutar == 'todas' else ([mutar] if mutar else [None])
         malo = 0
         for n in nombres:
+            if n and '--local' not in argv and any(x.startswith('C') for x in MUTACIONES[n][1]):
+                print(f'{n}: solo local (dos sesiones), se salta')
+                continue
             sql = armar(n, local='--local' in argv)
             out = subprocess.run(['psql', con, '-X', '-At', '-v', 'ON_ERROR_STOP=1'], input=sql, text=True, capture_output=True)
             r = resultado(out.stdout + out.stderr)
@@ -170,6 +248,16 @@ def main(argv: list[str]) -> int:
                 malo = 1
                 continue
             caidos = {f[0] for f in (r.get('fallaron') or [])}
+            if '--local' in argv:
+                c = concurrencia(con, n)
+                if c is None:
+                    print(f"{n or 'sin mutar'}: concurrencia NO PROBADA (no se pudo armar la copia local)")
+                    malo = 1
+                else:
+                    caidos |= c
+                    r['fallas'] += len(c)
+                    r.setdefault('fallaron', None)
+                    r['fallaron'] = (r['fallaron'] or []) + [[x, 'dos sesiones'] for x in sorted(c)]
             if n is None:
                 print(f"sin mutar: ok={r['ok']} fallas={r['fallas']}" + (f" {r['fallaron']}" if r['fallas'] else ''))
                 if '--detalle' in argv:

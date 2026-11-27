@@ -6,14 +6,16 @@ dueño (firma por chat sobre el SHA de cabeza). No es urgente (impacto medido ho
 
 ## 1. Qué pasa y qué no
 
-- Tabla nueva `pos_catalogo_fallas`: una fila abierta por (local, código SQLSTATE, mensaje), con `veces`, `facturas`,
-  `primera_en`, `ultima_en`, `resuelta_en/por`. RLS: owner y contador leen todo; manager, solo sus locales. Nadie
+- Tabla nueva `pos_catalogo_fallas`: una fila abierta por (local, código SQLSTATE, **patrón** del mensaje: sin valores
+  entre comillas ni números), con `veces`, `facturas`, último `mensaje` crudo, `primera_en`, `ultima_en`, `resuelta_en/por`. RLS: owner y contador leen todo; manager, solo sus locales. Nadie
   escribe por la API.
 - `pos_catalogo_registrar()` (el disparador de la 198) con `create or replace`: si `pos_catalogo_absorber` falla, además
-  del WARNING de siempre anota la falla. **La ingesta manda:** si anotar también falla, otro WARNING y la factura entra.
-- `pos_catalogo_reparar(p_local)` (SECURITY DEFINER): owner (null = todos los locales) y manager de su local. Misma regla
-  de la 198 sobre toda la historia; cierra las fallas abiertas del local. Idempotente. Si la regla sigue rota, da el
-  error y no cierra nada.
+  del WARNING de siempre anota la falla. **La ingesta manda:** anotar nunca espera (`pg_try_advisory_xact_lock` propio
+  por local; si está tomado, solo WARNING) y si anotar falla, otro WARNING y la factura entra.
+- `pos_catalogo_reparar(p_local)` (SECURITY DEFINER): owner (null = todos, de a un local) y manager de su local
+  (decisión del dueño 26-nov). Toma el MISMO candado por local que `pos_ndf_ingestar` (082). Enfriamiento: 1 por local
+  por minuto (si no, `saltados: [{local, hace_s}]`, tabla interna `pos_catalogo_reparaciones`). Si la regla sigue rota,
+  da el error y no cierra nada.
 - No toca: `pos_ndf_*` (ni políticas ni el disparador), `pos_catalogo_absorber`, `pos_catalogo_refrescar`, la Edge
   `ingest-ndf`, el agente del PoS, sagrados. Sin pantalla todavía (choca con #374, 3.1b): va en un PR después de #374.
 
@@ -35,10 +37,10 @@ fuera de `visto_desde/hasta`**: el disparador no falló hasta hoy. Distinto en `
 ## 3. Orden
 
 1. Batería 205 en staging por la sesión de CC del dueño (regla 14): `python3 scripts/sql/205_pruebas.py --psql
-   "<staging>" --mutar todas` (20 casos, 21 mutaciones; termina en ROLLBACK). Local (Postgres 16) ya corrió: PR.
+   "<staging>" --mutar todas` (22 casos; C1/C2 de dos sesiones solo en local; termina en ROLLBACK). Local (Postgres 16): 22/22 + C1/C2, 28/28 mutaciones (PR).
 2. Firma por chat sobre el SHA de cabeza (Gate verde) + lecturas del §2.
 3. Merge en ventana D1 (código → con OK). Branching aplica la 205.
-4. Después (solo lectura): ledger con **una** fila `205` / `pos_catalogo_fallas` · `reg` = `9d79f682…` · tabla con RLS
+4. Después (solo lectura): ledger con **una** fila `205` / `pos_catalogo_fallas` · `reg` = `7cc9af68…` · tablas con RLS
    y 0 filas · `pos_catalogo_reparar` `prosecdef`, `EXECUTE` solo `authenticated` · disparador sigue habilitado ·
    siguen entrando facturas (latido del PoS) y `pos_productos` se mueve con ellas.
 
@@ -46,8 +48,8 @@ fuera de `visto_desde/hasta`**: el disparador no falló hasta hoy. Distinto en `
 
 ## 4. Vuelta atrás
 
-`scripts/sql/205_rollback.sql` en una transacción (deja el disparador EXACTO a la 198; borra `pos_catalogo_reparar` y la
-tabla: antes, guardar sus filas fuera del repo) + PR que saca el `.sql` de `main` solo si la 205 no está en el ledger
+`scripts/sql/205_rollback.sql` en una transacción (deja el disparador EXACTO a la 198; borra `pos_catalogo_reparar` y las
+dos tablas: antes, guardar sus filas fuera del repo) + PR que saca el `.sql` de `main` solo si la 205 no está en el ledger
 (regla 10). Si ya está: migración nueva con el mismo contenido.
 
 ## 5. Firma y bitácora

@@ -132,8 +132,11 @@ select '02 con otro cuerpo de registrar la 205 se para sin crear nada; al salir 
 
 -- ═══ B. Objetos y permisos ══════════════════════════════════════════════════════════════════════════════════════
 insert into _r205 (caso, ok, detalle)
-select '03 tabla con RLS; reparar DEFINER con search_path; authenticated lee y ejecuta reparar; anon nada; nadie escribe ni llama registrar',
+select '03 tablas con RLS (reparaciones sin lectura); reparar DEFINER con search_path; authenticated lee y ejecuta reparar; anon nada; nadie escribe ni llama registrar',
        (select relrowsecurity from pg_class where oid = 'public.pos_catalogo_fallas'::regclass)
+       and (select relrowsecurity from pg_class where oid = 'public.pos_catalogo_reparaciones'::regclass)
+       and not has_table_privilege('authenticated', 'public.pos_catalogo_reparaciones', 'select')
+       and not has_table_privilege('anon', 'public.pos_catalogo_reparaciones', 'select')
        and (select prosecdef and proconfig @> array['search_path=public, pg_temp'] from pg_proc where oid = 'public.pos_catalogo_reparar(text)'::regprocedure)
        and (select prosecdef and proconfig @> array['search_path=public, pg_temp'] from pg_proc where oid = 'public.pos_catalogo_registrar()'::regprocedure)
        and has_table_privilege('authenticated', 'public.pos_catalogo_fallas', 'select')
@@ -179,6 +182,18 @@ select '07 la misma falla en otro lote suma (veces 2, facturas 2) en la MISMA fi
        (select v from _a205 where k = 'i07') = '1'
        and pg_temp.abiertas('prueba-205') = 'prueba-205:23514:2:2' and (select count(*) from public.pos_catalogo_fallas) = 1,
        pg_temp.abiertas('prueba-205');
+-- 21: la misma falla con OTRO valor entre comillas (otra restricción) cae en la misma fila: la clave es el patrón.
+alter table public.pos_productos drop constraint _roto_205;
+alter table public.pos_productos add constraint _roto_205b check (false) not valid;
+insert into _a205 select 'i07b', pg_temp.linea('prueba-205', 'P3', '9058');
+alter table public.pos_productos drop constraint _roto_205b;
+alter table public.pos_productos add constraint _roto_205 check (false) not valid;
+insert into _r205 (caso, ok, detalle)
+select '21 otro valor entre comillas = misma fila (veces 3); la clave es el patrón y `mensaje` guarda el último crudo',
+       (select v from _a205 where k = 'i07b') = '1'
+       and pg_temp.abiertas('prueba-205') = 'prueba-205:23514:3:3' and (select count(*) from public.pos_catalogo_fallas) = 1
+       and (select mensaje like '%_roto_205b%' and patron not like '%roto%' from public.pos_catalogo_fallas),
+       pg_temp.abiertas('prueba-205') || ' / ' || (select patron from public.pos_catalogo_fallas limit 1);
 -- 08: si anotar la falla TAMBIÉN falla, la línea entra igual.
 alter table public.pos_catalogo_fallas add constraint _roto_205f check (false) not valid;
 insert into _a205 select 'i08', pg_temp.linea('prueba-205', 'P4', '9054');
@@ -187,11 +202,11 @@ insert into _r205 (caso, ok, detalle)
 select '08 con la bitácora rota también, la línea entra igual (y la falla no se pudo sumar)',
        (select v from _a205 where k = 'i08') = '1'
        and exists (select 1 from public.pos_ndf_ticket_lines where codigo_producto = '9054')
-       and pg_temp.abiertas('prueba-205') = 'prueba-205:23514:2:2',
+       and pg_temp.abiertas('prueba-205') = 'prueba-205:23514:3:3',
        (select v from _a205 where k = 'i08') || ' / ' || pg_temp.abiertas('prueba-205');
 -- Falla en el local ajeno (santa-teresa) y una sin local (no se pudo saber), para los casos de lectura y de cierre.
 insert into _a205 select 'i09', pg_temp.linea('santa-teresa', 'F205-T1', '9055');
-insert into public.pos_catalogo_fallas (local, codigo, mensaje, facturas) values (null, 'XX000', 'ficticia sin local', 1);
+insert into public.pos_catalogo_fallas (local, codigo, patron, mensaje, facturas) values (null, 'XX000', 'ficticia sin local', 'ficticia sin local', 1);
 
 -- ═══ D. Quién ve los avisos ═════════════════════════════════════════════════════════════════════════════════════
 insert into _r205 (caso, ok, detalle)
@@ -208,7 +223,7 @@ select '09 lectura: owner y contador ven las 3; manager ve solo la suya; el de s
                  pg_temp.como(c.manager_otro, 'select string_agg(local, '','') from public.pos_catalogo_fallas')) from _c205 c;
 insert into _r205 (caso, ok, detalle)
 select '10 nadie escribe los avisos por la API, ni el owner (insert, update, delete → 42501)',
-       pg_temp.err_como(c.owner_id, $$insert into public.pos_catalogo_fallas (local, codigo, mensaje) values ('prueba-205', 'X', 'x')$$, true) = '42501'
+       pg_temp.err_como(c.owner_id, $$insert into public.pos_catalogo_fallas (local, codigo, patron, mensaje) values ('prueba-205', 'X', 'x', 'x')$$, true) = '42501'
        and pg_temp.err_como(c.owner_id, 'update public.pos_catalogo_fallas set resuelta_en = now()', true) = '42501'
        and pg_temp.err_como(c.manager, 'delete from public.pos_catalogo_fallas', true) = '42501'
        and (select count(*) from public.pos_catalogo_fallas where resuelta_en is null) = 3, null from _c205 c;
@@ -216,8 +231,9 @@ select '10 nadie escribe los avisos por la API, ni el owner (insert, update, del
 -- ═══ E. Reparar ═════════════════════════════════════════════════════════════════════════════════════════════════
 insert into _a205 select 'r11', pg_temp.err_como(c.owner_id, $$public.pos_catalogo_reparar('prueba-205')$$) from _c205 c;
 insert into _r205 (caso, ok, detalle)
-select '11 si la regla sigue rota, reparar da el error (23514) y la falla queda ABIERTA',
-       (select v from _a205 where k = 'r11') = '23514' and pg_temp.abiertas('prueba-205') = 'prueba-205:23514:2:2',
+select '11 si la regla sigue rota, reparar da el error (23514), la falla queda ABIERTA y no cuenta para el enfriamiento',
+       (select v from _a205 where k = 'r11') = '23514' and pg_temp.abiertas('prueba-205') = 'prueba-205:23514:3:3'
+       and not exists (select 1 from public.pos_catalogo_reparaciones),
        (select v from _a205 where k = 'r11');
 alter table public.pos_productos drop constraint _roto_205;
 insert into _a205 select 'r12', concat_ws(',',
@@ -230,31 +246,39 @@ insert into _a205 select 'r12', concat_ws(',',
 insert into _r205 (caso, ok, detalle)
 select '12 contador, salonero, cajero, anon, el manager de OTRO local y el manager con null → 42501; nada cambia',
        (select v from _a205 where k = 'r12') = '42501,42501,42501,42501,42501,42501'
-       and pg_temp.abiertas('prueba-205') = 'prueba-205:23514:2:2'
-       and not exists (select 1 from public.pos_productos where codigo in ('9052', '9053', '9054')),
+       and pg_temp.abiertas('prueba-205') = 'prueba-205:23514:3:3'
+       and not exists (select 1 from public.pos_productos where codigo in ('9052', '9053', '9054', '9058')),
        (select v from _a205 where k = 'r12');
 insert into _a205 select 'r13', pg_temp.como(c.manager, $$public.pos_catalogo_reparar('prueba-205')$$)::text from _c205 c;
 insert into _r205 (caso, ok, detalle)
-select '13 el manager de prueba-205 repara: entran los 3 faltantes, cierra SU falla (con su uid), sin_catalogo 0',
-       (select v from _a205 where k = 'r13')::jsonb = '{"sin_catalogo": 0, "fallas_cerradas": 1, "productos_escritos": 3}'::jsonb
-       and (select count(*) from public.pos_productos where local = 'prueba-205' and codigo in ('9052', '9053', '9054')) = 3
+select '13 el manager de prueba-205 repara: entran los 4 faltantes, cierra SU falla (con su uid), sin_catalogo 0, queda anotada la reparación',
+       (select v from _a205 where k = 'r13')::jsonb = '{"sin_catalogo": 0, "fallas_cerradas": 1, "productos_escritos": 4, "saltados": []}'::jsonb
+       and (select count(*) from public.pos_productos where local = 'prueba-205' and codigo in ('9052', '9053', '9054', '9058')) = 4
+       and (select ultima_por from public.pos_catalogo_reparaciones where local = 'prueba-205') = c.manager
        and pg_temp.abiertas('prueba-205') = '-'
        and (select resuelta_por from public.pos_catalogo_fallas where local = 'prueba-205') = c.manager,
        (select v from _a205 where k = 'r13') from _c205 c;
 insert into _a205 select 'r14', pg_temp.como(c.manager, $$public.pos_catalogo_reparar('prueba-205')$$)::text from _c205 c;
 insert into _r205 (caso, ok, detalle)
-select '14 idempotente: la segunda vez escribe 0 y cierra 0',
-       (select v from _a205 where k = 'r14')::jsonb = '{"sin_catalogo": 0, "fallas_cerradas": 0, "productos_escritos": 0}'::jsonb,
+select '14 enfriamiento: otra vez dentro del minuto no trabaja y dice «ya reparado hace N s»',
+       (select v from _a205 where k = 'r14')::jsonb = '{"sin_catalogo": 0, "fallas_cerradas": 0, "productos_escritos": 0, "saltados": [{"local": "prueba-205", "hace_s": 0}]}'::jsonb,
        (select v from _a205 where k = 'r14');
+update public.pos_catalogo_reparaciones set ultima_en = now() - interval '2 minutes' where local = 'prueba-205';
+insert into _a205 select 'r14b', pg_temp.como(c.manager, $$public.pos_catalogo_reparar('prueba-205')$$)::text from _c205 c;
+insert into _r205 (caso, ok, detalle)
+select '22 pasado el minuto, idempotente: escribe 0 y cierra 0',
+       (select v from _a205 where k = 'r14b')::jsonb = '{"sin_catalogo": 0, "fallas_cerradas": 0, "productos_escritos": 0, "saltados": []}'::jsonb,
+       (select v from _a205 where k = 'r14b');
 insert into _r205 (caso, ok, detalle)
 select '15 reparar prueba-205 NO cierra la de santa-teresa ni la sin local',
        pg_temp.abiertas('santa-teresa') = 'santa-teresa:23514:1:1' and pg_temp.abiertas(null) = '-:XX000:1:1',
        pg_temp.abiertas('santa-teresa') || ' / ' || pg_temp.abiertas(null);
 insert into _a205 select 'r16', pg_temp.como(c.owner_id, 'public.pos_catalogo_reparar(null)')::text from _c205 c;
 insert into _r205 (caso, ok, detalle)
-select '16 el owner con null repara todos los locales y cierra las dos que quedaban (la de santa-teresa y la sin local)',
+select '16 el owner con null repara los locales de a uno (salta prueba-205, recién reparado) y cierra las dos que quedaban (santa-teresa y sin local)',
        ((select v from _a205 where k = 'r16')::jsonb ->> 'fallas_cerradas') = '2'
        and ((select v from _a205 where k = 'r16')::jsonb ->> 'sin_catalogo') = '0'
+       and ((select v from _a205 where k = 'r16')::jsonb -> 'saltados') @> '[{"local": "prueba-205"}]'::jsonb
        and exists (select 1 from public.pos_productos where local = 'santa-teresa' and codigo = '9055')
        and not exists (select 1 from public.pos_catalogo_fallas where resuelta_en is null),
        (select v from _a205 where k = 'r16');
@@ -314,7 +338,8 @@ select '19 205_rollback.sql deja EXACTO a la 198 (registrar 85609c26, sin tabla 
        and pg_temp.reg_md5() = '85609c26a1736ff174aec2832d101dc6'
        and (select prosecdef and proconfig @> array['search_path=public, pg_temp'] from pg_proc where oid = 'public.pos_catalogo_registrar()'::regprocedure)
        and obj_description('public.pos_catalogo_registrar()'::regprocedure, 'pg_proc') is null
-       and to_regclass('public.pos_catalogo_fallas') is null and to_regprocedure('public.pos_catalogo_reparar(text)') is null
+       and to_regclass('public.pos_catalogo_fallas') is null and to_regclass('public.pos_catalogo_reparaciones') is null
+       and to_regprocedure('public.pos_catalogo_reparar(text)') is null
        and exists (select 1 from pg_trigger where tgrelid = 'public.pos_ndf_ticket_lines'::regclass and tgname = 'trg_pos_catalogo_registrar')
        and (select v from _a205 where k = 'i19l') = '1',
        concat_ws(' / ', (select v from _a205 where k = 'g19'), (select v from _a205 where k = 'g19b'), pg_temp.reg_md5());
@@ -331,8 +356,8 @@ begin
   insert into _a205 values ('g20', v);
 end $g20$;
 insert into _r205 (caso, ok, detalle)
-select '20 tras la vuelta atrás la 205 entra otra vez (registrar 9d79f682)',
-       (select v from _a205 where k = 'g20') = 'corrió' and pg_temp.reg_md5() = '9d79f68209caac275c98d2b8ce42ed71'
+select '20 tras la vuelta atrás la 205 entra otra vez (registrar 7cc9af68)',
+       (select v from _a205 where k = 'g20') = 'corrió' and pg_temp.reg_md5() = '7cc9af6883242326a8aab0d20b004cb7'
        and to_regclass('public.pos_catalogo_fallas') is not null,
        (select v from _a205 where k = 'g20');
 

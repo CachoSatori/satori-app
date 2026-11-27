@@ -1,6 +1,6 @@
 {
   "_que_es": "«ultimo_ledger_prod» (R16): último número aplicado en prod; todo .sql NUEVO respecto de la base tiene que ser mayor (lo exige migraciones.test.ts; se sube en el PR del pase que lo aplica). Registro de numeración de migraciones (decisión del dueño, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
-  "ultimo_ledger_prod": 202,
+  "ultimo_ledger_prod": 203,
   "bloques": {
     "caja": {
       "tipo": "creacion",

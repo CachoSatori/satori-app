@@ -29,6 +29,12 @@
 //      tampoco duplica. Los errores de la base que dicen «no» (permiso, local, monto, el viejo ya no está) no caen al
 //      camino viejo: se devuelven como `sin_cambios` (nada cambió).
 //
+//   7. Mig 202 · Mn2 del verificador del #373: si el id del cliente choca con un movimiento de OTRO local, la base
+//      contesta 42501 «Ese id ya lo usa un movimiento de otro local» y no toca nada (el viejo sigue). Reintentar con
+//      el mismo id fallaría siempre, así que vuelve `sin_cambios` con `idOcupado`: quien llama avisa y prepara un id
+//      NUEVO para el próximo intento. No duplica: la fila con ese id es de otro local, así que ningún intento nuestro
+//      entró con él (el id es único en la base).
+//
 // Sin React ni Supabase: se prueba con dependencias falsas (reemplazoPago.test.ts).
 
 import type { CashMovement } from '../../shared/types/database'
@@ -46,7 +52,7 @@ export type ResultadoReemplazo =
   /** Nuevo en la base y viejo borrado. `nuevo` es null si el alta rebotó por duplicado (ya estaba): recargar. */
   | { estado: 'listo'; nuevo: CashMovement | null }
   /** El alta falló: no se tocó nada. El viejo sigue y cuenta. Reintentar con el MISMO id. */
-  | { estado: 'sin_cambios'; error: string; sinViejo?: boolean }
+  | { estado: 'sin_cambios'; error: string; sinViejo?: boolean; idOcupado?: boolean }
   /** El nuevo existe (en la base o en la cola) y el viejo todavía no se borró. `error` null = en cola sin señal. */
   | { estado: 'falta_borrar'; nuevo: CashMovement | null; reemplazo: ReemplazoPendiente; error: string | null }
   /**
@@ -89,6 +95,12 @@ export const esDuplicado = (e: unknown): boolean => /duplicate key|23505|already
 const caeAlCaminoViejo = (e: unknown): boolean => !!e && typeof e === 'object' && (e as { caer?: unknown }).caer === true
 /** La base dijo que el pago viejo ya no está (P0002 de la 200: otro aparato lo cambió o lo borró). */
 const esSinViejo = (e: unknown): boolean => !!e && typeof e === 'object' && (e as { code?: unknown }).code === 'P0002'
+/**
+ * Mig 202 · M1: el id del cliente ya lo usa un movimiento de OTRO local (42501 con ESE texto; los otros 42501 son de
+ * permiso y no se reintentan con otro id). Ningún intento nuestro entró con ese id: se puede usar uno nuevo.
+ */
+export const esIdDeOtroLocal = (e: unknown): boolean =>
+  !!e && typeof e === 'object' && (e as { code?: unknown }).code === '42501' && /id ya lo usa un movimiento de otro local/i.test(mensaje(e))
 
 export async function reemplazarPago(viejoId: string, nuevoId: string, deps: DepsReemplazo): Promise<ResultadoReemplazo> {
   let nuevo: CashMovement | null
@@ -99,7 +111,9 @@ export async function reemplazarPago(viejoId: string, nuevoId: string, deps: Dep
       if (r.estado === 'distinto') return { estado: 'distinto', guardado: r.guardado ?? null, reemplazo: reemplazo() }
       return { estado: 'listo', nuevo: r.repetido ? null : (r.nuevo ?? null) }
     } catch (e) {
-      if (!caeAlCaminoViejo(e)) return { estado: 'sin_cambios', error: mensaje(e), ...(esSinViejo(e) ? { sinViejo: true } : {}) }
+      if (!caeAlCaminoViejo(e)) {
+        return { estado: 'sin_cambios', error: mensaje(e), ...(esSinViejo(e) ? { sinViejo: true } : {}), ...(esIdDeOtroLocal(e) ? { idOcupado: true } : {}) }
+      }
       // sigue abajo, por el camino de siempre, con el MISMO id
     }
   }
@@ -333,6 +347,10 @@ export function mensajeNoTerminable(e: Exclude<EstadoCambio, 'terminable'>): str
     default:          return 'No se pudo revisar el cambio en la base (sin señal o con la sesión vencida). No se borró nada: reintentá con internet.'
   }
 }
+
+/** Mn2 #373: el id chocó con un pago de otro local. Nada cambió y el próximo «Guardar cambios» va con otro id. */
+export const MSG_ID_DE_OTRO_LOCAL =
+  'No se guardó el cambio: el número interno del pago nuevo coincidió con uno de otro local. El pago anterior sigue igual. Ya se preparó otro número: tocá «Guardar cambios» de nuevo.'
 
 export const MSG_PAGO_EN_CAMBIO =
   'Este pago tiene un cambio sin terminar. Primero tocá «Terminar el cambio» en el aviso rojo; cuando el aviso desaparezca, ya lo podés editar o borrar.'

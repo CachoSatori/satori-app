@@ -13,6 +13,7 @@ import {
 } from '../../shared/api/inventario'
 import { ventasDelRango } from '../ventas/ventasFuente'
 import { todayCR } from '../../shared/utils'
+import AvisoProvisorio from './AvisoProvisorio'
 import { computeDepletion, unitsFromDiaData, type DepletionResult } from './depletion'
 
 interface Props {
@@ -97,6 +98,8 @@ export default function InvConsumo({ ingredients, onRefresh, profile }: Props) {
 
   return (
     <div className="vt-section">
+      {/* Fase 0 (P4, 27-nov): el consumo baja un stock sin base real; se etiqueta, no se oculta. */}
+      <AvisoProvisorio />
       {error && <div style={{ color:'var(--c-laca)', fontSize:'0.78rem', marginBottom:'0.5rem' }}>{error}</div>}
 
       {/* Controles */}
